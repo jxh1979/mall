@@ -35,7 +35,7 @@
     "verify:ops160-backup-restore": "node tools/verify-160-backup-restore-scripts.mjs",
     "verify:production-credentials": "node tools/verify-production-credential-rotation-ledger.mjs",
     "verify:p0a-ops-hardening": "node tools/verify-p0a-ops-hardening.mjs",
-    "verify:ops160-recovery": "npm run verify:ops160-execution-policy && npm run verify:ops160-backup-restore && npm run verify:production-credentials && npm run verify:p0a-ops-hardening",
+    "verify:ops160-recovery": "npm run verify:coding-host-protection && npm run verify:ops160-execution-policy && npm run verify:ops160-backup-restore && npm run verify:production-credentials && npm run verify:p0a-ops-hardening",
     "verify:p0-contract": "npm run verify:no-legacy-api-prototype && npm run verify:openapi && npm run verify:openapi-examples && npm run verify:operation-matrix && npm run verify:openapi-closure && npm run verify:client-routes && npm run verify:client-openapi && npm run verify:client-payload",
     "verify:p0-web": "npm run verify:p0-contract && npm run build",
     "verify:p0-env": "npm run verify:backend-env && npm run verify:android-env",
@@ -47,8 +47,9 @@
     "android:p0:build": "node tools/run-android-gradle.mjs --project apps/android-terminal clean build",
     "android:p0:smoke": "node tools/run-android-gradle.mjs --project apps/android-terminal run",
     "android:p0:apk": "node tools/run-android-gradle.mjs --project apps/android-terminal/android-app --require-android-sdk :app:assembleDebug",
-    "verify:p0": "npm run verify:p0-contract && npm run verify:security-baseline && npm run test:backend && npm run build && npm run verify:android-env && npm run android:p0:build && npm run android:p0:smoke && npm run android:p0:apk",
-    "verify:no-legacy-api-prototype": "node tools/verify-no-legacy-api-prototype.mjs"
+    "verify:p0": "npm run verify:coding-host-protection && npm run verify:p0-contract && npm run verify:security-baseline && npm run test:backend && npm run build && npm run verify:android-env && npm run android:p0:build && npm run android:p0:smoke && npm run android:p0:apk",
+    "verify:no-legacy-api-prototype": "node tools/verify-no-legacy-api-prototype.mjs",
+    "verify:coding-host-protection": "node tools/verify-coding-host-protection.mjs"
   },
   "engines": {
     "node": ">=22"

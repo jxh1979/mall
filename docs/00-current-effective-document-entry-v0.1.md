@@ -44,6 +44,7 @@
 | P2 当前差异对抗式审计 | `docs/p2-current-diff-adversarial-review-v0.1.md` |
 | 正式安全基线待生成任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
+| 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
 | 废止技术路线 | TypeScript / SQLite / Prisma / Fastify 后端仅可作为历史预研原型，不得作为正式开发、测试、部署、安全审计依据；`apps/api` 已于 2026-06-15 从 160 正式仓库物理移除，`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract`，用于阻断旧目录、旧脚本、旧依赖和旧 lockfile 标记回流 |
 | 金额单位 | 全局金额使用整数分 `bigint` |
@@ -333,6 +334,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 2026-06-12 | V0.1 OpenAPI 契约闸口 | 新增 `npm run verify:openapi` 为 P0 联调、自动化测试和供应商 mock 前置检查 |
 | 2026-06-12 | V0.1 npm 工作区收口 | 根 npm workspace 和 lockfile 移除旧 `apps/api`、Fastify、Prisma 依赖；旧 API 子目录仅保留阻断提示和历史参考 |
 | 2026-06-15 | V0.1 旧原型物理清理 | `apps/api` 已从 160 正式仓库物理移除；`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract`，防止旧原型回流 |
+| 2026-06-15 | V0.1 160 编码保护基线 | 新增 `coding-host-protection-baseline-v0.1.md`、`verify:coding-host-protection` 和实施证据；完整 P0 验证、正式提交和安全扫描只认 160 仓库证据 |
 | 2026-06-12 | V0.1 客户端旧路径闸口 | 新增 `npm run audit:client-routes` 和 `npm run verify:client-routes` 作为 Web/Android/一体机/供应商 mock 正式联调前置检查 |
 | 2026-06-12 | V0.1 客户端 OpenAPI 覆盖闸口 | 新增 `npm run audit:client-openapi` 和 `npm run verify:client-openapi`，覆盖检查升级为路径模板 + HTTP 方法一致性，防止客户端只改路径前缀但未补机器契约 |
 | 2026-06-12 | V0.1 客户端请求字段闸口 | 新增 `npm run audit:client-payload` 和 `npm run verify:client-payload`，防止客户端路径正确但请求字段未对齐 OpenAPI requestBody |

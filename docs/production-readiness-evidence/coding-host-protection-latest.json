@@ -1,0 +1,22 @@
+{
+  "status": "passed",
+  "canonical_host_ip": "192.168.88.160",
+  "canonical_hostname": "y9000p-ai",
+  "canonical_repo_root": "/home/james/complex-management",
+  "local_role": "coordination_quality_only",
+  "local_code_policy": "no_formal_code_on_local_machine",
+  "guarded_scripts": [
+    "verify:coding-host-protection",
+    "verify:ops160-recovery",
+    "verify:p0"
+  ],
+  "verification_commands": [
+    "npm run verify:coding-host-protection",
+    "npm run verify:ops160-recovery",
+    "npm run verify:p0-contract",
+    "npm run test:backend",
+    "npm run build"
+  ],
+  "evidence_scope": "160 repository guardrail; local machine remains coordination and quality-check only",
+  "last_verified_utc": "2026-06-15T12:15:00Z"
+}

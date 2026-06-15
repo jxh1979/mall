@@ -2,7 +2,7 @@
 
 ## 1. 文档定位
 
-本文档是生产前置资料的实施台账模板，用于把 MDM、支付、NAS、密钥轮换、人脸年龄核验、企业微信、第三方供应商、160 环境、安全基线等上线前置事项统一管理。
+本文档是生产前置资料的实施台账模板，用于把 MDM、支付、NAS、密钥轮换、人脸年龄核验、企业微信、第三方供应商、160 环境、编码主机保护、安全基线等上线前置事项统一管理。
 
 它不是新的拍板清单。除总控已经明确暂缓的“域名 HTTPS 绑定”外，本文档中的事项按默认推荐方案执行；缺资料时记录为 `pending_info` 或 `blocked`，不得反向打开业务范围决策。
 
@@ -60,6 +60,7 @@
 | PRD-WECOM-001 | wecom | 企业微信配置 | 一次授权、自动账号映射、每日同步、失败告警、基础质检 | IT/运营 | 企业微信 | pending_info | 阻塞企业微信 P0 同步能力 | `third-party-integration-development-design.md` | 配置应用、通讯录、会话存档、回调和同步任务 |
 | PRD-3P-001 | third_party | 机器人/视频/设备厂商接入资料 | 双向开放接口 + 供应商 adapter；Webhook + 定时轮询校验 | 采购/IT | TBD | pending_info | 不阻塞 P0 主闭环；阻塞真实厂商联调 | `third-party-supplier-integration-kit-v0.1.md` | 收集 SDK/API、签名、回调、字段映射和测试账号 |
 | PRD-160-001 | ops160 | 160 运行配置生产化 | `/etc/complex/complex.env`、systemd、日志、健康检查、告警 | IT/运维 | 自管 | pending_info | 阻塞长期预生产和生产；不阻塞用户级覆盖开发验证 | `server-160-runbook-v0.2.md` | 迁移用户级覆盖到系统配置，接入 systemd 和告警 |
+| PRD-160-CODE-001 | ops160 | 160 编码保护基线 | 正式编码、完整 P0 验证、安全扫描和提交只认 `192.168.88.160` 的 `/home/james/complex-management`；本机只负责进度检查、任务拆解和质量检查 | 技术负责人/运维 | 自管 | passed | 阻塞非 160 主机形成正式编码和完整验收结论；不阻塞本机协调和文档审查 | `coding-host-protection-baseline-v0.1.md` | 已建立 `verify:coding-host-protection`、证据 JSON 和 package 闸口；后续迁移主机时必须更新基线和证据 |
 | PRD-HTTPS-001 | domain | 域名 HTTPS | 总控已确认先不绑定 | IT/总控 | TBD | not_started | 仅阻塞公开生产域名访问，不阻塞内网预生产和开发验收 | `server-160-runbook-v0.2.md` | 等总控启动公开访问后再配置 |
 | PRD-SEC-001 | security | 正式安全基线 | 首批正式编码包落地后生成 V1 安全基线 | 安全/技术负责人 | 自管/第三方 | not_started | 阻塞生产安全准入，不阻塞首批编码 | `formal-security-baseline-generation-task-v0.1.md` | 首批编码包完成后生成报告和 findings register |
 
@@ -107,6 +108,7 @@ P0-A no-system-write boundary：本台账允许记录由 Codex 生成的预检�
 | 更新证据 | IT 上传 MDM enroll 截图或 NAS 恢复报告 | 更新台账项 | 状态、证据链接、最近测试时间和审计事件可追溯 |
 | 供应商未定 | 人脸年龄核验或设备厂商尚未采购 | 查询台账 | 状态为 `pending_info`，不阻塞 P0 接口占位和 mock，阻塞真实生产通过 |
 | 域名 HTTPS 暂缓 | 总控未要求公开域名 | 执行检查 | 仅提示公开生产前置，不阻塞内网开发、预生产和编码验收 |
+| 编码主机保护 | 开发或审计准备给出完整 P0 通过结论 | 执行 `npm run verify:coding-host-protection` 或完整 `npm run verify:p0` | 只有 160 的 `/home/james/complex-management` 仓库可通过；非 160 主机不得形成正式代码验收结论 |
 | 密钥安全 | 运维填写密钥信息 | 保存台账 | 系统拒绝明文密钥，只接受 `credential_ref` |
 
 ## 8. 交付结论

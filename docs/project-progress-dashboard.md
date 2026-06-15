@@ -14,6 +14,7 @@
 - P0 编码：2026-06-14 已在 192.168.88.160 的 `/home/james/complex-management` 完成首批 P0 正式编码验收。OpenAPI 181 个 operation 与 Java Controller 181 个映射一致，缺失 0，多余 0；后端 360 个测试通过；Web、Android、APK、API/Web 健康检查和 PostgreSQL/Redis/NATS/MinIO 状态均通过；`/opt/complex/scripts/complex-verify-p0.sh` 最终输出 `P0 verification PASS`；根目录 `npm run verify:p0` 也已可直接加载 160 用户级运行配置并通过完整验证。交接入口见 `p0-coding-completion-and-handoff-report-v0.1.md`。
 - P0-0：正式 Java 21 + Spring Boot 4.x + Maven + PostgreSQL + Flyway + springdoc-openapi 后端工程骨架已创建在 `backend/`。160 机器已同步最新工程和 `ops/160` 脚本，并已通过 `verify:p0-env`、`verify:p0-contract`、`verify:p0-web`、`complex-runtime-config-check.sh`、`complex-verify-be000.sh` 运行态验收、`complex-health-check.sh` 和完整 `complex-verify-p0.sh`。当前 API release `20260613-193142` 与 Web release `20260613-180329` 已启动。注意：完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通；真实业务域 Controller/Repository/Service 仍不得标记为“正式并行开发完成”。
 - 入口：P0 编码、联调、测试和供应商 mock 统一从 `p0-coding-entry-pack-v0.1.md` 进入；旧 `apps/api` TypeScript/Fastify/SQLite 原型已从 160 正式仓库物理移除，根目录 API 脚本统一指向 `backend/`，`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract` 防回退。
+- 编码主机保护：新增 `coding-host-protection-baseline-v0.1.md` 和 `verify:coding-host-protection`；正式编码、完整 P0 验证、安全扫描和提交只认 `192.168.88.160` 的 `/home/james/complex-management`，本机只负责进度检查、任务拆解和质量检查，不得在本机仓库提交正式代码。
 - 客户端：`npm run verify:client-routes` 已通过，Web/Android 非正式 `/api/*` 路径已清零；`npm run verify:client-openapi` 已通过，客户端 77 个正式路径模板和 95 个方法级调用均已被 P0 OpenAPI 覆盖；`npm run verify:client-payload` 已通过，Web/Android 已具备 OpenAPI 字段名适配；`ClientPlaceholderRequest` 已删除，写接口均改为字段级 requestBody schema。
 - OpenAPI 文档质量：`docs:repair-openapi-text` 已修复残留连续问号摘要、描述和参数说明；`docs:operation-matrix` 已按当前 181 个 operation 重新生成 operation 验收矩阵；`docs:openapi-examples` 已补首批高风险写接口和外部接入接口机器示例；`docs:openapi-closure` 已生成 `p0-openapi-contract-closure-appendix-v0.1.md`，覆盖 operation 到任务簇、权限、事件、终端和样例准入的追溯附录；`verify:operation-matrix`、`verify:openapi-examples` 与 `verify:openapi-closure` 已纳入 P0 总验证链。
 - 安全基线：`security-scans/threat_model.md` 已从旧 TypeScript/SQLite 原型威胁模型替换为正式安全基线重建入口；旧安全扫描仅通过 `security-scans/LEGACY-SECURITY-SCANS.md` 作历史追溯，不得参与当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 上线判断；`verify:prod-docs-access` 已纳入 `verify:security-baseline`，用于保证 prod profile 下 OpenAPI/Swagger 文档不匿名公开。
@@ -22,7 +23,7 @@
 - 生产前置资料：新增 `production-readiness-implementation-ledger-template-v0.1.md`，MDM、支付、NAS、密钥、人脸年龄核验、企业微信、第三方供应商、160、HTTPS 和安全基线均进入台账化管理；NAS 服务器已确认为 `192.168.88.113`，挂载协议为 SMB，共享为 `bn`，160 挂载目录为 `/mnt/complex-nas-backup`，当前不启用备份归档加密。MDM 采购/enroll、真实支付商户、企业微信、人脸年龄核验供应商、第三方厂商资料和 NAS 密码交付不纳入 P0 编码完成范围，只作为生产前置管理。
 - 正式安全基线：新增 `formal-security-baseline-generation-task-v0.1.md`，旧安全扫描不得替代正式基线；首批正式编码包落地且运行时 OpenAPI 可导出后生成 V1 安全基线和 findings register。
 - 文档入口复核：`00-current-effective-document-entry-v0.1.md` 的角色最小阅读包已修复失效文件名，`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` 已补高风险 AC 到 operationId 映射，`p0-user-story-map-and-sprint-slices-v0.1.md` 已将积分摘要和生产前置责任状态归入切片表。
-- 本机验证边界：`npm run verify:p0-contract` 已实测通过，表示 OpenAPI、OpenAPI 示例、operation 矩阵同步、OpenAPI 追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段七个可先验闸口已闭合；`npm run verify:p0-web` 也已实测通过，表示 Web typecheck 与生产构建可执行。本机缺少 Java 21 时，`test:backend`、BE-000 和完整 `verify:p0` 不再作为本机必须完成项；后续 Java/后端集成测试默认在 `192.168.88.160` 或等效 Java 21 环境执行，本机只记录环境前置缺失。
+- 本机验证边界：本机 Codex 只负责进度检查、任务拆解、远程调度和质量检查；正式代码修改、Java/Android/安全扫描、完整 `npm run verify:p0` 和提交必须在 `192.168.88.160` 的 `/home/james/complex-management` 执行。`verify:p0` 已接入 `verify:coding-host-protection`，非 160 主机默认不得给出完整 P0 通过结论。
 - Web 构建边界：`npm run build` 已在本机通过，包含 typecheck 与 Vite 生产构建；当前仅有 Vite chunk size 警告，不作为 P0 阻断。
 - P0：以 `p0-implementation-task-list.md` 为唯一边界清单，先完成核心组织/商户/票务/权益/核销/结算/酒吧最小闭环、完整应收应付台账、主体绑定、事件留痕和基础运维。
 - P1：酒吧 SaaS 增强、商户服务工单、商户账单门厅、游乐安全告知/电子免责/事故工单、商场平面图图片+多边形坐标、合同审批流和附件归档。
@@ -120,6 +121,7 @@
 | 2026-06-12 | 改 | 总控拍板 Spring Boot 使用 4.x；`backend/pom.xml` 父版本同步为 Spring Boot 4.1.0，Web 依赖切换为 Boot 4 的 WebMVC starter。 |
 | 2026-06-12 | 增/改 | 新增 `p0-coding-entry-pack-v0.1.md` 为 P0 可编码入口包；根目录 API 脚本和 `apps/api` 子脚本改为阻断旧原型并指向正式 `backend/`。 |
 | 2026-06-15 | 改 | 旧 `apps/api` TypeScript/Fastify/Prisma/SQLite 原型已从 160 正式仓库物理移除；新增 `verify:no-legacy-api-prototype` 并纳入 `verify:p0-contract`。 |
+| 2026-06-15 | 增 | 新增 160 编码保护基线和 `verify:coding-host-protection`，完整 P0 验证、正式提交和安全扫描默认只能在 160 仓库形成证据。 |
 | 2026-06-12 | 改 | 160 运维脚本切换为 Java/Spring Boot/PostgreSQL/Flyway 口径，新增 BE-000 验收脚本，备份脚本移除旧 SQLite 原型库。 |
 | 2026-06-12 | 增/改 | Web/Android 非正式接口路径已清零，`verify:client-routes` 通过；补齐客户端路径模板 + HTTP 方法 OpenAPI 覆盖，`verify:client-openapi` 通过；`ClientPlaceholderRequest` 已删除并替换为字段级 DTO。 |
 | 2026-06-12 | 增/改 | 新增客户端请求字段闸口 `verify:client-payload`；Web 出站请求统一转 OpenAPI snake_case、入站响应转前端 camelCase；Android 启用 snake_case 序列化并规范化手写 JsonObject。 |

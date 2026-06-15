@@ -132,12 +132,13 @@
 | `npm run verify:operation-matrix` | 严格阻断 operation 验收矩阵与 `openapi-p0.json` 不一致的 P0 联调包 |
 | `npm run docs:openapi-closure` | 按当前 OpenAPI 重新生成 `p0-openapi-contract-closure-appendix-v0.1.md` |
 | `npm run verify:openapi-closure` | 严格阻断 OpenAPI 权限、事件、任务追溯附录与 `openapi-p0.json` 不一致的 P0 联调包 |
+| `npm run verify:coding-host-protection` | 检查正式编码和完整验证必须在 `192.168.88.160` 的 `/home/james/complex-management` 仓库执行；本机只负责进度检查、任务拆解和质量检查 |
 | `npm run verify:p0-contract` | 执行 P0 可在普通 Node 环境先验收的契约闸口：OpenAPI、示例、operation 矩阵、追溯附录、客户端旧路径、客户端 OpenAPI 覆盖和客户端请求字段 |
 | `npm run verify:p0-web` | 执行 `verify:p0-contract` 后再构建 Web；适合前端、测试和供应商 mock 在后端/Android 环境未就绪时先确认联调包 |
 | `npm run verify:backend-env` | 检查正式后端前置环境：Java 21+、Maven Wrapper 或 Maven 3.9+、`backend/pom.xml`；未通过时不得进入 BE-000 或 P0 后端验收 |
 | `npm run verify:android-env` | 检查 Android P0 前置环境：Java 21+、Gradle Wrapper 或系统 Gradle、Android SDK；未通过时不得进入 Android 构建、smoke 或 APK 验收 |
 | `npm run verify:p0-env` | 只执行后端和 Android 环境前置校验；适合 IT/运维先判断机器是否具备 BE-000 和 Android APK 实跑条件 |
-| `npm run verify:p0` | 先执行 OpenAPI 契约闸口、OpenAPI 示例闸口、operation 验收矩阵同步闸口、OpenAPI 权限/事件/任务追溯附录闸口、客户端接口迁移闸口、客户端 OpenAPI 覆盖闸口和客户端请求字段闸口，再进入 BE-000、Web、Android 环境和 Android 构建/APK 验证 |
+| `npm run verify:p0` | 先执行 160 编码保护闸口，确认当前主机和仓库为 `192.168.88.160` / `/home/james/complex-management`，再执行 OpenAPI 契约、示例、operation 矩阵、追溯附录、客户端接口迁移、客户端 OpenAPI 覆盖、客户端请求字段、BE-000、Web、Android 环境和 Android 构建/APK 验证 |
 
 开放平台和 Webhook 接口不伪装成终端；它们必须声明 `x-invocation-channel`。员工、客人、设备和页面类接口必须声明 `x-terminal-allowed`，且只能使用统一口径中的 10 个终端码。
 
@@ -163,3 +164,4 @@
 | 2026-06-13 | V0.1 160 回滚预检 | `complex-rollback-api.sh` 纳入运行配置预检，阻断缺数据库账号/密码、PostgreSQL 不可达或基础容器缺失时把回滚误判为成功 |
 | 2026-06-13 | V0.1 Android smoke 账号闸口 | `complex-verify-p0.sh` 读取 160 环境文件并要求 `P0_ADMIN_USERNAME`、`P0_ADMIN_PASSWORD`；缺专用种子测试账号时完整 P0 正确阻断，不得用生产管理员密码或跳过 smoke 标记通过 |
 | 2026-06-13 | V0.1 完整 P0 smoke 通过 | 160 完整 `complex-verify-p0.sh` 已通过；新增 smoke 切片边界，明确其只保活自动化验收，不替代生产级业务实现 |
+| 2026-06-15 | V0.1 160 编码保护基线 | 新增 `coding-host-protection-baseline-v0.1.md`、`verify:coding-host-protection` 和实施证据，完整 `verify:p0` 默认必须在 160 仓库执行；本机只负责进度检查、任务拆解和质量检查 |
