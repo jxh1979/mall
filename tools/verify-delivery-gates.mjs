@@ -56,6 +56,7 @@ if (packageJson) {
     "verify:production-evidence-manifest-templates",
     "verify:production-evidence-owner-guides",
     "verify:production-evidence-submission-status",
+    "verify:production-evidence-submissions-guard",
     "verify:production-evidence-intake",
   ];
   if (!deliveryScript) {
@@ -81,6 +82,7 @@ requireIncludes("docs/delivery-readiness-gates-v0.1.md", [
   "PRODUCTION_EVIDENCE_MANIFEST_TEMPLATES_READY",
   "PRODUCTION_EVIDENCE_OWNER_GUIDES_READY",
   "PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY",
+  "PRODUCTION_EVIDENCE_SUBMISSIONS_GUARD_READY",
   "npm run verify:delivery-gates",
   "verify:external-dependency-gates",
   "verify:coding-host-protection",

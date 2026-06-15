@@ -7,6 +7,7 @@
 - MISSING_MANIFEST_IS_AWAITING_NOT_PASSED
 - INVALID_MANIFEST_BLOCKS_DELIVERY_GATE
 - CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET
+- RAW_EVIDENCE_STAYS_EXTERNAL
 
 ## 2. 定位
 
@@ -81,7 +82,7 @@
 
 ## 6. 使用规则
 
-1. 责任人提交真实材料时，在对应 `packet_folder` 下放置 `manifest-<item_id>.json` 和证据文件或链接。
+1. 责任人提交真实材料时，只在对应 `packet_folder` 下放置 `manifest-<item_id>.json`；原始证据文件必须存放在外部受控位置，并通过 `evidence_links` 引用。
 2. manifest 必须使用 `production-evidence-submission-kit-v0.1.md` 定义的字段，真实密钥只能写 `credential_ref`。
-3. 提交后执行 `npm run docs:production-evidence-submission-status` 和 `npm run verify:production-evidence-submission-status`。
+3. 提交后执行 `npm run verify:production-evidence-submissions-guard`、`npm run docs:production-evidence-submission-status` 和 `npm run verify:production-evidence-submission-status`。
 4. 看板为 `valid_submission` 也不自动关闭阻断项；仍需更新来源台账、findings register 和复跑交付闸口。

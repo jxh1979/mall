@@ -10,7 +10,8 @@
     "status_dashboard_does_not_close_blockers": true,
     "missing_manifest_is_not_failure": true,
     "invalid_manifest_blocks_delivery_gate": true,
-    "credential_ref_only_no_plaintext_secret": true
+    "credential_ref_only_no_plaintext_secret": true,
+    "raw_evidence_stays_external_not_in_repo": true
   },
   "counts": {
     "expected_submissions": 40,

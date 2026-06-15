@@ -7,6 +7,7 @@
 - TEMPLATE_ONLY_NOT_PRODUCTION_EVIDENCE
 - NO_OWNER_GUIDE_CLOSES_BLOCKERS
 - CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET
+- RAW_EVIDENCE_STAYS_EXTERNAL
 
 ## 2. 定位
 
@@ -35,11 +36,12 @@
 
 1. 从 `template_path` 复制 JSON 模板。
 2. 放到对应 `target_manifest_path`，文件名保持 `manifest-<item_id>.json`。
-3. 替换责任人、提交时间、证据链接、测试时间、复核人、credential_ref、回滚步骤和复测日期。
+3. 替换责任人、提交时间、证据链接、测试时间、复核人、credential_ref、回滚步骤和复测日期；证据链接必须指向外部受控位置，不提交原始证据文件。
 4. 删除或保留 `template_notice` 均可，但不得把模板默认值当成真实证据。
 5. 运行以下命令：
 
 ```bash
+npm run verify:production-evidence-submissions-guard
 npm run docs:production-evidence-submission-status
 npm run verify:production-evidence-submission-status
 npm run verify:delivery-gates

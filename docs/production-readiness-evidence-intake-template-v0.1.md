@@ -22,6 +22,8 @@
 
 配套状态看板：`production-evidence-submission-status-v0.1.md` 扫描实际 manifest 提交状态；未提交保持 awaiting，格式错误、缺字段或明文密钥会阻断交付闸口。
 
+配套提交目录护栏：`docs/production-readiness-evidence/submissions/README.md` 和 `.gitignore` 强制仓库只提交 manifest，原始证据必须外部留链。
+
 ## 3. 通用证据字段
 
 | 字段 | 必填 | 说明 |

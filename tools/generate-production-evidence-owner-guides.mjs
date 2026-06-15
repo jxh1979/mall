@@ -70,14 +70,14 @@ function guideMd(guide) {
     template_path: item.template_path,
     target_manifest_path: item.target_manifest_path,
   }));
-  return normalize(`# ${guide.owner_group} 生产证据回填说明 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_OWNER_GUIDE_READY\n- OWNER_GUIDE_FROM_MANIFEST_TEMPLATES\n- TEMPLATE_ONLY_NOT_PRODUCTION_EVIDENCE\n- NO_OWNER_GUIDE_CLOSES_BLOCKERS\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n\n## 2. 定位\n\n本文只给 \`${guide.owner_group}\` 使用，列出该责任组需要回填的生产证据模板、真实提交位置和复测命令。本文不关闭任何生产阻断项，不允许把模板、口头确认或 mock 当成生产证据。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 待回填项 | ${guide.counts.items} |\n| P0 待回填项 | ${guide.counts.p0_items} |\n| 当前 awaiting | ${guide.counts.awaiting_submission} |\n| 当前 valid | ${guide.counts.valid_submission} |\n| 当前 invalid | ${guide.counts.invalid_submission} |\n\n## 4. 回填清单\n\n${mdTable(rows, [
+  return normalize(`# ${guide.owner_group} 生产证据回填说明 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_OWNER_GUIDE_READY\n- OWNER_GUIDE_FROM_MANIFEST_TEMPLATES\n- TEMPLATE_ONLY_NOT_PRODUCTION_EVIDENCE\n- NO_OWNER_GUIDE_CLOSES_BLOCKERS\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- RAW_EVIDENCE_STAYS_EXTERNAL\n\n## 2. 定位\n\n本文只给 \`${guide.owner_group}\` 使用，列出该责任组需要回填的生产证据模板、真实提交位置和复测命令。本文不关闭任何生产阻断项，不允许把模板、口头确认或 mock 当成生产证据。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 待回填项 | ${guide.counts.items} |\n| P0 待回填项 | ${guide.counts.p0_items} |\n| 当前 awaiting | ${guide.counts.awaiting_submission} |\n| 当前 valid | ${guide.counts.valid_submission} |\n| 当前 invalid | ${guide.counts.invalid_submission} |\n\n## 4. 回填清单\n\n${mdTable(rows, [
     { key: "item_id", label: "item_id" },
     { key: "priority", label: "priority" },
     { key: "category", label: "category" },
     { key: "current_status", label: "current_status" },
     { key: "template_path", label: "template_path" },
     { key: "target_manifest_path", label: "target_manifest_path" },
-  ])}\n## 5. 操作步骤\n\n1. 从 \`template_path\` 复制 JSON 模板。\n2. 放到对应 \`target_manifest_path\`，文件名保持 \`manifest-<item_id>.json\`。\n3. 替换责任人、提交时间、证据链接、测试时间、复核人、credential_ref、回滚步骤和复测日期。\n4. 删除或保留 \`template_notice\` 均可，但不得把模板默认值当成真实证据。\n5. 运行以下命令：\n\n\`\`\`bash\nnpm run docs:production-evidence-submission-status\nnpm run verify:production-evidence-submission-status\nnpm run verify:delivery-gates\n\`\`\`\n\n## 6. 禁止事项\n\n1. 不得提交明文密码、token、API secret、私钥正文或供应商密钥。\n2. 不得用 mock、口头确认、占位截图或未脱敏导出关闭生产阻断项。\n3. 看板显示 \`valid_submission\` 后，仍需更新来源台账和 findings register，不能只靠本文关闭阻断。\n`);
+  ])}\n## 5. 操作步骤\n\n1. 从 \`template_path\` 复制 JSON 模板。\n2. 放到对应 \`target_manifest_path\`，文件名保持 \`manifest-<item_id>.json\`。\n3. 替换责任人、提交时间、证据链接、测试时间、复核人、credential_ref、回滚步骤和复测日期；证据链接必须指向外部受控位置，不提交原始证据文件。\n4. 删除或保留 \`template_notice\` 均可，但不得把模板默认值当成真实证据。\n5. 运行以下命令：\n\n\`\`\`bash\nnpm run verify:production-evidence-submissions-guard\nnpm run docs:production-evidence-submission-status\nnpm run verify:production-evidence-submission-status\nnpm run verify:delivery-gates\n\`\`\`\n\n## 6. 禁止事项\n\n1. 不得提交明文密码、token、API secret、私钥正文或供应商密钥。\n2. 不得用 mock、口头确认、占位截图或未脱敏导出关闭生产阻断项。\n3. 看板显示 \`valid_submission\` 后，仍需更新来源台账和 findings register，不能只靠本文关闭阻断。\n`);
 }
 
 const templateIndex = readJson(templateIndexPath);
@@ -169,7 +169,7 @@ const md = normalize(`# 生产证据责任组回填说明包 V0.1\n\n## 1. 机�
   { key: "awaiting_submission", label: "awaiting_submission" },
   { key: "valid_submission", label: "valid_submission" },
   { key: "invalid_submission", label: "invalid_submission" },
-])}\n## 5. 使用规则\n\n1. 将对应 \`guide_path\` 发给责任组。\n2. 责任组按说明复制 manifest 模板并填入真实证据链接。\n3. 每次提交后运行 \`npm run docs:production-evidence-submission-status\` 和 \`npm run verify:delivery-gates\`。\n4. 本说明包只做分派和指导，不得作为生产证据或关闭依据。\n`);
+])}\n## 5. 使用规则\n\n1. 将对应 \`guide_path\` 发给责任组。\n2. 责任组按说明复制 manifest 模板并填入真实证据链接；原始证据不得提交进仓库。\n3. 每次提交后运行 \`npm run docs:production-evidence-submission-status\` 和 \`npm run verify:delivery-gates\`。\n4. 本说明包只做分派和指导，不得作为生产证据或关闭依据。\n`);
 
 const json = normalize(JSON.stringify(output, null, 2));
 forbidPlaintextSecrets(mdPath, md);

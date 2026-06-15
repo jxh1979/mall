@@ -34,6 +34,6 @@
 ## 5. 使用规则
 
 1. 将对应 `guide_path` 发给责任组。
-2. 责任组按说明复制 manifest 模板并填入真实证据链接。
+2. 责任组按说明复制 manifest 模板并填入真实证据链接；原始证据不得提交进仓库。
 3. 每次提交后运行 `npm run docs:production-evidence-submission-status` 和 `npm run verify:delivery-gates`。
 4. 本说明包只做分派和指导，不得作为生产证据或关闭依据。

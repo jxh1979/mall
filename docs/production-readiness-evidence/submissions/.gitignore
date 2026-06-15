@@ -1,0 +1,9 @@
+# PRODUCTION_EVIDENCE_SUBMISSIONS_GUARD_READY
+# MANIFEST_ONLY_IN_REPO
+# RAW_EVIDENCE_STAYS_EXTERNAL
+# Raw evidence files must stay outside git and be referenced by manifest evidence_links.
+*
+!*/
+!.gitignore
+!README.md
+!**/manifest-*.json

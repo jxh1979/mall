@@ -7,10 +7,12 @@
 - AWAITING_REAL_PRODUCTION_EVIDENCE
 - CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET
 - VERIFY_PRODUCTION_EVIDENCE_SUBMISSION_KIT_READY
+- MANIFEST_ONLY_IN_REPO
+- RAW_EVIDENCE_STAYS_EXTERNAL
 
 ## 2. 定位
 
-本文从 `docs/production-readiness-evidence/production-owner-action-packs-latest.json` 自动生成，把责任人动作包进一步转成可提交、可复核、可追溯的证据包结构。本文只定义提交格式，不改变生产前置台账、阻断清单或安全 findings 的状态。
+本文从 `docs/production-readiness-evidence/production-owner-action-packs-latest.json` 自动生成，把责任人动作包进一步转成可提交、可复核、可追溯的证据包结构。本文只定义提交格式，不改变生产前置台账、阻断清单或安全 findings 的状态。仓库内只允许提交 manifest JSON；原始证据必须存放在受控外部位置，并通过 evidence_links 引用。
 
 ## 3. 总览
 
@@ -100,12 +102,13 @@
 2. `npm run docs:production-owner-actions`
 3. `npm run docs:production-evidence-submission-kit`
 4. `npm run verify:production-evidence-submission-kit`
-5. `npm run verify:production-readiness-evidence`
-6. `npm run verify:delivery-gates`
+5. `npm run verify:production-evidence-submissions-guard`
+6. `npm run verify:production-readiness-evidence`
+7. `npm run verify:delivery-gates`
 
 ## 8. 禁止事项
 
 1. 本提交包不能替代真实证据，不能把 `awaiting_real_evidence` 当作 passed。
 2. 不得提交明文密码、明文 token、API secret、私钥正文、支付密钥、人脸供应商密钥、企业微信密钥或 NAS SMB 密码。
-3. 只能提交 credential_ref、脱敏导出、工单、供应商回执、验收报告和机器命令输出。
+3. 仓库内只能提交 manifest JSON；脱敏导出、工单、供应商回执、验收报告和机器命令输出必须存放在外部受控位置，并在 evidence_links 留链。
 4. 只有 mock、口头确认、占位截图、无责任人截图、无测试时间截图，均不得关闭生产阻断。

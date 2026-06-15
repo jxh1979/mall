@@ -10,7 +10,9 @@
     "no_plaintext_secret": true,
     "credential_ref_only": true,
     "mock_is_not_production_evidence": true,
-    "submission_kit_does_not_close_blockers": true
+    "submission_kit_does_not_close_blockers": true,
+    "manifest_only_in_repo": true,
+    "raw_evidence_stays_external": true
   },
   "counts": {
     "owner_groups": 5,
@@ -132,6 +134,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -191,6 +194,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -250,6 +254,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -308,6 +313,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -368,6 +374,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -428,6 +435,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -488,6 +496,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -548,6 +557,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -608,6 +618,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -663,6 +674,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -723,6 +735,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -783,6 +796,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -843,6 +857,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -903,6 +918,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -963,6 +979,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1023,6 +1040,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1083,6 +1101,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1143,6 +1162,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1203,6 +1223,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1262,6 +1283,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1322,6 +1344,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1382,6 +1405,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1434,6 +1458,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1493,6 +1518,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1552,6 +1578,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1612,6 +1639,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1672,6 +1700,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1731,6 +1760,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1789,6 +1819,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1849,6 +1880,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1909,6 +1941,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -1968,6 +2001,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2028,6 +2062,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2086,6 +2121,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2141,6 +2177,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2201,6 +2238,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2261,6 +2299,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2321,6 +2360,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2381,6 +2421,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]
@@ -2433,6 +2474,7 @@
         "npm run docs:production-owner-actions",
         "npm run docs:production-evidence-submission-kit",
         "npm run verify:production-evidence-submission-kit",
+        "npm run verify:production-evidence-submissions-guard",
         "npm run verify:production-readiness-evidence",
         "npm run verify:delivery-gates"
       ]

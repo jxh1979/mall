@@ -135,6 +135,7 @@ function makeSubmission(ownerGroup, item) {
       "npm run docs:production-owner-actions",
       "npm run docs:production-evidence-submission-kit",
       "npm run verify:production-evidence-submission-kit",
+      "npm run verify:production-evidence-submissions-guard",
       "npm run verify:production-readiness-evidence",
       "npm run verify:delivery-gates",
     ],
@@ -184,6 +185,8 @@ const output = {
     credential_ref_only: true,
     mock_is_not_production_evidence: true,
     submission_kit_does_not_close_blockers: true,
+    manifest_only_in_repo: true,
+    raw_evidence_stays_external: true,
   },
   counts: {
     owner_groups: ownerSummaries.length,
@@ -230,7 +233,7 @@ const submissionRows = submissions.map((submission) => ({
   manifest_file_name: submission.manifest_file_name,
 }));
 
-const md = normalize(`# 生产证据提交包 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_KIT_READY\n- SUBMISSION_KIT_FROM_OWNER_ACTION_PACKS\n- AWAITING_REAL_PRODUCTION_EVIDENCE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- VERIFY_PRODUCTION_EVIDENCE_SUBMISSION_KIT_READY\n\n## 2. 定位\n\n本文从 \`${sourcePath}\` 自动生成，把责任人动作包进一步转成可提交、可复核、可追溯的证据包结构。本文只定义提交格式，不改变生产前置台账、阻断清单或安全 findings 的状态。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 责任组 | ${output.counts.owner_groups} |\n| 证据提交模板 | ${output.counts.submission_templates} |\n| P0 证据提交模板 | ${output.counts.p0_submission_templates} |\n\n## 4. 责任组提交根目录\n\n${mdTable(ownerRows, [
+const md = normalize(`# 生产证据提交包 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_KIT_READY\n- SUBMISSION_KIT_FROM_OWNER_ACTION_PACKS\n- AWAITING_REAL_PRODUCTION_EVIDENCE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- VERIFY_PRODUCTION_EVIDENCE_SUBMISSION_KIT_READY\n- MANIFEST_ONLY_IN_REPO\n- RAW_EVIDENCE_STAYS_EXTERNAL\n\n## 2. 定位\n\n本文从 \`${sourcePath}\` 自动生成，把责任人动作包进一步转成可提交、可复核、可追溯的证据包结构。本文只定义提交格式，不改变生产前置台账、阻断清单或安全 findings 的状态。仓库内只允许提交 manifest JSON；原始证据必须存放在受控外部位置，并通过 evidence_links 引用。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 责任组 | ${output.counts.owner_groups} |\n| 证据提交模板 | ${output.counts.submission_templates} |\n| P0 证据提交模板 | ${output.counts.p0_submission_templates} |\n\n## 4. 责任组提交根目录\n\n${mdTable(ownerRows, [
   { key: "owner_group", label: "owner_group" },
   { key: "status", label: "status" },
   { key: "submission_count", label: "submission_count" },
@@ -245,7 +248,7 @@ const md = normalize(`# 生产证据提交包 V0.1\n\n## 1. 机器标记\n\n- PR
   { key: "submission_status", label: "submission_status" },
   { key: "packet_folder", label: "packet_folder" },
   { key: "manifest_file_name", label: "manifest_file_name" },
-])}\n## 6. 单项 manifest 最低字段\n\n每个 \`manifest-<item_id>.json\` 至少包含：\n\n- submission_id\n- item_id\n- owner_group\n- owner_person\n- submitted_at\n- evidence_ids\n- evidence_links\n- last_test_time\n- result：只允许 passed、failed、partial、blocked\n- redaction_confirmed\n- reviewer\n- credential_refs：涉及账号、支付、企微、供应商、NAS、JWT、对象存储、数据库时必填；只写引用，不写密钥正文\n- rollback_step：涉及支付、凭证、供应商、160 配置、NAS 时必填\n- next_retest_due：涉及周期演练、凭证轮换、MDM、NAS、160 运行配置时必填\n\n## 7. 回填后必跑命令\n\n1. \`npm run docs:production-blockers\`\n2. \`npm run docs:production-owner-actions\`\n3. \`npm run docs:production-evidence-submission-kit\`\n4. \`npm run verify:production-evidence-submission-kit\`\n5. \`npm run verify:production-readiness-evidence\`\n6. \`npm run verify:delivery-gates\`\n\n## 8. 禁止事项\n\n1. 本提交包不能替代真实证据，不能把 \`awaiting_real_evidence\` 当作 passed。\n2. 不得提交明文密码、明文 token、API secret、私钥正文、支付密钥、人脸供应商密钥、企业微信密钥或 NAS SMB 密码。\n3. 只能提交 credential_ref、脱敏导出、工单、供应商回执、验收报告和机器命令输出。\n4. 只有 mock、口头确认、占位截图、无责任人截图、无测试时间截图，均不得关闭生产阻断。\n`);
+])}\n## 6. 单项 manifest 最低字段\n\n每个 \`manifest-<item_id>.json\` 至少包含：\n\n- submission_id\n- item_id\n- owner_group\n- owner_person\n- submitted_at\n- evidence_ids\n- evidence_links\n- last_test_time\n- result：只允许 passed、failed、partial、blocked\n- redaction_confirmed\n- reviewer\n- credential_refs：涉及账号、支付、企微、供应商、NAS、JWT、对象存储、数据库时必填；只写引用，不写密钥正文\n- rollback_step：涉及支付、凭证、供应商、160 配置、NAS 时必填\n- next_retest_due：涉及周期演练、凭证轮换、MDM、NAS、160 运行配置时必填\n\n## 7. 回填后必跑命令\n\n1. \`npm run docs:production-blockers\`\n2. \`npm run docs:production-owner-actions\`\n3. \`npm run docs:production-evidence-submission-kit\`\n4. \`npm run verify:production-evidence-submission-kit\`\n5. \`npm run verify:production-evidence-submissions-guard\`\n6. \`npm run verify:production-readiness-evidence\`\n7. \`npm run verify:delivery-gates\`\n\n## 8. 禁止事项\n\n1. 本提交包不能替代真实证据，不能把 \`awaiting_real_evidence\` 当作 passed。\n2. 不得提交明文密码、明文 token、API secret、私钥正文、支付密钥、人脸供应商密钥、企业微信密钥或 NAS SMB 密码。\n3. 仓库内只能提交 manifest JSON；脱敏导出、工单、供应商回执、验收报告和机器命令输出必须存放在外部受控位置，并在 evidence_links 留链。\n4. 只有 mock、口头确认、占位截图、无责任人截图、无测试时间截图，均不得关闭生产阻断。\n`);
 
 const duplicateSubmissionIds = duplicateValues(output.submissions.map((submission) => submission.submission_id));
 const duplicatePacketFolders = duplicateValues(output.submissions.map((submission) => submission.packet_folder));
