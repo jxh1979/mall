@@ -1,0 +1,11 @@
+{
+  "results": [],
+  "errors": [],
+  "paths": {
+    "scanned": [
+      "/home/james/complex-management/apps/web/src/main.tsx",
+      "/home/james/complex-management/apps/web/vite.config.ts",
+      "/home/james/complex-management/packages/shared/src/index.ts"
+    ]
+  }
+}

@@ -1,0 +1,406 @@
+# 票务、酒吧、游乐与商户管理成熟系统对照补充设计
+
+更新时间：2026-06-05
+
+> **执行口径（2026-06-11 收口，2026-06-13 追溯闸口补强）：** 本文档仅作为市场成熟系统能力参考、P1/P2 增强建议和后续产品演进素材，不再作为 P0 当前开发入口、接口契约或测试验收依据。P0 正式编码必须以 `00-current-effective-document-entry-v0.1.md`、`p0-api-contract-pack-v0.1.md`、`docs/openapi/openapi-p0.yaml/json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-implementation-task-list.md` 为准。本文历史 API 表中的 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 仅保留为早期思路，不得作为正式 Java 后端路径；未进入 OpenAPI 追溯附录且未通过 `verify:openapi-closure` 的能力，不得生成 Controller、SDK/mock、接口自动化或供应商联调文档。
+
+本文档用于承接早期总控业务要求和成熟系统对照思路：票务系统、酒吧管理系统、游乐管理系统需要明确拆分为后端录入配置与前端展示操作，并补齐票务策略、酒吧合作合同收益、酒水权益核销、商户合同与铺位平面图等能力。当前本文仅作为市场增强参考和后续 P1/P2 产品演进素材；涉及 P0 的内容必须回到当前有效入口、OpenAPI 契约、operation 验收矩阵和 OpenAPI 追溯附录确认后才可开发。
+
+> 复核说明（2026-06-10 归档后）：本文为早期成熟系统对照补充，市场基准与对抗式审计历史报告已归档；其结论已吸收到 `final-open-decisions-and-owner-checklist-20260610.md`、`master-roadmap.md` 和 `p0-implementation-task-list.md`。若本文与当前任务清单对 P0/P1/P2 边界理解不同，P0 边界以 `p0-implementation-task-list.md` 为准，市场增强项默认进入 P1/P2。
+
+## 1. 成熟系统参考结论
+
+参考公开资料后，成熟系统通常不把“价格、合同、库存、空间、核销”混在单个页面里，而是拆成可配置规则、可审计流程和现场终端三层：
+
+| 领域 | 参考系统/资料 | 可借鉴能力 | 落地到本项目 |
+|---|---|---|---|
+| 景区/场馆票务 | ROLLER price rules | 按数量、时间、提前预订调整价格；同一规则可复用到多个产品；总部规则与门店本地价格权限分离 | 建立票务策略引擎：日历、渠道、人群、数量、首单、互斥叠加、审批发布 |
+| 餐饮/酒吧 POS | Oracle Simphony、Toast、Lightspeed Restaurant | 菜品/酒水可多价格层级；折扣可预配置；桌台/楼层图用于现场快速操作；库存和报表依赖完整价格与出品记录 | 酒吧后台维护商品、价格、库存、合同收益；平板只服务酒吧点酒下单、最低消费校验和支付引导 |
+| 商业地产/商场租赁 | Yardi Retail Manager、Yardi Smart Lease、MRI ProLease | 管理租赁面积、铺位、平面图、限制条款、关键日期、租金阶梯、营业额租金、合同审批与续约预警 | 平台地基增强商户、铺位、合同、审批、收益规则、平面图坐标和附件 |
+
+参考链接：
+
+- ROLLER price rules: https://mysupport.roller.software/hc/en-us/articles/11149309350671-Get-started-with-price-rules
+- Oracle Simphony menu item prices: https://docs.oracle.com/en/industries/food-beverage/simphony/19.8/simcg/c_menu_items_pricing.htm
+- Oracle Simphony discounts: https://docs.oracle.com/cd/E89797_01/doc.210/e89805/c_discounts.htm
+- Toast bar POS: https://pos.toasttab.com/restaurant-pos/bar-pos
+- Lightspeed floor plans and tables: https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804656709-Creating-and-managing-floor-plans-and-tables
+- Yardi Retail Manager: https://www.yardi.com/en-gb/product/retail-manager/
+- Yardi Smart Lease: https://www.yardi.com/product/smart-lease/
+- MRI lease critical dates: https://www.mrisoftware.com/au/blog/managing-critical-lease-dates-in-retail/
+
+## 2. 总体边界调整
+
+### 2.1 前后端职责
+
+| 端 | 主要职责 | 禁止或限制 |
+|---|---|---|
+| 后端管理端 | 主数据录入、策略配置、合同录入、合同审批、价格试算、规则发布、结算规则维护、审计留痕 | 不承担现场高频展示交互 |
+| Web 前端 | 展示经营数据、检索、审批、配置表单、管理工作台 | 不直接绕过后端规则写核心业务状态 |
+| Android 工作手机/平板/一体机 | 工作手机做门票和权益扫码核销；平板做员工协助酒吧点酒下单、最低消费校验和支付引导；售票型触摸屏一体机做官方自助购票/取票/订单查询；非售票型触摸屏一体机做权益展示/领取、订台下单、吧台买酒下单、游乐设施状态查看和授权状态检查 | 不作为商户、合同、价格策略的主数据来源；不承担工作人员代客购票；离线只能使用后端下发的最小摘要 |
+| 第三方系统 | 餐饮、零售、机器人、视频监控、企业微信、设备只通过开放平台接口接入 | 不直接访问核心数据库 |
+
+### 2.2 模块拆分原则
+
+1. 票务系统负责票种、价格策略、促销资格、出票、权益生成、核销和结算依据。
+2. 酒吧系统负责桌台、点单、账单、出品、库存、存酒、票务赠酒权益承接和酒吧经营报表。
+3. 游乐系统负责项目、场次、容量、预约排队、项目核销、安全规则、设备状态、巡检和事故。
+4. 平台地基负责商户、组织、品牌、铺位、合同、合作模式、审批、平面图、联系人和资质。
+5. 收益结算系统消费票务核销、酒吧账单、游乐核销、合同规则和商户资料生成结算明细。
+
+## 3. 现有能力与缺口
+
+| 模块 | 已有能力 | 本次新增缺口 | 优先级 |
+|---|---|---|---|
+| 票务 | 票种、权益、出票、核销、渠道、结算基础 | 价格策略引擎、节假日日历、新人/首单/学生/多人/渠道优惠、策略审批、价格试算 | P0/P1 |
+| 酒吧 | 桌台、商品、订单、账单、库存、存酒、预订、出品 | 合同合作模式展示、收益模型引用、票务赠酒核销统计、赠酒成本归属、核销后库存扣减闭环 | P0/P1 |
+| 游乐 | 项目、规则、场次、容量、核销、P0 安全巡检、设备状态 | 后台录入与前端展示边界强化、票价策略引用、快速通道规则、停运补偿、预约排队、事故/保险接口预留 | P1/P2 增强；P0 安全巡检已纳入核心闭环 |
+| 平台地基 | 商户、组织、场地、区域、点位、合同基础字段 | 商户扩展资料、第一/第二联系人、租赁面积、计租面积、楼层区块、铺位平面图、合同审批、租金与分成细则 | P0/P1 |
+| Android | 工作手机核销、酒吧点酒平板、触摸屏一体机自助服务设计 | 三端职责边界、离线可见字段、终端只读配置边界、一体机订单与状态检查边界 | P1 |
+
+## 4. 票务系统补充设计
+
+### 4.1 票务策略类型
+
+| 策略 | 示例 | 规则口径 |
+|---|---|---|
+| 日期策略 | 平日、周末、节假日、特殊活动日 | 以 `TicketPriceCalendar` 决定基准价或上浮/下浮 |
+| 时段策略 | 上午场、下午场、夜场 | 与场次或入园时间绑定 |
+| 多人票策略 | 双人票、三人票、家庭票、团队票 | 支持固定套餐价或按人数阶梯优惠；P0 记录 `num_people`，同一时段全部核销（D9） |
+| 学生票策略 | 学生证、学信网/人工审核、年龄段 | P0 人工审核（证件 + 学信网），需资格校验和凭证留痕（D9） |
+| 新人策略 | 从未注册、从未购票、首单 | P0 以手机号为唯一防刷依据、注册须短信验证，同号未享受过即判新人，系统自动判定（D9） |
+| 渠道策略 | 官方 App/小程序、美团、大众点评、抖音等第三方渠道 | 同一票种可配置不同渠道价、渠道库存、渠道结算；门票必须由客人自助购买。P0 第三方仅美团/大众点评/抖音，携程/旅行社为 P1+ 预留 |
+| 会员策略 | 普通会员、VIP、企业客户 | 与会员等级、企业协议、积分权益关联 |
+| 优惠券策略 | 满减券、折扣券、兑换券 | 需要可叠加、互斥、限量、有效期和承担方 |
+| 早鸟/限时 | 提前 7 天、开园前 2 小时 | 与下单时间和游玩日期差值关联 |
+| 风控策略 | 同设备多账号、异常退款、批量下单 | 触发限制、审核或人工确认 |
+
+> 修订说明（2026-06-07）：新人/学生/多人三类资格的 P0 口径按《统一口径基准》D9（用户拍板）统一：新人=手机号自动判定、学生=人工审核证件+学信网+留痕、多人=`num_people`+同一时段全部核销，三类均 P0。原 §8.2 把"渠道/学生/新人资格规则"整体列 P1 与本表、与 PRD §5/§12 冲突，已按 D9 拆分（基础资格 P0、复杂资格规则与渠道资格 P1），消除"自动/人工/P1"三处分歧。依据 finding ticket-1/2/3/4。
+
+### 4.2 策略叠加与互斥
+
+| 规则 | 说明 |
+|---|---|
+| 基准价优先 | 先由产品版本、日期、场次、渠道确定基准价 |
+| 资格规则其次 | 再判断新人、学生、会员、企业协议、渠道来源 |
+| 优惠规则排序 | 按策略优先级、优惠承担方、最优价或固定顺序计算 |
+| 互斥组 | 学生票与新人折扣可配置是否互斥；渠道补贴与平台券可配置是否叠加 |
+| 封顶封底 | 最终价不能低于最低保护价，折扣总额不能超过预算或库存 |
+| 快照留痕 | 订单必须保存价格策略快照，后续规则修改不影响已购订单 |
+
+### 4.3 后端录入页面
+
+| 页面 | 功能 | P级 |
+|---|---|---|
+| 票种策略中心 | 查询策略、状态、适用票种、适用渠道 | P0 |
+| 策略新建/编辑 | 日期、人群、渠道、数量、优惠、互斥组、预算 | P0 |
+| 节假日日历 | 法定节假日、特殊活动日、淡旺季 | P0 |
+| 价格试算器 | 输入票种、日期、渠道、用户资格，输出最终价和命中规则 | P0 |
+| 策略审批发布 | 草稿、提交、审批、发布、停用、回滚 | P1 |
+| 优惠承担方 | 平台承担、商户承担、渠道承担、联合承担 | P1 |
+| 策略效果报表 | 使用量、让利额、转化率、异常订单 | P2 |
+
+### 4.4 前端/Android 展示
+
+| 场景 | 展示内容 |
+|---|---|
+| 游客购票页 | 可售票种、当前价、权益摘要、不可用原因、优惠标签 |
+| 客人 App/小程序 | 官方可售票种、当前价、权益摘要、不可用原因、优惠标签、会员积分和兑换入口 |
+| 第三方渠道回流 | 美团、大众点评、抖音等渠道订单、票码、支付/退款结果和核销状态 |
+| 核销端 | 不展示复杂价格，只展示票名、权益、剩余次数、风险提示、可核销动作 |
+| 管理看板 | 今日销售、策略命中、渠道销售、异常优惠、退款影响 |
+
+### 4.5 数据表建议
+
+> 修订说明（2026-06-07 收口）：明确资格规则口径的权威边界——本节 `ticket_customer_eligibility_rules`（新人/学生）与 `ticket_bundle_rules`（多人/套餐）两表为**营销/定价策略侧聚合视图**（服务于价格策略建模），不作为执行侧建表依据；**执行侧（票务子系统）权威落点是 ticketing dev-design §6.2.1.1 的单张 `ticket_eligibility_rules`**（单表覆盖新人/学生/多人三类），编码以该单表为准，字段映射见 dev-design §6.2.1.1。`num_people` 的**唯一落点为 `product_entitlement_templates`/`issued_entitlements`**（多人票应核销人数），本节 `ticket_bundle_rules` 只承载 `min_people`/`max_people` 约束（`num_people` 列保留为策略侧展示，不作为执行侧人数权威），消除两表/单表与 `num_people` 落点的重复与冲突。依据 finding decision-land-6。
+
+| 表 | 说明 | 核心字段 |
+|---|---|---|
+| `ticket_pricing_strategies` | 票务价格策略主表 | strategy_code, name, strategy_type, priority, stack_group, status |
+| `ticket_price_calendars` | 日期价格日历 | date, day_type, holiday_name, season_code, price_level |
+| `ticket_price_rules` | 价格规则明细 | strategy_id, condition_json, action_type, discount_value, min_price |
+| `ticket_customer_eligibility_rules` | 客户资格规则·策略侧聚合（新人/学生 P0，D9；执行侧权威=dev-design §6.2.1.1 单表 `ticket_eligibility_rules`） | eligibility_type, identity_scope, verification_method（新人=auto_by_phone、学生=manual_review）, reuse_limit；学生审核留痕另见票务子系统 `student_credential_audits` |
+| `ticket_channel_promotions` | 渠道策略（P0 仅美团/大众点评/抖音，携程/旅行社 P1+预留） | channel_id, product_id, channel_price, subsidy_owner, quota |
+| `ticket_bundle_rules` | 多人票/套餐票·策略侧聚合（P0，D9：同一时段全部核销；执行侧多人资格归入单表 `ticket_eligibility_rules`） | bundle_type, min_people, max_people, num_people（策略侧展示用；执行侧人数权威落点为 `product_entitlement_templates`/`issued_entitlements`）, bundle_price, entitlement_template_json |
+| `ticket_coupon_campaigns` | 优惠券活动 | coupon_type, budget_amount, issue_limit, valid_from, valid_to |
+| `ticket_price_simulations` | 价格试算记录 | input_json, result_json, operator_id, simulated_at |
+| `ticket_pricing_snapshots` | 订单价格快照 | order_id, strategy_ids, pricing_detail_json, final_amount |
+
+### 4.6 API 清单
+
+> 本节为成熟系统参考 API，不是 P0 正式后端契约。正式路径、请求体、权限、终端、幂等和事件以 `docs/openapi/openapi-p0.yaml/json` 为准。
+
+| 方法 | 历史能力路径 | 说明 | 能力阶段（非正式接口路径） |
+|---|---|---|---|
+| GET | `/api/admin/ticket-pricing/strategies` | 查询策略 | P0 |
+| POST | `/api/admin/ticket-pricing/strategies` | 新建策略 | P0 |
+| PUT | `/api/admin/ticket-pricing/strategies/{id}` | 修改策略 | P0 |
+| POST | `/api/admin/ticket-pricing/simulate` | 价格试算 | P0 |
+| POST | `/api/admin/ticket-pricing/strategies/{id}/submit` | 提交审批 | P1 |
+| POST | `/api/admin/ticket-pricing/strategies/{id}/publish` | 发布策略 | P1 |
+| POST | `/api/ticketing/quote` | 客人自助购票报价 | P0 |
+| GET | `/api/v1/customer/ticket-products` | 官方 App/小程序获取可售票种；以 `docs/openapi/openapi-p0.yaml` 为准 | P0 |
+| POST | `/api/openapi/ticketing/channel-orders/import` | 第三方渠道订单回流 | P1 |
+
+## 5. 酒吧管理系统补充设计
+
+### 5.1 合同与收益模式边界
+
+酒吧合同的主数据应归属平台地基/合同中心，酒吧系统只引用合同结果并展示当前生效的经营口径。这样可以避免酒吧系统和平台商户管理各自维护一套合同。
+
+| 合作模式 | 收益规则 | 结算来源 |
+|---|---|---|
+| 租赁 | 固定租金、每平米租金、物业费、递增租金 | 合同中心 + 收租计划 |
+| 联营 | 销售额分成、毛利分成、保底加分成 | 酒吧账单 + 合同规则 |
+| 自营 | 平台全额收入，成本按库存和人工归集 | 酒吧账单 + 成本中心 |
+| 股东比例 | 按项目或公司股份比例分配收益 | 经营利润 + 股东比例规则 |
+| 抽成 | 按酒水、门票、卡座、活动分别抽成 | 酒吧账单 + 票务核销 + 活动订单 |
+| 保底加分成 | 低于保底按保底，高于后按比例分成 | 合同保底 + 实收流水 |
+| 票务赠酒补贴 | 票务套餐赠酒由平台或活动预算承担 | 票务权益核销 + 酒吧出品成本 |
+
+### 5.2 酒水权益核销闭环
+
+票务中赠送的酒水不能只在票务侧核销成功，还必须进入酒吧经营数据：
+
+1. 票务出票时生成 `drink_redeem` 或 `bar_package_drink` 权益。
+2. 客人在酒吧前端/Android 出示票码。
+3. 酒吧端调用票务核销预检，确认权益、商户、门店、有效期和剩余次数。
+4. 核销成功后酒吧系统生成兑换类订单或账单抵扣项。
+5. 如果指定具体酒水 SKU，则同步扣减库存；如果是“任选一杯”，出品时再绑定 SKU。
+6. 生成赠酒统计、成本归属、结算明细和异常记录。
+7. 退款或核销冲正时，必须生成反向库存/结算/权益事件。
+
+### 5.3 酒吧后台页面
+
+| 页面 | 功能 | P级 |
+|---|---|---|
+| 酒吧经营总览 | 今日营业额、桌台、订单、赠酒核销、库存预警 | P0 |
+| 合同收益口径 | 查看生效合同、合作模式、分成规则、保底、租金 | P0 |
+| 酒水权益核销台账 | 票务赠酒核销、对应 SKU、成本、承担方、冲正状态 | P0 |
+| 酒吧商品价格 | SKU、规格、价格层级、会员价、渠道价、套餐 | P1 |
+| 赠酒规则配置 | 票务权益和酒吧商品映射、默认成本、是否扣库存 | P1 |
+| 结算试算 | 按合同规则试算日/月结算金额 | P1 |
+| 合作收益报表 | 租金、抽成、保底差额、赠酒补贴、活动收益 | P2 |
+
+### 5.4 前端/Android 展示
+
+| 场景 | 展示内容 |
+|---|---|
+| 吧台平板 | 酒吧/卡座绑定、点酒下单、最低消费校验、支付二维码、付款码支付、待出品 |
+| 员工工作手机 | 门票核销、赠饮/礼物/其他权益核销、送达确认、客户服务状态 |
+| 触摸屏一体机 | 扫码展示/领取赠饮、礼物和其他权益，支持订台下单、吧台买酒下单、游乐状态查看和授权状态检查 |
+| 经理看板 | 今日收入、赠酒核销、异常折扣、低库存、合同口径 |
+| 商户端 | 只展示本商户合同摘要、核销、账单、结算，不展示平台全局 |
+
+### 5.5 数据表建议
+
+| 表 | 说明 | 核心字段 |
+|---|---|---|
+| `bar_contract_refs` | 酒吧引用合同口径 | bar_venue_id, merchant_id, contract_id, effective_from, effective_to |
+| `bar_revenue_rule_snapshots` | 酒吧收益规则快照 | contract_id, mode, rent_amount, share_rate, guarantee_amount |
+| `bar_entitlement_redemptions` | 酒水权益承接记录 | entitlement_id, verification_id, bar_order_id, product_id, cost_owner |
+| `bar_drink_settlement_items` | 赠酒结算明细 | redemption_id, merchant_id, settlement_amount, cost_amount, status |
+| `bar_product_price_levels` | 酒水多价格层级 | product_id, price_level, price, active_condition_json |
+| `bar_voucher_product_mappings` | 票务权益与酒水 SKU 映射 | entitlement_template_id, product_id, quantity, allow_substitution |
+
+### 5.6 API 清单
+
+> 本节为酒吧 SaaS 增强参考 API，不是 P0 正式后端契约。拆单、合单、转台、挂账、服务费、低消差额补齐、配方成本和员工提成增强进入 P1；P0 点酒闭环以 OpenAPI 为准。
+
+| 方法 | 历史能力路径 | 说明 | 能力阶段（非正式接口路径） |
+|---|---|---|---|
+| GET | `/api/admin/bar/contract-summary` | 酒吧合同收益口径 | P0 |
+| GET | `/api/admin/bar/entitlement-redemptions` | 赠酒核销台账 | P0 |
+| POST | `/api/admin/bar/entitlement-redemptions` | 承接票务酒水核销 | P0 |
+| POST | `/api/admin/bar/voucher-product-mappings` | 配置赠酒 SKU 映射 | P1 |
+| POST | `/api/admin/bar/settlement/simulate` | 酒吧结算试算 | P1 |
+| GET | `/api/mobile/bar/redemption-summary` | 平板赠饮权益提示摘要，实际核销由工作手机或一体机完成 | P1 |
+
+## 6. 游乐管理系统补充设计
+
+### 6.1 前后端拆分
+
+| 后端录入/配置 | 前端/Android 展示操作 |
+|---|---|
+| 项目档案、区域、容量、场次、开放计划、安全规则 | 今日项目状态、排队人数、可入场人数、核销结果 |
+| 身高、年龄、健康、陪同规则 | 核销时提示禁止原因和人工放行要求 |
+| 设备巡检模板、停运规则、事故流程 | 巡检任务、故障上报、停运提示 |
+| 快速通道、预约容量、补偿规则 | 快速通道核销、预约叫号、补偿券展示 |
+
+### 6.2 补充功能
+
+| 功能 | 说明 | P级 |
+|---|---|---|
+| 游乐票价策略引用 | 单项目票、快速通道、节假日价仍由票务策略引擎报价 | P1 |
+| 快速通道容量 | 每场次快速通道名额、核销窗口、过号规则 | P1 |
+| 安全规则强提醒 | 身高、年龄、健康限制、陪同要求，现场核销必须展示 | P0 |
+| 停运补偿 | 设备停运后，未核销预约进入改期、退款或补偿券流程 | P1 |
+| 事故/保险接口预留 | 事故记录可挂视频证据、客服工单、保险材料 | P2 |
+| 项目平面定位 | 项目绑定商场区域和平面图坐标，便于地图导航和应急处置 | P1 |
+
+### 6.3 数据表建议
+
+| 表 | 说明 | 核心字段 |
+|---|---|---|
+| `amusement_fast_pass_policies` | 快速通道策略 | project_id, session_id, quota, valid_window, over_time_policy |
+| `amusement_compensation_rules` | 停运补偿规则 | trigger_type, compensation_type, amount, approval_required |
+| `amusement_project_map_refs` | 项目平面图坐标 | project_id, floor_plan_id, area_id, polygon_json, entrance_point_id |
+| `amusement_safety_rule_checks` | 安全规则检查记录 | project_id, rule_id, customer_id, result, checked_by |
+
+### 6.4 API 清单
+
+> 本节为游乐成熟系统增强参考 API，不是 P0 正式后端契约。P0 只强制安全巡检、核销和开放阻断闭环；预约排队、团体/包场、集团视图等按 P2 排期。
+
+| 方法 | 历史能力路径 | 说明 | 能力阶段（非正式接口路径） |
+|---|---|---|---|
+| GET | `/api/admin/amusement/projects/{id}/map-ref` | 项目平面图定位 | P1 |
+| POST | `/api/admin/amusement/fast-pass-policies` | 快速通道策略 | P1 |
+| POST | `/api/admin/amusement/compensation-rules` | 停运补偿规则 | P1 |
+| POST | `/api/mobile/amusement/safety-checks` | 现场安全规则确认 | P0 |
+
+## 7. 平台地基与商户管理补充设计
+
+### 7.1 商户扩展资料
+
+商户管理需要从“基础商户档案”升级为“商户经营主体 + 品牌 + 铺位 + 合同 + 联系人 + 资质 + 收益规则”的完整管理。
+
+| 类别 | 字段 |
+|---|---|
+| 主体信息 | 公司名称、统一社会信用代码、法人、品牌、业态、商户类型、经营状态、风险等级 |
+| 联系人 | 负责人、第一联系人、第二联系人、财务联系人、运营联系人、紧急联系人、电话、邮箱、企业微信 |
+| 铺位信息 | 楼栋、楼层、区块、铺位号、租赁面积、计租面积、公摊面积、经营面积、容量 |
+| 租金信息 | 每平米租金、月固定租金、物业费、保证金、免租期、递增规则 |
+| 合作信息 | 租赁、联营、自营、合作、股东比例、销售抽成、毛利分成、保底加分成 |
+| 合同信息 | 合同编号、起止日期、签署日期、审批状态、附件、补充协议、关键条款 |
+| 结算信息 | 结算周期、收款账户、开票信息、分成规则、冻结状态 |
+| 风险与预警 | 合同到期、资质到期、租金逾期、销售异常、投诉异常、消防/设备异常 |
+
+### 7.2 平面图能力
+
+| 能力 | 说明 |
+|---|---|
+| 平面图文件 | 支持上传楼层图、SVG/图片/PDF 预览，保留版本 |
+| 区块绘制 | 以多边形标注商场区块、公共区域、消防通道、出入口 |
+| 铺位绘制 | 每个铺位绑定坐标、多边形、面积、楼层、租赁状态 |
+| 商户绑定 | 铺位可绑定商户、品牌、合同、生效日期 |
+| 运营引用 | 票务、酒吧、游乐、监控、机器人、设备点位都引用同一平面图坐标 |
+
+### 7.3 合同审批与关键日期
+
+| 流程 | 说明 |
+|---|---|
+| 草稿 | 商务录入合同基础资料、铺位、面积、租金和收益规则 |
+| 业务审核 | 运营确认业态、铺位、经营范围和现场条件 |
+| 财务审核 | 财务确认租金、分成、保证金、结算周期和收款账户 |
+| 法务审核 | 法务确认合同条款、附件、补充协议和风险条款 |
+| 总经理审批 | 关键商户、保底让利、长期合同进入最终审批 |
+| 生效 | 合同生效后生成收益规则快照，供票务、酒吧、游乐和结算引用 |
+| 预警 | 到期、续约、租金调整、免租期结束、保证金到期自动提醒 |
+
+### 7.4 数据表建议
+
+| 表 | 说明 | 核心字段 |
+|---|---|---|
+| `merchant_profiles` | 商户扩展资料 | merchant_id, industry_type, business_scope, risk_level, settlement_status |
+| `merchant_contacts` | 商户联系人 | merchant_id, contact_role, name, phone_encrypted, email, is_primary |
+| `merchant_spaces` | 商户租赁/经营空间 | merchant_id, floor_plan_id, area_id, unit_no, leased_area, billable_area |
+| `mall_floor_plans` | 商场平面图 | mall_id, floor, file_url, version, status |
+| `floor_plan_shapes` | 平面图区域/铺位图形 | floor_plan_id, shape_type, ref_type, ref_id, polygon_json |
+| `merchant_contracts` | 商户合同增强表 | merchant_id, contract_no, contract_type, cooperation_mode, status |
+| `contract_approval_flows` | 合同审批流程 | contract_id, current_step, status, submitted_by, approved_at |
+| `contract_approval_records` | 合同审批记录 | flow_id, step_code, approver_id, decision, comment |
+| `contract_rent_rules` | 租金规则 | contract_id, rent_type, unit_rent, fixed_rent, escalation_json |
+| `contract_revenue_share_rules` | 分成规则 | contract_id, revenue_scope, share_base, platform_rate, merchant_rate |
+| `contract_key_dates` | 合同关键日期 | contract_id, date_type, date_name, due_date, remind_days, remind_level, block_policy, approval_level_on_due, owner_user_id, attachment_group_id, status；详细颗粒度见 `contract-date-compliance-field-granularity-options-20260610.md` |
+| `contract_attachments` | 合同附件 | contract_id, file_type, file_url, uploaded_by |
+
+### 7.5 API 清单
+
+> 本节为商业地产/商户服务增强参考 API，不是 P0 正式后端契约。商户服务/维修/投诉/整改工单作为 P1 独立子域；租金、物业费、能源费、公摊/CAM、应收账龄在 P0 并入财务经营完整应收应付台账，P1 再扩展为商户账单门户。
+
+| 方法 | 历史能力路径 | 说明 | 能力阶段（非正式接口路径） |
+|---|---|---|---|
+| GET | `/api/admin/merchant-profiles` | 商户扩展资料列表 | P0 |
+| PUT | `/api/admin/merchant-profiles/{merchantId}` | 更新商户扩展资料 | P0 |
+| POST | `/api/admin/merchant-contacts` | 新增联系人 | P0 |
+| POST | `/api/admin/merchant-spaces` | 绑定商户铺位 | P0 |
+| POST | `/api/admin/contracts` | 新建合同增强资料 | P0 |
+| POST | `/api/admin/contracts/{id}/submit` | 提交合同审批 | P1 |
+| POST | `/api/admin/contracts/{id}/approve` | 审批合同 | P1 |
+| GET | `/api/admin/floor-plans` | 平面图列表 | P1 |
+| POST | `/api/admin/floor-plans` | 上传平面图 | P1 |
+| POST | `/api/admin/floor-plan-shapes` | 保存区块/铺位多边形 | P1 |
+
+## 8. P0/P1/P2 编码顺序
+
+### 8.1 P0 必做
+
+| 序号 | 任务 | 产出 |
+|---|---|---|
+| P0-1 | 票务价格策略基础模型 | 策略、日期日历、规则、试算、订单快照 |
+| P0-2 | 票务报价能力 | 正式报价/试算 operation 以 `docs/openapi/openapi-p0.yaml/json` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 为准；本文不冻结 `/api/ticketing/quote` |
+| P0-3 | 商户扩展资料 | 联系人、面积、区块、合作模式、租金字段 |
+| P0-4 | 合同增强基础表 | 合同类型、合作模式、租金/分成规则基础字段 |
+| P0-5 | 酒吧赠酒核销台账 | 票务权益核销承接、成本归属、统计报表 |
+| P0-6 | 游乐安全规则现场确认 | Android/移动端核销时展示安全限制并留痕 |
+| P0-7 | 页面入口调整 | 票务策略、商户合同、酒吧赠酒、游乐安全规则进入独立索引 |
+| P0-8 | 门票资格规则基础落地（D9） | 新人=手机号自动判定、学生=人工审核证件+学信网+凭证留痕（`student_credential_audits`）、多人=`num_people`+同一时段全部核销 |
+
+### 8.2 P1 必做
+
+| 序号 | 任务 | 产出 |
+|---|---|---|
+| P1-1 | 策略审批发布 | 草稿、提交、审批、发布、回滚 |
+| P1-2 | 渠道资格与复杂资格规则引擎 | 渠道价、会员等级、复杂叠加/互斥；新人/学生/多人基础资格已前移 P0-8（D9） |
+| P1-3 | 酒吧赠酒 SKU 映射增强与冲正补偿 | P0 已要求赠饮/酒水兑换生成 0 元兑换点单并扣减吧台库存；P1 增强复杂 SKU 映射、替换赠饮、冲正补偿和报表 |
+| P1-4 | 合同审批流 | 业务、财务、法务、总经理审批 |
+| P1-5 | 商场平面图 | 上传楼层图、区块/铺位坐标、商户绑定 |
+| P1-6 | 游乐快速通道和停运补偿 | 快速通道容量、设备停运补偿 |
+
+### 8.3 P2 增强
+
+| 序号 | 任务 | 产出 |
+|---|---|---|
+| P2-1 | 动态定价 | 客流、库存、天气、活动、历史转化驱动的建议价 |
+| P2-2 | 复杂分成 | 毛利分成、股东比例、活动专项分账、多主体联合结算 |
+| P2-3 | 合同 AI 抽取 | 合同 OCR、条款抽取、关键日期识别、人工复核 |
+| P2-4 | 商户风险预警 | 租金逾期、合同到期、营业额异常、投诉异常 |
+| P2-5 | 平面图运营联动 | 机器人路线、视频点位、设备巡检、应急疏散引用 |
+
+## 9. 验收口径
+
+| 模块 | 验收标准 |
+|---|---|
+| 票务策略 | 同一票种可按平日/周末/节假日、多人票、新人、学生、渠道输出不同报价；订单保存策略快照 |
+| 酒吧赠酒 | 票务赠酒权益核销后，酒吧可查询核销台账、对应商品、成本归属和结算状态 |
+| 酒吧合同 | 酒吧页面能展示生效合同模式：租赁、联营、自营、抽成、保底加分成等 |
+| 游乐现场 | Android/移动端核销时能展示安全限制，人工放行必须留痕 |
+| 商户管理 | 商户资料包含第一/第二联系人、面积、楼层、区块、铺位、租金、合作模式和合同状态 |
+| 平面图 | 至少支持上传楼层图、维护区块/铺位坐标、绑定商户和场地 |
+| 审批 | 合同和策略进入审批后不能直接生效；发布后生成规则快照 |
+
+## 10. 已确认执行口径
+
+1. ~~票务策略 P0 是否先覆盖“平日/周末/节假日、多人票、新人、学生、渠道价”六类，动态定价放到 P2。~~ 已按总控口径收口：平日/周末/节假日价为最高优先级基础价格，多人票/新人票/学生票/渠道价基于基础价生成或由运营输入固定价格覆盖，动态定价放 P2；详见 `final-open-decisions-and-owner-checklist-20260610.md`。
+2. ~~新人资格以"手机号 + 设备 + 证件/微信 openid"哪几个维度作为防刷依据。~~ 已按 D9 定调：以**手机号**为唯一防刷依据，注册须短信验证，系统自动判定（2026-06-07 用户拍板）。
+3. ~~学生票是否需要外部学生认证接口，还是 P0 先人工审核/现场证件核验。~~ 已按 D9 定调：P0 **人工审核**（证件 + 学信网核验），凭证写入 `student_credential_audits` 留痕（2026-06-07 用户拍板）。
+4. ~~酒吧赠酒成本由平台承担、酒吧承担、活动预算承担，还是按每个票务产品单独配置。~~ 已按总控口径建议：平台承担，字段保留成本归属。
+5. ~~酒吧合同的“股东比例”是只用于利润报表，还是直接进入结算打款。~~ 已确认：只用于利润报表，不进入 P0 结算打款。
+6. ~~商场平面图 P1 先做图片 + 多边形坐标，还是直接要求 CAD/SVG 标准化导入。~~ 已确认：P1 图片 + 多边形坐标，CAD/SVG 标准化导入放 P2。
+7. ~~合同审批 P1 是否需要电子签章接口，还是先只做审批流和附件归档。~~ 已确认：P1 先做审批流和附件归档，电子签章/OCR 后置。
+8. ~~Android 端是否要求 P1 支持离线查看策略摘要；高价值酒水核销建议保持在线。~~ 已确认：P1 支持离线查看策略摘要和普通低风险摘要，高价值酒水核销保持在线；P0 不启用离线核销。
+
+## 11. 变更日志
+
+| 日期 | 类型 | 位置 | 内容 | 原因/依据 |
+|---|---|---|---|---|
+| 2026-06-07 | 改 | §4.1 票务策略类型 | 新人/学生/多人三类对齐 D9（手机号自动判定/人工审核留痕/`num_people`+同时段全部核销）；渠道标注 P0 仅美团/大众点评/抖音 | 消除"自动/人工/P1"冲突，统一 §8.2 与 PRD §5/§12；finding ticket-1/2/3/4/6 |
+| 2026-06-07 | 改 | §4.5 数据表建议 | `ticket_customer_eligibility_rules`/`ticket_bundle_rules`/`ticket_channel_promotions` 补 D9 与 P0/P1 标注、`num_people` | 资格规则与多人票落地、渠道边界；finding ticket-1/4/6 |
+| 2026-06-07 | 改 | §8.1/§8.2 | 新增 P0-8 门票资格规则基础落地；P1-2 改为渠道/复杂资格规则，基础资格前移 P0 | 资格 P0 落地，纠正原 P1 列法与 D9 冲突；finding ticket-1/2 |
+| 2026-06-07 | 改 | §10 已确认执行口径 | 第 2/3 条新人/学生资格按 D9 定调划除 | D9 已拍板，消除未决项；finding ticket-1/2/3 |
+| 2026-06-07 | 改 | §4.5 数据表建议 | 明确 `ticket_customer_eligibility_rules`/`ticket_bundle_rules` 两表为策略侧聚合、执行侧权威=dev-design §6.2.1.1 单表；`num_people` 唯一落点为模板/`issued_entitlements` | 统一资格规则口径、消除两表/单表与 num_people 落点重复；finding decision-land-6 |
+| 2026-06-09 对抗式市场基准复核 | 增 | 文档头 | 补最新市场基准报告入口，并明确 P0 边界以 `p0-implementation-task-list.md` 为准 | 避免早期成熟系统对照文档被误读为 P0 立即编码清单 |
+| 2026-06-10 总控决策建议补充 | 改 | §10 | 将票务策略、赠酒成本、股东比例、平面图、合同审批、Android 离线策略六项改为已确认执行口径 | 用户要求给出优劣对比和建议供选择执行 |
+| 2026-06-11 可编码收口 | 增/改 | 文档头、API 清单 | 明确本文仅为市场参考和 P1/P2 增强素材；历史 API 表不得作为正式 Java/OpenAPI 路径 | 防止成熟系统增强项和旧路径污染 P0 编码入口 |
+| 2026-06-12 参考文档收口 | 改 | §4.6/§5.6/§6.4/§7.5/§8.1 | API 表头改为历史能力路径；P0-2 票务报价任务改为以正式 OpenAPI/operation 验收矩阵为准，不冻结 `/api/ticketing/quote` | 防止市场参考 API 被误读为正式后端契约 |
+| 2026-06-13 OpenAPI 追溯闸口 | 改 | 文档头、API 清单 | 市场参考能力若要进入 P0，必须先进入 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md`，并通过 `verify:openapi-closure` | 防止成熟系统参考项绕过当前入口直接进入编码、mock 或供应商联调 |

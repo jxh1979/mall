@@ -1,0 +1,34 @@
+START baseline-security-audit
+START baseline-secrets
+START baseline-owasp
+START baseline-cwe
+START java-java
+START java-findsecbugs
+START ts-typescript
+START js-javascript
+START js-react
+START js-nodejs
+START ops-dockerfile
+START thirdparty-trailofbits
+START thirdparty-kondukto
+START thirdparty-elttam
+START thirdparty-dotta
+START thirdparty-atlassian
+START thirdparty-apiiro
+FAIL thirdparty-dotta exit=2
+FAIL js-javascript exit=2
+FAIL java-findsecbugs exit=2
+FAIL java-java exit=2
+FAIL baseline-security-audit exit=2
+FAIL thirdparty-atlassian exit=2
+FAIL js-react exit=2
+FAIL ops-dockerfile exit=2
+FAIL thirdparty-apiiro exit=2
+FAIL baseline-cwe exit=2
+FAIL thirdparty-trailofbits exit=2
+FAIL thirdparty-kondukto exit=2
+FAIL ts-typescript exit=2
+FAIL js-nodejs exit=2
+FAIL baseline-owasp exit=2
+FAIL thirdparty-elttam exit=2
+FAIL baseline-secrets exit=2

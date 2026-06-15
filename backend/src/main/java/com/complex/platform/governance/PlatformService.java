@@ -1,0 +1,604 @@
+package com.complex.platform.governance;
+
+import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.dto.ApprovalRequest;
+import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
+import com.complex.platform.governance.dto.BusinessEntityRequest;
+import com.complex.platform.governance.dto.ContractDraftRequest;
+import com.complex.platform.governance.dto.MerchantProfileRequest;
+import com.complex.platform.governance.dto.ProjectRequest;
+import com.complex.platform.governance.dto.SpaceRequest;
+import com.complex.platform.governance.dto.StatusChangeRequest;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Supplier;
+import org.springframework.stereotype.Service;
+
+@Service
+public class PlatformService {
+
+    private static final int DEFAULT_PAGE = 1;
+    private static final int DEFAULT_PAGE_SIZE = 50;
+
+    private final PlatformRepository repository;
+    private final IdempotencyService idempotencyService;
+    private final AuditEventService auditEventService;
+
+    public PlatformService(
+            PlatformRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService
+    ) {
+        this.repository = repository;
+        this.idempotencyService = idempotencyService;
+        this.auditEventService = auditEventService;
+    }
+
+    public PageResponse<BusinessEntityRecord> listBusinessEntities() {
+        List<BusinessEntityRecord> records = repository.listBusinessEntities();
+        auditEventService.recordSuccess(
+                "entity_binding.viewed",
+                "entity.binding.view",
+                "business_entity",
+                "all",
+                null,
+                null,
+                Map.of("count", records.size())
+        );
+        return page(records);
+    }
+
+    public BusinessEntityRecord createBusinessEntity(BusinessEntityRequest request) {
+        return executeWrite(
+                "createBusinessEntity",
+                idempotencyKey(request),
+                request,
+                BusinessEntityRecord.class,
+                "business_entity.changed",
+                "business_entity.change_failed",
+                "entity.binding.manage",
+                "business_entity",
+                () -> {
+                    String entityName = requireText(request == null ? null : request.entityName(), "entity_name");
+                    String entityRole = requireText(request == null ? null : request.entityRole(), "entity_role");
+                    Instant now = Instant.now();
+                    return repository.saveBusinessEntity(new BusinessEntityRecord(
+                            "be_" + slug(request.idempotencyKey()),
+                            entityName,
+                            entityRole,
+                            trimToNull(request.unifiedSocialCreditCode()),
+                            trimToNull(request.legalRepresentative()),
+                            trimToNull(request.bankAccountRef()),
+                            trimToDefault(request.status(), "active"),
+                            now,
+                            now
+                    ));
+                }
+        );
+    }
+
+    public PageResponse<MerchantRecord> listMerchants() {
+        List<MerchantRecord> records = repository.listMerchants();
+        auditEventService.recordSuccess(
+                "merchant.viewed",
+                "merchant.profile.view",
+                "merchant",
+                "all",
+                null,
+                null,
+                Map.of("count", records.size())
+        );
+        return page(records);
+    }
+
+    public MerchantRecord createMerchant(MerchantProfileRequest request) {
+        return saveMerchant(
+                "createMerchant",
+                "mch_" + slug(idempotencyKey(request)),
+                request
+        );
+    }
+
+    public MerchantRecord updateMerchant(String merchantId, MerchantProfileRequest request) {
+        return saveMerchant(
+                "updateMerchant:" + merchantId,
+                requireText(merchantId, "merchant_id"),
+                request
+        );
+    }
+
+    public PageResponse<ProjectRecord> listProjects() {
+        List<ProjectRecord> records = repository.listProjects();
+        auditEventService.recordSuccess(
+                "project.viewed",
+                "governance.project.view",
+                "project",
+                "all",
+                null,
+                null,
+                Map.of("count", records.size())
+        );
+        return page(records);
+    }
+
+    public ProjectRecord createProject(ProjectRequest request) {
+        return executeWrite(
+                "createProject",
+                idempotencyKey(request),
+                request,
+                ProjectRecord.class,
+                "project.created",
+                "project.create_failed",
+                "governance.project.manage",
+                "project",
+                () -> {
+                    String name = requireText(request == null ? null : request.name(), "name");
+                    String venueType = requireText(request == null ? null : request.venueType(), "venue_type");
+                    Instant now = Instant.now();
+                    return repository.saveProject(new ProjectRecord(
+                            "prj_" + slug(request.idempotencyKey()),
+                            trimToNull(request.merchantId()),
+                            venueType,
+                            name,
+                            trimToNull(request.code()),
+                            trimToNull(request.floor()),
+                            request.capacity(),
+                            trimToDefault(request.status(), "active"),
+                            now,
+                            now
+                    ));
+                }
+        );
+    }
+
+    public PageResponse<SpaceRecord> listSpaces() {
+        List<SpaceRecord> records = repository.listSpaces();
+        auditEventService.recordSuccess(
+                "space.viewed",
+                "governance.space.view",
+                "space",
+                "all",
+                null,
+                null,
+                Map.of("count", records.size())
+        );
+        return page(records);
+    }
+
+    public SpaceRecord createSpace(SpaceRequest request) {
+        return executeWrite(
+                "createSpace",
+                idempotencyKey(request),
+                request,
+                SpaceRecord.class,
+                "space.updated",
+                "space.update_failed",
+                "governance.space.manage",
+                "space",
+                () -> {
+                    String spaceName = requireText(request == null ? null : request.spaceName(), "space_name");
+                    String spaceType = requireText(request == null ? null : request.spaceType(), "space_type");
+                    Instant now = Instant.now();
+                    return repository.saveSpace(new SpaceRecord(
+                            "sp_" + slug(request.idempotencyKey()),
+                            trimToNull(request.projectId()),
+                            trimToNull(request.merchantId()),
+                            trimToNull(request.parentSpaceId()),
+                            spaceName,
+                            spaceType,
+                            trimToNull(request.floorNo()),
+                            request.areaSquareMeter(),
+                            request.polygonPoints() == null ? List.of() : request.polygonPoints(),
+                            trimToDefault(request.status(), "active"),
+                            now,
+                            now
+                    ));
+                }
+        );
+    }
+
+    public PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindings() {
+        try {
+            List<BusinessEntityBindingRecord> records = repository.listBusinessEntityBindings();
+            auditEventService.recordSuccess(
+                    "entity_binding.viewed",
+                    "entity.binding.view",
+                    "business_entity_binding",
+                    "all",
+                    null,
+                    null,
+                    Map.of("count", records.size())
+            );
+            return page(records);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "entity_binding.view_failed",
+                    "entity.binding.view",
+                    "business_entity_binding",
+                    "all",
+                    null,
+                    null,
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public BusinessEntityBindingRecord createBusinessEntityBinding(BusinessEntityBindingRequest request) {
+        return executeWrite(
+                "createBusinessEntityBinding",
+                idempotencyKey(request),
+                request,
+                BusinessEntityBindingRecord.class,
+                "entity_binding.changed",
+                "entity_binding.change_failed",
+                "entity.binding.manage",
+                "business_entity_binding",
+                () -> {
+                    BusinessEntityBindingRequest actual = requireRequest(request);
+                    String merchantId = requireText(actual.merchantId(), "merchant_id");
+                    repository.findActiveBusinessEntityBindingByMerchantId(merchantId)
+                            .ifPresent(existing -> {
+                                throw ApiException.conflict(
+                                        "ACTIVE_BINDING_EXISTS",
+                                        "active business entity binding already exists for merchant"
+                                );
+                            });
+                    Instant now = Instant.now();
+                    return repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(
+                            UUID.randomUUID().toString(),
+                            merchantId,
+                            requireText(actual.operationEntityId(), "operation_entity_id"),
+                            requireText(actual.contractEntityId(), "contract_entity_id"),
+                            requireText(actual.settlementEntityId(), "settlement_entity_id"),
+                            "active",
+                            actual.effectiveFrom() == null ? LocalDate.now(ZoneOffset.UTC) : actual.effectiveFrom(),
+                            null,
+                            trimToNull(actual.changeReason()),
+                            now,
+                            now
+                    ));
+                }
+        );
+    }
+
+    public BusinessEntityBindingRecord changeBusinessEntityBinding(String id, StatusChangeRequest request) {
+        String bindingId = requireText(id, "id");
+        return executeWrite(
+                "changeBusinessEntityBinding:" + bindingId,
+                idempotencyKey(request),
+                request,
+                BusinessEntityBindingRecord.class,
+                "entity_binding.changed",
+                "entity_binding.change_failed",
+                "entity.binding.manage",
+                "business_entity_binding",
+                () -> {
+                    StatusChangeRequest actual = requireRequest(request);
+                    String status = requireText(actual.action(), "action");
+                    String reason = requireText(actual.reason(), "reason");
+                    BusinessEntityBindingRecord existing = repository.findBusinessEntityBindingById(bindingId)
+                            .orElseThrow(() -> ApiException.notFound("BINDING_NOT_FOUND", "business entity binding not found"));
+                    if ("active".equals(status)) {
+                        repository.findActiveBusinessEntityBindingByMerchantId(existing.merchantId())
+                                .filter(active -> !active.id().equals(existing.id()))
+                                .ifPresent(active -> {
+                                    throw ApiException.conflict(
+                                            "ACTIVE_BINDING_EXISTS",
+                                            "active business entity binding already exists for merchant"
+                                    );
+                                });
+                    }
+                    Instant now = Instant.now();
+                    return repository.saveBusinessEntityBinding(new BusinessEntityBindingRecord(
+                            existing.id(),
+                            existing.merchantId(),
+                            existing.operationEntityId(),
+                            existing.contractEntityId(),
+                            existing.settlementEntityId(),
+                            status,
+                            existing.effectiveFrom(),
+                            "active".equals(status) ? null : LocalDate.now(ZoneOffset.UTC),
+                            reason,
+                            existing.createdAt(),
+                            now
+                    ));
+                }
+        );
+    }
+
+    public PageResponse<ContractRecord> listContracts() {
+        try {
+            List<ContractRecord> records = repository.listContracts();
+            auditEventService.recordSuccess(
+                    "contract.viewed",
+                    "contract.view",
+                    "contract",
+                    "all",
+                    null,
+                    null,
+                    Map.of("count", records.size())
+            );
+            return page(records);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "contract.view_failed",
+                    "contract.view",
+                    "contract",
+                    "all",
+                    null,
+                    null,
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public ContractRecord createContractDraft(ContractDraftRequest request) {
+        return executeWrite(
+                "createContractDraft",
+                idempotencyKey(request),
+                request,
+                ContractRecord.class,
+                "contract.draft_saved",
+                "contract.draft_save_failed",
+                "contract.draft.manage",
+                "contract",
+                () -> {
+                    ContractDraftRequest actual = requireRequest(request);
+                    Instant now = Instant.now();
+                    List<String> attachmentIds = actual.attachmentIds() == null
+                            ? List.of()
+                            : List.copyOf(actual.attachmentIds());
+                    return repository.saveContract(new ContractRecord(
+                            "ctr_" + slug(actual.idempotencyKey()),
+                            requireText(actual.merchantId(), "merchant_id"),
+                            requireText(actual.contractSubjectId(), "contract_subject_id"),
+                            trimToNull(actual.operationSubjectId()),
+                            requireText(actual.settlementSubjectId(), "settlement_subject_id"),
+                            requireDate(actual.effectiveDate(), "effective_date"),
+                            requireDate(actual.expiryDate(), "expiry_date"),
+                            actual.rentTerms() == null ? Map.of() : Map.copyOf(actual.rentTerms()),
+                            actual.shareholderRatioForReport(),
+                            attachmentIds,
+                            "draft",
+                            now,
+                            now
+                    ));
+                }
+        );
+    }
+
+    public ContractRecord approveContract(String contractId, ApprovalRequest request) {
+        String id = requireText(contractId, "contract_id");
+        return executeWrite(
+                "approveContract:" + id,
+                idempotencyKey(request),
+                request,
+                ContractRecord.class,
+                "contract.lifecycle_changed",
+                "contract.lifecycle_change_failed",
+                "contract.lifecycle.approve",
+                "contract",
+                () -> {
+                    ApprovalRequest actual = requireRequest(request);
+                    String lifecycleStatus = switch (requireText(actual.decision(), "decision")) {
+                        case "approve" -> "approved";
+                        case "reject" -> "rejected";
+                        case "return" -> "returned";
+                        default -> throw ApiException.badRequest("VALIDATION_FAILED", "decision is invalid");
+                    };
+                    ContractRecord existing = repository.findContractById(id)
+                            .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                    return repository.saveContract(new ContractRecord(
+                            existing.id(),
+                            existing.merchantId(),
+                            existing.contractSubjectId(),
+                            existing.operationSubjectId(),
+                            existing.settlementSubjectId(),
+                            existing.effectiveDate(),
+                            existing.expiryDate(),
+                            existing.rentTerms(),
+                            existing.shareholderRatioForReport(),
+                            existing.attachmentIds(),
+                            lifecycleStatus,
+                            existing.createdAt(),
+                            Instant.now()
+                    ));
+                }
+        );
+    }
+
+    private MerchantRecord saveMerchant(
+            String operationId,
+            String merchantId,
+            MerchantProfileRequest request
+    ) {
+        return executeWrite(
+                operationId,
+                idempotencyKey(request),
+                request,
+                MerchantRecord.class,
+                "merchant.updated",
+                "merchant.update_failed",
+                "merchant.profile.manage",
+                "merchant",
+                () -> {
+                    String merchantName = requireText(request == null ? null : request.merchantName(), "merchant_name");
+                    String merchantType = requireText(request == null ? null : request.merchantType(), "merchant_type");
+                    Instant now = Instant.now();
+                    return repository.saveMerchant(new MerchantRecord(
+                            merchantId,
+                            merchantName,
+                            merchantType,
+                            trimToNull(request.businessEntityId()),
+                            trimToNull(request.contractEntityId()),
+                            trimToNull(request.settlementEntityId()),
+                            trimToNull(request.contactName()),
+                            trimToNull(request.contactPhone()),
+                            trimToDefault(request.status(), "active"),
+                            now,
+                            now
+                    ));
+                }
+        );
+    }
+
+    private <T> T executeWrite(
+            String operationId,
+            String idempotencyKey,
+            Object request,
+            Class<T> responseType,
+            String successEvent,
+            String failureEvent,
+            String permissionCode,
+            String businessType,
+            Supplier<T> action
+    ) {
+        try {
+            return idempotencyService.execute(
+                    operationId,
+                    idempotencyKey,
+                    request,
+                    () -> {
+                        T saved = action.get();
+                        auditEventService.recordSuccess(
+                                successEvent,
+                                permissionCode,
+                                businessType,
+                                businessId(saved),
+                                null,
+                                idempotencyKey,
+                                Map.of()
+                        );
+                        return saved;
+                    },
+                    responseType
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    failureEvent,
+                    permissionCode,
+                    businessType,
+                    null,
+                    null,
+                    idempotencyKey,
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    private <T> PageResponse<T> page(List<T> items) {
+        return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
+    }
+
+    private String requireText(String value, String fieldName) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
+        }
+        return trimmed;
+    }
+
+    private String trimToDefault(String value, String defaultValue) {
+        String trimmed = value == null ? "" : value.trim();
+        return trimmed.isEmpty() ? defaultValue : trimmed;
+    }
+
+    private String trimToNull(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private <T> T requireRequest(T request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        return request;
+    }
+
+    private LocalDate requireDate(LocalDate value, String fieldName) {
+        if (value == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
+        }
+        return value;
+    }
+
+    private String slug(String value) {
+        String slug = trimToDefault(value, UUID.randomUUID().toString())
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+        return slug.isEmpty() ? UUID.randomUUID().toString().replace("-", "") : slug;
+    }
+
+    private String idempotencyKey(BusinessEntityRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String idempotencyKey(MerchantProfileRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String idempotencyKey(ProjectRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String idempotencyKey(SpaceRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String idempotencyKey(BusinessEntityBindingRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String idempotencyKey(StatusChangeRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String idempotencyKey(ContractDraftRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String idempotencyKey(ApprovalRequest request) {
+        return request == null ? null : request.idempotencyKey();
+    }
+
+    private String businessId(Object value) {
+        if (value instanceof BusinessEntityRecord record) {
+            return record.id();
+        }
+        if (value instanceof MerchantRecord record) {
+            return record.id();
+        }
+        if (value instanceof ProjectRecord record) {
+            return record.id();
+        }
+        if (value instanceof SpaceRecord record) {
+            return record.id();
+        }
+        if (value instanceof BusinessEntityBindingRecord record) {
+            return record.id();
+        }
+        if (value instanceof ContractRecord record) {
+            return record.id();
+        }
+        return null;
+    }
+
+    private String codeOf(RuntimeException exception) {
+        if (exception instanceof ApiException apiException) {
+            return apiException.code();
+        }
+        return exception.getClass().getSimpleName();
+    }
+}

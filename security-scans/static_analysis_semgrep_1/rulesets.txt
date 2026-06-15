@@ -1,0 +1,22 @@
+# Semgrep Scan - Approved Rulesets
+# Generated: 2026-06-14
+# Scan mode: important-only
+# Engine: Semgrep OSS
+
+p/security-audit
+p/secrets
+p/owasp-top-ten
+p/cwe-top-25
+p/java
+p/findsecbugs
+p/typescript
+p/javascript
+p/react
+p/nodejs
+p/dockerfile
+https://github.com/trailofbits/semgrep-rules
+https://github.com/elttam/semgrep-rules
+https://github.com/kondukto-io/semgrep-rules
+https://github.com/federicodotta/semgrep-rules
+https://github.com/atlassian-labs/atlassian-sast-ruleset
+https://github.com/apiiro/malicious-code-ruleset

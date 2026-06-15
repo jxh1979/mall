@@ -1,0 +1,153 @@
+package com.complex.platform.evidence;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
+
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
+        "spring.datasource.username=complex",
+        "spring.datasource.password=complex_dev_pwd"
+})
+@Transactional
+class EvidenceEventJdbcIntegrationTests {
+
+    @Autowired
+    private JdbcEvidenceEventRepository repository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void resetEvidenceEventTables() {
+        jdbcTemplate.execute("TRUNCATE evidence_events");
+    }
+
+    @Test
+    void migrationCreatesEvidenceEventTable() {
+        assertThat(regclass("evidence_events")).isEqualTo("evidence_events");
+        assertThat(regclass("evidence_attachments")).isEqualTo("evidence_attachments");
+        assertThat(regclass("evidence_reviews")).isEqualTo("evidence_reviews");
+        assertThat(permissionCodes()).contains(
+                "evidence.attachment.create",
+                "evidence.review.create",
+                "evidence.timeline.view"
+        );
+    }
+
+    @Test
+    void evidenceEventListReturnsLatestEvents() {
+        Instant occurred = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveAll(List.of(
+                new EvidenceEventRecord(
+                        "evt_old",
+                        "P0-ANDROID-JDBC",
+                        "staff_jdbc",
+                        "terminal.login",
+                        "android_terminal",
+                        "success",
+                        "login",
+                        Map.of("mode", "online"),
+                        occurred,
+                        occurred.plusSeconds(1)
+                ),
+                new EvidenceEventRecord(
+                        "evt_new",
+                        "P0-ANDROID-JDBC",
+                        "staff_jdbc",
+                        "terminal.verification.online",
+                        "android_terminal",
+                        "success",
+                        "verification",
+                        Map.of("verification_no", "V1"),
+                        occurred.plusSeconds(2),
+                        occurred.plusSeconds(3)
+                )
+        ));
+
+        assertThat(repository.listLatest(2))
+                .extracting(EvidenceEventRecord::id, EvidenceEventRecord::eventType)
+                .containsExactly(
+                        tuple("evt_new", "terminal.verification.online"),
+                        tuple("evt_old", "terminal.login")
+                );
+        assertThat(repository.listLatest(1))
+                .singleElement()
+                .satisfies(event -> assertThat(event.payload()).containsEntry("verification_no", "V1"));
+    }
+
+    @Test
+    void attachmentReviewAndTimelinePersistFormalFields() {
+        Instant now = Instant.parse("2026-06-14T08:00:00Z");
+        repository.saveAll(List.of(new EvidenceEventRecord(
+                "evt_timeline_jdbc",
+                "P0-ANDROID-JDBC",
+                "staff_jdbc",
+                "terminal.exception",
+                "android_terminal",
+                "success",
+                "exception evidence",
+                Map.of("business_type", "contract", "business_id", "ctr_jdbc"),
+                now,
+                now.plusSeconds(1)
+        )));
+        repository.saveAttachment(new EvidenceAttachmentRecord(
+                "att_jdbc",
+                "contract.pdf",
+                "application/pdf",
+                1024L,
+                "contract",
+                "ctr_jdbc",
+                "contract",
+                "evidence/contracts/ctr_jdbc.pdf",
+                "https://object-storage.local/upload/att_jdbc",
+                "uploaded",
+                "sha256:jdbc",
+                now,
+                now.plusSeconds(2)
+        ));
+        repository.saveReview(new EvidenceReviewRecord(
+                "rev_jdbc",
+                "contract",
+                "ctr_jdbc",
+                "medium",
+                "pass",
+                "complete",
+                List.of("att_jdbc"),
+                "created",
+                now.plusSeconds(3),
+                now.plusSeconds(3)
+        ));
+
+        assertThat(repository.findAttachmentById("att_jdbc"))
+                .get()
+                .satisfies(attachment -> {
+                    assertThat(attachment.status()).isEqualTo("uploaded");
+                    assertThat(attachment.checksum()).isEqualTo("sha256:jdbc");
+                });
+        assertThat(repository.listTimeline("contract", "ctr_jdbc"))
+                .extracting(EvidenceTimelineItem::itemType)
+                .contains("evidence_event", "attachment", "review");
+    }
+
+    private String regclass(String tableName) {
+        return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
+    }
+
+    private List<String> permissionCodes() {
+        return jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permissions
+                 ORDER BY permission_code
+                """, String.class);
+    }
+}

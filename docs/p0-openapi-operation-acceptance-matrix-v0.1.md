@@ -1,0 +1,273 @@
+# P0 OpenAPI Operation 验收矩阵 V0.1
+
+## 1. 文档定位
+
+本文基于 `docs/openapi/openapi-p0.yaml` 与 `docs/openapi/openapi-p0.json` 生成，是 P0 可编码接口、权限、终端、幂等、审计事件和测试验收的逐接口矩阵。后端、前端、Android 终端、一体机、客人端、小程序/App/Web、测试与第三方供应商联调均以本文为执行入口。
+
+本文不是新需求池；若本文与业务 PRD、技术方案或旧接口表冲突，以 OpenAPI、统一口径基准、权限矩阵、OpenAPI 追溯附录和本文为准。未进入 OpenAPI 与 `p0-openapi-contract-closure-appendix-v0.1.md` 的能力不得直接进入 P0 开发。
+
+## 2. 强制规则
+
+1. 每个 operation 必须对应 Spring Boot Controller 方法、请求 DTO、响应 DTO、Service 方法、权限校验、审计事件、追溯附录条目和验收用例。
+2. `x-permission` 只表达员工或系统权限点，或使用 `public`、`authenticated`、`not_applicable`；客人 Token、设备凭证、开放应用凭证、Webhook 签名统一写入 `x-auth-context`。
+3. `requestBody` 不允许继续使用 `GenericWrite`；每个写接口必须有独立 schema，字段名、必填项、枚举和单位必须可直接生成 DTO。
+4. `x-idempotency-required=true` 的接口必须校验 `X-Idempotency-Key`，并把重复提交返回、并发锁、失败重放、审计留痕纳入测试。
+5. `x-terminal-allowed` 只能使用 `unified-standards-baseline-v0.1.md` D5 的 10 个终端码；门禁设备、人脸年龄设备、监控和服务端调用必须使用 `x-device-capability` 或 `x-invocation-channel` 表达，不能伪装成终端类型。
+6. 本文列出的成功事件和失败事件必须进入事件中心；不能只做业务表更新而没有操作留痕。
+
+## 3. Operation 清单
+
+> 当前 `docs/openapi/openapi-p0.json` 共 181 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+
+| 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| open-platform | `POST` | `/api/open/auth/token` | `openAuthToken` | 开放平台获取令牌 | `OpenAuthTokenRequest` | `not_applicable` | `open-app-credential` | `open-app` | channel: server-to-server | 否 | `open_auth.succeeded` | `open_auth.failed` |
+| open-platform | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | `getOpenEventResult` | 回调处理结果查询 | `-` | `not_applicable` | `open-app-credential` | `open-endpoint` | channel: server-to-server | 否 | `api_call.logged` | `api_call.rejected` |
+| open-platform | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | `receiveOpenWebhook` | 第三方或供应商回调 | `GenericObject` | `not_applicable` | `webhook-signature` | `open-endpoint` | channel: server-to-server | 是 | `api_call.logged` | `api_call.rejected` |
+| access | `GET` | `/api/v1/access/permission-templates` | `listPermissionTemplates` | 权限模板列表 | `-` | `access.permission_template.view` | `staff-token` | `project` | web | 否 | `permission_template.viewed` | `permission_template.view_failed` |
+| access | `POST` | `/api/v1/access/permission-templates` | `createPermissionTemplate` | 创建权限模板 | `PermissionTemplateRequest` | `access.permission_template.manage` | `staff-token` | `project` | web | 是 | `permission_template.changed` | `permission_template.change_failed` |
+| access | `PUT` | `/api/v1/access/permission-templates/{id}` | `updatePermissionTemplate` | 修改权限模板 | `PermissionTemplateRequest` | `access.permission_template.manage` | `staff-token` | `project` | web | 是 | `permission_template.changed` | `permission_template.change_failed` |
+| access | `POST` | `/api/v1/access/permission-templates/{id}/apply` | `applyPermissionTemplate` | 应用权限模板 | `PermissionTemplateApplyRequest` | `access.permission_template.apply` | `staff-token` | `project` | web | 是 | `permission_template.applied` | `permission_template.apply_failed` |
+| access | `POST` | `/api/v1/access/permission-templates/{id}/copy` | `copyPermissionTemplate` | 复制权限模板 | `PermissionTemplateRequest` | `access.permission_template.manage` | `staff-token` | `project` | web | 是 | `permission_template.copied` | `permission_template.copy_failed` |
+| access | `GET` | `/api/v1/access/permissions` | `listPermissions` | 权限点列表 | `-` | `access.permission.view` | `staff-token` | `project` | web | 否 | `permission.viewed` | `permission.view_failed` |
+| access | `GET` | `/api/v1/access/roles` | `listRoles` | 角色列表 | `-` | `access.role.view` | `staff-token` | `project` | web | 否 | `role.viewed` | `role.view_failed` |
+| access | `POST` | `/api/v1/access/roles` | `createRole` | 创建角色 | `RoleRequest` | `access.role.manage` | `staff-token` | `project` | web | 是 | `role.changed` | `role.change_failed` |
+| access | `POST` | `/api/v1/access/temporary-grants` | `createTemporaryGrant` | 临时授权 | `TemporaryGrantRequest` | `access.temporary_grant.create` | `staff-token` | `project` | web | 是 | `permission_template.applied` | `temporary_grant.create_failed` |
+| access | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | `revokeTemporaryGrant` | 撤销临时授权 | `StatusChangeRequest` | `access.temporary_grant.revoke` | `staff-token` | `project` | web | 是 | `permission_template.revoked` | `temporary_grant.revoke_failed` |
+| access | `GET` | `/api/v1/access/users` | `listAccessUsers` | 查询权限用户 | `-` | `access.user.view` | `staff-token` | `project` | web | 否 | `access.user.viewed` | `access.user.viewed_failed` |
+| access | `POST` | `/api/v1/access/users` | `createAccessUser` | 创建权限用户 | `AccessUserRequest` | `access.user.manage` | `staff-token` | `project` | web | 是 | `access.user.changed` | `access.user.changed_failed` |
+| amusement | `GET` | `/api/v1/amusement/device-statuses` | `listAmusementDeviceStatuses` | 查询游乐设备状态 | `-` | `amusement.device_status.view` | `staff-token` | `project` | web | 否 | `amusement.device_status.viewed` | `amusement.device_status.viewed_failed` |
+| amusement | `GET` | `/api/v1/amusement/manual-overrides` | `listAmusementManualOverrides` | 查询游乐人工放行 | `-` | `amusement.verification.override` | `staff-token` | `project-amusement` | web, tablet | 否 | `amusement.manual_override.viewed` | `amusement.manual_override.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/manual-overrides` | `createAmusementManualOverride` | 游乐人工放行 | `AmusementManualOverrideRequest` | `amusement.verification.override` | `staff-token` | `project-amusement-point` | staff_work_phone | 是 | `amusement.verification_overridden` | `amusement.verification_override_failed` |
+| amusement | `GET` | `/api/v1/amusement/projects` | `listAmusementProjects` | 查询游乐项目 | `-` | `amusement.session.view` | `staff-token` | `project-amusement` | web, staff_work_phone, kiosk | 否 | `amusement.session.viewed` | `amusement.session.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/projects` | `createAmusementProject` | 维护游乐项目 | `AmusementProjectRequest` | `amusement.session.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.session.changed` | `amusement.session.change_failed` |
+| amusement | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | `getAmusementOpenEligibility` | 查询项目或场次安全与容量准入 | `-` | `amusement.safety_inspection.view` | `staff-token` | `project-amusement` | web, staff_work_phone, kiosk | 否 | `amusement.open_eligibility.viewed` | `amusement.open_eligibility.blocked` |
+| amusement | `POST` | `/api/v1/amusement/projects/{id}/rules` | `createAmusementProjectRule` | 创建游乐项目规则 | `AmusementProjectRuleRequest` | `amusement.project.manage` | `staff-token` | `project` | web | 是 | `amusement.project_rule.changed` | `amusement.project_rule.changed_failed` |
+| amusement | `GET` | `/api/v1/amusement/queue-entries` | `listAmusementQueueEntries` | 查询游乐排队记录 | `-` | `amusement.queue.view` | `staff-token` | `project` | web | 否 | `amusement.queue.viewed` | `amusement.queue.viewed_failed` |
+| amusement | `GET` | `/api/v1/amusement/reservations` | `listAmusementReservations` | 查询游乐预约 | `-` | `amusement.reservation.view` | `staff-token` | `project` | web | 否 | `amusement.reservation.viewed` | `amusement.reservation.viewed_failed` |
+| amusement | `GET` | `/api/v1/amusement/safety-inspections` | `listAmusementSafetyInspections` | 查询安全巡检 | `-` | `amusement.safety_inspection.view` | `staff-token` | `project-amusement` | web, staff_work_phone | 否 | `amusement.safety_inspection.viewed` | `amusement.safety_inspection.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/safety-inspections` | `createAmusementSafetyInspection` | 创建开放前安全巡检 | `AmusementSafetyInspectionRequest` | `amusement.safety_inspection.create` | `staff-token` | `project-amusement` | web, staff_work_phone | 是 | `amusement.safety_inspection.created` | `amusement.safety_inspection.create_failed` |
+| amusement | `POST` | `/api/v1/amusement/safety-inspections/{id}/approve-reopen` | `approveAmusementReopen` | 严重项恢复开放审批 | `StatusChangeRequest` | `amusement.safety_inspection.approve_reopen` | `staff-token` | `project-amusement` | web | 是 | `amusement.safety_inspection.reopened` | `amusement.safety_inspection.reopen_rejected` |
+| amusement | `POST` | `/api/v1/amusement/safety-inspections/{id}/recheck` | `recheckAmusementSafetyInspection` | 提交复检结果 | `AmusementSafetyActionRequest` | `amusement.safety_inspection.recheck` | `staff-token` | `project-amusement` | staff_work_phone, web | 是 | `amusement.safety_inspection.rechecked` | `amusement.safety_inspection.recheck_failed` |
+| amusement | `POST` | `/api/v1/amusement/safety-inspections/{id}/rectify` | `rectifyAmusementSafetyInspection` | 提交整改说明和证据 | `AmusementSafetyActionRequest` | `amusement.safety_inspection.rectify` | `staff-token` | `project-amusement` | staff_work_phone, web | 是 | `amusement.safety_inspection.rectification_submitted` | `amusement.safety_inspection.rectification_failed` |
+| amusement | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | `submitAmusementSafetyInspection` | 提交巡检结果 | `AmusementSafetyActionRequest` | `amusement.safety_inspection.submit` | `staff-token` | `project-amusement` | staff_work_phone, web | 是 | `amusement.safety_inspection.submitted` | `amusement.safety_inspection.blocked` |
+| amusement | `GET` | `/api/v1/amusement/safety-templates` | `listAmusementSafetyTemplates` | 查询巡检模板 | `-` | `amusement.safety_template.view` | `staff-token` | `project-amusement` | web, staff_work_phone | 否 | `amusement.safety_template.viewed` | `amusement.safety_template.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/safety-templates` | `createAmusementSafetyTemplate` | 维护巡检模板 | `AmusementSafetyTemplateRequest` | `amusement.safety_template.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.safety_template.changed` | `amusement.safety_template.change_failed` |
+| amusement | `GET` | `/api/v1/amusement/sessions` | `listAmusementSessions` | 查询游乐场次和容量 | `-` | `amusement.session.view` | `staff-token` | `project-amusement` | web, staff_work_phone, kiosk | 否 | `amusement.session.viewed` | `amusement.session.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/sessions` | `createAmusementSession` | 维护游乐场次和容量 | `AmusementSessionRequest` | `amusement.session.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.session.changed` | `amusement.session.change_failed` |
+| amusement | `GET` | `/api/v1/amusement/verifications` | `listAmusementVerifications` | 查询游乐核销记录 | `-` | `amusement.verification.view` | `staff-token` | `project-amusement` | web, tablet | 否 | `amusement.verification.viewed` | `amusement.verification.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/verifications` | `createAmusementVerification` | 游乐权益核销 | `VerificationRequest` | `amusement.verification.execute` | `staff-token` | `project-amusement-point` | staff_work_phone<br>capability: verification-gate | 是 | `amusement.verification_succeeded` | `amusement.verification_failed` |
+| analytics | `GET` | `/api/v1/analytics/ai-quality/results` | `listAiQualityResults` | 查询ai质检结果 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.ai_quality_result.viewed` | `analytics.ai_quality_result.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/ai-quality/tasks` | `listAiQualityTasks` | 查询ai质检任务 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.ai_quality_task.viewed` | `analytics.ai_quality_task.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/customer-intents` | `listCustomerIntents` | 查询客户意向 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.customer_intent.viewed` | `analytics.customer_intent.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/dashboards/p0-overview` | `getP0OverviewDashboard` | P0 经营总览 | `-` | `analytics.dashboard.view` | `staff-token` | `project` | web | 否 | `analytics.dashboard_viewed` | `analytics.dashboard_view_failed` |
+| analytics | `GET` | `/api/v1/analytics/merchant-health` | `listMerchantHealthScores` | 查询商户健康度scores | `-` | `analytics.dashboard.view` | `staff-token` | `project` | web | 否 | `analytics.merchant_health.viewed` | `analytics.merchant_health.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/merchants` | `listAnalyticsMerchants` | 查询经营分析商户 | `-` | `analytics.dashboard.view` | `staff-token` | `project` | web | 否 | `analytics.merchant_summary.viewed` | `analytics.merchant_summary.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/metric-anomalies` | `listMetricAnomalies` | 查询指标异常 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.metric_anomaly.viewed` | `analytics.metric_anomaly.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/metric-definitions` | `listMetricDefinitions` | 查询指标定义 | `-` | `analytics.dashboard.view` | `staff-token` | `project` | web | 否 | `analytics.metric_definition.viewed` | `analytics.metric_definition.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/risk-alerts` | `listRiskAlerts` | 风险预警 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `risk_alert.viewed` | `risk_alert.view_failed` |
+| analytics | `POST` | `/api/v1/analytics/risk-alerts` | `createRiskAlert` | 创建风险alert | `RiskAlertRequest` | `analytics.risk_alert.manage` | `staff-token` | `project` | web | 是 | `risk_alert.created` | `risk_alert.create_failed` |
+| analytics | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | `resolveRiskAlert` | 处理风险alert | `RiskAlertStatusChangeRequest` | `analytics.risk_alert.manage` | `staff-token` | `project` | web | 是 | `analytics.risk_alert.resolved` | `analytics.risk_alert.resolved_failed` |
+| analytics | `GET` | `/api/v1/analytics/risk-rules` | `listRiskRules` | 查询风险规则 | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.risk_rule.viewed` | `analytics.risk_rule.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/robot` | `getRobotAnalytics` | 获取机器人经营分析 | `-` | `analytics.dashboard.view` | `staff-token` | `project` | web | 否 | `analytics.robot.viewed` | `analytics.robot.viewed_failed` |
+| analytics | `GET` | `/api/v1/analytics/staff-service-score` | `listStaffServiceScores` | 查询员工服务scores | `-` | `analytics.risk_alert.view` | `staff-token` | `project` | web | 否 | `analytics.staff_service_score.viewed` | `analytics.staff_service_score.viewed_failed` |
+| auth | `POST` | `/api/v1/auth/login` | `login` | 员工或商户员工登录 | `LoginRequest` | `public` | `public` | `none` | web, merchant_portal, staff_work_phone, tablet, kiosk | 否 | `auth.login.succeeded` | `auth.login.failed` |
+| auth | `POST` | `/api/v1/auth/logout` | `logout` | 退出登录 | `LogoutRequest` | `authenticated` | `staff-token` | `current-session` | web, merchant_portal, staff_work_phone, tablet, kiosk | 否 | `auth.logout` | `auth.logout_failed` |
+| auth | `POST` | `/api/v1/auth/refresh` | `refreshToken` | 刷新会话 | `RefreshTokenRequest` | `authenticated` | `staff-token` | `current-session` | web, merchant_portal, staff_work_phone, tablet, kiosk | 否 | `auth.token.refreshed` | `auth.token_refresh_failed` |
+| bar | `POST` | `/api/v1/bar/age-verifications` | `createBarAgeVerification` | 酒吧年龄和人脸核验 | `VerificationRequest` | `bar.entry.age_verify` | `staff-token` | `project-bar` | staff_work_phone<br>capability: age-verification-device | 是 | `bar.age_verification.passed` | `bar.age_verification.rejected` |
+| bar | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | `calculateBarTableCommission` | 卡座销售提成计算 | `CommissionCalculateRequest` | `bar.table_commission.calculate` | `staff-token` | `project-bar` | web | 是 | `bar.table_commission.calculated` | `bar.table_commission.calculate_failed` |
+| bar | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | `createBarBillPayIntent` | 酒吧账单支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-bar-table` | tablet, web | 是 | `payment.intent_created` | `payment.intent_failed` |
+| bar | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | `settleBarBill` | 账单结清 | `BarBillSettleRequest` | `finance.payment.register` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill.settled` | `bar.bill.settle_failed` |
+| bar | `GET` | `/api/v1/bar/orders` | `listBarOrders` | 查询酒吧订单 | `-` | `bar.order.view` | `staff-token` | `project-bar-table` | web, tablet | 否 | `bar.order.viewed` | `bar.order.view_failed` |
+| bar | `POST` | `/api/v1/bar/orders` | `createBarOrder` | 点单 | `BarOrderRequest` | `bar.order.create` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.order_created` | `bar.order_create_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/bill` | `createBarOrderBill` | 创建酒吧订单账单 | `BarOrderBillCreateRequest` | `bar.order.create` | `staff-token` | `project` | web | 是 | `bar.bill.created` | `bar.bill.created_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | `deliverBarOrder` | 出酒或送达确认 | `BarOrderDeliveryRequest` | `bar.order.create` | `staff-token` | `project-bar-table` | tablet, staff_work_phone | 是 | `bar.order_delivered` | `bar.order_deliver_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/items` | `addBarOrderItem` | 新增酒吧订单物品 | `BarOrderRequest` | `bar.order.create` | `staff-token` | `project` | web | 是 | `bar.order_item.created` | `bar.order_item.created_failed` |
+| bar | `GET` | `/api/v1/bar/production-tickets` | `listBarProductionTickets` | 查询酒吧出品票据 | `-` | `bar.order.create` | `staff-token` | `project` | web | 否 | `bar.production_ticket.viewed` | `bar.production_ticket.viewed_failed` |
+| bar | `GET` | `/api/v1/bar/products` | `listBarProducts` | 查询酒吧商品 | `-` | `bar.order.create` | `staff-token` | `project` | web, tablet, kiosk | 否 | `bar.product.viewed` | `bar.product.viewed_failed` |
+| bar | `POST` | `/api/v1/bar/products` | `createBarProduct` | 创建酒吧商品 | `BarProductRequest` | `bar.order.create` | `staff-token` | `project` | web | 是 | `bar.product.created` | `bar.product.created_failed` |
+| bar | `GET` | `/api/v1/bar/reservations` | `listBarReservations` | 查询酒吧预约 | `-` | `bar.reservation.view` | `staff-token` | `project-bar-table` | web, tablet | 否 | `bar.reservation.viewed` | `bar.reservation.view_failed` |
+| bar | `POST` | `/api/v1/bar/reservations` | `createBarReservation` | 订台或卡座预订 | `BarReservationRequest` | `bar.reservation.create` | `staff-token` | `project-bar` | web, tablet, miniapp, app, kiosk | 是 | `bar.reservation.created` | `bar.reservation.create_failed` |
+| bar | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | `checkInBarReservationGuest` | 卡座免通票入场名额核销 | `VerificationRequest` | `bar.table.guest_checkin` | `staff-token` | `project-bar` | staff_work_phone | 是 | `bar.table_guest.checked_in` | `bar.table_guest.rejected` |
+| bar | `GET` | `/api/v1/bar/tables` | `listBarTables` | 查询桌台或卡座 | `-` | `bar.table.view` | `staff-token` | `project-bar` | web, tablet | 否 | `bar.table.viewed` | `bar.table.view_failed` |
+| bar | `POST` | `/api/v1/bar/tables` | `createBarTable` | 创建桌台或卡座 | `BarTableRequest` | `bar.table.manage` | `staff-token` | `project-bar` | web | 是 | `bar.table.changed` | `bar.table.change_failed` |
+| bar | `POST` | `/api/v1/bar/tables/{table_id}/open` | `openBarTable` | 开台 | `OpenBarTableRequest` | `bar.table.open_close` | `staff-token` | `project-bar` | tablet, web | 是 | `bar.table.opened` | `bar.table.open_failed` |
+| customer | `POST` | `/api/v1/customer/auth/phone-login` | `customerPhoneLogin` | 客人手机号登录 | `CustomerPhoneLoginRequest` | `public` | `public` | `customer` | web, miniapp, app, kiosk | 否 | `customer.auth.login` | `customer.auth.login_failed` |
+| customer | `GET` | `/api/v1/customer/bar-reservation-options` | `listCustomerBarReservationOptions` | 客人可订台资源 | `-` | `not_applicable` | `customer-token` | `public-project-bar` | web, miniapp, app, kiosk | 否 | `customer.bar_reservation_options_viewed` | `customer.bar_reservation_options_view_failed` |
+| customer | `POST` | `/api/v1/customer/bar-reservations` | `createCustomerBarReservation` | 客人卡座预订 | `CustomerBarReservationRequest` | `not_applicable` | `customer-token` | `customer-project-bar` | web, miniapp, app, kiosk | 是 | `customer.bar_reservation.created` | `customer.bar_reservation.create_failed` |
+| customer | `POST` | `/api/v1/customer/consents` | `createCustomerConsent` | 隐私同意记录 | `CustomerConsentRequest` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app, kiosk | 是 | `customer.consent.created` | `customer.consent.create_failed` |
+| customer | `GET` | `/api/v1/customer/orders` | `listCustomerOrders` | 我的订单 | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app, kiosk | 否 | `customer.orders_viewed` | `customer.orders_view_failed` |
+| customer | `GET` | `/api/v1/customer/points` | `getCustomerPoints` | 积分余额 | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.points_viewed` | `customer.points_view_failed` |
+| customer | `POST` | `/api/v1/customer/ticket-orders` | `createCustomerTicketOrder` | 客人购票下单 | `CustomerTicketOrderRequest` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app, kiosk | 是 | `customer.ticket_order.created` | `customer.ticket_order.create_failed` |
+| customer | `GET` | `/api/v1/customer/ticket-products` | `listCustomerTicketProducts` | 客人可购票种和票价 | `-` | `public` | `public` | `public-project` | web, miniapp, app, kiosk | 否 | `customer.ticket_products_viewed` | `customer.ticket_products_view_failed` |
+| customer | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | `getCustomerTicketQr` | 我的动态二维码 | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app | 否 | `ticket_credential.refreshed` | `ticket_credential.refresh_failed` |
+| evidence | `POST` | `/api/v1/evidence/attachments/upload-intents` | `createEvidenceAttachmentUploadIntent` | 申请证据附件预签名上传 | `EvidenceAttachmentUploadIntentRequest` | `evidence.attachment.create` | `staff-token` | `project-object` | web, staff_work_phone, tablet | 是 | `evidence.upload_intent_created` | `evidence.upload_intent_failed` |
+| evidence | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | `bindEvidenceAttachment` | 关联证据附件到业务对象 | `EvidenceAttachmentBindRequest` | `evidence.attachment.create` | `staff-token` | `project-object` | web, staff_work_phone, tablet | 是 | `evidence.attachment_bound` | `evidence.attachment_bind_failed` |
+| evidence | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | `completeEvidenceAttachmentUpload` | 完成上传确认 | `EvidenceAttachmentCompleteRequest` | `evidence.attachment.create` | `staff-token` | `project-object` | web, staff_work_phone, tablet | 是 | `evidence.attachment_completed` | `evidence.attachment_complete_failed` |
+| evidence | `GET` | `/api/v1/evidence/events` | `listEvidenceEvents` | 事件查询 | `-` | `evidence.event.view` | `staff-token` | `project-object` | web | 否 | `evidence.event_viewed` | `evidence.event_view_failed` |
+| evidence | `POST` | `/api/v1/evidence/events` | `createEvidenceEvents` | 创建证据事件 | `EventBatchRequest` | `evidence.event.create` | `staff-token` | `project-device` | staff_work_phone, tablet, kiosk | 是 | `evidence.events_reported` | `evidence.events_report_failed` |
+| evidence | `POST` | `/api/v1/evidence/reviews` | `createEvidenceReview` | 风险或异常复核 | `EvidenceReviewRequest` | `evidence.review.create` | `staff-token` | `project-object` | web | 是 | `evidence.review_created` | `evidence.review_create_failed` |
+| evidence | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | `getEvidenceTimeline` | 业务时间线 | `-` | `evidence.timeline.view` | `staff-token` | `project-object` | web | 否 | `evidence.timeline_viewed` | `evidence.timeline_view_failed` |
+| finance | `GET` | `/api/v1/finance/ar-ap-items` | `listArApItems` | 查询应收应付台账 | `-` | `finance.ar_ap.view` | `staff-token` | `project-entity` | web | 否 | `finance_ar_ap.viewed` | `finance_ar_ap.view_failed` |
+| finance | `POST` | `/api/v1/finance/ar-ap-items` | `createArApItem` | 手工新增应收应付台账项 | `ArApItemRequest` | `finance.ar_ap.manage` | `staff-token` | `project-entity` | web | 是 | `finance_ar_ap.created` | `finance_ar_ap.create_failed` |
+| finance | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | `createArApPayment` | 应收应付收付款登记 | `ArApPaymentRequest` | `finance.payment.register` | `staff-token` | `project-entity` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
+| finance | `POST` | `/api/v1/finance/daily-closes` | `createDailyClose` | 日结锁定 | `DailyCloseRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.locked` | `finance_daily_close.lock_failed` |
+| finance | `POST` | `/api/v1/finance/payment-intents` | `createPaymentIntent` | 创建聚合支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-order` | web, tablet, kiosk, miniapp, app | 是 | `payment.intent_created` | `payment.intent_failed` |
+| finance | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | `confirmOfflinePayment` | 现金或 POS 线下收款确认 | `OfflinePaymentConfirmRequest` | `finance.payment.register` | `staff-token` | `project-order` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
+| finance | `GET` | `/api/v1/finance/reconciliation/batches` | `listReconciliationBatches` | 查询对账批次 | `-` | `finance.reconciliation.view` | `staff-token` | `project` | web | 否 | `finance.reconciliation_batch.viewed` | `finance.reconciliation_batch.viewed_failed` |
+| finance | `GET` | `/api/v1/finance/reconciliation/differences` | `listReconciliationDifferences` | 对账差异 | `-` | `openplatform.reconcile.execute` | `staff-token` | `project-entity-channel` | web | 否 | `finance_reconciliation.difference_found` | `finance_reconciliation.view_failed` |
+| finance | `POST` | `/api/v1/finance/refunds` | `createFinanceRefund` | 创建财务退款记录 | `RefundRequest` | `finance.refund.create` | `staff-token` | `project-order` | web | 是 | `finance_refund.created` | `finance_refund.create_failed` |
+| integration | `GET` | `/api/v1/integration/compensation-tasks` | `listIntegrationCompensationTasks` | 查询第三方集成补偿任务 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.compensation_task.viewed` | `integration.compensation_task.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/devices` | `listIntegrationDevices` | 查询第三方集成设备 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.device.viewed` | `integration.device.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/devices/events` | `listIntegrationDeviceEvents` | 查询第三方集成设备事件 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.device_event.viewed` | `integration.device_event.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/devices/offline-sync-batches` | `listIntegrationOfflineSyncBatches` | 查询第三方集成离线批次 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.offline_sync_batch.viewed` | `integration.offline_sync_batch.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/order-syncs` | `listIntegrationOrderSyncs` | 查询第三方集成订单syncs | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.order_sync.viewed` | `integration.order_sync.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/provider-adapters` | `listProviderAdapters` | 供应商适配器查询 | `-` | `integration.provider_adapter.view` | `staff-token` | `project-provider` | web | 否 | `provider_adapter.viewed` | `provider_adapter.view_failed` |
+| integration | `POST` | `/api/v1/integration/provider-adapters` | `createProviderAdapter` | 创建供应商适配器占位或 mock adapter | `ProviderAdapterRequest` | `integration.provider_adapter.create` | `staff-token` | `project-provider` | web | 是 | `provider_adapter.created` | `provider_adapter.create_failed` |
+| integration | `PUT` | `/api/v1/integration/provider-adapters/{id}` | `updateProviderAdapter` | 更新供应商适配器配置 | `ProviderAdapter` | `integration.provider_adapter.update` | `staff-token` | `project-provider` | web | 是 | `open_mapping.changed` | `provider_adapter.update_failed` |
+| integration | `POST` | `/api/v1/integration/provider-adapters/{id}/mark-production-ready` | `markProviderAdapterProductionReady` | 标记供应商适配器生产就绪 | `StatusChangeRequest` | `integration.provider_adapter.production_ready` | `staff-token` | `project-provider` | web | 是 | `provider_adapter.production_ready_marked` | `provider_adapter.production_ready_failed` |
+| integration | `POST` | `/api/v1/integration/provider-adapters/{id}/test-mock` | `testProviderAdapterMock` | mock adapter 契约测试 | `ProviderAdapterTestRequest` | `integration.provider_adapter.test` | `staff-token` | `project-provider` | web | 是 | `provider_adapter.tested` | `provider_adapter.test_failed` |
+| integration | `GET` | `/api/v1/integration/retail/skus` | `listIntegrationRetailSkus` | 查询第三方集成零售SKU | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.retail_sku.viewed` | `integration.retail_sku.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/retry-tasks` | `listIntegrationRetryTasks` | 查询第三方集成retry任务 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.retry_task.viewed` | `integration.retry_task.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/robot/task-events` | `listRobotTaskEvents` | 查询机器人task事件 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.robot_task_event.viewed` | `integration.robot_task_event.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/robot/tasks` | `listRobotTasks` | 查询机器人任务 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.robot_task.viewed` | `integration.robot_task.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/video/cameras` | `listVideoCameras` | 查询视频摄像头 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.video_camera.viewed` | `integration.video_camera.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/voucher-verifications` | `listVoucherVerifications` | 查询券核销记录 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.voucher_verification.viewed` | `integration.voucher_verification.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/wecom/bindings` | `listWecomBindings` | 查询企业微信绑定 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.wecom_binding.viewed` | `integration.wecom_binding.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/wecom/conversations` | `listWecomConversations` | 查询企业微信会话 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.wecom_conversation.viewed` | `integration.wecom_conversation.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/wecom/messages` | `listWecomMessages` | 查询企业微信消息 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.wecom_message.viewed` | `integration.wecom_message.viewed_failed` |
+| integration | `GET` | `/api/v1/integration/wecom/risk-hits` | `listWecomRiskHits` | 查询企业微信风险命中 | `-` | `integration.provider_adapter.view` | `staff-token` | `project` | web | 否 | `integration.wecom_risk_hit.viewed` | `integration.wecom_risk_hit.viewed_failed` |
+| inventory | `GET` | `/api/v1/inventory/items` | `listInventoryItems` | 查询库存明细 | `-` | `inventory.stock.view` | `staff-token` | `project` | web | 否 | `inventory.item.viewed` | `inventory.item.viewed_failed` |
+| inventory | `POST` | `/api/v1/inventory/items` | `createInventoryItem` | 创建库存物品 | `InventoryItemRequest` | `inventory.stock.move` | `staff-token` | `project` | web | 是 | `inventory.item.created` | `inventory.item.created_failed` |
+| inventory | `GET` | `/api/v1/inventory/purchase-requests` | `listPurchaseRequests` | 查询采购申请 | `-` | `inventory.purchase_request.view` | `staff-token` | `project` | web | 否 | `inventory.purchase_request_viewed` | `inventory.purchase_request_view_failed` |
+| inventory | `POST` | `/api/v1/inventory/purchase-requests` | `createPurchaseRequest` | 创建采购申请 | `PurchaseRequestCreate` | `inventory.purchase_request.manage` | `staff-token` | `project` | web | 是 | `inventory.purchase_request_changed` | `inventory.purchase_request_change_failed` |
+| inventory | `GET` | `/api/v1/inventory/saved-bottles` | `listSavedBottles` | 查询存酒 | `-` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-customer` | web, tablet, staff_work_phone | 否 | `bar.saved_bottle.viewed` | `bar.saved_bottle.view_failed` |
+| inventory | `POST` | `/api/v1/inventory/saved-bottles` | `createSavedBottle` | 存酒登记 | `SavedBottleRequest` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-customer` | tablet, web | 是 | `bar.saved_bottle.created` | `bar.saved_bottle.create_failed` |
+| inventory | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | `claimSavedBottle` | 存酒领取 | `SavedBottleClaimRequest` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-customer` | tablet, staff_work_phone | 是 | `bar.saved_bottle_picked_up` | `bar.saved_bottle.pickup_failed` |
+| inventory | `POST` | `/api/v1/inventory/stock-adjustments` | `createStockAdjustment` | 盘点差异、报损、报溢 | `StockAdjustmentRequest` | `inventory.stock.adjust` | `staff-token` | `project-warehouse` | web, staff_work_phone | 是 | `inventory.counted` | `inventory.adjustment_failed` |
+| inventory | `GET` | `/api/v1/inventory/stock-balances` | `listStockBalances` | 查询库存余额 | `-` | `inventory.stock.view` | `staff-token` | `project` | web | 否 | `inventory.stock_balance.viewed` | `inventory.stock_balance.viewed_failed` |
+| inventory | `POST` | `/api/v1/inventory/stock-in` | `createStockIn` | 入库 | `StockInRequest` | `inventory.stock.move` | `staff-token` | `project-warehouse` | web, staff_work_phone | 是 | `inventory.inbound_confirmed` | `inventory.inbound_failed` |
+| inventory | `GET` | `/api/v1/inventory/stock-movements` | `listStockMovements` | 查询库存流水 | `-` | `inventory.stock.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.stock_movement.viewed` | `inventory.stock_movement.view_failed` |
+| inventory | `POST` | `/api/v1/inventory/stock-movements` | `createStockMovement` | 库存移动或扣减 | `StockMovementRequest` | `inventory.stock.move` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 是 | `inventory.outbound_verified` | `inventory.stock_movement_failed` |
+| inventory | `POST` | `/api/v1/inventory/stock-movements/transfer` | `transferStockMovement` | 调拨库存流水 | `StockMovementRequest` | `inventory.stock.move` | `staff-token` | `project` | web | 是 | `inventory.stock_transfer.created` | `inventory.stock_transfer.created_failed` |
+| inventory | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | `createTypedStockMovement` | 创建typed库存流水 | `StockMovementRequest` | `inventory.stock.move` | `staff-token` | `project` | web | 是 | `inventory.stock_movement.created` | `inventory.stock_movement.created_failed` |
+| inventory | `GET` | `/api/v1/inventory/suppliers` | `listInventorySuppliers` | 查询供应商 | `-` | `inventory.supplier.view` | `staff-token` | `project` | web | 否 | `inventory.supplier_viewed` | `inventory.supplier_view_failed` |
+| inventory | `POST` | `/api/v1/inventory/suppliers` | `createInventorySupplier` | 创建供应商 | `InventorySupplierRequest` | `inventory.supplier.manage` | `staff-token` | `project` | web | 是 | `inventory.supplier_changed` | `inventory.supplier_change_failed` |
+| inventory | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | `scanTraceCodeHandover` | 物品追踪码扫码交接 | `VerificationRequest` | `inventory.stock.move` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet | 是 | `operation_handover.created` | `operation_handover.failed` |
+| platform | `GET` | `/api/v1/platform/business-entities` | `listBusinessEntities` | 查询经营、运营、合同、结算主体档案 | `-` | `entity.binding.view` | `staff-token` | `project-merchant` | web | 否 | `business_entity.viewed` | `business_entity.view_failed` |
+| platform | `POST` | `/api/v1/platform/business-entities` | `createBusinessEntity` | 创建经营、运营、合同、结算主体档案 | `BusinessEntityRequest` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `business_entity.changed` | `business_entity.change_failed` |
+| platform | `GET` | `/api/v1/platform/business-entity-bindings` | `listBusinessEntityBindings` | 查询四类主体绑定 | `-` | `entity.binding.view` | `staff-token` | `project-merchant` | web | 否 | `entity_binding.viewed` | `entity_binding.view_failed` |
+| platform | `POST` | `/api/v1/platform/business-entity-bindings` | `createBusinessEntityBinding` | 创建四类主体唯一绑定 | `BusinessEntityBindingRequest` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `entity_binding.changed` | `entity_binding.change_failed` |
+| platform | `POST` | `/api/v1/platform/business-entity-bindings/{id}/change` | `changeBusinessEntityBinding` | 变更四类主体绑定 | `StatusChangeRequest` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `entity_binding.changed` | `entity_binding.change_failed` |
+| platform | `GET` | `/api/v1/platform/contracts` | `listContracts` | 查询合同摘要和附件归档 | `-` | `contract.view` | `staff-token` | `project-merchant` | web | 否 | `contract.viewed` | `contract.view_failed` |
+| platform | `POST` | `/api/v1/platform/contracts` | `createContractDraft` | 创建合同草稿和归档附件 | `ContractDraftRequest` | `contract.draft.manage` | `staff-token` | `project-merchant` | web | 是 | `contract.draft_saved` | `contract.draft_save_failed` |
+| platform | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | `approveContract` | 合同审批流 | `ApprovalRequest` | `contract.lifecycle.approve` | `staff-token` | `project-merchant` | web | 是 | `contract.lifecycle_changed` | `contract.lifecycle_change_failed` |
+| platform | `GET` | `/api/v1/platform/merchants` | `listMerchants` | 查询商户 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web, merchant_portal | 否 | `merchant.viewed` | `merchant.view_failed` |
+| platform | `POST` | `/api/v1/platform/merchants` | `createMerchant` | 创建商户 | `MerchantProfileRequest` | `merchant.profile.manage` | `staff-token` | `project` | web | 是 | `merchant.updated` | `merchant.update_failed` |
+| platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | `updateMerchant` | 修改商户 | `MerchantProfileRequest` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.updated` | `merchant.update_failed` |
+| platform | `GET` | `/api/v1/platform/projects` | `listProjects` | 查询综合体项目 | `-` | `governance.project.view` | `staff-token` | `project` | web | 否 | `project.viewed` | `project.view_failed` |
+| platform | `POST` | `/api/v1/platform/projects` | `createProject` | 创建项目 | `ProjectRequest` | `governance.project.manage` | `staff-token` | `project` | web | 是 | `project.created` | `project.create_failed` |
+| platform | `GET` | `/api/v1/platform/spaces` | `listSpaces` | 查询场馆、区域、点位 | `-` | `governance.space.view` | `staff-token` | `project-merchant-space` | web, merchant_portal | 否 | `space.viewed` | `space.view_failed` |
+| platform | `POST` | `/api/v1/platform/spaces` | `createSpace` | 创建场馆、区域、点位 | `SpaceRequest` | `governance.space.manage` | `staff-token` | `project` | web | 是 | `space.updated` | `space.update_failed` |
+| system | `GET` | `/api/v1/system/health` | `getSystemHealth` | 健康检查 | `-` | `public` | `public` | `none` | web, mobile_admin<br>channel: monitoring | 否 | `system.health_checked` | `system.health_check_failed` |
+| system | `GET` | `/api/v1/system/version` | `getSystemVersion` | 版本和构建信息 | `-` | `system.version.view` | `staff-token` | `project` | web, mobile_admin | 否 | `system.version_viewed` | `system.version_view_failed` |
+| ops | `GET` | `/api/v1/ops/production-readiness/items` | `listProductionReadinessItems` | 查询生产前置责任状态 | `-` | `ops.production_readiness.view` | `staff-token` | `project` | web, mobile_admin | 否 | `production_readiness.viewed` | `production_readiness.view_failed` |
+| ops | `PUT` | `/api/v1/ops/production-readiness/items/{id}` | `updateProductionReadinessItem` | 更新生产前置责任状态 | `ProductionReadinessItemUpdateRequest` | `ops.production_readiness.manage` | `staff-token` | `project` | web, mobile_admin | 是 | `production_readiness.updated` | `production_readiness.update_failed` |
+| ops | `POST` | `/api/v1/ops/production-readiness/checks` | `createProductionReadinessCheck` | 执行生产前置准入检查 | `ProductionReadinessCheckRequest` | `ops.production_readiness.check` | `staff-token` | `project` | web, mobile_admin | 是 | `production_readiness.checked` | `production_readiness.check_failed` |
+| terminals | `GET` | `/api/v1/terminals/capability-switches` | `listCapabilitySwitches` | 查询端能力开关 | `-` | `terminal.switch.view` | `staff-token` | `project-device` | web | 否 | `terminal_switch.viewed` | `terminal_switch.view_failed` |
+| terminals | `PUT` | `/api/v1/terminals/capability-switches/{id}` | `updateCapabilitySwitch` | 修改端能力开关 | `CapabilitySwitchRequest` | `terminal.switch.manage` | `staff-token` | `project-device` | web | 是 | `terminal_switch.changed` | `terminal_switch.change_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/bind` | `bindDevice` | 设备绑定 | `DeviceBindRequest` | `terminal.device.bind` | `staff-token` | `project-device` | web, staff_work_phone, tablet, kiosk | 是 | `terminal.device.bound` | `terminal.device.bind_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/return` | `returnTerminalDevice` | 归还终端设备 | `DeviceReturnRequest` | `terminal.device.bind` | `staff-token` | `project` | staff_work_phone, tablet, kiosk, web | 是 | `terminal.device.returned` | `terminal.device.returned_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/{id}/unbind` | `unbindDevice` | 设备解绑 | `DeviceUnbindRequest` | `terminal.device.unbind` | `staff-token` | `project-device` | web | 是 | `terminal.device.unbound` | `terminal.device.unbind_failed` |
+| terminals | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | `getKioskConfig` | 一体机配置，含售票型与非售票型模式 | `-` | `not_applicable` | `device-credential` | `project-device` | kiosk | 否 | `terminal.kiosk_config_viewed` | `terminal.access_rejected` |
+| terminals | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | `kioskHeartbeat` | 一体机心跳 | `KioskHeartbeatRequest` | `not_applicable` | `device-credential` | `project-device` | kiosk | 否 | `terminal.kiosk_heartbeat` | `terminal.kiosk_heartbeat_failed` |
+| terminals | `GET` | `/api/v1/terminals/offline-entitlements` | `getTerminalOfflineEntitlements` | 获取终端离线权益 | `-` | `terminal.device.bind` | `staff-token` | `project` | staff_work_phone, tablet, kiosk | 否 | `terminal.offline_entitlements.viewed` | `terminal.offline_entitlements.viewed_failed` |
+| terminals | `POST` | `/api/v1/terminals/sync-tasks` | `syncTerminalTasks` | 同步终端任务 | `TerminalSyncTasksRequest` | `terminal.device.bind` | `staff-token` | `project` | staff_work_phone, tablet, kiosk | 是 | `terminal.sync_task.accepted` | `terminal.sync_task.accepted_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/entitlement-templates` | `listEntitlementTemplates` | 查询权益模板 | `-` | `ticket.entitlement.view` | `staff-token` | `project` | web | 否 | `ticket_entitlement_template.viewed` | `ticket_entitlement_template.viewed_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/entitlement-templates` | `createEntitlementTemplate` | 创建权益模板 | `EntitlementTemplateRequest` | `ticket.entitlement.manage` | `staff-token` | `project` | web | 是 | `ticket_entitlement_template.changed` | `ticket_entitlement_template.changed_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/issued-entitlements` | `listIssuedEntitlements` | 查询已发放权益 | `-` | `ticket.verify.view` | `staff-token` | `project` | web | 否 | `ticket_issued_entitlement.viewed` | `ticket_issued_entitlement.viewed_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/orders` | `createTicketOrder` | 创建票务订单 | `TicketOrderRequest` | `ticket.order.create` | `staff-token` | `project-channel` | web, kiosk, miniapp, app | 是 | `ticket_order.created` | `ticket_order.create_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | `issueTicket` | 出票 | `TicketIssueRequest` | `ticket.ticket.issue` | `staff-token` | `project-order` | web, kiosk, miniapp, app | 是 | `ticket.issued` | `ticket.issue_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/pay-intents` | `createTicketOrderPayIntent` | 创建票务支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-order` | web, kiosk, miniapp, app | 是 | `payment.intent_created` | `payment.intent_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/price-rules` | `listTicketPriceRules` | 查询平日、周末、节假日及派生价规则 | `-` | `ticket.price_variant.view` | `staff-token` | `project-channel` | web | 否 | `ticket_price_variant.viewed` | `ticket_price_variant.view_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/price-rules` | `createTicketPriceRule` | 创建平日、周末、节假日及派生价规则 | `TicketPriceRuleRequest` | `ticket.price_variant.manage` | `staff-token` | `project-channel` | web | 是 | `ticket_price_variant.changed` | `ticket_price_variant.change_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/refunds` | `requestTicketRefund` | 退款或撤销申请 | `RefundRequest` | `ticket.refund.request` | `staff-token` | `project-order` | web, merchant_portal | 是 | `ticket_refund.requested` | `ticket_refund.request_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | `approveTicketRefund` | 退款审批 | `StatusChangeRequest` | `ticket.refund.approve` | `staff-token` | `project-order` | web | 是 | `ticket_refund.approved` | `ticket_refund.approve_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/ticket-types` | `listTicketTypes` | 票种查询 | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types` | `createTicketType` | 创建票种 | `TicketTypeRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.changed` | `ticket_product.change_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/entitlements` | `bindTicketTypeEntitlement` | 绑定票类型权益 | `TicketTypeEntitlementRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product_entitlement.bound` | `ticket_product_entitlement.bound_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/issue` | `issueTicketTypeDirectly` | 发放票类型directly | `TicketIssueRequest` | `ticket.order.create` | `staff-token` | `project` | web | 是 | `ticket_order.issued` | `ticket_order.issued_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | `publishTicketType` | 发布票种 | `StatusChangeRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_price.published` | `ticket_price.publish_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | `getTicketCredential` | 获取动态二维码凭证 | `-` | `ticket.credential.view` | `staff-token` | `project-order-customer` | web, miniapp, app | 否 | `ticket_credential.refreshed` | `ticket_credential.refresh_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/verifications` | `listTicketVerifications` | 查询票核销记录 | `-` | `verification.view` | `staff-token` | `project-merchant` | web, staff_work_phone, tablet, kiosk | 否 | `verification.viewed` | `verification.view_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/verifications` | `createTicketVerification` | 正式核销 | `VerificationRequest` | `verification.execute` | `staff-token` | `project-point` | staff_work_phone<br>capability: verification-gate | 是 | `verification.succeeded` | `verification.failed` |
+| ticketing | `POST` | `/api/v1/ticketing/verifications/preview` | `previewTicketVerification` | 票务核销预览 | `VerificationRequest` | `verification.execute` | `staff-token` | `project-point` | staff_work_phone<br>capability: verification-gate | 是 | `verification.previewed` | `verification.failed` |
+
+## 4. 通用 Given/When/Then 验收标准
+
+### AC-OP-001 接口实现一致性
+
+Given 开发领取任一 P0 接口任务，When 提交 Controller、DTO、Service、Repository 和测试用例，Then 接口路径、方法、operationId、字段、枚举、单位、权限码、鉴权上下文、审计事件必须与 OpenAPI、本文和 `p0-openapi-contract-closure-appendix-v0.1.md` 一致；不得新增 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 等旧草案路径作为正式 P0 接口。
+
+### AC-OP-002 权限与鉴权上下文分离
+
+Given 接口需要访问控制，When 访问方是员工、商户员工、客人、设备、开放应用或第三方 Webhook，Then 系统必须先按 `x-auth-context` 完成鉴权，再按 `x-permission` 和 `x-data-scope` 完成授权；客人 Token、设备凭证、开放应用凭证和 Webhook 签名不得被误写成员工权限码。
+
+### AC-OP-003 请求字段可测试
+
+Given 写接口有 requestBody，When 测试读取 schema 的 required、type、format、enum、minimum、maximum 和 description，Then 必须能生成字段级正向、缺字段、错类型、越界、枚举非法、金额单位错误和幂等重复提交测试。
+
+### AC-OP-004 幂等与并发一致性
+
+Given 接口声明 `x-idempotency-required=true` 或业务涉及支付、核销、库存、入账、合同审批、退款、酒水领取、存酒、卡座预订等不可重复动作，When 同一请求被重复提交、网络超时后重放、或并发执行，Then 系统必须返回同一业务结果或明确拒绝，并写入可追溯事件。
+
+### AC-OP-005 终端边界
+
+Given 某接口只允许特定终端调用，When 其它终端、设备或 Web 页面尝试调用，Then 系统必须根据 D5 终端码和 `x-terminal-allowed` 拒绝访问，并记录失败事件；门禁核销、人脸年龄核验、监控和服务端调用必须额外校验 `x-device-capability` 或 `x-invocation-channel`；一体机售票版与非售票版必须按设备能力开关决定可用接口。
+
+### AC-OP-006 留痕闭环
+
+Given 任一 operation 被调用，When 成功、失败、部分成功、超时、供应商回调异常或人工补录发生，Then 事件中心必须记录操作者、终端、设备、对象、前后状态、失败原因、关联订单/票/权益/酒水/卡座/合同/财务流水 ID。
+
+### AC-OP-007 第三方适配器边界
+
+Given 机器人、视频平台、支付、短信、人脸、企业微信或设备厂商 SDK/API 尚未最终到位，When 进入 P0 编码，Then 只能实现平台侧标准接口、Adapter 抽象、mock 契约、Webhook 接收和轮询校验框架；供应商字段映射、签名细节、异常码和补偿策略必须在供应商资料到位后补齐。
+
+### AC-OP-008 Springdoc 反向校验
+
+Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 OpenAPI，Then 必须与 `docs/openapi/openapi-p0.yaml` 的 operationId、路径、方法、schema、权限扩展字段、审计事件和 OpenAPI 追溯附录一致；差异必须在代码或文档中收口，不能由测试口头解释。
+
+## 5. 边界与异常场景
+
+| 场景 | 风险 | 必测要求 |
+|---|---|---|
+| 重复提交 | 支付、核销、酒水领取、存酒、合同审批、财务入账重复执行 | 同一幂等键重复请求返回同一结果；不同幂等键但同一业务对象冲突时必须拒绝并留痕 |
+| 并发库存 | 票务库存、酒水库存、权益次数、卡座容量被超卖或超扣 | 并发测试必须验证行锁/乐观锁、库存预扣与最终落账一致 |
+| 终端越权 | 员工端、平板、一体机、客人端调用不属于自己的接口 | 按 `x-terminal-allowed`、设备能力、登录主体和数据范围同时校验 |
+| 数据范围穿透 | 商户员工查看其它商户、酒吧、卡座、订单、库存或财务数据 | 每个查询和写入接口必须按 project/merchant/venue/bar/space 等范围过滤 |
+| 第三方不稳定 | Webhook 丢失、重复、乱序、签名失败、供应商超时 | Webhook + 定时轮询校验；所有回调按事件 ID 和业务对象做幂等补偿 |
+| 人工补录 | 人工补录绕过原始凭证、库存、财务、审批或实名边界 | 补录必须审批、附件归档、原因码、前后状态和责任人留痕 |
+| 退款/撤销 | 票务、权益、卡座、酒水、支付状态之间不一致 | 退款前校验核销、权益使用、酒水领取、定金、应收应付和结算状态 |
+| 离线/弱网 | 工作手机或 Android 端离线导致核销、库存、支付误判 | P1 仅允许策略摘要离线查看；高价值酒水、支付、核销必须在线 |
+| 开放平台鉴权 | nonce 重放、签名过期、开放应用被停用仍能访问 | 签名窗口、nonce 唯一、密钥轮换、锁定与人工解锁必须可测 |
+| 附件归档 | 合同、审批、事故、整改附件缺失或 hash 不一致 | 附件上传、下载、病毒扫描、hash 校验、权限隔离和归档留痕必须可测 |
+
+## 6. 用户故事拆分
+
+- `US-P0-API-001` 作为后端开发，我要按 OpenAPI 每个 operation 生成 Controller/DTO/Service/Repository/审计事件和测试，确保接口可直接联调。
+- `US-P0-API-002` 作为前端开发，我要按 OpenAPI 和追溯附录生成或维护 API client，并废弃旧 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 草案路径。
+- `US-P0-API-003` 作为 Android/一体机开发，我要按 `x-terminal-allowed` 与设备能力开关决定可调用接口，避免售票版和非售票版混用。
+- `US-P0-API-004` 作为测试负责人，我要把本文每个 P0 operation 转换为正向、权限、数据范围、幂等、异常、审计留痕和并发测试用例。
+- `US-P0-API-005` 作为第三方供应商联调负责人，我要先对接 Adapter、Webhook 接收、mock 契约和轮询校验，再在供应商资料到位后补字段映射与异常补偿。
+
+## 7. 变更记录
+
+| 日期 | 版本 | 说明 |
+|---|---|---|
+| 2026-06-11 | V0.1 | 新增 P0 OpenAPI operation 级验收矩阵，补齐接口、权限、鉴权上下文、终端、幂等、审计事件、验收标准、边界场景和用户故事。 |
+| 2026-06-11 | V0.1 终端枚举收口 | 按当时 OpenAPI 全量重建 operation 表格；`x-terminal-allowed` 只保留 D5 终端码，门禁/年龄核验设备与服务端调用改由设备能力或调用通道表达。 |
+| 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
+| 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
+| 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 181 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

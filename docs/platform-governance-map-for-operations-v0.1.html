@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>平台治理层业务说明地图 V0.1</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #667085;
+      --line: #d9dee7;
+      --soft: #eef3f8;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --green: #087f5b;
+      --green-soft: #e7f5ef;
+      --amber: #a86600;
+      --amber-soft: #fff4df;
+      --red: #b42318;
+      --red-soft: #fff0ef;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif;
+      line-height: 1.65;
+    }
+    a { color: inherit; text-decoration: none; }
+    .top { background: #fff; border-bottom: 1px solid var(--line); }
+    .top-inner {
+      width: min(1320px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 28px 0 24px;
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--blue);
+      font-size: 14px;
+      font-weight: 800;
+    }
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      max-width: 900px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+    .notice {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border: 1px solid #cbd7ee;
+      background: var(--blue-soft);
+      border-radius: 8px;
+      color: #233b73;
+      font-weight: 700;
+    }
+    .layout {
+      width: min(1320px, calc(100% - 40px));
+      margin: 22px auto 56px;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+    .side {
+      position: sticky;
+      top: 16px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .side-title { padding: 16px 18px 10px; font-weight: 800; }
+    .side-note { margin: 0; padding: 0 18px 12px; color: var(--muted); font-size: 13px; }
+    .nav { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+    .nav a {
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+      color: #344054;
+    }
+    .nav a:hover { background: var(--soft); color: var(--blue); }
+    .content { display: grid; gap: 18px; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 23px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+    h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+    .lead { margin: 0 0 16px; color: var(--muted); font-size: 16px; }
+    .summary-grid, .card-grid, .detail-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .summary-box, .system-card, .info-block, .relation-row, .question {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .summary-box { padding: 14px; }
+    .summary-box strong { display: block; margin-bottom: 5px; }
+    .summary-box span { color: var(--muted); font-size: 14px; }
+    .system-card {
+      padding: 15px;
+      transition: transform .16s ease, border-color .16s ease;
+      min-height: 138px;
+    }
+    .system-card:hover { transform: translateY(-2px); border-color: #9bb8ff; }
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .system-card p { margin: 0; color: var(--muted); font-size: 14px; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--green);
+      background: var(--green-soft);
+      white-space: nowrap;
+    }
+    .tag.warn { color: var(--amber); background: var(--amber-soft); }
+    .open-link { display: inline-block; margin-top: 10px; color: var(--blue); font-weight: 700; font-size: 13px; }
+    .info-block { padding: 16px; }
+    ul { margin: 8px 0 0; padding-left: 20px; }
+    li { margin: 6px 0; }
+    .plain-table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    .plain-table th, .plain-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .plain-table th { background: var(--soft); font-weight: 800; }
+    .plain-table tr:last-child td { border-bottom: 0; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fff;
+      min-height: 126px;
+    }
+    .step-number {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .step strong { display: block; margin-bottom: 5px; }
+    .step span { color: var(--muted); font-size: 14px; }
+    .relation-list { display: grid; gap: 10px; }
+    .relation-row {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 12px;
+      padding: 14px;
+      align-items: start;
+    }
+    .relation-from { font-weight: 800; color: var(--blue); }
+    .relation-text { color: var(--muted); }
+    .question-list { display: grid; gap: 10px; }
+    .question { padding: 13px 15px; background: var(--amber-soft); border-color: #ffd591; color: #5c3b00; }
+    .question.confirmed { background: var(--green-soft); border-color: #b7e2cc; color: #0b4f3a; }
+    .footer-note { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .side { position: static; }
+      .summary-grid, .card-grid, .detail-grid, .flow { grid-template-columns: 1fr; }
+      .relation-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div class="top-inner">
+        <p class="eyebrow">平台治理层 · 给业务人员看的说明</p>
+        <h1>平台治理层业务说明地图 V0.1</h1>
+        <p class="subtitle">这页说明平台治理层管什么、为什么要先管、各模块之间怎么互相限制和放行。它不讲技术实现，只讲业务人员能理解的管理关系。</p>
+        <div class="notice">一句话理解：平台治理层先定义“哪个综合体、哪个空间、哪个商户、签了什么合同、谁能操作、用什么设备、哪些端能打开、哪些流程能走、违规怎么审批放行”。后续票务、酒吧、游乐、供应链、财务和第三方都要先听这层规则。</div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="side">
+        <div class="side-title">点击查看</div>
+        <p class="side-note">按业务人员理解顺序排列。</p>
+        <nav class="nav">
+          <a href="#overview">整体定位</a>
+          <a href="#flow">治理顺序</a>
+          <a href="#modules">模块入口</a>
+          <a href="#project">综合体/集团</a>
+          <a href="#space">空间点位</a>
+          <a href="#merchant">商户主体</a>
+          <a href="#contract">合同准入</a>
+          <a href="#staff">员工和手机</a>
+          <a href="#device">设备管理</a>
+          <a href="#permission">权限和职级</a>
+          <a href="#terminal-switch">终端开关</a>
+          <a href="#merchant-side">商户侧</a>
+          <a href="#open-platform">开放接口</a>
+          <a href="#audit">留痕复核</a>
+          <a href="#relations">连接关系</a>
+          <a href="#decisions">已拍板/待排期</a>
+        </nav>
+      </aside>
+
+      <div class="content">
+        <section id="overview">
+          <h2>整体定位：平台治理层不是一个业务部门，而是所有业务的底座</h2>
+          <p class="lead">票务、酒吧、游乐、供应链、财务、第三方接入都要先知道“归属、权限、合同和责任”。平台治理层就是把这些基础规则先定清楚。</p>
+          <div class="summary-grid">
+            <div class="summary-box">
+              <strong>先管归属</strong>
+              <span>哪个综合体、哪个楼层、哪个区域、哪个点位、哪个商户。</span>
+            </div>
+            <div class="summary-box">
+              <strong>再管资格</strong>
+              <span>合同是否有效、经营范围是否允许、员工是否有权限、设备是否合规。</span>
+            </div>
+            <div class="summary-box">
+              <strong>最后管责任</strong>
+              <span>谁创建、谁审批、谁复核、谁放行、谁承担后续责任。</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="flow">
+          <h2>治理顺序：一件业务能不能做，要先经过这些判断</h2>
+          <div class="flow">
+            <div class="step">
+              <div class="step-number">1</div>
+              <strong>先看对象</strong>
+              <span>这个业务属于哪个综合体、空间、商户和业态。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">2</div>
+              <strong>再看合同</strong>
+              <span>合同是否生效，是否允许这个业务、位置和结算口径。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">3</div>
+              <strong>再看人员</strong>
+              <span>员工是否注册、是否审批通过、是否有当前功能权限。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">4</div>
+              <strong>再看设备</strong>
+              <span>工作手机、平板、一体机或扫码设备是否受管且状态正常。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">5</div>
+              <strong>最后留痕</strong>
+              <span>通过、拒绝、卡住、升级审批和放行结果都要记录。</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="modules">
+          <h2>模块入口：平台治理层包含哪些管理模块</h2>
+          <div class="card-grid">
+            <a class="system-card" href="#project">
+              <div class="card-top"><h3>综合体和集团</h3><span class="tag">基础</span></div>
+              <p>当前先管一个综合体，但所有数据都要预留未来集团视图。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#space">
+              <div class="card-top"><h3>空间和点位</h3><span class="tag">基础</span></div>
+              <p>管理楼层、区域、卡座、吧台、游乐点位、库房和设备位置。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#merchant">
+              <div class="card-top"><h3>商户和主体</h3><span class="tag">基础</span></div>
+              <p>管理商户、运营主体、联系人、合作方式和业务范围。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#contract">
+              <div class="card-top"><h3>合同和准入</h3><span class="tag warn">卡流程</span></div>
+              <p>合同不是只归档，还会决定后续业务能不能走。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#staff">
+              <div class="card-top"><h3>员工和手机</h3><span class="tag">人员</span></div>
+              <p>管理员工注册、私人手机设备凭证、工作手机、企微和岗位状态。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#permission">
+              <div class="card-top"><h3>权限和职级</h3><span class="tag warn">关键</span></div>
+              <p>权限细到单一功能，可按角色和员工完全自定义。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#terminal-switch">
+              <div class="card-top"><h3>终端开关</h3><span class="tag">SaaS</span></div>
+              <p>控制客人 App、小程序、Web 前端、工作人员平板、员工工作手机、员工私人手机 App、商户侧 Web 门户、商户侧 App、触摸屏一体机和移动管理端哪些能打开。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <!-- 修订说明（2026-06-07）：原 #modules 仅列 7 张卡片，但下文已有 #device 设备管理、#merchant-side 商户侧、#open-platform 开放接口、#audit 留痕复核四个章节却无对应入口卡片，导致"模块入口"与正文不一致（htmlmap-2）。依据本页既有章节与《统一口径基准》D3 开放平台、D5 商户侧/设备凭证定位，补齐这 4 张入口卡片，使卡片与锚点一一对应。 -->
+            <a class="system-card" href="#device">
+              <div class="card-top"><h3>设备管理</h3><span class="tag">人员</span></div>
+              <p>管理工作手机、平板、一体机和扫码设备的台账、领还、受管策略和状态。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#merchant-side">
+              <div class="card-top"><h3>商户侧</h3><span class="tag">边界</span></div>
+              <p>商户在授权业务范围内全开放使用本商户功能，但看不到平台全局和其他商户。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#open-platform">
+              <div class="card-top"><h3>开放接口</h3><span class="tag warn">对外</span></div>
+              <p>先做好自有开放 API/Webhook/SDK 与动态鉴权，第三方鉴权后在授权范围内读写。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#audit">
+              <div class="card-top"><h3>留痕复核</h3><span class="tag warn">关键</span></div>
+              <p>重要动作可追溯：谁发起、谁审批、谁复核、谁放行，敏感操作进复核队列。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+          </div>
+        </section>
+
+        <section id="project">
+          <h2>综合体和集团：当前一个项目，未来能看集团</h2>
+          <p class="lead">当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属”。未来需要集团视图和跨项目汇总，只是优先级不高。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>建立综合体项目档案。</li>
+                <li>记录项目状态、负责人、地址和经营范围。</li>
+                <li>为商户、空间、合同、员工、设备、票务和看板提供归属。</li>
+                <li>预留集团视图，后续汇总多个综合体的收入、客流、异常、商户和结算。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>业务意义</h3>
+              <ul>
+                <li>避免多个综合体上线后数据混在一起。</li>
+                <li>让老板后续能看单项目，也能看集团总览。</li>
+                <li>P0 不急着做集团大屏，但数据结构必须先留好。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="space">
+          <h2>空间和点位：所有业务都要知道“发生在哪”</h2>
+          <p class="lead">空间不仅是楼层图。它会影响商户合同、卡座低消、游乐容量、设备归属、库存位置和员工责任。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>维护楼层、区域、点位、商铺、卡座、吧台位、游乐入口、库房和设备点位。</li>
+                <li>记录空间面积、用途、状态、负责人和所属商户。</li>
+                <li>支持平面图能力预留，后续可把点位放到图上。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>影响业务</h3>
+              <ul>
+                <li>酒吧低消按时间、卡座和位置配置。</li>
+                <li>游乐容量按项目、场次、点位和设备控制。</li>
+                <li>供应链库存要知道库房和库位。</li>
+                <li>设备和员工班次要知道责任区域。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="merchant">
+          <h2>商户和主体：谁在这里经营，经营什么</h2>
+          <p class="lead">商户管理不是只录一个名字。它要记录商户能经营什么、在哪经营、谁负责、联系方式、合作方式和后续系统开放范围。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>建立商户档案、运营主体、负责人、第一联系人和第二联系人。</li>
+                <li>区分自营、租赁、联营、代运营、服务商接入等合作方式。</li>
+                <li>绑定空间、业态、合同和经营范围。</li>
+                <li>支持酒吧和游乐/乐园商户未来作为独立 SaaS 使用。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>业务边界</h3>
+              <ul>
+                <li>商户侧在授权业务范围内全开放。</li>
+                <li>商户不能查看平台全局和其他商户数据。</li>
+                <li>商户可操作哪些功能，由合同、业务范围和权限共同决定。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="contract">
+          <h2>合同和准入：违反规则先卡住，再按层级放行</h2>
+          <p class="lead">合同核心摘要会变成系统规则。票务、酒吧、游乐、供应链、第三方和结算如果违反合同或基础定义，流程必须先被卡住。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>维护合同状态、期限、面积、空间、经营范围、合作方式和结算口径摘要。</li>
+                <li>把合同摘要转成准入规则。</li>
+                <li>超合同范围、超空间范围、过期、资质异常、权限不足时先阻断。</li>
+                <li>允许上一级、上两级或最高权限审批后放行。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>业务意义</h3>
+              <ul>
+                <li>防止商户超范围经营。</li>
+                <li>防止结算口径和合同不一致。</li>
+                <li>让特殊情况可以审批放行，但必须留下原因和责任人。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="staff">
+          <h2>员工和手机：人、私人手机、工作手机要能对应起来</h2>
+          <p class="lead">员工不是只建账号。系统要知道员工是谁、审核是否通过、私人手机是否绑定、工作手机是否合规、上岗时能做什么。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>员工私人手机 App 注册，提交资料后后台审批。</li>
+                <li>私人手机 App 安装期生成并绑定设备凭证（Keystore 设备公钥/不可逆设备指纹），不读取手机本机 NFC 唯一标识。</li>
+                <li>员工换手机必须先解绑旧手机，再绑定新手机。</li>
+                <li>Root、调试或异常环境检测异常时，私人手机 App 失效并复核。</li>
+                <li>办公区私人手机寄存柜流动使用，先到先选，离开全部拿走。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>工作手机和企业微信</h3>
+              <ul>
+                <li>工作手机必须使用企业微信进行工作沟通。</li>
+                <li>企业微信工作会话按可配置留存期限保存（非永久，到期归档/销毁/匿名化）；不脱敏原文仅限最小授权 + 审批的取证/质检场景，普通展示按权限脱敏，查看写审计。<!-- 修订说明（2026-06-08 三轮收口）：原"永久保存"按 A7/合规§4 C3 改为可配置留存；2026-06-08 复核补充不脱敏原文的最小授权边界。依据 residual-scan-4 --></li>
+                <li>查看会话原文必须写入访问审计。</li>
+                <li>平台使用企业微信已有会话能力，统一同步、存储、质检和审计。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="device">
+          <h2>设备管理：谁领了什么设备，设备能不能用</h2>
+          <p class="lead">设备包括工作手机、平板、一体机、扫码设备、闸机预留和其他现场设备。设备要绑定员工、班次、点位和状态。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>建设备台账，记录编号、型号、点位、责任人和状态。</li>
+                <li>记录设备领用、归还、维修、挂失和报废。</li>
+                <li>工作手机预装软件清单和网站白名单由后台维护。</li>
+                <li>通过 Android Enterprise / Android Management API + 商业 MDM 阻止违规访问并留痕。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和现场业务的关系</h3>
+              <ul>
+                <li>工作手机负责扫码核销门票和权益。</li>
+                <li>工作手机还负责酒水和物品交接扫码，记录出库、后厨接收、服务员取走和送达。</li>
+                <li>平板只负责酒吧点酒下单。</li>
+                <li>一体机负责权益展示、订台、吧台买酒、游乐状态和定期检修记录。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="permission">
+          <h2>权限和职级：每一个单一功能都可以单独授权</h2>
+          <p class="lead">权限不能只按岗位粗略分。一个单一功能就是一个权限点，例如“票务核销”“查看卡座预定状态”。角色可以批量配置，员工也可以单独增减权限。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>权限规则</h3>
+              <ul>
+                <li>权限按单一功能最小颗粒度配置。</li>
+                <li>支持角色级权限模板。</li>
+                <li>支持员工级完全自定义配置。</li>
+                <li>敏感动作可要求上一级、上两级或最高权限审批。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>职级规则</h3>
+              <ul>
+                <li>职级可按 M1-M10 配置。</li>
+                <li>每个职级可分上、中、下。</li>
+                <li>职级只绑定薪资大范围，具体薪资单独填写。</li>
+                <li>职级影响默认权限模板和审批层级，但不能替代功能权限点。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="terminal-switch">
+          <h2>终端开关：哪些端能打开，后台说了算</h2>
+          <p class="lead">所有端都要有后台开关。开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限、商户范围和设备状态。这是为了以后酒吧系统和乐园系统可以独立 SaaS 化。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>能控制哪些端</h3>
+              <ul>
+                <li>客人 App 和小程序。</li>
+                <li>Web 前端和移动管理端。</li>
+                <li>工作人员平板 App。</li>
+                <li>员工工作手机和员工私人手机 App。</li>
+                <li>商户侧 App/Web。</li>
+                <li>触摸屏一体机。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>怎么控制</h3>
+              <ul>
+                <li>可以按全局、综合体项目、商户、业务系统、模块、设备和版本开关。</li>
+                <li>关闭后菜单不可见或不可点，接口也要拒绝业务动作。</li>
+                <li>访问被拒绝也要留痕，便于排查是权限问题还是开关问题。</li>
+                <li>酒吧和游乐/乐园未来独立运营时，可以只打开对应商户和对应模块。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="merchant-side">
+          <h2>商户侧：在授权业务范围内全开放</h2>
+          <p class="lead">商户侧不是平台后台，也不是只读页面。商户在自己的授权业务范围内完整使用相关功能，但不能跨商户和看平台全局。</p>
+          <table class="plain-table">
+            <thead>
+              <tr>
+                <th>商户类型</th>
+                <th>可以开放什么</th>
+                <th>不能开放什么</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>酒吧商户</td>
+                <td>卡座、订台、点酒、账单、存酒、库存、员工、对账、看板。</td>
+                <td>其他商户数据、平台全局配置、跨项目数据。</td>
+              </tr>
+              <tr>
+                <td>游乐/乐园商户</td>
+                <td>项目、场次、容量、核销、巡检、检修、异常、员工、看板。</td>
+                <td>其他商户数据、平台全局配置、跨项目数据。</td>
+              </tr>
+              <tr>
+                <td>餐饮/零售商户</td>
+                <td>本商户订单回流、券核销、对账差异、结算依据、看板。</td>
+                <td>完整平台后台、其他商户对账、平台全局风控。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="open-platform">
+          <h2>开放接口：先做好自己的开放能力，再接第三方资料</h2>
+          <p class="lead">当前还没有真实第三方供应商接口资料，所以不把供应商字段作为当前阻塞。先开发自有系统，再让第三方在鉴权后读取或回写数据；后续拿到第三方 SDK/API 后再接进来。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>平台开放给第三方</h3>
+              <ul>
+                <li>开放 API、Webhook、SDK 示例和接口文档。</li>
+                <li>第三方必须先通过动态鉴权。</li>
+                <li>第三方只能访问授权范围内的数据和功能。</li>
+                <li>所有调用必须有日志和审计。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>第三方接入平台</h3>
+              <ul>
+                <li>后续拿到第三方 SDK、API 和接口资料后再接入。</li>
+                <li>按供应商补字段映射、回调格式和对账口径。</li>
+                <li>餐饮、零售、机器人、视频、设备都按接口资料逐步接。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="audit">
+          <h2>留痕和复核：重要动作不能只靠口头说明</h2>
+          <p class="lead">平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>必须留痕的动作</h3>
+              <ul>
+                <li>合同准入阻断和升级放行。</li>
+                <li>权限变更、临时授权和敏感权限使用。</li>
+                <li>员工注册审批、设备凭证绑定、换机解绑重绑。</li>
+                <li>设备领还、违规访问、工作手机异常。</li>
+                <li>终端开关启用、停用、灰度开放和被拒绝访问。</li>
+                <li>订单获取、销售归属、订台来源和定金结果。</li>
+                <li>卡座或桌台的主责服务员、协助服务员、加单、送达和换人。</li>
+                <li>异常发现、第一处理人接单、转派、升级、处理和关闭。</li>
+                <li>酒水或物品从库房、机器人、后厨、服务员到客人的交接。</li>
+                <li>查看企业微信会话原文、查看视频证据和查看财务敏感信息。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>常见复核</h3>
+              <ul>
+                <li>人工放行、免单、退款、调账。</li>
+                <li>高价值酒水报损、盘点差异、存酒作废。</li>
+                <li>日结锁定后的影响金额补录。</li>
+                <li>游乐设施检修后的恢复营业确认。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="relations">
+          <h2>连接关系：平台治理层怎么连接所有业务</h2>
+          <div class="relation-list">
+            <div class="relation-row">
+              <div class="relation-from">治理连接票务</div>
+              <div class="relation-text">票种发布、权益核销、退款和人工放行，都要看项目、合同、员工权限、设备状态和准入规则。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">治理连接酒吧</div>
+              <div class="relation-text">卡座、订台、低消、点酒、免单和账单调整，都要知道空间、商户、合同、员工和审批层级。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">治理连接游乐</div>
+              <div class="relation-text">项目开放、场次容量、设备检修和恢复营业，都要绑定点位、设备、员工、检修供应商和主管确认。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">治理连接供应链</div>
+              <div class="relation-text">供应商、供应合同、采购、库房、库存报损和盘点差异，都要看商户归属、合同范围和复核权限。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">治理连接财务</div>
+              <div class="relation-text">日结锁定、结算依据、补录影响金额和对账差异，都要有审批权限和操作留痕。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">治理连接第三方</div>
+              <div class="relation-text">第三方只能在动态鉴权和授权范围内调用接口；后续供应商 SDK/API 接入也要遵守同一套规则。</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="decisions">
+          <h2>已拍板规则和待排期问题</h2>
+          <div class="question-list">
+            <div class="question confirmed">已拍板：未来需要集团视图和跨项目汇总视图，但优先级不高，P0 先保证所有对象带综合体项目归属。</div>
+            <div class="question confirmed">已拍板：商户侧在授权业务范围内全开放，酒吧和游乐/乐园保留独立 SaaS 能力。</div>
+            <div class="question confirmed">已拍板：日结锁定后不允许直接补录影响金额，必须上级审批通过后才能补录。</div>
+            <div class="question confirmed">已拍板：员工权限按单一功能最小颗粒度配置，支持角色和员工级完全自定义。</div>
+            <div class="question confirmed">已拍板：企业微信使用已有会话能力，平台负责统一同步、永久存储、质检和审计。</div>
+            <div class="question confirmed">已拍板：第三方接口资料当前未确定，先做自有系统和开放 API / Webhook / SDK 示例，后续再接第三方 SDK/API。</div>
+            <div class="question confirmed">已拍板：所有有过程的业务动作都必须留痕，酒水和可追责物品从库房到客人的全过程必须可追溯。</div>
+            <div class="question confirmed">已拍板：订单获取、销售归属、卡座服务、异常第一处理人、转派升级、复核关闭都必须进入统一留痕。</div>
+            <div class="question confirmed">已拍板：留痕优先自动生成，依赖账号、设备、点位、班次、扫码、支付、机器人、企业微信和第三方回流，人工只补原因和证据。</div>
+            <div class="question confirmed">已拍板：所有端都必须有后台开关，关闭后该端或模块不可用，打开后仍受权限和数据范围控制。</div>
+            <div class="question confirmed">已收口：集团视图默认 P2；P0 只预留项目归属和跨项目汇总口径，不阻塞单综合体闭环。</div>
+            <div class="question confirmed">已拍板：权限点首批由平台统一预置，实施阶段允许边配置边补充。</div>
+            <div class="question confirmed">已拍板：企业微信后台配置由管理员一次性完成授权和密钥配置，系统自动做账号映射、同步、失败告警、基础规则质检和留存策略。</div>
+          </div>
+        </section>
+
+        <!-- 修订说明（2026-06-07）：footer 补"生成日期 + 依据"（htmlmap-3），便于追溯本治理层说明所依据的权威来源；依据 product-requirements-v0.1.md 与平台治理/开放平台/终端切换等 PRD，跨文档口径以 unified-standards-baseline-v0.1.md 为准。 -->
+        <p class="footer-note">文档版本：V0.1。生成日期：2026-06-07。用途：给不懂产品和技术的业务人员理解平台治理层范围。<br>依据：product-requirements-v0.1.md 及平台治理、开放平台鉴权、运营留痕与终端切换等 PRD；跨文档统一口径以 unified-standards-baseline-v0.1.md 为准。</p>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,612 @@
+package com.complex.platform.auth;
+
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.common.api.ApiException;
+import com.complex.platform.evidence.AuditEventService;
+import jakarta.annotation.PostConstruct;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@Profile("prod")
+public class ProductionAuthService {
+
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final AuditEventService auditEventService;
+    private final PasswordEncoder passwordEncoder;
+    private final SecureRandom secureRandom;
+    private final String seedUsername;
+    private final String seedPassword;
+    private final Duration accessTokenTtl;
+    private final Duration refreshTokenTtl;
+    private final int maxFailedAttempts;
+    private final Duration lockDuration;
+
+    public ProductionAuthService(
+            NamedParameterJdbcTemplate jdbcTemplate,
+            AuditEventService auditEventService,
+            @Value("${complex.auth.production.seed-admin.username:}") String seedUsername,
+            @Value("${complex.auth.production.seed-admin.password:}") String seedPassword,
+            @Value("${complex.auth.access-token-ttl:PT30M}") Duration accessTokenTtl,
+            @Value("${complex.auth.refresh-token-ttl:PT8H}") Duration refreshTokenTtl,
+            @Value("${complex.auth.failed-login.max-attempts:5}") int maxFailedAttempts,
+            @Value("${complex.auth.failed-login.lock-duration:PT15M}") Duration lockDuration
+    ) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.auditEventService = auditEventService;
+        this.secureRandom = new SecureRandom();
+        this.passwordEncoder = new BCryptPasswordEncoder(10, secureRandom);
+        this.seedUsername = seedUsername;
+        this.seedPassword = seedPassword;
+        this.accessTokenTtl = accessTokenTtl;
+        this.refreshTokenTtl = refreshTokenTtl;
+        this.maxFailedAttempts = Math.max(1, maxFailedAttempts);
+        this.lockDuration = lockDuration.isNegative() || lockDuration.isZero() ? Duration.ofMinutes(15) : lockDuration;
+    }
+
+    @PostConstruct
+    @Transactional
+    public void seedAdminWhenConfigured() {
+        if (isBlank(seedUsername) || isBlank(seedPassword)) {
+            return;
+        }
+
+        Instant now = Instant.now();
+        String userId = jdbcTemplate.queryForObject("""
+                INSERT INTO access_users (
+                    id, username, account_type, organization_id, merchant_id, status, created_at
+                )
+                VALUES (
+                    :id, :username, 'platform_admin', 'platform-company', NULL, 'active', :now
+                )
+                ON CONFLICT (username) DO UPDATE SET
+                    account_type = 'platform_admin',
+                    organization_id = COALESCE(access_users.organization_id, 'platform-company'),
+                    status = 'active'
+                RETURNING id
+                """, new MapSqlParameterSource()
+                .addValue("id", deterministicUserId(seedUsername))
+                .addValue("username", seedUsername)
+                .addValue("now", timestampWithTimeZone(now)), String.class);
+
+        jdbcTemplate.update("""
+                INSERT INTO auth_credentials (
+                    user_id, password_hash, password_algo, failed_attempt_count, locked_until,
+                    password_changed_at, status, created_at, updated_at
+                )
+                VALUES (
+                    :user_id, :password_hash, 'bcrypt', 0, NULL, :now, 'active', :now, :now
+                )
+                ON CONFLICT (user_id) DO UPDATE SET
+                    password_hash = EXCLUDED.password_hash,
+                    password_algo = 'bcrypt',
+                    failed_attempt_count = 0,
+                    locked_until = NULL,
+                    status = 'active',
+                    password_changed_at = :now,
+                    updated_at = :now
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("password_hash", passwordEncoder.encode(seedPassword))
+                .addValue("now", timestampWithTimeZone(now)));
+
+        jdbcTemplate.update("""
+                INSERT INTO user_roles (user_id, role_id)
+                SELECT :user_id, 'role_platform_admin'
+                 WHERE EXISTS (SELECT 1 FROM roles WHERE id = 'role_platform_admin')
+                ON CONFLICT (user_id, role_id) DO NOTHING
+                """, Map.of("user_id", userId));
+    }
+
+    @Transactional
+    public AuthService.LoginResponse login(AuthService.LoginRequest request) {
+        try {
+            requireText(request == null ? null : request.loginName(), "login_name");
+            requireText(request.password(), "password");
+
+            CredentialRecord credential = findCredentialByUsername(request.loginName())
+                    .orElseThrow(() -> ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password"));
+            Instant now = Instant.now();
+            if (!"active".equals(credential.userStatus())) {
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+            }
+            if (credential.lockedUntil() != null && now.isBefore(credential.lockedUntil())) {
+                throw ApiException.unauthorized("ACCOUNT_LOCKED", "account is temporarily locked");
+            }
+            if (!"active".equals(credential.credentialStatus()) && !"locked".equals(credential.credentialStatus())) {
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+            }
+            if (!passwordEncoder.matches(request.password(), credential.passwordHash())) {
+                registerFailedLogin(credential, now);
+                throw ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password");
+            }
+
+            resetFailedLogin(credential.userId(), now);
+            SessionRecord session = createSession(credential.toActor(), request.deviceId(), request.terminalType(), now);
+            auditEventService.recordSuccess(
+                    "auth.login.succeeded",
+                    "auth.login",
+                    "auth-session",
+                    session.id(),
+                    null,
+                    null,
+                    Map.of(
+                            "user_id", credential.userId(),
+                            "session_id", session.id(),
+                            "device_id", session.deviceId(),
+                            "terminal_type", session.terminalType()
+                    )
+            );
+            return responseFor(session, credential.toApiUser());
+        } catch (ApiException exception) {
+            auditEventService.recordFailure(
+                    "auth.login.failed",
+                    "auth.login",
+                    "auth-session",
+                    null,
+                    null,
+                    null,
+                    exception.code()
+            );
+            throw exception;
+        }
+    }
+
+    @Transactional
+    public AuthService.LoginResponse refresh(AuthService.RefreshTokenRequest request, String currentAccessToken) {
+        try {
+            requireText(request == null ? null : request.refreshToken(), "refresh_token");
+            requireText(currentAccessToken, "access_token");
+
+            Instant now = Instant.now();
+            SessionWithUser session = findActiveSessionByRefreshToken(request.refreshToken())
+                    .orElseThrow(() -> ApiException.unauthorized("REFRESH_TOKEN_INVALID", "refresh token is invalid"));
+            if (now.isAfter(session.refreshExpiresAt())) {
+                expireSession(session.id(), now);
+                throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "refresh token is expired");
+            }
+            if (!session.accessTokenHash().equals(sha256Hex(currentAccessToken))) {
+                throw ApiException.unauthorized("SESSION_MISMATCH", "refresh token does not match current session");
+            }
+            if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
+                throw ApiException.unauthorized("SESSION_MISMATCH", "device does not match current session");
+            }
+            if (!"active".equals(session.userStatus())) {
+                throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
+            }
+
+            SessionRecord refreshed = rotateSessionTokens(session, now);
+            auditEventService.recordSuccess(
+                    "auth.token.refreshed",
+                    "auth.refresh",
+                    "auth-session",
+                    refreshed.id(),
+                    null,
+                    null,
+                    Map.of(
+                            "user_id", session.userId(),
+                            "session_id", refreshed.id(),
+                            "device_id", refreshed.deviceId()
+                    )
+            );
+            return responseFor(refreshed, session.toApiUser());
+        } catch (ApiException exception) {
+            auditEventService.recordFailure(
+                    "auth.token_refresh_failed",
+                    "auth.refresh",
+                    "auth-session",
+                    null,
+                    null,
+                    null,
+                    exception.code()
+            );
+            throw exception;
+        }
+    }
+
+    @Transactional
+    public AuthService.LogoutResponse logout(AuthService.LogoutRequest request, String currentAccessToken) {
+        try {
+            requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
+            requireText(request.sessionId(), "session_id");
+            requireText(currentAccessToken, "access_token");
+
+            Instant now = Instant.now();
+            SessionWithUser session = findActiveSessionByAccessToken(currentAccessToken)
+                    .orElseThrow(() -> ApiException.unauthorized("ACCESS_TOKEN_INVALID", "access token is invalid"));
+            if (!session.id().equals(request.sessionId())) {
+                throw ApiException.unauthorized("SESSION_MISMATCH", "session_id does not match current token");
+            }
+            if (!isBlank(request.deviceId()) && !request.deviceId().equals(session.deviceId())) {
+                throw ApiException.unauthorized("SESSION_MISMATCH", "device does not match current session");
+            }
+
+            jdbcTemplate.update("""
+                    UPDATE auth_sessions
+                       SET status = 'logged_out',
+                           revoked_at = :now,
+                           updated_at = :now
+                     WHERE id = :id
+                       AND status = 'active'
+                    """, new MapSqlParameterSource()
+                    .addValue("id", session.id())
+                    .addValue("now", timestampWithTimeZone(now)));
+            auditEventService.recordSuccess(
+                    "auth.logout",
+                    "auth.logout",
+                    "auth-session",
+                    session.id(),
+                    null,
+                    request.idempotencyKey(),
+                    Map.of(
+                            "session_id", session.id(),
+                            "device_id", session.deviceId()
+                    )
+            );
+            return new AuthService.LogoutResponse(session.id(), "logged_out", now);
+        } catch (ApiException exception) {
+            auditEventService.recordFailure(
+                    "auth.logout_failed",
+                    "auth.logout",
+                    "auth-session",
+                    request == null ? null : request.sessionId(),
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    exception.code()
+            );
+            throw exception;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<AccessActor> authenticateToken(String token) {
+        if (isBlank(token)) {
+            return Optional.empty();
+        }
+        return findActiveSessionByAccessToken(token)
+                .filter(session -> Instant.now().isBefore(session.accessExpiresAt()))
+                .filter(session -> "active".equals(session.userStatus()))
+                .map(SessionWithUser::toActor);
+    }
+
+    private SessionRecord createSession(AccessActor actor, String deviceId, String terminalType, Instant now) {
+        String accessToken = newToken("p0_prod_access_");
+        String refreshToken = newToken("p0_prod_refresh_");
+        SessionRecord session = new SessionRecord(
+                "sess_" + UUID.randomUUID(),
+                actor.id(),
+                accessToken,
+                refreshToken,
+                blankToDefault(deviceId, "unknown"),
+                blankToDefault(terminalType, "web"),
+                now.plus(accessTokenTtl),
+                now.plus(refreshTokenTtl),
+                now
+        );
+        jdbcTemplate.update("""
+                INSERT INTO auth_sessions (
+                    id, user_id, access_token_hash, refresh_token_hash, device_id, terminal_type,
+                    status, access_expires_at, refresh_expires_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, :user_id, :access_token_hash, :refresh_token_hash, :device_id, :terminal_type,
+                    'active', :access_expires_at, :refresh_expires_at, :now, :now
+                )
+                """, sessionParameters(session));
+        return session;
+    }
+
+    private SessionRecord rotateSessionTokens(SessionWithUser session, Instant now) {
+        String accessToken = newToken("p0_prod_access_");
+        String refreshToken = newToken("p0_prod_refresh_");
+        Instant accessExpiresAt = now.plus(accessTokenTtl);
+        Instant refreshExpiresAt = now.plus(refreshTokenTtl);
+        int updated = jdbcTemplate.update("""
+                UPDATE auth_sessions
+                   SET access_token_hash = :access_token_hash,
+                       refresh_token_hash = :refresh_token_hash,
+                       access_expires_at = :access_expires_at,
+                       refresh_expires_at = :refresh_expires_at,
+                       updated_at = :now
+                 WHERE id = :id
+                   AND status = 'active'
+                   AND refresh_token_hash = :old_refresh_token_hash
+                """, new MapSqlParameterSource()
+                .addValue("id", session.id())
+                .addValue("access_token_hash", sha256Hex(accessToken))
+                .addValue("refresh_token_hash", sha256Hex(refreshToken))
+                .addValue("old_refresh_token_hash", session.refreshTokenHash())
+                .addValue("access_expires_at", timestampWithTimeZone(accessExpiresAt))
+                .addValue("refresh_expires_at", timestampWithTimeZone(refreshExpiresAt))
+                .addValue("now", timestampWithTimeZone(now)));
+        if (updated != 1) {
+            throw ApiException.unauthorized("REFRESH_TOKEN_INVALID", "refresh token is invalid");
+        }
+        return new SessionRecord(
+                session.id(),
+                session.userId(),
+                accessToken,
+                refreshToken,
+                session.deviceId(),
+                session.terminalType(),
+                accessExpiresAt,
+                refreshExpiresAt,
+                now
+        );
+    }
+
+    private void registerFailedLogin(CredentialRecord credential, Instant now) {
+        int nextCount = credential.failedAttemptCount() + 1;
+        Instant lockedUntil = nextCount >= maxFailedAttempts ? now.plus(lockDuration) : null;
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("user_id", credential.userId())
+                .addValue("failed_attempt_count", nextCount)
+                .addValue("now", timestampWithTimeZone(now));
+        if (lockedUntil == null) {
+            jdbcTemplate.update("""
+                    UPDATE auth_credentials
+                       SET failed_attempt_count = :failed_attempt_count,
+                           updated_at = :now
+                     WHERE user_id = :user_id
+                    """, parameters);
+            return;
+        }
+
+        jdbcTemplate.update("""
+                UPDATE auth_credentials
+                   SET failed_attempt_count = :failed_attempt_count,
+                       locked_until = :locked_until,
+                       status = 'locked',
+                       updated_at = :now
+                 WHERE user_id = :user_id
+                """, parameters.addValue("locked_until", timestampWithTimeZone(lockedUntil)));
+    }
+
+    private void resetFailedLogin(String userId, Instant now) {
+        jdbcTemplate.update("""
+                UPDATE auth_credentials
+                   SET failed_attempt_count = 0,
+                       locked_until = NULL,
+                       status = 'active',
+                       last_login_at = :now,
+                       updated_at = :now
+                 WHERE user_id = :user_id
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("now", timestampWithTimeZone(now)));
+    }
+
+    private void expireSession(String sessionId, Instant now) {
+        jdbcTemplate.update("""
+                UPDATE auth_sessions
+                   SET status = 'expired',
+                       updated_at = :now
+                 WHERE id = :id
+                   AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("id", sessionId)
+                .addValue("now", timestampWithTimeZone(now)));
+    }
+
+    private Optional<CredentialRecord> findCredentialByUsername(String username) {
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject("""
+                    SELECT u.id AS user_id, u.username, u.account_type, u.organization_id, u.merchant_id,
+                           u.status AS user_status, c.password_hash, c.failed_attempt_count, c.locked_until,
+                           c.status AS credential_status
+                      FROM access_users u
+                      JOIN auth_credentials c ON c.user_id = u.id
+                     WHERE u.username = :username
+                    """, Map.of("username", username), (rs, rowNum) -> new CredentialRecord(
+                    rs.getString("user_id"),
+                    rs.getString("username"),
+                    rs.getString("account_type"),
+                    rs.getString("organization_id"),
+                    rs.getString("merchant_id"),
+                    rs.getString("user_status"),
+                    rs.getString("password_hash"),
+                    rs.getInt("failed_attempt_count"),
+                    instant(rs.getObject("locked_until", OffsetDateTime.class)),
+                    rs.getString("credential_status")
+            )));
+        } catch (EmptyResultDataAccessException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<SessionWithUser> findActiveSessionByAccessToken(String accessToken) {
+        return findActiveSessionByTokenHash("""
+                SELECT s.id, s.user_id, s.access_token_hash, s.refresh_token_hash, s.device_id, s.terminal_type,
+                       s.access_expires_at, s.refresh_expires_at,
+                       u.username, u.account_type, u.organization_id, u.merchant_id, u.status AS user_status
+                  FROM auth_sessions s
+                  JOIN access_users u ON u.id = s.user_id
+                 WHERE s.access_token_hash = :token_hash
+                   AND s.status = 'active'
+                """, sha256Hex(accessToken));
+    }
+
+    private Optional<SessionWithUser> findActiveSessionByRefreshToken(String refreshToken) {
+        return findActiveSessionByTokenHash("""
+                SELECT s.id, s.user_id, s.access_token_hash, s.refresh_token_hash, s.device_id, s.terminal_type,
+                       s.access_expires_at, s.refresh_expires_at,
+                       u.username, u.account_type, u.organization_id, u.merchant_id, u.status AS user_status
+                  FROM auth_sessions s
+                  JOIN access_users u ON u.id = s.user_id
+                 WHERE s.refresh_token_hash = :token_hash
+                   AND s.status = 'active'
+                """, sha256Hex(refreshToken));
+    }
+
+    private Optional<SessionWithUser> findActiveSessionByTokenHash(String sql, String tokenHash) {
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject(sql, Map.of("token_hash", tokenHash), (rs, rowNum) -> new SessionWithUser(
+                    rs.getString("id"),
+                    rs.getString("user_id"),
+                    rs.getString("access_token_hash"),
+                    rs.getString("refresh_token_hash"),
+                    rs.getString("device_id"),
+                    rs.getString("terminal_type"),
+                    instant(rs.getObject("access_expires_at", OffsetDateTime.class)),
+                    instant(rs.getObject("refresh_expires_at", OffsetDateTime.class)),
+                    rs.getString("username"),
+                    rs.getString("account_type"),
+                    rs.getString("organization_id"),
+                    rs.getString("merchant_id"),
+                    rs.getString("user_status")
+            )));
+        } catch (EmptyResultDataAccessException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private MapSqlParameterSource sessionParameters(SessionRecord session) {
+        Instant now = session.updatedAt();
+        return new MapSqlParameterSource()
+                .addValue("id", session.id())
+                .addValue("user_id", session.userId())
+                .addValue("access_token_hash", sha256Hex(session.accessToken()))
+                .addValue("refresh_token_hash", sha256Hex(session.refreshToken()))
+                .addValue("device_id", session.deviceId())
+                .addValue("terminal_type", session.terminalType())
+                .addValue("access_expires_at", timestampWithTimeZone(session.accessExpiresAt()))
+                .addValue("refresh_expires_at", timestampWithTimeZone(session.refreshExpiresAt()))
+                .addValue("now", timestampWithTimeZone(now));
+    }
+
+    private AuthService.LoginResponse responseFor(SessionRecord session, AuthService.ApiUser user) {
+        return new AuthService.LoginResponse(
+                session.accessToken(),
+                session.refreshToken(),
+                session.id(),
+                "Bearer",
+                user
+        );
+    }
+
+    private String deterministicUserId(String username) {
+        return "usr_prod_" + sha256Hex(username).substring(0, 24);
+    }
+
+    private String newToken(String prefix) {
+        byte[] bytes = new byte[32];
+        secureRandom.nextBytes(bytes);
+        return prefix + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String sha256Hex(String value) {
+        return HexFormat.of().formatHex(MessageDigestHolder.digest(value));
+    }
+
+    private void requireText(String value, String fieldName) {
+        if (isBlank(value)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
+        }
+    }
+
+    private String blankToDefault(String value, String defaultValue) {
+        return isBlank(value) ? defaultValue : value;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private OffsetDateTime timestampWithTimeZone(Instant instant) {
+        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
+    }
+
+    private Instant instant(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
+    }
+
+    private record CredentialRecord(
+            String userId,
+            String username,
+            String accountType,
+            String organizationId,
+            String merchantId,
+            String userStatus,
+            String passwordHash,
+            int failedAttemptCount,
+            Instant lockedUntil,
+            String credentialStatus
+    ) {
+        AccessActor toActor() {
+            return new AccessActor(userId, username, accountType, organizationId, merchantId, userStatus);
+        }
+
+        AuthService.ApiUser toApiUser() {
+            return new AuthService.ApiUser(userId, username, accountType, organizationId, merchantId);
+        }
+    }
+
+    private record SessionRecord(
+            String id,
+            String userId,
+            String accessToken,
+            String refreshToken,
+            String deviceId,
+            String terminalType,
+            Instant accessExpiresAt,
+            Instant refreshExpiresAt,
+            Instant updatedAt
+    ) {
+    }
+
+    private record SessionWithUser(
+            String id,
+            String userId,
+            String accessTokenHash,
+            String refreshTokenHash,
+            String deviceId,
+            String terminalType,
+            Instant accessExpiresAt,
+            Instant refreshExpiresAt,
+            String username,
+            String accountType,
+            String organizationId,
+            String merchantId,
+            String userStatus
+    ) {
+        AccessActor toActor() {
+            return new AccessActor(userId, username, accountType, organizationId, merchantId, userStatus);
+        }
+
+        AuthService.ApiUser toApiUser() {
+            return new AuthService.ApiUser(userId, username, accountType, organizationId, merchantId);
+        }
+    }
+
+    private static final class MessageDigestHolder {
+        private MessageDigestHolder() {
+        }
+
+        static byte[] digest(String value) {
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                return digest.digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } catch (Exception exception) {
+                throw new IllegalStateException("SHA-256 digest unavailable", exception);
+            }
+        }
+    }
+}

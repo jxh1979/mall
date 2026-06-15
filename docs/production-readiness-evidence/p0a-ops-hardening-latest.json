@@ -1,0 +1,19 @@
+{
+  "artifact": "p0a-ops-hardening",
+  "boundary": "P0-A no-system-write boundary",
+  "system_write_policy": "codex_no_system_write",
+  "nas_mount_path": "/mnt/complex-nas-backup",
+  "nas_server": "192.168.88.113",
+  "nas_share": "bn",
+  "schedule_installed_by_codex": false,
+  "plaintext_secret_present": false,
+  "business_p0_expanded": false,
+  "required_runtime_check": "ops/160/complex-nas-preflight.sh",
+  "required_gate": "npm run verify:p0a-ops-hardening",
+  "runtime_preflight_status": "passed",
+  "runtime_preflight_verified_at": "2026-06-14T18:51:28+00:00",
+  "runtime_preflight_host": "192.168.88.160",
+  "runtime_preflight_free_bytes": 31509851459584,
+  "runtime_preflight_mount_type": "cifs",
+  "status": "runtime_preflight_passed"
+}

@@ -1,0 +1,773 @@
+package com.complex.platform.amusement;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+@Repository
+class JdbcAmusementRepository implements AmusementRepository {
+
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<Map<String, Object>>> ITEM_LIST_TYPE = new TypeReference<>() {
+    };
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
+
+    JdbcAmusementRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper.copy().findAndRegisterModules();
+    }
+
+    @Override
+    public AmusementSafetyTemplateRecord saveSafetyTemplate(AmusementSafetyTemplateRecord template) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_safety_templates (
+                    id, template_name, items_json, effective_from, status,
+                    evidence_attachment_ids, created_at, updated_at
+                )
+                VALUES (
+                    :id, :template_name, CAST(:items_json AS jsonb), :effective_from, :status,
+                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    template_name = EXCLUDED.template_name,
+                    items_json = EXCLUDED.items_json,
+                    effective_from = EXCLUDED.effective_from,
+                    status = EXCLUDED.status,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    updated_at = EXCLUDED.updated_at
+                """, safetyTemplateParameters(template));
+        return template;
+    }
+
+    @Override
+    public List<AmusementSafetyTemplateRecord> listSafetyTemplates() {
+        return jdbcTemplate.query("""
+                SELECT id, template_name, items_json, effective_from, status,
+                       evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_safety_templates
+                 ORDER BY created_at DESC, id
+                """, this::mapSafetyTemplate);
+    }
+
+    @Override
+    public Optional<AmusementSafetyTemplateRecord> findSafetyTemplateById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, template_name, items_json, effective_from, status,
+                       evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_safety_templates
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapSafetyTemplate).stream().findFirst();
+    }
+
+    @Override
+    public AmusementProjectRecord saveProject(AmusementProjectRecord project) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_projects (
+                    id, project_name, capacity, open_status, safety_template_id,
+                    eligibility_rule_json, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_name, :capacity, :open_status, :safety_template_id,
+                    CAST(:eligibility_rule_json AS jsonb), :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    project_name = EXCLUDED.project_name,
+                    capacity = EXCLUDED.capacity,
+                    open_status = EXCLUDED.open_status,
+                    safety_template_id = EXCLUDED.safety_template_id,
+                    eligibility_rule_json = EXCLUDED.eligibility_rule_json,
+                    updated_at = EXCLUDED.updated_at
+                """, projectParameters(project));
+        return project;
+    }
+
+    @Override
+    public List<AmusementProjectRecord> listProjects() {
+        return jdbcTemplate.query("""
+                SELECT id, project_name, capacity, open_status, safety_template_id,
+                       eligibility_rule_json, created_at, updated_at
+                  FROM amusement_projects
+                 ORDER BY created_at DESC, id
+                """, this::mapProject);
+    }
+
+    @Override
+    public Optional<AmusementProjectRecord> findProjectById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_name, capacity, open_status, safety_template_id,
+                       eligibility_rule_json, created_at, updated_at
+                  FROM amusement_projects
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapProject).stream().findFirst();
+    }
+
+    @Override
+    public AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_project_rules (
+                    id, project_id, rule_type, rule_value, effective_from, effective_to,
+                    blocking, status, evidence_attachment_ids, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :rule_type, :rule_value, :effective_from, :effective_to,
+                    :blocking, :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    rule_type = EXCLUDED.rule_type,
+                    rule_value = EXCLUDED.rule_value,
+                    effective_from = EXCLUDED.effective_from,
+                    effective_to = EXCLUDED.effective_to,
+                    blocking = EXCLUDED.blocking,
+                    status = EXCLUDED.status,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    updated_at = EXCLUDED.updated_at
+                """, projectRuleParameters(rule));
+        return rule;
+    }
+
+    @Override
+    public List<AmusementProjectRuleRecord> listActiveBlockingProjectRules(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, rule_type, rule_value, effective_from, effective_to,
+                       blocking, status, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_project_rules
+                 WHERE project_id = :project_id
+                   AND blocking = TRUE
+                   AND status = 'active'
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), this::mapProjectRule);
+    }
+
+    @Override
+    public AmusementSessionRecord saveSession(AmusementSessionRecord session) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_sessions (
+                    id, project_id, start_time, end_time, capacity, used_capacity,
+                    status, evidence_attachment_ids, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :start_time, :end_time, :capacity, :used_capacity,
+                    :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    project_id = EXCLUDED.project_id,
+                    start_time = EXCLUDED.start_time,
+                    end_time = EXCLUDED.end_time,
+                    capacity = EXCLUDED.capacity,
+                    used_capacity = EXCLUDED.used_capacity,
+                    status = EXCLUDED.status,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    updated_at = EXCLUDED.updated_at
+                """, sessionParameters(session));
+        return session;
+    }
+
+    @Override
+    public List<AmusementSessionRecord> listSessions() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity,
+                       status, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_sessions
+                 ORDER BY start_time DESC, id
+                """, this::mapSession);
+    }
+
+    @Override
+    public Optional<AmusementSessionRecord> findSessionById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity,
+                       status, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_sessions
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapSession).stream().findFirst();
+    }
+
+    @Override
+    public boolean incrementSessionUsedCapacityIfAvailable(String sessionId) {
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_sessions
+                   SET used_capacity = used_capacity + 1,
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND used_capacity < capacity
+                """, Map.of("id", sessionId, "updated_at", timestampWithTimeZone(Instant.now())));
+        return updated > 0;
+    }
+
+    @Override
+    public AmusementSafetyInspectionRecord saveSafetyInspection(AmusementSafetyInspectionRecord inspection) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_safety_inspections (
+                    id, project_id, template_id, items_json, overall_result, inspection_status,
+                    rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
+                    approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :template_id, CAST(:items_json AS jsonb), :overall_result, :inspection_status,
+                    :rectification_status, :reopen_status, :inspected_at, :submitted_at, :rechecked_at,
+                    :approved_at, :operator_note, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    items_json = EXCLUDED.items_json,
+                    overall_result = EXCLUDED.overall_result,
+                    inspection_status = EXCLUDED.inspection_status,
+                    rectification_status = EXCLUDED.rectification_status,
+                    reopen_status = EXCLUDED.reopen_status,
+                    inspected_at = EXCLUDED.inspected_at,
+                    submitted_at = EXCLUDED.submitted_at,
+                    rechecked_at = EXCLUDED.rechecked_at,
+                    approved_at = EXCLUDED.approved_at,
+                    operator_note = EXCLUDED.operator_note,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    updated_at = EXCLUDED.updated_at
+                """, safetyInspectionParameters(inspection));
+        return inspection;
+    }
+
+    @Override
+    public List<AmusementSafetyInspectionRecord> listSafetyInspections() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
+                       rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_safety_inspections
+                 ORDER BY created_at DESC, id
+                """, this::mapSafetyInspection);
+    }
+
+    @Override
+    public Optional<AmusementSafetyInspectionRecord> findSafetyInspectionById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
+                       rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_safety_inspections
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapSafetyInspection).stream().findFirst();
+    }
+
+    @Override
+    public Optional<AmusementSafetyInspectionRecord> latestSafetyInspectionForProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
+                       rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_safety_inspections
+                 WHERE project_id = :project_id
+                 ORDER BY inspected_at DESC, created_at DESC, id
+                 LIMIT 1
+                """, Map.of("project_id", projectId), this::mapSafetyInspection).stream().findFirst();
+    }
+
+    @Override
+    public AmusementSafetyActionRecord saveSafetyAction(AmusementSafetyActionRecord action) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_safety_actions (
+                    id, inspection_id, action_type, action_result, comment, attachment_ids, created_at
+                )
+                VALUES (
+                    :id, :inspection_id, :action_type, :action_result, :comment,
+                    CAST(:attachment_ids AS jsonb), :created_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    action_result = EXCLUDED.action_result,
+                    comment = EXCLUDED.comment,
+                    attachment_ids = EXCLUDED.attachment_ids
+                """, safetyActionParameters(action));
+        return action;
+    }
+
+    @Override
+    public AmusementVerificationRecord saveVerification(AmusementVerificationRecord verification) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_verifications (
+                    id, project_id, session_id, credential_payload, device_id, staff_id,
+                    verification_result, failure_reason, evidence_attachment_ids, created_at
+                )
+                VALUES (
+                    :id, :project_id, :session_id, :credential_payload, :device_id, :staff_id,
+                    :verification_result, :failure_reason, CAST(:evidence_attachment_ids AS jsonb), :created_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    verification_result = EXCLUDED.verification_result,
+                    failure_reason = EXCLUDED.failure_reason,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
+                """, verificationParameters(verification));
+        return verification;
+    }
+
+    @Override
+    public List<AmusementVerificationRecord> listVerifications() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, credential_payload, device_id, staff_id,
+                       verification_result, failure_reason, evidence_attachment_ids, created_at
+                  FROM amusement_verifications
+                 ORDER BY created_at DESC, id
+                """, this::mapVerification);
+    }
+
+    @Override
+    public AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_manual_overrides (
+                    id, project_id, session_id, override_type, reason, status,
+                    operator_note, evidence_attachment_ids, created_at
+                )
+                VALUES (
+                    :id, :project_id, :session_id, :override_type, :reason, :status,
+                    :operator_note, CAST(:evidence_attachment_ids AS jsonb), :created_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    override_type = EXCLUDED.override_type,
+                    reason = EXCLUDED.reason,
+                    status = EXCLUDED.status,
+                    operator_note = EXCLUDED.operator_note,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
+                """, manualOverrideParameters(override));
+        return override;
+    }
+
+    @Override
+    public List<AmusementManualOverrideRecord> listManualOverrides() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, override_type, reason, status,
+                       operator_note, evidence_attachment_ids, created_at
+                  FROM amusement_manual_overrides
+                 ORDER BY created_at DESC, id
+                """, this::mapManualOverride);
+    }
+
+    @Override
+    public AmusementDeviceStatusRecord saveDeviceStatus(AmusementDeviceStatusRecord status) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_device_statuses (
+                    id, project_id, device_id, provider_code, status, last_seen_at,
+                    raw_status_json, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :device_id, :provider_code, :status, :last_seen_at,
+                    CAST(:raw_status_json AS jsonb), :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    provider_code = EXCLUDED.provider_code,
+                    status = EXCLUDED.status,
+                    last_seen_at = EXCLUDED.last_seen_at,
+                    raw_status_json = EXCLUDED.raw_status_json,
+                    updated_at = EXCLUDED.updated_at
+                """, deviceStatusParameters(status));
+        return status;
+    }
+
+    @Override
+    public List<AmusementDeviceStatusRecord> listDeviceStatuses() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, device_id, provider_code, status, last_seen_at,
+                       raw_status_json, created_at, updated_at
+                  FROM amusement_device_statuses
+                 ORDER BY last_seen_at DESC, id
+                """, this::mapDeviceStatus);
+    }
+
+    @Override
+    public AmusementQueueEntryRecord saveQueueEntry(AmusementQueueEntryRecord entry) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_queue_entries (
+                    id, project_id, session_id, customer_id, queue_no, status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :session_id, :customer_id, :queue_no, :status, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, queueEntryParameters(entry));
+        return entry;
+    }
+
+    @Override
+    public List<AmusementQueueEntryRecord> listQueueEntries() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, queue_no, status, created_at, updated_at
+                  FROM amusement_queue_entries
+                 ORDER BY created_at DESC, id
+                """, this::mapQueueEntry);
+    }
+
+    @Override
+    public Optional<AmusementQueueEntryRecord> findQueueEntryById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, queue_no, status, created_at, updated_at
+                  FROM amusement_queue_entries
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapQueueEntry).stream().findFirst();
+    }
+
+    @Override
+    public AmusementReservationRecord saveReservation(AmusementReservationRecord reservation) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_reservations (
+                    id, project_id, session_id, customer_id, reservation_status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :session_id, :customer_id, :reservation_status, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    reservation_status = EXCLUDED.reservation_status,
+                    updated_at = EXCLUDED.updated_at
+                """, reservationParameters(reservation));
+        return reservation;
+    }
+
+    @Override
+    public List<AmusementReservationRecord> listReservations() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, reservation_status, created_at, updated_at
+                  FROM amusement_reservations
+                 ORDER BY created_at DESC, id
+                """, this::mapReservation);
+    }
+
+    @Override
+    public Optional<AmusementReservationRecord> findReservationById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, reservation_status, created_at, updated_at
+                  FROM amusement_reservations
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapReservation).stream().findFirst();
+    }
+
+    private MapSqlParameterSource safetyTemplateParameters(AmusementSafetyTemplateRecord template) {
+        return new MapSqlParameterSource()
+                .addValue("id", template.id())
+                .addValue("template_name", template.templateName())
+                .addValue("items_json", writeJson(template.items()))
+                .addValue("effective_from", template.effectiveFrom())
+                .addValue("status", template.status())
+                .addValue("evidence_attachment_ids", writeJson(template.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(template.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
+    }
+
+    private MapSqlParameterSource projectParameters(AmusementProjectRecord project) {
+        return new MapSqlParameterSource()
+                .addValue("id", project.id())
+                .addValue("project_name", project.projectName())
+                .addValue("capacity", project.capacity())
+                .addValue("open_status", project.openStatus())
+                .addValue("safety_template_id", project.safetyTemplateId())
+                .addValue("eligibility_rule_json", writeJson(project.eligibilityRule()))
+                .addValue("created_at", timestampWithTimeZone(project.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(project.updatedAt()));
+    }
+
+    private MapSqlParameterSource projectRuleParameters(AmusementProjectRuleRecord rule) {
+        return new MapSqlParameterSource()
+                .addValue("id", rule.id())
+                .addValue("project_id", rule.projectId())
+                .addValue("rule_type", rule.ruleType())
+                .addValue("rule_value", rule.ruleValue())
+                .addValue("effective_from", rule.effectiveFrom())
+                .addValue("effective_to", rule.effectiveTo())
+                .addValue("blocking", rule.blocking())
+                .addValue("status", rule.status())
+                .addValue("evidence_attachment_ids", writeJson(rule.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
+    }
+
+    private MapSqlParameterSource sessionParameters(AmusementSessionRecord session) {
+        return new MapSqlParameterSource()
+                .addValue("id", session.id())
+                .addValue("project_id", session.projectId())
+                .addValue("start_time", timestampWithTimeZone(session.startTime()))
+                .addValue("end_time", timestampWithTimeZone(session.endTime()))
+                .addValue("capacity", session.capacity())
+                .addValue("used_capacity", session.usedCapacity())
+                .addValue("status", session.status())
+                .addValue("evidence_attachment_ids", writeJson(session.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(session.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(session.updatedAt()));
+    }
+
+    private MapSqlParameterSource safetyInspectionParameters(AmusementSafetyInspectionRecord inspection) {
+        return new MapSqlParameterSource()
+                .addValue("id", inspection.id())
+                .addValue("project_id", inspection.projectId())
+                .addValue("template_id", inspection.templateId())
+                .addValue("items_json", writeJson(inspection.items()))
+                .addValue("overall_result", inspection.overallResult())
+                .addValue("inspection_status", inspection.inspectionStatus())
+                .addValue("rectification_status", inspection.rectificationStatus())
+                .addValue("reopen_status", inspection.reopenStatus())
+                .addValue("inspected_at", timestampWithTimeZone(inspection.inspectedAt()))
+                .addValue("submitted_at", timestampWithTimeZone(inspection.submittedAt()))
+                .addValue("rechecked_at", timestampWithTimeZone(inspection.recheckedAt()))
+                .addValue("approved_at", timestampWithTimeZone(inspection.approvedAt()))
+                .addValue("operator_note", inspection.operatorNote())
+                .addValue("evidence_attachment_ids", writeJson(inspection.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(inspection.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(inspection.updatedAt()));
+    }
+
+    private MapSqlParameterSource safetyActionParameters(AmusementSafetyActionRecord action) {
+        return new MapSqlParameterSource()
+                .addValue("id", action.id())
+                .addValue("inspection_id", action.inspectionId())
+                .addValue("action_type", action.actionType())
+                .addValue("action_result", action.actionResult())
+                .addValue("comment", action.comment())
+                .addValue("attachment_ids", writeJson(action.attachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(action.createdAt()));
+    }
+
+    private MapSqlParameterSource verificationParameters(AmusementVerificationRecord verification) {
+        return new MapSqlParameterSource()
+                .addValue("id", verification.id())
+                .addValue("project_id", verification.projectId())
+                .addValue("session_id", verification.sessionId())
+                .addValue("credential_payload", verification.credentialPayload())
+                .addValue("device_id", verification.deviceId())
+                .addValue("staff_id", verification.staffId())
+                .addValue("verification_result", verification.verificationResult())
+                .addValue("failure_reason", verification.failureReason())
+                .addValue("evidence_attachment_ids", writeJson(verification.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(verification.createdAt()));
+    }
+
+    private MapSqlParameterSource manualOverrideParameters(AmusementManualOverrideRecord override) {
+        return new MapSqlParameterSource()
+                .addValue("id", override.id())
+                .addValue("project_id", override.projectId())
+                .addValue("session_id", override.sessionId())
+                .addValue("override_type", override.overrideType())
+                .addValue("reason", override.reason())
+                .addValue("status", override.status())
+                .addValue("operator_note", override.operatorNote())
+                .addValue("evidence_attachment_ids", writeJson(override.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(override.createdAt()));
+    }
+
+    private MapSqlParameterSource deviceStatusParameters(AmusementDeviceStatusRecord status) {
+        return new MapSqlParameterSource()
+                .addValue("id", status.id())
+                .addValue("project_id", status.projectId())
+                .addValue("device_id", status.deviceId())
+                .addValue("provider_code", status.providerCode())
+                .addValue("status", status.status())
+                .addValue("last_seen_at", timestampWithTimeZone(status.lastSeenAt()))
+                .addValue("raw_status_json", writeJson(status.rawStatus()))
+                .addValue("created_at", timestampWithTimeZone(status.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(status.updatedAt()));
+    }
+
+    private MapSqlParameterSource queueEntryParameters(AmusementQueueEntryRecord entry) {
+        return new MapSqlParameterSource()
+                .addValue("id", entry.id())
+                .addValue("project_id", entry.projectId())
+                .addValue("session_id", entry.sessionId())
+                .addValue("customer_id", entry.customerId())
+                .addValue("queue_no", entry.queueNo())
+                .addValue("status", entry.status())
+                .addValue("created_at", timestampWithTimeZone(entry.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(entry.updatedAt()));
+    }
+
+    private MapSqlParameterSource reservationParameters(AmusementReservationRecord reservation) {
+        return new MapSqlParameterSource()
+                .addValue("id", reservation.id())
+                .addValue("project_id", reservation.projectId())
+                .addValue("session_id", reservation.sessionId())
+                .addValue("customer_id", reservation.customerId())
+                .addValue("reservation_status", reservation.reservationStatus())
+                .addValue("created_at", timestampWithTimeZone(reservation.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(reservation.updatedAt()));
+    }
+
+    private AmusementSafetyTemplateRecord mapSafetyTemplate(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementSafetyTemplateRecord(
+                rs.getString("id"),
+                rs.getString("template_name"),
+                readJson(rs.getString("items_json"), ITEM_LIST_TYPE),
+                rs.getObject("effective_from", LocalDate.class),
+                rs.getString("status"),
+                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementProjectRecord mapProject(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementProjectRecord(
+                rs.getString("id"),
+                rs.getString("project_name"),
+                rs.getInt("capacity"),
+                rs.getString("open_status"),
+                rs.getString("safety_template_id"),
+                readJson(rs.getString("eligibility_rule_json"), MAP_TYPE),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementProjectRuleRecord mapProjectRule(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementProjectRuleRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("rule_type"),
+                rs.getString("rule_value"),
+                rs.getString("effective_from"),
+                rs.getString("effective_to"),
+                rs.getBoolean("blocking"),
+                rs.getString("status"),
+                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementSessionRecord mapSession(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementSessionRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                instant(rs, "start_time"),
+                instant(rs, "end_time"),
+                rs.getInt("capacity"),
+                rs.getInt("used_capacity"),
+                rs.getString("status"),
+                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementSafetyInspectionRecord mapSafetyInspection(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementSafetyInspectionRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("template_id"),
+                readJson(rs.getString("items_json"), ITEM_LIST_TYPE),
+                rs.getString("overall_result"),
+                rs.getString("inspection_status"),
+                rs.getString("rectification_status"),
+                rs.getString("reopen_status"),
+                instant(rs, "inspected_at"),
+                instant(rs, "submitted_at"),
+                instant(rs, "rechecked_at"),
+                instant(rs, "approved_at"),
+                rs.getString("operator_note"),
+                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementVerificationRecord mapVerification(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementVerificationRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("session_id"),
+                rs.getString("credential_payload"),
+                rs.getString("device_id"),
+                rs.getString("staff_id"),
+                rs.getString("verification_result"),
+                rs.getString("failure_reason"),
+                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
+                instant(rs, "created_at")
+        );
+    }
+
+    private AmusementManualOverrideRecord mapManualOverride(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementManualOverrideRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("session_id"),
+                rs.getString("override_type"),
+                rs.getString("reason"),
+                rs.getString("status"),
+                rs.getString("operator_note"),
+                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
+                instant(rs, "created_at")
+        );
+    }
+
+    private AmusementDeviceStatusRecord mapDeviceStatus(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementDeviceStatusRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("device_id"),
+                rs.getString("provider_code"),
+                rs.getString("status"),
+                instant(rs, "last_seen_at"),
+                readJson(rs.getString("raw_status_json"), MAP_TYPE),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementQueueEntryRecord mapQueueEntry(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementQueueEntryRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("session_id"),
+                rs.getString("customer_id"),
+                rs.getString("queue_no"),
+                rs.getString("status"),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementReservationRecord mapReservation(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementReservationRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("session_id"),
+                rs.getString("customer_id"),
+                rs.getString("reservation_status"),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private Instant instant(ResultSet rs, String column) throws SQLException {
+        OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
+        return value == null ? null : value.toInstant();
+    }
+
+    private OffsetDateTime timestampWithTimeZone(Instant instant) {
+        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value == null ? Map.of() : value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException("json payload is invalid", exception);
+        }
+    }
+
+    private <T> T readJson(String value, TypeReference<T> type) {
+        try {
+            return objectMapper.readValue(value, type);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("stored json payload is unreadable", exception);
+        }
+    }
+}

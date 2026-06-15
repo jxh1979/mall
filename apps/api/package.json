@@ -1,0 +1,38 @@
+{
+  "name": "legacy-apps-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "legacy:block": "node -e \"console.error('apps/api 是历史 TypeScript/Fastify/SQLite 预研原型；正式后端入口是 ../../backend。'); process.exit(1)\"",
+    "dev": "npm run legacy:block",
+    "build": "npm run legacy:block",
+    "start": "npm run legacy:block",
+    "typecheck": "npm run legacy:block",
+    "prisma:generate": "npm run legacy:block",
+    "prisma:migrate": "npm run legacy:block",
+    "seed:p0": "npm run legacy:block",
+    "smoke:p0": "npm run legacy:block",
+    "smoke:p0-ops": "npm run legacy:block",
+    "smoke:p1-bar": "npm run legacy:block",
+    "smoke:p1-amusement": "npm run legacy:block",
+    "smoke:p1-integration": "npm run legacy:block",
+    "smoke:p2-integration": "npm run legacy:block",
+    "smoke:p3-analytics": "npm run legacy:block"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/swagger": "^9.4.0",
+    "@fastify/swagger-ui": "^5.2.0",
+    "@prisma/client": "^6.1.0",
+    "argon2": "^0.41.1",
+    "fastify": "^5.2.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

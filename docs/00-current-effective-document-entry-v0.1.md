@@ -1,0 +1,322 @@
+# 当前有效文档入口与开发准入清单 V0.1
+
+## 1. 文档定位
+
+本文档是综合体管理系统当前交付包的第一阅读入口，用于回答四个问题：
+
+1. 哪些文档是当前有效口径。
+2. 哪些内容已经归档或废止，不能再作为开发依据。
+3. 产品、开发、测试、运营、第三方供应商应按什么顺序阅读。
+4. 哪些交付物完成前，不允许进入正式并行开发、联调或生产上线。
+
+本文档不替代 PRD、技术方案、接口文档和验收文档；它只负责做入口、裁决优先级和准入规则。凡本文档与旧文档冲突，先按本文档和 `unified-standards-baseline-v0.1.md` 执行，再回补修正文档。
+
+## 2. 当前唯一正式口径
+
+| 事项 | 当前口径 |
+|---|---|
+| 正式技术栈 | Java 21 + Spring Boot 4.x + PostgreSQL + Flyway + Maven + springdoc-openapi |
+| P0 机器可读接口契约 | `docs/openapi/openapi-p0.yaml`、`docs/openapi/openapi-p0.json` |
+| P0 operation 级验收矩阵 | `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` |
+| P0 OpenAPI 权限、事件、任务追溯附录 | `docs/p0-openapi-contract-closure-appendix-v0.1.md` |
+| P0 可编码入口包 | `docs/p0-coding-entry-pack-v0.1.md` |
+| P0 首批编码包 | `docs/p0-first-coding-package-v0.1.md` |
+| P0 编码完成与交接报告 | `docs/p0-coding-completion-and-handoff-report-v0.1.md` |
+| P1 编码完成审计 | `docs/p1-coding-completion-audit-v0.1.md` |
+| P2 编码候选审计 | `docs/p2-coding-candidate-audit-v0.1.md` |
+| P2-A 平面图导入开发计划 | `docs/superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md` |
+| P2-A 平面图导入接口契约 | `docs/p2-floor-plan-import-api-contract-v0.1.md` |
+| P2-A 平面图导入完成审计 | `docs/p2-floor-plan-import-completion-audit-v0.1.md` |
+| 正式安全基线待生成任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
+| 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
+| 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
+| 废止技术路线 | TypeScript / SQLite / Prisma / Fastify 后端仅可作为历史预研原型，不得作为正式开发、测试、部署、安全审计依据；`apps/api/LEGACY-PROTOTYPE.md` 为物理标识，`apps/api/package.json` 脚本已改为阻断提示，且旧 API 已从根 npm workspace 和根 lockfile 摘除 |
+| 金额单位 | 全局金额使用整数分 `bigint` |
+| 币种 | P0 仅启用 CNY，保留 `currency=CNY` 字段，不启用多币种和汇率换算 |
+| 能力层 | 平台治理、业务经营、第三方接入、证据留痕与风控、数据分析、终端展示六层 |
+| 财务定位 | 财务经营是数据分析层下的财务/对账子域，P0 必须支持完整应收应付台账 |
+| 第三方接入 | 双向开放：平台提供统一 OpenAPI/Webhook，同时通过供应商 SDK/API 适配器接入外部成熟服务 |
+| Webhook/轮询 | P0 使用 Webhook + 定时轮询校验 |
+| 设备管控 | Android Enterprise / Android Management API + 商业 MDM 作为 P0 上线前置 |
+| 备份 | NAS 备份方案，NAS 服务器 `192.168.88.113`，共享 `bn`，UNC `//192.168.88.113/bn`，160 挂载 `/mnt/complex-nas-backup`，当前不启用备份归档加密；2026-06-14 已完成一次真实 NAS 同步和从 NAS 恢复演练，生产前仍需固化开机自动挂载、定时备份、容量告警和周期性恢复演练 |
+| 生产凭证轮换 | 生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥采用人工台账 + 到期提醒 + Runbook；`npm run verify:ops160-recovery` 必须通过 |
+| AI/规则处理 | P0 使用 Java 内置规则处理器；独立 Python AI 服务后置 P2 |
+| 构建工具 | Maven 为唯一 P0 构建工具 |
+| 游乐安全 | P0 强制开放前阻断式安全巡检、严重项暂停开放、主管恢复、全程留痕 |
+| 一体机 | 统一终端码 `kiosk`，通过 `kiosk_mode=ticketing/service` 区分售票型和非售票型 |
+| 售票型一体机 | 承担官方自助购票、取票、订单查询职责 |
+| 卡座提成 | 新增销售人员岗位；销售人员售卖卡座按可计提消费额 15%，非销售人员按 10%；不含通票和票务权益 |
+| 卡座转卡/合并/续卡 | 已纳入 P1 酒吧 SaaS/POS 增强：同酒吧、同商户、同营业日受控操作；保留账单、低消、入场名额、销售归属、服务责任链和事件留痕；不作为当前 P0 阻断 |
+
+## 3. 当前有效文档阅读顺序
+
+### 3.1 总控、产品负责人、项目负责人
+
+| 顺序 | 文档 | 用途 |
+|---|---|---|
+| 1 | `00-current-effective-document-entry-v0.1.md` | 确认当前有效入口、废止口径和准入条件 |
+| 2 | `unified-standards-baseline-v0.1.md` | 查看跨文档唯一标准 |
+| 3 | `product-requirements-v0.1.md` | 查看产品总纲和业务边界 |
+| 4 | `business-decision-log-v0.1.md` | 查看历史业务决策来源 |
+| 5 | `p0-coding-entry-pack-v0.1.md` | 查看正式编码、联调、测试和供应商 mock 的统一入口 |
+| 6 | `p0-first-coding-package-v0.1.md` | 查看首批编码包、首批任务边界、反模式和验收标准 |
+| 7 | `p0-coding-completion-and-handoff-report-v0.1.md` | 查看 160 P0 编码完成、验证证据、质量结论和生产前置边界 |
+| 8 | `p1-coding-completion-audit-v0.1.md` | 查看 P1 编码完成范围、验证证据和剩余外部依赖 |
+| 9 | `p2-coding-candidate-audit-v0.1.md` | 查看 P2 可编码候选、暂缓项和推荐顺序 |
+| 10 | `superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md` | 查看 P2-A 平面图 SVG/标准 JSON 导入开发计划 |
+| 11 | `p2-floor-plan-import-api-contract-v0.1.md` | 查看 P2-A 平面图导入接口、权限、事件和验收 |
+| 12 | `p2-floor-plan-import-completion-audit-v0.1.md` | 查看 P2-A 当前完成范围、验证证据和后置边界 |
+| 13 | `p0-implementation-task-list.md` | 查看 P0 开发任务和优先级 |
+| 14 | `production-readiness-implementation-ledger-template-v0.1.md` | 查看生产前置资料实施台账、状态、责任、证据和阻塞范围 |
+| 15 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成条件、输入、输出和阻断项 |
+| 16 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看 P0 接口契约基线和机器可读契约 |
+| 17 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 181 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径 |
+| 18 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 OpenAPI 反向生成的权限、事件、任务追溯和样例准入口径 |
+| 19 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 查看 P0 用户故事地图和迭代切片 |
+| 20 | `requirement-traceability-matrix-v0.1.md` | 查看需求到设计、任务、验收的追踪关系 |
+
+### 3.2 后端、数据库、架构和运维
+
+| 顺序 | 文档 | 用途 |
+|---|---|---|
+| 1 | `system-development-spec.md` | 查看总体技术方案 |
+| 2 | `p0-coding-entry-pack-v0.1.md` | 查看正式工程、契约、权限、留痕、验收和旧原型隔离的共同入口 |
+| 3 | `p0-first-coding-package-v0.1.md` | 查看首批正式编码包和首批可验收边界 |
+| 4 | `prototype-deprecation-and-technology-baseline-v0.1.md` | 查看历史原型废止和正式技术栈基线 |
+| 5 | `code-contract-difference-and-migration-audit-v0.1.md` | 查看旧原型、旧路径与正式 Java/OpenAPI 契约的迁移闸口 |
+| 6 | `java-backend-platform-foundation-development-design.md` | 查看 Java 后端地基设计 |
+| 7 | `foundation-database-design.md` | 查看 PostgreSQL/Flyway 数据库设计 |
+| 8 | `openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看正式 P0 路径、认证、权限、幂等、事件和响应契约 |
+| 9 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 operation 级开发完成定义 |
+| 10 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 operation 到权限、事件、任务簇、终端和样例准入的完整追溯 |
+| 11 | `open-platform-security-auth-development-design.md` | 查看开放平台鉴权、安全、签名和权限设计 |
+| 12 | `production-readiness-implementation-ledger-template-v0.1.md` | 查看生产前置资料台账字段、状态和准入检查口径 |
+| 13 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成任务和安全准入输出 |
+| 14 | `server-160-runbook-v0.2.md` | 查看 160 服务器部署、备份、恢复和运维脚本 |
+
+### 3.3 业务模块开发
+
+| 业务 | 先读文档 | 再读文档 |
+|---|---|---|
+| 票务、通票、权益、核销 | `ticketing-entitlement-checkin-product-prd-v0.1.md` | `ticketing-pass-entitlement-development-design.md` |
+| 酒吧、卡座、低消、点酒、赠酒、存酒 | `bar-business-operations-product-prd-v0.1.md` | `bar-operations-development-design.md` |
+| 供应链、库存、损耗、报损、存酒 | `supply-chain-inventory-product-prd-v0.1.md` | `supply-chain-inventory-development-design-v0.1.md` |
+| 游乐项目、场次、容量、安全巡检 | `amusement-business-operations-product-prd-v0.1.md` | `amusement-operations-development-design.md` |
+| 商户、主体、合同、权限、设备 | `platform-governance-prd-v0.1.md` | `platform-governance-product-spec-v0.2.md` |
+| 应收应付、日结、对账、结算 | `finance-settlement-product-prd-v0.1.md` | `finance-ar-ap-ledger-development-design-v0.1.md` |
+
+### 3.4 前端、Android、平板、一体机、小程序/App/Web
+
+| 终端 | 文档 | 重点 |
+|---|---|---|
+| 后台管理 Web | `frontend-admin-development-design.md` | 管理端页面、表单、权限和操作入口 |
+| Android 工作手机/平板 | `android-device-terminal-development-design.md` | 设备绑定、扫码、核销、MDM、在线策略 |
+| 终端枚举与页面边界 | `terminal-page-product-prd-v0.1.md` | 端类型、页面职责、开关 |
+| App/小程序/Web | `web-mobile-app-terminal-extension-product-prd-v0.1.md` | 客人购票、订单、权益、展示和自助入口 |
+| 一体机 | `terminal-display-layer-spec-v0.2.md` | 售票型/非售票型一体机边界和能力开关 |
+
+### 3.5 测试、审计、运营复核
+
+| 文档 | 用途 |
+|---|---|
+| `p0-api-contract-pack-v0.1.md` | P0 接口契约基线、路径、鉴权、响应、错误码、幂等、Webhook 和接口目录 |
+| `p0-first-coding-package-v0.1.md` | P0 首批编码包、首批可开发范围、强制反模式和首批验收标准 |
+| `openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | P0 机器可读接口契约；后端 springdoc 输出、前端 SDK/mock、Android 联调和自动化测试均以此比对 |
+| `p0-openapi-operation-acceptance-matrix-v0.1.md` | P0 operation 级验收矩阵；按接口逐条校验字段、权限、认证上下文、终端、幂等、事件和边界情况 |
+| `p0-openapi-contract-closure-appendix-v0.1.md` | OpenAPI 反向生成的权限、事件、任务追溯和样例准入附录；补齐人工矩阵未逐 operation 展开的执行缺口 |
+| `code-contract-difference-and-migration-audit-v0.1.md` | 旧原型、旧路径、正式技术栈和迁移任务的审计闸口 |
+| `p0-user-story-map-and-sprint-slices-v0.1.md` | P0 用户故事地图、角色旅程和迭代切片 |
+| `p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | P0 端到端验收和边界场景 |
+| `p0-operation-permission-matrix-v0.1.md` | 权限点、权限模板、临时授权、单次有效和拒绝规则 |
+| `p0-action-event-evidence-matrix-v0.1.md` | 操作事件、证据、复核、敏感访问留痕 |
+| `pm-critic-and-acceptance-criteria-20260610.md` | PM Critic 对抗式审查和验收补强 |
+| `platform-governance-acceptance-pack-v0.2.md` | 平台治理验收包 |
+| `formal-security-baseline-generation-task-v0.1.md` | 正式安全基线生成条件、输入、输出、阻断项和验收标准 |
+| `production-readiness-implementation-ledger-template-v0.1.md` | 生产前置资料实施台账模板，覆盖 MDM、支付、NAS、密钥、供应商、160 和安全基线 |
+
+### 3.6 第三方供应商和外部系统
+
+| 文档 | 用途 |
+|---|---|
+| `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入产品边界 |
+| `third-party-access-layer-spec-v0.2.md` | 第三方接入层页面、字段、流程和验收 |
+| `third-party-integration-development-design.md` | 第三方技术集成设计 |
+| `third-party-supplier-integration-kit-v0.1.md` | 供应商未确定前的统一接口、适配器、字段映射占位、Webhook/轮询和补偿策略 |
+| `openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 供应商 Adapter、开放平台 mock、Webhook/轮询验收的接口契约 |
+| `p0-openapi-operation-acceptance-matrix-v0.1.md` | 供应商 Adapter、Webhook、轮询、mock 和异常补偿的 operation 验收口径 |
+| `p0-openapi-contract-closure-appendix-v0.1.md` | 供应商联调时按 operationId 查权限、事件、终端、任务簇和样例准入；不得引用旧 `/api/integration/*` 作为正式路径 |
+
+### 3.7 文档类型、事实源等级和适用对象矩阵
+
+事实源等级用于处理文档冲突：`S0` 为唯一裁决入口，`S1` 为可直接开发/验收的执行事实源，`S2` 为模块设计或产品拆解事实源，`S3` 为历史参考或市场增强材料。低等级文档不得反向覆盖高等级文档。
+
+| 文档 | 类型 | 事实源等级 | 适用对象 | 可编码入口 | 冲突时上游 |
+|---|---|---|---|---|---|
+| `00-current-effective-document-entry-v0.1.md` | 当前入口/裁决规则 | S0 | 总控、产品、开发、测试、供应商 | 是，作为准入裁决 | 本文档自身 |
+| `unified-standards-baseline-v0.1.md` | 统一口径基准 | S0 | 产品、开发、测试 | 是，作为跨域规则裁决 | 本文档 |
+| `business-decision-log-v0.1.md` | 决策日志 | S0 | 总控、产品、实施 | 是，作为业务决策证据 | 本文档、统一口径基准 |
+| `p0-coding-entry-pack-v0.1.md` | P0 可编码入口包 | S1 | 后端、前端、Android、一体机、测试、供应商 | 是，作为编码和联调第一执行入口 | 本文档、OpenAPI、验收矩阵 |
+| `p0-first-coding-package-v0.1.md` | P0 首批编码包 | S1 | 后端、数据库、测试、项目管理 | 是，作为首批正式编码分派入口 | P0 编码入口包、任务清单、OpenAPI |
+| `p0-coding-completion-and-handoff-report-v0.1.md` | P0 编码完成交接报告 | S1 | 总控、产品、开发、测试、运维、安全 | 是，作为 P0 编码完成后的交接和验收证据入口 | P0 首批编码包、160 验证结果、生产前置台账 |
+| `p1-coding-completion-audit-v0.1.md` | P1 编码完成审计 | S1 | 总控、产品、开发、测试、运营、供应商 | 是，作为 P1 当前可编码范围完成结论和验收证据入口 | P1 API 契约、160 验证结果、Semgrep 扫描 |
+| `p2-coding-candidate-audit-v0.1.md` | P2 编码候选审计 | S1 | 总控、产品、开发、测试、供应商 | 是，作为 P2 开工排序和外部依赖边界入口 | 本文档、P1 完成审计、各业务设计文档 |
+| `superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md` | P2-A 平面图导入开发计划 | S1 | 总控、产品、开发、测试、运维 | 是，作为 P2-A 正式 TDD 编码执行清单 | P2 候选审计、P1 平面图能力、FloorPlan 后端模块 |
+| `p2-floor-plan-import-api-contract-v0.1.md` | P2-A 平面图导入接口契约 | S1 | 产品、开发、测试、运营、实施 | 是，作为 P2-A 接口、权限、事件和验收依据 | P2-A 开发计划、后端实现、V034 迁移 |
+| `p2-floor-plan-import-completion-audit-v0.1.md` | P2-A 平面图导入完成审计 | S1 | 总控、产品、开发、测试、实施 | 是，作为 P2-A 当前完成结论和验证证据入口 | 160 测试结果、P0 契约闸口、Semgrep 扫描 |
+| `production-readiness-implementation-ledger-template-v0.1.md` | 生产前置实施台账模板 | S1 | 运维、IT、采购、财务、测试、项目管理 | 是，作为生产准入资料管理入口 | 本文档、各 Runbook、OpenAPI |
+| `formal-security-baseline-generation-task-v0.1.md` | 正式安全基线生成任务 | S1 | 技术负责人、安全、测试、运维 | 是，作为正式安全基线生成和安全准入入口 | 本文档、OpenAPI、运行时安全报告 |
+| `p0-api-contract-pack-v0.1.md` | 接口契约说明 | S1 | 后端、前端、Android、一体机、供应商、测试 | 是 | 本文档、OpenAPI |
+| `openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 机器可读接口契约 | S1 | 后端、前端、Android、一体机、小程序/App/Web、供应商、测试 | 是 | 本文档、接口契约包 |
+| `p0-openapi-operation-acceptance-matrix-v0.1.md` | operation 验收矩阵 | S1 | 后端、前端、Android、测试、供应商 | 是 | OpenAPI、权限矩阵、事件矩阵 |
+| `p0-openapi-contract-closure-appendix-v0.1.md` | OpenAPI 权限、事件、任务追溯收口附录 | S1 | 后端、前端、Android、一体机、测试、供应商、项目管理 | 是 | OpenAPI、operation 验收矩阵 |
+| `p0-task-api-permission-event-acceptance-map-v0.1.md` | 任务-接口-权限-事件-验收映射 | S1 | 开发负责人、测试、项目管理 | 是 | OpenAPI、验收矩阵 |
+| `p0-user-story-map-and-sprint-slices-v0.1.md` | 用户故事/迭代切片 | S1 | 产品、开发、测试、运营 | 是 | 本文档、任务映射表 |
+| `p0-operation-permission-matrix-v0.1.md` | 权限矩阵 | S1 | 后端、前端、Android、测试、运营管理 | 是 | 本文档、统一口径基准 |
+| `p0-action-event-evidence-matrix-v0.1.md` | 留痕/证据矩阵 | S1 | 后端、测试、审计、运营 | 是 | 本文档、统一口径基准 |
+| `code-contract-difference-and-migration-audit-v0.1.md` | 代码契约迁移审计 | S1 | 技术负责人、后端、前端、Android | 是，作为旧原型迁移闸口 | 本文档、OpenAPI |
+| 各业务 PRD | PRD/产品范围 | S2 | 产品、运营、测试 | 否，需映射到 S1 文档后开发 | 本文档、统一口径基准 |
+| 各开发设计文档 | 模块设计/技术方案 | S2 | 开发、测试、供应商 | 是，但不得覆盖 S1 接口和验收 | S1 接口、权限、事件、任务映射 |
+| `third-party-supplier-integration-kit-v0.1.md` | 供应商接入包 | S2 | 供应商、集成开发、测试 | 是，限接口占位和适配框架 | OpenAPI、第三方开发设计 |
+| `business-module-mature-system-gap-analysis.md` | 市场成熟系统参考/增强建议 | S3 | 产品规划、后续路线图 | 否 | 本文档、P0 任务清单 |
+| 历史审计报告、旧进度快照、归档源文件 | 历史证据 | S3 | 审计追溯 | 否 | 当前入口和 S0/S1 文档 |
+
+### 3.8 角色最小阅读包
+
+任何角色进入开发、验收、联调或供应商对接前，必须按下表读取最小包。若时间不足，不得跳过 S0/S1 文档去直接读历史设计稿。
+
+| 角色 | 必读包 | 读完后必须能执行的动作 | 不得跳过 |
+|---|---|---|---|
+| 总控/产品负责人 | 本文档、`unified-standards-baseline-v0.1.md`、`business-decision-log-v0.1.md`、`p0-user-story-map-and-sprint-slices-v0.1.md`、`project-progress-dashboard.md` | 判断范围、优先级、版本边界、是否已收口和是否可进入编码 | 不得用历史审计报告或旧待决策清单反向打开已收口事项 |
+| 后端负责人 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`backend/README.md`、`java-backend-platform-foundation-development-design.md`、`foundation-database-design.md` | 按首批编码包和 operation 开发 Controller、Service、Flyway、权限、幂等、事件和接口测试 | 不得按旧 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或 TypeScript/SQLite 原型开发 |
+| Web/小程序/App 前端 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.json`、`frontend-admin-development-design.md`、`customer-app-miniapp-development-design-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`code-contract-difference-and-migration-audit-v0.1.md` | 对齐正式路径、请求字段、错误码、权限状态、支付/核销/权益闭环和页面验收 | 不得只把旧路径改前缀，也不得使用未进入 OpenAPI 的字段或状态 |
+| Android 工作手机/平板/一体机 | `android-device-terminal-development-design.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`apps/android-terminal/README.md`、`openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 区分工作手机、平板、售票型一体机、非售票型一体机能力；按设备绑定、终端限制、在线核销和留痕实现 | 不得把 `/api/mobile/*` 当作正式后端路径；未纳管设备不得生产使用 |
+| 测试/审计 | `p0-first-coding-package-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-operation-permission-matrix-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md` | 按业务闭环、首批编码包、operation、权限、事件、证据、安全基线和异常场景编写验收用例 | 不得只按页面路径或模块标题验收 |
+| 运营/财务/门店管理 | `product-requirements-v0.1.md`、`bar-operations-development-design.md`、`ticketing-pass-entitlement-development-design.md`、`finance-ar-ap-ledger-development-design-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 验证通票、权益、酒水领取、存酒、卡座、最低消费、扫码支付、核销、应收应付和日结对账闭环 | 不得用口头流程替代系统留痕和财务主口径 |
+| 第三方供应商/集成开发 | `third-party-supplier-integration-kit-v0.1.md`、`open-platform-security-auth-development-design.md`、`third-party-integration-development-design.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-contract-closure-appendix-v0.1.md` | 明确平台调用供应商、供应商调用平台、签名、Webhook、轮询校验、字段映射和异常补偿边界 | 不得引用旧 `/api/integration/*` 作为正式联调路径 |
+| 运维/IT/采购 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`production-readiness-implementation-ledger-template-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`server-160-runbook-v0.2.md`、`backend/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md`、`nas-backup-and-restore-runbook-v0.1.md` | 完成首批编码环境配套、160 部署、回滚、健康检查、MDM/Android Enterprise、账号密钥轮换、NAS 备份恢复、安全基线输入和生产前置台账 | 不得把本地原型、未纳管设备、无安全基线或未演练备份视为生产就绪 |
+
+## 4. 已归档、废止或不得作为执行入口的内容
+
+| 内容 | 当前处理 | 规则 |
+|---|---|---|
+| TypeScript / SQLite / Prisma / Fastify 后端原型 | 只允许作为历史预研材料；`apps/api/package.json` 运行脚本已阻断；根 npm workspace 和 lockfile 已移除旧 API 依赖 | 不得继续作为正式 P0 开发入口 |
+| `apps/web`、`apps/android-terminal` 现有旧路径调用 | 非正式路径已迁入 `/api/v1/*` 或 `/api/open/*`；迁移盘点使用 `npm run audit:client-routes` | 不得以 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或旧请求字段名反向约束正式后端；正式联调前必须通过 `npm run verify:p0-contract`，其展开包含 OpenAPI、示例、operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和客户端请求字段闸口 |
+| Node/Fastify/SQLite 旧安全扫描或威胁模型 | 已通过 `security-scans/LEGACY-SECURITY-SCANS.md` 标注 legacy；`security-scans/threat_model.md` 已替换为 Java/Spring/PostgreSQL/Flyway 正式安全基线重建入口 | 不得作为当前 Java/PostgreSQL 安全设计依据；正式 Java 后端落地后重做安全基线 |
+| 历史对抗式审计报告 | 保留追溯价值 | 不再作为当前执行入口，已吸收结论看当前文档 |
+| 旧线程索引、旧进度快照 | 已归档或应归档 | 当前进度看 `project-progress-dashboard.md` |
+| 写有历史未决措辞或 `pending_confirm` 类业务状态的旧文档 | 若事项已被本文档或 `unified-standards-baseline-v0.1.md` 收口，则不再作为开放产品问题 | 应回改为“已确认执行口径”或“实施前输入项” |
+
+说明：`pending_confirm`、`待复核`、`待支付`、`待核销` 等作为业务状态枚举时，不代表产品仍有开放问题；是否需要总控拍板只看本文档、`business-decision-log-v0.1.md` 和 `final-open-decisions-and-owner-checklist-20260610.md` 的当前口径。
+
+历史能力表统一规则：所有旧文档中保留的 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*`、`/api/public/*`、相对路径或“能力路径”表格，只能作为历史能力清单和迁移参考。每一行能力在进入编码前必须能映射到 `openapi/openapi-p0.yaml/json` 的 exact path 或 operationId，并进入 `p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `p0-openapi-contract-closure-appendix-v0.1.md`；无法映射的能力一律视为“未进入 OpenAPI，不得开发”，不得生成 Java Controller、SDK/mock、接口自动化或供应商联调文档。
+
+业务状态措辞规则：当“待确认”“待复核”“待支付”“待核销”是枚举状态时，文档必须写成“业务状态：待确认”等上下文，不得裸写成开放决策问题。真正需要拍板的内容只能出现在当前有效决策清单或本文准入条件中。
+
+## 5. P0 正式开发准入条件
+
+以下事项完成前，不允许把对应模块标记为“可正式并行开发完成”。
+
+### 5.1 P0 验证链分层
+
+P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺失掩盖已可先验的文档契约，也避免把契约通过误判为完整上线通过，统一按下表执行：
+
+| 验证层 | 命令 | 通过后代表什么 | 不代表什么 |
+|---|---|---|---|
+| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、181 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合 | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |
+| Web 层 | `npm run verify:p0-web` | 契约层通过，且 Web 可构建 | 不代表后端和 Android 环境已就绪 |
+| 环境层 | `npm run verify:p0-env` | 后端 Java/Maven 与 Android Java/Gradle/SDK 前置环境满足验收条件 | 本机缺 Java 21 时不得判定代码失败；Java/后端测试和完整 P0 默认在 160 或等效 Java 21 环境执行 |
+| 完整 P0 | `npm run verify:p0` | 契约、后端测试、Web 构建、Android 环境、Android 构建、smoke 和 APK 验证均通过 | 这是完整验收口径，不能用单项通过替代；当前协作中以后端/Java 测试在 `192.168.88.160` 执行为准 |
+
+| 准入项 | 适用范围 | 未完成时允许做什么 | 未完成时禁止做什么 |
+|---|---|---|---|
+| P0-0 正式后端工程准入 | 后端、数据库、CI、接口自动化、SDK/mock、160 运维 | 可整理原型、迁移计划和文档契约 | 未建立 Java 21 + Spring Boot 4.x + Maven + PostgreSQL + Flyway + springdoc-openapi 工程，并通过 `ops/160/complex-verify-be000.sh` 或等效验收前，不得把任一业务域标记为正式并行开发完成 |
+| P0 首批编码包 | 后端、数据库、权限、事件、应收应付、主体绑定、生产前置台账 | 可继续维护 OpenAPI、任务清单和 smoke | 未按 `p0-first-coding-package-v0.1.md` 完成首批包结构、统一响应、Flyway、权限模板、事件审计、主体绑定、应收应付和生产前置台账前，不得宣称 P0 正式业务实现已进入稳定开发态 |
+| P0 API Contract Pack + OpenAPI YAML/JSON | 前端、后端、Android、一体机、小程序/App/Web、第三方 | 可做领域建模、页面草图、mock | OpenAPI 缺失或与权限矩阵不一致时不得进入真实联调和接口冻结 |
+| P0 operation 级验收矩阵 | 后端、前端、Android、一体机、小程序/App/Web、测试、供应商 | 可按域拆开发故事 | 未覆盖字段、权限、认证上下文、终端、幂等和事件时不得标记接口完成 |
+| OpenAPI 契约闸口 | 后端、前端、Android、一体机、小程序/App/Web、测试、供应商 | 可修改契约草案 | `npm run verify:openapi` 未通过时不得进入 P0 联调、自动化测试或供应商 mock |
+| OpenAPI 示例闸口 | 前端、后端、Android、一体机、小程序/App/Web、测试、供应商 | 可补 example 和 mock payload | `npm run verify:openapi-examples` 未通过时不得进入 P0 联调、自动化测试或供应商 mock；高风险写接口和外部接入接口不得只有 schema 没有样例 |
+| operation 矩阵同步闸口 | 后端、前端、Android、一体机、小程序/App/Web、测试、供应商 | 可重建验收矩阵 | `npm run verify:operation-matrix` 未通过时不得进入 P0 联调、自动化测试或供应商 mock |
+| OpenAPI 权限/事件/任务追溯附录闸口 | 后端、前端、Android、一体机、小程序/App/Web、测试、供应商、项目管理 | 可重建追溯附录 | `npm run verify:openapi-closure` 未通过时不得进入 P0 联调、自动化测试、供应商 mock 或任务完成验收 |
+| 代码契约迁移审计 | 旧 Web、旧 Android、旧 API 原型迁移 | 可参考旧交互和流程 | 未清理旧正式调用路径、未覆盖 OpenAPI、operation 矩阵不同步，或 `npm run verify:p0-contract` 未通过时不得进入真实联调 |
+| 用户故事地图与迭代切片 | 全部 P0 业务模块 | 可维护任务清单 | 不得只按表结构排期 |
+| 任务-接口-权限-事件-验收映射表 | 全部 P0 开发任务 | 可先补草表 | 不得宣称任务可验收 |
+| Java/PostgreSQL/Flyway/Maven 脚手架 | 后端、数据库、CI | 可整理原型和迁移计划 | 不得沿用 Node/SQLite 作为正式后端 |
+| 160 API 部署/回滚/健康检查脚本 | 运维、预生产、生产验收 | 可按 Runbook 执行 Java jar 发布、回滚、健康检查和 BE-000 验收 | 不得启动旧 `apps/api` 或备份旧 SQLite 原型库作为正式资产 |
+| MDM 设备管控方案 | Android 工作手机、平板、一体机 | 可做模拟设备和测试环境 | 未纳管设备不得作为生产工作终端 |
+| 聚合支付商户号、密钥、回调和对账文件 | 支付、退款、日结、对账 | 可做支付抽象和 mock | 不得生产收款/退款上线 |
+| 酒吧年龄/人脸校验供应商或等效设备 | 酒吧强制年龄校验 | 可做接口占位和测试 mock | 不得标记生产正式通过 |
+| NAS 备份与恢复演练 | 生产环境 | 真实 SMB 挂载、读写删除测试、NAS 同步备份和从 NAS 恢复演练已通过；最新证据为 `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 生产前仍需固化开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练 |
+| 生产前置资料实施台账 | 运维、IT、采购、财务、安全、供应商接入、生产准入 | 可按模板收集资料、账号、证据和阻塞范围 | 未建立 `production-readiness-implementation-ledger-template-v0.1.md` 对应台账，或 `npm run verify:ops160-recovery` 未通过前，不得用口头说明或零散截图替代上线前置证据 |
+| 正式安全基线 | 后端、OpenAPI、开放平台、支付、设备、第三方、160 运维、生产上线 | 可按 `formal-security-baseline-generation-task-v0.1.md` 准备输入和 findings register | 首批正式编码包落地后仍未生成正式安全基线时，不得进入生产安全准入 |
+
+## 6. 第一批必须新增或补强的文档
+
+| 优先级 | 文档 | 目的 |
+|---|---|---|
+| P0 | `p0-api-contract-pack-v0.1.md` + `openapi/openapi-p0.yaml` + `openapi/openapi-p0.json` | 已新增并落地机器可读契约。固化正式 OpenAPI 基线、错误码、幂等、签名、分页、Webhook、回调和接口目录 |
+| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把 181 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵 |
+| P0 | `p0-openapi-contract-closure-appendix-v0.1.md` | 已新增。由 OpenAPI 反向生成权限、事件、任务追溯和样例准入附录，补齐人工矩阵未逐 operation 展开的缺口 |
+| P0 | `code-contract-difference-and-migration-audit-v0.1.md` | 已新增。明确旧 TypeScript/Fastify/SQLite API、旧 Web/Android 路径和正式 Java/OpenAPI 契约的迁移闸口 |
+| P0 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 已新增。按角色和业务闭环拆用户故事，避免只按模块开发 |
+| P0 | `p0-task-api-permission-event-acceptance-map-v0.1.md` | 已新增。把任务、接口、权限、事件、验收标准绑定起来 |
+| P0 | `prototype-deprecation-and-technology-baseline-v0.1.md` | 已新增。明确废止 TS/SQLite 后端原型，固定 Java/PostgreSQL/Maven 正式路线 |
+| P0 | `p0-coding-entry-pack-v0.1.md` | 已新增。把正式后端、OpenAPI、operation 验收、权限、留痕、任务映射、供应商 mock 和旧原型阻断集中成可编码入口包 |
+| P0 | `p0-first-coding-package-v0.1.md` | 已新增。把 BE-001/BE-002/DB-001/AUTH/事件/主体绑定/应收应付/生产前置台账压缩成首批可编码、可验收工作包 |
+| P0 | `production-readiness-implementation-ledger-template-v0.1.md` | 已新增。把 MDM、支付、NAS、密钥、人脸年龄核验、企业微信、第三方供应商、160、安全基线等生产前置资料做成实施台账模板 |
+| P0 | `formal-security-baseline-generation-task-v0.1.md` | 已新增。定义正式安全基线的触发条件、输入、输出、阻断规则和验收标准 |
+| P0 | `amusement-p0-safety-inspection-spec-v0.1.md` | 已新增。固化游乐开放前阻断式巡检和恢复闭环 |
+
+## 7. AI-ready 实现文档强制规则
+
+所有实现类文档（后端、前端、Android、票务、酒吧、供应链、游乐、第三方、风控、终端、160 运维）在进入编码前必须满足以下四件套。若原文没有单独章节，默认按本节和下列引用执行，不得让开发或测试自行猜测。
+
+| 四件套 | 当前执行口径 | 主要引用 |
+|---|---|---|
+| 反模式 | 不得沿用旧 TypeScript/SQLite 后端、旧 `/api/admin/*`、旧 `/api/mobile/*`、旧 `/api/integration/*`、相对接口路径、旧请求字段名、无事件写表、无权限校验、无幂等写接口、无证据的高风险操作 | `prototype-deprecation-and-technology-baseline-v0.1.md`、`code-contract-difference-and-migration-audit-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md` |
+| 测试用例 | 每个 P0 故事必须能映射到 Given/When/Then、operation 验收矩阵、OpenAPI 追溯附录、端到端验收和边界场景；没有验收映射的任务不得标记完成 | `p0-user-story-map-and-sprint-slices-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` |
+| 错误处理 | 所有写接口必须覆盖参数错误、无权限、状态冲突、幂等冲突、第三方不可用、供应商回调重复/漏发、支付/库存/核销失败和人工复核路径 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`p0-action-event-evidence-matrix-v0.1.md`、`third-party-supplier-integration-kit-v0.1.md` |
+| 精确引用 | 文档引用必须使用当前有效文件名、OpenAPI exact path、operationId 或追溯附录条目；不得使用“见相关文档”“接口待定”“路径同上”等模糊写法 | `openapi/openapi-p0.json`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md`、`delivery-package-manifest-v0.1.md` |
+
+## 8. 进入下一章前的审计结论
+
+当前第一批 P0 硬缺口已经收口：原型废止声明已由 `prototype-deprecation-and-technology-baseline-v0.1.md`、`apps/api/LEGACY-PROTOTYPE.md`、`apps/api/package.json` 阻断脚本和 `code-contract-difference-and-migration-audit-v0.1.md` 承接，P0 可编码入口已由 `p0-coding-entry-pack-v0.1.md` 承接，首批正式编码范围已由 `p0-first-coding-package-v0.1.md` 承接，160 API 部署/回滚/健康检查/BE-000 验收脚本已由 `ops/160/*.sh` 和 `server-160-runbook-v0.2.md` 承接，生产前置资料已由 `production-readiness-implementation-ledger-template-v0.1.md` 承接，正式安全基线待生成任务已由 `formal-security-baseline-generation-task-v0.1.md` 承接，接口契约已由 `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json`、`verify:p0-contract` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 承接，OpenAPI 权限、事件、任务追溯缺口已由 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure` 承接，Web 可构建性已由 `verify:p0-web` 承接，后端/Android 环境前置已由 `verify:p0-env` 承接，用户故事和迭代切片已由 `p0-user-story-map-and-sprint-slices-v0.1.md` 承接，任务-接口-权限-事件-验收映射已由 `p0-task-api-permission-event-acceptance-map-v0.1.md` 承接，游乐 P0 安全巡检闭环已由 `amusement-p0-safety-inspection-spec-v0.1.md` 承接。票务资格 P0 的 `ticket_eligibility_rules`、`student_credential_audits`、多人票 `num_people` 和核销放行人数留痕已收口为正式 Flyway 首批业务迁移必落项，不再作为开放待决策项。160 机器已按最新项目和脚本完成同步，并已通过环境、契约、Web 构建、运行配置预检、API/Web 启动、BE-000 运行态、整体健康检查和完整 `complex-verify-p0.sh`；当前使用 `~/.complex/complex.env` 用户级覆盖解决 `/etc/complex/complex.env` 暂无 sudo 写入权限的问题，不在文档或脚本中落真实密钥。注意：当前完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通，不代表平台、票务、权益、核销、证据、设备等业务域已完成生产级实现。
+
+下一步不再新增拍板问题；建议直接按 `p0-first-coding-package-v0.1.md` 进入首批编码包执行：先完成 BE-001/BE-002、Flyway 首批正式迁移、权限模板、事件审计、主体绑定、应收应付和生产前置台账，再把当前 `local/dev/test` 内存态 smoke 切片迁移为 PostgreSQL + Flyway + Service/Repository + 权限/事件/审计的正式业务实现，并要求每替换一个 smoke 接口都保持 `complex-verify-p0.sh` 继续通过。生产或长期预生产前，IT/运维仍需把用户级覆盖配置迁入 `/etc/complex/complex.env`，接入 systemd、账号密钥轮换、告警、生产前置台账和正式安全基线。
+
+## 9. 变更日志
+
+| 日期 | 版本 | 变更 |
+|---|---|---|
+| 2026-06-10 | V0.1 | 新增当前有效文档入口、正式口径、阅读顺序、废止内容和 P0 开发准入条件 |
+| 2026-06-10 | V0.1 补充 | 标记 P0 任务映射表和游乐安全巡检规格已新增；审计结论改为第一批硬缺口已收口 |
+| 2026-06-11 | V0.1 编码准入补强 | 新增 operation 级验收矩阵和代码契约迁移审计入口；明确旧 Web/Android 路径不得反向约束正式 Java/OpenAPI 后端 |
+| 2026-06-12 | V0.1 可编码准入收口修复 | 新增 P0-0 正式后端工程准入；同步 OpenAPI 认证上下文、写接口请求体和旧路径降级规则，明确未建立正式 Java/Spring/PostgreSQL/Flyway 工程前不得标记业务域正式并行开发完成 |
+| 2026-06-12 | V0.1 AI-ready 交付补强 | 新增实现文档四件套规则；明确 `pending_confirm` 类业务状态不等于产品开放问题；所有实现类文档必须按反模式、测试用例、错误处理和精确引用进入编码 |
+| 2026-06-12 | V0.1 事实源矩阵收口 | 新增文档类型、事实源等级和适用对象矩阵；明确 S0/S1/S2/S3 冲突裁决关系，防止旧路径和市场参考文档反向覆盖正式 OpenAPI |
+| 2026-06-13 | V0.1 入口引用与验证分层修复 | 修复角色最小阅读包中的失效文件名；新增 `verify:p0-contract`、`verify:p0-web`、`verify:p0-env`、`verify:p0` 四层验证口径；把 MDM、密钥轮换和 NAS 生产前置 Runbook 作为运维/IT/采购入口 |
+| 2026-06-13 | V0.1 生产前置台账接口收口 | 新增生产前置责任状态 P0 轻量台账/API，OpenAPI operation 总数更新为 181 个 |
+| 2026-06-12 | V0.1 可编码入口包补强 | 新增 `p0-coding-entry-pack-v0.1.md` 为编码、联调、测试和供应商 mock 统一入口；同步说明 `apps/api` 旧脚本已阻断 |
+| 2026-06-12 | V0.1 160 脚本收口 | 160 API 部署、回滚、健康检查、BE-000/P0 验收和备份脚本切换为 Java/Spring Boot/PostgreSQL/Flyway 口径 |
+| 2026-06-12 | V0.1 OpenAPI 契约闸口 | 新增 `npm run verify:openapi` 为 P0 联调、自动化测试和供应商 mock 前置检查 |
+| 2026-06-12 | V0.1 npm 工作区收口 | 根 npm workspace 和 lockfile 移除旧 `apps/api`、Fastify、Prisma 依赖；旧 API 子目录仅保留阻断提示和历史参考 |
+| 2026-06-12 | V0.1 客户端旧路径闸口 | 新增 `npm run audit:client-routes` 和 `npm run verify:client-routes` 作为 Web/Android/一体机/供应商 mock 正式联调前置检查 |
+| 2026-06-12 | V0.1 客户端 OpenAPI 覆盖闸口 | 新增 `npm run audit:client-openapi` 和 `npm run verify:client-openapi`，覆盖检查升级为路径模板 + HTTP 方法一致性，防止客户端只改路径前缀但未补机器契约 |
+| 2026-06-12 | V0.1 客户端请求字段闸口 | 新增 `npm run audit:client-payload` 和 `npm run verify:client-payload`，防止客户端路径正确但请求字段未对齐 OpenAPI requestBody |
+| 2026-06-12 | V0.1 operation 矩阵同步闸口 | 新增 `npm run verify:operation-matrix`，防止 OpenAPI 已修改但逐接口验收矩阵未同步 |
+| 2026-06-13 | V0.1 OpenAPI 示例闸口 | 新增 `npm run docs:openapi-examples` 和 `npm run verify:openapi-examples`；高风险写接口和外部接入接口必须具备机器可读 example，防止供应商 mock、接口测试和 SDK 生成继续猜 payload |
+| 2026-06-13 | V0.1 OpenAPI 权限/事件/任务追溯附录闸口 | 新增 `p0-openapi-contract-closure-appendix-v0.1.md`、`npm run docs:openapi-closure` 和 `npm run verify:openapi-closure`；以 OpenAPI 反向生成权限、事件、任务簇、终端和样例准入追溯 |
+| 2026-06-13 | V0.1 角色最小阅读包与旧路径隔离补强 | 新增总控、后端、前端、Android、测试、运营、供应商、运维的最小阅读包；旧路径联调闸口补入 `verify:openapi-closure` |
+| 2026-06-13 | V0.1 160 实机更新与历史能力表规则收口 | 补充 160 最新项目同步后的验证边界；统一规定历史能力表必须映射 OpenAPI exact path 或 operationId，否则不得进入正式开发 |
+| 2026-06-13 | V0.1 票务资格与160回滚收口 | 明确票务资格规则表、学生凭证留痕表、多人票人数和放行人数留痕为正式 Flyway 首批业务迁移必落项；同步声明 160 API 回滚不得绕过运行配置预检 |
+| 2026-06-13 | V0.1 160 运行态与完整 P0 边界收口 | 160 已通过用户级运行配置覆盖、API/Web 启动、BE-000 运行态和整体健康检查；当时完整 P0 处于阶段性待收口状态，后续已由 release `20260613-183652` 和完整 `complex-verify-p0.sh` 收口 |
+| 2026-06-13 | V0.1 完整 P0 smoke 通过 | 160 API release `20260613-183652` 发布后完整 `complex-verify-p0.sh` 已通过；同时明确 dev smoke 切片不等同于生产级业务实现 |
+| 2026-06-13 | V0.1 安全基线入口收口 | `security-scans/threat_model.md` 不再保留旧 TypeScript/SQLite 原型威胁模型正文，改为 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 正式安全基线重建说明 |
+| 2026-06-13 | V0.1 160 复核与运行态同步 | 本轮文档和 OpenAPI 描述同步到 160 后，API release `20260613-193142` 已发布；运行时 `/docs/openapi` 已确认包含 `Java 21 + Spring Boot 4.x`，完整 `complex-verify-p0.sh` 于 19:32 再次通过 |
+| 2026-06-13 | V0.1 首批编码与生产前置收口 | 新增 `p0-first-coding-package-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`production-readiness-implementation-ledger-template-v0.1.md`，把首批编码范围、安全基线生成任务和生产前置资料台账纳入 S1 执行事实源 |
+| 2026-06-14 | V0.1 NAS 与 160 验证口径收口 | 明确 NAS 服务器为 `192.168.88.113`；Java/后端集成测试、BE-000 和完整 P0 验收默认在 160 或等效 Java 21 环境执行，本机缺 Java 21 只记录为本机环境前置缺失 |
+| 2026-06-14 | V0.1 NAS 参数收口 | 明确 NAS 共享 `bn`、UNC `//192.168.88.113/bn`、SMB 用户 `jxh1`、160 挂载 `/mnt/complex-nas-backup`、保留 30 天、容量上限 1TB；当前总控口径为备份归档不加密，需显式配置 `ALLOW_UNENCRYPTED_BACKUPS=true` |
+| 2026-06-15 | V0.1 P1 编码收口 | 新增 `p1-coding-completion-audit-v0.1.md`，记录 P1 当前可编码能力、验证证据和供应商/硬件/BOM 等外部依赖边界 |
+| 2026-06-15 | V0.1 P2 候选审计 | 新增 `p2-coding-candidate-audit-v0.1.md`，推荐 P2 优先从商场平面图 CAD/SVG 标准化导入开始，供应商深度联动和独立 Python AI 服务暂缓 |
+| 2026-06-15 | V0.1 P2-A 开发计划 | 新增 `superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md`，把平面图 SVG/标准 JSON 导入拆为可 TDD 执行的开发计划 |
+| 2026-06-15 | V0.1 P2-A 接口契约 | 新增 `p2-floor-plan-import-api-contract-v0.1.md`，固化平面图导入接口、权限、事件、解析规则和验收标准 |
+| 2026-06-15 | V0.1 P2-A 完成审计 | 新增 `p2-floor-plan-import-completion-audit-v0.1.md`，记录 P2-A 平面图导入完成范围、验证证据和未纳入范围 |

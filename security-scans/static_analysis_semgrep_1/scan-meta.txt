@@ -1,0 +1,6 @@
+host=y9000p-ai
+user=james
+semgrep_version=1.166.0
+engine=OSS_ONLY
+output_dir=/home/james/complex-management/security-scans/static_analysis_semgrep_1
+mode=important-only

@@ -1,0 +1,1328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>综合体管理系统业务说明地图 V0.1</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #667085;
+      --line: #d9dee7;
+      --soft: #eef3f8;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --green: #087f5b;
+      --green-soft: #e7f5ef;
+      --amber: #b86b00;
+      --amber-soft: #fff4df;
+      --red: #b42318;
+      --red-soft: #fff0ef;
+      --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif;
+      line-height: 1.65;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .page {
+      min-height: 100vh;
+    }
+
+    .top {
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .top-inner {
+      width: min(1320px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 28px 0 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--blue);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 880px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .notice {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border: 1px solid #cbd7ee;
+      background: var(--blue-soft);
+      border-radius: 8px;
+      color: #233b73;
+      font-weight: 600;
+    }
+
+    .layout {
+      width: min(1320px, calc(100% - 40px));
+      margin: 22px auto 56px;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .side {
+      position: sticky;
+      top: 16px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .side-title {
+      padding: 16px 18px 10px;
+      font-weight: 800;
+    }
+
+    .side-note {
+      margin: 0;
+      padding: 0 18px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .nav {
+      display: grid;
+      padding: 8px;
+      gap: 4px;
+      border-top: 1px solid var(--line);
+    }
+
+    .nav a {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 7px;
+      color: #344054;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav a:hover,
+    .nav a.active {
+      background: var(--blue-soft);
+      color: #1746a2;
+    }
+
+    .content {
+      display: grid;
+      gap: 20px;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      scroll-margin-top: 20px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .summary-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+    }
+
+    .summary-box strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .summary-box span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .journey {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .step {
+      position: relative;
+      min-height: 128px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 13px;
+      background: #ffffff;
+    }
+
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 10px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 800;
+      font-size: 13px;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .step span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .system-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .system-card {
+      display: grid;
+      gap: 9px;
+      min-height: 168px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+
+    .system-card:hover {
+      border-color: #9ab6f5;
+      box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .card-top {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .system-card h3 {
+      margin: 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      width: fit-content;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: #44546a;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tag.core {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .tag.support {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .tag.risk {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .system-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .open-link {
+      width: fit-content;
+      color: var(--blue);
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .info-block {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+    }
+
+    .info-block ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+
+    .info-block li {
+      margin: 5px 0;
+    }
+
+    .plain-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+
+    .plain-table th,
+    .plain-table td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .plain-table th {
+      background: #f2f5f9;
+      color: #344054;
+      font-weight: 800;
+    }
+
+    .plain-table td {
+      background: #fff;
+    }
+
+    .relation-map {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .relation-row {
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: 12px;
+      align-items: stretch;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .relation-from {
+      padding: 12px;
+      background: #f2f5f9;
+      font-weight: 800;
+    }
+
+    .relation-text {
+      padding: 12px;
+      color: #475467;
+    }
+
+    .question-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .question {
+      border-left: 4px solid var(--amber);
+      background: var(--amber-soft);
+      padding: 12px 13px;
+      border-radius: 0 8px 8px 0;
+      color: #684400;
+      font-weight: 700;
+    }
+
+    .question.confirmed {
+      border-left-color: var(--green);
+      background: var(--green-soft);
+      color: #07523d;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 8px 0 0;
+    }
+
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        position: static;
+      }
+
+      .nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .journey {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .top-inner,
+      .layout {
+        width: min(100% - 24px, 1320px);
+      }
+
+      h1 {
+        font-size: 25px;
+      }
+
+      h2 {
+        font-size: 21px;
+      }
+
+      section {
+        padding: 17px;
+      }
+
+      .summary-grid,
+      .system-list,
+      .detail-grid,
+      .question-list,
+      .journey {
+        grid-template-columns: 1fr;
+      }
+
+      .nav {
+        grid-template-columns: 1fr;
+      }
+
+      .relation-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div class="top-inner">
+        <p class="eyebrow">给业务人员看的系统说明</p>
+        <h1>综合体管理系统业务说明地图 V0.1</h1>
+        <p class="subtitle">这页不讲技术，也不讲复杂产品术语。它只说明：这套系统管哪些事、每个子系统干什么、谁会用、它们之间为什么要连接。</p>
+        <div class="notice">一句话理解：官方 App 和小程序同步建设，门票只能由客人自己购买；美团、大众点评、抖音先做团购购票回流；平板负责员工协助点酒；供应链先管酒类、吧台消耗、客人存酒和常用消耗品；酒水从库房到客人全过程扫码留痕；订单是谁促成的、卡座是谁服务的、异常是谁第一个处理的，也都要自动留痕；所有端都有后台开关；订台需要定金；Web 可做少量确认；工作手机负责在线扫码核销和企业微信工作沟通。</div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="side" aria-label="页面目录">
+        <div class="side-title">点击查看</div>
+        <p class="side-note">建议从“整体说明”开始看，再进入具体子系统。</p>
+        <nav class="nav">
+          <a href="#overview" class="active">整体说明</a>
+          <a href="#journey">一笔业务怎么走</a>
+          <a href="#systems">子系统入口</a>
+          <a href="#governance">基础管理</a>
+          <a href="#ticketing">票务权益</a>
+          <a href="#customer">客人端</a>
+          <a href="#staff">酒吧平板/工作手机</a>
+          <a href="#kiosk">触摸屏一体机</a>
+          <a href="#bar">酒吧管理</a>
+          <a href="#supply">供应链库存</a>
+          <a href="#amusement">游乐管理</a>
+          <a href="#merchant">商户管理</a>
+          <a href="#thirdparty">第三方接入</a>
+          <a href="#risk">留痕与异常</a>
+          <a href="#finance">财务对账</a>
+          <a href="#analytics">经营看板</a>
+          <a href="#terminals">各类入口</a>
+          <a href="#relations">相互关系</a>
+          <a href="#questions">已拍板/待确认</a>
+        </nav>
+      </aside>
+
+      <div class="content">
+        <section id="overview">
+          <h2>整体说明：这套系统到底管什么</h2>
+          <p class="lead">综合体里不是只有一个业务。会有卖票、入场、酒吧消费、供应商、采购、库房、存酒、游乐项目、餐饮零售商户、工作人员、设备、第三方系统、财务对账和经营分析。当前先管理一个综合体，但系统要按未来多个综合体统一管理来设计，把这些分散的事情按同一套规则记录下来。</p>
+          <div class="summary-grid">
+            <div class="summary-box">
+              <strong>先管清楚基础盘子</strong>
+              <span>哪个综合体、谁在经营、在哪经营、签了什么合同、谁能操作、谁负责。</span>
+            </div>
+            <div class="summary-box">
+              <strong>再管清楚经营动作</strong>
+              <span>客人从哪里买票、产生什么权益、在哪里核销、酒吧如何点酒、酒水和物品如何消耗、游乐如何履约。</span>
+            </div>
+            <div class="summary-box">
+              <strong>最后管清楚结果</strong>
+              <span>收入、退款、核销、会员积分、异常、对账、结算、商户表现和经营看板。</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="journey">
+          <h2>一笔业务怎么走</h2>
+          <p class="lead">下面用“客人买票并进场消费”说明系统的主流程。业务人员只要理解这条线，就能理解大部分子系统为什么要互相连接。</p>
+          <div class="journey">
+            <div class="step">
+              <div class="step-number">1</div>
+              <strong>客人看信息</strong>
+              <span>在 App、小程序或 Web 上看票、套餐、游乐项目、酒吧规则。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">2</div>
+              <strong>下单购票</strong>
+              <span>门票只能客人自己通过官方 App/小程序或第三方平台购买。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">3</div>
+              <strong>生成权益和积分</strong>
+              <span>一张票可能拆成入场、游乐、赠饮等权益，并按规则产生会员积分。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">4</div>
+              <strong>现场核销/点酒</strong>
+              <span>工作手机扫客人二维码核销；酒吧平板绑定卡座后点酒下单。</span>
+            </div>
+            <div class="step">
+              <div class="step-number">5</div>
+              <strong>库存、财务和看板</strong>
+              <span>订单、核销、退款、酒吧账单、库存消耗、存酒、积分、第三方回流进入对账和经营看板。</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="systems">
+          <h2>子系统入口</h2>
+          <p class="lead">点击下面任意子系统，可以直接跳到对应说明。每个子系统都按“干什么、谁会用、主要功能、和谁有关”来解释。</p>
+          <div class="system-list">
+            <a class="system-card" href="#governance">
+              <div class="card-top"><h3>基础管理</h3><span class="tag core">先做</span></div>
+              <p>管理综合体、空间、商户、合同、员工、设备、权限。它是所有业务的准入基础。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#ticketing">
+              <div class="card-top"><h3>票务权益</h3><span class="tag core">核心</span></div>
+              <p>管理官方和第三方购票结果、门票策略、订单、权益、防伪二维码、会员积分和核销。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#customer">
+              <div class="card-top"><h3>客人端</h3><span class="tag">入口</span></div>
+              <p>给客人官方购票、预定/订台、查订单、查权益、看积分摘要、出示验票二维码；礼物兑换进入 P1。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#staff">
+              <div class="card-top"><h3>酒吧平板/工作手机</h3><span class="tag">现场</span></div>
+              <p>平板只做酒吧点酒下单；工作手机负责门票和权益扫码核销。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#kiosk">
+              <div class="card-top"><h3>触摸屏一体机</h3><span class="tag">自助</span></div>
+              <p>放在吧台、权益领取点或游乐服务点，支持订台、吧台买酒、权益展示、游乐状态查看和定期检修记录。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#bar">
+              <div class="card-top"><h3>酒吧管理</h3><span class="tag core">业务</span></div>
+              <p>管理酒吧、卡座、按时间和位置配置的最低消费、点酒下单、扫码支付、赠饮核销、账单和异常。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#supply">
+              <div class="card-top"><h3>供应链库存</h3><span class="tag core">业务</span></div>
+              <p>管理供应商、供应合同、采购周期、库房、酒类、吧台消耗、客人存酒、常用消耗品，以及酒水从库房到客人的扫码交接留痕。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#amusement">
+              <div class="card-top"><h3>游乐管理</h3><span class="tag core">业务</span></div>
+              <p>管理游乐项目、开放时间、场次、容量、核销、巡检、定期检修和暂停关闭。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <!-- 修订说明（2026-06-07）：原文"只看自己的资料、经营和对账信息"与 PRD/正文及《统一口径基准》D5 商户侧定位（merchant_portal/merchant_app）冲突，商户侧并非只读小窗口。依据 round2 商户侧"授权范围内全开放"决策及本页 #merchant 正文，改为"授权业务范围内全开放使用自己的经营/库存/对账等，但看不到平台全局和其他商户"。 -->
+            <a class="system-card" href="#merchant">
+              <div class="card-top"><h3>商户管理</h3><span class="tag">边界</span></div>
+              <p>让餐饮、零售、酒吧等商户在授权业务范围内全开放使用自己的经营、库存、对账等功能，但看不到平台全局和其他商户。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#thirdparty">
+              <div class="card-top"><h3>第三方接入</h3><span class="tag support">外部</span></div>
+              <p>餐饮 POS、零售 POS、机器人、监控、企微、支付渠道把关键结果回传。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#risk">
+              <div class="card-top"><h3>留痕与异常</h3><span class="tag risk">风险</span></div>
+              <p>记录人工放行、退款、免单、超容、重复核销、第三方差异，以及酒水出库、机器人交接、后厨接收和送达。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#finance">
+              <div class="card-top"><h3>财务对账</h3><span class="tag support">结果</span></div>
+              <p>把订单、退款、核销、酒吧账单、第三方回流整理成日结和结算依据。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#analytics">
+              <div class="card-top"><h3>经营看板</h3><span class="tag support">判断</span></div>
+              <p>给管理层和运营看收入、客流、核销、异常、商户表现和对账结果。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+            <a class="system-card" href="#terminals">
+              <div class="card-top"><h3>各类入口</h3><span class="tag">页面</span></div>
+              <p>管理后台、Web 前端、商户侧、现场端、平板、移动端、客人小程序，并由后台统一控制各端开关。</p>
+              <span class="open-link">查看说明</span>
+            </a>
+          </div>
+        </section>
+
+        <section id="governance">
+          <h2>基础管理：先把综合体的盘子管清楚</h2>
+          <p class="lead">这个子系统不是直接卖票，也不是酒吧点单。它负责回答：哪个综合体、谁在经营、在哪经营、签了什么合同、谁能操作、出了事找谁。当前先做一个综合体，但必须预留以后多综合体统一管理。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>建立综合体项目、楼层、区域、点位；当前一个综合体，未来可扩展为多综合体。</li>
+                <li>建立商户档案，区分自营、租赁、联营、代运营等合作方式。</li>
+                <li>管理合同、租赁面积、合作期限、经营范围、结算口径摘要和核心条款摘要。</li>
+                <li>把合同和基础定义变成准入规则：不符合合同或基础定义的后续流程必须先被卡住，再按上一级、上两级或最高权限等配置层级审批放行。</li>
+                <li>管理员工、岗位、班次、职级、权限、工作设备和员工注册审批。</li>
+                <li>支持票务管理、酒吧管理、游乐设施管理拆成独立子系统，但都必须先通过基础平台定义归属、合同和权限。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>票务要知道门票和权益属于哪个综合体、哪个项目、哪个区域。</li>
+                <li>酒吧要知道桌台、卡座、吧台属于哪个空间和商户。</li>
+                <li>游乐要知道项目入口、场次和容量属于哪个点位。</li>
+                <li>财务要知道商户合同和合作方式，才能做结算。</li>
+                <li>用户权限要知道员工注册信息、设备凭证绑定、私人手机、公司工作手机、职级和审批状态。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="ticketing">
+          <h2>票务权益：管卖什么票、给什么权益、怎么核销</h2>
+          <p class="lead">票务不是单纯“卖一张门票”。门票必须由客人自己通过官方 App/小程序或第三方团购渠道购买。App 和小程序同步建设；美团、大众点评、抖音首批只做团购购买、订单回流、核销和对账。系统要把购票结果、通票、套餐拆成客人可以使用的权益，并生成带防伪能力的票码和二维码，防止被变造，事后核对每一次使用。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>设置平日票、周末票、节假日票、学生票、多人票、新人优惠、渠道优惠；符合后台规则时系统自动判断可用，不符合规则时不能使用。</li>
+                <li>设置酒吧通票、游乐通票、酒吧加游乐联合通票，以及包含餐饮/零售优惠或折扣的组合通票。</li>
+                <li>餐饮和零售由第三方承接，通票里只放优惠、折扣、券或权益，不自研餐饮/零售 POS。</li>
+                <li>记录官方 App/小程序订单，以及美团、大众点评、抖音团购渠道订单。</li>
+                <li>根据后台规则记录会员积分、会员等级成长和积分兑换关系；消费金额只是可配置条件之一，积分兑换礼物必须扣减库存。</li>
+                <li>生成票码、权益、验票二维码和对应的防伪串码。</li>
+                <li>二维码必须带签名、有效期、随机串和哈希校验；有效期按日票、周票、月票、年票等票种规则配置。</li>
+                <li>二维码每 30 秒或 60 秒自动刷新，截图无效，现场必须在线核验。</li>
+                <li>现场核销时判断是否可用，并记录核销结果。</li>
+                <li>事后可按票号、二维码哈希、核销设备、员工、点位、时间和订单进行核对。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>和客人端相连，客人通过 App 或小程序买票和查票。</li>
+                <li>和第三方平台相连，外部渠道购票结果要回到平台。</li>
+                <li>和员工工作手机相连，现场员工用工作手机扫码核销。</li>
+                <li>和酒吧相连，票里赠送的酒水权益到酒吧核销。</li>
+                <li>和游乐相连，票里的游乐权益到项目入口核销。</li>
+                <li>和财务相连，订单、退款和核销进入对账。</li>
+                <li>和留痕相连，票码生成、刷新、核销、失败、撤销和异常都能追溯。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="customer">
+          <h2>客人端：客人自己买票、预定、查询、积分和出示二维码</h2>
+          <p class="lead">客人端包括 App 和小程序，两者同步建设。订单、票、权益、二维码、积分摘要、等级和订台记录必须是一套口径；积分明细、礼物列表、兑换发起和兑换记录进入 P1。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>查看综合体介绍、营业时间、活动公告、票务入口。</li>
+                <li>查看票种、套餐、通票、游乐项目和酒吧规则。</li>
+                <li>通过官方 App/小程序购票、预定、确认订单、查看支付结果。</li>
+                <li>官方 App 和小程序都可以订台，订台需要支付定金。</li>
+                <li>查询第三方渠道购票后的票、权益和核销状态。</li>
+                <li>查看我的订单、我的票、我的权益和使用记录。</li>
+                <li>P0 查看会员积分摘要和会员等级；积分明细、礼物列表、兑换发起和兑换记录进入 P1。</li>
+                <li>展示验票二维码，供现场工作人员核销。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接票务权益系统，拿到票、权益和二维码。</li>
+                <li>连接会员积分规则，消费后获得积分和等级成长；礼物兑换作为 P1 客人端能力，底层扣库存规则保留。</li>
+                <li>连接游乐系统，展示可预定项目和场次。</li>
+                <li>连接酒吧系统，展示酒吧规则和赠饮权益。</li>
+                <li>连接员工工作手机核销，核销后客人能看到使用记录。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="staff">
+          <h2>酒吧平板/工作手机：平板点酒，工作手机核销</h2>
+          <p class="lead">平板、公司工作手机、员工私人手机 App 是不同设备和不同用途。平板只做酒吧点酒下单；公司工作手机用于扫客人二维码核销门票和权益，并通过企业微信承接员工工作沟通；员工私人手机 App 只用于注册、通知和状态查看，不能进入现场业务操作。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>员工安装私人手机 App 时生成并绑定设备凭证（Keystore 设备公钥/不可逆设备指纹），不读取手机本机 NFC 唯一标识。</li>
+                <li>员工换手机时必须先解绑旧手机，再绑定新手机。</li>
+                <li>私人手机 App 可收发通知、查看状态和审批结果；检测到 Root、调试或设备异常时自动失效并进入复核。</li>
+                <li>员工私人手机和公司发放的工作手机建立一一对应关系，进入办公区后私人手机需要寄存，寄存柜不固定，先到先选，离开时全部取走。</li>
+                <li>员工上岗，确认班次、岗位、职级、责任区域和设备。</li>
+                <li>平板先绑定具体酒吧，再绑定卡座、桌台或吧台位。</li>
+                <li>平板选择酒水、套餐和数量，并校验最低消费。</li>
+                <li>平板生成支付二维码给客人手机扫码，或扫描客人手机付款码。</li>
+                <li>工作手机扫描客人 App/小程序或第三方票码二维码核销门票。</li>
+                <li>工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。</li>
+                <li>工作手机上的微信必须是企业微信，员工工作聊天每天自动上传到后台，按可配置留存期限保存（非无限期"永久"，到期归档/销毁/匿名化）。<!-- 修订说明（2026-06-08 三轮收口）：原"永久保存"按 A7/合规§4 C3 改为可配置留存。依据 residual-scan-4 --></li>
+                <li>后台按会话内容分析服务质量、客户需求、投诉倾向和违规内容；不脱敏原文仅限最小授权 + 审批的取证/质检场景，普通展示按权限脱敏，查看要留痕。</li>
+                <li>正式发放的受管工作手机不允许安装除预装软件之外的任何软件，只允许访问白名单网站；清单由后台维护，通过 Android Enterprise / Android Management API + 商业 MDM 拦截违规访问。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接基础管理，确认员工注册、审核、设备凭证绑定、角色、职级、班次、设备和权限。</li>
+                <li>连接酒吧系统，平板只负责酒吧点酒和支付。</li>
+                <li>连接票务权益，工作手机只负责门票和权益核销。</li>
+                <li>连接一体机，权益扫码后展示可领取内容。</li>
+                <li>连接企业微信，会话每天归档后进入质检、服务分析和违规排查。</li>
+                <li>连接设备管控，限制安装软件、限制网站访问、记录设备违规。</li>
+                <li>连接留痕与异常，所有人工处理都可追溯。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="kiosk">
+          <h2>触摸屏一体机：自助下单、权益领取和现场状态查看</h2>
+          <p class="lead">一体机不是普通展示屏，而是固定在吧台、权益领取点、游乐服务点的触摸屏设备。它可以让客人或现场工作人员在固定点位完成自助查询和部分下单，但不能卖门票。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>扫码查看客人当前可领取的赠饮、礼物、积分兑换权益和领取状态。</li>
+                <li>支持订台下单：选择酒吧、日期、时段、卡座/桌台/吧台位、人数和订台备注；订台需要支付定金。</li>
+                <li>支持吧台买酒下单：选择酒水、套餐、数量，生成待支付订单。</li>
+                <li>支持支付引导：优先生成二维码让客人手机扫码支付，也可由工作人员辅助扫码付款码。</li>
+                <li>允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。</li>
+                <li>查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。</li>
+                <li>工程师可在授权后填写游乐设施定期检修记录，检修单位作为供应商记录。</li>
+                <li>检修完成后必须由主管确认，设施才能恢复营业。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接酒吧管理，订台和吧台买酒会进入酒吧订单、账单、最低消费、定金和支付流水。</li>
+                <li>连接票务权益，客人扫码后展示可领取权益，领取确认后回写权益状态。</li>
+                <li>连接游乐管理，展示游乐设施开放状态、容量和异常，并形成状态检查、定期检修和主管确认记录。</li>
+                <li>连接支付和财务，一体机产生的订单必须进入日结、对账和经营看板。</li>
+                <li>连接留痕与异常，一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="bar">
+          <h2>酒吧管理：从入场、开台到结账关台</h2>
+          <p class="lead">酒吧管理先做基础经营闭环。平板端服务员工协助点酒；触摸屏一体机可支持客人或现场人员订台、吧台买酒和支付引导；吧台酒水可以按杯、按瓶、按套餐或其他形式售卖，但门票仍只能由客人自己在官方 App/小程序或第三方渠道购买。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>识别客人是否有酒吧入场资格。</li>
+                <li>管理不同酒吧、桌台、卡座、吧台位的空闲、开台、待清台和异常状态。</li>
+                <li>记录卡座位置、服务员、人数、点酒明细、最低消费和账单状态；人数原则上不参与最低消费计算。</li>
+                <li>接收官方 App、小程序、触摸屏一体机和销售人员产生的订台订单。</li>
+                <li>订台订单必须记录定金、订台来源、销售人员或设备来源、到店和取消结果。</li>
+                <li>接收一体机产生的吧台买酒订单。</li>
+                <li>支持吧台酒水按杯、按瓶、按套餐或其他形式售卖；按杯销售按标准出酒量扣减库存，超出标准部分记为损耗。</li>
+                <li>吧台出品、赠饮、兑换和售卖后，把酒水使用量和消耗量写入供应链库存。</li>
+                <li>支付优先使用线上支付：客人手机扫平板二维码，或平板扫客人手机付款码。</li>
+                <li>现场必须允许现金和 POS 机支付，但要进入账单、日结、员工责任链和财务对账。</li>
+                <li>核销票务赠送的酒水权益。</li>
+                <li>客人喝不完的酒可以转入存酒管理，登记手机号、姓名/昵称、瓶底标签数值、照片和人工备注。</li>
+                <li>处理关台、退款、免单、账单调整和争议。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接基础管理，酒吧区域、桌台和商户归属来自基础管理。</li>
+                <li>连接票务权益，赠饮权益从客人自己购买的门票或套餐里来。</li>
+                <li>连接工作人员平板，由服务员执行点酒下单和支付引导。</li>
+                <li>连接触摸屏一体机，承接订台、吧台买酒和权益领取自助操作。</li>
+                <li>连接员工工作手机和一体机，完成赠饮或权益领取核销与展示。</li>
+                <li>连接供应链库存，扣减吧台售卖消耗、赠饮消耗、存酒取用和报损。</li>
+                <li>连接财务，酒吧账单和调整进入日结与对账。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="supply">
+          <h2>供应链库存：管供应商、采购、库房、消耗和存酒</h2>
+          <p class="lead">供应链库存不是只看“仓库里还有多少”。它要把供应商、供应合同、采购周期、入库、出库、调拨、吧台消耗、盘点差异、报损和客人存酒连起来。酒吧卖出去的酒、赠送出去的酒、按杯消耗的酒、客人存起来的酒，以及每一瓶需要追责的酒从库房到客人的交接过程，都要有清楚记录。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>管理供应商档案、联系人、资质、结算方式和启停状态。</li>
+                <li>管理供应合同，包括平台自用供应合同、商户自采供应合同、平台统一采购后分销给商户三种模式。</li>
+                <li>记录供货范围、价格口径、账期、有效期、合同核心摘要、审批状态和可采购范围。</li>
+                <li>管理采购周期，从采购申请、审批、下单、预计到货、实际到货到入库确认。</li>
+                <li>管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。</li>
+                <li>P0 先管理酒类、吧台消耗、客人存酒和常用消耗品，例如纸巾、色盅、色子、杯子、杯具、冰块、果料等。</li>
+                <li>记录入库、出库、调拨、盘点、报损、报溢和库存调整。</li>
+                <li>给酒水、礼品、高价值物料和需追责耗材生成或绑定平台唯一二维码，可以入库贴码，也可以出库打印码。</li>
+                <li>记录库管出库核验、机器人或人工配送、酒吧后厨接收、服务员取走、送达客人或卡座的全过程。</li>
+                <li>记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计；按杯消耗按标准容量扣减，超出部分进入损耗。</li>
+                <li>管理客人存酒：标签从酒瓶最底部开始贴，按标签显示数值记录剩余量。</li>
+                <li>存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。</li>
+                <li>管理存酒取酒、转赠、作废、争议和异常处理。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接基础管理，供应商、合同、库房、员工和权限要先定义清楚。</li>
+                <li>连接酒吧管理，点酒、吧台买酒、赠饮、出品和存酒都会影响库存。</li>
+                <li>连接票务权益，门票赠饮、积分兑换礼物和权益领取必须按规则扣减库存。</li>
+                <li>连接触摸屏一体机，一体机买酒或领取礼物后要回写库存消耗。</li>
+                <li>连接财务，采购成本、报损、盘点差异和库存余额会影响经营判断。</li>
+                <li>连接机器人和工作手机，机器人到达是被动留痕，员工扫码交接是主动留痕。</li>
+                <li>连接留痕与异常，高价值酒水报损、盘点差异、存酒作废必须拍照和视频留证，并主管复核。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="amusement">
+          <h2>游乐管理：管项目开放、场次容量和安全异常</h2>
+          <p class="lead">游乐管理的重点是：项目什么时候开放、一次能接待多少人、客人有没有对应权益、现场有没有安全和异常记录。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>建立游乐项目和项目入口点位。</li>
+                <li>设置开放日期、开放时间、场次和容量；P0 按具体项目 + 具体场次/时段 + 点位/设备控制容量。</li>
+                <li>绑定哪些票务权益可以使用这个项目。</li>
+                <li>现场核销时判断权益是否可用、容量是否允许。</li>
+                <li>通过触摸屏一体机展示游乐设施开放、排队、容量、暂停、故障和维护状态。</li>
+                <li>工程师可在一体机上填写定期检修记录，记录检修单位、检修人员、结果和异常原因。</li>
+                <li>主管确认检修通过后，设施才能恢复营业。</li>
+                <li>记录巡检、暂停、关闭、故障、超容和游客争议。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接基础管理，项目入口和场地来自空间点位。</li>
+                <li>连接票务权益，游乐权益从票或通票中生成。</li>
+                <li>连接现场端，员工在入口扫码核销和放行。</li>
+                <li>连接触摸屏一体机，让客人查看游乐状态，让工程师做定期检修记录，让主管确认恢复营业。</li>
+                <li>连接风控，超容、暂停、关闭和巡检异常要留痕。</li>
+                <li>连接经营看板，管理层看项目客流、容量和异常。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="merchant">
+          <h2>商户管理：商户在授权范围内完整使用自己的系统</h2>
+          <p class="lead">商户侧不是平台后台，也不是只读小窗口。商户在自己的合同、空间、业务和权限范围内可以完整使用相关功能，但不能看平台全局和其他商户数据。酒吧系统和游乐/乐园系统要保留未来独立成为酒吧 SaaS、乐园 SaaS 的能力。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>查看本商户基础资料、联系人、空间和合同摘要。</li>
+                <li>查看本商户订单、核销、退款或第三方回流结果。</li>
+                <li>查看与平台口径不一致的对账差异。</li>
+                <li>查看周期内可结算结果。</li>
+                <li>查看与本商户相关的异常、补录和复核记录。</li>
+                <li>在授权范围内操作本商户可用的酒吧、游乐/乐园、供应链、员工、对账和看板功能。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接基础管理，商户身份、合同和经营范围先被定义。</li>
+                <li>连接第三方接入，餐饮和零售商户的 POS 结果回流到平台。</li>
+                <li>连接财务对账，商户核对差异和结算依据。</li>
+                <li>连接权限控制，商户不能看平台全局和其他商户数据。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="thirdparty">
+          <h2>第三方接入：外部系统继续做专业系统，平台拿回结果</h2>
+          <p class="lead">餐饮、零售、机器人、视频监控、企业微信、支付渠道都不需要平台从头自研。当前还没有真实供应商接口资料，所以先开发自己的系统和开放接口：第三方可以在鉴权后读取或回写平台数据；后续拿到第三方 SDK、API 和接口资料后，再把第三方能力接进来。</p>
+          <table class="plain-table">
+            <thead>
+              <tr>
+                <th>第三方类型</th>
+                <th>平台要拿回什么</th>
+                <th>平台不做什么</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>餐饮 POS</td>
+                <td>订单级结果、券核销级结果、退款、日汇总、半日汇总和小时汇总；单店小数据量场景支持实时汇总。</td>
+                <td>不自研完整餐饮 POS。</td>
+              </tr>
+              <tr>
+                <td>零售 POS</td>
+                <td>订单级结果、券核销级结果、退款、日汇总、半日汇总和小时汇总；单店小数据量场景支持实时汇总，商品汇总先预留。</td>
+                <td>不自研完整零售 POS。</td>
+              </tr>
+              <tr>
+                <td>机器人</td>
+                <td>任务创建、取货、配送、送达、失败原因。</td>
+                <td>不做机器人调度内核。</td>
+              </tr>
+              <tr>
+                <td>视频监控</td>
+                <td>摄像头点位、事件时间段、证据索引、调阅记录。</td>
+                <td>不做完整监控平台。</td>
+              </tr>
+              <tr>
+                <td>企业微信</td>
+                <td>员工工作聊天、会话归属、客户、员工、投诉、服务质量、违规命中和质检结果。</td>
+                <td>不替代企业微信，不采集私人微信。</td>
+              </tr>
+              <tr>
+                <td>第三方售票渠道</td>
+                <td>美团、大众点评、抖音团购订单号、票码、支付结果、退款结果、核销结果和差异。</td>
+                <td>先不做第三方营销玩法和完整外部店铺运营。</td>
+              </tr>
+            </tbody>
+          </table>
+          <!-- 修订说明（2026-06-07）：补"机器人配送与扫码交接"和"视频监控 P0 先留点位/时间"两段说明（htmlmap-4）。机器人/视频监控两类第三方此前只在表格里一行带过，未说清留痕方式与 P0 范围；依据本页"留痕与异常""供应链库存"正文（机器人到达=被动留痕、员工扫码交接=主动留痕；后续接入视频后按事件时间和点位自动匹配监控片段）补足，与正文口径一致。 -->
+          <div class="detail-grid" style="margin-top:14px;">
+            <div class="info-block">
+              <h3>机器人配送与扫码交接</h3>
+              <ul>
+                <li>机器人负责把酒水或物品从库房/吧台送到后厨、卡座或客人，平台只拿任务创建、取货、配送、送达和失败原因，不做机器人调度内核。</li>
+                <li>机器人到达是<strong>被动留痕</strong>：由机器人上报的任务状态自动记录时间和点位。</li>
+                <li>每一段交接仍以<strong>员工扫码为主动留痕</strong>：库管出库核验、酒吧后厨接收、服务员取走、送达客人或卡座都要扫平台唯一二维码，形成可追责的全过程链路。</li>
+                <li>机器人上报与人工扫码出现缺口、重复或差异时进入留痕与异常复核。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>视频监控（P0 先留点位/时间）</h3>
+              <ul>
+                <li>当前没有真实监控平台接口资料，平台不自研完整监控平台。</li>
+                <li><strong>P0 先留"点位 + 时间"锚点</strong>：每个关键动作记录发生的设备点位和时间，预留与监控片段对齐的依据。</li>
+                <li>后续接入视频后，系统按事件发生的时间段和点位，自动找到可能对应的监控片段并形成证据索引和调阅记录。</li>
+                <li>调阅监控属敏感操作，必须按权限查看并写入访问留痕。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="risk">
+          <h2>留痕与异常：重要动作留得住，出了问题追得回</h2>
+          <p class="lead">这个子系统是为了避免现场和财务说不清。只要一个动作有过程，就要尽量在业务发生时自动留下记录。比如订单是谁带来的、谁服务了这桌客人、谁第一个处理异常、谁复核关闭，都要能追得回。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>必须关注的动作</h3>
+              <ul>
+                <li>订单从哪里来，是 App、小程序、第三方、销售人员、一体机还是现场工作台。</li>
+                <li>销售归属是谁，是否涉及订台、客户跟进、业绩或提成。</li>
+                <li>卡座或桌台由谁主责服务，谁协助服务，谁加单，谁送达，是否中途换人。</li>
+                <li>核销成功、失败、拒绝、撤销。</li>
+                <li>人工放行、人工补录、主管复核。</li>
+                <li>退款、免单、账单调整。</li>
+                <li>游乐项目暂停、关闭、超容、巡检异常。</li>
+                <li>第三方回流失败、重复、延迟、差异。</li>
+                <li>设备未归还、挂失、跨班次使用。</li>
+                <li>酒水或物品从库房出库、订单核验、机器人取货、后厨接收、服务员送达客人。</li>
+                <li>异常是谁发现的、谁第一个处理、谁转派、谁升级、谁关闭。</li>
+                <li>企业微信会话中的私单、私收款、辱骂、违规承诺、诱导私人微信等内容；会话按可配置留存期限保存（非永久，到期归档/销毁/匿名化）；不脱敏原文仅限最小授权 + 审批的取证/质检场景，普通展示按权限脱敏。<!-- 修订说明（2026-06-08 三轮收口）：原"永久保存"改可配置留存；2026-06-08 复核补充不脱敏原文的最小授权边界。依据 residual-scan-4/A7/C3 --></li>
+                <li>工作手机私装软件、访问非白名单网站、绕过企业微信沟通。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>怎样减少人工填写</h3>
+              <ul>
+                <li>员工登录后，系统自动知道“是谁”。</li>
+                <li>工作手机、平板、一体机绑定点位后，系统自动知道“在哪”。</li>
+                <li>订台、点单、支付、核销、扫码、接单、关闭异常时，系统自动留下时间和动作。</li>
+                <li>机器人、支付、企业微信、第三方接口能上报的，优先由系统自动记录。</li>
+                <li>人工只在异常、退款、免单、调账、放行、补录时填写原因、照片、视频或复核意见。</li>
+                <li>后续接入视频后，系统按事件发生的时间和点位，自动找到可能对应的监控片段。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>处理结果</h3>
+              <ul>
+                <li>普通动作只记录。</li>
+                <li>高风险动作进入复核队列。</li>
+                <li>记录缺失时允许人工补录，但必须写原因和责任人。</li>
+                <li>异常关闭时必须有处理结论。</li>
+                <li>必要时关联视频、企业微信会话、附件或备注作为证据。</li>
+                <li>企业微信会话每天归档后自动进入规则检查，疑似违规进入复核队列。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="finance">
+          <h2>财务对账：把经营事实整理成财务能确认的口径</h2>
+          <p class="lead">财务对账不是只看收了多少钱。它要把订单、退款、核销、酒吧账单、库存消耗、采购成本、报损差异、第三方回流、合同规则放在一起核对，最后形成日结和结算依据。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要功能</h3>
+              <ul>
+                <li>汇总官方 App/小程序、第三方渠道、酒吧、游乐、供应链库存和第三方回流的经营流水。</li>
+                <li>按日生成日结批次。</li>
+                <li>核对平台、支付渠道、商户、第三方结果是否一致。</li>
+                <li>识别金额差异、数量差异、状态差异和缺失差异。</li>
+                <li>按商户、合同、周期形成结算依据。</li>
+                <li>核对采购入库、库存消耗、报损、盘点差异和高价值酒水异常。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>和谁有关</h3>
+              <ul>
+                <li>连接票务，拿订单、退款和核销结果。</li>
+                <li>连接会员积分，确认哪些消费会产生积分和兑换扣减。</li>
+                <li>连接酒吧，拿账单、赠饮、免单和关台结果。</li>
+                <li>连接供应链库存，拿采购、入库、出库、调拨、消耗、存酒和盘点差异。</li>
+                <li>连接游乐，拿项目核销和容量执行结果。</li>
+                <li>连接第三方，拿餐饮、零售、支付渠道回流结果。</li>
+                <li>连接风控，差异调整必须有原因和复核结果。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="analytics">
+          <h2>经营看板：让管理层和运营看得懂、能追问</h2>
+          <p class="lead">看板不是为了好看，而是为了判断综合体经营情况。它要能从总览下钻到票务、酒吧、供应链库存、游乐、商户、异常和对账明细。</p>
+          <div class="detail-grid">
+            <div class="info-block">
+              <h3>主要指标</h3>
+              <ul>
+                <li>收入：售票收入、酒吧收入、第三方回流收入、退款、净收入。</li>
+                <li>客流：入场人数、酒吧入场、游乐核销人数、渠道客流。</li>
+                <li>核销：权益发放数、核销数、核销率、拒绝数、人工放行数。</li>
+                <li>会员：新增会员、积分发放、积分兑换、会员等级分布。</li>
+                <li>供应链：采购到货、库存余额、吧台消耗、缺货预警、盘点差异、存酒余额。</li>
+                <li>风险：待复核、异常事件、补录数量、第三方差异。</li>
+                <li>财务：日结状态、对账差异、结算待确认。</li>
+              </ul>
+            </div>
+            <div class="info-block">
+              <h3>谁会看</h3>
+              <ul>
+                <li>管理层看整体收入、客流、风险、商户表现。</li>
+                <li>运营看今日运行、核销、异常和第三方回流。</li>
+                <li>财务看退款、差异、日结和结算依据。</li>
+                <li>票务、酒吧、游乐负责人看各自业务表现。</li>
+                <li>采购、库管和酒吧店长看采购周期、库存消耗、存酒和盘点差异。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="terminals">
+          <h2>各类入口：不同人只看自己该看的、只做自己该做的</h2>
+          <table class="plain-table">
+            <thead>
+              <tr>
+                <th>入口</th>
+                <th>谁使用</th>
+                <th>主要做什么</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>管理后台</td>
+                <td>管理层、运营、财务、系统管理员</td>
+                <td>配置、查询、复核、对账、看板。</td>
+              </tr>
+              <tr>
+                <td>Web 前端</td>
+                <td>业务人员、管理层、运营、财务、部分商户人员</td>
+                <td>查看经营、票务、酒吧、供应链库存、游乐、异常和对账信息，并允许少量业务确认动作。</td>
+              </tr>
+              <tr>
+                <td>商户侧页面</td>
+                <td>餐饮、零售、酒吧等商户</td>
+                <td>在授权业务范围内全开放，处理本商户经营、供应/库存、对账、结算、员工和看板，不看平台全局。</td>
+              </tr>
+              <tr>
+                <td>现场作业端/员工工作手机</td>
+                <td>现场员工、服务员、游乐入口员工、巡检</td>
+                <td>上岗、领设备、扫二维码核销门票和权益、放行、补录、巡检、库房和酒水交接扫码。</td>
+              </tr>
+              <tr>
+                <td>工作人员平板 App</td>
+                <td>酒吧现场工作人员、服务员</td>
+                <td>只做酒吧点酒下单，绑定酒吧和卡座，校验最低消费，支持扫码支付。</td>
+              </tr>
+              <tr>
+                <td>触摸屏一体机</td>
+                <td>客人、现场工作人员</td>
+                <td>扫码查看和领取权益，也可做订台下单、吧台买酒下单、游乐设施状态查看、定期检修记录和主管确认。</td>
+              </tr>
+              <tr>
+                <td>移动管理端</td>
+                <td>管理层、运营主管</td>
+                <td>看关键指标、处理待办、审批异常和补录。</td>
+              </tr>
+              <tr>
+                <td>客人 App/小程序</td>
+                <td>游客、会员、潜在客户</td>
+                <td>官方购票、预定/订台、查订单、查权益、看积分摘要、出示验票二维码；礼物兑换进入 P1。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="relations">
+          <h2>相互关系：为什么这些子系统必须连在一起</h2>
+          <div class="relation-map">
+            <div class="relation-row">
+              <div class="relation-from">基础管理连所有业务</div>
+              <div class="relation-text">因为票务、酒吧、游乐、商户、员工、设备都必须知道自己属于哪个综合体、哪个项目、哪个空间、哪个商户、由谁负责；如果合同或基础定义不允许，后续流程必须先被卡住，再按配置的更高级审核层级放行。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">票码连防伪核对</div>
+              <div class="relation-text">因为门票二维码不能只是普通图片，必须有防伪串码、签名、有效期和哈希校验，现场防变造，事后核对时能按订单、票号、员工、设备、点位核对。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">票务连酒吧</div>
+              <div class="relation-text">因为客人自己购买的门票或套餐里可能送酒水，酒吧必须知道这个赠饮权益是否有效、是否已经核销。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">供应链连酒吧</div>
+              <div class="relation-text">因为酒吧吧台卖酒、按杯出品、按瓶出品、赠饮、兑换、报损和客人存酒，都会改变酒水数量和库存状态。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">供应链连基础管理</div>
+              <div class="relation-text">因为供应商、供应合同、库房、库位、采购人员、库管和审批权限都要先在基础管理中定义清楚。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">供应链连票务权益</div>
+              <div class="relation-text">因为门票赠饮、积分兑换礼物和其他权益领取，可能需要扣减酒水、礼品或消耗品库存。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">供应链连财务</div>
+              <div class="relation-text">因为采购成本、库存消耗、报损、盘点差异、存酒余额和供应合同，会影响日结、成本判断和经营复盘。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">供应链连留痕</div>
+              <div class="relation-text">因为高价值酒水报损、盘点差异、存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">票务连游乐</div>
+              <div class="relation-text">因为通票里可能包含游乐项目，游乐入口要判断客人能不能进、场次容量够不够。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">平板连酒吧</div>
+              <div class="relation-text">因为平板只负责酒吧点酒下单，必须绑定具体酒吧和卡座，并按时间、卡座和位置校验最低消费后才能提交。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">工作手机连留痕</div>
+              <div class="relation-text">因为门票核销、赠饮领取、权益领取、企业微信沟通、人工放行、补录、巡检、设备异常、订单销售归属、卡座服务责任、异常第一处理人都可能影响责任和服务质量，必须留下记录。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">工作手机连设备管控</div>
+              <div class="relation-text">因为正式发放的受管工作手机只能安装预装软件，只能访问白名单网站，并且工作沟通必须使用企业微信，设备策略和违规访问也要进入后台审计。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">第三方连财务</div>
+              <div class="relation-text">因为美团、大众点评、抖音、餐饮、零售、支付渠道等外部系统产生的订单、退款和核销结果，也要进入平台统一对账。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">会员积分连客人端</div>
+              <div class="relation-text">因为客人消费后会产生积分和等级成长，App 和小程序必须展示一致的积分摘要；积分明细、礼物列表、兑换发起和兑换记录进入 P1，兑换扣库存规则仍由积分和供应链底层承载。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">一体机连权益</div>
+              <div class="relation-text">因为客人领取赠饮、礼物或其他权益时，需要扫码后在一体机上清楚看到能领什么、能领多少、是否已经领取，并把领取结果回写到权益记录。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">一体机连酒吧</div>
+              <div class="relation-text">因为一体机可以做订台和吧台买酒下单，必须把卡座、桌台、吧台位、商品、金额、支付和服务责任写回酒吧账单。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">一体机连游乐</div>
+              <div class="relation-text">因为客人和员工需要在现场触摸屏上看到游乐设施是否开放、是否排队、是否暂停或故障，工程师的定期检修和主管的恢复营业确认也要进入游乐异常和巡检记录。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">风控连财务</div>
+              <div class="relation-text">因为退款、免单、调账、差异处理如果没有复核和原因，财务不能放心确认。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">财务连看板</div>
+              <div class="relation-text">因为管理层不能只看销售数字，还要知道这些数字是否已日结、是否有差异、是否能结算。</div>
+            </div>
+            <div class="relation-row">
+              <div class="relation-from">看板连各入口</div>
+              <div class="relation-text">因为管理层、运营、财务、商户看到的是同一套经营事实，只是权限和展示范围不同。</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="questions">
+          <h2>已确认规则和实施前输入项</h2>
+          <p class="lead">下面把已经确认的经营规则和后续排期内容分开。已确认内容进入后续页面和编码规则；实施输入按合同、供应商资料、账号配置和上线参数落地。</p>
+          <div class="question-list">
+            <div class="question confirmed">已拍板：官方购票入口 App 和小程序同步建设；门票只能由客人自己购买。</div>
+            <div class="question confirmed">已拍板：美团、大众点评、抖音先接团购购票、订单回流、核销和对账。</div>
+            <div class="question confirmed">已拍板：积分兑换礼物需要扣减库存，兑换结果进入库存、权益和看板。</div>
+            <div class="question confirmed">已拍板：通票包括酒吧通票、游乐通票、酒吧+游乐通票，以及含餐饮/零售优惠折扣的组合通票。</div>
+            <div class="question confirmed">已拍板：订台入口包括 App、小程序、一体机和销售人员，订台需要定金。</div>
+            <div class="question confirmed">已拍板：吧台买酒优先线上支付，同时必须允许现金和 POS 机支付并进入对账。</div>
+            <div class="question confirmed">已拍板：供应合同分平台自用、商户自采、平台统一采购分销三种模式。</div>
+            <div class="question confirmed">已拍板：客人存酒按瓶底标签数值、拍照、人工备注、手机号和姓名/昵称管理。</div>
+            <div class="question confirmed">已拍板：游乐容量 P0 按具体项目、具体场次/时段、点位/设备控制。</div>
+            <div class="question confirmed">已拍板：餐饮/零售第三方同时支持订单级和券核销级回流，并支持日、半日、小时和单店实时汇总。</div>
+            <div class="question confirmed">已拍板：票务二维码按日票、周票、月票、年票等票种设置有效期，30 秒或 60 秒刷新，截图无效，必须在线核验。</div>
+            <div class="question confirmed">已拍板：员工私人手机 App 使用设备凭证绑定（Keystore 设备公钥/不可逆设备指纹），不读取手机本机 NFC 唯一标识；换手机先解绑旧设备凭证再绑定新设备。</div>
+            <div class="question confirmed">已拍板：私人手机 Root/调试/异常环境判为不可信并失效复核；办公区寄存柜流动使用、先到先选、离开拿走。</div>
+            <div class="question confirmed">已拍板：职级可按 M1-M10，并可分上中下；职级只给薪资大范围，具体薪资仍需单独填写。</div>
+            <div class="question confirmed">已拍板：工作手机预装软件清单和网站白名单由后台维护，通过 Android Enterprise / Android Management API + 商业 MDM 阻止违规访问并留痕。</div>
+            <div class="question confirmed">已拍板：Web 前端允许少量业务确认动作。</div>
+            <div class="question confirmed">已拍板：会员积分、等级成长和兑换规则由后台定义。</div>
+            <div class="question confirmed">已拍板：新人优惠、学生票、多人票由后台配置规则，符合规则自动判断，不符合规则不能使用。</div>
+            <div class="question confirmed">已拍板：酒吧最低消费按时间、卡座和位置配置，原则上不按人数。</div>
+            <div class="question confirmed">已拍板：供应链 P0 从酒类、吧台消耗、客人存酒和纸巾、色盅、色子、杯子等常用消耗品开始。</div>
+            <div class="question confirmed">已拍板：吧台按杯销售按标准出酒量/容量扣减，超出部分记损耗，损耗严重进入核查。</div>
+            <div class="question confirmed">已拍板：高价值酒水报损、盘点差异、存酒作废必须主管复核，并拍照/视频留证。</div>
+            <div class="question confirmed">已拍板：一体机游乐检修由工程师填写，检修单位作为供应商记录，主管确认后才能恢复营业。</div>
+            <div class="question confirmed">已拍板：人工放行、免单、退款、调账按可配置层级主管复核。</div>
+            <div class="question confirmed">已拍板：合同或基础定义违规全部先卡住流程，允许更高级审核后放行。</div>
+            <div class="question confirmed">已拍板：企业微信会话原文按可配置留存期限保存（非永久，到期归档/销毁/匿名化）；不脱敏原文仅限最小授权 + 审批的取证/质检场景，普通展示按权限脱敏，查看写审计。<!-- 修订说明（2026-06-08 三轮收口）：原"永久保存"按 A7/合规§4 C3 改为可配置留存；2026-06-08 复核补充不脱敏原文的最小授权边界。依据 residual-scan-4 --></div>
+            <div class="question confirmed">已拍板：未来需要集团视图和跨项目汇总视图，但优先级不高，P0 先做好项目归属。</div>
+            <div class="question confirmed">已拍板：商户侧在授权业务范围内全开放，酒吧和游乐/乐园保留独立 SaaS 能力。</div>
+            <div class="question confirmed">已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。</div>
+            <div class="question confirmed">已拍板：员工权限按单一功能最小颗粒度配置，支持角色和员工级完全自定义。</div>
+            <div class="question confirmed">已拍板：第三方接口资料当前未确定，先完成自有系统和开放 API/Webhook/SDK 示例，后续再接第三方 SDK/API。</div>
+            <div class="question confirmed">已拍板：所有有过程的业务动作都必须留痕，酒水和可追责物品从库房到客人的全过程必须扫码或设备事件追溯。</div>
+            <div class="question confirmed">已拍板：留痕不只限于物品交接，订单获取、销售归属、卡座服务、异常第一处理人、转派升级、复核关闭、退款、免单、调账也都要进入留痕。</div>
+            <div class="question confirmed">已拍板：留痕要尽量自动生成，优先用登录、设备绑定、点位、班次、扫码、支付回调、机器人状态、企业微信和第三方回流记录，人工只补原因和证据。</div>
+            <div class="question confirmed">已拍板：所有端都必须有后台开关，关闭后该端或模块不可用，打开后仍受权限和数据范围控制。</div>
+          </div>
+        </section>
+
+        <!-- 修订说明（2026-06-07）：footer 补"生成日期 + 依据"（htmlmap-3），便于追溯本说明地图所依据的权威来源；依据 product-requirements-v0.1.md 与各业务域 PRD，跨文档口径以 unified-standards-baseline-v0.1.md 为准。 -->
+        <p class="footer-note">文档版本：V0.1。生成日期：2026-06-07。用途：给不懂产品和技术的业务人员理解综合体管理系统范围。<br>依据：product-requirements-v0.1.md 及各业务域 PRD（票务/酒吧/供应链/游乐/留痕等）；跨文档统一口径以 unified-standards-baseline-v0.1.md 为准。</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const links = Array.from(document.querySelectorAll(".nav a"));
+    const sections = links
+      .map((link) => document.querySelector(link.getAttribute("href")))
+      .filter(Boolean);
+
+    function setActive() {
+      const offset = 120;
+      let current = sections[0];
+
+      sections.forEach((section) => {
+        const top = section.getBoundingClientRect().top;
+        if (top <= offset) current = section;
+      });
+
+      links.forEach((link) => {
+        link.classList.toggle("active", link.getAttribute("href") === `#${current.id}`);
+      });
+    }
+
+    window.addEventListener("scroll", setActive, { passive: true });
+    setActive();
+  </script>
+</body>
+</html>

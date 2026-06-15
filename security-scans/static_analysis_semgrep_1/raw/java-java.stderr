@@ -1,0 +1,3 @@
+Usage: semgrep scan [--help] [OPTION]… [TARGETS]…
+semgrep scan: option '--severity': invalid value 'CRITICAL', expected one of
+              'INFO', 'WARNING' or 'ERROR'

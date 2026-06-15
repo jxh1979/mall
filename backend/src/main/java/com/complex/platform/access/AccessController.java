@@ -1,0 +1,132 @@
+package com.complex.platform.access;
+
+import com.complex.platform.access.dto.AccessUserRequest;
+import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
+import com.complex.platform.access.dto.PermissionTemplateRequest;
+import com.complex.platform.access.dto.RoleRequest;
+import com.complex.platform.access.dto.StatusChangeRequest;
+import com.complex.platform.access.dto.TemporaryGrantRequest;
+import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.ApiResponse;
+import com.complex.platform.common.api.PageResponse;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/access")
+public class AccessController {
+
+    private final AccessService service;
+    private final AuthorizationService authorizationService;
+
+    public AccessController(AccessService service, AuthorizationService authorizationService) {
+        this.service = service;
+        this.authorizationService = authorizationService;
+    }
+
+    @GetMapping("/permission-templates")
+    public ApiResponse<PageResponse<PermissionTemplate>> listPermissionTemplates() {
+        authorizationService.requirePermission("access.permission_template.view");
+        return ApiResponse.ok(service.listPermissionTemplates());
+    }
+
+    @PostMapping("/permission-templates")
+    public ApiResponse<PermissionTemplate> createPermissionTemplate(@RequestBody PermissionTemplateRequest request) {
+        authorizationService.requirePermission("access.permission_template.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createPermissionTemplate(request));
+    }
+
+    @PutMapping("/permission-templates/{id}")
+    public ApiResponse<PermissionTemplate> updatePermissionTemplate(
+            @PathVariable String id,
+            @RequestBody PermissionTemplateRequest request
+    ) {
+        authorizationService.requirePermission("access.permission_template.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updatePermissionTemplate(id, request));
+    }
+
+    @PostMapping("/permission-templates/{id}/apply")
+    public ApiResponse<PermissionTemplateApplyResult> applyPermissionTemplate(
+            @PathVariable String id,
+            @RequestBody PermissionTemplateApplyRequest request
+    ) {
+        authorizationService.requirePermission("access.permission_template.apply");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.applyPermissionTemplate(id, request));
+    }
+
+    @PostMapping("/permission-templates/{id}/copy")
+    public ApiResponse<PermissionTemplate> copyPermissionTemplate(
+            @PathVariable String id,
+            @RequestBody PermissionTemplateRequest request
+    ) {
+        authorizationService.requirePermission("access.permission_template.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.copyPermissionTemplate(id, request));
+    }
+
+    @GetMapping("/permissions")
+    public ApiResponse<PageResponse<PermissionDefinition>> listPermissions() {
+        authorizationService.requirePermission("access.permission.view");
+        return ApiResponse.ok(service.listPermissions());
+    }
+
+    @GetMapping("/roles")
+    public ApiResponse<PageResponse<RoleRecord>> listRoles() {
+        authorizationService.requirePermission("access.role.view");
+        return ApiResponse.ok(service.listRoles());
+    }
+
+    @PostMapping("/roles")
+    public ApiResponse<RoleRecord> createRole(@RequestBody RoleRequest request) {
+        authorizationService.requirePermission("access.role.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createRole(request));
+    }
+
+    @PostMapping("/temporary-grants")
+    public ApiResponse<TemporaryGrant> createTemporaryGrant(@RequestBody TemporaryGrantRequest request) {
+        authorizationService.requirePermission("access.temporary_grant.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        if (request.validUntil() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "valid_until is required");
+        }
+        return ApiResponse.ok(service.createTemporaryGrant(request));
+    }
+
+    @PostMapping("/temporary-grants/{id}/revoke")
+    public ApiResponse<TemporaryGrant> revokeTemporaryGrant(
+            @PathVariable String id,
+            @RequestBody StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("access.temporary_grant.revoke");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.revokeTemporaryGrant(id, request));
+    }
+
+    @GetMapping("/users")
+    public ApiResponse<PageResponse<AccessUser>> listAccessUsers() {
+        authorizationService.requirePermission("access.user.view");
+        return ApiResponse.ok(service.listAccessUsers());
+    }
+
+    @PostMapping("/users")
+    public ApiResponse<AccessUser> createAccessUser(@RequestBody AccessUserRequest request) {
+        authorizationService.requirePermission("access.user.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createAccessUser(request));
+    }
+
+    private void requireIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
+        }
+    }
+}

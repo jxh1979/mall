@@ -1,0 +1,18 @@
+# P0-A no-system-write boundary
+# P0A_SCHEDULE_TEMPLATE
+#
+# This is a non-installing schedule template. Codex must not install it.
+# IT-only install step: IT may translate this into a managed timer or cron entry
+# during a controlled maintenance window, then attach evidence to the production
+# readiness ledger.
+
+DESCRIPTION="Complex P0-A NAS backup schedule"
+CADENCE="daily"
+RUN_AS="james"
+WORKDIR="/home/james/complex-management"
+
+COMMAND="NAS_BACKUP_TARGET_DIR=/mnt/complex-nas-backup REQUIRE_NAS_BACKUP_SYNC=true ALLOW_UNENCRYPTED_BACKUPS=true RETENTION_DAYS=30 /opt/complex/scripts/complex-backup.sh scheduled"
+
+PRECHECK="/home/james/complex-management/ops/160/complex-nas-preflight.sh"
+VERIFY_AFTER="npm run verify:ops160-recovery"
+ROLLBACK="disable the installed schedule through the IT-managed scheduler and run a manual backup"

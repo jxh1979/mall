@@ -1,0 +1,19 @@
+# P0-A no-system-write boundary
+# P0A_ALERT_TEMPLATE
+#
+# This file contains secret reference only placeholders. It must not contain
+# webhook URLs, SMTP passwords, API tokens, or private keys.
+
+ALERT_POLICY_NAME="complex-p0a-backup-alerts"
+WECOM_WEBHOOK_REF="cred://prod/alert/wecom/complex-backup"
+EMAIL_RECIPIENTS_REF="cred://prod/alert/email/complex-ops"
+
+EVENT_BACKUP_FAILED="backup_failed"
+EVENT_CAPACITY_THRESHOLD_EXCEEDED="capacity_threshold_exceeded"
+EVENT_RESTORE_DRILL_FAILED="restore_drill_failed"
+EVENT_CREDENTIAL_EXPIRING="credential_expiring"
+
+CAPACITY_WARNING_PERCENT="80"
+CAPACITY_CRITICAL_PERCENT="90"
+EXPECTED_ACK_OWNER="IT/ops"
+FALLBACK_CHANNEL="email"

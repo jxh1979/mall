@@ -1,0 +1,1330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  parentId  String?
+  orgType   String
+  name      String
+  shortName String?
+  code      String?  @unique
+  status    String   @default("active")
+  sortOrder Int      @default(0)
+  remark    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  merchants        Merchant[]
+  serviceProviders ServiceProvider[]
+}
+
+model Merchant {
+  id                String   @id @default(cuid())
+  organizationId    String
+  merchantType      String
+  companyName       String
+  displayName       String
+  businessLicenseNo String?
+  legalPerson       String?
+  contactName       String?
+  contactPhone      String?
+  contactEmail      String?
+  settlementStatus  String   @default("normal")
+  riskLevel         String   @default("normal")
+  status            String   @default("pending")
+  remark            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  brands       Brand[]
+  venues       Venue[]
+  openApps     OpenApp[]
+  auditEvents  AuditEvent[]
+}
+
+model ServiceProvider {
+  id             String   @id @default(cuid())
+  organizationId String
+  providerType   String
+  name           String
+  contactName    String?
+  contactPhone   String?
+  status         String   @default("active")
+  remark         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  openApps     OpenApp[]
+}
+
+model Brand {
+  id         String   @id @default(cuid())
+  merchantId String
+  name       String
+  brandType  String
+  logoUrl    String?
+  status     String   @default("active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+  venues   Venue[]
+}
+
+model Venue {
+  id            String   @id @default(cuid())
+  merchantId    String
+  brandId       String?
+  venueType     String
+  name          String
+  code          String?  @unique
+  floor         String?
+  addressDesc   String?
+  capacity      Int?
+  businessHours String?
+  status        String   @default("preparing")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+  brand    Brand?   @relation(fields: [brandId], references: [id])
+  areas    Area[]
+  openApps OpenApp[]
+}
+
+model Area {
+  id        String   @id @default(cuid())
+  parentId  String?
+  venueId   String?
+  name      String
+  areaType  String
+  floor     String?
+  capacity  Int?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  venue          Venue?          @relation(fields: [venueId], references: [id])
+  locationPoints LocationPoint[]
+}
+
+model LocationPoint {
+  id         String   @id @default(cuid())
+  areaId     String
+  venueId    String?
+  merchantId String?
+  pointType  String
+  name       String
+  code       String?  @unique
+  capacity   Int?
+  status     String   @default("active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  area Area @relation(fields: [areaId], references: [id])
+}
+
+model UserAccount {
+  id               String   @id @default(cuid())
+  username         String   @unique
+  phone            String?
+  passwordHash     String
+  accountType      String
+  organizationId   String?
+  merchantId       String?
+  staffProfileId   String?
+  lastLoginAt      DateTime?
+  failedLoginCount Int      @default(0)
+  lockedUntil      DateTime?
+  status           String   @default("pending")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+}
+
+model StaffProfile {
+  id               String   @id @default(cuid())
+  organizationId   String
+  merchantId       String?
+  venueId          String?
+  employeeNo       String?  @unique
+  name             String
+  phone            String?
+  positionId       String?
+  employmentStatus String   @default("active")
+  entryDate        DateTime?
+  resignDate       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String?
+  roleCode       String   @unique
+  roleName       String
+  roleType       String
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+}
+
+model Permission {
+  id             String   @id @default(cuid())
+  permissionCode String   @unique
+  permissionName String
+  permissionType String
+  resource       String
+  action         String
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+}
+
+model DataScope {
+  id             String   @id @default(cuid())
+  ownerType      String
+  ownerId        String
+  scopeType      String
+  scopeId        String
+  permissionMode String
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Device {
+  id              String   @id @default(cuid())
+  deviceType      String
+  deviceCode      String   @unique
+  imei            String?
+  serialNo        String?
+  merchantId      String?
+  venueId         String?
+  areaId          String?
+  locationPointId String?
+  providerId      String?
+  status          String   @default("idle")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+}
+
+model OpenApp {
+  id                String   @id @default(cuid())
+  appCode           String   @unique
+  appName           String
+  appType           String
+  merchantId        String?
+  serviceProviderId String?
+  venueId           String?
+  contactName       String?
+  contactPhone      String?
+  callbackUrl       String?
+  ipWhitelist       String?
+  status            String   @default("draft")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  merchant        Merchant?        @relation(fields: [merchantId], references: [id])
+  serviceProvider ServiceProvider? @relation(fields: [serviceProviderId], references: [id])
+  venue           Venue?           @relation(fields: [venueId], references: [id])
+  credentials     OpenAppCredential[]
+  authSessions    AuthSession[]
+  accessTokens     AccessToken[]
+  dynamicEndpoints DynamicEndpoint[]
+  auditEvents      AuditEvent[]
+}
+
+model OpenAppCredential {
+  id               String   @id @default(cuid())
+  openAppId        String
+  loginAccount     String   @unique
+  passwordHash     String
+  secretEncrypted  String
+  secretMasked     String
+  failedAuthCount  Int      @default(0)
+  lastFailedAt     DateTime?
+  lockedAt         DateTime?
+  status           String   @default("active")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  openApp OpenApp @relation(fields: [openAppId], references: [id])
+}
+
+model AuthSession {
+  id              String   @id @default(cuid())
+  openAppId       String
+  credentialId    String
+  authIp          String?
+  userAgent       String?
+  authenticatedAt DateTime
+  expiresAt       DateTime
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  openApp OpenApp @relation(fields: [openAppId], references: [id])
+}
+
+model AccessToken {
+  id            String   @id @default(cuid())
+  openAppId     String
+  authSessionId String
+  tokenHash     String   @unique
+  issuedAt      DateTime
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  openApp OpenApp @relation(fields: [openAppId], references: [id])
+}
+
+model DynamicEndpoint {
+  id            String   @id @default(cuid())
+  openAppId     String
+  authSessionId String
+  endpointKey   String   @unique
+  endpointPath  String
+  issuedAt      DateTime
+  expiresAt     DateTime
+  rotatedAt     DateTime?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  openApp OpenApp @relation(fields: [openAppId], references: [id])
+}
+
+model AuthFailureRecord {
+  id            String   @id @default(cuid())
+  openAppId     String?
+  loginAccount  String
+  failureType   String
+  ip            String?
+  userAgent     String?
+  occurredAt    DateTime
+  failureReason String?
+  createdAt     DateTime @default(now())
+}
+
+model AppLockRecord {
+  id           String   @id @default(cuid())
+  openAppId    String
+  credentialId String?
+  lockedReason String
+  failedCount  Int
+  lockedAt     DateTime
+  lockedBy     String
+  status       String   @default("locked")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ManualUnlockRecord {
+  id           String   @id @default(cuid())
+  lockRecordId String
+  openAppId    String
+  unlockedBy   String
+  unlockedAt   DateTime
+  reason       String
+  reviewResult String
+  createdAt    DateTime @default(now())
+}
+
+model ApiCallLog {
+  id              String   @id @default(cuid())
+  openAppId       String?
+  apiResourceId   String?
+  apiVersion      String?
+  requestId       String?
+  traceId         String?
+  ip              String?
+  method          String?
+  path            String?
+  requestSummary  String?
+  responseSummary String?
+  statusCode      Int?
+  businessCode    String?
+  durationMs      Int?
+  result          String
+  occurredAt      DateTime
+  createdAt       DateTime @default(now())
+}
+
+model ThirdPartyOrderSync {
+  id                 String   @id @default(cuid())
+  businessType       String
+  syncType           String   @default("order")
+  externalBusinessId String
+  merchantId         String?
+  venueId            String?
+  amount             Int      @default(0)
+  currency           String   @default("CNY")
+  status             String   @default("synced")
+  occurredAt         DateTime
+  payload            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([businessType, syncType, externalBusinessId])
+}
+
+model ThirdPartyVoucherVerification {
+  id                     String   @id @default(cuid())
+  businessType           String
+  externalVerificationId String
+  merchantId             String?
+  venueId                String?
+  entitlementCode        String?
+  amount                 Int      @default(0)
+  status                 String   @default("verified")
+  resultReason           String?
+  payload                String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([businessType, externalVerificationId])
+}
+
+model IntegrationRetryTask {
+  id              String   @id @default(cuid())
+  businessType    String
+  taskType        String
+  referenceId     String?
+  status          String   @default("pending")
+  attemptCount    Int      @default(0)
+  maxAttempts     Int      @default(3)
+  nextRunAt       DateTime?
+  lastError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model IntegrationCompensationTask {
+  id            String   @id @default(cuid())
+  businessType  String
+  taskType      String
+  referenceId   String?
+  status        String   @default("open")
+  reason        String
+  resolvedBy    String?
+  resolvedAt    DateTime?
+  resolution    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ReconciliationBatch {
+  id               String   @id @default(cuid())
+  businessType     String
+  reconDate        String
+  sourceType       String   @default("manual")
+  platformCount    Int      @default(0)
+  thirdPartyCount  Int      @default(0)
+  platformAmount   Int      @default(0)
+  thirdPartyAmount Int      @default(0)
+  diffCount        Int      @default(0)
+  status           String   @default("matched")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ReconciliationDifference {
+  id                 String   @id @default(cuid())
+  batchId            String
+  businessType        String
+  diffType            String
+  platformBusinessId  String?
+  externalBusinessId  String?
+  platformValue       String?
+  thirdPartyValue     String?
+  status              String   @default("open")
+  resolvedBy          String?
+  resolvedAt          DateTime?
+  resolution          String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model IntegrationSku {
+  id            String   @id @default(cuid())
+  businessType  String
+  externalSkuId String
+  merchantId    String?
+  venueId       String?
+  skuCode       String
+  skuName       String
+  category      String?
+  priceAmount   Int      @default(0)
+  currency      String   @default("CNY")
+  status        String   @default("active")
+  payload       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessType, externalSkuId])
+}
+
+model RobotTask {
+  id                String   @id @default(cuid())
+  taskNo            String   @unique
+  integrationAppId  String?
+  externalTaskId    String?  @unique
+  merchantId        String?
+  venueId           String?
+  taskType          String   @default("delivery")
+  pickupLocation    String?
+  dropoffLocation   String?
+  assignedRobotCode String?
+  priority          Int      @default(0)
+  status            String   @default("pending")
+  scheduledAt       DateTime?
+  acceptedAt        DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  signedAt          DateTime?
+  cancelledAt       DateTime?
+  abnormalReason    String?
+  payload           String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model RobotTaskEvent {
+  id            String   @id @default(cuid())
+  eventKey      String   @unique
+  robotTaskId   String
+  externalEventId String?
+  eventType     String
+  taskStatus    String
+  occurredAt    DateTime
+  payload       String?
+  createdAt     DateTime @default(now())
+}
+
+model CameraDevice {
+  id              String   @id @default(cuid())
+  cameraCode      String   @unique
+  externalCameraId String?
+  deviceId        String?
+  merchantId      String?
+  venueId         String?
+  areaId          String?
+  locationPointId String?
+  cameraName      String
+  provider        String?
+  streamUrl       String?
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model VideoEvidenceLink {
+  id            String   @id @default(cuid())
+  evidenceNo    String   @unique
+  cameraId      String?
+  eventType     String
+  eventId       String?
+  objectType    String?
+  objectId      String?
+  snapshotUrl   String?
+  clipUrl       String?
+  capturedAt    DateTime
+  status        String   @default("bound")
+  viewCount     Int      @default(0)
+  lastViewedAt  DateTime?
+  payload       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model WecomBinding {
+  id             String   @id @default(cuid())
+  corpId         String
+  staffUserId    String
+  userId         String?
+  staffId        String?
+  merchantId     String?
+  externalUserId String?
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([corpId, staffUserId])
+}
+
+model WecomConversation {
+  id                 String   @id @default(cuid())
+  conversationKey    String   @unique
+  corpId             String
+  merchantId         String?
+  staffUserId        String
+  externalCustomerId String?
+  customerName       String?
+  status             String   @default("active")
+  startedAt          DateTime?
+  lastMessageAt      DateTime?
+  payload            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model WecomMessage {
+  id               String   @id @default(cuid())
+  msgId            String   @unique
+  conversationId   String
+  senderType       String
+  senderId         String?
+  contentType      String   @default("text")
+  content          String?
+  sanitizedContent String?
+  riskLevel        String   @default("normal")
+  sentAt           DateTime
+  payload          String?
+  createdAt        DateTime @default(now())
+}
+
+model WecomRiskHit {
+  id             String   @id @default(cuid())
+  conversationId String?
+  messageId      String?
+  ruleCode       String
+  riskType       String
+  riskLevel      String   @default("normal")
+  keyword        String?
+  summary        String
+  status         String   @default("open")
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  reviewResult   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DeviceIntegrationEvent {
+  id               String   @id @default(cuid())
+  eventKey         String   @unique
+  deviceId         String?
+  merchantId       String?
+  venueId          String?
+  locationPointId  String?
+  externalDeviceId String?
+  deviceCode       String?
+  eventType        String
+  eventSeq         String
+  status           String   @default("received")
+  occurredAt       DateTime
+  payload          String?
+  createdAt        DateTime @default(now())
+}
+
+model DeviceOfflineSyncBatch {
+  id            String   @id @default(cuid())
+  batchNo       String   @unique
+  deviceId      String?
+  deviceCode    String?
+  totalCount    Int      @default(0)
+  acceptedCount Int      @default(0)
+  rejectedCount Int      @default(0)
+  status        String   @default("accepted")
+  payload       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AuditEvent {
+  id              String   @id @default(cuid())
+  eventType       String
+  eventCategory   String
+  occurredAt      DateTime
+  receivedAt      DateTime
+  sourceType      String
+  sourceSystem    String?
+  merchantId      String?
+  venueId         String?
+  areaId          String?
+  locationPointId String?
+  actorType       String?
+  actorId         String?
+  deviceId        String?
+  customerId      String?
+  orderId         String?
+  ticketId        String?
+  entitlementId   String?
+  inventoryItemId String?
+  robotTaskId     String?
+  conversationId  String?
+  videoEvidenceId String?
+  openAppId       String?
+  result          String   @default("success")
+  riskLevel       String   @default("normal")
+  summary         String
+  payload         String?
+  rawPayloadId    String?
+  traceId         String?
+  previousEventId String?
+  createdAt       DateTime @default(now())
+
+  merchant Merchant? @relation(fields: [merchantId], references: [id])
+  openApp  OpenApp?  @relation(fields: [openAppId], references: [id])
+}
+
+model TicketProduct {
+  id          String   @id @default(cuid())
+  productCode String  @unique
+  productName String
+  productType String
+  priceAmount Int     @default(0)
+  currency    String  @default("CNY")
+  status      String  @default("draft")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  productEntitlements ProductEntitlement[]
+  issuedTickets       IssuedTicket[]
+}
+
+model EntitlementTemplate {
+  id                 String   @id @default(cuid())
+  name               String
+  entitlementType    String
+  merchantId         String?
+  venueId            String?
+  projectId          String?
+  defaultTotalTimes  Int      @default(1)
+  defaultValueAmount Int      @default(0)
+  status             String   @default("active")
+  description        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  deletedAt          DateTime?
+
+  productEntitlements ProductEntitlement[]
+  issuedEntitlements  IssuedEntitlement[]
+}
+
+model ProductEntitlement {
+  id                    String @id @default(cuid())
+  ticketProductId        String
+  entitlementTemplateId  String
+  quantity               Int    @default(1)
+  totalTimes             Int    @default(1)
+  valueAmount            Int    @default(0)
+  sortOrder              Int    @default(0)
+
+  ticketProduct       TicketProduct       @relation(fields: [ticketProductId], references: [id])
+  entitlementTemplate EntitlementTemplate @relation(fields: [entitlementTemplateId], references: [id])
+}
+
+model IssuedTicket {
+  id            String   @id @default(cuid())
+  ticketCode    String   @unique
+  ticketProductId String
+  purchaserName String?
+  purchaserPhone String?
+  status        String   @default("active")
+  issuedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ticketProduct      TicketProduct       @relation(fields: [ticketProductId], references: [id])
+  issuedEntitlements IssuedEntitlement[]
+}
+
+model IssuedEntitlement {
+  id                    String   @id @default(cuid())
+  entitlementCode        String   @unique
+  issuedTicketId         String
+  entitlementTemplateId  String
+  entitlementType        String
+  merchantId             String?
+  venueId                String?
+  projectId              String?
+  totalTimes             Int      @default(1)
+  usedTimes              Int      @default(0)
+  valueAmount            Int      @default(0)
+  status                 String   @default("active")
+  validFrom              DateTime?
+  validTo                DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  issuedTicket        IssuedTicket        @relation(fields: [issuedTicketId], references: [id])
+  entitlementTemplate EntitlementTemplate @relation(fields: [entitlementTemplateId], references: [id])
+  verificationRecords VerificationRecord[]
+}
+
+model VerificationRecord {
+  id                 String   @id @default(cuid())
+  verificationNo     String   @unique
+  issuedEntitlementId String
+  merchantId         String?
+  venueId            String?
+  projectId          String?
+  staffId            String?
+  deviceId           String?
+  source             String   @default("backend")
+  status             String
+  resultReason       String?
+  createdAt          DateTime @default(now())
+
+  issuedEntitlement IssuedEntitlement @relation(fields: [issuedEntitlementId], references: [id])
+  settlementItems   SettlementItem[]
+}
+
+model SettlementItem {
+  id                  String   @id @default(cuid())
+  verificationRecordId String
+  merchantId          String?
+  amount              Int      @default(0)
+  status              String   @default("pending")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  verificationRecord VerificationRecord @relation(fields: [verificationRecordId], references: [id])
+}
+
+model SettlementBill {
+  id          String   @id @default(cuid())
+  billNo      String   @unique
+  merchantId  String?
+  totalAmount Int      @default(0)
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BarTable {
+  id             String   @id @default(cuid())
+  merchantId     String?
+  venueId        String?
+  tableCode      String   @unique
+  tableName      String
+  capacity       Int?
+  minSpendAmount Int      @default(0)
+  status         String   @default("idle")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  orders BarOrder[]
+}
+
+model BarProduct {
+  id          String   @id @default(cuid())
+  merchantId  String?
+  venueId     String?
+  category    String
+  productName String
+  priceAmount Int      @default(0)
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems     BarOrderItem[]
+  inventoryFlows BarInventoryFlow[]
+  stockMovements BarStockMovement[]
+  savedBottles   SavedBottle[]
+}
+
+model BarInventoryFlow {
+  id         String   @id @default(cuid())
+  merchantId String?
+  venueId    String?
+  productId  String?
+  flowType   String
+  quantity   Int
+  reason     String?
+  operatorId String?
+  createdAt  DateTime @default(now())
+
+  product BarProduct? @relation(fields: [productId], references: [id])
+}
+
+model BarInventoryItem {
+  id          String   @id @default(cuid())
+  merchantId  String?
+  venueId     String?
+  itemCode    String   @unique
+  itemName    String
+  category    String   @default("drink")
+  unit        String   @default("bottle")
+  status      String   @default("active")
+  minQuantity Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  balances  BarStockBalance[]
+  movements BarStockMovement[]
+}
+
+model BarStockBalance {
+  id           String   @id @default(cuid())
+  merchantId   String?
+  venueId      String?
+  itemId       String
+  locationType String   @default("warehouse_stock")
+  quantity     Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  item BarInventoryItem @relation(fields: [itemId], references: [id])
+
+  @@unique([itemId, merchantId, venueId, locationType])
+}
+
+model BarStockMovement {
+  id                 String   @id @default(cuid())
+  movementNo         String   @unique
+  merchantId          String?
+  venueId             String?
+  itemId              String
+  productId           String?
+  movementType        String
+  quantity            Int
+  fromLocationType    String?
+  toLocationType      String?
+  beforeFromQuantity  Int?
+  afterFromQuantity   Int?
+  beforeToQuantity    Int?
+  afterToQuantity     Int?
+  reason              String?
+  status              String   @default("confirmed")
+  operatorId          String?
+  referenceType       String?
+  referenceId         String?
+  createdAt           DateTime @default(now())
+
+  item    BarInventoryItem @relation(fields: [itemId], references: [id])
+  product BarProduct?      @relation(fields: [productId], references: [id])
+}
+
+model SavedBottle {
+  id              String   @id @default(cuid())
+  savedNo         String   @unique
+  merchantId      String?
+  venueId         String?
+  productId       String?
+  customerName    String
+  customerPhone   String?
+  storageLocation String?
+  initialUnit     String   @default("percent")
+  initialValue    Int      @default(100)
+  remainingUnit   String   @default("percent")
+  remainingValue  Int      @default(100)
+  expiresAt       DateTime?
+  sourceOrderId   String?
+  sourceBillId    String?
+  status          String   @default("stored")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  product   BarProduct?           @relation(fields: [productId], references: [id])
+  movements SavedBottleMovement[]
+}
+
+model SavedBottleMovement {
+  id                   String   @id @default(cuid())
+  movementNo           String   @unique
+  savedBottleId        String
+  movementType         String
+  quantity             Int      @default(0)
+  beforeRemainingValue Int
+  afterRemainingValue  Int
+  operatorId           String?
+  reason               String?
+  createdAt            DateTime @default(now())
+
+  savedBottle SavedBottle @relation(fields: [savedBottleId], references: [id])
+}
+
+model BarOrder {
+  id          String   @id @default(cuid())
+  orderNo     String   @unique
+  tableId     String
+  merchantId  String?
+  venueId     String?
+  status      String   @default("open")
+  totalAmount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  table BarTable @relation(fields: [tableId], references: [id])
+  items BarOrderItem[]
+  bills BarBill[]
+}
+
+model BarOrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  quantity    Int      @default(1)
+  unitPrice   Int      @default(0)
+  lineAmount  Int      @default(0)
+  status      String   @default("ordered")
+  createdAt   DateTime @default(now())
+
+  order   BarOrder   @relation(fields: [orderId], references: [id])
+  product BarProduct @relation(fields: [productId], references: [id])
+}
+
+model BarBill {
+  id            String   @id @default(cuid())
+  billNo        String   @unique
+  orderId       String
+  tableId       String
+  totalAmount   Int      @default(0)
+  paidAmount    Int      @default(0)
+  paymentMethod String?
+  status        String   @default("unpaid")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  order BarOrder @relation(fields: [orderId], references: [id])
+}
+
+model BarProductionTicket {
+  id             String   @id @default(cuid())
+  ticketNo       String   @unique
+  orderId        String
+  orderItemId    String
+  productId      String
+  merchantId     String?
+  venueId        String?
+  department     String   @default("bar")
+  quantity       Int      @default(1)
+  status         String   @default("pending")
+  startedAt      DateTime?
+  servedAt       DateTime?
+  cancelledAt    DateTime?
+  abnormalReason String?
+  operatorId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model BarReservation {
+  id            String   @id @default(cuid())
+  reservationNo String  @unique
+  merchantId    String?
+  venueId       String?
+  tableId       String?
+  customerName  String
+  customerPhone String?
+  reservedAt    DateTime
+  partySize     Int      @default(1)
+  depositAmount Int      @default(0)
+  status        String   @default("reserved")
+  remark        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AmusementProject {
+  id          String   @id @default(cuid())
+  merchantId  String?
+  venueId     String?
+  projectCode String   @unique
+  projectName String
+  capacity    Int      @default(0)
+  status      String   @default("active")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rules    AmusementProjectRule[]
+  sessions AmusementSession[]
+}
+
+model AmusementProjectRule {
+  id        String   @id @default(cuid())
+  projectId String
+  ruleType  String
+  ruleValue String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+
+  project AmusementProject @relation(fields: [projectId], references: [id])
+}
+
+model AmusementSession {
+  id           String   @id @default(cuid())
+  projectId    String
+  sessionName  String
+  startsAt     DateTime
+  endsAt       DateTime
+  capacity     Int      @default(0)
+  usedCapacity Int      @default(0)
+  status       String   @default("scheduled")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project       AmusementProject @relation(fields: [projectId], references: [id])
+  verifications AmusementVerification[]
+}
+
+model AmusementVerification {
+  id                  String   @id @default(cuid())
+  verificationNo       String   @unique
+  projectId            String
+  sessionId            String
+  issuedEntitlementId  String?
+  staffId              String?
+  status               String
+  resultReason         String?
+  createdAt            DateTime @default(now())
+
+  session AmusementSession @relation(fields: [sessionId], references: [id])
+}
+
+model AmusementReservation {
+  id              String   @id @default(cuid())
+  reservationNo   String   @unique
+  projectId       String
+  sessionId       String
+  merchantId      String?
+  venueId         String?
+  customerName    String
+  customerPhone   String?
+  partySize       Int      @default(1)
+  reservedCapacity Int     @default(1)
+  status          String   @default("reserved")
+  queueEntryId    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AmusementQueueEntry {
+  id            String   @id @default(cuid())
+  queueNo       String   @unique
+  projectId     String
+  sessionId     String
+  reservationId String?
+  merchantId    String?
+  venueId       String?
+  customerName  String?
+  customerPhone String?
+  partySize     Int      @default(1)
+  status        String   @default("waiting")
+  calledAt      DateTime?
+  passedAt      DateTime?
+  admittedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AmusementDeviceStatus {
+  id            String   @id @default(cuid())
+  projectId     String
+  merchantId    String?
+  venueId       String?
+  deviceName    String
+  deviceCode    String   @unique
+  status        String   @default("normal")
+  statusReason  String?
+  lastChangedBy String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AmusementInspectionTemplate {
+  id           String   @id @default(cuid())
+  projectId    String?
+  templateName String
+  checklist    String
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AmusementInspectionRecord {
+  id           String   @id @default(cuid())
+  templateId   String?
+  projectId    String
+  sessionId    String?
+  inspectorId  String?
+  result       String
+  abnormalItems String?
+  remark       String?
+  status       String   @default("submitted")
+  createdAt    DateTime @default(now())
+}
+
+model AmusementFaultRecord {
+  id          String   @id @default(cuid())
+  faultNo     String   @unique
+  projectId   String
+  deviceId    String?
+  faultLevel  String   @default("normal")
+  summary     String
+  status      String   @default("open")
+  reportedBy  String?
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  resolution  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MetricSnapshot {
+  id            String   @id @default(cuid())
+  metricCode    String
+  metricName    String
+  metricValue   Int      @default(0)
+  dimensionType String   @default("platform")
+  dimensionId   String?
+  snapshotAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+}
+
+model RiskRule {
+  id          String   @id @default(cuid())
+  ruleCode    String   @unique
+  ruleName    String
+  ruleType    String
+  threshold   Int      @default(0)
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  alerts RiskAlert[]
+}
+
+model RiskAlert {
+  id          String   @id @default(cuid())
+  ruleId      String?
+  alertType   String
+  riskLevel   String   @default("normal")
+  objectType  String?
+  objectId    String?
+  summary     String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rule RiskRule? @relation(fields: [ruleId], references: [id])
+}
+
+model MetricDefinition {
+  id          String   @id @default(cuid())
+  metricCode  String   @unique
+  metricName  String
+  category    String
+  unit        String?
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AiQualityTask {
+  id            String   @id @default(cuid())
+  taskNo        String   @unique
+  taskType      String
+  objectType    String?
+  objectId      String?
+  status        String   @default("pending")
+  resultSummary String?
+  retryCount    Int      @default(0)
+  errorMessage  String?
+  createdBy     String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AiQualityResult {
+  id          String   @id @default(cuid())
+  taskId      String?
+  sourceType  String
+  objectType  String?
+  objectId    String?
+  riskLevel   String   @default("normal")
+  score       Int      @default(100)
+  summary     String
+  tags        String?
+  payload     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CustomerIntent {
+  id             String   @id @default(cuid())
+  conversationId String?
+  messageId      String?
+  customerKey    String?
+  intentType     String
+  label          String
+  confidence     Int      @default(0)
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+}
+
+model StaffServiceScore {
+  id            String   @id @default(cuid())
+  staffUserId   String?
+  userId        String?
+  staffName     String?
+  merchantId    String?
+  score         Int      @default(100)
+  responseScore Int      @default(100)
+  qualityScore  Int      @default(100)
+  riskPenalty   Int      @default(0)
+  sampleSize    Int      @default(0)
+  snapshotDate  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model MerchantHealthScore {
+  id              String   @id @default(cuid())
+  merchantId      String?
+  score           Int      @default(100)
+  operationsScore Int      @default(100)
+  financeScore    Int      @default(100)
+  riskScore       Int      @default(100)
+  serviceScore    Int      @default(100)
+  snapshotDate    String
+  summary         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model MetricAnomalyExplanation {
+  id            String   @id @default(cuid())
+  metricCode    String
+  metricName    String
+  dimensionType String   @default("platform")
+  dimensionId   String?
+  baselineValue Int      @default(0)
+  currentValue  Int      @default(0)
+  changeRate    Int      @default(0)
+  severity      String   @default("normal")
+  explanation   String
+  createdAt     DateTime @default(now())
+}

@@ -1,0 +1,35 @@
+semgrep-core rule validation failed (PatternParseError)
+semgrep-core rule validation failed (PatternParseError)
+semgrep-core rule validation failed (PatternParseError)
+semgrep-core rule validation failed (PatternParseError)
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 360 files tracked by git with 100 Code rules:
+                                                                                                                        
+  Language   Rules   Files          Origin   Rules                                                                      
+ ──────────────────────────        ────────────────                                                                     
+  java          11     287          Custom     100                                                                      
+  js            13      19                                                                                              
+  bash           5      13                                                                                              
+  ts            13       3                                                                                              
+                                                                                                                        
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 0 (0 blocking)
+ • Rules run: 24
+ • Targets scanned: 322
+ • Parsed lines: ~99.7%
+ • Scan skipped: 
+   ◦ Matching --exclude patterns: 2
+   ◦ Files matching .semgrepignore patterns: 8
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 24 rules on 322 files: 0 findings.
+If Semgrep missed a finding, please send us feedback to let us know!
+See https://semgrep.dev/docs/reporting-false-negatives/

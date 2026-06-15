@@ -1,0 +1,169 @@
+package com.complex.platform.integration;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.complex.platform.auth.AuthService;
+import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.GlobalExceptionHandler;
+import com.complex.platform.config.SecurityConfig;
+import java.time.Instant;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
+import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterAutoConfiguration;
+import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(controllers = OpenPlatformController.class)
+@Import({GlobalExceptionHandler.class, SecurityConfig.class, OpenPlatformControllerTests.TestBeans.class})
+@ImportAutoConfiguration({
+        SecurityAutoConfiguration.class,
+        SecurityFilterAutoConfiguration.class,
+        ServletWebSecurityAutoConfiguration.class
+})
+class OpenPlatformControllerTests {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private IntegrationService service;
+
+    @BeforeEach
+    void resetMocks() {
+        Mockito.reset(service);
+    }
+
+    @Test
+    void openAuthTokenAllowsServerToServerRequestWithoutStaffAuthentication() throws Exception {
+        when(service.issueOpenToken(any(OpenAuthTokenRequest.class))).thenReturn(new OpenAuthTokenResponse(
+                "raw-token-once",
+                "Bearer",
+                Instant.parse("2026-06-14T00:30:00Z")
+        ));
+
+        mockMvc.perform(post("/api/open/auth/token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "app_key": "p0-open-app",
+                                  "timestamp": 1781424000000,
+                                  "nonce": "nonce-controller",
+                                  "signature": "signature"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.token").value("raw-token-once"))
+                .andExpect(jsonPath("$.data.token_type").value("Bearer"));
+
+        verify(service).issueOpenToken(any(OpenAuthTokenRequest.class));
+    }
+
+    @Test
+    void openWebhookAcceptsServerToServerRequestAndDoesNotNeedStaffAuthentication() throws Exception {
+        when(service.receiveWebhook(
+                eq("p0-default"),
+                eq("mock-provider"),
+                eq("payment.paid"),
+                eq("signature"),
+                eq("idem-controller"),
+                any()
+        )).thenReturn(new WebhookAcceptedResponse("evt-controller", false));
+
+        mockMvc.perform(post("/api/open/d/p0-default/webhooks/mock-provider/payment.paid")
+                        .header("X-Webhook-Signature", "signature")
+                        .header("X-Idempotency-Key", "idem-controller")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "event_id": "evt-controller",
+                                  "payload": {"status": "paid"}
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.event_id").value("evt-controller"))
+                .andExpect(jsonPath("$.data.deduplicated").value(false));
+    }
+
+    @Test
+    void openWebhookRejectsMissingIdempotencyKeyBeforeServiceCall() throws Exception {
+        mockMvc.perform(post("/api/open/d/p0-default/webhooks/mock-provider/payment.paid")
+                        .header("X-Webhook-Signature", "signature")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "event_id": "evt-missing-idem"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void openEventResultQueryUsesOpenAppSignatureContext() throws Exception {
+        when(service.getOpenEventResult(eq("p0-default"), eq("evt-controller"), any()))
+                .thenReturn(new OpenEventResultResponse("evt-controller", "accepted", Map.of("normalized_status", "paid")));
+
+        mockMvc.perform(get("/api/open/d/p0-default/events/evt-controller")
+                        .queryParam("app_key", "p0-open-app")
+                        .queryParam("timestamp", "1781424000000")
+                        .queryParam("nonce", "nonce-query")
+                        .queryParam("signature", "signature"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.event_id").value("evt-controller"))
+                .andExpect(jsonPath("$.data.event_status").value("accepted"))
+                .andExpect(jsonPath("$.data.result.normalized_status").value("paid"));
+    }
+
+    @Test
+    void openInvalidSignatureReturnsUnauthorizedBusinessCode() throws Exception {
+        when(service.issueOpenToken(any(OpenAuthTokenRequest.class)))
+                .thenThrow(ApiException.unauthorized("OPEN_SIGNATURE_INVALID", "open signature is invalid"));
+
+        mockMvc.perform(post("/api/open/auth/token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "app_key": "p0-open-app",
+                                  "timestamp": 1781424000000,
+                                  "nonce": "nonce-invalid",
+                                  "signature": "bad-signature"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("OPEN_SIGNATURE_INVALID"));
+    }
+
+    @TestConfiguration
+    static class TestBeans {
+        @Bean
+        IntegrationService integrationService() {
+            return Mockito.mock(IntegrationService.class);
+        }
+
+        @Bean
+        AuthService authService() {
+            return new AuthService("", "");
+        }
+    }
+}

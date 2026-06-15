@@ -1,0 +1,104 @@
+[
+  {
+    "name": "baseline-cwe",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "baseline-owasp",
+    "results": 2,
+    "important": 0,
+    "errors": 2
+  },
+  {
+    "name": "baseline-secrets",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "baseline-security-audit",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "java-findsecbugs",
+    "results": 11,
+    "important": 11,
+    "errors": 0
+  },
+  {
+    "name": "java-java",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "js-javascript",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "js-nodejs",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "js-react",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "ops-dockerfile",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "thirdparty-apiiro",
+    "results": 0,
+    "important": 0,
+    "errors": 7
+  },
+  {
+    "name": "thirdparty-atlassian",
+    "results": 0,
+    "important": 0,
+    "errors": 19
+  },
+  {
+    "name": "thirdparty-dotta",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "thirdparty-elttam",
+    "results": 0,
+    "important": 0,
+    "errors": 2
+  },
+  {
+    "name": "thirdparty-kondukto",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  },
+  {
+    "name": "thirdparty-trailofbits",
+    "results": 0,
+    "important": 0,
+    "errors": 2
+  },
+  {
+    "name": "ts-typescript",
+    "results": 0,
+    "important": 0,
+    "errors": 0
+  }
+]

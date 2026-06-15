@@ -1,0 +1,15 @@
+{
+  "event": "restore.drill_completed",
+  "restore_drill_id": "restore-drill-20260614_181410",
+  "backup_path": "/mnt/complex-nas-backup/manual/20260614-181410.tar.gz",
+  "backup_sha256": "973e3423f4274be64d98ee49e5d0cd0502052962e107e48bc8ae7a9c046c900d",
+  "restore_target": "complex_restore_drill_20260614_181410",
+  "restore_database_dropped": true,
+  "started_at": "2026-06-14T18:14:11+00:00",
+  "finished_at": "2026-06-14T18:14:12+00:00",
+  "operator": "james",
+  "verification_result": "passed",
+  "flyway_version": "018",
+  "verified_tables": "auth_credentials,auth_sessions,flyway_schema_history,platform_migration_baseline",
+  "audit_event": "restore.drill_completed"
+}

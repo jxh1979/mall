@@ -1,0 +1,33 @@
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 360 files tracked by git with 530 Code rules:
+                                                                                                                        
+  Language      Rules   Files          Origin      Rules                                                                
+ ─────────────────────────────        ───────────────────                                                               
+  <multilang>       6     360          Community     530                                                                
+  java             59     287                                                                                           
+  js               65      19                                                                                           
+  bash              1      13                                                                                           
+  json              3       4                                                                                           
+  html              1       4                                                                                           
+  ts               71       3                                                                                           
+  yaml             18       3                                                                                           
+                                                                                                                        
+                
+                
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 2 (2 blocking)
+ • Rules run: 159
+ • Targets scanned: 360
+ • Parsed lines: ~99.8%
+ • Scan skipped: 
+   ◦ Matching --exclude patterns: 2
+   ◦ Files matching .semgrepignore patterns: 8
+ • For a detailed list of skipped files and lines, run semgrep with the --verbose flag
+Ran 159 rules on 360 files: 2 findings.

@@ -1,0 +1,28 @@
+# Android 终端 P0
+
+本工程先实现 Android 终端可复用的 Kotlin 业务核心和 160 联调入口。
+
+P0 已覆盖：
+
+- 员工登录
+- 设备绑定和点位绑定
+- 在线扫码预览与确认核销
+- 离线权益包加载
+- 离线核销本地队列
+- 人工补录本地队列
+- 待同步任务回传
+- 有待同步任务时归还拦截
+- 终端操作事件批量上报
+
+当前构建方式：
+
+```bash
+npm run verify:android-env
+npm run android:p0:build
+P0_API_BASE_URL=http://127.0.0.1:8080 P0_ADMIN_USERNAME=<seeded-admin> P0_ADMIN_PASSWORD=<seeded-password> npm run android:p0:smoke
+npm run android:p0:apk
+```
+
+说明：`android:p0:build` 与 `android:p0:smoke` 验证 Kotlin 终端核心；`android:p0:smoke` 需要已种子的 P0 管理员账号和可访问的 P0 后端业务接口，不得使用真实生产管理员密码做 smoke；`android:p0:apk` 验证 APK 壳工程，并要求 Android SDK 可访问。根脚本会优先使用 Gradle Wrapper；若项目目录没有 Wrapper，则使用系统 Gradle。160 或本机未完成 Java 21、Gradle/Wrapper、Android SDK 准备前，不得把 Android P0 构建或 APK 验收标记为完成。
+
+160 已通过完整 `complex-verify-p0.sh`。当前后端用于 Android smoke 的业务接口是 `local/dev/test` profile 下的内存态 P0 smoke 切片，只用于自动化验收和端侧流程保活；正式业务实现仍需迁移到 PostgreSQL + Flyway + Service/Repository + 权限/事件/审计。
