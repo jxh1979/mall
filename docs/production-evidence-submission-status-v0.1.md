@@ -7,13 +7,14 @@
 - MISSING_MANIFEST_IS_AWAITING_NOT_PASSED
 - INVALID_MANIFEST_BLOCKS_DELIVERY_GATE
 - CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET
+- PRODUCTION_CREDENTIAL_REF_REQUIRED
 - RAW_EVIDENCE_STAYS_EXTERNAL
 - TRACEABLE_EVIDENCE_LINKS_REQUIRED
 - CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN
 
 ## 2. 定位
 
-本文从 `docs/production-readiness-evidence/production-evidence-submission-kit-latest.json` 自动生成，并扫描各责任组提交目录下的 `manifest-<item_id>.json`。未提交 manifest 只显示为 `awaiting_submission`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误（兼容 UTF-8 BOM）、明文密钥、占位值、模板专用字段、证据编号格式错误、未接受的证据类型、result 非 passed、未来提交/测试时间、过期复测日期、提交人与复核人相同、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 `invalid_submission` 并阻断交付闸口。
+本文从 `docs/production-readiness-evidence/production-evidence-submission-kit-latest.json` 自动生成，并扫描各责任组提交目录下的 `manifest-<item_id>.json`。未提交 manifest 只显示为 `awaiting_submission`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误（兼容 UTF-8 BOM）、明文密钥、非生产 credential_ref、占位值、模板专用字段、证据编号格式错误、未接受的证据类型、result 非 passed、未来提交/测试时间、过期复测日期、提交人与复核人相同、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 `invalid_submission` 并阻断交付闸口。
 
 ## 3. 总览
 
