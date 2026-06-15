@@ -90,6 +90,7 @@ const productionBlockerRegister = readJson("docs/production-readiness-evidence/p
 const productionOwnerActionPacks = readJson("docs/production-readiness-evidence/production-owner-action-packs-latest.json");
 const productionEvidenceSubmissionKit = readJson("docs/production-readiness-evidence/production-evidence-submission-kit-latest.json");
 const productionEvidenceSubmissionStatus = readJson("docs/production-readiness-evidence/production-evidence-submission-status-latest.json");
+const productionEvidenceManifestTemplates = readJson("docs/production-readiness-evidence/production-evidence-manifest-template-index-latest.json");
 
 forbidPlaintextSecrets("production readiness ledger", ledgerText);
 forbidPlaintextSecrets("production readiness backfill", backfillText);
@@ -145,6 +146,18 @@ if (productionEvidenceSubmissionKit) {
   if (submissions.length < 1) failures.push("production evidence submission kit must contain submission templates while blockers are open");
 }
 
+if (productionEvidenceManifestTemplates) {
+  if (productionEvidenceManifestTemplates.status !== "templates_ready_not_real_evidence") {
+    failures.push(`production evidence manifest templates status must be templates_ready_not_real_evidence, got ${productionEvidenceManifestTemplates.status}`);
+  }
+  if (productionEvidenceManifestTemplates.source_submission_kit_path !== "docs/production-readiness-evidence/production-evidence-submission-kit-latest.json") {
+    failures.push("production evidence manifest templates must be generated from submission kit");
+  }
+  if ((productionEvidenceManifestTemplates.counts?.templates ?? 0) < 1) {
+    failures.push("production evidence manifest templates must include template files while blockers are open");
+  }
+}
+
 if (productionEvidenceSubmissionStatus) {
   if (!["awaiting_real_evidence", "partial_real_evidence_submitted"].includes(productionEvidenceSubmissionStatus.status)) {
     failures.push(`production evidence submission status must not contain invalid submissions, got ${productionEvidenceSubmissionStatus.status}`);
@@ -163,7 +176,7 @@ if (semgrepEvidence) {
   const scanned = Array.isArray(semgrepEvidence.paths?.scanned) ? semgrepEvidence.paths.scanned : [];
   if (results.length !== 0) failures.push(`delivery readiness semgrep must have 0 findings, got ${results.length}`);
   if (errors.length !== 0) failures.push(`delivery readiness semgrep must have 0 errors, got ${errors.length}`);
-  for (const target of ["tools/generate-production-blocker-register.mjs", "tools/generate-production-owner-action-packs.mjs", "tools/generate-production-evidence-submission-kit.mjs", "tools/generate-production-evidence-submission-status.mjs", "tools/verify-delivery-gates.mjs", "tools/verify-nas-smb-mount-evidence.mjs", "tools/verify-production-evidence-intake-templates.mjs", "tools/verify-production-readiness-evidence.mjs"]) {
+  for (const target of ["tools/generate-production-blocker-register.mjs", "tools/generate-production-owner-action-packs.mjs", "tools/generate-production-evidence-submission-kit.mjs", "tools/generate-production-evidence-manifest-templates.mjs", "tools/generate-production-evidence-submission-status.mjs", "tools/verify-delivery-gates.mjs", "tools/verify-nas-smb-mount-evidence.mjs", "tools/verify-production-evidence-intake-templates.mjs", "tools/verify-production-readiness-evidence.mjs"]) {
     if (!scanned.includes(target)) failures.push(`delivery readiness semgrep must scan ${target}`);
   }
 }
@@ -172,7 +185,7 @@ for (const [relativePath, text, markers] of [
   ["security-scans/formal-security-baseline-v1.md", baselineText, ["正式安全基线 V1", `OpenAPI operation count: ${expectedOperationCount}`, "Verification command: `npm run verify:security-baseline`"]],
   ["security-scans/findings-register-v1.md", findingsText, ["Findings Register V1", `OpenAPI operation count: ${expectedOperationCount}`, "SEC-P0-MDM-DEVICE-001", "SEC-P0-OPS-RECOVERY-001"]],
   ["docs/production-readiness-implementation-ledger-template-v0.1.md", ledgerText, ["| PRD-SEC-001 | security | 正式安全基线 |", "| PRD-SEC-001 | security | 正式安全基线 | V1 已生成；后续 OpenAPI、认证、权限、第三方、支付、MDM、生产凭证或 160 运维证据变化后必须重生成 | 安全/技术负责人 | 自管/第三方 | passed |", "security-scans/formal-security-baseline-v1.md", "security-scans/findings-register-v1.md"]],
-  ["docs/production-readiness-evidence/production-readiness-evidence-backfill-20260615.md", backfillText, ["PRD-SEC-001", "security-baseline-latest.json", "verify:production-readiness-evidence", "delivery-readiness-semgrep-20260615.json", "production-blocker-register-latest.json", "verify:production-blockers", "production-owner-action-packs-latest.json", "verify:production-owner-actions", "production-evidence-submission-kit-latest.json", "verify:production-evidence-submission-kit", "production-evidence-submission-status-latest.json", "verify:production-evidence-submission-status"]],
+  ["docs/production-readiness-evidence/production-readiness-evidence-backfill-20260615.md", backfillText, ["PRD-SEC-001", "security-baseline-latest.json", "verify:production-readiness-evidence", "delivery-readiness-semgrep-20260615.json", "production-blocker-register-latest.json", "verify:production-blockers", "production-owner-action-packs-latest.json", "verify:production-owner-actions", "production-evidence-submission-kit-latest.json", "verify:production-evidence-submission-kit", "production-evidence-manifest-template-index-latest.json", "verify:production-evidence-manifest-templates", "production-evidence-submission-status-latest.json", "verify:production-evidence-submission-status"]],
   ["docs/production-blocker-register-v0.1.md", readText("docs/production-blocker-register-v0.1.md"), ["PRODUCTION_BLOCKER_REGISTER_READY", "PRODUCTION_BLOCKERS_OPEN", "NO_FAKE_PRODUCTION_EVIDENCE_CLOSURE"]],
   ["docs/production-readiness-evidence/nas-smb-mount-latest.json", nasEvidenceText, ["nas_smb_mount_live_rw", "plaintext_secret_present", "false"]],
 ]) {

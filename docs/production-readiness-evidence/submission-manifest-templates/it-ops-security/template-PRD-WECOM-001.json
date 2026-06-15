@@ -1,0 +1,26 @@
+{
+  "template_notice": "TEMPLATE_ONLY_NOT_PRODUCTION_EVIDENCE",
+  "submission_id": "SUB-it-ops-security-PRD-WECOM-001",
+  "item_id": "PRD-WECOM-001",
+  "owner_group": "IT/运维/安全",
+  "owner_person": "待填写责任人姓名",
+  "submitted_at": "YYYY-MM-DDTHH:mm:ssZ",
+  "evidence_ids": [
+    "EVD-PRD-WECOM-001-YYYYMMDD-001"
+  ],
+  "evidence_links": [
+    "待填写工单/脱敏导出/供应商回执/验收报告链接"
+  ],
+  "evidence_types": [
+    "wecom_app_config_export",
+    "directory_sync_report"
+  ],
+  "last_test_time": "YYYY-MM-DDTHH:mm:ssZ",
+  "result": "blocked",
+  "reviewer": "待填写复核人",
+  "redaction_confirmed": false,
+  "credential_refs": [
+    "cred://prod/wecom/PRD-WECOM-001/replace-with-real-reference"
+  ],
+  "notes": "复制到真实 submissions 目录前，必须替换占位字段；真实密钥只允许写 credential_ref。"
+}

@@ -14,11 +14,12 @@
 | P0 自动化闸口 | passed | `npm run verify:p0` 通过 | 160 命令执行记录 | 覆盖 P0 契约、安全基线、后端 547 测试、Web build、Android env/build/smoke/APK |
 | P0-A 运维闸口 | passed | `npm run verify:ops160-recovery` 通过 | 160 命令执行记录 | 覆盖执行策略、备份恢复脚本、生产凭证台账结构、P0-A ops hardening |
 | PRD-SEC-001 | passed | 正式安全基线 V1 与 findings register 已生成并通过机器校验 | `security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md`、`docs/production-readiness-evidence/security-baseline-latest.json` | 不关闭 MDM、生产凭证、真实支付/企微/供应商等 open 阻断项 |
-| 交付闸口脚本 Semgrep | passed | `pipx run semgrep --config p/javascript` 扫描 8 个新增/修改 Node 校验/生成脚本，0 findings | `security-scans/delivery-readiness-semgrep-20260615.json` | 不替代完整发布前安全扫描 |
+| 交付闸口脚本 Semgrep | passed | `pipx run semgrep --config p/javascript` 扫描 9 个新增/修改 Node 校验/生成脚本，0 findings | `security-scans/delivery-readiness-semgrep-20260615.json` | 不替代完整发布前安全扫描 |
 | 生产阻断清单 | open_blockers_present | 已从生产前置台账和 findings register 生成机器可读阻断清单 | `docs/production-blocker-register-v0.1.md`、`docs/production-readiness-evidence/production-blocker-register-latest.json` | 当前仍有外部/IT/供应商阻断项，不得伪关闭 |
 | 生产前置证据回填模板 | passed | 已按 MDM、NAS、凭证、支付、企微、人脸、第三方和 160 运行配置补齐证据字段模板 | `docs/production-readiness-evidence-intake-template-v0.1.md` | 模板不关闭阻断项，只规范回填材料 |
 | 生产责任人动作包 | open_actions_present | 已按责任人把未关闭生产阻断项拆成动作、证据和复测命令 | `docs/production-owner-action-packs-v0.1.md`、`docs/production-readiness-evidence/production-owner-action-packs-latest.json` | 从阻断清单自动生成，不关闭任何 pending/open 项 |
 | 生产证据提交包 | awaiting_real_evidence | 已把责任人动作包转成提交目录、manifest 字段、证据类型和复测命令 | `docs/production-evidence-submission-kit-v0.1.md`、`docs/production-readiness-evidence/production-evidence-submission-kit-latest.json` | 提交包只定义格式，不关闭任何 pending/open 项 |
+| 生产证据 Manifest 模板 | templates_ready_not_real_evidence | 已为 40 个提交项生成可复制 JSON 模板，默认 blocked 且仅作填写样例 | `docs/production-evidence-manifest-templates-v0.1.md`、`docs/production-readiness-evidence/production-evidence-manifest-template-index-latest.json` | 模板不是生产证据，复制后必须替换占位内容 |
 | 生产证据提交状态看板 | awaiting_real_evidence | 已扫描实际 manifest 提交状态；当前未提交 manifest 均保持 awaiting，不视为 passed | `docs/production-evidence-submission-status-v0.1.md`、`docs/production-readiness-evidence/production-evidence-submission-status-latest.json` | 看板不关闭阻断项；无效 manifest 会阻断交付闸口 |
 | PRD-NAS-001 | passed | NAS `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup` 且可写；已补 live mount + write/read/delete 机器证据 | `docs/production-readiness-evidence/nas-smb-mount-latest.json`、`docs/nas-backup-and-restore-runbook-v0.1.md#63-最新真实-nas-验证证据2026-06-15` | 系统级自动挂载仍需 IT 固化；可用 `npm run verify:nas-smb-mount-evidence` 复核 |
 | PRD-NAS-002 | passed | 当前版本备份 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 已从 NAS 恢复成功 | `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 恢复 Flyway 版本 `039` |
@@ -48,12 +49,13 @@
 | 2026-06-15 11:27 UTC | 从 NAS 归档执行恢复演练 | `restore.drill_completed`，Flyway `039`，临时库已删除 |
 | 2026-06-15 19:56 UTC | 执行 NAS SMB 挂载/读写机器校验 | `npm run verify:nas-smb-mount-evidence` 通过，不读取或记录 SMB 密码 |
 | 2026-06-15 20:05 UTC | 执行正式安全基线与生产前置证据校验 | `npm run verify:security-baseline` 和 `npm run verify:production-readiness-evidence` 通过 |
-| 2026-06-15 20:06 UTC | 执行交付闸口脚本 Semgrep 增量扫描 | `pipx run semgrep --config p/javascript` 扫描 8 个脚本，0 findings |
+| 2026-06-15 20:06 UTC | 执行交付闸口脚本 Semgrep 增量扫描 | `pipx run semgrep --config p/javascript` 扫描 9 个脚本，0 findings |
 | 2026-06-15 20:12 UTC | 生成生产阻断清单 | `npm run docs:production-blockers` 与 `npm run verify:production-blockers` 通过 |
 | 2026-06-15 20:18 UTC | 校验生产前置证据回填模板 | `npm run verify:production-evidence-intake` 通过 |
 | 2026-06-15 20:25 UTC | 生成生产责任人动作包 | `npm run docs:production-owner-actions` 与 `npm run verify:production-owner-actions` 通过 |
 | 2026-06-15 20:34 UTC | 生成生产证据提交包 | `npm run docs:production-evidence-submission-kit` 与 `npm run verify:production-evidence-submission-kit` 通过 |
 | 2026-06-15 20:42 UTC | 生成生产证据提交状态看板 | `npm run docs:production-evidence-submission-status` 与 `npm run verify:production-evidence-submission-status` 通过 |
+| 2026-06-15 20:50 UTC | 生成生产证据 Manifest 模板 | `npm run docs:production-evidence-manifest-templates` 与 `npm run verify:production-evidence-manifest-templates` 通过 |
 | 2026-06-15 | 执行 `npm run verify:p0` | 通过 |
 | 2026-06-15 | 执行 `npm run verify:ops160-recovery` | 通过 |
 
@@ -71,5 +73,5 @@
 3. IT/安全/财务按 PRD-CRED-* 明细补齐真实生产凭证引用、到期提醒和轮换证据。
 4. 财务/IT 回填聚合支付商户、退款、回调和对账证据。
 5. 运营/IT 回填企业微信、人脸年龄核验和第三方供应商真实资料。
-6. 每补齐一批证据后先执行：`npm run docs:production-blockers && npm run docs:production-owner-actions && npm run docs:production-evidence-submission-kit && npm run docs:production-evidence-submission-status && npm run verify:production-owner-actions && npm run verify:production-evidence-submission-kit && npm run verify:production-evidence-submission-status`。
+6. 每补齐一批证据后先执行：`npm run docs:production-blockers && npm run docs:production-owner-actions && npm run docs:production-evidence-submission-kit && npm run docs:production-evidence-manifest-templates && npm run docs:production-evidence-submission-status && npm run verify:production-owner-actions && npm run verify:production-evidence-submission-kit && npm run verify:production-evidence-manifest-templates && npm run verify:production-evidence-submission-status`。
 7. 再执行：`npm run docs:security-baseline && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:p0 && npm run verify:ops160-recovery`。
