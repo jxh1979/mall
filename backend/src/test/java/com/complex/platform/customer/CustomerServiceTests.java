@@ -59,6 +59,7 @@ class CustomerServiceTests {
         inventoryService = Mockito.mock(InventoryService.class);
         service = new CustomerService(
                 customerRepository,
+                new FixedCustomerOtpVerifier("000000"),
                 ticketingService,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
@@ -80,6 +81,21 @@ class CustomerServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .containsExactly("customer.auth.login");
+    }
+
+    @Test
+    void phoneLoginRejectsInvalidSmsCodeWithoutCreatingSession() {
+        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest(
+                "13800138000",
+                "111111",
+                "miniapp"
+        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+                assertThat(exception.code()).isEqualTo("CUSTOMER_OTP_INVALID"));
+
+        assertThat(customerRepository.sessions).isEmpty();
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .containsExactly("customer.auth.login_failed");
     }
 
     @Test

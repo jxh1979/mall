@@ -4,12 +4,16 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -492,7 +496,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     :issued_at, :expires_at, :status, :refreshed_count, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
-                    credential_token = EXCLUDED.credential_token,
+                    credential_token = NULL,
                     nonce = EXCLUDED.nonce,
                     credential_hash = EXCLUDED.credential_hash,
                     credential_type = EXCLUDED.credential_type,
@@ -507,12 +511,15 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public Optional<TicketCredentialRecord> findTicketCredentialByToken(String credentialToken) {
+        if (credentialToken == null || credentialToken.isBlank()) {
+            return Optional.empty();
+        }
         return jdbcTemplate.query("""
                 SELECT id, entitlement_id, order_id, credential_token, nonce, credential_hash, credential_type,
                        issued_at, expires_at, status, refreshed_count, created_at, updated_at
                   FROM ticket_credentials
-                 WHERE credential_token = :credential_token
-                """, Map.of("credential_token", credentialToken), this::mapTicketCredential).stream().findFirst();
+                 WHERE credential_hash = :credential_hash
+                """, Map.of("credential_hash", sha256(credentialToken)), this::mapTicketCredential).stream().findFirst();
     }
 
     @Override
@@ -680,7 +687,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("verification_id", task.verificationId())
                 .addValue("verification_no", task.verificationNo())
                 .addValue("occurred_at", task.occurredAt())
-                .addValue("payload", writeJson(task.payload()))
+                .addValue("payload", writeJson(sanitizedSyncPayload(task.payload())))
                 .addValue("created_at", timestampWithTimeZone(task.createdAt()));
     }
 
@@ -763,9 +770,9 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("id", credential.id())
                 .addValue("entitlement_id", credential.entitlementId())
                 .addValue("order_id", credential.orderId())
-                .addValue("credential_token", credential.credentialToken())
+                .addValue("credential_token", null)
                 .addValue("nonce", credential.nonce())
-                .addValue("credential_hash", credential.credentialHash())
+                .addValue("credential_hash", credentialHash(credential))
                 .addValue("credential_type", credential.credentialType())
                 .addValue("issued_at", timestampWithTimeZone(credential.issuedAt()))
                 .addValue("expires_at", timestampWithTimeZone(credential.expiresAt()))
@@ -1063,6 +1070,38 @@ class JdbcTicketingRepository implements TicketingRepository {
     private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
         OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
         return value == null ? null : value.toInstant();
+    }
+
+    private String credentialHash(TicketCredentialRecord credential) {
+        if (credential.credentialToken() != null && !credential.credentialToken().isBlank()) {
+            return sha256(credential.credentialToken());
+        }
+        return credential.credentialHash();
+    }
+
+    private Map<String, String> sanitizedSyncPayload(Map<String, String> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> sanitized = new LinkedHashMap<>();
+        payload.forEach((key, value) -> sanitized.put(key, sanitizedDynamicCredential(value)));
+        return sanitized;
+    }
+
+    private String sanitizedDynamicCredential(String value) {
+        if (value == null || !value.startsWith("cred_")) {
+            return value;
+        }
+        return "sha256:" + sha256(value);
+    }
+
+    private String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException("ticket credential hashing unavailable", exception);
+        }
     }
 
     private String writeJson(Object value) {

@@ -34,6 +34,7 @@ public class CustomerService {
     private static final int DEFAULT_PAGE_SIZE = 50;
 
     private final CustomerRepository repository;
+    private final CustomerOtpVerifier otpVerifier;
     private final TicketingService ticketingService;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
@@ -41,12 +42,14 @@ public class CustomerService {
 
     public CustomerService(
             CustomerRepository repository,
+            CustomerOtpVerifier otpVerifier,
             TicketingService ticketingService,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             InventoryService inventoryService
     ) {
         this.repository = repository;
+        this.otpVerifier = otpVerifier;
         this.ticketingService = ticketingService;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
@@ -58,7 +61,8 @@ public class CustomerService {
         try {
             CustomerPhoneLoginRequest actual = requireRequest(request);
             String phone = requireText(actual.phone(), "phone");
-            requireText(actual.smsCode(), "sms_code");
+            String smsCode = requireText(actual.smsCode(), "sms_code");
+            otpVerifier.verify(phone, smsCode, actual.scene());
             Instant now = Instant.now();
             CustomerRecord customer = repository.findCustomerByPhone(phone)
                     .map(existing -> repository.saveCustomer(new CustomerRecord(

@@ -45,7 +45,7 @@ class AmusementJdbcIntegrationTests {
         assertThat(regclass("amusement_queue_entries")).isEqualTo("amusement_queue_entries");
         assertThat(regclass("amusement_reservations")).isEqualTo("amusement_reservations");
         assertThat(regclass("amusement_group_bookings")).isEqualTo("amusement_group_bookings");
-        assertThat(currentFlywayVersion()).isEqualTo("037");
+        assertThat(currentFlywayVersion()).isEqualTo("039");
 
         assertThat(permissionCodes()).contains(
                 "amusement.device_status.view",

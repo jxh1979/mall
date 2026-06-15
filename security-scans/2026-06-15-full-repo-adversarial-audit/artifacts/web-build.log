@@ -1,0 +1,29 @@
+
+> entertainment-complex-management@0.1.0 build
+> npm run build --workspace apps/web
+
+
+> apps-web@0.1.0 build
+> npm run typecheck && vite build
+
+
+> apps-web@0.1.0 typecheck
+> tsc -b --noEmit
+
+vite v6.4.3 building for production...
+transforming...
+✓ 3002 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/bar/index.html                0.55 kB │ gzip:   0.36 kB
+dist/ticketing/index.html          0.56 kB │ gzip:   0.37 kB
+dist/amusement/index.html          0.56 kB │ gzip:   0.37 kB
+dist/index.html                    0.66 kB │ gzip:   0.47 kB
+dist/assets/main-CUf5I7FO.css     12.41 kB │ gzip:   3.33 kB
+dist/assets/main-yXmzDZ3D.js   1,105.65 kB │ gzip: 340.98 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.77s

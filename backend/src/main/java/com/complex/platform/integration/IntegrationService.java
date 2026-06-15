@@ -4,6 +4,8 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -60,6 +62,7 @@ public class IntegrationService {
     private final AuditEventService auditEventService;
     private final SecretResolver secretResolver;
     private final Clock clock;
+    private final ObjectMapper signatureObjectMapper;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
@@ -84,6 +87,9 @@ public class IntegrationService {
         this.auditEventService = auditEventService;
         this.clock = clock;
         this.secretResolver = secretResolver;
+        this.signatureObjectMapper = new ObjectMapper()
+                .findAndRegisterModules()
+                .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
     }
 
     public OpenAuthTokenResponse issueOpenToken(OpenAuthTokenRequest request) {
@@ -182,7 +188,8 @@ public class IntegrationService {
             if (!provider.equals(endpoint.providerCode()) || !endpoint.webhookEnabled()) {
                 throw ApiException.unauthorized("OPEN_WEBHOOK_REJECTED", "open webhook endpoint is not enabled");
             }
-            verifySignature(signature, webhookCanonical(endpointKey, provider, event, resolvedIdempotencyKey), resolveSecret(endpoint.secretRef()), "OPEN_WEBHOOK_SIGNATURE_INVALID");
+            String payloadHash = payloadHash(payload);
+            verifySignature(signature, webhookCanonical(endpointKey, provider, event, resolvedIdempotencyKey, payloadHash), resolveSecret(endpoint.secretRef()), "OPEN_WEBHOOK_SIGNATURE_INVALID");
 
             WebhookAcceptedResponse response = repository.findOpenEventByIdempotency(endpointKey, provider, resolvedIdempotencyKey)
                     .map(existing -> new WebhookAcceptedResponse(existing.id(), true))
@@ -198,7 +205,7 @@ public class IntegrationService {
                                 true,
                                 "accepted",
                                 payload == null ? Map.of() : Map.copyOf(payload),
-                                Map.of("accepted", true),
+                                Map.of("accepted", true, "payload_hash", payloadHash),
                                 null,
                                 now,
                                 now
@@ -986,8 +993,16 @@ public class IntegrationService {
         return "app_key=" + appKey + "\nnonce=" + nonce + "\ntimestamp=" + timestamp;
     }
 
-    private String webhookCanonical(String endpointKey, String provider, String event, String idempotencyKey) {
-        return "endpoint_key=" + endpointKey + "\nevent=" + event + "\nidempotency_key=" + idempotencyKey + "\nprovider=" + provider;
+    private String webhookCanonical(String endpointKey, String provider, String event, String idempotencyKey, String payloadHash) {
+        return "endpoint_key=" + endpointKey + "\nevent=" + event + "\nidempotency_key=" + idempotencyKey + "\npayload_hash=" + payloadHash + "\nprovider=" + provider;
+    }
+
+    private String payloadHash(Map<String, Object> payload) {
+        try {
+            return sha256(signatureObjectMapper.writeValueAsString(payload == null ? Map.of() : payload));
+        } catch (Exception exception) {
+            throw ApiException.badRequest("OPEN_WEBHOOK_PAYLOAD_INVALID", "open webhook payload is not serializable");
+        }
     }
 
     private String resolveSecret(String secretRef) {

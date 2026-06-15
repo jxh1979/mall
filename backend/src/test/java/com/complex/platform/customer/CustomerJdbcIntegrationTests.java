@@ -5,7 +5,10 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,7 +41,7 @@ class CustomerJdbcIntegrationTests {
         assertThat(regclass("customer_points_redemptions")).isEqualTo("customer_points_redemptions");
         assertThat(regclass("bar_tables")).isEqualTo("bar_tables");
         assertThat(regclass("bar_reservations")).isEqualTo("bar_reservations");
-        assertThat(currentFlywayVersion()).isEqualTo("037");
+        assertThat(currentFlywayVersion()).isEqualTo("039");
     }
 
     @Test
@@ -92,6 +95,12 @@ class CustomerJdbcIntegrationTests {
                 .get()
                 .extracting(CustomerSessionRecord::customerId)
                 .isEqualTo("customer_jdbc");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT customer_token FROM customer_sessions WHERE id = 'session_jdbc'",
+                String.class
+        )).isNull();
+        assertThat(jdbcTemplate.queryForObject("SELECT customer_token_hash FROM customer_sessions WHERE id = 'session_jdbc'", String.class))
+                .isEqualTo(sha256("cust_jdbc"));
         assertThat(repository.findPointsByCustomerId("customer_jdbc"))
                 .get()
                 .extracting(CustomerPointsAccountRecord::balance)
@@ -250,5 +259,14 @@ class CustomerJdbcIntegrationTests {
                  ORDER BY installed_rank DESC
                  LIMIT 1
                 """, String.class);
+    }
+
+    private String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 }

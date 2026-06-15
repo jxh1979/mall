@@ -49,7 +49,7 @@ class BarJdbcIntegrationTests {
         assertThat(regclass("bar_bill_adjustments")).isEqualTo("bar_bill_adjustments");
         assertThat(regclass("bar_bill_operations")).isEqualTo("bar_bill_operations");
         assertThat(columnNames("bar_bill_adjustments")).contains("ar_ap_item_id");
-        assertThat(currentFlywayVersion()).isEqualTo("037");
+        assertThat(currentFlywayVersion()).isEqualTo("039");
 
         assertThat(permissionCodes()).contains(
                 "bar.entry.age_verify",

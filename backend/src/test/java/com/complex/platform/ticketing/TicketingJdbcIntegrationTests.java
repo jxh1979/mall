@@ -3,7 +3,10 @@ package com.complex.platform.ticketing;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -211,7 +214,7 @@ class TicketingJdbcIntegrationTests {
                 "ver_jdbc",
                 "V20260614000001",
                 "2026-06-14T00:00:00Z",
-                Map.of("entitlementCode", "P0-JDBC"),
+                Map.of("entitlementCode", "P0-JDBC", "credentialPayload", "cred_terminal_jdbc"),
                 now
         ));
 
@@ -228,10 +231,11 @@ class TicketingJdbcIntegrationTests {
         assertThat(repository.listVerifications())
                 .extracting(VerificationRecord::verificationNo, VerificationRecord::status)
                 .contains(tuple("V20260614000001", "success"));
-        assertThat(repository.findTerminalSyncTask("P0-ANDROID-JDBC", "client_task_jdbc"))
-                .get()
-                .extracting(TerminalSyncTaskRecord::verificationNo)
-                .isEqualTo("V20260614000001");
+        TerminalSyncTaskRecord syncTask = repository.findTerminalSyncTask("P0-ANDROID-JDBC", "client_task_jdbc")
+                .orElseThrow();
+        assertThat(syncTask.verificationNo()).isEqualTo("V20260614000001");
+        assertThat(syncTask.payload().get("credentialPayload")).isEqualTo("sha256:" + sha256("cred_terminal_jdbc"));
+        assertThat(syncTask.payload().values()).doesNotContain("cred_terminal_jdbc");
     }
 
     @Test
@@ -376,6 +380,12 @@ class TicketingJdbcIntegrationTests {
                 .get()
                 .extracting(TicketCredentialRecord::entitlementId)
                 .isEqualTo("ent_order_jdbc");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT credential_token FROM ticket_credentials WHERE id = 'credential_jdbc'",
+                String.class
+        )).isNull();
+        assertThat(jdbcTemplate.queryForObject("SELECT credential_hash FROM ticket_credentials WHERE id = 'credential_jdbc'", String.class))
+                .isEqualTo(sha256("cred_jdbc"));
         assertThat(repository.findTicketRefundById("refund_jdbc"))
                 .get()
                 .extracting(TicketRefundRecord::status)
@@ -489,5 +499,14 @@ class TicketingJdbcIntegrationTests {
                  WHERE role_id = 'role_platform_admin'
                  ORDER BY permission_code
                 """, String.class);
+    }
+
+    private String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 }

@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1068,7 +1069,7 @@ public class TicketingService {
                 updated.id(),
                 updated.entitlementCode(),
                 requireText(request.credentialType(), "credential_type"),
-                requireText(request.credentialPayload(), "credential_payload"),
+                verificationPayload(request.credentialPayload(), credential),
                 requireText(request.deviceId(), "device_id"),
                 requireText(request.pointId(), "point_id"),
                 "success",
@@ -1142,7 +1143,7 @@ public class TicketingService {
                 verificationId,
                 verificationNo,
                 occurredAt,
-                payload,
+                sanitizedSyncPayload(payload),
                 Instant.now()
         ));
         return toSyncTaskResult(saved);
@@ -1182,6 +1183,30 @@ public class TicketingService {
             throw ApiException.conflict("CREDENTIAL_EXPIRED", "credential is expired");
         }
         return java.util.Optional.of(credential);
+    }
+
+    private String verificationPayload(String credentialPayload, TicketCredentialRecord credential) {
+        String payload = requireText(credentialPayload, "credential_payload");
+        if (credential == null) {
+            return payload;
+        }
+        return "sha256:" + hash(payload);
+    }
+
+    private Map<String, String> sanitizedSyncPayload(Map<String, String> payload) {
+        if (payload == null || payload.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> sanitized = new LinkedHashMap<>();
+        payload.forEach((key, value) -> sanitized.put(key, sanitizedDynamicCredential(value)));
+        return sanitized;
+    }
+
+    private String sanitizedDynamicCredential(String value) {
+        if (value == null || !value.startsWith("cred_")) {
+            return value;
+        }
+        return "sha256:" + hash(value);
     }
 
     private <T> PageResponse<T> readPage(

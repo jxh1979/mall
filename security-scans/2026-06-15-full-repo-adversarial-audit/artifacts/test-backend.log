@@ -1,0 +1,895 @@
+
+> entertainment-complex-management@0.1.0 test:backend
+> node tools/run-backend-maven.mjs test
+
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ----------------------< com.complex:complex-api >-----------------------
+[INFO] Building complex-api 0.1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ complex-api ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 37 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ complex-api ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ complex-api ---
+[INFO] skip non existing resourceDirectory /home/james/complex-management/backend/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ complex-api ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ complex-api ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.complex.platform.evidence.EvidenceEventControllerTests
+09:43:12.039 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.evidence.EvidenceEventControllerTests
+09:43:12.049 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.evidence.EvidenceEventControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:12.363Z  INFO 814793 --- [complex-api] [           main] c.c.p.e.EvidenceEventControllerTests     : Starting EvidenceEventControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:12.364Z DEBUG 814793 --- [complex-api] [           main] c.c.p.e.EvidenceEventControllerTests     : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:12.365Z  INFO 814793 --- [complex-api] [           main] c.c.p.e.EvidenceEventControllerTests     : No active profile set, falling back to 1 default profile: "local"
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/home/james/.m2/repository/net/bytebuddy/byte-buddy-agent/1.18.10/byte-buddy-agent-1.18.10.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+2026-06-15T09:43:14.840Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:15.043Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:15.046Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:15.046Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:15.048Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:15.083Z  INFO 814793 --- [complex-api] [           main] c.c.p.e.EvidenceEventControllerTests     : Started EvidenceEventControllerTests in 2.995 seconds (process running for 3.846)
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.517 s -- in com.complex.platform.evidence.EvidenceEventControllerTests
+[INFO] Running com.complex.platform.evidence.EvidenceEventServiceTests
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.101 s -- in com.complex.platform.evidence.EvidenceEventServiceTests
+[INFO] Running com.complex.platform.evidence.AuditEventServiceTests
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.complex.platform.evidence.AuditEventServiceTests
+[INFO] Running com.complex.platform.evidence.EvidenceEventJdbcIntegrationTests
+2026-06-15T09:43:15.411Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.evidence.EvidenceEventJdbcIntegrationTests]: EvidenceEventJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:15.411Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.evidence.EvidenceEventJdbcIntegrationTests
+2026-06-15T09:43:15.413Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.evidence.EvidenceEventJdbcIntegrationTests]: EvidenceEventJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:15.414Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.evidence.EvidenceEventJdbcIntegrationTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:15.434Z  INFO 814793 --- [complex-api] [           main] .c.p.e.EvidenceEventJdbcIntegrationTests : Starting EvidenceEventJdbcIntegrationTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:15.434Z DEBUG 814793 --- [complex-api] [           main] .c.p.e.EvidenceEventJdbcIntegrationTests : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:15.434Z  INFO 814793 --- [complex-api] [           main] .c.p.e.EvidenceEventJdbcIntegrationTests : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:15.710Z  INFO 814793 --- [complex-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-15T09:43:15.722Z  INFO 814793 --- [complex-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 6 ms. Found 0 JPA repository interfaces.
+2026-06-15T09:43:15.872Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-06-15T09:43:15.945Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@20c7a91d
+2026-06-15T09:43:15.946Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-06-15T09:43:15.956Z  INFO 814793 --- [complex-api] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://127.0.0.1:5432/complex (PostgreSQL 16.14)
+2026-06-15T09:43:15.996Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 37 migrations (execution time 00:00.019s)
+2026-06-15T09:43:16.013Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 037
+2026-06-15T09:43:16.014Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-06-15T09:43:16.054Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-06-15T09:43:16.075Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-06-15T09:43:16.169Z  INFO 814793 --- [complex-api] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-15T09:43:16.203Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://127.0.0.1:5432/complex]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: complex/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-15T09:43:16.362Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-15T09:43:16.402Z  INFO 814793 --- [complex-api] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-15T09:43:16.611Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:16.853Z  INFO 814793 --- [complex-api] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-06-15T09:43:16.879Z  INFO 814793 --- [complex-api] [           main] .c.p.e.EvidenceEventJdbcIntegrationTests : Started EvidenceEventJdbcIntegrationTests in 1.462 seconds (process running for 5.642)
+2026-06-15T09:43:16.907Z  WARN 814793 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/openapi endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-06-15T09:43:16.908Z  WARN 814793 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/swagger-ui endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.576 s -- in com.complex.platform.evidence.EvidenceEventJdbcIntegrationTests
+[INFO] Running com.complex.platform.common.idempotency.IdempotencyServiceTests
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.complex.platform.common.idempotency.IdempotencyServiceTests
+[INFO] Running com.complex.platform.common.api.GlobalExceptionHandlerTests
+2026-06-15T09:43:16.998Z ERROR 814793 --- [complex-api] [           main] c.c.p.common.api.GlobalExceptionHandler  : Unhandled API exception
+
+java.lang.IllegalStateException: jdbc root cause
+	at com.complex.platform.common.api.GlobalExceptionHandlerTests.unexpectedExceptionsKeepGenericResponseAndLogRootCause(GlobalExceptionHandlerTests.java:18) ~[test-classes/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:701) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.platform.commons.support.ReflectionSupport.invokeMethod(ReflectionSupport.java:502) ~[junit-platform-commons-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.support.MethodReflectionUtils.invoke(MethodReflectionUtils.java:45) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:61) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:124) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:163) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:148) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:123) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:105) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:99) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:66) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:47) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:39) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:104) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:98) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invokeVoid(InterceptingExecutableInvoker.java:71) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$0(TestMethodTestDescriptor.java:219) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:215) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:157) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:70) ~[junit-jupiter-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:176) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596) ~[na:na]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:42) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$2(NodeTestTask.java:180) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$1(NodeTestTask.java:166) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:138) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$0(NodeTestTask.java:164) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:74) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:163) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:116) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:36) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:52) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:58) ~[junit-platform-engine-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.executeEngine(EngineExecutionOrchestrator.java:246) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.failOrExecuteEngine(EngineExecutionOrchestrator.java:218) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:179) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:108) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:66) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:157) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:65) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:125) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:114) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.lambda$execute$2(InterceptingLauncher.java:57) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.ClasspathAlignmentCheckingLauncherInterceptor.intercept(ClasspathAlignmentCheckingLauncherInterceptor.java:25) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.InterceptingLauncher.execute(InterceptingLauncher.java:56) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:58) ~[junit-platform-launcher-6.0.3.jar:6.0.3]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.apache.maven.surefire.api.util.ReflectionUtils.invokeMethodWithArray(ReflectionUtils.java:125) ~[surefire-api-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.executeWithCancellationToken(LauncherAdapter.java:68) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.LauncherAdapter.execute(LauncherAdapter.java:54) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:203) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:168) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:136) ~[surefire-junit-platform-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507) ~[surefire-booter-3.5.6.jar:3.5.6]
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495) ~[surefire-booter-3.5.6.jar:3.5.6]
+
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.complex.platform.common.api.GlobalExceptionHandlerTests
+[INFO] Running com.complex.platform.finance.FinanceServiceTests
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.complex.platform.finance.FinanceServiceTests
+[INFO] Running com.complex.platform.finance.FinanceJdbcIntegrationTests
+2026-06-15T09:43:17.027Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.finance.FinanceJdbcIntegrationTests]: FinanceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:17.032Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.finance.FinanceJdbcIntegrationTests
+2026-06-15T09:43:17.032Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.finance.FinanceJdbcIntegrationTests]: FinanceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:17.033Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.finance.FinanceJdbcIntegrationTests
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in com.complex.platform.finance.FinanceJdbcIntegrationTests
+[INFO] Running com.complex.platform.finance.FinanceControllerTests
+2026-06-15T09:43:17.059Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.finance.FinanceControllerTests
+2026-06-15T09:43:17.061Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.finance.FinanceControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:17.072Z  INFO 814793 --- [complex-api] [           main] c.c.p.finance.FinanceControllerTests     : Starting FinanceControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:17.072Z DEBUG 814793 --- [complex-api] [           main] c.c.p.finance.FinanceControllerTests     : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:17.072Z  INFO 814793 --- [complex-api] [           main] c.c.p.finance.FinanceControllerTests     : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:17.185Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:17.202Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:17.202Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:17.203Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:17.203Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:17.207Z  INFO 814793 --- [complex-api] [           main] c.c.p.finance.FinanceControllerTests     : Started FinanceControllerTests in 0.144 seconds (process running for 5.97)
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.193 s -- in com.complex.platform.finance.FinanceControllerTests
+[INFO] Running com.complex.platform.merchantbilling.MerchantBillingControllerTests
+2026-06-15T09:43:17.256Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantbilling.MerchantBillingControllerTests
+2026-06-15T09:43:17.258Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantbilling.MerchantBillingControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:17.266Z  INFO 814793 --- [complex-api] [           main] c.c.p.m.MerchantBillingControllerTests   : Starting MerchantBillingControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:17.267Z DEBUG 814793 --- [complex-api] [           main] c.c.p.m.MerchantBillingControllerTests   : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:17.267Z  INFO 814793 --- [complex-api] [           main] c.c.p.m.MerchantBillingControllerTests   : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:17.372Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:17.386Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:17.386Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:17.387Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:17.387Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:17.391Z  INFO 814793 --- [complex-api] [           main] c.c.p.m.MerchantBillingControllerTests   : Started MerchantBillingControllerTests in 0.132 seconds (process running for 6.154)
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.186 s -- in com.complex.platform.merchantbilling.MerchantBillingControllerTests
+[INFO] Running com.complex.platform.merchantbilling.MerchantBillingJdbcIntegrationTests
+2026-06-15T09:43:17.437Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.merchantbilling.MerchantBillingJdbcIntegrationTests]: MerchantBillingJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:17.437Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantbilling.MerchantBillingJdbcIntegrationTests
+2026-06-15T09:43:17.437Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.merchantbilling.MerchantBillingJdbcIntegrationTests]: MerchantBillingJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:17.438Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantbilling.MerchantBillingJdbcIntegrationTests
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.complex.platform.merchantbilling.MerchantBillingJdbcIntegrationTests
+[INFO] Running com.complex.platform.merchantbilling.MerchantBillingServiceTests
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in com.complex.platform.merchantbilling.MerchantBillingServiceTests
+[INFO] Running com.complex.platform.customer.CustomerJdbcIntegrationTests
+2026-06-15T09:43:17.479Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.customer.CustomerJdbcIntegrationTests]: CustomerJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:17.483Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.customer.CustomerJdbcIntegrationTests
+2026-06-15T09:43:17.484Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.customer.CustomerJdbcIntegrationTests]: CustomerJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:17.484Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.customer.CustomerJdbcIntegrationTests
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.032 s -- in com.complex.platform.customer.CustomerJdbcIntegrationTests
+[INFO] Running com.complex.platform.customer.CustomerServiceTests
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.115 s -- in com.complex.platform.customer.CustomerServiceTests
+[INFO] Running com.complex.platform.customer.CustomerControllerTests
+2026-06-15T09:43:17.628Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.customer.CustomerControllerTests
+2026-06-15T09:43:17.630Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.customer.CustomerControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:17.640Z  INFO 814793 --- [complex-api] [           main] c.c.p.customer.CustomerControllerTests   : Starting CustomerControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:17.640Z DEBUG 814793 --- [complex-api] [           main] c.c.p.customer.CustomerControllerTests   : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:17.640Z  INFO 814793 --- [complex-api] [           main] c.c.p.customer.CustomerControllerTests   : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:17.745Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:17.760Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:17.760Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:17.760Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:17.760Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:17.764Z  INFO 814793 --- [complex-api] [           main] c.c.p.customer.CustomerControllerTests   : Started CustomerControllerTests in 0.132 seconds (process running for 6.526)
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.180 s -- in com.complex.platform.customer.CustomerControllerTests
+[INFO] Running com.complex.platform.system.SystemControllerTests
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.complex.platform.system.SystemControllerTests
+[INFO] Running com.complex.platform.inventory.InventoryServiceTests
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.048 s -- in com.complex.platform.inventory.InventoryServiceTests
+[INFO] Running com.complex.platform.inventory.InventoryControllerTests
+2026-06-15T09:43:17.864Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.inventory.InventoryControllerTests
+2026-06-15T09:43:17.866Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.inventory.InventoryControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:17.886Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.InventoryControllerTests         : Starting InventoryControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:17.886Z DEBUG 814793 --- [complex-api] [           main] c.c.p.i.InventoryControllerTests         : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:17.886Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.InventoryControllerTests         : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:17.982Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:17.996Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:17.996Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:17.996Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:17.997Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:18.001Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.InventoryControllerTests         : Started InventoryControllerTests in 0.121 seconds (process running for 6.763)
+[INFO] Tests run: 38, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.294 s -- in com.complex.platform.inventory.InventoryControllerTests
+[INFO] Running com.complex.platform.inventory.InventoryJdbcIntegrationTests
+2026-06-15T09:43:18.154Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.inventory.InventoryJdbcIntegrationTests]: InventoryJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.154Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.inventory.InventoryJdbcIntegrationTests
+2026-06-15T09:43:18.155Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.inventory.InventoryJdbcIntegrationTests]: InventoryJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.155Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.inventory.InventoryJdbcIntegrationTests
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in com.complex.platform.inventory.InventoryJdbcIntegrationTests
+[INFO] Running com.complex.platform.amusement.AmusementJdbcIntegrationTests
+2026-06-15T09:43:18.182Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.amusement.AmusementJdbcIntegrationTests]: AmusementJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.187Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementJdbcIntegrationTests
+2026-06-15T09:43:18.187Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.amusement.AmusementJdbcIntegrationTests]: AmusementJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.187Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementJdbcIntegrationTests
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.030 s -- in com.complex.platform.amusement.AmusementJdbcIntegrationTests
+[INFO] Running com.complex.platform.amusement.AmusementSafetyJdbcIntegrationTests
+2026-06-15T09:43:18.212Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.amusement.AmusementSafetyJdbcIntegrationTests]: AmusementSafetyJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.213Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementSafetyJdbcIntegrationTests
+2026-06-15T09:43:18.213Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.amusement.AmusementSafetyJdbcIntegrationTests]: AmusementSafetyJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.213Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementSafetyJdbcIntegrationTests
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.complex.platform.amusement.AmusementSafetyJdbcIntegrationTests
+[INFO] Running com.complex.platform.amusement.AmusementServiceTests
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in com.complex.platform.amusement.AmusementServiceTests
+[INFO] Running com.complex.platform.amusement.AmusementControllerTests
+2026-06-15T09:43:18.298Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementControllerTests
+2026-06-15T09:43:18.299Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:18.308Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AmusementControllerTests         : Starting AmusementControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:18.308Z DEBUG 814793 --- [complex-api] [           main] c.c.p.a.AmusementControllerTests         : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:18.308Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AmusementControllerTests         : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:18.403Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:18.415Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:18.415Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:18.415Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:18.416Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:18.419Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AmusementControllerTests         : Started AmusementControllerTests in 0.119 seconds (process running for 7.182)
+[INFO] Tests run: 47, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.286 s -- in com.complex.platform.amusement.AmusementControllerTests
+[INFO] Running com.complex.platform.amusement.AmusementSafetyServiceTests
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in com.complex.platform.amusement.AmusementSafetyServiceTests
+[INFO] Running com.complex.platform.amusement.AmusementSafetyControllerTests
+2026-06-15T09:43:18.598Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementSafetyControllerTests
+2026-06-15T09:43:18.599Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.amusement.AmusementSafetyControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:18.606Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AmusementSafetyControllerTests   : Starting AmusementSafetyControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:18.606Z DEBUG 814793 --- [complex-api] [           main] c.c.p.a.AmusementSafetyControllerTests   : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:18.606Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AmusementSafetyControllerTests   : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:18.693Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:18.704Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:18.704Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:18.704Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:18.705Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:18.708Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AmusementSafetyControllerTests   : Started AmusementSafetyControllerTests in 0.108 seconds (process running for 7.471)
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.138 s -- in com.complex.platform.amusement.AmusementSafetyControllerTests
+[INFO] Running com.complex.platform.analytics.AnalyticsControllerTests
+2026-06-15T09:43:18.739Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.analytics.AnalyticsControllerTests
+2026-06-15T09:43:18.740Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.analytics.AnalyticsControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:18.748Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AnalyticsControllerTests         : Starting AnalyticsControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:18.748Z DEBUG 814793 --- [complex-api] [           main] c.c.p.a.AnalyticsControllerTests         : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:18.748Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AnalyticsControllerTests         : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:18.836Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:18.848Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:18.848Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:18.848Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:18.849Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:18.852Z  INFO 814793 --- [complex-api] [           main] c.c.p.a.AnalyticsControllerTests         : Started AnalyticsControllerTests in 0.109 seconds (process running for 7.614)
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.172 s -- in com.complex.platform.analytics.AnalyticsControllerTests
+[INFO] Running com.complex.platform.analytics.AnalyticsJdbcIntegrationTests
+2026-06-15T09:43:18.907Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.analytics.AnalyticsJdbcIntegrationTests]: AnalyticsJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.907Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.analytics.AnalyticsJdbcIntegrationTests
+2026-06-15T09:43:18.907Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.analytics.AnalyticsJdbcIntegrationTests]: AnalyticsJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:18.908Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.analytics.AnalyticsJdbcIntegrationTests
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.complex.platform.analytics.AnalyticsJdbcIntegrationTests
+[INFO] Running com.complex.platform.analytics.AnalyticsServiceTests
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.complex.platform.analytics.AnalyticsServiceTests
+[INFO] Running com.complex.platform.integration.IntegrationServiceTests
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.complex.platform.integration.IntegrationServiceTests
+[INFO] Running com.complex.platform.integration.OpenPlatformControllerTests
+2026-06-15T09:43:18.963Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.integration.OpenPlatformControllerTests
+2026-06-15T09:43:18.965Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.integration.OpenPlatformControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:18.971Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.OpenPlatformControllerTests      : Starting OpenPlatformControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:18.972Z DEBUG 814793 --- [complex-api] [           main] c.c.p.i.OpenPlatformControllerTests      : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:18.972Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.OpenPlatformControllerTests      : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:19.065Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:19.075Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:19.075Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:19.075Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:19.076Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:19.079Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.OpenPlatformControllerTests      : Started OpenPlatformControllerTests in 0.113 seconds (process running for 7.842)
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.140 s -- in com.complex.platform.integration.OpenPlatformControllerTests
+[INFO] Running com.complex.platform.integration.IntegrationJdbcIntegrationTests
+2026-06-15T09:43:19.099Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.integration.IntegrationJdbcIntegrationTests]: IntegrationJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.100Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.integration.IntegrationJdbcIntegrationTests
+2026-06-15T09:43:19.100Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.integration.IntegrationJdbcIntegrationTests]: IntegrationJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.100Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.integration.IntegrationJdbcIntegrationTests
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.complex.platform.integration.IntegrationJdbcIntegrationTests
+[INFO] Running com.complex.platform.integration.IntegrationControllerTests
+2026-06-15T09:43:19.138Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.integration.IntegrationControllerTests
+2026-06-15T09:43:19.140Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.integration.IntegrationControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:19.146Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.IntegrationControllerTests       : Starting IntegrationControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:19.146Z DEBUG 814793 --- [complex-api] [           main] c.c.p.i.IntegrationControllerTests       : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:19.146Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.IntegrationControllerTests       : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:19.198Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:19.210Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:19.210Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:19.210Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:19.210Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:19.214Z  INFO 814793 --- [complex-api] [           main] c.c.p.i.IntegrationControllerTests       : Started IntegrationControllerTests in 0.072 seconds (process running for 7.976)
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.121 s -- in com.complex.platform.integration.IntegrationControllerTests
+[INFO] Running com.complex.platform.compliance.ComplianceJdbcIntegrationTests
+2026-06-15T09:43:19.258Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.compliance.ComplianceJdbcIntegrationTests]: ComplianceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.261Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.compliance.ComplianceJdbcIntegrationTests
+2026-06-15T09:43:19.262Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.compliance.ComplianceJdbcIntegrationTests]: ComplianceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.262Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.compliance.ComplianceJdbcIntegrationTests
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.complex.platform.compliance.ComplianceJdbcIntegrationTests
+[INFO] Running com.complex.platform.compliance.ComplianceServiceTests
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.complex.platform.compliance.ComplianceServiceTests
+[INFO] Running com.complex.platform.compliance.ComplianceControllerTests
+2026-06-15T09:43:19.287Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.compliance.ComplianceControllerTests
+2026-06-15T09:43:19.288Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.compliance.ComplianceControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:19.294Z  INFO 814793 --- [complex-api] [           main] c.c.p.c.ComplianceControllerTests        : Starting ComplianceControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:19.294Z DEBUG 814793 --- [complex-api] [           main] c.c.p.c.ComplianceControllerTests        : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:19.294Z  INFO 814793 --- [complex-api] [           main] c.c.p.c.ComplianceControllerTests        : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:19.388Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:19.399Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:19.399Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:19.399Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:19.399Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:19.402Z  INFO 814793 --- [complex-api] [           main] c.c.p.c.ComplianceControllerTests        : Started ComplianceControllerTests in 0.113 seconds (process running for 8.165)
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.131 s -- in com.complex.platform.compliance.ComplianceControllerTests
+[INFO] Running com.complex.platform.floorplan.FloorPlanImportParserTests
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.complex.platform.floorplan.FloorPlanImportParserTests
+[INFO] Running com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests
+2026-06-15T09:43:19.424Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests]: FloorPlanJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.427Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests
+2026-06-15T09:43:19.427Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests]: FloorPlanJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.428Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.complex.platform.floorplan.FloorPlanJdbcIntegrationTests
+[INFO] Running com.complex.platform.floorplan.FloorPlanServiceTests
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.020 s -- in com.complex.platform.floorplan.FloorPlanServiceTests
+[INFO] Running com.complex.platform.floorplan.FloorPlanControllerTests
+2026-06-15T09:43:19.471Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanControllerTests
+2026-06-15T09:43:19.472Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.floorplan.FloorPlanControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:19.478Z  INFO 814793 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : Starting FloorPlanControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:19.478Z DEBUG 814793 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:19.478Z  INFO 814793 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:19.564Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:19.583Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:19.583Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:19.583Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:19.583Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:19.586Z  INFO 814793 --- [complex-api] [           main] c.c.p.f.FloorPlanControllerTests         : Started FloorPlanControllerTests in 0.113 seconds (process running for 8.349)
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.148 s -- in com.complex.platform.floorplan.FloorPlanControllerTests
+[INFO] Running com.complex.platform.ticketing.TicketingJdbcIntegrationTests
+2026-06-15T09:43:19.618Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.ticketing.TicketingJdbcIntegrationTests]: TicketingJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.622Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ticketing.TicketingJdbcIntegrationTests
+2026-06-15T09:43:19.622Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.ticketing.TicketingJdbcIntegrationTests]: TicketingJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.622Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ticketing.TicketingJdbcIntegrationTests
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s -- in com.complex.platform.ticketing.TicketingJdbcIntegrationTests
+[INFO] Running com.complex.platform.ticketing.TicketingControllerTests
+2026-06-15T09:43:19.674Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ticketing.TicketingControllerTests
+2026-06-15T09:43:19.675Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ticketing.TicketingControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:19.683Z  INFO 814793 --- [complex-api] [           main] c.c.p.t.TicketingControllerTests         : Starting TicketingControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:19.683Z DEBUG 814793 --- [complex-api] [           main] c.c.p.t.TicketingControllerTests         : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:19.683Z  INFO 814793 --- [complex-api] [           main] c.c.p.t.TicketingControllerTests         : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:19.741Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:19.754Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:19.754Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:19.754Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:19.754Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:19.757Z  INFO 814793 --- [complex-api] [           main] c.c.p.t.TicketingControllerTests         : Started TicketingControllerTests in 0.081 seconds (process running for 8.52)
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.118 s -- in com.complex.platform.ticketing.TicketingControllerTests
+[INFO] Running com.complex.platform.ticketing.TicketingServiceTests
+[INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.048 s -- in com.complex.platform.ticketing.TicketingServiceTests
+[INFO] Running com.complex.platform.governance.PlatformJdbcIntegrationTests
+2026-06-15T09:43:19.840Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.governance.PlatformJdbcIntegrationTests]: PlatformJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.844Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.PlatformJdbcIntegrationTests
+2026-06-15T09:43:19.844Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.governance.PlatformJdbcIntegrationTests]: PlatformJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:19.845Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.PlatformJdbcIntegrationTests
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.046 s -- in com.complex.platform.governance.PlatformJdbcIntegrationTests
+[INFO] Running com.complex.platform.governance.PlatformServiceTests
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.complex.platform.governance.PlatformServiceTests
+[INFO] Running com.complex.platform.governance.PlatformControllerTests
+2026-06-15T09:43:19.902Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.PlatformControllerTests
+2026-06-15T09:43:19.903Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.governance.PlatformControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:19.910Z  INFO 814793 --- [complex-api] [           main] c.c.p.g.PlatformControllerTests          : Starting PlatformControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:19.910Z DEBUG 814793 --- [complex-api] [           main] c.c.p.g.PlatformControllerTests          : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:19.910Z  INFO 814793 --- [complex-api] [           main] c.c.p.g.PlatformControllerTests          : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:20.011Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:20.023Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:20.023Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:20.023Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:20.024Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:20.027Z  INFO 814793 --- [complex-api] [           main] c.c.p.g.PlatformControllerTests          : Started PlatformControllerTests in 0.123 seconds (process running for 8.79)
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.158 s -- in com.complex.platform.governance.PlatformControllerTests
+[INFO] Running com.complex.platform.terminal.TerminalDeviceServiceTests
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in com.complex.platform.terminal.TerminalDeviceServiceTests
+[INFO] Running com.complex.platform.terminal.TerminalDeviceControllerTests
+2026-06-15T09:43:20.093Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.terminal.TerminalDeviceControllerTests
+2026-06-15T09:43:20.094Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.terminal.TerminalDeviceControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:20.101Z  INFO 814793 --- [complex-api] [           main] c.c.p.t.TerminalDeviceControllerTests    : Starting TerminalDeviceControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:20.101Z DEBUG 814793 --- [complex-api] [           main] c.c.p.t.TerminalDeviceControllerTests    : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:20.101Z  INFO 814793 --- [complex-api] [           main] c.c.p.t.TerminalDeviceControllerTests    : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:20.202Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:20.213Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:20.213Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:20.213Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:20.213Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:20.217Z  INFO 814793 --- [complex-api] [           main] c.c.p.t.TerminalDeviceControllerTests    : Started TerminalDeviceControllerTests in 0.121 seconds (process running for 8.979)
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.160 s -- in com.complex.platform.terminal.TerminalDeviceControllerTests
+[INFO] Running com.complex.platform.terminal.TerminalDeviceJdbcIntegrationTests
+2026-06-15T09:43:20.249Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.terminal.TerminalDeviceJdbcIntegrationTests]: TerminalDeviceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:20.249Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.terminal.TerminalDeviceJdbcIntegrationTests
+2026-06-15T09:43:20.249Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.terminal.TerminalDeviceJdbcIntegrationTests]: TerminalDeviceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:20.249Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.terminal.TerminalDeviceJdbcIntegrationTests
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.067 s -- in com.complex.platform.terminal.TerminalDeviceJdbcIntegrationTests
+[INFO] Running com.complex.platform.merchantservice.MerchantServiceControllerTests
+2026-06-15T09:43:20.320Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantservice.MerchantServiceControllerTests
+2026-06-15T09:43:20.322Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantservice.MerchantServiceControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:20.329Z  INFO 814793 --- [complex-api] [           main] c.c.p.m.MerchantServiceControllerTests   : Starting MerchantServiceControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:20.329Z DEBUG 814793 --- [complex-api] [           main] c.c.p.m.MerchantServiceControllerTests   : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:20.329Z  INFO 814793 --- [complex-api] [           main] c.c.p.m.MerchantServiceControllerTests   : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:20.429Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:20.439Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:20.439Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:20.440Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:20.440Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:20.443Z  INFO 814793 --- [complex-api] [           main] c.c.p.m.MerchantServiceControllerTests   : Started MerchantServiceControllerTests in 0.12 seconds (process running for 9.206)
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.148 s -- in com.complex.platform.merchantservice.MerchantServiceControllerTests
+[INFO] Running com.complex.platform.merchantservice.MerchantServiceJdbcIntegrationTests
+2026-06-15T09:43:20.464Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.merchantservice.MerchantServiceJdbcIntegrationTests]: MerchantServiceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:20.465Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantservice.MerchantServiceJdbcIntegrationTests
+2026-06-15T09:43:20.465Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.merchantservice.MerchantServiceJdbcIntegrationTests]: MerchantServiceJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:20.466Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.merchantservice.MerchantServiceJdbcIntegrationTests
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.complex.platform.merchantservice.MerchantServiceJdbcIntegrationTests
+[INFO] Running com.complex.platform.merchantservice.MerchantServiceServiceTests
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.complex.platform.merchantservice.MerchantServiceServiceTests
+[INFO] Running com.complex.platform.access.AuthorizationServiceTests
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.complex.platform.access.AuthorizationServiceTests
+[INFO] Running com.complex.platform.access.AccessControllerTests
+2026-06-15T09:43:20.502Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.access.AccessControllerTests
+2026-06-15T09:43:20.503Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.access.AccessControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:20.510Z  INFO 814793 --- [complex-api] [           main] c.c.p.access.AccessControllerTests       : Starting AccessControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:20.510Z DEBUG 814793 --- [complex-api] [           main] c.c.p.access.AccessControllerTests       : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:20.510Z  INFO 814793 --- [complex-api] [           main] c.c.p.access.AccessControllerTests       : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:20.609Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:20.620Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:20.620Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:20.620Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:20.621Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-06-15T09:43:20.624Z  INFO 814793 --- [complex-api] [           main] c.c.p.access.AccessControllerTests       : Started AccessControllerTests in 0.12 seconds (process running for 9.387)
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.141 s -- in com.complex.platform.access.AccessControllerTests
+[INFO] Running com.complex.platform.access.AccessServiceTests
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.complex.platform.access.AccessServiceTests
+[INFO] Running com.complex.platform.access.AccessJdbcIntegrationTests
+2026-06-15T09:43:20.645Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.access.AccessJdbcIntegrationTests]: AccessJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:20.646Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.access.AccessJdbcIntegrationTests
+2026-06-15T09:43:20.646Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.access.AccessJdbcIntegrationTests]: AccessJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:20.646Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.access.AccessJdbcIntegrationTests
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in com.complex.platform.access.AccessJdbcIntegrationTests
+[INFO] Running com.complex.platform.bar.FinanceBarReceivableLedgerServiceTests
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.complex.platform.bar.FinanceBarReceivableLedgerServiceTests
+[INFO] Running com.complex.platform.bar.BarServiceTests
+[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.059 s -- in com.complex.platform.bar.BarServiceTests
+[INFO] Running com.complex.platform.bar.BarControllerTests
+2026-06-15T09:43:20.736Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.bar.BarControllerTests
+2026-06-15T09:43:20.737Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.bar.BarControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:20.746Z  INFO 814793 --- [complex-api] [           main] c.c.platform.bar.BarControllerTests      : Starting BarControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:20.746Z DEBUG 814793 --- [complex-api] [           main] c.c.platform.bar.BarControllerTests      : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:20.746Z  INFO 814793 --- [complex-api] [           main] c.c.platform.bar.BarControllerTests      : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:20.847Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:20.873Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:20.873Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:20.873Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:20.873Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:20.878Z  INFO 814793 --- [complex-api] [           main] c.c.platform.bar.BarControllerTests      : Started BarControllerTests in 0.138 seconds (process running for 9.641)
+[INFO] Tests run: 50, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.289 s -- in com.complex.platform.bar.BarControllerTests
+[INFO] Running com.complex.platform.bar.BarJdbcIntegrationTests
+2026-06-15T09:43:21.020Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.bar.BarJdbcIntegrationTests]: BarJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:21.020Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.bar.BarJdbcIntegrationTests
+2026-06-15T09:43:21.020Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.bar.BarJdbcIntegrationTests]: BarJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:21.020Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.bar.BarJdbcIntegrationTests
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in com.complex.platform.bar.BarJdbcIntegrationTests
+[INFO] Running com.complex.platform.ops.productionreadiness.ProductionReadinessServiceTests
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in com.complex.platform.ops.productionreadiness.ProductionReadinessServiceTests
+[INFO] Running com.complex.platform.ops.productionreadiness.ProductionReadinessJdbcIntegrationTests
+2026-06-15T09:43:21.062Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.ops.productionreadiness.ProductionReadinessJdbcIntegrationTests]: ProductionReadinessJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:21.066Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ops.productionreadiness.ProductionReadinessJdbcIntegrationTests
+2026-06-15T09:43:21.066Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.ops.productionreadiness.ProductionReadinessJdbcIntegrationTests]: ProductionReadinessJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:21.067Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ops.productionreadiness.ProductionReadinessJdbcIntegrationTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:21.072Z  INFO 814793 --- [complex-api] [           main] .ProductionReadinessJdbcIntegrationTests : Starting ProductionReadinessJdbcIntegrationTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:21.072Z DEBUG 814793 --- [complex-api] [           main] .ProductionReadinessJdbcIntegrationTests : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:21.072Z  INFO 814793 --- [complex-api] [           main] .ProductionReadinessJdbcIntegrationTests : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:21.129Z  INFO 814793 --- [complex-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-15T09:43:21.133Z  INFO 814793 --- [complex-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 3 ms. Found 0 JPA repository interfaces.
+2026-06-15T09:43:21.161Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
+2026-06-15T09:43:21.169Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@4c0eee08
+2026-06-15T09:43:21.169Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
+2026-06-15T09:43:21.170Z  INFO 814793 --- [complex-api] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://127.0.0.1:5432/complex (PostgreSQL 16.14)
+2026-06-15T09:43:21.189Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 37 migrations (execution time 00:00.009s)
+2026-06-15T09:43:21.200Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 037
+2026-06-15T09:43:21.200Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-06-15T09:43:21.207Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-06-15T09:43:21.215Z  INFO 814793 --- [complex-api] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-15T09:43:21.218Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://127.0.0.1:5432/complex]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: complex/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-15T09:43:21.225Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-15T09:43:21.242Z  INFO 814793 --- [complex-api] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-15T09:43:21.277Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:21.333Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:21.333Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:21.333Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:21.334Z  INFO 814793 --- [complex-api] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-06-15T09:43:21.335Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+2026-06-15T09:43:21.344Z  INFO 814793 --- [complex-api] [           main] .ProductionReadinessJdbcIntegrationTests : Started ProductionReadinessJdbcIntegrationTests in 0.276 seconds (process running for 10.107)
+2026-06-15T09:43:21.345Z  WARN 814793 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/openapi endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-06-15T09:43:21.345Z  WARN 814793 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/swagger-ui endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.346 s -- in com.complex.platform.ops.productionreadiness.ProductionReadinessJdbcIntegrationTests
+[INFO] Running com.complex.platform.ops.productionreadiness.ProductionReadinessControllerTests
+2026-06-15T09:43:21.410Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ops.productionreadiness.ProductionReadinessControllerTests
+2026-06-15T09:43:21.411Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.ops.productionreadiness.ProductionReadinessControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:21.417Z  INFO 814793 --- [complex-api] [           main] p.o.p.ProductionReadinessControllerTests : Starting ProductionReadinessControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:21.418Z DEBUG 814793 --- [complex-api] [           main] p.o.p.ProductionReadinessControllerTests : Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-06-15T09:43:21.418Z  INFO 814793 --- [complex-api] [           main] p.o.p.ProductionReadinessControllerTests : No active profile set, falling back to 1 default profile: "local"
+2026-06-15T09:43:21.510Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:21.519Z DEBUG 814793 --- [complex-api] [           main] c.c.p.auth.BearerAuthenticationFilter    : Filter 'bearerAuthenticationFilter' configured for use
+2026-06-15T09:43:21.519Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:21.519Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:21.519Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:21.522Z  INFO 814793 --- [complex-api] [           main] p.o.p.ProductionReadinessControllerTests : Started ProductionReadinessControllerTests in 0.109 seconds (process running for 10.284)
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.134 s -- in com.complex.platform.ops.productionreadiness.ProductionReadinessControllerTests
+[INFO] Running com.complex.platform.auth.AuthControllerTests
+2026-06-15T09:43:21.547Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.auth.AuthControllerTests
+2026-06-15T09:43:21.548Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.auth.AuthControllerTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:21.554Z  INFO 814793 --- [complex-api] [           main] c.c.platform.auth.AuthControllerTests    : Starting AuthControllerTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:21.554Z  INFO 814793 --- [complex-api] [           main] c.c.platform.auth.AuthControllerTests    : The following 1 profile is active: "test"
+2026-06-15T09:43:21.599Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:21.609Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:21.609Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:21.609Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-06-15T09:43:21.611Z  INFO 814793 --- [complex-api] [           main] c.c.platform.auth.AuthControllerTests    : Started AuthControllerTests in 0.062 seconds (process running for 10.374)
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.085 s -- in com.complex.platform.auth.AuthControllerTests
+[INFO] Running com.complex.platform.auth.AuthServiceTests
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.complex.platform.auth.AuthServiceTests
+[INFO] Running com.complex.platform.auth.BearerAuthenticationFilterTests
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 s -- in com.complex.platform.auth.BearerAuthenticationFilterTests
+[INFO] Running com.complex.platform.auth.ProductionAuthJdbcIntegrationTests
+2026-06-15T09:43:21.632Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.auth.ProductionAuthJdbcIntegrationTests]: ProductionAuthJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:21.632Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.auth.ProductionAuthJdbcIntegrationTests
+2026-06-15T09:43:21.632Z  INFO 814793 --- [complex-api] [           main] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.complex.platform.auth.ProductionAuthJdbcIntegrationTests]: ProductionAuthJdbcIntegrationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+2026-06-15T09:43:21.633Z  INFO 814793 --- [complex-api] [           main] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.complex.platform.ComplexApiApplication for test class com.complex.platform.auth.ProductionAuthJdbcIntegrationTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-06-15T09:43:21.640Z  INFO 814793 --- [complex-api] [           main] c.p.a.ProductionAuthJdbcIntegrationTests : Starting ProductionAuthJdbcIntegrationTests using Java 21.0.11 with PID 814793 (started by james in /home/james/complex-management/backend)
+2026-06-15T09:43:21.640Z  INFO 814793 --- [complex-api] [           main] c.p.a.ProductionAuthJdbcIntegrationTests : The following 1 profile is active: "prod"
+2026-06-15T09:43:21.695Z  INFO 814793 --- [complex-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-15T09:43:21.699Z  INFO 814793 --- [complex-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 3 ms. Found 0 JPA repository interfaces.
+2026-06-15T09:43:21.724Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Starting...
+2026-06-15T09:43:21.730Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@7da23c0e
+2026-06-15T09:43:21.730Z  INFO 814793 --- [complex-api] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Start completed.
+2026-06-15T09:43:21.731Z  INFO 814793 --- [complex-api] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://127.0.0.1:5432/complex (PostgreSQL 16.14)
+2026-06-15T09:43:21.741Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 37 migrations (execution time 00:00.005s)
+2026-06-15T09:43:21.749Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema "public": 037
+2026-06-15T09:43:21.749Z  INFO 814793 --- [complex-api] [           main] o.f.core.internal.command.DbMigrate      : Schema "public" is up to date. No migration necessary.
+2026-06-15T09:43:21.755Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-06-15T09:43:21.761Z  INFO 814793 --- [complex-api] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-15T09:43:21.764Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://127.0.0.1:5432/complex]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 16.14
+	Default catalog/schema: complex/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-15T09:43:21.771Z  INFO 814793 --- [complex-api] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-15T09:43:21.787Z  INFO 814793 --- [complex-api] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-15T09:43:21.874Z  INFO 814793 --- [complex-api] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name userDetailsService
+2026-06-15T09:43:21.933Z  INFO 814793 --- [complex-api] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-06-15T09:43:21.933Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-06-15T09:43:21.934Z  INFO 814793 --- [complex-api] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-06-15T09:43:21.935Z  INFO 814793 --- [complex-api] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+2026-06-15T09:43:21.943Z  INFO 814793 --- [complex-api] [           main] c.p.a.ProductionAuthJdbcIntegrationTests : Started ProductionAuthJdbcIntegrationTests in 0.309 seconds (process running for 10.706)
+2026-06-15T09:43:21.943Z  WARN 814793 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/openapi endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-06-15T09:43:21.943Z  WARN 814793 --- [complex-api] [           main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /docs/swagger-ui endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.544 s -- in com.complex.platform.auth.ProductionAuthJdbcIntegrationTests
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 543, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  11.697 s
+[INFO] Finished at: 2026-06-15T09:43:22Z
+[INFO] ------------------------------------------------------------------------

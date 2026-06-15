@@ -511,6 +511,56 @@ class TicketingServiceTests {
     }
 
     @Test
+    void dynamicCredentialVerificationStoresHashedPayloadOnly() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("credential-payload-hash");
+        TicketCredentialResponse credential = service.getTicketCredential(entitlement.id());
+
+        service.createVerification(new VerificationRequest(
+                "credential-payload-hash-once",
+                "dynamic_qr",
+                credential.credentialToken(),
+                "dev_1",
+                "gate_1",
+                Map.of()
+        ));
+
+        assertThat(ticketingRepository.listVerifications())
+                .extracting(VerificationRecord::credentialPayload)
+                .allSatisfy(payload -> assertThat(payload)
+                        .startsWith("sha256:")
+                        .doesNotContain(credential.credentialToken()));
+    }
+
+    @Test
+    void offlineSyncTaskStoresHashedDynamicCredentialPayloadOnly() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("sync-credential-payload-hash");
+        TicketCredentialResponse credential = service.getTicketCredential(entitlement.id());
+        TerminalSyncTaskItemRequest task = new TerminalSyncTaskItemRequest(
+                "client-dynamic-credential-task",
+                "offline_verification",
+                "2026-06-14T00:00:00Z",
+                Map.of(
+                        "credentialPayload", credential.credentialToken(),
+                        "pointId", "gate_1"
+                )
+        );
+
+        service.syncTerminalTasks(new TerminalSyncTasksRequest(
+                "sync-dynamic-credential",
+                "sync dynamic credential",
+                List.of(),
+                "P0-ANDROID-1",
+                "staff_1",
+                List.of(task)
+        ));
+
+        TerminalSyncTaskRecord saved = ticketingRepository.findTerminalSyncTask("P0-ANDROID-1", "client-dynamic-credential-task")
+                .orElseThrow();
+        assertThat(saved.payload().get("credentialPayload")).startsWith("sha256:");
+        assertThat(saved.payload().values()).doesNotContain(credential.credentialToken());
+    }
+
+    @Test
     void refundRequestAndApprovalDoNotDeleteIssuedHistory() {
         IssuedEntitlementRecord entitlement = issueOrderEntitlement("refund");
         TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();

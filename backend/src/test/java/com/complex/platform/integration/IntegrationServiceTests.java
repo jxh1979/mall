@@ -11,6 +11,7 @@ import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
@@ -147,7 +148,7 @@ class IntegrationServiceTests {
         payload.put("event_id", "evt-webhook");
         payload.put("idempotency_key", "idem-webhook");
         payload.put("payload", Map.of("normalized_status", "paid"));
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-webhook");
+        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-webhook", payload);
 
         WebhookAcceptedResponse first = service.receiveWebhook(
                 "p0-default",
@@ -175,6 +176,32 @@ class IntegrationServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("api_call.logged");
+    }
+
+    @Test
+    void webhookRejectsSignatureWhenPayloadChanges() {
+        Map<String, Object> signedPayload = new LinkedHashMap<>();
+        signedPayload.put("event_id", "evt-webhook-tamper");
+        signedPayload.put("idempotency_key", "idem-webhook-tamper");
+        signedPayload.put("payload", Map.of("normalized_status", "paid"));
+        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-webhook-tamper", signedPayload);
+
+        Map<String, Object> tamperedPayload = new LinkedHashMap<>();
+        tamperedPayload.put("event_id", "evt-webhook-tamper");
+        tamperedPayload.put("idempotency_key", "idem-webhook-tamper");
+        tamperedPayload.put("payload", Map.of("normalized_status", "refunded"));
+
+        assertThatThrownBy(() -> service.receiveWebhook(
+                "p0-default",
+                "mock-provider",
+                "payment.paid",
+                signature,
+                null,
+                tamperedPayload
+        )).isInstanceOfSatisfying(ApiException.class, exception ->
+                assertThat(exception.code()).isEqualTo("OPEN_WEBHOOK_SIGNATURE_INVALID"));
+
+        assertThat(repository.events).isEmpty();
     }
 
     @Test
@@ -446,8 +473,8 @@ class IntegrationServiceTests {
         return hmac(OPEN_APP_TEST_SECRET, "app_key=" + appKey + "\nnonce=" + nonce + "\ntimestamp=" + timestamp);
     }
 
-    private String webhookSignature(String endpointKey, String provider, String event, String idempotencyKey) {
-        return hmac(OPEN_WEBHOOK_TEST_SECRET, "endpoint_key=" + endpointKey + "\nevent=" + event + "\nidempotency_key=" + idempotencyKey + "\nprovider=" + provider);
+    private String webhookSignature(String endpointKey, String provider, String event, String idempotencyKey, Map<String, Object> payload) {
+        return hmac(OPEN_WEBHOOK_TEST_SECRET, "endpoint_key=" + endpointKey + "\nevent=" + event + "\nidempotency_key=" + idempotencyKey + "\npayload_hash=" + payloadHash(payload) + "\nprovider=" + provider);
     }
 
     private String hmac(String key, String value) {
@@ -455,6 +482,17 @@ class IntegrationServiceTests {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private String payloadHash(Map<String, Object> payload) {
+        try {
+            ObjectMapper mapper = new ObjectMapper()
+                    .findAndRegisterModules()
+                    .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+            return sha256(mapper.writeValueAsString(payload == null ? Map.of() : payload));
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }

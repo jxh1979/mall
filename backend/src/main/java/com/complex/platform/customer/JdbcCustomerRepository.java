@@ -5,11 +5,14 @@ import com.complex.platform.bar.BarTableRecord;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,10 +70,11 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public CustomerSessionRecord saveSession(CustomerSessionRecord session) {
         jdbcTemplate.update("""
-                INSERT INTO customer_sessions (id, customer_id, customer_token, scene, issued_at, expires_at, status)
-                VALUES (:id, :customer_id, :customer_token, :scene, :issued_at, :expires_at, :status)
+                INSERT INTO customer_sessions (id, customer_id, customer_token, customer_token_hash, scene, issued_at, expires_at, status)
+                VALUES (:id, :customer_id, :customer_token, :customer_token_hash, :scene, :issued_at, :expires_at, :status)
                 ON CONFLICT (id) DO UPDATE SET
-                    customer_token = EXCLUDED.customer_token,
+                    customer_token = NULL,
+                    customer_token_hash = EXCLUDED.customer_token_hash,
                     expires_at = EXCLUDED.expires_at,
                     status = EXCLUDED.status
                 """, sessionParameters(session));
@@ -79,11 +83,14 @@ class JdbcCustomerRepository implements CustomerRepository {
 
     @Override
     public Optional<CustomerSessionRecord> findSessionByToken(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
         return jdbcTemplate.query("""
-                SELECT id, customer_id, customer_token, scene, issued_at, expires_at, status
+                SELECT id, customer_id, customer_token_hash AS customer_token, scene, issued_at, expires_at, status
                   FROM customer_sessions
-                 WHERE customer_token = :customer_token
-                """, Map.of("customer_token", token), this::mapSession).stream().findFirst();
+                 WHERE customer_token_hash = :customer_token_hash
+                """, Map.of("customer_token_hash", sha256(token)), this::mapSession).stream().findFirst();
     }
 
     @Override
@@ -331,7 +338,8 @@ class JdbcCustomerRepository implements CustomerRepository {
         return new MapSqlParameterSource()
                 .addValue("id", session.id())
                 .addValue("customer_id", session.customerId())
-                .addValue("customer_token", session.customerToken())
+                .addValue("customer_token", null)
+                .addValue("customer_token_hash", sha256(session.customerToken()))
                 .addValue("scene", session.scene())
                 .addValue("issued_at", timestampWithTimeZone(session.issuedAt()))
                 .addValue("expires_at", timestampWithTimeZone(session.expiresAt()))
@@ -553,6 +561,15 @@ class JdbcCustomerRepository implements CustomerRepository {
     private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
         OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
         return value == null ? null : value.toInstant();
+    }
+
+    private String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException("customer token hashing unavailable", exception);
+        }
     }
 
     private String writeJson(Object value) {

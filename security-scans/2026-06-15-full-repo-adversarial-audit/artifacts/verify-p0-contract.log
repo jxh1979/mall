@@ -1,0 +1,39 @@
+
+> entertainment-complex-management@0.1.0 verify:p0-contract
+> npm run verify:openapi && npm run verify:openapi-examples && npm run verify:operation-matrix && npm run verify:openapi-closure && npm run verify:client-routes && npm run verify:client-openapi && npm run verify:client-payload
+
+
+> entertainment-complex-management@0.1.0 verify:openapi
+> node tools/verify-openapi-contract.mjs
+
+OpenAPI contract verification passed.
+
+> entertainment-complex-management@0.1.0 verify:openapi-examples
+> node tools/verify-openapi-p0-examples.mjs
+
+OpenAPI P0 example verification passed: 9 request bodies and 3 responses checked.
+
+> entertainment-complex-management@0.1.0 verify:operation-matrix
+> node tools/generate-openapi-operation-matrix.mjs --check
+
+docs/p0-openapi-operation-acceptance-matrix-v0.1.md is in sync with docs/openapi/openapi-p0.json; 190 operations checked.
+
+> entertainment-complex-management@0.1.0 verify:openapi-closure
+> node tools/generate-openapi-contract-closure-appendix.mjs --check
+
+/home/james/complex-management/docs/p0-openapi-contract-closure-appendix-v0.1.md is in sync with /home/james/complex-management/docs/openapi/openapi-p0.json; 190 operations checked.
+
+> entertainment-complex-management@0.1.0 verify:client-routes
+> node tools/audit-client-api-routes.mjs --strict
+
+[client-api-route-audit] PASS: client code only references formal /api/v1 or /api/open paths.
+
+> entertainment-complex-management@0.1.0 verify:client-openapi
+> node tools/audit-client-openapi-coverage.mjs --strict
+
+[client-openapi-coverage] PASS: 84 client route template(s) are covered by OpenAPI; 104 method-specific call(s) match OpenAPI methods.
+
+> entertainment-complex-management@0.1.0 verify:client-payload
+> node tools/verify-client-payload-policy.mjs --strict
+
+[client-payload-policy] PASS: client payload normalization and OpenAPI request field casing are enforced.

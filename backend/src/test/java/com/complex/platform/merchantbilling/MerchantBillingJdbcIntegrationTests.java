@@ -32,7 +32,7 @@ class MerchantBillingJdbcIntegrationTests {
         assertThat(regclass("merchant_bill_lines")).isEqualTo("merchant_bill_lines");
         assertThat(regclass("merchant_bill_disputes")).isEqualTo("merchant_bill_disputes");
         assertThat(regclass("merchant_bill_dunning_records")).isEqualTo("merchant_bill_dunning_records");
-        assertThat(currentFlywayVersion()).isEqualTo("037");
+        assertThat(currentFlywayVersion()).isEqualTo("039");
 
         assertThat(permissionCodes()).contains(
                 "merchant.billing.view",

@@ -1,0 +1,24 @@
+
+> entertainment-complex-management@0.1.0 verify:ops160-recovery
+> npm run verify:ops160-execution-policy && npm run verify:ops160-backup-restore && npm run verify:production-credentials && npm run verify:p0a-ops-hardening
+
+
+> entertainment-complex-management@0.1.0 verify:ops160-execution-policy
+> node tools/verify-ops160-execution-policy.mjs
+
+ops160 execution policy verification passed.
+
+> entertainment-complex-management@0.1.0 verify:ops160-backup-restore
+> node tools/verify-160-backup-restore-scripts.mjs
+
+160 backup and restore script verification passed.
+
+> entertainment-complex-management@0.1.0 verify:production-credentials
+> node tools/verify-production-credential-rotation-ledger.mjs
+
+production credential rotation ledger verification passed.
+
+> entertainment-complex-management@0.1.0 verify:p0a-ops-hardening
+> node tools/verify-p0a-ops-hardening.mjs
+
+P0-A ops hardening verification passed.
