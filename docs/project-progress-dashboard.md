@@ -71,7 +71,7 @@
 | 生产账号密钥轮换 | 台账结构已可验证；真实凭证证据待实施 | `docs/production-credential-rotation-runbook-v0.1.md`、`npm run verify:production-credentials` |
 | NAS 备份恢复 | 已收口 | `docs/nas-backup-and-restore-runbook-v0.1.md` |
 | 生产前置资料实施台账 | 已收口 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
-| 正式安全基线待生成任务 | 已收口 | `docs/formal-security-baseline-generation-task-v0.1.md` |
+| 正式安全基线生成与维护任务 | 已收口 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 文档归档审计 | 已收口 | `docs/document-retention-merge-audit-20260610.md` |
 
 ## 3. P0 实施状态口径
@@ -149,7 +149,7 @@
 | 2026-06-13 | 改 | 同步安全基线与 Spring Boot 4.x 描述后，160 API release `20260613-193142` 已发布；运行时 `/docs/openapi` 已确认包含 `Java 21 + Spring Boot 4.x`，完整 `complex-verify-p0.sh` 于 19:32 再次通过。 |
 | 2026-06-13 | 改 | 复核 160 当前环境：JDK 21.0.11、Maven 3.9.11、Node 22.22.3、npm 10.9.8、Spring Boot 4.1.0；`complex-runtime-config-check.sh`、`verify:backend-env`、`verify:android-env`、`verify:p0-contract` 和完整 `complex-verify-p0.sh` 均通过。 |
 | 2026-06-13 | 改 | `security-scans/threat_model.md` 替换为正式安全基线重建入口，防止旧 TypeScript/SQLite 原型威胁模型继续被误用为当前上线依据。 |
-| 2026-06-13 | 增/改 | 新增 `p0-first-coding-package-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`production-readiness-implementation-ledger-template-v0.1.md`；首批编码、安全基线待生成任务和生产前置资料台账均已进入执行入口、索引和验收链。 |
+| 2026-06-13 | 增/改 | 新增 `p0-first-coding-package-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`production-readiness-implementation-ledger-template-v0.1.md`；首批编码、安全基线生成与维护任务和生产前置资料台账均已进入执行入口、索引和验收链；正式安全基线 V1 已生成并纳入 `verify:security-baseline` 与 `verify:production-readiness-evidence`。 |
 | 2026-06-14 | 验证/收口 | 160 机器完成 P0 首批编码正式验收：OpenAPI 181 个 operation 与 Controller 181 个映射一致，后端 360 个测试通过，Web/Android/APK/运行态健康检查通过，`complex-verify-p0.sh` 输出 `P0 verification PASS`；新增 `p0-coding-completion-and-handoff-report-v0.1.md` 作为交接入口。 |
 | 2026-06-14 | 改 | 明确 NAS 服务器为 `192.168.88.113`；后续 Java/后端集成测试、BE-000 和完整 P0 验收默认在 160 或等效 Java 21 环境执行，本机缺 Java 21 只记录为本机环境前置缺失。 |
 | 2026-06-14 | 复核 | 已将 NAS/160 测试口径、安全基线和生产文档访问保护同步到 160；160 上 `verify:ops160-recovery`、`verify:security-baseline`、`npm run test:backend` 和 `AUTO_START_RUNTIME=true /opt/complex/scripts/complex-verify-p0.sh` 均通过，后端测试为 360 个通过，完整 P0 输出 `P0 verification PASS`。 |

@@ -111,7 +111,7 @@ if (securityEvidence) {
 for (const [relativePath, text, markers] of [
   ["security-scans/formal-security-baseline-v1.md", baselineText, ["正式安全基线 V1", `OpenAPI operation count: ${expectedOperationCount}`, "Verification command: `npm run verify:security-baseline`"]],
   ["security-scans/findings-register-v1.md", findingsText, ["Findings Register V1", `OpenAPI operation count: ${expectedOperationCount}`, "SEC-P0-MDM-DEVICE-001", "SEC-P0-OPS-RECOVERY-001"]],
-  ["docs/production-readiness-implementation-ledger-template-v0.1.md", ledgerText, ["| PRD-SEC-001 | security | 正式安全基线 |", "| PRD-SEC-001 | security | 正式安全基线 | 首批正式编码包落地后生成 V1 安全基线 | 安全/技术负责人 | 自管/第三方 | passed |", "security-scans/formal-security-baseline-v1.md", "security-scans/findings-register-v1.md"]],
+  ["docs/production-readiness-implementation-ledger-template-v0.1.md", ledgerText, ["| PRD-SEC-001 | security | 正式安全基线 |", "| PRD-SEC-001 | security | 正式安全基线 | V1 已生成；后续 OpenAPI、认证、权限、第三方、支付、MDM、生产凭证或 160 运维证据变化后必须重生成 | 安全/技术负责人 | 自管/第三方 | passed |", "security-scans/formal-security-baseline-v1.md", "security-scans/findings-register-v1.md"]],
   ["docs/production-readiness-evidence/production-readiness-evidence-backfill-20260615.md", backfillText, ["PRD-SEC-001", "security-baseline-latest.json", "verify:production-readiness-evidence"]],
   ["docs/production-readiness-evidence/nas-smb-mount-latest.json", nasEvidenceText, ["nas_smb_mount_live_rw", "plaintext_secret_present", "false"]],
 ]) {

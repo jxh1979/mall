@@ -1,4 +1,4 @@
-# 正式安全基线待生成任务 V0.1
+# 正式安全基线生成与维护任务 V0.1
 
 ## 1. 文档定位
 
@@ -89,4 +89,4 @@
 
 ## 8. 当前结论
 
-截至本文档建立时，正式安全基线处于“待生成任务已定义”状态。旧安全基线已失效；新基线必须在首批正式编码包落地并可在 160 或等效预生产环境实跑后生成。
+截至 2026-06-15，正式安全基线 V1 已生成并纳入机器校验：`security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md`、`docs/production-readiness-evidence/security-baseline-latest.json`。旧 TypeScript/Fastify/SQLite 安全基线继续失效；后续只要 OpenAPI、认证、权限、第三方接入、支付、MDM、生产凭证、160 运维或供应商证据发生实质变化，必须重新执行 `npm run docs:security-baseline && npm run verify:security-baseline && npm run verify:production-readiness-evidence`。

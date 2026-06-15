@@ -62,7 +62,7 @@
 | PRD-160-001 | ops160 | 160 运行配置生产化 | `/etc/complex/complex.env`、systemd、日志、健康检查、告警 | IT/运维 | 自管 | pending_info | 阻塞长期预生产和生产；不阻塞用户级覆盖开发验证 | `server-160-runbook-v0.2.md` | 迁移用户级覆盖到系统配置，接入 systemd 和告警 |
 | PRD-160-CODE-001 | ops160 | 160 编码保护基线 | 正式编码、完整 P0 验证、安全扫描和提交只认 `192.168.88.160` 的 `/home/james/complex-management`；本机只负责进度检查、任务拆解和质量检查 | 技术负责人/运维 | 自管 | passed | 阻塞非 160 主机形成正式编码和完整验收结论；不阻塞本机协调和文档审查 | `coding-host-protection-baseline-v0.1.md` | 已建立 `verify:coding-host-protection`、证据 JSON 和 package 闸口；后续迁移主机时必须更新基线和证据 |
 | PRD-HTTPS-001 | domain | 域名 HTTPS | 总控已确认先不绑定 | IT/总控 | TBD | not_started | 仅阻塞公开生产域名访问，不阻塞内网预生产和开发验收 | `server-160-runbook-v0.2.md` | 等总控启动公开访问后再配置 |
-| PRD-SEC-001 | security | 正式安全基线 | 首批正式编码包落地后生成 V1 安全基线 | 安全/技术负责人 | 自管/第三方 | passed | 安全基线已生成并可验证；仍需关闭 findings 中 P0/P1 open 项后才可公开生产 | `formal-security-baseline-generation-task-v0.1.md`、`security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md`、`docs/production-readiness-evidence/security-baseline-latest.json` | `npm run verify:security-baseline` 与 `npm run verify:production-readiness-evidence` 通过 |
+| PRD-SEC-001 | security | 正式安全基线 | V1 已生成；后续 OpenAPI、认证、权限、第三方、支付、MDM、生产凭证或 160 运维证据变化后必须重生成 | 安全/技术负责人 | 自管/第三方 | passed | 安全基线已生成并可验证；仍需关闭 findings 中 P0/P1 open 项后才可公开生产 | `formal-security-baseline-generation-task-v0.1.md`、`security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md`、`docs/production-readiness-evidence/security-baseline-latest.json` | `npm run verify:security-baseline` 与 `npm run verify:production-readiness-evidence` 通过 |
 
 ## 4.1 生产凭证明细台账模板
 

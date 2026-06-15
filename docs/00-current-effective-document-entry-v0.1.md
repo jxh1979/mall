@@ -52,7 +52,7 @@
 | 外部依赖准入闸口 | `docs/external-dependency-gates-v0.1.md` |
 | 交付总闸口文档 | `docs/delivery-readiness-gates-v0.1.md` |
 | 交付总闸口机器校验 | `npm run verify:delivery-gates` |
-| 正式安全基线待生成任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
+| 正式安全基线生成与维护任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
 | 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
@@ -293,7 +293,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 酒吧年龄/人脸校验供应商或等效设备 | 酒吧强制年龄校验 | 可做接口占位和测试 mock | 不得标记生产正式通过 |
 | NAS 备份与恢复演练 | 生产环境 | 真实 SMB 挂载、读写删除测试、NAS 同步备份和从 NAS 恢复演练已通过；最新证据为 `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 生产前仍需固化开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练 |
 | 生产前置资料实施台账 | 运维、IT、采购、财务、安全、供应商接入、生产准入 | 可按模板收集资料、账号、证据和阻塞范围 | 未建立 `production-readiness-implementation-ledger-template-v0.1.md` 对应台账，或 `npm run verify:ops160-recovery` 未通过前，不得用口头说明或零散截图替代上线前置证据 |
-| 正式安全基线 | 后端、OpenAPI、开放平台、支付、设备、第三方、160 运维、生产上线 | 可按 `formal-security-baseline-generation-task-v0.1.md` 准备输入和 findings register | 首批正式编码包落地后仍未生成正式安全基线时，不得进入生产安全准入 |
+| 正式安全基线 | 后端、OpenAPI、开放平台、支付、设备、第三方、160 运维、生产上线 | V1 已生成并可通过 `npm run verify:security-baseline` 与 `npm run verify:production-readiness-evidence` 复核 | 仍有 P0/P1 open findings 或生产前置 pending_info 时，不得进入公开生产安全准入 |
 
 ## 6. 第一批必须新增或补强的文档
 
@@ -325,9 +325,9 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 ## 8. 进入下一章前的审计结论
 
-当前第一批 P0 硬缺口已经收口：原型废止声明已由 `prototype-deprecation-and-technology-baseline-v0.1.md`、`verify:no-legacy-api-prototype` 和 `code-contract-difference-and-migration-audit-v0.1.md` 承接，P0 可编码入口已由 `p0-coding-entry-pack-v0.1.md` 承接，首批正式编码范围已由 `p0-first-coding-package-v0.1.md` 承接，160 API 部署/回滚/健康检查/BE-000 验收脚本已由 `ops/160/*.sh` 和 `server-160-runbook-v0.2.md` 承接，生产前置资料已由 `production-readiness-implementation-ledger-template-v0.1.md` 承接，正式安全基线待生成任务已由 `formal-security-baseline-generation-task-v0.1.md` 承接，接口契约已由 `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json`、`verify:p0-contract` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 承接，OpenAPI 权限、事件、任务追溯缺口已由 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure` 承接，Web 可构建性已由 `verify:p0-web` 承接，后端/Android 环境前置已由 `verify:p0-env` 承接，用户故事和迭代切片已由 `p0-user-story-map-and-sprint-slices-v0.1.md` 承接，任务-接口-权限-事件-验收映射已由 `p0-task-api-permission-event-acceptance-map-v0.1.md` 承接，游乐 P0 安全巡检闭环已由 `amusement-p0-safety-inspection-spec-v0.1.md` 承接。票务资格 P0 的 `ticket_eligibility_rules`、`student_credential_audits`、多人票 `num_people` 和核销放行人数留痕已收口为正式 Flyway 首批业务迁移必落项，不再作为开放待决策项。160 机器已按最新项目和脚本完成同步，并已通过环境、契约、Web 构建、运行配置预检、API/Web 启动、BE-000 运行态、整体健康检查和完整 `complex-verify-p0.sh`；当前使用 `~/.complex/complex.env` 用户级覆盖解决 `/etc/complex/complex.env` 暂无 sudo 写入权限的问题，不在文档或脚本中落真实密钥。注意：当前完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通，不代表平台、票务、权益、核销、证据、设备等业务域已完成生产级实现。
+当前第一批 P0 硬缺口已经收口：原型废止声明已由 `prototype-deprecation-and-technology-baseline-v0.1.md`、`verify:no-legacy-api-prototype` 和 `code-contract-difference-and-migration-audit-v0.1.md` 承接，P0 可编码入口已由 `p0-coding-entry-pack-v0.1.md` 承接，首批正式编码范围已由 `p0-first-coding-package-v0.1.md` 承接，160 API 部署/回滚/健康检查/BE-000 验收脚本已由 `ops/160/*.sh` 和 `server-160-runbook-v0.2.md` 承接，生产前置资料已由 `production-readiness-implementation-ledger-template-v0.1.md` 承接，正式安全基线生成与维护任务已由 `formal-security-baseline-generation-task-v0.1.md`、`security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md` 和 `verify:production-readiness-evidence` 承接，接口契约已由 `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json`、`verify:p0-contract` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 承接，OpenAPI 权限、事件、任务追溯缺口已由 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure` 承接，Web 可构建性已由 `verify:p0-web` 承接，后端/Android 环境前置已由 `verify:p0-env` 承接，用户故事和迭代切片已由 `p0-user-story-map-and-sprint-slices-v0.1.md` 承接，任务-接口-权限-事件-验收映射已由 `p0-task-api-permission-event-acceptance-map-v0.1.md` 承接，游乐 P0 安全巡检闭环已由 `amusement-p0-safety-inspection-spec-v0.1.md` 承接。票务资格 P0 的 `ticket_eligibility_rules`、`student_credential_audits`、多人票 `num_people` 和核销放行人数留痕已收口为正式 Flyway 首批业务迁移必落项，不再作为开放待决策项。160 机器已按最新项目和脚本完成同步，并已通过环境、契约、Web 构建、运行配置预检、API/Web 启动、BE-000 运行态、整体健康检查和完整 `complex-verify-p0.sh`；当前使用 `~/.complex/complex.env` 用户级覆盖解决 `/etc/complex/complex.env` 暂无 sudo 写入权限的问题，不在文档或脚本中落真实密钥。注意：当前完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通，不代表平台、票务、权益、核销、证据、设备等业务域已完成生产级实现。
 
-下一步不再新增拍板问题；建议直接按 `p0-first-coding-package-v0.1.md` 进入首批编码包执行：先完成 BE-001/BE-002、Flyway 首批正式迁移、权限模板、事件审计、主体绑定、应收应付和生产前置台账，再把当前 `local/dev/test` 内存态 smoke 切片迁移为 PostgreSQL + Flyway + Service/Repository + 权限/事件/审计的正式业务实现，并要求每替换一个 smoke 接口都保持 `complex-verify-p0.sh` 继续通过。生产或长期预生产前，IT/运维仍需把用户级覆盖配置迁入 `/etc/complex/complex.env`，接入 systemd、账号密钥轮换、告警、生产前置台账和正式安全基线。
+下一步不再新增拍板问题；建议直接按 `p0-first-coding-package-v0.1.md` 进入首批编码包执行：先完成 BE-001/BE-002、Flyway 首批正式迁移、权限模板、事件审计、主体绑定、应收应付和生产前置台账，再把当前 `local/dev/test` 内存态 smoke 切片迁移为 PostgreSQL + Flyway + Service/Repository + 权限/事件/审计的正式业务实现，并要求每替换一个 smoke 接口都保持 `complex-verify-p0.sh` 继续通过。生产或长期预生产前，IT/运维仍需把用户级覆盖配置迁入 `/etc/complex/complex.env`，接入 systemd、账号密钥轮换、告警、生产前置台账，并关闭或正式豁免安全基线 findings 中的公开生产阻断项。
 
 ## 9. 变更日志
 
