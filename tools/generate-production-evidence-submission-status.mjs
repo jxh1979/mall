@@ -160,7 +160,11 @@ function validateManifest(template, manifest) {
   ]) {
     if (data[field] !== expected) failures.push(`${field} must be ${expected}`);
   }
-  if (!resultAllowedValues.has(data.result)) failures.push(`result must be one of ${[...resultAllowedValues].join(", ")}`);
+  if (!resultAllowedValues.has(data.result)) {
+    failures.push(`result must be one of ${[...resultAllowedValues].join(", ")}`);
+  } else if (data.result !== "passed") {
+    failures.push(`result must be passed to count as valid production evidence submission; got ${data.result}`);
+  }
   if (data.redaction_confirmed !== true) failures.push("redaction_confirmed must be true");
   if (!Array.isArray(data.evidence_types) || data.evidence_types.length === 0) {
     failures.push("evidence_types must include at least one accepted evidence type");
@@ -256,7 +260,7 @@ const output = {
   submissions: rows,
 };
 
-const md = normalize(`# 生产证据提交状态看板 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY\n- STATUS_FROM_PRODUCTION_EVIDENCE_SUBMISSION_KIT\n- MISSING_MANIFEST_IS_AWAITING_NOT_PASSED\n- INVALID_MANIFEST_BLOCKS_DELIVERY_GATE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- RAW_EVIDENCE_STAYS_EXTERNAL\n- TRACEABLE_EVIDENCE_LINKS_REQUIRED\n- CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN\n\n## 2. 定位\n\n本文从 \`${kitPath}\` 自动生成，并扫描各责任组提交目录下的 \`manifest-<item_id>.json\`。未提交 manifest 只显示为 \`awaiting_submission\`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥、占位值、模板专用字段、证据编号格式错误、未接受的证据类型、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 \`invalid_submission\` 并阻断交付闸口。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 预期提交项 | ${counts.expected_submissions} |\n| 等待提交 | ${counts.awaiting_submission} |\n| 有效提交 | ${counts.valid_submission} |\n| 无效提交 | ${counts.invalid_submission} |\n| P0 等待提交 | ${counts.p0_awaiting_submission} |\n| P0 有效提交 | ${counts.p0_valid_submission} |\n| P0 无效提交 | ${counts.p0_invalid_submission} |\n\n## 4. 责任组状态\n\n${mdTable(ownerRows, [
+const md = normalize(`# 生产证据提交状态看板 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY\n- STATUS_FROM_PRODUCTION_EVIDENCE_SUBMISSION_KIT\n- MISSING_MANIFEST_IS_AWAITING_NOT_PASSED\n- INVALID_MANIFEST_BLOCKS_DELIVERY_GATE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- RAW_EVIDENCE_STAYS_EXTERNAL\n- TRACEABLE_EVIDENCE_LINKS_REQUIRED\n- CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN\n\n## 2. 定位\n\n本文从 \`${kitPath}\` 自动生成，并扫描各责任组提交目录下的 \`manifest-<item_id>.json\`。未提交 manifest 只显示为 \`awaiting_submission\`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥、占位值、模板专用字段、证据编号格式错误、未接受的证据类型、result 非 passed、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 \`invalid_submission\` 并阻断交付闸口。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 预期提交项 | ${counts.expected_submissions} |\n| 等待提交 | ${counts.awaiting_submission} |\n| 有效提交 | ${counts.valid_submission} |\n| 无效提交 | ${counts.invalid_submission} |\n| P0 等待提交 | ${counts.p0_awaiting_submission} |\n| P0 有效提交 | ${counts.p0_valid_submission} |\n| P0 无效提交 | ${counts.p0_invalid_submission} |\n\n## 4. 责任组状态\n\n${mdTable(ownerRows, [
   { key: "owner_group", label: "owner_group" },
   { key: "expected_submissions", label: "expected_submissions" },
   { key: "awaiting_submission", label: "awaiting_submission" },
