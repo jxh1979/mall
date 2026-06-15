@@ -101,33 +101,33 @@ Expected: one protected commit on 160 with P2 backend, migrations, tests, docs a
 
 ## Task 2: Candidate B P2 Web Management Entry MVP
 
-- [ ] **Step 1: Characterize current Web structure before editing**
+- [x] **Step 1: Characterize current Web structure before editing**
 
 Read `apps/web/src/main.tsx` and existing API helper patterns. Identify where ticketing, amusement and analytics pages currently render.
 
-- [ ] **Step 2: Write or strengthen failing frontend checks when practical**
+- [x] **Step 2: Write or strengthen failing frontend checks when practical**
 
 If the Web app already has component tests, add tests for P2-B/C/D route rendering and API field mapping first. If no frontend test harness exists, use TypeScript compile checks and Vite build as the minimum verification gate, and do not add a new test framework in this task.
 
-- [ ] **Step 3: Implement P2-B Web entry**
+- [x] **Step 3: Implement P2-B Web entry**
 
 Add a management section for amusement group/private bookings: list, create request, approve, release. The UI must show project/session, booking type, party size, reserved capacity, status, evidence ids and operator notes. Approval/release must call backend APIs and rely on backend capacity outcome.
 
-- [ ] **Step 4: Implement P2-C Web entry**
+- [x] **Step 4: Implement P2-C Web entry**
 
 Add a management section for ticket dynamic pricing rules: list, create draft, publish, simulate. The UI must clearly label simulation as non-production pricing and must not alter ticket order price。
 
-- [ ] **Step 5: Implement P2-D Web entry**
+- [x] **Step 5: Implement P2-D Web entry**
 
 Add a read-only section for business metric snapshots. The UI must label the data as analytics snapshot, not financial settlement ledger.
 
-- [ ] **Step 6: Verify Candidate B**
+- [x] **Step 6: Verify Candidate B**
 
 Run: `npm run typecheck && npm run build && npm run verify:p0-contract`
 
 Expected: all pass.
 
-- [ ] **Step 7: Security and differential review**
+- [x] **Step 7: Security and differential review**
 
 Run Semgrep again and review the Web diff for XSS, overbroad data exposure, unauthorized operations, stale API paths and accidental dependency on legacy `apps/api`.
 

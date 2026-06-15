@@ -26,6 +26,7 @@ import {
   InputNumber,
   Layout,
   Menu,
+  Modal,
   Select,
   Segmented,
   Spin,
@@ -80,6 +81,36 @@ type TicketProduct = {
   priceAmount: number;
   status: string;
   createdAt: string;
+};
+type TicketDynamicPricingRule = {
+  id: string;
+  ticketTypeId: string;
+  ruleName: string;
+  priority: number;
+  effectiveFrom: string;
+  effectiveTo: string;
+  salesChannel?: string;
+  adjustmentType: string;
+  adjustmentRate?: number;
+  adjustmentAmountCent?: number;
+  minPriceCent?: number;
+  maxPriceCent?: number;
+  status: string;
+  conditionRule: Record<string, JsonValue>;
+  operatorNote?: string;
+  evidenceAttachmentIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+type TicketDynamicPricingSimulation = {
+  ticketTypeId: string;
+  visitDate: string;
+  salesChannel: string;
+  basePriceCent: number;
+  adjustmentCent: number;
+  finalPriceCent: number;
+  matchedRuleId?: string;
+  explanation: string;
 };
 type EntitlementTemplate = {
   id: string;
@@ -159,6 +190,7 @@ type AmusementSession = {
   endsAt: string;
   capacity: number;
   usedCapacity: number;
+  lockedCapacity?: number;
   status: string;
 };
 type AmusementVerification = { id: string; verificationNo: string; status: string; resultReason?: string; createdAt: string };
@@ -167,6 +199,24 @@ type AmusementQueueEntry = { id: string; queueNo: string; customerName?: string;
 type AmusementDeviceStatus = { id: string; deviceName: string; deviceCode: string; status: string; updatedAt: string };
 type AmusementInspectionRecord = { id: string; result: string; status: string; createdAt: string };
 type AmusementFaultRecord = { id: string; faultNo: string; faultLevel: string; summary: string; status: string; createdAt: string };
+type AmusementGroupBooking = {
+  id: string;
+  projectId: string;
+  sessionId: string;
+  bookingType: string;
+  customerName: string;
+  contactPhone?: string;
+  partySize: number;
+  reservedCapacity: number;
+  bookingStatus: string;
+  approvalNote?: string;
+  operatorNote?: string;
+  evidenceAttachmentIds: string[];
+  approvedAt?: string;
+  releasedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
 type RiskRule = { id: string; ruleCode: string; ruleName: string; ruleType: string; threshold: number; status: string };
 type RiskAlert = { id: string; alertType: string; riskLevel: string; summary: string; status: string; createdAt: string };
 type AuditEvent = { id: string; eventType: string; eventCategory: string; sourceType: string; result: string; riskLevel: string; summary: string; occurredAt: string };
@@ -197,6 +247,24 @@ type CustomerIntent = { id: string; intentType: string; label: string; confidenc
 type StaffServiceScore = { id: string; staffUserId?: string; score: number; riskPenalty: number; sampleSize: number; snapshotDate: string; createdAt: string };
 type MerchantHealthScore = { id: string; merchantId?: string; score: number; operationsScore: number; financeScore: number; riskScore: number; serviceScore: number; snapshotDate: string; createdAt: string };
 type MetricAnomalyExplanation = { id: string; metricCode: string; metricName: string; severity: string; changeRate: number; explanation: string; createdAt: string };
+type BusinessMetricSnapshot = {
+  snapshotId: string;
+  metricKey: string;
+  domain: string;
+  periodType: string;
+  businessDate: string;
+  segmentType: string;
+  segmentId?: string;
+  actualValue: number;
+  baselineValue?: number;
+  varianceRate?: number;
+  trendDirection: string;
+  projectionMethod: string;
+  projectedValue?: number;
+  confidenceScore?: number;
+  payload: Record<string, JsonValue>;
+  createdAt: string;
+};
 
 type Snapshot = {
   health: HealthResponse;
@@ -210,6 +278,7 @@ type Snapshot = {
   users: UserAccount[];
   merchants: MerchantRow[];
   tickets: TicketProduct[];
+  ticketDynamicPricingRules: TicketDynamicPricingRule[];
   entitlementTemplates: EntitlementTemplate[];
   issuedEntitlements: IssuedEntitlement[];
   verifications: VerificationRecord[];
@@ -232,6 +301,7 @@ type Snapshot = {
   amusementDeviceStatuses: AmusementDeviceStatus[];
   amusementInspectionRecords: AmusementInspectionRecord[];
   amusementFaults: AmusementFaultRecord[];
+  amusementGroupBookings: AmusementGroupBooking[];
   riskRules: RiskRule[];
   riskAlerts: RiskAlert[];
   events: AuditEvent[];
@@ -262,6 +332,7 @@ type Snapshot = {
   staffServiceScores: StaffServiceScore[];
   merchantHealthScores: MerchantHealthScore[];
   metricAnomalyExplanations: MetricAnomalyExplanation[];
+  businessMetricSnapshots: BusinessMetricSnapshot[];
   loadedAt: string;
 };
 
@@ -411,6 +482,8 @@ function getApiBaseUrl() {
 const apiBaseUrl = getApiBaseUrl();
 let apiAccessToken = "";
 const openApiPrefix = ["/api", "open"].join("/");
+const formalApiPrefix = ["/api", "v1"].join("/");
+const authApiPrefix = [formalApiPrefix, "auth"].join("/");
 
 function setApiAccessToken(token: string) {
   apiAccessToken = token;
@@ -453,8 +526,39 @@ function normalizeOutgoingBody(path: string, body: JsonBody) {
   return mapJsonKeys(body, toSnakeCaseKey, new Set(["payload"]));
 }
 
+function shouldAttachIdempotencyKey(path: string) {
+  return path.startsWith(`${formalApiPrefix}/`) && !path.startsWith(`${authApiPrefix}/`);
+}
+
+function nextIdempotencyKey() {
+  return `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizePostBody(path: string, body: JsonBody) {
+  const normalized = normalizeOutgoingBody(path, body);
+  if (
+    !shouldAttachIdempotencyKey(path) ||
+    !isPlainJsonObject(normalized) ||
+    "idempotency_key" in normalized ||
+    "idempotencyKey" in normalized
+  ) {
+    return normalized;
+  }
+  return { ...normalized, idempotency_key: nextIdempotencyKey() };
+}
+
 function normalizeIncomingBody(value: unknown) {
   return mapJsonKeys(value, toCamelCaseKey);
+}
+
+function unwrapApiPayload(value: unknown) {
+  const normalized = normalizeIncomingBody(value);
+  if (isPlainJsonObject(normalized) && "code" in normalized && "data" in normalized) {
+    const data = normalized.data;
+    if (isPlainJsonObject(data) && Array.isArray(data.items)) return data.items;
+    return data;
+  }
+  return normalized;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -463,7 +567,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers });
   const text = await response.text();
   if (!response.ok) throw new Error(`${path} ${response.status}: ${text || response.statusText}`);
-  return (text ? normalizeIncomingBody(JSON.parse(text)) : null) as T;
+  return (text ? unwrapApiPayload(JSON.parse(text)) : null) as T;
 }
 
 function getJson<T>(path: string) {
@@ -474,7 +578,7 @@ function postJson<T>(path: string, body: JsonBody) {
   return requestJson<T>(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(normalizeOutgoingBody(path, body)),
+    body: JSON.stringify(normalizePostBody(path, body)),
   });
 }
 
@@ -484,6 +588,15 @@ function formatMoney(amount: number | null | undefined) {
 
 function formatRate(value: number | null | undefined) {
   return `${((value ?? 0) / 100).toFixed(2)}%`;
+}
+
+function formatPercentPoint(value: number | null | undefined) {
+  return `${(value ?? 0).toFixed(2)}%`;
+}
+
+function formatMetricValue(metricKey: string, value: number | null | undefined) {
+  if (metricKey.includes("amount_cents")) return formatMoney(value);
+  return (value ?? 0).toLocaleString("zh-CN", { maximumFractionDigits: 4 });
 }
 
 function toCents(value: number | null | undefined) {
@@ -807,6 +920,9 @@ function App() {
   const [savedBottlePickupForm] = Form.useForm();
   const [amusementFlowForm] = Form.useForm();
   const [amusementVerifyForm] = Form.useForm();
+  const [amusementGroupBookingForm] = Form.useForm();
+  const [dynamicPricingForm] = Form.useForm();
+  const [dynamicPricingSimulationForm] = Form.useForm();
   const [riskForm] = Form.useForm();
   const [openAppForm] = Form.useForm();
 
@@ -841,6 +957,7 @@ function App() {
         users,
         merchants,
         tickets,
+        ticketDynamicPricingRules,
         entitlementTemplates,
         issuedEntitlements,
         verifications,
@@ -863,6 +980,7 @@ function App() {
         amusementDeviceStatuses,
         amusementInspectionRecords,
         amusementFaults,
+        amusementGroupBookings,
         riskRules,
         riskAlerts,
         events,
@@ -893,6 +1011,7 @@ function App() {
         staffServiceScores,
         merchantHealthScores,
         metricAnomalyExplanations,
+        businessMetricSnapshots,
       ] = await Promise.all([
         getJson<HealthResponse>("/api/v1/system/health"),
         getJson<Overview>("/api/v1/analytics/dashboards/p0-overview"),
@@ -905,6 +1024,7 @@ function App() {
         getJson<UserAccount[]>("/api/v1/access/users"),
         getJson<MerchantRow[]>("/api/v1/analytics/merchants"),
         getJson<TicketProduct[]>("/api/v1/ticketing/ticket-types"),
+        getJson<TicketDynamicPricingRule[]>("/api/v1/ticketing/dynamic-pricing-rules"),
         getJson<EntitlementTemplate[]>("/api/v1/ticketing/entitlement-templates"),
         getJson<IssuedEntitlement[]>("/api/v1/ticketing/issued-entitlements"),
         getJson<VerificationRecord[]>("/api/v1/ticketing/verifications"),
@@ -927,6 +1047,7 @@ function App() {
         getJson<AmusementDeviceStatus[]>("/api/v1/amusement/device-statuses"),
         getJson<AmusementInspectionRecord[]>("/api/v1/amusement/safety-inspections"),
         getJson<AmusementFaultRecord[]>("/api/v1/amusement/manual-overrides"),
+        getJson<AmusementGroupBooking[]>("/api/v1/amusement/group-bookings"),
         getJson<RiskRule[]>("/api/v1/analytics/risk-rules"),
         getJson<RiskAlert[]>("/api/v1/analytics/risk-alerts"),
         getJson<AuditEvent[]>("/api/v1/evidence/events?limit=80"),
@@ -957,6 +1078,7 @@ function App() {
         getJson<StaffServiceScore[]>("/api/v1/analytics/staff-service-score"),
         getJson<MerchantHealthScore[]>("/api/v1/analytics/merchant-health"),
         getJson<MetricAnomalyExplanation[]>("/api/v1/analytics/metric-anomalies"),
+        getJson<BusinessMetricSnapshot[]>("/api/v1/analytics/business-metric-snapshots"),
       ]);
       setSnapshot({
         health,
@@ -970,6 +1092,7 @@ function App() {
         users,
         merchants,
         tickets,
+        ticketDynamicPricingRules,
         entitlementTemplates,
         issuedEntitlements,
         verifications,
@@ -992,6 +1115,7 @@ function App() {
         amusementDeviceStatuses,
         amusementInspectionRecords,
         amusementFaults,
+        amusementGroupBookings,
         riskRules,
         riskAlerts,
         events,
@@ -1022,6 +1146,7 @@ function App() {
         staffServiceScores,
         merchantHealthScores,
         metricAnomalyExplanations,
+        businessMetricSnapshots,
         loadedAt: new Date().toISOString(),
       });
     } catch (loadError) {
@@ -1170,6 +1295,46 @@ function App() {
     await runAction("核销", () => postJson("/api/v1/ticketing/verifications", { entitlementCode, source: "web-p0" }));
   }
 
+  function dynamicCondition(values: Record<string, string | number>) {
+    const key = String(values.conditionKey || "").trim();
+    const value = String(values.conditionValue || "").trim();
+    return key && value ? { [key]: value } : {};
+  }
+
+  async function handleDynamicPricingRule(values: Record<string, string | number>) {
+    await runAction("P2 动态定价规则", () => postJson<TicketDynamicPricingRule>("/api/v1/ticketing/dynamic-pricing-rules", {
+      ticketTypeId: values.ticketTypeId,
+      ruleName: values.ruleName,
+      priority: Number(values.priority || 0),
+      effectiveFrom: values.effectiveFrom,
+      effectiveTo: values.effectiveTo,
+      salesChannel: values.salesChannel || undefined,
+      adjustmentType: values.adjustmentType,
+      adjustmentRate: values.adjustmentType === "percent_delta" ? Number(values.adjustmentRate || 0) : undefined,
+      adjustmentAmountCent: values.adjustmentType === "fixed_delta" ? toCents(Number(values.adjustmentAmountYuan || 0)) : undefined,
+      minPriceCent: values.minPriceYuan === undefined || values.minPriceYuan === "" ? undefined : toCents(Number(values.minPriceYuan)),
+      maxPriceCent: values.maxPriceYuan === undefined || values.maxPriceYuan === "" ? undefined : toCents(Number(values.maxPriceYuan)),
+      conditionRule: dynamicCondition(values),
+      operatorNote: values.operatorNote || undefined,
+    }), () => dynamicPricingForm.resetFields());
+  }
+
+  async function handlePublishDynamicPricingRule(ruleId: string) {
+    await runAction("P2 动态定价发布", () => postJson<TicketDynamicPricingRule>(`/api/v1/ticketing/dynamic-pricing-rules/${ruleId}/publish`, {
+      action: "publish",
+      reason: "Web 管理端发布动态定价规则",
+    }));
+  }
+
+  async function handleDynamicPricingSimulation(values: Record<string, string | number>) {
+    await runAction("P2 动态定价模拟", () => postJson<TicketDynamicPricingSimulation>("/api/v1/ticketing/dynamic-pricing/simulations", {
+      ticketTypeId: values.ticketTypeId,
+      visitDate: values.visitDate,
+      salesChannel: values.salesChannel || "web",
+      context: dynamicCondition(values),
+    }));
+  }
+
   async function handleSettlementGenerate(values: Record<string, string>) {
     await runAction("结算单生成", () => postJson("/api/v1/finance/ar-ap-items", {
       merchantId: values.merchantId || undefined,
@@ -1313,6 +1478,43 @@ function App() {
         manualReason: values.manualReason || "P0 web manual allow",
       });
     }, () => amusementVerifyForm.resetFields());
+  }
+
+  async function handleAmusementGroupBooking(values: Record<string, string | number>) {
+    const session = snapshot?.amusementSessions.find((item) => item.id === values.sessionId);
+    if (!session) throw new Error("请选择可用场次");
+    await runAction("P2 团体/包场申请", () => postJson<AmusementGroupBooking>("/api/v1/amusement/group-bookings", {
+      projectId: session.projectId,
+      sessionId: session.id,
+      bookingType: values.bookingType || "group",
+      customerName: values.customerName,
+      contactPhone: values.contactPhone || undefined,
+      partySize: Number(values.partySize || 1),
+      reservedCapacity: Number(values.reservedCapacity || values.partySize || 1),
+      operatorNote: values.operatorNote || undefined,
+    }), () => amusementGroupBookingForm.resetFields());
+  }
+
+  async function handleApproveGroupBooking(bookingId: string) {
+    await runAction("P2 团体/包场审批", () => postJson<AmusementGroupBooking>(`/api/v1/amusement/group-bookings/${bookingId}/approve`, {
+      approvalNote: "Web 管理端审批并锁定容量",
+    }));
+  }
+
+  async function handleReleaseGroupBooking(bookingId: string) {
+    await runAction("P2 团体/包场释放", () => postJson<AmusementGroupBooking>(`/api/v1/amusement/group-bookings/${bookingId}/release`, {
+      reason: "Web 管理端释放已锁定容量",
+    }));
+  }
+
+  function confirmHighImpactAction(title: string, content: string, action: () => Promise<void>) {
+    Modal.confirm({
+      title,
+      content,
+      okText: "确认",
+      cancelText: "取消",
+      onOk: action,
+    });
   }
 
   async function handleRiskAlert(values: Record<string, string>) {
@@ -1499,7 +1701,53 @@ function App() {
             </Form>
           </div>
         </div>
+        <div className="action-grid two">
+          <div className="action-panel">
+            <h2>P2 动态定价规则</h2>
+            <Alert className="status-alert" type="info" showIcon message="仅用于规则容器和模拟，不改变当前正式订单实收。" />
+            <Form form={dynamicPricingForm} layout="vertical" onFinish={handleDynamicPricingRule} initialValues={{ priority: 10, salesChannel: "web", adjustmentType: "percent_delta", adjustmentRate: 10, minPriceYuan: 0 }}>
+              <div className="form-grid two">
+                <Form.Item name="ticketTypeId" label="票种" rules={[{ required: true }]}><Select options={snapshotValue.tickets.map((item) => ({ value: item.id, label: `${item.productName} · ${formatMoney(item.priceAmount)}` }))} /></Form.Item>
+                <Form.Item name="ruleName" label="规则名称" rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item name="effectiveFrom" label="生效开始" rules={[{ required: true }]}><Input placeholder="2026-06-01" /></Form.Item>
+                <Form.Item name="effectiveTo" label="生效结束" rules={[{ required: true }]}><Input placeholder="2026-06-30" /></Form.Item>
+                <Form.Item name="salesChannel" label="渠道"><Select options={["admin", "kiosk", "miniapp", "app", "web", "channel"].map((value) => ({ value, label: value }))} /></Form.Item>
+                <Form.Item name="priority" label="优先级"><InputNumber className="full" /></Form.Item>
+                <Form.Item name="adjustmentType" label="调整类型"><Select options={[{ value: "percent_delta", label: "百分比调整" }, { value: "fixed_delta", label: "固定金额调整" }]} /></Form.Item>
+                <Form.Item name="adjustmentRate" label="百分比"><InputNumber className="full" /></Form.Item>
+                <Form.Item name="adjustmentAmountYuan" label="固定金额（元）"><InputNumber className="full" /></Form.Item>
+                <Form.Item name="minPriceYuan" label="最低价（元）"><InputNumber min={0} className="full" /></Form.Item>
+                <Form.Item name="maxPriceYuan" label="最高价（元）"><InputNumber min={0} className="full" /></Form.Item>
+                <Form.Item name="conditionKey" label="条件字段"><Input placeholder="inventory_level" /></Form.Item>
+                <Form.Item name="conditionValue" label="条件值"><Input placeholder="low" /></Form.Item>
+                <Form.Item name="operatorNote" label="备注"><Input /></Form.Item>
+              </div>
+              <Button type="primary" htmlType="submit">创建动态定价草稿</Button>
+            </Form>
+          </div>
+          <div className="action-panel">
+            <h2>P2 动态定价模拟</h2>
+            <Form form={dynamicPricingSimulationForm} layout="vertical" onFinish={handleDynamicPricingSimulation} initialValues={{ salesChannel: "web" }}>
+              <div className="form-grid two">
+                <Form.Item name="ticketTypeId" label="票种" rules={[{ required: true }]}><Select options={snapshotValue.tickets.map((item) => ({ value: item.id, label: item.productName }))} /></Form.Item>
+                <Form.Item name="visitDate" label="游玩日期" rules={[{ required: true }]}><Input placeholder="2026-06-20" /></Form.Item>
+                <Form.Item name="salesChannel" label="渠道"><Select options={["admin", "kiosk", "miniapp", "app", "web", "channel"].map((value) => ({ value, label: value }))} /></Form.Item>
+                <Form.Item name="conditionKey" label="条件字段"><Input placeholder="inventory_level" /></Form.Item>
+                <Form.Item name="conditionValue" label="条件值"><Input placeholder="low" /></Form.Item>
+              </div>
+              <Button htmlType="submit">模拟价格</Button>
+            </Form>
+          </div>
+        </div>
         <div className="table-grid two">
+          <SimpleTable title="P2 动态定价规则" data={snapshotValue.ticketDynamicPricingRules.slice(0, 12)} columns={[
+            { title: "规则", dataIndex: "ruleName" },
+            { title: "渠道", dataIndex: "salesChannel", render: (value) => value || "全部" },
+            { title: "状态", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: "有效期", key: "period", render: (_, row) => `${row.effectiveFrom} 至 ${row.effectiveTo}` },
+            { title: "调整", key: "adjustment", render: (_, row) => row.adjustmentType === "percent_delta" ? formatPercentPoint(row.adjustmentRate) : formatMoney(row.adjustmentAmountCent) },
+            { title: "操作", key: "actions", render: (_, row) => row.status === "draft" ? <Button size="small" onClick={() => confirmHighImpactAction("发布动态定价规则", "仅发布规则容器和模拟能力，不改变当前正式订单实收。", () => handlePublishDynamicPricingRule(row.id))}>发布</Button> : <Tag>{row.status}</Tag> },
+          ]} />
           <SimpleTable title="票种" data={snapshotValue.tickets.slice(0, 12)} columns={[
             { title: "名称", dataIndex: "productName" },
             { title: "价格", dataIndex: "priceAmount", render: formatMoney },
@@ -1703,7 +1951,40 @@ function App() {
             </Form>
           </div>
         </div>
+        <div className="action-grid two">
+          <div className="action-panel">
+            <h2>P2 团体/包场容量申请</h2>
+            <Alert className="status-alert" type="info" showIcon message="审批时由后端锁定容量；前端只展示结果，不自行裁决可锁定。" />
+            <Form form={amusementGroupBookingForm} layout="vertical" onFinish={handleAmusementGroupBooking} initialValues={{ bookingType: "group", partySize: 2, reservedCapacity: 2 }}>
+              <div className="form-grid two">
+                <Form.Item name="sessionId" label="场次" rules={[{ required: true }]}><Select options={snapshotValue.amusementSessions.map((item) => ({ value: item.id, label: `${item.sessionName} · 已用 ${item.usedCapacity} · 锁定 ${item.lockedCapacity ?? 0} / ${item.capacity}` }))} /></Form.Item>
+                <Form.Item name="bookingType" label="类型"><Select options={[{ value: "group", label: "团体" }, { value: "private", label: "包场" }]} /></Form.Item>
+                <Form.Item name="customerName" label="客户" rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item name="contactPhone" label="联系电话"><Input /></Form.Item>
+                <Form.Item name="partySize" label="人数"><InputNumber min={1} className="full" /></Form.Item>
+                <Form.Item name="reservedCapacity" label="锁定容量"><InputNumber min={1} className="full" /></Form.Item>
+                <Form.Item name="operatorNote" label="备注"><Input /></Form.Item>
+              </div>
+              <Button type="primary" htmlType="submit">创建待审批申请</Button>
+            </Form>
+          </div>
+        </div>
         <div className="table-grid two">
+          <SimpleTable title="P2 团体/包场" data={snapshotValue.amusementGroupBookings.slice(0, 12)} columns={[
+            { title: "客户", dataIndex: "customerName" },
+            { title: "类型", dataIndex: "bookingType" },
+            { title: "人数", dataIndex: "partySize" },
+            { title: "锁定容量", dataIndex: "reservedCapacity" },
+            { title: "状态", dataIndex: "bookingStatus", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: "操作", key: "actions", render: (_, row) => <div className="button-row compact">{row.bookingStatus === "pending_approval" ? <Button size="small" onClick={() => confirmHighImpactAction("审批并锁定容量", "审批后由后端事务锁定该场次容量。", () => handleApproveGroupBooking(row.id))}>审批锁定</Button> : null}{row.bookingStatus === "approved" ? <Button size="small" onClick={() => confirmHighImpactAction("释放已锁定容量", "释放后该申请占用的场次容量会被归还。", () => handleReleaseGroupBooking(row.id))}>释放</Button> : null}</div> },
+          ]} />
+          <SimpleTable title="P2 场次容量池" data={snapshotValue.amusementSessions.slice(0, 12)} columns={[
+            { title: "场次", dataIndex: "sessionName" },
+            { title: "已用", dataIndex: "usedCapacity" },
+            { title: "锁定", dataIndex: "lockedCapacity", render: (value) => value ?? 0 },
+            { title: "容量", dataIndex: "capacity" },
+            { title: "状态", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          ]} />
           <SimpleTable title="游乐项目" data={snapshotValue.amusementProjects.slice(0, 12)} columns={[
             { title: "项目", dataIndex: "projectName" },
             { title: "容量", dataIndex: "capacity" },
@@ -1763,6 +2044,15 @@ function App() {
           <div className="metric"><span>P3 客户意图</span><strong>{snapshotValue.customerIntents.length}</strong><small>企微需求识别</small></div>
         </div>
         <div className="table-grid two">
+          <SimpleTable title="P2 经营指标快照" data={snapshotValue.businessMetricSnapshots.slice(0, 12).map((row) => ({ ...row, key: row.snapshotId }))} columns={[
+            { title: "指标", dataIndex: "metricKey" },
+            { title: "领域", dataIndex: "domain" },
+            { title: "日期", dataIndex: "businessDate" },
+            { title: "实际值", key: "actual", render: (_, row) => formatMetricValue(row.metricKey, row.actualValue) },
+            { title: "基准", key: "baseline", render: (_, row) => formatMetricValue(row.metricKey, row.baselineValue) },
+            { title: "变化", dataIndex: "varianceRate", render: formatPercentPoint },
+            { title: "趋势", dataIndex: "trendDirection", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          ]} />
           <SimpleTable title="P3 指标字典" data={snapshotValue.metricDefinitions.slice(0, 12)} columns={[
             { title: "编码", dataIndex: "metricCode" },
             { title: "名称", dataIndex: "metricName" },

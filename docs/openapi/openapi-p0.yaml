@@ -4663,6 +4663,257 @@ paths:
       x-device-capability:
         - verification-gate
       x-auth-context: staff-token
+  /api/v1/ticketing/dynamic-pricing-rules:
+    get:
+      tags:
+        - ticketing
+      operationId: listTicketDynamicPricingRules
+      summary: List P2 ticket dynamic pricing rules
+      description: List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      x-permission: ticket.dynamic_pricing.view
+      x-data-scope: project-channel
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket_dynamic_pricing.viewed.success
+      x-audit-event-failure: ticket_dynamic_pricing.viewed.failure
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - ticketing
+      operationId: createTicketDynamicPricingRule
+      summary: Create P2 ticket dynamic pricing rule draft
+      description: Create P2 ticket dynamic pricing rule draft. Dynamic pricing remains a simulation/rule container and must not alter P0 ticket order price settlement.
+      x-permission: ticket.dynamic_pricing.manage
+      x-data-scope: project-channel
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_dynamic_pricing.created.success
+      x-audit-event-failure: ticket_dynamic_pricing.created.failure
+      requestBody:
+        $ref: "#/components/requestBodies/TicketDynamicPricingRuleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/dynamic-pricing-rules/{id}/publish:
+    post:
+      tags:
+        - ticketing
+      operationId: publishTicketDynamicPricingRule
+      summary: Publish P2 ticket dynamic pricing rule
+      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      x-permission: ticket.dynamic_pricing.publish
+      x-data-scope: project-channel
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_dynamic_pricing.published.success
+      x-audit-event-failure: ticket_dynamic_pricing.published.failure
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: Resource id path parameter.
+      requestBody:
+        $ref: "#/components/requestBodies/StatusChange"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/dynamic-pricing/simulations:
+    post:
+      tags:
+        - ticketing
+      operationId: simulateTicketDynamicPricing
+      summary: Simulate P2 ticket dynamic pricing without changing order price
+      description: Simulate P2 ticket dynamic pricing without changing order price. The response is for operational preview only and must not create ticket orders or receivables.
+      x-permission: ticket.dynamic_pricing.simulate
+      x-data-scope: project-channel
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_dynamic_pricing.simulated.success
+      x-audit-event-failure: ticket_dynamic_pricing.simulated.failure
+      requestBody:
+        $ref: "#/components/requestBodies/TicketDynamicPricingSimulationRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/amusement/group-bookings:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementGroupBookings
+      summary: List P2 amusement group and private bookings
+      description: List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
+      x-permission: amusement.group_booking.view
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: amusement_group_booking.viewed.success
+      x-audit-event-failure: amusement_group_booking.viewed.failure
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - amusement
+      operationId: createAmusementGroupBooking
+      summary: Create P2 amusement group or private booking request
+      description: Create P2 amusement group or private booking request. Approval must lock capacity in backend transaction; frontend display cannot decide capacity success.
+      x-permission: amusement.group_booking.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement_group_booking.created.success
+      x-audit-event-failure: amusement_group_booking.created.failure
+      requestBody:
+        $ref: "#/components/requestBodies/AmusementGroupBookingRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/amusement/group-bookings/{id}/approve:
+    post:
+      tags:
+        - amusement
+      operationId: approveAmusementGroupBooking
+      summary: Approve P2 amusement group booking and lock capacity
+      description: Approve P2 amusement group booking and lock capacity. Capacity success must be decided by backend transaction.
+      x-permission: amusement.group_booking.approve
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement_group_booking.approved.success
+      x-audit-event-failure: amusement_group_booking.approved.failure
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: Resource id path parameter.
+      requestBody:
+        $ref: "#/components/requestBodies/AmusementGroupBookingApprovalRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/amusement/group-bookings/{id}/release:
+    post:
+      tags:
+        - amusement
+      operationId: releaseAmusementGroupBooking
+      summary: Release P2 amusement group booking and free locked capacity
+      description: Release P2 amusement group booking and free locked capacity. Release must leave audit evidence.
+      x-permission: amusement.group_booking.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement_group_booking.released.success
+      x-audit-event-failure: amusement_group_booking.released.failure
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: Resource id path parameter.
+      requestBody:
+        $ref: "#/components/requestBodies/AmusementGroupBookingReleaseRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/business-metric-snapshots:
+    get:
+      tags:
+        - analytics
+      operationId: listBusinessMetricSnapshots
+      summary: List P2 business metric snapshots for operational analytics
+      description: List P2 business metric snapshots for operational analytics. This is read-only analytics and not finance settlement.
+      x-permission: analytics.dashboard.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics_business_metric_snapshot.viewed.success
+      x-audit-event-failure: analytics_business_metric_snapshot.viewed.failure
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
 components:
   securitySchemes:
     BearerAuth:
@@ -4819,6 +5070,36 @@ components:
         maxLength: 128
       description: EventId 路径参数；必须引用当前数据范围内存在且允许访问的记录。
   requestBodies:
+    TicketDynamicPricingRuleRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TicketDynamicPricingRuleRequest"
+    TicketDynamicPricingSimulationRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TicketDynamicPricingSimulationRequest"
+    AmusementGroupBookingRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementGroupBookingRequest"
+    AmusementGroupBookingApprovalRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementGroupBookingApprovalRequest"
+    AmusementGroupBookingReleaseRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementGroupBookingReleaseRequest"
     StatusChange:
       required: true
       content:
@@ -5409,6 +5690,235 @@ components:
             meta:
               server_time: 2026-06-12T12:00:00Z
   schemas:
+    TicketDynamicPricingRuleRequest:
+      type: object
+      description: P2 ticket dynamic pricing rule write request. Dynamic pricing remains a simulation/rule container and must not alter P0 ticket order price settlement.
+      additionalProperties: false
+      required:
+        - ticket_type_id
+        - rule_name
+        - adjustment_type
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        operator_note:
+          type: string
+          description: Operator note retained in audit evidence.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for approval or operational trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        ticket_type_id:
+          type: string
+          description: Ticket type id in current project scope.
+          maxLength: 64
+        rule_name:
+          type: string
+          description: Rule display name for operations and audit review.
+          maxLength: 120
+        priority:
+          type: integer
+          description: Higher priority wins when multiple rules match.
+          minimum: 0
+          maximum: 999999
+        effective_from:
+          type: string
+          format: date
+          description: First valid visit date for the rule.
+        effective_to:
+          type: string
+          format: date
+          description: Last valid visit date for the rule; must not be before effective_from.
+        sales_channel:
+          type: string
+          description: Sales channel filter; null means all channels.
+          enum:
+            - admin
+            - kiosk
+            - miniapp
+            - app
+            - web
+            - channel
+          maxLength: 64
+        adjustment_type:
+          type: string
+          description: Adjustment calculation mode.
+          enum:
+            - percent_delta
+            - fixed_delta
+          maxLength: 64
+        adjustment_rate:
+          type: number
+          description: Percent delta value; required when adjustment_type is percent_delta.
+          minimum: -100
+          maximum: 1000
+          multipleOf: 0.01
+          x-java-type: java.math.BigDecimal
+        adjustment_amount_cent:
+          type: integer
+          description: Fixed delta amount in cents; required when adjustment_type is fixed_delta.
+          minimum: -999999999999
+          maximum: 999999999999
+        min_price_cent:
+          type: integer
+          description: Minimum final price in cents.
+          minimum: 0
+          maximum: 999999999999
+        max_price_cent:
+          type: integer
+          description: Maximum final price in cents.
+          minimum: 0
+          maximum: 999999999999
+        condition_rule:
+          type: object
+          description: Structured matching condition, for example weekday, holiday, channel, crowd, or campaign segment.
+          additionalProperties: true
+    TicketDynamicPricingSimulationRequest:
+      type: object
+      description: P2 ticket dynamic pricing simulation request. The response is for operational preview only and must not create ticket orders or receivables.
+      additionalProperties: false
+      required:
+        - ticket_type_id
+        - sales_channel
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        ticket_type_id:
+          type: string
+          description: Ticket type id in current project scope.
+          maxLength: 64
+        visit_date:
+          type: string
+          format: date
+          description: Visit date used to resolve calendar base price and matching rules.
+        sales_channel:
+          type: string
+          description: Sales channel used in rule matching.
+          enum:
+            - admin
+            - kiosk
+            - miniapp
+            - app
+            - web
+            - channel
+          maxLength: 64
+        context:
+          type: object
+          description: Additional matching context such as party_size, is_holiday, or segment tags.
+          additionalProperties: true
+    AmusementGroupBookingRequest:
+      type: object
+      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend display cannot decide capacity success.
+      additionalProperties: false
+      required:
+        - project_id
+        - session_id
+        - customer_name
+        - party_size
+        - reserved_capacity
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        operator_note:
+          type: string
+          description: Operator note retained in audit evidence.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for approval or operational trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        project_id:
+          type: string
+          description: Amusement project id in current project scope.
+          maxLength: 64
+        session_id:
+          type: string
+          description: Amusement session id to reserve capacity from.
+          maxLength: 64
+        booking_type:
+          type: string
+          description: Group or private booking type.
+          enum:
+            - group
+            - private
+          maxLength: 64
+        customer_name:
+          type: string
+          description: Contact customer or organization name.
+          maxLength: 120
+        contact_phone:
+          type: string
+          description: Contact phone shown only to authorized operators.
+          maxLength: 32
+        party_size:
+          type: integer
+          description: Expected guest count.
+          minimum: 0
+          maximum: 999999
+        reserved_capacity:
+          type: integer
+          description: Capacity to lock after approval.
+          minimum: 0
+          maximum: 999999
+    AmusementGroupBookingApprovalRequest:
+      type: object
+      description: P2 amusement group/private booking approval request. Approval locks capacity and must leave audit evidence.
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - approval_note
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        approval_note:
+          type: string
+          description: Approval note explaining capacity lock and operation basis.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for approval trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+    AmusementGroupBookingReleaseRequest:
+      type: object
+      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave audit evidence.
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        reason:
+          type: string
+          description: Release reason for audit and dispute handling.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for release trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
     SuccessResponse:
       type: object
       required:

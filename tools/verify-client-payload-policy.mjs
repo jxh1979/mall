@@ -79,7 +79,8 @@ const openapiFile = 'docs/openapi/openapi-p0.json';
 const webSource = read(webFile);
 expectContains(webFile, webSource, 'function normalizeOutgoingBody', 'outgoing snake_case request normalizer');
 expectContains(webFile, webSource, 'function normalizeIncomingBody', 'incoming camelCase response normalizer');
-expectContains(webFile, webSource, 'body: JSON.stringify(normalizeOutgoingBody(path, body))', 'normalized POST body');
+expectContains(webFile, webSource, 'function normalizePostBody', 'POST body normalizer with idempotency key');
+expectContains(webFile, webSource, 'body: JSON.stringify(normalizePostBody(path, body))', 'normalized POST body');
 expectNotContains(webFile, webSource, 'body: JSON.stringify(body)', 'direct POST JSON body without OpenAPI field normalization');
 
 const androidSource = read(androidClientFile);
