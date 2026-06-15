@@ -55,6 +55,49 @@ function isBlank(value) {
   return String(value).trim() === "";
 }
 
+function collectTextValues(value) {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => collectTextValues(item));
+  if (typeof value === "object") return Object.values(value).flatMap((item) => collectTextValues(item));
+  return [String(value).trim()].filter(Boolean);
+}
+
+function hasPlaceholderText(value) {
+  return /(待填写|TODO|TBD|placeholder|replace|example|sample|dummy|test-placeholder|示例|占位)/i.test(String(value));
+}
+
+function isLocalOrDevReference(value) {
+  const text = String(value).trim();
+  return /^(?:file:\/\/|[A-Za-z]:\\|\\\\|\/(?:home|mnt|tmp|var|etc|Users|Volumes)\/)/.test(text)
+    || /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[?::1\]?)(?:[:/]|$)/i.test(text)
+    || /^https?:\/\/(?:example\.com|example\.org|example\.net)(?:[:/]|$)/i.test(text);
+}
+
+function isTraceableEvidenceReference(value) {
+  const text = String(value).trim();
+  return /^(?:https?:\/\/|smb:\/\/|nas:\/\/|sharepoint:\/\/|oss:\/\/|s3:\/\/|minio:\/\/|ticket:\/\/|itsm:\/\/|workorder:\/\/|approval:\/\/|supplier:\/\/|doc:\/\/|vault:\/\/|urn:)/i.test(text)
+    || /^(?:ITSM|TICKET|WO|APPROVAL|SUPPLIER|NAS-EVIDENCE|DOC|EVD)-[A-Za-z0-9][A-Za-z0-9_.:-]{3,}$/i.test(text);
+}
+
+function validateTraceableReferences(fieldName, value) {
+  const failures = [];
+  for (const entry of collectTextValues(value)) {
+    if (hasPlaceholderText(entry)) failures.push(`${fieldName} contains placeholder value: ${entry}`);
+    if (isLocalOrDevReference(entry)) failures.push(`${fieldName} must not use local/dev path or localhost reference: ${entry}`);
+    if (!isTraceableEvidenceReference(entry)) failures.push(`${fieldName} must use traceable external reference or approved evidence id prefix: ${entry}`);
+  }
+  return failures;
+}
+
+function validateCredentialRefs(value) {
+  const failures = [];
+  for (const entry of collectTextValues(value)) {
+    if (hasPlaceholderText(entry)) failures.push(`credential_refs contains placeholder value: ${entry}`);
+    if (!/^cred:\/\/[A-Za-z0-9][A-Za-z0-9/_.:@-]*$/i.test(entry)) failures.push(`credential_refs must use cred:// reference only: ${entry}`);
+  }
+  return failures;
+}
+
 function loadManifest(relativePath) {
   const absolutePath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(absolutePath)) return { exists: false };
@@ -98,6 +141,10 @@ function validateManifest(template, manifest) {
   if (["passed", "partial"].includes(data.result) && isBlank(data.evidence_links)) {
     failures.push("passed or partial result must include evidence_links");
   }
+  if (!isBlank(data.evidence_links)) failures.push(...validateTraceableReferences("evidence_links", data.evidence_links));
+  if (!isBlank(data.failure_case_evidence)) failures.push(...validateTraceableReferences("failure_case_evidence", data.failure_case_evidence));
+  if (!isBlank(data.approval_record)) failures.push(...validateTraceableReferences("approval_record", data.approval_record));
+  if (!isBlank(data.credential_refs)) failures.push(...validateCredentialRefs(data.credential_refs));
   return { status: failures.length > 0 ? "invalid_submission" : "valid_submission", failures, warnings };
 }
 
@@ -177,7 +224,7 @@ const output = {
   submissions: rows,
 };
 
-const md = normalize(`# 生产证据提交状态看板 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY\n- STATUS_FROM_PRODUCTION_EVIDENCE_SUBMISSION_KIT\n- MISSING_MANIFEST_IS_AWAITING_NOT_PASSED\n- INVALID_MANIFEST_BLOCKS_DELIVERY_GATE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- RAW_EVIDENCE_STAYS_EXTERNAL\n\n## 2. 定位\n\n本文从 \`${kitPath}\` 自动生成，并扫描各责任组提交目录下的 \`manifest-<item_id>.json\`。未提交 manifest 只显示为 \`awaiting_submission\`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥或关键字段不匹配，则进入 \`invalid_submission\` 并阻断交付闸口。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 预期提交项 | ${counts.expected_submissions} |\n| 等待提交 | ${counts.awaiting_submission} |\n| 有效提交 | ${counts.valid_submission} |\n| 无效提交 | ${counts.invalid_submission} |\n| P0 等待提交 | ${counts.p0_awaiting_submission} |\n| P0 有效提交 | ${counts.p0_valid_submission} |\n| P0 无效提交 | ${counts.p0_invalid_submission} |\n\n## 4. 责任组状态\n\n${mdTable(ownerRows, [
+const md = normalize(`# 生产证据提交状态看板 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY\n- STATUS_FROM_PRODUCTION_EVIDENCE_SUBMISSION_KIT\n- MISSING_MANIFEST_IS_AWAITING_NOT_PASSED\n- INVALID_MANIFEST_BLOCKS_DELIVERY_GATE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- RAW_EVIDENCE_STAYS_EXTERNAL\n- TRACEABLE_EVIDENCE_LINKS_REQUIRED\n- CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN\n\n## 2. 定位\n\n本文从 \`${kitPath}\` 自动生成，并扫描各责任组提交目录下的 \`manifest-<item_id>.json\`。未提交 manifest 只显示为 \`awaiting_submission\`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥、占位值、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 \`invalid_submission\` 并阻断交付闸口。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 预期提交项 | ${counts.expected_submissions} |\n| 等待提交 | ${counts.awaiting_submission} |\n| 有效提交 | ${counts.valid_submission} |\n| 无效提交 | ${counts.invalid_submission} |\n| P0 等待提交 | ${counts.p0_awaiting_submission} |\n| P0 有效提交 | ${counts.p0_valid_submission} |\n| P0 无效提交 | ${counts.p0_invalid_submission} |\n\n## 4. 责任组状态\n\n${mdTable(ownerRows, [
   { key: "owner_group", label: "owner_group" },
   { key: "expected_submissions", label: "expected_submissions" },
   { key: "awaiting_submission", label: "awaiting_submission" },
@@ -203,7 +250,7 @@ const md = normalize(`# 生产证据提交状态看板 V0.1\n\n## 1. 机器标�
   { key: "manifest_path", label: "manifest_path" },
   { key: "failures", label: "failures" },
   { key: "warnings", label: "warnings" },
-])}\n## 6. 使用规则\n\n1. 责任人提交真实材料时，只在对应 \`packet_folder\` 下放置 \`manifest-<item_id>.json\`；原始证据文件必须存放在外部受控位置，并通过 \`evidence_links\` 引用。\n2. manifest 必须使用 \`production-evidence-submission-kit-v0.1.md\` 定义的字段，真实密钥只能写 \`credential_ref\`。\n3. 提交后执行 \`npm run verify:production-evidence-submissions-guard\`、\`npm run docs:production-evidence-submission-status\` 和 \`npm run verify:production-evidence-submission-status\`。\n4. 看板为 \`valid_submission\` 也不自动关闭阻断项；仍需更新来源台账、findings register 和复跑交付闸口。\n`);
+])}\n## 6. 使用规则\n\n1. 责任人提交真实材料时，只在对应 \`packet_folder\` 下放置 \`manifest-<item_id>.json\`；原始证据文件必须存放在外部受控位置，并通过 \`evidence_links\` 引用。\n2. manifest 必须使用 \`production-evidence-submission-kit-v0.1.md\` 定义的字段，真实密钥只能写 \`credential_ref\`；\`evidence_links\`、\`failure_case_evidence\` 和 \`approval_record\` 必须是外部可追溯链接或批准的证据编号，不能是 TODO、示例值、本地路径或 localhost。\n3. 提交后执行 \`npm run verify:production-evidence-submissions-guard\`、\`npm run docs:production-evidence-submission-status\` 和 \`npm run verify:production-evidence-submission-status\`。\n4. 看板为 \`valid_submission\` 也不自动关闭阻断项；仍需更新来源台账、findings register 和复跑交付闸口。\n`);
 
 const json = normalize(JSON.stringify(output, null, 2));
 const outputSecretHits = [...forbidPlaintextSecrets(mdPath, md), ...forbidPlaintextSecrets(jsonPath, json)];

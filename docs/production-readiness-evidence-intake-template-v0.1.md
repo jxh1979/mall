@@ -24,6 +24,8 @@
 
 配套提交目录护栏：`docs/production-readiness-evidence/submissions/README.md` 和 `.gitignore` 强制仓库只提交 manifest，原始证据必须外部留链。
 
+证据链接口径：`evidence_links`、`failure_case_evidence`、`approval_record` 必须是外部可追溯引用或批准的证据编号；`credential_refs` 必须是 `cred://...`，并且不得包含占位词。
+
 ## 3. 通用证据字段
 
 | 字段 | 必填 | 说明 |

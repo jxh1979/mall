@@ -8,10 +8,12 @@
 - INVALID_MANIFEST_BLOCKS_DELIVERY_GATE
 - CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET
 - RAW_EVIDENCE_STAYS_EXTERNAL
+- TRACEABLE_EVIDENCE_LINKS_REQUIRED
+- CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN
 
 ## 2. 定位
 
-本文从 `docs/production-readiness-evidence/production-evidence-submission-kit-latest.json` 自动生成，并扫描各责任组提交目录下的 `manifest-<item_id>.json`。未提交 manifest 只显示为 `awaiting_submission`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥或关键字段不匹配，则进入 `invalid_submission` 并阻断交付闸口。
+本文从 `docs/production-readiness-evidence/production-evidence-submission-kit-latest.json` 自动生成，并扫描各责任组提交目录下的 `manifest-<item_id>.json`。未提交 manifest 只显示为 `awaiting_submission`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥、占位值、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 `invalid_submission` 并阻断交付闸口。
 
 ## 3. 总览
 
@@ -83,6 +85,6 @@
 ## 6. 使用规则
 
 1. 责任人提交真实材料时，只在对应 `packet_folder` 下放置 `manifest-<item_id>.json`；原始证据文件必须存放在外部受控位置，并通过 `evidence_links` 引用。
-2. manifest 必须使用 `production-evidence-submission-kit-v0.1.md` 定义的字段，真实密钥只能写 `credential_ref`。
+2. manifest 必须使用 `production-evidence-submission-kit-v0.1.md` 定义的字段，真实密钥只能写 `credential_ref`；`evidence_links`、`failure_case_evidence` 和 `approval_record` 必须是外部可追溯链接或批准的证据编号，不能是 TODO、示例值、本地路径或 localhost。
 3. 提交后执行 `npm run verify:production-evidence-submissions-guard`、`npm run docs:production-evidence-submission-status` 和 `npm run verify:production-evidence-submission-status`。
 4. 看板为 `valid_submission` 也不自动关闭阻断项；仍需更新来源台账、findings register 和复跑交付闸口。

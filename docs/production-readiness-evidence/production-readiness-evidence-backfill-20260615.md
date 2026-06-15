@@ -23,6 +23,7 @@
 | 生产证据责任组回填说明包 | owner_guides_ready_not_real_evidence | 已按责任组生成 5 份回填说明，列出模板路径、提交路径和复测命令 | `docs/production-evidence-owner-guides-v0.1.md`、`docs/production-readiness-evidence/production-evidence-owner-guides-latest.json`、`docs/production-readiness-evidence/owner-guides/` | 说明包不是生产证据，不关闭阻断项 |
 | 生产证据提交状态看板 | awaiting_real_evidence | 已扫描实际 manifest 提交状态；当前未提交 manifest 均保持 awaiting，不视为 passed | `docs/production-evidence-submission-status-v0.1.md`、`docs/production-readiness-evidence/production-evidence-submission-status-latest.json` | 看板不关闭阻断项；无效 manifest 会阻断交付闸口 |
 | 生产证据提交目录护栏 | manifest_only_in_repo | 已创建 submissions README/.gitignore，并强制仓库只允许 manifest 入库；原始证据外部留链 | `docs/production-readiness-evidence/submissions/README.md`、`docs/production-readiness-evidence/submissions/.gitignore` | 护栏不关闭阻断项，只降低误传原始证据和密钥风险 |
+| 生产证据链接与凭证引用校验 | traceable_links_required | 已禁止 TODO/占位值/本地路径/localhost/不可追溯证据链接；凭证引用必须为 `cred://...` 且不得含占位词；机器标记 `TRACEABLE_EVIDENCE_LINKS_REQUIRED`、`CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN` | `tools/generate-production-evidence-submission-status.mjs`、`docs/production-evidence-submission-status-v0.1.md` | 该校验只判定提交材料是否可验收，不关闭任何生产阻断项 |
 | PRD-NAS-001 | passed | NAS `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup` 且可写；已补 live mount + write/read/delete 机器证据 | `docs/production-readiness-evidence/nas-smb-mount-latest.json`、`docs/nas-backup-and-restore-runbook-v0.1.md#63-最新真实-nas-验证证据2026-06-15` | 系统级自动挂载仍需 IT 固化；可用 `npm run verify:nas-smb-mount-evidence` 复核 |
 | PRD-NAS-002 | passed | 当前版本备份 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 已从 NAS 恢复成功 | `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 恢复 Flyway 版本 `039` |
 | PRD-CRED-NAS-001 | structure_passed | NAS SMB 凭证引用已记录为 `cred://prod/nas/smb/complex-backup-rw` | `docs/production-readiness-implementation-ledger-template-v0.1.md` | 真实密码不得进入仓库；轮换证据仍需 IT 回填 |
@@ -60,6 +61,7 @@
 | 2026-06-15 20:50 UTC | 生成生产证据 Manifest 模板 | `npm run docs:production-evidence-manifest-templates` 与 `npm run verify:production-evidence-manifest-templates` 通过 |
 | 2026-06-15 20:58 UTC | 生成生产证据责任组回填说明包 | `npm run docs:production-evidence-owner-guides` 与 `npm run verify:production-evidence-owner-guides` 通过 |
 | 2026-06-15 21:24 UTC | 固化生产证据提交目录护栏 | `npm run verify:production-evidence-submissions-guard` 纳入交付闸口；submissions 目录只允许 manifest 入库 |
+| 2026-06-15 21:45 UTC | 固化证据链接与凭证引用校验 | 已用 TDD 验证 `TODO` 证据链接会被拦截，`ticket://...`/`APPROVAL-...`/`cred://...` 可通过 |
 | 2026-06-15 | 执行 `npm run verify:p0` | 通过 |
 | 2026-06-15 | 执行 `npm run verify:ops160-recovery` | 通过 |
 

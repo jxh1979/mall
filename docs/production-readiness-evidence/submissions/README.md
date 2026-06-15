@@ -7,6 +7,8 @@
 - RAW_EVIDENCE_STAYS_EXTERNAL
 - CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET
 - NO_FAKE_PRODUCTION_EVIDENCE_CLOSURE
+- TRACEABLE_EVIDENCE_LINKS_REQUIRED
+- CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN
 
 ## 2. 使用规则
 
@@ -14,11 +16,13 @@
 
 真实证据必须存放在受控外部位置，例如 IT 工单、财务审批系统、供应商交付目录、NAS 受控证据目录或权限受控文档库，并在 manifest 的 `evidence_links` 中记录链接或编号。
 
+`evidence_links`、`failure_case_evidence` 和 `approval_record` 必须使用外部可追溯引用，例如 `https://...`、`ticket://...`、`itsm://...`、`workorder://...`、`approval://...`、`supplier://...`、`nas://...`、`sharepoint://...`、`vault://...`，或 `ITSM-...`、`TICKET-...`、`WO-...`、`APPROVAL-...`、`SUPPLIER-...`、`NAS-EVIDENCE-...`、`DOC-...`、`EVD-...` 编号。禁止 `TODO`、`待填写`、`placeholder`、`example.com`、`localhost`、`file://`、Windows 本地路径和 Linux 本地路径。
+
 ## 3. 回填步骤
 
 1. 从 `docs/production-readiness-evidence/submission-manifest-templates/` 复制对应模板。
 2. 只把填写后的 `manifest-<item_id>.json` 放入对应 `submissions/<owner>/<item_id>/` 目录。
-3. `credential_refs` 只能填写凭证引用，例如 `cred://...`，不得填写密码、token、secret 或私钥正文。
+3. `credential_refs` 只能填写正式凭证引用，例如 `cred://prod/...`，不得填写密码、token、secret、私钥正文或 `replace-with-real-reference`、`placeholder` 这类占位值。
 4. 运行 `npm run verify:production-evidence-submissions-guard`、`npm run docs:production-evidence-submission-status` 和 `npm run verify:delivery-gates`。
 
 ## 4. 禁止事项
