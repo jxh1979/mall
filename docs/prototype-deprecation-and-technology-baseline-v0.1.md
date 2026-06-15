@@ -4,7 +4,7 @@
 
 本文档用于把综合体管理系统的历史预研原型和正式开发路线切开，防止产品、开发、测试、安全审计、供应商或外部机器智能体继续把旧 TypeScript/SQLite 后端当成正式系统。
 
-本文档不删除历史文件；它只规定哪些内容可参考、哪些内容必须废止、正式开发应从哪里开始，以及迁移或归档时必须满足的准入条件。旧 `apps/api` 目录已通过 `LEGACY-PROTOTYPE.md` 和阻断型 `package.json` 脚本做物理隔离，正式后端入口统一为 `backend/`。
+本文档记录历史预研原型与正式开发路线的切分。自 2026-06-15 起，旧 `apps/api` TypeScript/Fastify/Prisma/SQLite 原型已从 160 正式仓库物理移除；正式后端入口统一为 `backend/`，并通过 `npm run verify:no-legacy-api-prototype` 防止恢复旧原型。
 
 ## 2. 强制结论
 
@@ -27,11 +27,7 @@
 |---|---|---|---|
 | 根目录 `package.json` / `package-lock.json` | 历史 Node 工作区脚本 | 追溯旧原型启动方式 | 不得作为正式后端构建入口 |
 | 根目录 `tsconfig.base.json` | 历史 TypeScript 工作区配置 | 追溯旧前后端预研 | 不得作为正式后端编译入口 |
-| `apps/api/package.json` | 历史 Fastify API 原型的阻断脚本入口，且已从根 npm workspace 摘除 | 提醒开发、测试、安全审计和供应商旧原型不得运行 | 不得恢复为正式 API 启动、构建、seed、smoke 或 Prisma 脚本；不得重新写回根 workspace 或 lockfile |
-| `apps/api/LEGACY-PROTOTYPE.md` | 旧后端目录物理标识 | 提醒开发、测试、安全审计和供应商此目录为历史预研 | 不得删除该提示后继续按旧后端开发 |
-| `apps/api/src/**` | 历史 TypeScript 后端代码 | 参考接口命名、流程草稿和测试样例 | 不得直接迁入生产 |
-| `apps/api/prisma/schema.prisma` | 历史 Prisma/SQLite 数据模型 | 只可作为数据对象对照材料 | 不得作为正式数据库设计 |
-| `apps/api/dev.db`、`apps/api/prisma/dev.db` | 历史 SQLite 原型数据 | 只可作为样例数据来源 | 不得作为正式数据库、测试库或迁移源 |
+| `apps/api/**` | 历史 TypeScript/Fastify/Prisma/SQLite 后端原型 | 已于 2026-06-15 从正式仓库物理移除，仅允许从 Git 历史追溯 | 不得恢复为正式 API、mock、seed、smoke、Prisma、SQLite 或供应商联调入口；恢复会被 `npm run verify:no-legacy-api-prototype` 阻断 |
 | `security-scans/**`、`security-scans/LEGACY-SECURITY-SCANS.md` | 基于旧原型的安全扫描报告仅作历史追溯；`security-scans/threat_model.md` 已替换为正式安全基线重建入口 | 追溯旧问题和安全审计方法 | 不得作为当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 安全结论；正式 Java 后端落地后必须重做安全基线 |
 | `ops/160/*.sh` | 160 运维脚本 | 正式 Java 后端部署、回滚、健康检查、BE-000/P0 验收和生产备份 | 不得启动旧 `apps/api`，不得把 SQLite 原型库作为正式备份资产 |
 | `apps/web/**` | Web 前端原型或页面实现 | 可按当前 PRD/接口契约复核后复用 UI 经验 | 不得以旧 mock 接口反向约束正式后端 |
@@ -115,14 +111,14 @@ P0 只做 Java 内置规则处理器，覆盖票务资格、权益核销、权�
 
 | 优先级 | 动作 | 目的 |
 |---|---|---|
-| P0 | 将 `apps/api` 标注为 legacy prototype 或迁入归档目录 | 防止误启动旧后端 |
+| P0 | 物理移除 `apps/api` 并新增 `verify:no-legacy-api-prototype` 防回退闸口 | 防止误启动或恢复旧后端 |
 | P0 | 根目录正式启动脚本改向 Java/Maven | 防止新开发者运行旧 Node API |
 | P0 | 将旧安全扫描标注为 legacy scan | 防止安全结论错配 |
 | P0 | 新增 Java/PostgreSQL/Flyway 安全审计基线 | 替换旧 Node/SQLite 威胁模型 |
 | P1 | 盘点旧前端是否仍依赖旧 API mock | 避免前端接口反向污染后端契约 |
 | P1 | 将可复用样例数据转为 PostgreSQL seed 设计 | 支持正式测试数据 |
 
-当前执行状态：`apps/api` 已标注为 legacy prototype，且 `apps/api/package.json` 的运行、构建、Prisma、seed 和 smoke 脚本均已改为阻断提示；根 npm workspace 和根 lockfile 已移除旧 API、Fastify、Prisma 依赖；根目录 `dev`、`dev:api`、`smoke:p0`、`verify:p0` 已改向 `backend/` 或正式后端测试；160 API 发布、回滚、健康检查、BE-000/P0 验收和备份脚本已切换为 Java/Spring Boot/PostgreSQL/Flyway 口径。若后续决定物理迁入归档目录，仍须保留原型用途、废止原因、可参考范围、禁止用途和正式替代入口。
+当前执行状态：`apps/api` 已从 160 正式仓库物理移除，根 npm workspace、根脚本和 lockfile 不再保留旧 API、Fastify、Prisma、SQLite 入口；根目录 `dev`、`dev:api`、`smoke:p0`、`verify:p0` 已改向 `backend/` 或正式后端测试；160 API 发布、回滚、健康检查、BE-000/P0 验收和备份脚本已切换为 Java/Spring Boot/PostgreSQL/Flyway 口径；`verify:p0-contract` 已纳入 `verify:no-legacy-api-prototype`，用于阻断旧原型目录、旧脚本名、旧依赖和旧 package-lock 标记回流。
 
 归档不是简单删除。所有历史原型在归档前应保留一份说明：原型用途、废止原因、可参考范围、禁止用途、正式替代入口。
 
@@ -130,32 +126,32 @@ P0 只做 Java 内置规则处理器，覆盖票务资格、权益核销、权�
 
 ### AC-TECH-001 正式技术栈唯一
 
-Given 新开发者或外部供应商阅读交付包，  
-When 其查看当前有效入口、交付包说明、统一口径基准和项目进度看板，  
+Given 新开发者或外部供应商阅读交付包，
+When 其查看当前有效入口、交付包说明、统一口径基准和项目进度看板，
 Then 只能得出一个结论：正式后端为 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway + Maven。
 
 ### AC-TECH-002 旧原型不得误用
 
-Given 仓库中仍存在 `apps/api`、SQLite 数据库、Prisma schema 或旧安全扫描，  
-When 开发、测试、安全审计或供应商准备进入 P0 实施，  
-Then 这些内容必须被识别为历史预研原型，不得作为正式实现、验收或安全结论。
+Given 有人尝试恢复 `apps/api`、SQLite 数据库、Prisma schema 或旧 Fastify 依赖，
+When 执行 `npm run verify:no-legacy-api-prototype` 或 `npm run verify:p0-contract`，
+Then 验证必须失败并指出旧原型恢复项；旧安全扫描仍只允许通过 `security-scans/LEGACY-SECURITY-SCANS.md` 作历史追溯。
 
 ### AC-TECH-003 旧代码可参考但不可支配正式设计
 
-Given 旧 TypeScript 后端中存在某个接口、状态或字段，  
-When 正式 Java 后端设计与旧实现不一致，  
+Given 旧 TypeScript 后端中存在某个接口、状态或字段，
+When 正式 Java 后端设计与旧实现不一致，
 Then 以当前 PRD、统一口径基准、API Contract Pack、数据库设计和验收标准为准。
 
 ### AC-TECH-004 前端 TypeScript 不被误伤
 
-Given 文档废止 TypeScript/Fastify/Prisma/SQLite 后端路线，  
-When 前端团队评估 `apps/web` 或后续 Web 前端实现，  
+Given 文档废止 TypeScript/Fastify/Prisma/SQLite 后端路线，
+When 前端团队评估 `apps/web` 或后续 Web 前端实现，
 Then 不得把“废止后端 TypeScript 原型”误解为禁止前端使用 TypeScript。
 
 ### AC-TECH-005 安全审计切换
 
-Given 旧安全扫描基于 Node/Fastify/SQLite 原型，  
-When 正式 Java/PostgreSQL 工程建立后，  
+Given 旧安全扫描基于 Node/Fastify/SQLite 原型，
+When 正式 Java/PostgreSQL 工程建立后，
 Then 必须重新建立 Java 21 + Spring Boot 4.x/PostgreSQL/Flyway/MDM/开放平台/支付/NAS 备份相关的安全审计基线。
 
 ## 8. 与其他文档的关系
@@ -187,4 +183,5 @@ Then 必须重新建立 Java 21 + Spring Boot 4.x/PostgreSQL/Flyway/MDM/开放�
 | 2026-06-12 | V0.1 旧脚本阻断 | 将根目录 API 脚本和 `apps/api` 子脚本改为阻断旧 TypeScript/Fastify/SQLite 原型，正式后端入口统一为 `backend/` |
 | 2026-06-12 | V0.1 160 运维脚本收口 | 160 API 部署、回滚、健康检查、BE-000/P0 验收和备份脚本切换为正式 Java 后端口径 |
 | 2026-06-12 | V0.1 npm 工作区收口 | 根 npm workspace 和 lockfile 移除旧 `apps/api`、Fastify、Prisma 依赖，旧 API 子目录仅保留阻断提示和历史参考 |
+| 2026-06-15 | V0.1 旧原型物理清理 | `apps/api` 已从 160 正式仓库物理移除；新增 `verify:no-legacy-api-prototype` 并纳入 `verify:p0-contract`，阻断旧目录、旧脚本、旧依赖和旧 lockfile 标记回流 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | 正式 API 依据补入 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure`；旧原型能力未进入追溯附录不得生成 Controller、SDK/mock、接口自动化或供应商联调 |

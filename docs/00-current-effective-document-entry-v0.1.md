@@ -45,7 +45,7 @@
 | 正式安全基线待生成任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
-| 废止技术路线 | TypeScript / SQLite / Prisma / Fastify 后端仅可作为历史预研原型，不得作为正式开发、测试、部署、安全审计依据；`apps/api/LEGACY-PROTOTYPE.md` 为物理标识，`apps/api/package.json` 脚本已改为阻断提示，且旧 API 已从根 npm workspace 和根 lockfile 摘除 |
+| 废止技术路线 | TypeScript / SQLite / Prisma / Fastify 后端仅可作为历史预研原型，不得作为正式开发、测试、部署、安全审计依据；`apps/api` 已于 2026-06-15 从 160 正式仓库物理移除，`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract`，用于阻断旧目录、旧脚本、旧依赖和旧 lockfile 标记回流 |
 | 金额单位 | 全局金额使用整数分 `bigint` |
 | 币种 | P0 仅启用 CNY，保留 `currency=CNY` 字段，不启用多币种和汇率换算 |
 | 能力层 | 平台治理、业务经营、第三方接入、证据留痕与风控、数据分析、终端展示六层 |
@@ -232,7 +232,7 @@
 
 | 内容 | 当前处理 | 规则 |
 |---|---|---|
-| TypeScript / SQLite / Prisma / Fastify 后端原型 | 只允许作为历史预研材料；`apps/api/package.json` 运行脚本已阻断；根 npm workspace 和 lockfile 已移除旧 API 依赖 | 不得继续作为正式 P0 开发入口 |
+| TypeScript / SQLite / Prisma / Fastify 后端原型 | 已从正式仓库物理移除；只允许通过 Git 历史和历史审计文档追溯 | 不得恢复为正式 P0 开发、mock、seed、smoke 或供应商联调入口；恢复会被 `verify:no-legacy-api-prototype` 阻断 |
 | `apps/web`、`apps/android-terminal` 现有旧路径调用 | 非正式路径已迁入 `/api/v1/*` 或 `/api/open/*`；迁移盘点使用 `npm run audit:client-routes` | 不得以 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或旧请求字段名反向约束正式后端；正式联调前必须通过 `npm run verify:p0-contract`，其展开包含 OpenAPI、示例、operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和客户端请求字段闸口 |
 | Node/Fastify/SQLite 旧安全扫描或威胁模型 | 已通过 `security-scans/LEGACY-SECURITY-SCANS.md` 标注 legacy；`security-scans/threat_model.md` 已替换为 Java/Spring/PostgreSQL/Flyway 正式安全基线重建入口 | 不得作为当前 Java/PostgreSQL 安全设计依据；正式 Java 后端落地后重做安全基线 |
 | 历史对抗式审计报告 | 保留追溯价值 | 不再作为当前执行入口，已吸收结论看当前文档 |
@@ -312,7 +312,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 ## 8. 进入下一章前的审计结论
 
-当前第一批 P0 硬缺口已经收口：原型废止声明已由 `prototype-deprecation-and-technology-baseline-v0.1.md`、`apps/api/LEGACY-PROTOTYPE.md`、`apps/api/package.json` 阻断脚本和 `code-contract-difference-and-migration-audit-v0.1.md` 承接，P0 可编码入口已由 `p0-coding-entry-pack-v0.1.md` 承接，首批正式编码范围已由 `p0-first-coding-package-v0.1.md` 承接，160 API 部署/回滚/健康检查/BE-000 验收脚本已由 `ops/160/*.sh` 和 `server-160-runbook-v0.2.md` 承接，生产前置资料已由 `production-readiness-implementation-ledger-template-v0.1.md` 承接，正式安全基线待生成任务已由 `formal-security-baseline-generation-task-v0.1.md` 承接，接口契约已由 `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json`、`verify:p0-contract` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 承接，OpenAPI 权限、事件、任务追溯缺口已由 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure` 承接，Web 可构建性已由 `verify:p0-web` 承接，后端/Android 环境前置已由 `verify:p0-env` 承接，用户故事和迭代切片已由 `p0-user-story-map-and-sprint-slices-v0.1.md` 承接，任务-接口-权限-事件-验收映射已由 `p0-task-api-permission-event-acceptance-map-v0.1.md` 承接，游乐 P0 安全巡检闭环已由 `amusement-p0-safety-inspection-spec-v0.1.md` 承接。票务资格 P0 的 `ticket_eligibility_rules`、`student_credential_audits`、多人票 `num_people` 和核销放行人数留痕已收口为正式 Flyway 首批业务迁移必落项，不再作为开放待决策项。160 机器已按最新项目和脚本完成同步，并已通过环境、契约、Web 构建、运行配置预检、API/Web 启动、BE-000 运行态、整体健康检查和完整 `complex-verify-p0.sh`；当前使用 `~/.complex/complex.env` 用户级覆盖解决 `/etc/complex/complex.env` 暂无 sudo 写入权限的问题，不在文档或脚本中落真实密钥。注意：当前完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通，不代表平台、票务、权益、核销、证据、设备等业务域已完成生产级实现。
+当前第一批 P0 硬缺口已经收口：原型废止声明已由 `prototype-deprecation-and-technology-baseline-v0.1.md`、`verify:no-legacy-api-prototype` 和 `code-contract-difference-and-migration-audit-v0.1.md` 承接，P0 可编码入口已由 `p0-coding-entry-pack-v0.1.md` 承接，首批正式编码范围已由 `p0-first-coding-package-v0.1.md` 承接，160 API 部署/回滚/健康检查/BE-000 验收脚本已由 `ops/160/*.sh` 和 `server-160-runbook-v0.2.md` 承接，生产前置资料已由 `production-readiness-implementation-ledger-template-v0.1.md` 承接，正式安全基线待生成任务已由 `formal-security-baseline-generation-task-v0.1.md` 承接，接口契约已由 `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json`、`verify:p0-contract` 和 `p0-openapi-operation-acceptance-matrix-v0.1.md` 承接，OpenAPI 权限、事件、任务追溯缺口已由 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure` 承接，Web 可构建性已由 `verify:p0-web` 承接，后端/Android 环境前置已由 `verify:p0-env` 承接，用户故事和迭代切片已由 `p0-user-story-map-and-sprint-slices-v0.1.md` 承接，任务-接口-权限-事件-验收映射已由 `p0-task-api-permission-event-acceptance-map-v0.1.md` 承接，游乐 P0 安全巡检闭环已由 `amusement-p0-safety-inspection-spec-v0.1.md` 承接。票务资格 P0 的 `ticket_eligibility_rules`、`student_credential_audits`、多人票 `num_people` 和核销放行人数留痕已收口为正式 Flyway 首批业务迁移必落项，不再作为开放待决策项。160 机器已按最新项目和脚本完成同步，并已通过环境、契约、Web 构建、运行配置预检、API/Web 启动、BE-000 运行态、整体健康检查和完整 `complex-verify-p0.sh`；当前使用 `~/.complex/complex.env` 用户级覆盖解决 `/etc/complex/complex.env` 暂无 sudo 写入权限的问题，不在文档或脚本中落真实密钥。注意：当前完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通，不代表平台、票务、权益、核销、证据、设备等业务域已完成生产级实现。
 
 下一步不再新增拍板问题；建议直接按 `p0-first-coding-package-v0.1.md` 进入首批编码包执行：先完成 BE-001/BE-002、Flyway 首批正式迁移、权限模板、事件审计、主体绑定、应收应付和生产前置台账，再把当前 `local/dev/test` 内存态 smoke 切片迁移为 PostgreSQL + Flyway + Service/Repository + 权限/事件/审计的正式业务实现，并要求每替换一个 smoke 接口都保持 `complex-verify-p0.sh` 继续通过。生产或长期预生产前，IT/运维仍需把用户级覆盖配置迁入 `/etc/complex/complex.env`，接入 systemd、账号密钥轮换、告警、生产前置台账和正式安全基线。
 
@@ -332,6 +332,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 2026-06-12 | V0.1 160 脚本收口 | 160 API 部署、回滚、健康检查、BE-000/P0 验收和备份脚本切换为 Java/Spring Boot/PostgreSQL/Flyway 口径 |
 | 2026-06-12 | V0.1 OpenAPI 契约闸口 | 新增 `npm run verify:openapi` 为 P0 联调、自动化测试和供应商 mock 前置检查 |
 | 2026-06-12 | V0.1 npm 工作区收口 | 根 npm workspace 和 lockfile 移除旧 `apps/api`、Fastify、Prisma 依赖；旧 API 子目录仅保留阻断提示和历史参考 |
+| 2026-06-15 | V0.1 旧原型物理清理 | `apps/api` 已从 160 正式仓库物理移除；`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract`，防止旧原型回流 |
 | 2026-06-12 | V0.1 客户端旧路径闸口 | 新增 `npm run audit:client-routes` 和 `npm run verify:client-routes` 作为 Web/Android/一体机/供应商 mock 正式联调前置检查 |
 | 2026-06-12 | V0.1 客户端 OpenAPI 覆盖闸口 | 新增 `npm run audit:client-openapi` 和 `npm run verify:client-openapi`，覆盖检查升级为路径模板 + HTTP 方法一致性，防止客户端只改路径前缀但未补机器契约 |
 | 2026-06-12 | V0.1 客户端请求字段闸口 | 新增 `npm run audit:client-payload` 和 `npm run verify:client-payload`，防止客户端路径正确但请求字段未对齐 OpenAPI requestBody |

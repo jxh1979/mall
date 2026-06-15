@@ -13,7 +13,7 @@
 - 文档：主线产品、开发设计、字段、流程、验收、运维和 PM Critic 审查文档已收口；“已收口”仅代表产品和开发口径已固定，不代表正式代码已经完成。
 - P0 编码：2026-06-14 已在 192.168.88.160 的 `/home/james/complex-management` 完成首批 P0 正式编码验收。OpenAPI 181 个 operation 与 Java Controller 181 个映射一致，缺失 0，多余 0；后端 360 个测试通过；Web、Android、APK、API/Web 健康检查和 PostgreSQL/Redis/NATS/MinIO 状态均通过；`/opt/complex/scripts/complex-verify-p0.sh` 最终输出 `P0 verification PASS`；根目录 `npm run verify:p0` 也已可直接加载 160 用户级运行配置并通过完整验证。交接入口见 `p0-coding-completion-and-handoff-report-v0.1.md`。
 - P0-0：正式 Java 21 + Spring Boot 4.x + Maven + PostgreSQL + Flyway + springdoc-openapi 后端工程骨架已创建在 `backend/`。160 机器已同步最新工程和 `ops/160` 脚本，并已通过 `verify:p0-env`、`verify:p0-contract`、`verify:p0-web`、`complex-runtime-config-check.sh`、`complex-verify-be000.sh` 运行态验收、`complex-health-check.sh` 和完整 `complex-verify-p0.sh`。当前 API release `20260613-193142` 与 Web release `20260613-180329` 已启动。注意：完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通；真实业务域 Controller/Repository/Service 仍不得标记为“正式并行开发完成”。
-- 入口：P0 编码、联调、测试和供应商 mock 统一从 `p0-coding-entry-pack-v0.1.md` 进入；根目录 API 脚本和 `apps/api` 子脚本已阻断旧 TypeScript/Fastify/SQLite 原型，正式后端统一指向 `backend/`。
+- 入口：P0 编码、联调、测试和供应商 mock 统一从 `p0-coding-entry-pack-v0.1.md` 进入；旧 `apps/api` TypeScript/Fastify/SQLite 原型已从 160 正式仓库物理移除，根目录 API 脚本统一指向 `backend/`，`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract` 防回退。
 - 客户端：`npm run verify:client-routes` 已通过，Web/Android 非正式 `/api/*` 路径已清零；`npm run verify:client-openapi` 已通过，客户端 77 个正式路径模板和 95 个方法级调用均已被 P0 OpenAPI 覆盖；`npm run verify:client-payload` 已通过，Web/Android 已具备 OpenAPI 字段名适配；`ClientPlaceholderRequest` 已删除，写接口均改为字段级 requestBody schema。
 - OpenAPI 文档质量：`docs:repair-openapi-text` 已修复残留连续问号摘要、描述和参数说明；`docs:operation-matrix` 已按当前 181 个 operation 重新生成 operation 验收矩阵；`docs:openapi-examples` 已补首批高风险写接口和外部接入接口机器示例；`docs:openapi-closure` 已生成 `p0-openapi-contract-closure-appendix-v0.1.md`，覆盖 operation 到任务簇、权限、事件、终端和样例准入的追溯附录；`verify:operation-matrix`、`verify:openapi-examples` 与 `verify:openapi-closure` 已纳入 P0 总验证链。
 - 安全基线：`security-scans/threat_model.md` 已从旧 TypeScript/SQLite 原型威胁模型替换为正式安全基线重建入口；旧安全扫描仅通过 `security-scans/LEGACY-SECURITY-SCANS.md` 作历史追溯，不得参与当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 上线判断；`verify:prod-docs-access` 已纳入 `verify:security-baseline`，用于保证 prod profile 下 OpenAPI/Swagger 文档不匿名公开。
@@ -73,7 +73,7 @@
 
 | 模块 | P0 状态 | 验收关注 |
 |---|---|---|
-| BE-000 正式后端工程准入 | 160 运行态和完整 P0 自动化 smoke 已通过 | `backend/` 已建立 Java 21 + Spring Boot 4.x + Maven + PostgreSQL + Flyway + springdoc-openapi 工程、健康检查、版本接口、OpenAPI 配置和 `V001__baseline.sql`；根目录 API 脚本已改向 `backend/`，旧 `apps/api` 子脚本已阻断；160 已同步最新工程和脚本并通过 `verify:p0-env`、`verify:p0-contract`、`verify:p0-web`、`complex-runtime-config-check.sh`、`complex-verify-be000.sh`、`complex-health-check.sh` 和 `complex-verify-p0.sh`；当前 API 使用 dev profile、非 systemd 回退启动和 `local/dev/test` 内存态 P0 smoke 切片，生产或长期预生产前仍需正式写入 `/etc/complex/complex.env`、systemd、密钥轮换、告警，并将业务接口迁移为 PostgreSQL + Flyway 正式实现 |
+| BE-000 正式后端工程准入 | 160 运行态和完整 P0 自动化 smoke 已通过 | `backend/` 已建立 Java 21 + Spring Boot 4.x + Maven + PostgreSQL + Flyway + springdoc-openapi 工程、健康检查、版本接口、OpenAPI 配置和 `V001__baseline.sql`；根目录 API 脚本已改向 `backend/`，旧 `apps/api` 已物理移除并由 `verify:no-legacy-api-prototype` 防回退；160 已同步最新工程和脚本并通过 `verify:p0-env`、`verify:p0-contract`、`verify:p0-web`、`complex-runtime-config-check.sh`、`complex-verify-be000.sh`、`complex-health-check.sh` 和 `complex-verify-p0.sh`；当前 API 使用 dev profile、非 systemd 回退启动和 `local/dev/test` 内存态 P0 smoke 切片，生产或长期预生产前仍需正式写入 `/etc/complex/complex.env`、systemd、密钥轮换、告警，并将业务接口迁移为 PostgreSQL + Flyway 正式实现 |
 | Web/Android API client 迁移 | 旧路径清零，OpenAPI 示例、OpenAPI 覆盖、operation 矩阵同步和请求字段闸口已闭合 | `npm run verify:p0-contract` 已通过；`ClientPlaceholderRequest` 已删除，后续不得恢复通用占位请求体；客户端写接口请求字段必须与 OpenAPI requestBody schema 一致 |
 | 平台组织、商户、场馆、区域、点位 | 160 P0 编码验收通过 | 多综合体、多主体、合同主体、运营主体、结算主体唯一绑定和留痕已进入自动化验收；生产配置和真实资料仍按生产前置台账执行 |
 | 员工账号与权限 | 160 P0 编码验收通过 | 认证、权限、权限模板、临时授权、审计日志和 auth refresh/logout 已补齐；refresh/logout 保持 Bearer 认证边界 |
@@ -119,6 +119,7 @@
 | 2026-06-12 | 增 | 创建 `backend/` 正式后端骨架、`.env.example` Java/PostgreSQL 变量和 Flyway baseline；标记本地 Java/Maven 缺失导致 BE-000 尚待实跑验收。 |
 | 2026-06-12 | 改 | 总控拍板 Spring Boot 使用 4.x；`backend/pom.xml` 父版本同步为 Spring Boot 4.1.0，Web 依赖切换为 Boot 4 的 WebMVC starter。 |
 | 2026-06-12 | 增/改 | 新增 `p0-coding-entry-pack-v0.1.md` 为 P0 可编码入口包；根目录 API 脚本和 `apps/api` 子脚本改为阻断旧原型并指向正式 `backend/`。 |
+| 2026-06-15 | 改 | 旧 `apps/api` TypeScript/Fastify/Prisma/SQLite 原型已从 160 正式仓库物理移除；新增 `verify:no-legacy-api-prototype` 并纳入 `verify:p0-contract`。 |
 | 2026-06-12 | 改 | 160 运维脚本切换为 Java/Spring Boot/PostgreSQL/Flyway 口径，新增 BE-000 验收脚本，备份脚本移除旧 SQLite 原型库。 |
 | 2026-06-12 | 增/改 | Web/Android 非正式接口路径已清零，`verify:client-routes` 通过；补齐客户端路径模板 + HTTP 方法 OpenAPI 覆盖，`verify:client-openapi` 通过；`ClientPlaceholderRequest` 已删除并替换为字段级 DTO。 |
 | 2026-06-12 | 增/改 | 新增客户端请求字段闸口 `verify:client-payload`；Web 出站请求统一转 OpenAPI snake_case、入站响应转前端 camelCase；Android 启用 snake_case 序列化并规范化手写 JsonObject。 |

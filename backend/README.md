@@ -62,8 +62,8 @@ P0 当前以 Maven 为唯一后端构建工具，允许使用系统 Maven 3.9+ �
 
 ## 开发边界
 
-- `apps/api` 下的 TypeScript/Fastify/SQLite 内容不得作为正式后端入口。
-- 根目录 `dev`、`dev:api`、`smoke:p0` 已改为指向本 Java 后端；若脚本重新指向 `apps/api`，视为入口回退缺陷。
+- 历史 `apps/api` TypeScript/Fastify/SQLite 预研原型已物理删除，禁止恢复为正式或备用后端入口。
+- 根目录 `dev`、`dev:api`、`smoke:p0` 必须持续指向 Java 21 + Spring Boot + PostgreSQL + Flyway 后端；若脚本重新指向旧原型目录，视为入口回退缺陷。
 - 业务域 Controller、Service、Repository 必须在 BE-000 启动和 Flyway baseline 可执行后再进入正式实现。
 - 数据库结构必须通过 `src/main/resources/db/migration` 下的 Flyway 迁移文件管理，禁止依赖 Hibernate 自动建表。
 
