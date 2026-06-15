@@ -99,6 +99,7 @@
    - `p0-coding-entry-pack-v0.1.md` —— P0 编码、联调、测试和供应商 mock 的统一入口，说明正式工程、契约、权限、留痕、验收和旧原型阻断规则。
    - `external-dependency-gates-v0.1.md` —— 外部依赖准入闸口，阻断未确定供应商前的真实机器人、视频、设备控制和独立 Python AI 服务伪实现。
    - `delivery-readiness-gates-v0.1.md` —— 交付总闸口，要求交付前运行 `npm run verify:delivery-gates`。
+   - `production-owner-action-packs-v0.1.md`、`production-evidence-submission-kit-v0.1.md` —— 生产阻断项按责任人分派和证据提交包格式，要求回填后复跑交付闸口。
    - `p0-api-contract-pack-v0.1.md` —— P0 接口契约基线，供前端、后端、Android、一体机、小程序/App/Web、第三方和测试共同对齐。
    - `openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` —— P0 机器可读接口契约，供 springdoc 比对、SDK/mock 生成、接口自动化和供应商 Adapter 契约测试使用。
    - `p0-openapi-operation-acceptance-matrix-v0.1.md` —— P0 operation 级验收矩阵，覆盖请求体、权限、认证上下文、终端、幂等、事件、边界情况和开发用户故事。

@@ -56,6 +56,7 @@ for (const marker of [
   "npm run verify:production-blockers",
   "npm run verify:production-readiness-evidence",
   "npm run verify:delivery-gates",
+  "production-evidence-submission-kit-v0.1.md",
 ]) {
   requireIncludes(docPath, doc, marker);
 }
@@ -63,6 +64,9 @@ for (const marker of [
 const packageJson = JSON.parse(readText("package.json"));
 if (packageJson.scripts?.["verify:production-evidence-intake"] !== "node tools/verify-production-evidence-intake-templates.mjs") {
   failures.push("package.json must expose verify:production-evidence-intake");
+}
+if (packageJson.scripts?.["verify:production-evidence-submission-kit"] !== "node tools/generate-production-evidence-submission-kit.mjs --check") {
+  failures.push("package.json must expose verify:production-evidence-submission-kit");
 }
 if (!String(packageJson.scripts?.["verify:delivery-gates"] ?? "").includes("verify:production-evidence-intake")) {
   failures.push("verify:delivery-gates must include verify:production-evidence-intake");

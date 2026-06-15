@@ -52,6 +52,7 @@ if (packageJson) {
     "verify:production-readiness-evidence",
     "verify:production-blockers",
     "verify:production-owner-actions",
+    "verify:production-evidence-submission-kit",
     "verify:production-evidence-intake",
   ];
   if (!deliveryScript) {
@@ -73,12 +74,14 @@ requireIncludes("docs/delivery-readiness-gates-v0.1.md", [
   "NO_FORMAL_CODE_OUTSIDE_160",
   "NO_PRODUCTION_DEPLOYMENT_WITH_PENDING_EXTERNAL_BLOCKERS",
   "OWNER_ACTION_PACKS_FROM_PRODUCTION_BLOCKERS",
+  "PRODUCTION_EVIDENCE_SUBMISSION_KIT_READY",
   "npm run verify:delivery-gates",
   "verify:external-dependency-gates",
   "verify:coding-host-protection",
   "verify:production-readiness-evidence",
   "verify:production-blockers",
   "verify:production-owner-actions",
+  "verify:production-evidence-submission-kit",
   "verify:production-evidence-intake",
 ]);
 

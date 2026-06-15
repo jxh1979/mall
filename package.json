@@ -57,14 +57,16 @@
     "verify:p2-floor-plan-web-entry": "node tools/verify-p2-floor-plan-web-entry.mjs",
     "verify:external-dependency-gates": "node tools/verify-external-dependency-gates.mjs",
     "verify:delivery-gates-docs": "node tools/verify-delivery-gates.mjs",
-    "verify:delivery-gates": "npm run verify:delivery-gates-docs && npm run verify:coding-host-protection && npm run verify:external-dependency-gates && npm run verify:t3-coding-package && npm run verify:t3b-supplier-mock-kit && npm run verify:t3d-local-llm-ai-quality && npm run verify:p0-contract && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:production-blockers && npm run verify:production-owner-actions && npm run verify:production-evidence-intake",
+    "verify:delivery-gates": "npm run verify:delivery-gates-docs && npm run verify:coding-host-protection && npm run verify:external-dependency-gates && npm run verify:t3-coding-package && npm run verify:t3b-supplier-mock-kit && npm run verify:t3d-local-llm-ai-quality && npm run verify:p0-contract && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:production-blockers && npm run verify:production-owner-actions && npm run verify:production-evidence-submission-kit && npm run verify:production-evidence-intake",
     "verify:nas-smb-mount-evidence": "node tools/verify-nas-smb-mount-evidence.mjs",
     "verify:production-readiness-evidence": "node tools/verify-production-readiness-evidence.mjs",
     "docs:production-blockers": "node tools/generate-production-blocker-register.mjs",
     "verify:production-blockers": "node tools/generate-production-blocker-register.mjs --check",
     "verify:production-evidence-intake": "node tools/verify-production-evidence-intake-templates.mjs",
     "docs:production-owner-actions": "node tools/generate-production-owner-action-packs.mjs",
-    "verify:production-owner-actions": "node tools/generate-production-owner-action-packs.mjs --check"
+    "verify:production-owner-actions": "node tools/generate-production-owner-action-packs.mjs --check",
+    "docs:production-evidence-submission-kit": "node tools/generate-production-evidence-submission-kit.mjs",
+    "verify:production-evidence-submission-kit": "node tools/generate-production-evidence-submission-kit.mjs --check"
   },
   "engines": {
     "node": ">=22"
