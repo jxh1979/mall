@@ -54,7 +54,8 @@
     "verify:t3a-readonly-analytics": "node tools/verify-t3a-readonly-analytics.mjs",
     "verify:t3b-supplier-mock-kit": "node tools/verify-t3b-supplier-mock-kit.mjs",
     "verify:t3d-local-llm-ai-quality": "node tools/verify-t3d-local-llm-ai-quality.mjs",
-    "verify:p2-floor-plan-web-entry": "node tools/verify-p2-floor-plan-web-entry.mjs"
+    "verify:p2-floor-plan-web-entry": "node tools/verify-p2-floor-plan-web-entry.mjs",
+    "verify:external-dependency-gates": "node tools/verify-external-dependency-gates.mjs"
   },
   "engines": {
     "node": ">=22"
