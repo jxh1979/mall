@@ -16,6 +16,8 @@
 
 配套提交包：`production-evidence-submission-kit-v0.1.md` 从责任人动作包自动生成，定义每个责任组、每个阻断项的提交目录、manifest 文件名、必填字段、可接受证据类型和回填后复测命令。字段口径以本文为准，提交结构以提交包为准。
 
+配套状态看板：`production-evidence-submission-status-v0.1.md` 扫描实际 manifest 提交状态；未提交保持 awaiting，格式错误、缺字段或明文密钥会阻断交付闸口。
+
 ## 3. 通用证据字段
 
 | 字段 | 必填 | 说明 |
