@@ -13,7 +13,7 @@
 | P0 编码基线 | passed | 最新提交 `5463ee1 fix: harden credential storage and webhook signatures`，160 工作区干净 | 160 本地 git `master` | 160 未配置 remote，未 push |
 | P0 自动化闸口 | passed | `npm run verify:p0` 通过 | 160 命令执行记录 | 覆盖 P0 契约、安全基线、后端 547 测试、Web build、Android env/build/smoke/APK |
 | P0-A 运维闸口 | passed | `npm run verify:ops160-recovery` 通过 | 160 命令执行记录 | 覆盖执行策略、备份恢复脚本、生产凭证台账结构、P0-A ops hardening |
-| PRD-NAS-001 | passed | NAS `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup` 且可写 | `docs/nas-backup-and-restore-runbook-v0.1.md#63-最新真实-nas-验证证据2026-06-15` | 系统级自动挂载仍需 IT 固化 |
+| PRD-NAS-001 | passed | NAS `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup` 且可写；已补 live mount + write/read/delete 机器证据 | `docs/production-readiness-evidence/nas-smb-mount-latest.json`、`docs/nas-backup-and-restore-runbook-v0.1.md#63-最新真实-nas-验证证据2026-06-15` | 系统级自动挂载仍需 IT 固化；可用 `npm run verify:nas-smb-mount-evidence` 复核 |
 | PRD-NAS-002 | passed | 当前版本备份 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 已从 NAS 恢复成功 | `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 恢复 Flyway 版本 `039` |
 | PRD-CRED-NAS-001 | structure_passed | NAS SMB 凭证引用已记录为 `cred://prod/nas/smb/complex-backup-rw` | `docs/production-readiness-implementation-ledger-template-v0.1.md` | 真实密码不得进入仓库；轮换证据仍需 IT 回填 |
 | PRD-CRED-NAS-KEY-001 | not_applicable | 当前总控口径为备份归档不加密，保留 `cred://prod/nas/backup-encryption-key` 作为预留引用 | `docs/production-credential-rotation-runbook-v0.1.md` | 当前不阻塞；启用加密后再转阻断 |
@@ -39,6 +39,7 @@
 |---|---|---|
 | 2026-06-15 11:27 UTC | 执行当前版本 NAS 备份 | 生成 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 并同步到 NAS |
 | 2026-06-15 11:27 UTC | 从 NAS 归档执行恢复演练 | `restore.drill_completed`，Flyway `039`，临时库已删除 |
+| 2026-06-15 19:56 UTC | 执行 NAS SMB 挂载/读写机器校验 | `npm run verify:nas-smb-mount-evidence` 通过，不读取或记录 SMB 密码 |
 | 2026-06-15 | 执行 `npm run verify:p0` | 通过 |
 | 2026-06-15 | 执行 `npm run verify:ops160-recovery` | 通过 |
 

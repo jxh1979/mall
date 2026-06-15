@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "evidence_type": "nas_smb_mount_live_rw",
+  "verified_at": "2026-06-15T19:56:41Z",
+  "verified_on_host": "192.168.88.160",
+  "nas_server": "192.168.88.113",
+  "nas_share": "bn",
+  "nas_unc": "//192.168.88.113/bn",
+  "mount_path": "/mnt/complex-nas-backup",
+  "fstype": "cifs",
+  "required_options": ["rw", "vers=3.0"],
+  "smb_username": "jxh1",
+  "credential_ref": "cred://prod/nas/smb/complex-backup-rw",
+  "backup_key_ref": "cred://prod/nas/backup-encryption-key",
+  "encryption_enabled": false,
+  "retention_days": 30,
+  "capacity_limit": "1TB",
+  "write_test_status": "passed",
+  "plaintext_secret_present": false,
+  "password_in_evidence": false,
+  "source": "findmnt plus write/read/delete test on 192.168.88.160",
+  "notes": "No plaintext SMB password is stored in this evidence file. System-level automount, scheduled backup, and alert evidence remain IT-owned production hardening tasks."
+}

@@ -109,7 +109,8 @@ SMB 密码不得写入本文。推荐由 IT 在 160 写入仅当前运维用户�
 | 校验文件 | `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz.sha256` 校验通过，恢复演练输出 `checksum=verified` |
 | 从 NAS 恢复 | `complex-restore-drill.sh /mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 输出 `restore.drill_completed` |
 | 恢复结果 | 临时库 `complex_restore_drill_20260615_112734` 恢复成功并自动删除；Flyway 版本 `039`；验证表 `auth_credentials,auth_sessions,flyway_schema_history,platform_migration_baseline` |
-| 最新 evidence | `docs/production-readiness-evidence/nas-restore-drill-latest.json` |
+| 最新挂载 evidence | `docs/production-readiness-evidence/nas-smb-mount-latest.json`，可用 `npm run verify:nas-smb-mount-evidence` 复核 live mount 和临时读写删除测试 |
+| 最新恢复 evidence | `docs/production-readiness-evidence/nas-restore-drill-latest.json` |
 
 当前一次性真实 NAS 同步和恢复演练已按最新 Flyway 039 版本通过。生产前仍需把挂载写入受控的开机自动挂载方案，补定时备份、容量告警、失败告警和周期性恢复演练计划；这些属于 `PRD-NAS-AUTOMOUNT-001`、`PRD-NAS-SCHEDULE-001`、`PRD-NAS-ALERT-001`、`PRD-NAS-DRILL-CADENCE-001` 和 `PRD-CRED-001` 的运维生产化工作，不再反向阻塞 P0 编码完成。
 
