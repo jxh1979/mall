@@ -28,6 +28,8 @@
 
 配套优先级看板：`production-evidence-backfill-priority-v0.1.md` 按责任组、P0 缺口、状态和类别生成下一批真实证据回填顺序。
 
+配套执行台账：`production-evidence-backfill-execution-ledger-v0.1.md` 和 CSV 将优先级看板展开为一行一个待补 manifest，明确模板路径、目标提交路径和复测命令。
+
 ## 3. 通用证据字段
 
 | 字段 | 必填 | 说明 |

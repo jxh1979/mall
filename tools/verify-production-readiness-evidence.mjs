@@ -93,11 +93,14 @@ const productionEvidenceSubmissionStatus = readJson("docs/production-readiness-e
 const productionEvidenceManifestTemplates = readJson("docs/production-readiness-evidence/production-evidence-manifest-template-index-latest.json");
 const productionEvidenceOwnerGuides = readJson("docs/production-readiness-evidence/production-evidence-owner-guides-latest.json");
 const productionEvidenceBackfillPriority = readJson("docs/production-readiness-evidence/production-evidence-backfill-priority-latest.json");
+const productionEvidenceBackfillExecutionLedger = readJson("docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.json");
+const executionLedgerText = readText("docs/production-evidence-backfill-execution-ledger-v0.1.md");
 const submissionsGuardReadmeText = readText("docs/production-readiness-evidence/submissions/README.md");
 const submissionsGuardGitignoreText = readText("docs/production-readiness-evidence/submissions/.gitignore");
 
 forbidPlaintextSecrets("production readiness ledger", ledgerText);
 forbidPlaintextSecrets("production readiness backfill", backfillText);
+forbidPlaintextSecrets("production evidence backfill execution ledger", executionLedgerText);
 forbidPlaintextSecrets("security baseline evidence", securityEvidenceText);
 forbidPlaintextSecrets("nas smb evidence", nasEvidenceText);
 
@@ -168,6 +171,14 @@ if (productionEvidenceBackfillPriority) {
   if ((productionEvidenceBackfillPriority.batches ?? []).some((batch, index) => batch.rank !== index + 1)) failures.push("production evidence backfill priority batches must have sequential ranks");
 }
 
+if (productionEvidenceBackfillExecutionLedger) {
+  if (!productionEvidenceBackfillExecutionLedger.policy?.execution_ledger_does_not_close_blockers) failures.push("production evidence backfill execution ledger must not close blockers");
+  if (!productionEvidenceBackfillExecutionLedger.policy?.one_row_per_evidence_submission) failures.push("production evidence backfill execution ledger must be one row per evidence submission");
+  const ledgerRows = Array.isArray(productionEvidenceBackfillExecutionLedger.rows) ? productionEvidenceBackfillExecutionLedger.rows : [];
+  if ((productionEvidenceBackfillExecutionLedger.counts?.ledger_rows ?? 0) !== ledgerRows.length) failures.push("production evidence backfill execution ledger row count must match rows length");
+  if ((productionEvidenceBackfillExecutionLedger.counts?.p0_rows ?? 0) > (productionEvidenceBackfillExecutionLedger.counts?.ledger_rows ?? 0)) failures.push("production evidence backfill execution ledger p0 rows cannot exceed total rows");
+}
+
 if (productionEvidenceOwnerGuides) {
   if (productionEvidenceOwnerGuides.status !== "owner_guides_ready_not_real_evidence") {
     failures.push(`production evidence owner guides status must be owner_guides_ready_not_real_evidence, got ${productionEvidenceOwnerGuides.status}`);
@@ -198,7 +209,7 @@ if (semgrepEvidence) {
   const scanned = Array.isArray(semgrepEvidence.paths?.scanned) ? semgrepEvidence.paths.scanned : [];
   if (results.length !== 0) failures.push(`delivery readiness semgrep must have 0 findings, got ${results.length}`);
   if (errors.length !== 0) failures.push(`delivery readiness semgrep must have 0 errors, got ${errors.length}`);
-  for (const target of ["tools/generate-production-blocker-register.mjs", "tools/generate-production-owner-action-packs.mjs", "tools/generate-production-evidence-submission-kit.mjs", "tools/generate-production-evidence-manifest-templates.mjs", "tools/generate-production-evidence-owner-guides.mjs", "tools/generate-production-evidence-submission-status.mjs", "tools/verify-delivery-gates.mjs", "tools/verify-nas-smb-mount-evidence.mjs", "tools/generate-production-evidence-backfill-priority.mjs", "tools/verify-production-evidence-intake-templates.mjs", "tools/verify-production-evidence-submissions-guard.mjs", "tools/verify-production-readiness-evidence.mjs"]) {
+  for (const target of ["tools/generate-production-blocker-register.mjs", "tools/generate-production-owner-action-packs.mjs", "tools/generate-production-evidence-submission-kit.mjs", "tools/generate-production-evidence-manifest-templates.mjs", "tools/generate-production-evidence-owner-guides.mjs", "tools/generate-production-evidence-submission-status.mjs", "tools/verify-delivery-gates.mjs", "tools/verify-nas-smb-mount-evidence.mjs", "tools/generate-production-evidence-backfill-priority.mjs", "tools/generate-production-evidence-backfill-execution-ledger.mjs", "tools/verify-production-evidence-intake-templates.mjs", "tools/verify-production-evidence-submissions-guard.mjs", "tools/verify-production-readiness-evidence.mjs"]) {
     if (!scanned.includes(target)) failures.push(`delivery readiness semgrep must scan ${target}`);
   }
 }
@@ -207,7 +218,7 @@ for (const [relativePath, text, markers] of [
   ["security-scans/formal-security-baseline-v1.md", baselineText, ["正式安全基线 V1", `OpenAPI operation count: ${expectedOperationCount}`, "Verification command: `npm run verify:security-baseline`"]],
   ["security-scans/findings-register-v1.md", findingsText, ["Findings Register V1", `OpenAPI operation count: ${expectedOperationCount}`, "SEC-P0-MDM-DEVICE-001", "SEC-P0-OPS-RECOVERY-001"]],
   ["docs/production-readiness-implementation-ledger-template-v0.1.md", ledgerText, ["| PRD-SEC-001 | security | 正式安全基线 |", "| PRD-SEC-001 | security | 正式安全基线 | V1 已生成；后续 OpenAPI、认证、权限、第三方、支付、MDM、生产凭证或 160 运维证据变化后必须重生成 | 安全/技术负责人 | 自管/第三方 | passed |", "security-scans/formal-security-baseline-v1.md", "security-scans/findings-register-v1.md"]],
-  ["docs/production-readiness-evidence/production-readiness-evidence-backfill-20260615.md", backfillText, ["PRD-SEC-001", "security-baseline-latest.json", "verify:production-readiness-evidence", "delivery-readiness-semgrep-20260615.json", "production-blocker-register-latest.json", "verify:production-blockers", "production-owner-action-packs-latest.json", "verify:production-owner-actions", "production-evidence-submission-kit-latest.json", "verify:production-evidence-submission-kit", "production-evidence-manifest-template-index-latest.json", "verify:production-evidence-manifest-templates", "production-evidence-owner-guides-latest.json", "verify:production-evidence-owner-guides", "production-evidence-submission-status-latest.json", "verify:production-evidence-submission-status", "verify:production-evidence-submissions-guard", "production-evidence-backfill-priority-latest.json", "verify:production-evidence-backfill-priority", "TRACEABLE_EVIDENCE_LINKS_REQUIRED", "CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN", "PRODUCTION_EVIDENCE_BACKFILL_PRIORITY_READY", "P0_EVIDENCE_GAPS_TRACKED"]],
+  ["docs/production-readiness-evidence/production-readiness-evidence-backfill-20260615.md", backfillText, ["PRD-SEC-001", "security-baseline-latest.json", "verify:production-readiness-evidence", "delivery-readiness-semgrep-20260615.json", "production-blocker-register-latest.json", "verify:production-blockers", "production-owner-action-packs-latest.json", "verify:production-owner-actions", "production-evidence-submission-kit-latest.json", "verify:production-evidence-submission-kit", "production-evidence-manifest-template-index-latest.json", "verify:production-evidence-manifest-templates", "production-evidence-owner-guides-latest.json", "verify:production-evidence-owner-guides", "production-evidence-submission-status-latest.json", "verify:production-evidence-submission-status", "verify:production-evidence-submissions-guard", "production-evidence-backfill-priority-latest.json", "verify:production-evidence-backfill-priority", "production-evidence-backfill-execution-ledger-latest.json", "verify:production-evidence-backfill-execution-ledger", "TRACEABLE_EVIDENCE_LINKS_REQUIRED", "CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN", "PRODUCTION_EVIDENCE_BACKFILL_PRIORITY_READY", "P0_EVIDENCE_GAPS_TRACKED"]],
   ["docs/production-blocker-register-v0.1.md", readText("docs/production-blocker-register-v0.1.md"), ["PRODUCTION_BLOCKER_REGISTER_READY", "PRODUCTION_BLOCKERS_OPEN", "NO_FAKE_PRODUCTION_EVIDENCE_CLOSURE"]],
   ["docs/production-readiness-evidence/submissions/README.md", submissionsGuardReadmeText, ["PRODUCTION_EVIDENCE_SUBMISSIONS_GUARD_READY", "MANIFEST_ONLY_IN_REPO", "RAW_EVIDENCE_STAYS_EXTERNAL", "NO_FAKE_PRODUCTION_EVIDENCE_CLOSURE", "TRACEABLE_EVIDENCE_LINKS_REQUIRED", "CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN"]],
   ["docs/production-readiness-evidence/submissions/.gitignore", submissionsGuardGitignoreText, ["PRODUCTION_EVIDENCE_SUBMISSIONS_GUARD_READY", "MANIFEST_ONLY_IN_REPO", "RAW_EVIDENCE_STAYS_EXTERNAL", "!**/manifest-*.json"]],

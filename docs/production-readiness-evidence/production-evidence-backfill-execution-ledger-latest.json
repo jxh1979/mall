@@ -1,0 +1,1984 @@
+{
+  "ledger_version": "v0.1",
+  "status": "awaiting_p0_execution",
+  "generated_from": [
+    "docs/production-readiness-evidence/production-evidence-backfill-priority-latest.json",
+    "docs/production-readiness-evidence/production-evidence-submission-status-latest.json",
+    "docs/production-readiness-evidence/production-evidence-submission-kit-latest.json",
+    "docs/production-readiness-evidence/production-evidence-manifest-template-index-latest.json"
+  ],
+  "policy": {
+    "execution_ledger_does_not_close_blockers": true,
+    "one_row_per_evidence_submission": true,
+    "raw_evidence_stays_external": true,
+    "credential_ref_only_no_plaintext_secret": true,
+    "template_copy_requires_replacing_placeholders": true
+  },
+  "counts": {
+    "ledger_rows": 40,
+    "p0_rows": 31,
+    "awaiting_rows": 40,
+    "invalid_rows": 0,
+    "owner_groups": 5,
+    "batches": 21
+  },
+  "rows": [
+    {
+      "ledger_id": "BATCH-01-01",
+      "batch_id": "BATCH-01",
+      "batch_rank": 1,
+      "owner_group": "采购/供应商联调",
+      "priority": "P0",
+      "category": "MDM",
+      "item_id": "PRD-MDM-001",
+      "submission_id": "SUB-procurement-supplier-PRD-MDM-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
+      "packet_folder": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-MDM-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-MDM-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-MDM-001/manifest-PRD-MDM-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "console_export",
+        "device_enroll_screenshot",
+        "policy_export",
+        "remote_lock_wipe_test_report",
+        "platform_device_binding_record"
+      ],
+      "required_evidence_summary": [
+        "MDM/Android Enterprise 选型或 Android Management API 项目资料",
+        "策略模板截图或导出",
+        "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
+        "远程锁定、擦除、丢失模式演练记录",
+        "平台设备绑定记录和责任人"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先完成 MDM/Android Enterprise 选型、设备 enroll、策略下发和丢失/擦除演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-01-02",
+      "batch_id": "BATCH-01",
+      "batch_rank": 1,
+      "owner_group": "采购/供应商联调",
+      "priority": "P0",
+      "category": "MDM",
+      "item_id": "SEC-P0-MDM-DEVICE-001",
+      "submission_id": "SUB-procurement-supplier-SEC-P0-MDM-DEVICE-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open",
+      "blocking_scope": "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作",
+      "packet_folder": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P0-MDM-DEVICE-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-SEC-P0-MDM-DEVICE-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "console_export",
+        "device_enroll_screenshot",
+        "policy_export",
+        "remote_lock_wipe_test_report",
+        "platform_device_binding_record"
+      ],
+      "required_evidence_summary": [
+        "MDM/Android Enterprise 选型或 Android Management API 项目资料",
+        "策略模板截图或导出",
+        "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
+        "远程锁定、擦除、丢失模式演练记录",
+        "平台设备绑定记录和责任人"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先完成 MDM/Android Enterprise 选型、设备 enroll、策略下发和丢失/擦除演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-02-01",
+      "batch_id": "BATCH-02",
+      "batch_rank": 2,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "MDM",
+      "item_id": "PRD-MDM-001",
+      "submission_id": "SUB-it-ops-security-PRD-MDM-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-MDM-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-MDM-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-MDM-001/manifest-PRD-MDM-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "console_export",
+        "device_enroll_screenshot",
+        "policy_export",
+        "remote_lock_wipe_test_report",
+        "platform_device_binding_record"
+      ],
+      "required_evidence_summary": [
+        "MDM/Android Enterprise 选型或 Android Management API 项目资料",
+        "策略模板截图或导出",
+        "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
+        "远程锁定、擦除、丢失模式演练记录",
+        "平台设备绑定记录和责任人"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先完成 MDM/Android Enterprise 选型、设备 enroll、策略下发和丢失/擦除演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-02-02",
+      "batch_id": "BATCH-02",
+      "batch_rank": 2,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "MDM",
+      "item_id": "SEC-P0-MDM-DEVICE-001",
+      "submission_id": "SUB-it-ops-security-SEC-P0-MDM-DEVICE-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open",
+      "blocking_scope": "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-MDM-DEVICE-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-SEC-P0-MDM-DEVICE-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "console_export",
+        "device_enroll_screenshot",
+        "policy_export",
+        "remote_lock_wipe_test_report",
+        "platform_device_binding_record"
+      ],
+      "required_evidence_summary": [
+        "MDM/Android Enterprise 选型或 Android Management API 项目资料",
+        "策略模板截图或导出",
+        "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
+        "远程锁定、擦除、丢失模式演练记录",
+        "平台设备绑定记录和责任人"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先完成 MDM/Android Enterprise 选型、设备 enroll、策略下发和丢失/擦除演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-03-01",
+      "batch_id": "BATCH-03",
+      "batch_rank": 3,
+      "owner_group": "财务",
+      "priority": "P0",
+      "category": "payment",
+      "item_id": "PRD-PAY-001",
+      "submission_id": "SUB-finance-PRD-PAY-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞真实收款测试；不阻塞支付 mock",
+      "packet_folder": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-PAY-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-001/manifest-PRD-PAY-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "merchant_opening_record",
+        "callback_signature_doc",
+        "refund_test_report",
+        "reconciliation_sample",
+        "finance_approval_record"
+      ],
+      "required_evidence_summary": [
+        "聚合支付测试或生产商户资料",
+        "回调地址、验签资料和对账文件样例",
+        "退款权限、退款审批和日结口径",
+        "财务责任人确认",
+        "密钥仅填写 credential_ref，不写明文"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补聚合支付商户、回调验签、退款、对账和财务确认材料。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-03-02",
+      "batch_id": "BATCH-03",
+      "batch_rank": 3,
+      "owner_group": "财务",
+      "priority": "P0",
+      "category": "payment",
+      "item_id": "PRD-PAY-002",
+      "submission_id": "SUB-finance-PRD-PAY-002",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产收款、退款和日结",
+      "packet_folder": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-002/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-PAY-002.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-002/manifest-PRD-PAY-002.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "merchant_opening_record",
+        "callback_signature_doc",
+        "refund_test_report",
+        "reconciliation_sample",
+        "finance_approval_record"
+      ],
+      "required_evidence_summary": [
+        "聚合支付测试或生产商户资料",
+        "回调地址、验签资料和对账文件样例",
+        "退款权限、退款审批和日结口径",
+        "财务责任人确认",
+        "密钥仅填写 credential_ref，不写明文"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补聚合支付商户、回调验签、退款、对账和财务确认材料。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-04-01",
+      "batch_id": "BATCH-04",
+      "batch_rank": 4,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "payment",
+      "item_id": "PRD-PAY-001",
+      "submission_id": "SUB-it-ops-security-PRD-PAY-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞真实收款测试；不阻塞支付 mock",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-PAY-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-001/manifest-PRD-PAY-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "merchant_opening_record",
+        "callback_signature_doc",
+        "refund_test_report",
+        "reconciliation_sample",
+        "finance_approval_record"
+      ],
+      "required_evidence_summary": [
+        "聚合支付测试或生产商户资料",
+        "回调地址、验签资料和对账文件样例",
+        "退款权限、退款审批和日结口径",
+        "财务责任人确认",
+        "密钥仅填写 credential_ref，不写明文"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补聚合支付商户、回调验签、退款、对账和财务确认材料。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-04-02",
+      "batch_id": "BATCH-04",
+      "batch_rank": 4,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "payment",
+      "item_id": "PRD-PAY-002",
+      "submission_id": "SUB-it-ops-security-PRD-PAY-002",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产收款、退款和日结",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-002/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-PAY-002.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-002/manifest-PRD-PAY-002.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "merchant_opening_record",
+        "callback_signature_doc",
+        "refund_test_report",
+        "reconciliation_sample",
+        "finance_approval_record"
+      ],
+      "required_evidence_summary": [
+        "聚合支付测试或生产商户资料",
+        "回调地址、验签资料和对账文件样例",
+        "退款权限、退款审批和日结口径",
+        "财务责任人确认",
+        "密钥仅填写 credential_ref，不写明文"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补聚合支付商户、回调验签、退款、对账和财务确认材料。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-01",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-02",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-3P-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-3P-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞真实供应商联调或生产通过",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-3P-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-3P-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-03",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-DB-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-DB-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产数据库接入",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-DB-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-DB-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-DB-001/manifest-PRD-CRED-DB-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-04",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-JWT-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-JWT-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产登录和开放接口签发",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-JWT-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-JWT-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-05",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-NAS-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-NAS-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产可恢复结论",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-NAS-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-NAS-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-NAS-001/manifest-PRD-CRED-NAS-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-06",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-OBJ-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-OBJ-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产附件、证据包、对象备份接入",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OBJ-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-OBJ-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OBJ-001/manifest-PRD-CRED-OBJ-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-07",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-OPEN-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-OPEN-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞第三方双向开放生产接入",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPEN-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-OPEN-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-05-08",
+      "batch_id": "BATCH-05",
+      "batch_rank": 5,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-OPS-001",
+      "submission_id": "SUB-it-ops-security-PRD-CRED-OPS-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-OPS-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/manifest-PRD-CRED-OPS-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-06-01",
+      "batch_id": "BATCH-06",
+      "batch_rank": 6,
+      "owner_group": "财务",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-001",
+      "submission_id": "SUB-finance-PRD-CRED-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产",
+      "packet_folder": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-CRED-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/manifest-PRD-CRED-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-06-02",
+      "batch_id": "BATCH-06",
+      "batch_rank": 6,
+      "owner_group": "财务",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-3P-001",
+      "submission_id": "SUB-finance-PRD-CRED-3P-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞真实供应商联调或生产通过",
+      "packet_folder": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-3P-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-CRED-3P-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-07-01",
+      "batch_id": "BATCH-07",
+      "batch_rank": 7,
+      "owner_group": "技术实现负责人",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-JWT-001",
+      "submission_id": "SUB-technical-owner-PRD-CRED-JWT-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞生产登录和开放接口签发",
+      "packet_folder": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-PRD-CRED-JWT-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-07-02",
+      "batch_id": "BATCH-07",
+      "batch_rank": 7,
+      "owner_group": "技术实现负责人",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-OPEN-001",
+      "submission_id": "SUB-technical-owner-PRD-CRED-OPEN-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞第三方双向开放生产接入",
+      "packet_folder": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-OPEN-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-PRD-CRED-OPEN-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-08-01",
+      "batch_id": "BATCH-08",
+      "batch_rank": 8,
+      "owner_group": "采购/供应商联调",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-3P-001",
+      "submission_id": "SUB-procurement-supplier-PRD-CRED-3P-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞真实供应商联调或生产通过",
+      "packet_folder": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-CRED-3P-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-CRED-3P-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-09-01",
+      "batch_id": "BATCH-09",
+      "batch_rank": 9,
+      "owner_group": "运营/法务",
+      "priority": "P0",
+      "category": "credential",
+      "item_id": "PRD-CRED-3P-001",
+      "submission_id": "SUB-operations-legal-PRD-CRED-3P-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞真实供应商联调或生产通过",
+      "packet_folder": "docs/production-readiness-evidence/submissions/operations-legal/PRD-CRED-3P-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/operations-legal/template-PRD-CRED-3P-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "credential_ref_record",
+        "rotation_runbook",
+        "expiry_reminder_record",
+        "rotation_or_issuance_evidence",
+        "rollback_test_record"
+      ],
+      "required_evidence_summary": [
+        "credential_ref、owner_person、owner_department",
+        "到期日、提醒策略和轮换窗口",
+        "轮换步骤、回滚步骤和验证步骤",
+        "最近一次轮换或首次发放证据",
+        "不得出现明文密钥、token 或密码"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-10-01",
+      "batch_id": "BATCH-10",
+      "batch_rank": 10,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "nas",
+      "item_id": "PRD-NAS-ALERT-001",
+      "submission_id": "SUB-it-ops-security-PRD-NAS-ALERT-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产运维准入；不阻塞开发验证",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-ALERT-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-NAS-ALERT-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-ALERT-001/manifest-PRD-NAS-ALERT-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "automount_export",
+        "scheduled_backup_log",
+        "sha256_file",
+        "restore_drill_report",
+        "alert_delivery_record"
+      ],
+      "required_evidence_summary": [
+        "重启后自动挂载证据",
+        "读写删除测试证据",
+        "定时备份归档和 sha256",
+        "从定时归档恢复演练报告",
+        "容量告警和失败告警送达记录"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补 NAS 自动挂载、定时备份、容量/失败告警和周期恢复演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-10-02",
+      "batch_id": "BATCH-10",
+      "batch_rank": 10,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "nas",
+      "item_id": "PRD-NAS-AUTOMOUNT-001",
+      "submission_id": "SUB-it-ops-security-PRD-NAS-AUTOMOUNT-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产自动恢复；不阻塞开发验证",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-AUTOMOUNT-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-NAS-AUTOMOUNT-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-AUTOMOUNT-001/manifest-PRD-NAS-AUTOMOUNT-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "automount_export",
+        "scheduled_backup_log",
+        "sha256_file",
+        "restore_drill_report",
+        "alert_delivery_record"
+      ],
+      "required_evidence_summary": [
+        "重启后自动挂载证据",
+        "读写删除测试证据",
+        "定时备份归档和 sha256",
+        "从定时归档恢复演练报告",
+        "容量告警和失败告警送达记录"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补 NAS 自动挂载、定时备份、容量/失败告警和周期恢复演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-10-03",
+      "batch_id": "BATCH-10",
+      "batch_rank": 10,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "nas",
+      "item_id": "PRD-NAS-DRILL-CADENCE-001",
+      "submission_id": "SUB-it-ops-security-PRD-NAS-DRILL-CADENCE-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产可恢复结论；不阻塞当前编码",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-DRILL-CADENCE-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-NAS-DRILL-CADENCE-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-DRILL-CADENCE-001/manifest-PRD-NAS-DRILL-CADENCE-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "automount_export",
+        "scheduled_backup_log",
+        "sha256_file",
+        "restore_drill_report",
+        "alert_delivery_record"
+      ],
+      "required_evidence_summary": [
+        "重启后自动挂载证据",
+        "读写删除测试证据",
+        "定时备份归档和 sha256",
+        "从定时归档恢复演练报告",
+        "容量告警和失败告警送达记录"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补 NAS 自动挂载、定时备份、容量/失败告警和周期恢复演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-10-04",
+      "batch_id": "BATCH-10",
+      "batch_rank": 10,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "nas",
+      "item_id": "PRD-NAS-SCHEDULE-001",
+      "submission_id": "SUB-it-ops-security-PRD-NAS-SCHEDULE-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产自动备份；不阻塞手动备份演练",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-SCHEDULE-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-NAS-SCHEDULE-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-SCHEDULE-001/manifest-PRD-NAS-SCHEDULE-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "automount_export",
+        "scheduled_backup_log",
+        "sha256_file",
+        "restore_drill_report",
+        "alert_delivery_record"
+      ],
+      "required_evidence_summary": [
+        "重启后自动挂载证据",
+        "读写删除测试证据",
+        "定时备份归档和 sha256",
+        "从定时归档恢复演练报告",
+        "容量告警和失败告警送达记录"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补 NAS 自动挂载、定时备份、容量/失败告警和周期恢复演练证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-11-01",
+      "batch_id": "BATCH-11",
+      "batch_rank": 11,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "ops160",
+      "item_id": "PRD-160-001",
+      "submission_id": "SUB-it-ops-security-PRD-160-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产；不阻塞用户级覆盖开发验证",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-160-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-160-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-160-001/manifest-PRD-160-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "system_config_redacted_export",
+        "systemd_status_export",
+        "health_check_log",
+        "rollback_drill_report",
+        "alert_delivery_record"
+      ],
+      "required_evidence_summary": [
+        "/etc/complex/complex.env 或受控配置等效证据",
+        "systemd 服务、日志路径和健康检查",
+        "备份、恢复、告警和容量监控证据",
+        "运维 Runbook 和回滚步骤",
+        "不得由 Codex 写入系统级生产 secret"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补 160 生产运行配置、systemd、健康检查、日志和回滚证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-11-02",
+      "batch_id": "BATCH-11",
+      "batch_rank": 11,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "ops160",
+      "item_id": "SEC-P0-OPS-RECOVERY-001",
+      "submission_id": "SUB-it-ops-security-SEC-P0-OPS-RECOVERY-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open",
+      "blocking_scope": "阻塞公开生产安全准入；不阻塞开发联调",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-OPS-RECOVERY-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-SEC-P0-OPS-RECOVERY-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-OPS-RECOVERY-001/manifest-SEC-P0-OPS-RECOVERY-001.json",
+      "required_fields_count": 16,
+      "accepted_evidence_types": [
+        "system_config_redacted_export",
+        "systemd_status_export",
+        "health_check_log",
+        "rollback_drill_report",
+        "alert_delivery_record"
+      ],
+      "required_evidence_summary": [
+        "/etc/complex/complex.env 或受控配置等效证据",
+        "systemd 服务、日志路径和健康检查",
+        "备份、恢复、告警和容量监控证据",
+        "运维 Runbook 和回滚步骤",
+        "不得由 Codex 写入系统级生产 secret"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补 160 生产运行配置、systemd、健康检查、日志和回滚证据。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-12-01",
+      "batch_id": "BATCH-12",
+      "batch_rank": 12,
+      "owner_group": "采购/供应商联调",
+      "priority": "P0",
+      "category": "face_age",
+      "item_id": "PRD-FACE-001",
+      "submission_id": "SUB-procurement-supplier-PRD-FACE-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞酒吧生产年龄核验通过",
+      "packet_folder": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-FACE-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-FACE-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-FACE-001/manifest-PRD-FACE-001.json",
+      "required_fields_count": 14,
+      "accepted_evidence_types": [
+        "supplier_sdk_or_api_doc",
+        "success_failure_case_report",
+        "compliance_material",
+        "procurement_approval_record",
+        "operation_acceptance_record"
+      ],
+      "required_evidence_summary": [
+        "年龄/人脸供应商 SDK 或 API 文档",
+        "测试账号、错误码、成功和失败样例",
+        "合规材料与采购确认",
+        "生产 credential_ref",
+        "运营验收记录"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补人脸/年龄核验供应商 SDK/API、测试账号、合规和成功/失败样例。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-13-01",
+      "batch_id": "BATCH-13",
+      "batch_rank": 13,
+      "owner_group": "运营/法务",
+      "priority": "P0",
+      "category": "face_age",
+      "item_id": "PRD-FACE-001",
+      "submission_id": "SUB-operations-legal-PRD-FACE-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞酒吧生产年龄核验通过",
+      "packet_folder": "docs/production-readiness-evidence/submissions/operations-legal/PRD-FACE-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/operations-legal/template-PRD-FACE-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-FACE-001/manifest-PRD-FACE-001.json",
+      "required_fields_count": 14,
+      "accepted_evidence_types": [
+        "supplier_sdk_or_api_doc",
+        "success_failure_case_report",
+        "compliance_material",
+        "procurement_approval_record",
+        "operation_acceptance_record"
+      ],
+      "required_evidence_summary": [
+        "年龄/人脸供应商 SDK 或 API 文档",
+        "测试账号、错误码、成功和失败样例",
+        "合规材料与采购确认",
+        "生产 credential_ref",
+        "运营验收记录"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补人脸/年龄核验供应商 SDK/API、测试账号、合规和成功/失败样例。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-14-01",
+      "batch_id": "BATCH-14",
+      "batch_rank": 14,
+      "owner_group": "IT/运维/安全",
+      "priority": "P0",
+      "category": "face_age",
+      "item_id": "PRD-FACE-001",
+      "submission_id": "SUB-it-ops-security-PRD-FACE-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞酒吧生产年龄核验通过",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-FACE-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-FACE-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-FACE-001/manifest-PRD-FACE-001.json",
+      "required_fields_count": 14,
+      "accepted_evidence_types": [
+        "supplier_sdk_or_api_doc",
+        "success_failure_case_report",
+        "compliance_material",
+        "procurement_approval_record",
+        "operation_acceptance_record"
+      ],
+      "required_evidence_summary": [
+        "年龄/人脸供应商 SDK 或 API 文档",
+        "测试账号、错误码、成功和失败样例",
+        "合规材料与采购确认",
+        "生产 credential_ref",
+        "运营验收记录"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "先补人脸/年龄核验供应商 SDK/API、测试账号、合规和成功/失败样例。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-15-01",
+      "batch_id": "BATCH-15",
+      "batch_rank": 15,
+      "owner_group": "运营/法务",
+      "priority": "P1",
+      "category": "wecom",
+      "item_id": "PRD-WECOM-001",
+      "submission_id": "SUB-operations-legal-PRD-WECOM-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞企业微信 P0 同步能力",
+      "packet_folder": "docs/production-readiness-evidence/submissions/operations-legal/PRD-WECOM-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/operations-legal/template-PRD-WECOM-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-WECOM-001/manifest-PRD-WECOM-001.json",
+      "required_fields_count": 12,
+      "accepted_evidence_types": [
+        "wecom_app_config_export",
+        "directory_sync_report",
+        "callback_config_export",
+        "failure_alert_test",
+        "credential_ref_record"
+      ],
+      "required_evidence_summary": [
+        "企业微信应用和通讯录权限配置",
+        "回调配置、同步任务配置和失败告警",
+        "一次增量同步验收记录",
+        "会话存档或适用范围确认",
+        "生产 credential_ref"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-16-01",
+      "batch_id": "BATCH-16",
+      "batch_rank": 16,
+      "owner_group": "IT/运维/安全",
+      "priority": "P1",
+      "category": "wecom",
+      "item_id": "PRD-WECOM-001",
+      "submission_id": "SUB-it-ops-security-PRD-WECOM-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "阻塞企业微信 P0 同步能力",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-WECOM-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-WECOM-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-WECOM-001/manifest-PRD-WECOM-001.json",
+      "required_fields_count": 12,
+      "accepted_evidence_types": [
+        "wecom_app_config_export",
+        "directory_sync_report",
+        "callback_config_export",
+        "failure_alert_test",
+        "credential_ref_record"
+      ],
+      "required_evidence_summary": [
+        "企业微信应用和通讯录权限配置",
+        "回调配置、同步任务配置和失败告警",
+        "一次增量同步验收记录",
+        "会话存档或适用范围确认",
+        "生产 credential_ref"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-17-01",
+      "batch_id": "BATCH-17",
+      "batch_rank": 17,
+      "owner_group": "采购/供应商联调",
+      "priority": "P1",
+      "category": "third_party",
+      "item_id": "PRD-3P-001",
+      "submission_id": "SUB-procurement-supplier-PRD-3P-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "不阻塞 P0 主闭环；阻塞真实厂商联调",
+      "packet_folder": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-3P-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-3P-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-3P-001/manifest-PRD-3P-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "supplier_api_doc",
+        "signature_sample",
+        "webhook_sample",
+        "field_mapping_sheet",
+        "sandbox_test_report",
+        "credential_ref_record"
+      ],
+      "required_evidence_summary": [
+        "供应商 SDK/API、签名算法和回调样例",
+        "字段映射、错误码、补偿和对账口径",
+        "沙箱账号和生产 credential_ref",
+        "Webhook nonce/timestamp/幂等验证",
+        "轮询校验策略和失败重试策略"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-17-02",
+      "batch_id": "BATCH-17",
+      "batch_rank": 17,
+      "owner_group": "采购/供应商联调",
+      "priority": "P1",
+      "category": "third_party",
+      "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
+      "submission_id": "SUB-procurement-supplier-SEC-P1-WEBHOOK-REPLAY-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open",
+      "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
+      "packet_folder": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P1-WEBHOOK-REPLAY-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-SEC-P1-WEBHOOK-REPLAY-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "supplier_api_doc",
+        "signature_sample",
+        "webhook_sample",
+        "field_mapping_sheet",
+        "sandbox_test_report",
+        "credential_ref_record"
+      ],
+      "required_evidence_summary": [
+        "供应商 SDK/API、签名算法和回调样例",
+        "字段映射、错误码、补偿和对账口径",
+        "沙箱账号和生产 credential_ref",
+        "Webhook nonce/timestamp/幂等验证",
+        "轮询校验策略和失败重试策略"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-18-01",
+      "batch_id": "BATCH-18",
+      "batch_rank": 18,
+      "owner_group": "IT/运维/安全",
+      "priority": "P1",
+      "category": "third_party",
+      "item_id": "PRD-3P-001",
+      "submission_id": "SUB-it-ops-security-PRD-3P-001",
+      "current_status": "awaiting_submission",
+      "source_status": "pending_info",
+      "blocking_scope": "不阻塞 P0 主闭环；阻塞真实厂商联调",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-3P-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-3P-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-3P-001/manifest-PRD-3P-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "supplier_api_doc",
+        "signature_sample",
+        "webhook_sample",
+        "field_mapping_sheet",
+        "sandbox_test_report",
+        "credential_ref_record"
+      ],
+      "required_evidence_summary": [
+        "供应商 SDK/API、签名算法和回调样例",
+        "字段映射、错误码、补偿和对账口径",
+        "沙箱账号和生产 credential_ref",
+        "Webhook nonce/timestamp/幂等验证",
+        "轮询校验策略和失败重试策略"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-18-02",
+      "batch_id": "BATCH-18",
+      "batch_rank": 18,
+      "owner_group": "IT/运维/安全",
+      "priority": "P1",
+      "category": "third_party",
+      "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
+      "submission_id": "SUB-it-ops-security-SEC-P1-WEBHOOK-REPLAY-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open",
+      "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P1-WEBHOOK-REPLAY-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-SEC-P1-WEBHOOK-REPLAY-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "supplier_api_doc",
+        "signature_sample",
+        "webhook_sample",
+        "field_mapping_sheet",
+        "sandbox_test_report",
+        "credential_ref_record"
+      ],
+      "required_evidence_summary": [
+        "供应商 SDK/API、签名算法和回调样例",
+        "字段映射、错误码、补偿和对账口径",
+        "沙箱账号和生产 credential_ref",
+        "Webhook nonce/timestamp/幂等验证",
+        "轮询校验策略和失败重试策略"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-19-01",
+      "batch_id": "BATCH-19",
+      "batch_rank": 19,
+      "owner_group": "技术实现负责人",
+      "priority": "P1",
+      "category": "third_party",
+      "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
+      "submission_id": "SUB-technical-owner-SEC-P1-WEBHOOK-REPLAY-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open",
+      "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
+      "packet_folder": "docs/production-readiness-evidence/submissions/technical-owner/SEC-P1-WEBHOOK-REPLAY-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-SEC-P1-WEBHOOK-REPLAY-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
+      "required_fields_count": 15,
+      "accepted_evidence_types": [
+        "supplier_api_doc",
+        "signature_sample",
+        "webhook_sample",
+        "field_mapping_sheet",
+        "sandbox_test_report",
+        "credential_ref_record"
+      ],
+      "required_evidence_summary": [
+        "供应商 SDK/API、签名算法和回调样例",
+        "字段映射、错误码、补偿和对账口径",
+        "沙箱账号和生产 credential_ref",
+        "Webhook nonce/timestamp/幂等验证",
+        "轮询校验策略和失败重试策略"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot",
+        "screenshot_only_without_export_or_test_report"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-20-01",
+      "batch_id": "BATCH-20",
+      "batch_rank": 20,
+      "owner_group": "技术实现负责人",
+      "priority": "P2",
+      "category": "security",
+      "item_id": "SEC-P2-CSRF-API-001",
+      "submission_id": "SUB-technical-owner-SEC-P2-CSRF-API-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open_for_prod_review",
+      "blocking_scope": "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
+      "packet_folder": "docs/production-readiness-evidence/submissions/technical-owner/SEC-P2-CSRF-API-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-SEC-P2-CSRF-API-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/SEC-P2-CSRF-API-001/manifest-SEC-P2-CSRF-API-001.json",
+      "required_fields_count": 11,
+      "accepted_evidence_types": [
+        "security_review_record",
+        "auth_scheme_decision",
+        "test_output",
+        "approval_record"
+      ],
+      "required_evidence_summary": [
+        "认证方案分支说明",
+        "CSRF 或 Bearer Token 安全复核记录",
+        "安全负责人签收",
+        "生产前复测命令输出"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    },
+    {
+      "ledger_id": "BATCH-21-01",
+      "batch_id": "BATCH-21",
+      "batch_rank": 21,
+      "owner_group": "IT/运维/安全",
+      "priority": "P2",
+      "category": "security",
+      "item_id": "SEC-P2-CSRF-API-001",
+      "submission_id": "SUB-it-ops-security-SEC-P2-CSRF-API-001",
+      "current_status": "awaiting_submission",
+      "source_status": "open_for_prod_review",
+      "blocking_scope": "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
+      "packet_folder": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P2-CSRF-API-001/",
+      "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-SEC-P2-CSRF-API-001.json",
+      "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P2-CSRF-API-001/manifest-SEC-P2-CSRF-API-001.json",
+      "required_fields_count": 11,
+      "accepted_evidence_types": [
+        "security_review_record",
+        "auth_scheme_decision",
+        "test_output",
+        "approval_record"
+      ],
+      "required_evidence_summary": [
+        "认证方案分支说明",
+        "CSRF 或 Bearer Token 安全复核记录",
+        "安全负责人签收",
+        "生产前复测命令输出"
+      ],
+      "not_accepted_evidence": [
+        "oral_confirmation",
+        "mock_screenshot",
+        "placeholder_file",
+        "plaintext_secret",
+        "unowned_screenshot"
+      ],
+      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
+      "operator_next_step": "复制模板为目标 manifest，替换模板占位，填写外部证据链接、复核人、测试时间和 cred:// 引用后提交。",
+      "verification_commands": [
+        "npm run verify:production-evidence-submissions-guard",
+        "npm run docs:production-evidence-submission-status",
+        "npm run verify:production-evidence-submission-status",
+        "npm run docs:production-evidence-backfill-priority",
+        "npm run verify:production-evidence-backfill-priority",
+        "npm run verify:delivery-gates"
+      ]
+    }
+  ]
+}
