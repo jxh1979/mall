@@ -244,7 +244,7 @@ const findings = [
     owner: "IT/安全/运维",
     evidence: sourceFindings.productionCredentialLedgerVerifiable
       ? (sourceFindings.nasRestoreDrillEvidenceFromNas
-        ? "`verify:ops160-execution-policy` 已固化 NAS 服务器 `192.168.88.113` 和 160 后端测试口径；`verify:production-credentials` 已覆盖生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥、NAS SMB 凭证和备份加密预留台账；NAS 服务器 `192.168.88.113` 的真实挂载、备份同步和从 NAS 恢复演练已通过"
+        ? "`verify:ops160-execution-policy` 已固化 NAS 服务器 `192.168.88.113` 和 160 后端测试口径；`verify:production-credentials` 已覆盖生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥、NAS SMB 凭证和备份加密预留台账；NAS 服务器 `192.168.88.113` 的真实挂载、备份同步和从 NAS 恢复演练 `restore.drill_completed` 已通过"
         : (sourceFindings.nasServerKnown
           ? "`verify:ops160-execution-policy` 已固化 NAS 服务器 `192.168.88.113` 和 160 后端测试口径；`verify:production-credentials` 已覆盖生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥、NAS SMB 凭证和备份加密预留台账；PRD-NAS-002 仍需 160 挂载、真实同步和恢复证据"
           : "`verify:production-credentials` 已覆盖生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥、NAS SMB 凭证和备份加密预留台账；PRD-NAS-002 仍需真实恢复/同步证据"))
@@ -416,7 +416,7 @@ const baseline = `# 正式安全基线 V1
 | 支付、退款、应收应付、对账 | 聚合支付优先、保留直连抽象 | 回调重放、退款冲正缺审计、日结后改账 | OpenAPI 声明幂等和审计事件 | 供应商资料到位后补验签、对账文件、补偿策略 |
 | Android 工作手机、平板、一体机 | 端侧边界已在文档和 OpenAPI 表达 | 未纳管设备生产使用 | 生产前置台账阻断 MDM pending_info | Android Enterprise/商业 MDM enroll 后才可生产使用 |
 | 开放平台与第三方 | 双向开放与 adapter 边界已定义 | 签名、防重放、字段映射供应商差异 | mock adapter 和 OpenAPI 先行 | 真实供应商 SDK/API 到位后补字段和异常码 |
-| 160 运维、NAS、密钥 | 已有 runbook、台账模板和恢复演练脚本 | ${sourceFindings.productionCredentialLedgerVerifiable ? (sourceFindings.nasRestoreDrillEvidenceFromNas ? "NAS 服务器已明确为 `192.168.88.113`，真实 NAS 挂载、同步备份和从 NAS 恢复演练已通过；生产凭证台账结构已可验证，真实凭证发放/轮换证据仍需补齐" : (sourceFindings.nasServerKnown ? "NAS 服务器已明确为 `192.168.88.113`，生产凭证台账结构已可验证；160 挂载/真实 NAS 同步与真实凭证发放/轮换证据仍需补齐" : "生产凭证台账结构已可验证，真实 NAS 同步目标与真实凭证发放/轮换证据仍需补齐")) : "无恢复演练、密钥轮换台账结构和证据不足"} | 当前不在报告中记录明文密钥 | ${sourceFindings.nasRestoreDrillEvidenceFromNas ? "固化自动挂载、定时备份、容量告警、到期提醒和轮换证据归档" : "完成 NAS 同步验证、真实 credential_ref、到期提醒和轮换证据归档"} |
+| 160 运维、NAS、密钥 | 已有 runbook、台账模板和恢复演练脚本 | ${sourceFindings.productionCredentialLedgerVerifiable ? (sourceFindings.nasRestoreDrillEvidenceFromNas ? "NAS 服务器已明确为 `192.168.88.113`，真实 NAS 挂载、同步备份和从 NAS 恢复演练 `restore.drill_completed` 已通过；生产凭证台账结构已可验证，真实凭证发放/轮换证据仍需补齐" : (sourceFindings.nasServerKnown ? "NAS 服务器已明确为 `192.168.88.113`，生产凭证台账结构已可验证；160 挂载/真实 NAS 同步与真实凭证发放/轮换证据仍需补齐" : "生产凭证台账结构已可验证，真实 NAS 同步目标与真实凭证发放/轮换证据仍需补齐")) : "无恢复演练、密钥轮换台账结构和证据不足"} | 当前不在报告中记录明文密钥 | ${sourceFindings.nasRestoreDrillEvidenceFromNas ? "固化自动挂载、定时备份、容量告警、到期提醒和轮换证据归档" : "完成 NAS 同步验证、真实 credential_ref、到期提醒和轮换证据归档"} |
 
 ## authz-review-v1
 

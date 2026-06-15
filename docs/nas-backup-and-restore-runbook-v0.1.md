@@ -99,19 +99,19 @@ SMB 密码不得写入本文。推荐由 IT 在 160 写入仅当前运维用户�
 | 恢复证据 | `complex-restore-drill.sh latest` 输出 `restore.drill_completed`，临时库恢复后被删除 |
 | 台账证据 | 生产前置台账记录责任人、credential_ref、到期提醒、演练报告链接和失败补偿动作 |
 
-## 6.3 最新真实 NAS 验证证据（2026-06-14）
+## 6.3 最新真实 NAS 验证证据（2026-06-15）
 
 | 证据项 | 结果 |
 |---|---|
 | 160 挂载 | `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup`，`findmnt` 显示 `cifs`、`rw`、`vers=3.0`、`username=jxh1` |
-| 读写删除测试 | `sudo -u james` 在 `/mnt/complex-nas-backup` 完成 `.complex-write-test` 写入、读取和删除，结果为 `ok` |
-| 真实 NAS 备份 | `complex-backup.sh` 在 `NAS_BACKUP_TARGET_DIR=/mnt/complex-nas-backup`、`REQUIRE_NAS_BACKUP_SYNC=true`、`ALLOW_UNENCRYPTED_BACKUPS=true` 下生成 `/mnt/complex-nas-backup/manual/20260614-181410.tar.gz` |
-| 校验文件 | `/mnt/complex-nas-backup/manual/20260614-181410.tar.gz.sha256` 校验通过，`sha256sum -c` 输出 `OK` |
-| 从 NAS 恢复 | `complex-restore-drill.sh /mnt/complex-nas-backup/manual/20260614-181410.tar.gz` 输出 `restore.drill_completed` |
-| 恢复结果 | 临时库 `complex_restore_drill_20260614_181410` 恢复成功并自动删除；Flyway 版本 `018`；验证表 `auth_credentials,auth_sessions,flyway_schema_history,platform_migration_baseline` |
+| 读写状态 | `/mnt/complex-nas-backup` 当前对 160 用户可写，恢复演练前置检查通过 |
+| 当前版本真实 NAS 备份 | `complex-backup.sh` 在 `NAS_BACKUP_TARGET_DIR=/mnt/complex-nas-backup`、`REQUIRE_NAS_BACKUP_SYNC=true`、`ALLOW_UNENCRYPTED_BACKUPS=true` 下生成 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` |
+| 校验文件 | `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz.sha256` 校验通过，恢复演练输出 `checksum=verified` |
+| 从 NAS 恢复 | `complex-restore-drill.sh /mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 输出 `restore.drill_completed` |
+| 恢复结果 | 临时库 `complex_restore_drill_20260615_112734` 恢复成功并自动删除；Flyway 版本 `039`；验证表 `auth_credentials,auth_sessions,flyway_schema_history,platform_migration_baseline` |
 | 最新 evidence | `docs/production-readiness-evidence/nas-restore-drill-latest.json` |
 
-当前一次性真实 NAS 同步和恢复演练已通过。生产前仍需把挂载写入受控的开机自动挂载方案，补定时备份、容量告警、失败告警和周期性恢复演练计划；这些属于 `PRD-160-001` 和 `PRD-CRED-001` 的运维生产化工作，不再反向阻塞 P0 编码完成。
+当前一次性真实 NAS 同步和恢复演练已按最新 Flyway 039 版本通过。生产前仍需把挂载写入受控的开机自动挂载方案，补定时备份、容量告警、失败告警和周期性恢复演练计划；这些属于 `PRD-NAS-AUTOMOUNT-001`、`PRD-NAS-SCHEDULE-001`、`PRD-NAS-ALERT-001`、`PRD-NAS-DRILL-CADENCE-001` 和 `PRD-CRED-001` 的运维生产化工作，不再反向阻塞 P0 编码完成。
 
 ## 6.4 P0-A no-system-write boundary
 

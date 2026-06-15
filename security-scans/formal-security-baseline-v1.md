@@ -30,7 +30,7 @@
 | 支付、退款、应收应付、对账 | 聚合支付优先、保留直连抽象 | 回调重放、退款冲正缺审计、日结后改账 | OpenAPI 声明幂等和审计事件 | 供应商资料到位后补验签、对账文件、补偿策略 |
 | Android 工作手机、平板、一体机 | 端侧边界已在文档和 OpenAPI 表达 | 未纳管设备生产使用 | 生产前置台账阻断 MDM pending_info | Android Enterprise/商业 MDM enroll 后才可生产使用 |
 | 开放平台与第三方 | 双向开放与 adapter 边界已定义 | 签名、防重放、字段映射供应商差异 | mock adapter 和 OpenAPI 先行 | 真实供应商 SDK/API 到位后补字段和异常码 |
-| 160 运维、NAS、密钥 | 已有 runbook、台账模板和恢复演练脚本 | NAS 服务器已明确为 `192.168.88.113`，真实 NAS 挂载、同步备份和从 NAS 恢复演练已通过；生产凭证台账结构已可验证，真实凭证发放/轮换证据仍需补齐 | 当前不在报告中记录明文密钥 | 固化自动挂载、定时备份、容量告警、到期提醒和轮换证据归档 |
+| 160 运维、NAS、密钥 | 已有 runbook、台账模板和恢复演练脚本 | NAS 服务器已明确为 `192.168.88.113`，真实 NAS 挂载、同步备份和从 NAS 恢复演练 `restore.drill_completed` 已通过；生产凭证台账结构已可验证，真实凭证发放/轮换证据仍需补齐 | 当前不在报告中记录明文密钥 | 固化自动挂载、定时备份、容量告警、到期提醒和轮换证据归档 |
 
 ## authz-review-v1
 
@@ -117,7 +117,7 @@
 | 160 运维脚本 | P0 验证脚本已存在并可作为准入证据 | 需持续跑完整验证 |
 | 160 后端测试执行位置 | Java/后端集成测试、BE-000 和完整 P0 验收默认在 `192.168.88.160` 或等效 Java 21 环境执行 | 本机缺 Java 21 只记录为本机环境前置缺失，不作为代码失败 |
 | systemd/正式配置 | 文档要求迁移到系统配置和告警 | 公开生产前必须完成 |
-| NAS 恢复演练 | `restore.drill_completed` 已有证据，临时库恢复和清理通过；备份来源为 `/mnt/complex-nas-backup` 真实 NAS 归档 | 不再阻塞真实 NAS 可恢复性；生产前仍需固化自动挂载、定时备份和周期性演练 |
+| NAS 恢复演练 | PRD-NAS-002 仍需证据 | 阻塞生产可恢复结论 |
 | 密钥轮换 | `verify:production-credentials` 已通过；明细台账覆盖生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥、NAS SMB 凭证和备份加密预留 | 台账结构和 Runbook 不再阻塞；真实生产凭证发放仍需责任人、credential_ref、到期日和轮换证据 |
 | 报告密钥安全 | 本报告不写真实密钥、数据库密码或对象存储密码 | 正确 |
 
@@ -137,7 +137,7 @@
 |---|---|---|---|---|---|---|---|
 | P0 | `SEC-P0-AUTH-PROD-001` | 正式生产认证 Provider 与会话治理未落地 | resolved | 阻塞公开生产和长期预生产；不阻塞当前 dev smoke 编码验证 | 技术负责人/安全 | `ProductionAuthService`/`ProductionAuthController`/`ProductionBearerAuthenticationFilter`、`V018__p0_production_auth_provider.sql` 和 `ProductionAuthJdbcIntegrationTests` 已落地 | 继续保留 MDM、NAS、密钥轮换、真实供应商接入等非代码生产前置项的阻断状态 |
 | P0 | `SEC-P0-MDM-DEVICE-001` | MDM/Android Enterprise 生产纳管仍处 pending_info | open | 阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作 | IT/采购/运维 | `production-readiness-implementation-ledger-template-v0.1.md` 中 PRD-MDM-001 为 pending_info | 完成 MDM 选型、enroll、策略下发、设备绑定截图和生产准入记录 |
-| P0 | `SEC-P0-OPS-RECOVERY-001` | NAS 挂载、真实同步和从 NAS 恢复证据已完成，生产凭证发放证据仍需补齐 | open | 阻塞公开生产安全准入；不阻塞开发联调 | IT/安全/运维 | `complex-backup.sh` 已向 NAS 服务器 `192.168.88.113` 生成真实备份归档与 `.sha256`；`complex-restore-drill.sh` 已从 `/mnt/complex-nas-backup` 完成 `restore.drill_completed`；`verify:production-credentials` 已覆盖生产凭证台账结构；生产凭证发放和轮换证据仍需实施 | P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前补齐 credential_ref、到期提醒和轮换证据 |
+| P0 | `SEC-P0-OPS-RECOVERY-001` | NAS 挂载、真实同步和从 NAS 恢复证据已完成，生产凭证发放证据仍需补齐 | open | 阻塞公开生产安全准入；不阻塞开发联调 | IT/安全/运维 | `verify:ops160-execution-policy` 已固化 NAS 服务器 `192.168.88.113` 和 160 后端测试口径；`verify:production-credentials` 已覆盖生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥、NAS SMB 凭证和备份加密预留台账；NAS 服务器 `192.168.88.113` 的真实挂载、备份同步和从 NAS 恢复演练 `restore.drill_completed` 已通过 | P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据 |
 | P1 | `SEC-P1-DOCS-EXPOSURE-001` | OpenAPI/Swagger 文档在当前 SecurityConfig 中公开放行 | resolved | 公开生产匿名访问已保护；dev/test 仍可公开用于契约导出和联调验证 | 后端/运维 | `SecurityConfig` 仅在非 prod profile 对 `apiDocumentationPaths()` permitAll；`verify:prod-docs-access` 已覆盖 prod 匿名访问保护 | 后续若变更 SecurityConfig，必须继续执行 `npm run verify:prod-docs-access` 和 `npm run verify:security-baseline` |
 | P1 | `SEC-P1-WEBHOOK-REPLAY-001` | 真实供应商 Webhook 签名、防重放和轮询校验需在供应商资料到位后补实 | open | 阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter | 后端/IT/供应商联调负责人 | OpenAPI 当前存在 3 个开放应用或 webhook 签名上下文 operation | 按供应商 SDK/API 补字段映射、nonce、timestamp、签名验签、幂等、补偿和对账测试 |
 | P2 | `SEC-P2-CREDENTIALS-001` | Bearer 原始 token 不再进入 Spring Security credentials | resolved | 已修复；继续通过单测防回归 | 后端 | `BearerAuthenticationFilter` 构造 `UsernamePasswordAuthenticationToken(user, null, authorities)` | 保留 `BearerAuthenticationFilterTests`，后续正式认证实现沿用不把原始凭据放入认证对象的原则 |
