@@ -55,6 +55,7 @@
 | 正式安全基线生成与维护任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
 | 生产阻断清单 | `docs/production-blocker-register-v0.1.md`、`docs/production-readiness-evidence/production-blocker-register-latest.json` |
+| 生产责任人动作包 | `docs/production-owner-action-packs-v0.1.md`、`docs/production-readiness-evidence/production-owner-action-packs-latest.json` |
 | 生产前置证据回填模板 | `docs/production-readiness-evidence-intake-template-v0.1.md` |
 | 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |

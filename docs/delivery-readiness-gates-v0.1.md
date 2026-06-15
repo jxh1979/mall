@@ -13,6 +13,7 @@
 - NO_DELIVERY_WITHOUT_EXTERNAL_DEPENDENCY_GATES
 - NO_FORMAL_CODE_OUTSIDE_160
 - NO_PRODUCTION_DEPLOYMENT_WITH_PENDING_EXTERNAL_BLOCKERS
+- OWNER_ACTION_PACKS_FROM_PRODUCTION_BLOCKERS
 
 ## 2. 必跑命令
 
@@ -36,7 +37,8 @@ npm run verify:delivery-gates
 | 8 | `npm run verify:security-baseline` | 校验正式安全基线输入和生产文档访问策略 |
 | 9 | `npm run verify:production-readiness-evidence` | 校验生产前置证据、台账状态和安全基线 evidence 是否一致 |
 | 10 | `npm run verify:production-blockers` | 校验生产阻断清单与台账、findings register 同步 |
-| 11 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
+| 11 | `npm run verify:production-owner-actions` | 校验生产阻断项已按责任人拆成可执行动作包，且动作包由阻断清单自动生成 |
+| 12 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
 
 ## 3. 交付阻断规则
 
@@ -67,4 +69,5 @@ npm run verify:delivery-gates
 2. 如果是 OpenAPI 附录漂移，先生成闭环附录，再复跑契约闸口。
 3. 如果是外部依赖阻断，回到供应商资料、生产前置台账和外部依赖闸口，不写假实现。
 4. 如果是 160 主机保护失败，先确认是否在正式仓库 `/home/james/complex-management` 和主机 `192.168.88.160` 上运行。
-5. 修复后必须重新运行 `npm run verify:delivery-gates` 并保留输出证据。
+5. 如果是责任人动作包漂移，先运行 `npm run docs:production-blockers`，再运行 `npm run docs:production-owner-actions`。
+6. 修复后必须重新运行 `npm run verify:delivery-gates` 并保留输出证据。
