@@ -47,6 +47,8 @@
 | T3 安全与供应商就绪闸口 | `docs/t3-security-and-supplier-readiness-gate-v0.1.md` |
 | T3 入口评估与编码包审计 | `docs/t3-entry-assessment-and-coding-package-audit-v0.1.md` |
 | T3 编码包机器校验 | `npm run verify:t3-coding-package` |
+| T3-D1 本地大模型 AI 质检建议 | `docs/t3d-local-llm-ai-quality-v0.1.md` |
+| T3-D1 本地大模型 AI 质检机器校验 | `npm run verify:t3d-local-llm-ai-quality` |
 | 正式安全基线待生成任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
 | 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
@@ -61,7 +63,7 @@
 | 设备管控 | Android Enterprise / Android Management API + 商业 MDM 作为 P0 上线前置 |
 | 备份 | NAS 备份方案，NAS 服务器 `192.168.88.113`，共享 `bn`，UNC `//192.168.88.113/bn`，160 挂载 `/mnt/complex-nas-backup`，当前不启用备份归档加密；2026-06-14 已完成一次真实 NAS 同步和从 NAS 恢复演练，生产前仍需固化开机自动挂载、定时备份、容量告警和周期性恢复演练 |
 | 生产凭证轮换 | 生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥采用人工台账 + 到期提醒 + Runbook；`npm run verify:ops160-recovery` 必须通过 |
-| AI/规则处理 | P0 使用 Java 内置规则处理器；独立 Python AI 服务后置 P2 |
+| AI/规则处理 | P0 使用 Java 内置规则处理器；T3-D1 可使用 160 本地大模型提供脱敏后的只读质检建议，必须人工复核且不得自动决策；独立 Python AI 服务仍后置，未进入当前生产路径 |
 | 构建工具 | Maven 为唯一 P0 构建工具 |
 | 游乐安全 | P0 强制开放前阻断式安全巡检、严重项暂停开放、主管恢复、全程留痕 |
 | 一体机 | 统一终端码 `kiosk`，通过 `kiosk_mode=ticketing/service` 区分售票型和非售票型 |
@@ -202,6 +204,7 @@
 | `p2-python-ai-service-boundary-completion-audit-v0.1.md` | P2-F 独立 Python AI 服务边界完成审计 | S1 | 总控、产品、开发、算法/AI、测试 | 是，作为“边界已收口、正式服务后置”的验收入口 | 边界契约、模型和部署资料到位情况 |
 | `p2-full-completion-audit-v0.1.md` | P2 全量完成审计 | S1 | 总控、产品、开发、测试、运营、供应商 | 是，作为 P2-A 至 P2-F 当前完成和暂缓边界总入口 | 各 P2 子项完成审计、160 验证结果 |
 | `p2-current-diff-adversarial-review-v0.1.md` | P2 当前差异对抗式审计 | S1 | 总控、产品、开发、测试、安全、运维 | 是，作为 160 未提交 P2 差异的质量、安全和回滚判断入口 | 当前 git diff、测试结果、Semgrep 扫描 |
+| `t3d-local-llm-ai-quality-v0.1.md` | T3-D1 本地大模型 AI 质检建议 | S1 | 总控、产品、开发、测试、安全、运营 | 是，作为本地大模型辅助建议、loopback-only 适配、脱敏、人审兜底和机器验证入口 | T3 安全闸口、T3-D1 设计文档、后端实现和 `verify:t3d-local-llm-ai-quality` |
 | `production-readiness-implementation-ledger-template-v0.1.md` | 生产前置实施台账模板 | S1 | 运维、IT、采购、财务、测试、项目管理 | 是，作为生产准入资料管理入口 | 本文档、各 Runbook、OpenAPI |
 | `formal-security-baseline-generation-task-v0.1.md` | 正式安全基线生成任务 | S1 | 技术负责人、安全、测试、运维 | 是，作为正式安全基线生成和安全准入入口 | 本文档、OpenAPI、运行时安全报告 |
 | `p0-api-contract-pack-v0.1.md` | 接口契约说明 | S1 | 后端、前端、Android、一体机、供应商、测试 | 是 | 本文档、OpenAPI |
@@ -229,7 +232,7 @@
 | 后端负责人 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`backend/README.md`、`java-backend-platform-foundation-development-design.md`、`foundation-database-design.md` | 按首批编码包和 operation 开发 Controller、Service、Flyway、权限、幂等、事件和接口测试 | 不得按旧 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或 TypeScript/SQLite 原型开发 |
 | Web/小程序/App 前端 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.json`、`frontend-admin-development-design.md`、`customer-app-miniapp-development-design-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`code-contract-difference-and-migration-audit-v0.1.md` | 对齐正式路径、请求字段、错误码、权限状态、支付/核销/权益闭环和页面验收 | 不得只把旧路径改前缀，也不得使用未进入 OpenAPI 的字段或状态 |
 | Android 工作手机/平板/一体机 | `android-device-terminal-development-design.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`apps/android-terminal/README.md`、`openapi/openapi-p0.json`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 区分工作手机、平板、售票型一体机、非售票型一体机能力；按设备绑定、终端限制、在线核销和留痕实现 | 不得把 `/api/mobile/*` 当作正式后端路径；未纳管设备不得生产使用 |
-| 测试/审计 | `p0-first-coding-package-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-operation-permission-matrix-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md` | 按业务闭环、首批编码包、operation、权限、事件、证据、安全基线和异常场景编写验收用例 | 不得只按页面路径或模块标题验收 |
+| 测试/审计 | `p0-first-coding-package-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-operation-permission-matrix-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`t3d-local-llm-ai-quality-v0.1.md` | 按业务闭环、首批编码包、operation、权限、事件、证据、安全基线、AI 脱敏、人审兜底和异常场景编写验收用例 | 不得只按页面路径或模块标题验收；不得把 AI 建议当成自动处罚、退款、核销、调价、绩效或合同状态依据 |
 | 运营/财务/门店管理 | `product-requirements-v0.1.md`、`bar-operations-development-design.md`、`ticketing-pass-entitlement-development-design.md`、`finance-ar-ap-ledger-development-design-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 验证通票、权益、酒水领取、存酒、卡座、最低消费、扫码支付、核销、应收应付和日结对账闭环 | 不得用口头流程替代系统留痕和财务主口径 |
 | 第三方供应商/集成开发 | `third-party-supplier-integration-kit-v0.1.md`、`open-platform-security-auth-development-design.md`、`third-party-integration-development-design.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-contract-closure-appendix-v0.1.md` | 明确平台调用供应商、供应商调用平台、签名、Webhook、轮询校验、字段映射和异常补偿边界 | 不得引用旧 `/api/integration/*` 作为正式联调路径 |
 | 运维/IT/采购 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`production-readiness-implementation-ledger-template-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`server-160-runbook-v0.2.md`、`backend/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md`、`nas-backup-and-restore-runbook-v0.1.md` | 完成首批编码环境配套、160 部署、回滚、健康检查、MDM/Android Enterprise、账号密钥轮换、NAS 备份恢复、安全基线输入和生产前置台账 | 不得把本地原型、未纳管设备、无安全基线或未演练备份视为生产就绪 |
@@ -343,6 +346,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 2026-06-15 | V0.1 T3-0 编码包 | 新增 T3 编码入口、用户故事地图、安全与供应商就绪闸口、入口审计和 `verify:t3-coding-package`；下一步只允许优先进入 T3-A 只读经营分析 |
 | 2026-06-15 | V0.1 T3-A 只读经营分析 | Web 管理端经营分析入口按 T3-A 只读边界收口，修正 analytics 字段映射并新增 `verify:t3a-readonly-analytics` |
 | 2026-06-15 | V0.1 T3-B SDK/mock 套件 | 新增开放平台签名工具、Webhook 信封样例、provider adapter mock 测试样例和 `verify:t3b-supplier-mock-kit` |
+| 2026-06-15 | V0.1 T3-D1 本地大模型 AI 质检建议 | 新增 160 本地大模型 loopback-only 质检建议能力、脱敏、人审兜底和 `verify:t3d-local-llm-ai-quality`；不进入独立 Python AI 服务和 AI 自动决策 |
 | 2026-06-12 | V0.1 客户端旧路径闸口 | 新增 `npm run audit:client-routes` 和 `npm run verify:client-routes` 作为 Web/Android/一体机/供应商 mock 正式联调前置检查 |
 | 2026-06-12 | V0.1 客户端 OpenAPI 覆盖闸口 | 新增 `npm run audit:client-openapi` 和 `npm run verify:client-openapi`，覆盖检查升级为路径模板 + HTTP 方法一致性，防止客户端只改路径前缀但未补机器契约 |
 | 2026-06-12 | V0.1 客户端请求字段闸口 | 新增 `npm run audit:client-payload` 和 `npm run verify:client-payload`，防止客户端路径正确但请求字段未对齐 OpenAPI requestBody |
@@ -369,3 +373,5 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | T3-B SDK/mock 套件计划 | 已新增 | `docs/superpowers/plans/2026-06-15-t3b-supplier-mock-kit.md` |
 
 | T3-B SDK/mock 套件验收 | 已新增 | `npm run verify:t3b-supplier-mock-kit` |
+| T3-D1 本地大模型 AI 质检建议 | 已新增 | `docs/t3d-local-llm-ai-quality-v0.1.md` |
+| T3-D1 本地大模型 AI 质检验收 | 已新增 | `npm run verify:t3d-local-llm-ai-quality` |

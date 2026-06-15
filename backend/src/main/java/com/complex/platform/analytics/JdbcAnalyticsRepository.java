@@ -65,6 +65,54 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public AiQualityTaskRecord saveAiQualityTask(AiQualityTaskRecord task) {
+        jdbcTemplate.update("""
+                INSERT INTO analytics_ai_quality_tasks (
+                    task_id, source_type, source_id, processing_mode, model_provider,
+                    model_version, status, requested_by, created_at, completed_at
+                )
+                VALUES (
+                    :task_id, :source_type, :source_id, :processing_mode, :model_provider,
+                    :model_version, :status, :requested_by, :created_at, :completed_at
+                )
+                ON CONFLICT (task_id) DO UPDATE SET
+                    source_type = EXCLUDED.source_type,
+                    source_id = EXCLUDED.source_id,
+                    processing_mode = EXCLUDED.processing_mode,
+                    model_provider = EXCLUDED.model_provider,
+                    model_version = EXCLUDED.model_version,
+                    status = EXCLUDED.status,
+                    requested_by = EXCLUDED.requested_by,
+                    completed_at = EXCLUDED.completed_at
+                """, aiQualityTaskParameters(task));
+        return task;
+    }
+
+    @Override
+    public AiQualityResultRecord saveAiQualityResult(AiQualityResultRecord result) {
+        jdbcTemplate.update("""
+                INSERT INTO analytics_ai_quality_results (
+                    result_id, task_id, source_type, source_id, quality_score,
+                    risk_level, confidence_score, summary, finding_count, created_at
+                )
+                VALUES (
+                    :result_id, :task_id, :source_type, :source_id, :quality_score,
+                    :risk_level, :confidence_score, :summary, :finding_count, :created_at
+                )
+                ON CONFLICT (result_id) DO UPDATE SET
+                    task_id = EXCLUDED.task_id,
+                    source_type = EXCLUDED.source_type,
+                    source_id = EXCLUDED.source_id,
+                    quality_score = EXCLUDED.quality_score,
+                    risk_level = EXCLUDED.risk_level,
+                    confidence_score = EXCLUDED.confidence_score,
+                    summary = EXCLUDED.summary,
+                    finding_count = EXCLUDED.finding_count
+                """, aiQualityResultParameters(result));
+        return result;
+    }
+
+    @Override
     public List<CustomerIntentRecord> listCustomerIntents() {
         return jdbcTemplate.query("""
                 SELECT intent_id, source_type, source_id, customer_ref, intent_type,
@@ -241,6 +289,34 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM analytics_staff_service_scores
                  ORDER BY business_date DESC, service_score ASC, staff_id
                 """, this::mapStaffServiceScore);
+    }
+
+    private MapSqlParameterSource aiQualityTaskParameters(AiQualityTaskRecord task) {
+        return new MapSqlParameterSource()
+                .addValue("task_id", task.taskId())
+                .addValue("source_type", task.sourceType())
+                .addValue("source_id", task.sourceId())
+                .addValue("processing_mode", task.processingMode())
+                .addValue("model_provider", task.modelProvider())
+                .addValue("model_version", task.modelVersion())
+                .addValue("status", task.status())
+                .addValue("requested_by", task.requestedBy())
+                .addValue("created_at", timestampWithTimeZone(task.createdAt()))
+                .addValue("completed_at", timestampWithTimeZone(task.completedAt()));
+    }
+
+    private MapSqlParameterSource aiQualityResultParameters(AiQualityResultRecord result) {
+        return new MapSqlParameterSource()
+                .addValue("result_id", result.resultId())
+                .addValue("task_id", result.taskId())
+                .addValue("source_type", result.sourceType())
+                .addValue("source_id", result.sourceId())
+                .addValue("quality_score", result.qualityScore())
+                .addValue("risk_level", result.riskLevel())
+                .addValue("confidence_score", result.confidenceScore())
+                .addValue("summary", result.summary())
+                .addValue("finding_count", result.findingCount())
+                .addValue("created_at", timestampWithTimeZone(result.createdAt()));
     }
 
     private MapSqlParameterSource riskAlertParameters(RiskAlertRecord alert) {

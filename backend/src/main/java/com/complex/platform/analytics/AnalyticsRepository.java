@@ -22,6 +22,10 @@ public interface AnalyticsRepository {
 
     List<AiQualityTaskRecord> listAiQualityTasks();
 
+    AiQualityTaskRecord saveAiQualityTask(AiQualityTaskRecord task);
+
+    AiQualityResultRecord saveAiQualityResult(AiQualityResultRecord result);
+
     List<CustomerIntentRecord> listCustomerIntents();
 
     DashboardSnapshotRecord getP0OverviewDashboard();

@@ -45,6 +45,7 @@ class AnalyticsServiceTests {
     private InMemoryAnalyticsRepository analyticsRepository;
     private InMemoryIdempotencyRepository idempotencyRepository;
     private InMemoryAuditEventRepository auditEventRepository;
+    private CapturingLocalLlmClient localLlmClient;
     private AnalyticsService service;
 
     @BeforeEach
@@ -52,12 +53,14 @@ class AnalyticsServiceTests {
         analyticsRepository = new InMemoryAnalyticsRepository();
         idempotencyRepository = new InMemoryIdempotencyRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        localLlmClient = new CapturingLocalLlmClient();
         seedReadModels();
         service = new AnalyticsService(
                 analyticsRepository,
                 new IdempotencyService(idempotencyRepository, new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                FIXED_CLOCK
+                FIXED_CLOCK,
+                localLlmClient
         );
     }
 
@@ -220,6 +223,102 @@ class AnalyticsServiceTests {
         assertThat(auditEventRepository.events)
                 .filteredOn(event -> "analytics.risk_alert.resolved".equals(event.eventName()))
                 .hasSize(1);
+    }
+
+
+    @Test
+    void generateLocalLlmAiQualitySuggestionStoresResultAndRedactsSensitiveInput() {
+        localLlmClient.nextSuggestion = LocalLlmSuggestion.completed(
+                "local_llm",
+                "gemma-local",
+                88,
+                "suspicious",
+                new BigDecimal("0.72"),
+                "service tone risk found",
+                2
+        );
+
+        AiQualitySuggestionResponse response = service.generateLocalLlmAiQualitySuggestion(new AiQualitySuggestionRequest(
+                "llm-once",
+                "ticket_call",
+                "call_160",
+                "phone 13812345678 id 110101199003071234 email guest@example.com card 6222021234567890123 complaint text",
+                "staff_1"
+        ));
+
+        assertThat(response.modelStatus()).isEqualTo("completed");
+        assertThat(response.redactionApplied()).isTrue();
+        assertThat(response.manualReviewRequired()).isFalse();
+        assertThat(localLlmClient.lastSourceText)
+                .doesNotContain("13812345678")
+                .doesNotContain("110101199003071234")
+                .doesNotContain("guest@example.com")
+                .doesNotContain("6222021234567890123")
+                .contains("[PHONE_REDACTED]")
+                .contains("[ID_REDACTED]")
+                .contains("[EMAIL_REDACTED]")
+                .contains("[CARD_REDACTED]");
+        assertThat(response.task().processingMode()).isEqualTo("local_llm_suggestion");
+        assertThat(response.task().modelProvider()).isEqualTo("local_llm");
+        assertThat(response.result().qualityScore()).isEqualTo(88);
+        assertThat(response.result().riskLevel()).isEqualTo("suspicious");
+        assertThat(analyticsRepository.aiQualityTaskSaveCount).isEqualTo(1);
+        assertThat(analyticsRepository.aiQualityResultSaveCount).isEqualTo(1);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("analytics.ai_quality.local_llm_suggestion.created");
+    }
+
+    @Test
+    void generateLocalLlmAiQualitySuggestionFallsBackToManualReviewWhenModelUnavailable() {
+        localLlmClient.nextSuggestion = LocalLlmSuggestion.unavailable("disabled", "local-model");
+
+        AiQualitySuggestionResponse response = service.generateLocalLlmAiQualitySuggestion(new AiQualitySuggestionRequest(
+                "llm-unavailable",
+                "wecom_message",
+                "msg_160",
+                "guest asks for refund after failed service",
+                "staff_2"
+        ));
+
+        assertThat(response.modelStatus()).isEqualTo("unavailable");
+        assertThat(response.manualReviewRequired()).isTrue();
+        assertThat(response.result().confidenceScore()).isEqualByComparingTo(new BigDecimal("0.00"));
+        assertThat(response.result().summary()).contains("manual review");
+        assertThat(response.task().status()).isEqualTo("failed");
+        assertThat(analyticsRepository.aiQualityTaskSaveCount).isEqualTo(1);
+        assertThat(analyticsRepository.aiQualityResultSaveCount).isEqualTo(1);
+    }
+
+    @Test
+    void generateLocalLlmAiQualitySuggestionNormalizesUntrustedModelOutputAndRequiresManualReview() {
+        localLlmClient.nextSuggestion = LocalLlmSuggestion.completed(
+                "local_llm",
+                "gemma-local",
+                128,
+                "model_invented_risk",
+                new BigDecimal("1.70"),
+                "x".repeat(600),
+                -7
+        );
+
+        AiQualitySuggestionResponse response = service.generateLocalLlmAiQualitySuggestion(new AiQualitySuggestionRequest(
+                "llm-dirty-output",
+                "ticket_call",
+                "call_dirty",
+                "guest asks for manual escalation",
+                "staff_3"
+        ));
+
+        assertThat(response.modelStatus()).isEqualTo("completed");
+        assertThat(response.manualReviewRequired()).isTrue();
+        assertThat(response.result().qualityScore()).isEqualTo(100);
+        assertThat(response.result().riskLevel()).isEqualTo("suspicious");
+        assertThat(response.result().confidenceScore()).isEqualByComparingTo(BigDecimal.ONE);
+        assertThat(response.result().summary()).hasSize(500);
+        assertThat(response.result().findingCount()).isZero();
+        assertThat(analyticsRepository.aiQualityTaskSaveCount).isEqualTo(1);
+        assertThat(analyticsRepository.aiQualityResultSaveCount).isEqualTo(1);
     }
 
     private RiskAlertRequest riskAlertRequest(
@@ -449,6 +548,8 @@ class AnalyticsServiceTests {
         private boolean failAiQualityResults;
         private int riskAlertSaveCount;
         private int riskAlertUpdateCount;
+        private int aiQualityTaskSaveCount;
+        private int aiQualityResultSaveCount;
 
         @Override
         public List<AiQualityResultRecord> listAiQualityResults() {
@@ -461,6 +562,20 @@ class AnalyticsServiceTests {
         @Override
         public List<AiQualityTaskRecord> listAiQualityTasks() {
             return aiQualityTasks;
+        }
+
+        @Override
+        public AiQualityTaskRecord saveAiQualityTask(AiQualityTaskRecord task) {
+            aiQualityTaskSaveCount += 1;
+            aiQualityTasks.add(0, task);
+            return task;
+        }
+
+        @Override
+        public AiQualityResultRecord saveAiQualityResult(AiQualityResultRecord result) {
+            aiQualityResultSaveCount += 1;
+            aiQualityResults.add(0, result);
+            return result;
         }
 
         @Override
@@ -535,6 +650,19 @@ class AnalyticsServiceTests {
         @Override
         public List<StaffServiceScoreRecord> listStaffServiceScores() {
             return staffServiceScores;
+        }
+    }
+
+
+
+    private static final class CapturingLocalLlmClient implements LocalLlmClient {
+        private String lastSourceText;
+        private LocalLlmSuggestion nextSuggestion = LocalLlmSuggestion.unavailable("disabled", "local-model");
+
+        @Override
+        public LocalLlmSuggestion suggestQuality(String sourceType, String sourceId, String redactedText) {
+            lastSourceText = redactedText;
+            return nextSuggestion;
         }
     }
 

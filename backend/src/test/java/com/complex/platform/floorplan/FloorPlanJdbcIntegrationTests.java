@@ -32,7 +32,7 @@ class FloorPlanJdbcIntegrationTests {
         assertThat(regclass("floor_plan_import_tasks")).isEqualTo("floor_plan_import_tasks");
         assertThat(regclass("floor_plan_import_candidates")).isEqualTo("floor_plan_import_candidates");
         assertThat(regclass("floor_plan_import_errors")).isEqualTo("floor_plan_import_errors");
-        assertThat(currentFlywayVersion()).isEqualTo("039");
+        assertThat(currentFlywayVersion()).isEqualTo("040");
 
         assertThat(permissionCodes()).contains(
                 "floor_plan.view",

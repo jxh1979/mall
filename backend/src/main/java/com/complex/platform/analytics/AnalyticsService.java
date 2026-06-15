@@ -17,9 +17,11 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -36,31 +38,38 @@ public class AnalyticsService {
     private static final Set<String> RISK_LEVELS = Set.of("normal", "suspicious", "high", "critical");
     private static final Set<String> RISK_ALERT_RESOLVE_ACTIONS = Set.of("investigating", "resolved", "dismissed");
     private static final Set<String> TERMINAL_ALERT_STATUSES = Set.of("resolved", "dismissed");
+    private static final BigDecimal LOCAL_LLM_MIN_CONFIDENCE = new BigDecimal("0.60");
+    private static final int MAX_SOURCE_TEXT_CHARS = 12_000;
+    private static final int MAX_LLM_INPUT_CHARS = 4_000;
 
     private final AnalyticsRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final Clock clock;
+    private final LocalLlmClient localLlmClient;
 
     @Autowired
     public AnalyticsService(
             AnalyticsRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            LocalLlmClient localLlmClient
     ) {
-        this(repository, idempotencyService, auditEventService, Clock.systemUTC());
+        this(repository, idempotencyService, auditEventService, Clock.systemUTC(), localLlmClient);
     }
 
     AnalyticsService(
             AnalyticsRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            Clock clock
+            Clock clock,
+            LocalLlmClient localLlmClient
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.clock = clock;
+        this.localLlmClient = localLlmClient;
     }
 
     public PageResponse<AiQualityResultRecord> listAiQualityResults() {
@@ -80,6 +89,21 @@ public class AnalyticsService {
                 "analytics.risk_alert.view",
                 "analytics_ai_quality_task",
                 repository::listAiQualityTasks
+        );
+    }
+
+    @Transactional
+    public AiQualitySuggestionResponse generateLocalLlmAiQualitySuggestion(AiQualitySuggestionRequest request) {
+        return executeWrite(
+                "analytics.local-llm-ai-quality-suggestion",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AiQualitySuggestionResponse.class,
+                "analytics.ai_quality.local_llm_suggestion.created",
+                "analytics.ai_quality.local_llm_suggestion.failed",
+                "analytics.risk_alert.manage",
+                "analytics_ai_quality_task",
+                () -> generateLocalLlmAiQualitySuggestionInternal(request)
         );
     }
 
@@ -222,6 +246,63 @@ public class AnalyticsService {
                 "analytics.risk_alert.view",
                 "analytics_staff_service_score",
                 repository::listStaffServiceScores
+        );
+    }
+
+    private AiQualitySuggestionResponse generateLocalLlmAiQualitySuggestionInternal(AiQualitySuggestionRequest request) {
+        AiQualitySuggestionRequest actual = requireRequest(request);
+        String sourceType = requireLimitedText(actual.sourceType(), "source_type", 64);
+        String sourceId = requireLimitedText(actual.sourceId(), "source_id", 64);
+        String requestedBy = optionalLimitedText(actual.requestedBy(), "requested_by", 64);
+        String sourceText = requireLimitedText(actual.sourceText(), "source_text", MAX_SOURCE_TEXT_CHARS);
+        AiTextRedactor.RedactedText redacted = AiTextRedactor.redactAndTruncate(sourceText, MAX_LLM_INPUT_CHARS);
+        LocalLlmSuggestion suggestion = localLlmClient.suggestQuality(sourceType, sourceId, redacted.value());
+        int qualityScore = clampScore(suggestion.qualityScore());
+        BigDecimal confidenceScore = clampConfidence(suggestion.confidenceScore());
+        NormalizedRiskLevel riskLevel = normalizeSuggestionRiskLevel(suggestion.riskLevel());
+        NormalizedText summary = normalizeSuggestionSummary(suggestion.summary());
+        int findingCount = Math.max(0, suggestion.findingCount());
+        boolean modelOutputNormalized = qualityScore != suggestion.qualityScore()
+                || suggestion.confidenceScore() == null
+                || confidenceScore.compareTo(suggestion.confidenceScore()) != 0
+                || riskLevel.adjusted()
+                || summary.adjusted()
+                || findingCount != suggestion.findingCount();
+        boolean manualReviewRequired = !"completed".equals(suggestion.modelStatus())
+                || confidenceScore.compareTo(LOCAL_LLM_MIN_CONFIDENCE) < 0
+                || modelOutputNormalized;
+        Instant now = Instant.now(clock);
+        String taskStatus = "completed".equals(suggestion.modelStatus()) ? "completed" : "failed";
+        AiQualityTaskRecord task = repository.saveAiQualityTask(new AiQualityTaskRecord(
+                UUID.randomUUID().toString(),
+                sourceType,
+                sourceId,
+                "local_llm_suggestion",
+                normalizeText(suggestion.modelProvider(), "local_llm"),
+                normalizeText(suggestion.modelVersion(), "local-model"),
+                taskStatus,
+                requestedBy,
+                now,
+                now
+        ));
+        AiQualityResultRecord result = repository.saveAiQualityResult(new AiQualityResultRecord(
+                UUID.randomUUID().toString(),
+                task.taskId(),
+                sourceType,
+                sourceId,
+                qualityScore,
+                riskLevel.value(),
+                confidenceScore,
+                summary.value(),
+                findingCount,
+                now
+        ));
+        return new AiQualitySuggestionResponse(
+                task,
+                result,
+                suggestion.modelStatus(),
+                redacted.redactionApplied(),
+                manualReviewRequired
         );
     }
 
@@ -409,6 +490,67 @@ public class AnalyticsService {
         return action;
     }
 
+    private String requireLimitedText(String value, String fieldName, int maxLength) {
+        String text = requireText(value, fieldName);
+        if (text.length() > maxLength) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is too long");
+        }
+        return text;
+    }
+
+    private String optionalLimitedText(String value, String fieldName, int maxLength) {
+        String text = trimToNull(value);
+        if (text != null && text.length() > maxLength) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is too long");
+        }
+        return text;
+    }
+
+    private int clampScore(int value) {
+        return Math.max(0, Math.min(100, value));
+    }
+
+    private NormalizedRiskLevel normalizeSuggestionRiskLevel(String value) {
+        String raw = trimToNull(value);
+        if (raw == null) {
+            return new NormalizedRiskLevel("suspicious", true);
+        }
+        String normalized = raw.toLowerCase(Locale.ROOT);
+        if (!RISK_LEVELS.contains(normalized)) {
+            return new NormalizedRiskLevel("suspicious", true);
+        }
+        return new NormalizedRiskLevel(normalized, !normalized.equals(raw));
+    }
+
+    private NormalizedText normalizeSuggestionSummary(String value) {
+        String summary = trimToNull(value);
+        if (summary == null) {
+            return new NormalizedText("local LLM response requires manual review", true);
+        }
+        if (summary.length() > 500) {
+            return new NormalizedText(summary.substring(0, 500), true);
+        }
+        return new NormalizedText(summary, false);
+    }
+
+    private BigDecimal clampConfidence(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        if (value.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        if (value.compareTo(BigDecimal.ONE) > 0) {
+            return BigDecimal.ONE;
+        }
+        return value;
+    }
+
+    private String normalizeText(String value, String fallback) {
+        String text = trimToNull(value);
+        return text == null ? fallback : text;
+    }
+
     private String requireText(String value, String fieldName) {
         String trimmed = trimToNull(value);
         if (trimmed == null) {
@@ -429,6 +571,9 @@ public class AnalyticsService {
         if (value instanceof DashboardSnapshotRecord record) {
             return record.snapshotKey();
         }
+        if (value instanceof AiQualitySuggestionResponse response) {
+            return response.task().taskId();
+        }
         return null;
     }
 
@@ -437,5 +582,11 @@ public class AnalyticsService {
             return apiException.code();
         }
         return exception.getClass().getSimpleName();
+    }
+
+    private record NormalizedRiskLevel(String value, boolean adjusted) {
+    }
+
+    private record NormalizedText(String value, boolean adjusted) {
     }
 }

@@ -1454,6 +1454,45 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/analytics/ai-quality/local-llm-suggestions": {
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "generateLocalLlmAiQualitySuggestion",
+        "summary": "Generate local LLM AI quality suggestion",
+        "description": "T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result writes only AI quality task and result records and never changes payment, verification, refund, punishment, commission, contract, inventory, or device state.",
+        "x-permission": "analytics.risk_alert.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "analytics.ai_quality.local_llm_suggestion.created",
+        "x-audit-event-failure": "analytics.ai_quality.local_llm_suggestion.failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AiQualitySuggestion"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/analytics/customer-intents": {
       "get": {
         "tags": [
@@ -8000,6 +8039,23 @@
             }
           }
         }
+      },
+      "AiQualitySuggestion": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AiQualitySuggestionRequest"
+            },
+            "example": {
+              "idempotency_key": "local_llm_quality_20260615_000001",
+              "source_type": "ticket_call",
+              "source_id": "call_160_000001",
+              "source_text": "guest asks for refund after failed service",
+              "requested_by": "staff_1"
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -13125,6 +13181,44 @@
               "maxLength": 64
             },
             "maxItems": 50
+          }
+        }
+      },
+      "AiQualitySuggestionRequest": {
+        "type": "object",
+        "description": "T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and truncate before model invocation.",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "source_type",
+          "source_id",
+          "source_text"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "Idempotency key. Retries for the same AI quality suggestion must reuse it.",
+            "maxLength": 128
+          },
+          "source_type": {
+            "type": "string",
+            "description": "Quality source type, such as ticket_call or wecom_message.",
+            "maxLength": 64
+          },
+          "source_id": {
+            "type": "string",
+            "description": "Quality source business object id.",
+            "maxLength": 64
+          },
+          "source_text": {
+            "type": "string",
+            "description": "Text to inspect. Do not submit ID card, face image, payment proof, or unredacted sensitive source content.",
+            "maxLength": 12000
+          },
+          "requested_by": {
+            "type": "string",
+            "description": "Staff id that requested this suggestion for audit and manual review.",
+            "maxLength": 64
           }
         }
       }

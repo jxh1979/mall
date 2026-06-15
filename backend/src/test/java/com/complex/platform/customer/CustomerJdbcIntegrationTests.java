@@ -41,7 +41,7 @@ class CustomerJdbcIntegrationTests {
         assertThat(regclass("customer_points_redemptions")).isEqualTo("customer_points_redemptions");
         assertThat(regclass("bar_tables")).isEqualTo("bar_tables");
         assertThat(regclass("bar_reservations")).isEqualTo("bar_reservations");
-        assertThat(currentFlywayVersion()).isEqualTo("039");
+        assertThat(currentFlywayVersion()).isEqualTo("040");
     }
 
     @Test

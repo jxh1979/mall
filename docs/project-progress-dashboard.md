@@ -1,6 +1,6 @@
 # 项目进度总控看板
 
-更新时间：2026-06-15（T3-A 只读经营分析完成复核）
+更新时间：2026-06-15（T3-D1 本地大模型 AI 质检建议切片完成复核）
 
 本文档记录“综合体管理系统”的正式实施状态。所有后续编码、验收、运维和外部交接均以 **Java 21 + Spring Boot 4.x + PostgreSQL + Flyway + Maven** 为唯一技术栈口径。
 
@@ -11,15 +11,16 @@
 当前总控判定：
 
 - 文档：主线产品、开发设计、字段、流程、验收、运维和 PM Critic 审查文档已收口；“已收口”仅代表产品和开发口径已固定，不代表正式代码已经完成。
-- P0 编码：2026-06-14 已在 192.168.88.160 的 `/home/james/complex-management` 完成首批 P0 正式编码验收。OpenAPI 181 个 operation 与 Java Controller 181 个映射一致，缺失 0，多余 0；后端 360 个测试通过；Web、Android、APK、API/Web 健康检查和 PostgreSQL/Redis/NATS/MinIO 状态均通过；`/opt/complex/scripts/complex-verify-p0.sh` 最终输出 `P0 verification PASS`；根目录 `npm run verify:p0` 也已可直接加载 160 用户级运行配置并通过完整验证。交接入口见 `p0-coding-completion-and-handoff-report-v0.1.md`。
-- P0-0：正式 Java 21 + Spring Boot 4.x + Maven + PostgreSQL + Flyway + springdoc-openapi 后端工程骨架已创建在 `backend/`。160 机器已同步最新工程和 `ops/160` 脚本，并已通过 `verify:p0-env`、`verify:p0-contract`、`verify:p0-web`、`complex-runtime-config-check.sh`、`complex-verify-be000.sh` 运行态验收、`complex-health-check.sh` 和完整 `complex-verify-p0.sh`。当前 API release `20260613-193142` 与 Web release `20260613-180329` 已启动。注意：完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通；真实业务域 Controller/Repository/Service 仍不得标记为“正式并行开发完成”。
+- P0 编码：2026-06-14 已在 192.168.88.160 的 `/home/james/complex-management` 完成首批 P0 正式编码验收。OpenAPI 181 个 P0 operation 与 Java Controller 181 个映射一致，缺失 0，多余 0；后端 360 个测试通过；Web、Android、APK、API/Web 健康检查和 PostgreSQL/Redis/NATS/MinIO 状态均通过；`/opt/complex/scripts/complex-verify-p0.sh` 最终输出 `P0 verification PASS`；根目录 `npm run verify:p0` 也已可直接加载 160 用户级运行配置并通过完整验证。交接入口见 `p0-coding-completion-and-handoff-report-v0.1.md`。
+- P0-0：正式 Java 21 + Spring Boot 4.x + Maven + PostgreSQL + Flyway + springdoc-openapi 后端工程骨架已创建在 `backend/`。160 机器已同步最新工程和 `ops/160` 脚本，并已通过 `verify:p0-env`、`verify:p0-contract`、`verify:p0-web`、`complex-runtime-config-check.sh`、`complex-verify-be000.sh` 运行态验收、`complex-health-check.sh` 和完整 `complex-verify-p0.sh`。当前 API release `20260613-193142` 与 Web release `20260613-180329` 已启动。当前仓库 OpenAPI 随 P1/P2/T3 增量扩展后为 191 个 operation，P0 181 个 operation 的完成口径不被反向扩大。注意：完整 P0 通过的是 dev 环境自动化 smoke 切片，证明正式路径、统一响应、鉴权、Android 流程、APK 和 160 环境可跑通；真实业务域 Controller/Repository/Service 仍不得标记为“正式并行开发完成”。
 - 入口：P0 编码、联调、测试和供应商 mock 统一从 `p0-coding-entry-pack-v0.1.md` 进入；旧 `apps/api` TypeScript/Fastify/SQLite 原型已从 160 正式仓库物理移除，根目录 API 脚本统一指向 `backend/`，`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract` 防回退。
 - 编码主机保护：新增 `coding-host-protection-baseline-v0.1.md` 和 `verify:coding-host-protection`；正式编码、完整 P0 验证、安全扫描和提交只认 `192.168.88.160` 的 `/home/james/complex-management`，本机只负责进度检查、任务拆解和质量检查，不得在本机仓库提交正式代码。
-- T3-0：已建立 T3 编码入口包、用户故事地图、安全与供应商就绪闸口、入口审计和 `verify:t3-coding-package`；当前不直接进入 T3-C 机器人/视频/设备真实控制，也不进入 T3-D 独立 Python AI 服务。下一步若继续编码，只建议先做 T3-A 只读经营分析深化。
+- T3-0：已建立 T3 编码入口包、用户故事地图、安全与供应商就绪闸口、入口审计和 `verify:t3-coding-package`；当前不直接进入 T3-C 机器人/视频/设备真实控制，也不进入 T3-D2 独立 Python AI 服务。T3-D1 仅允许使用 160 机器本地大模型做脱敏后的只读质检建议。
 - T3-A：已在 160 完成只读经营分析最小切片，Web 管理端 `analytics` 入口改为 `T3-A 只读经营分析`，修正 analytics GET 返回字段映射，新增 `verify:t3a-readonly-analytics`；不新增后端写接口、数据库表、真实供应商控制或独立 Python AI 服务。
 - T3-B SDK/mock 套件：已新增开放平台签名工具、Webhook 信封样例、provider adapter mock 测试样例和 `verify:t3b-supplier-mock-kit`；仍不接真实供应商、不写真实密钥、不标记生产就绪。
+- T3-D1 本地大模型 AI 质检建议：已新增 loopback-only OpenAI-compatible 本地模型适配、敏感文本脱敏、人工复核兜底、AI 输出不自动决策约束、OpenAPI operation 和 `verify:t3d-local-llm-ai-quality`；执行入口见 `docs/t3d-local-llm-ai-quality-v0.1.md`。
 - 客户端：`npm run verify:client-routes` 已通过，Web/Android 非正式 `/api/*` 路径已清零；`npm run verify:client-openapi` 已通过，客户端 77 个正式路径模板和 95 个方法级调用均已被 P0 OpenAPI 覆盖；`npm run verify:client-payload` 已通过，Web/Android 已具备 OpenAPI 字段名适配；`ClientPlaceholderRequest` 已删除，写接口均改为字段级 requestBody schema。
-- OpenAPI 文档质量：`docs:repair-openapi-text` 已修复残留连续问号摘要、描述和参数说明；`docs:operation-matrix` 已按当前 181 个 operation 重新生成 operation 验收矩阵；`docs:openapi-examples` 已补首批高风险写接口和外部接入接口机器示例；`docs:openapi-closure` 已生成 `p0-openapi-contract-closure-appendix-v0.1.md`，覆盖 operation 到任务簇、权限、事件、终端和样例准入的追溯附录；`verify:operation-matrix`、`verify:openapi-examples` 与 `verify:openapi-closure` 已纳入 P0 总验证链。
+- OpenAPI 文档质量：`docs:repair-openapi-text` 已修复残留连续问号摘要、描述和参数说明；`docs:operation-matrix` 已按当前 191 个 operation 重新生成 operation 验收矩阵；`docs:openapi-examples` 已补首批高风险写接口和外部接入接口机器示例；`docs:openapi-closure` 已生成 `p0-openapi-contract-closure-appendix-v0.1.md`，覆盖 191 个 operation 到任务簇、权限、事件、终端和样例准入的追溯附录；`verify:operation-matrix`、`verify:openapi-examples` 与 `verify:openapi-closure` 已纳入 P0 总验证链。
 - 安全基线：`security-scans/threat_model.md` 已从旧 TypeScript/SQLite 原型威胁模型替换为正式安全基线重建入口；旧安全扫描仅通过 `security-scans/LEGACY-SECURITY-SCANS.md` 作历史追溯，不得参与当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 上线判断；`verify:prod-docs-access` 已纳入 `verify:security-baseline`，用于保证 prod profile 下 OpenAPI/Swagger 文档不匿名公开。
 - 首批编码包：新增 `p0-first-coding-package-v0.1.md`，首批正式编码按 CP-BE、CP-DB、CP-AUTH、CP-EVT、CP-GOV、CP-FIN、CP-OPS、CP-QA 执行，不再继续在 dev smoke 切片上堆生产逻辑。
 - P0 编码交接：新增 `p0-coding-completion-and-handoff-report-v0.1.md`，用于承接 P0 编码完成后的验收证据、已实现边界、生产前置约束和下一步交接动作。
@@ -126,6 +127,7 @@
 | 2026-06-15 | 改 | 旧 `apps/api` TypeScript/Fastify/Prisma/SQLite 原型已从 160 正式仓库物理移除；新增 `verify:no-legacy-api-prototype` 并纳入 `verify:p0-contract`。 |
 | 2026-06-15 | 增 | 新增 160 编码保护基线和 `verify:coding-host-protection`，完整 P0 验证、正式提交和安全扫描默认只能在 160 仓库形成证据。 |
 | 2026-06-15 | 增 | 新增 T3-0 编码包和 `verify:t3-coding-package`，裁决下一步只允许优先进入 T3-A 只读经营分析；T3-C/T3-D 继续阻断。 |
+| 2026-06-15 | 增/验证 | 新增 T3-D1 本地大模型 AI 质检建议切片；仅允许 160 本地 loopback 模型返回脱敏后的辅助建议，AI 输出不得自动影响处罚、退款、核销、调价、绩效或合同状态；新增 `docs/t3d-local-llm-ai-quality-v0.1.md` 与 `verify:t3d-local-llm-ai-quality`。 |
 | 2026-06-12 | 改 | 160 运维脚本切换为 Java/Spring Boot/PostgreSQL/Flyway 口径，新增 BE-000 验收脚本，备份脚本移除旧 SQLite 原型库。 |
 | 2026-06-12 | 增/改 | Web/Android 非正式接口路径已清零，`verify:client-routes` 通过；补齐客户端路径模板 + HTTP 方法 OpenAPI 覆盖，`verify:client-openapi` 通过；`ClientPlaceholderRequest` 已删除并替换为字段级 DTO。 |
 | 2026-06-12 | 增/改 | 新增客户端请求字段闸口 `verify:client-payload`；Web 出站请求统一转 OpenAPI snake_case、入站响应转前端 camelCase；Android 启用 snake_case 序列化并规范化手写 JsonObject。 |

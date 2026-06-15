@@ -72,6 +72,7 @@ class AnalyticsControllerTests {
         Mockito.reset(service, authorizationService);
         when(service.listAiQualityResults()).thenReturn(new PageResponse<>(List.of(aiQualityResult()), 1, 50, 1));
         when(service.listAiQualityTasks()).thenReturn(new PageResponse<>(List.of(aiQualityTask()), 1, 50, 1));
+        when(service.generateLocalLlmAiQualitySuggestion(any(AiQualitySuggestionRequest.class))).thenReturn(aiQualitySuggestion());
         when(service.listCustomerIntents()).thenReturn(new PageResponse<>(List.of(customerIntent()), 1, 50, 1));
         when(service.getP0OverviewDashboard()).thenReturn(dashboard());
         when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
@@ -91,6 +92,7 @@ class AnalyticsControllerTests {
     @CsvSource({
             "GET,/api/v1/analytics/ai-quality/results,analytics.risk_alert.view",
             "GET,/api/v1/analytics/ai-quality/tasks,analytics.risk_alert.view",
+            "POST,/api/v1/analytics/ai-quality/local-llm-suggestions,analytics.risk_alert.manage",
             "GET,/api/v1/analytics/customer-intents,analytics.risk_alert.view",
             "GET,/api/v1/analytics/dashboards/p0-overview,analytics.dashboard.view",
             "GET,/api/v1/analytics/business-metric-snapshots,analytics.dashboard.view",
@@ -125,7 +127,8 @@ class AnalyticsControllerTests {
     @ParameterizedTest
     @CsvSource({
             "/api/v1/analytics/risk-alerts",
-            "/api/v1/analytics/risk-alerts/alert_1/resolve"
+            "/api/v1/analytics/risk-alerts/alert_1/resolve",
+            "/api/v1/analytics/ai-quality/local-llm-suggestions"
     })
     void writeRoutesRejectMissingIdempotencyKey(String path) throws Exception {
         mockMvc.perform(post(path)
@@ -139,6 +142,9 @@ class AnalyticsControllerTests {
 
     private String bodyFor(String path, boolean withIdempotencyKey) {
         String idempotency = withIdempotencyKey ? "\"idempotency_key\":\"analytics-once\"," : "";
+        if (path.contains("/local-llm-suggestions")) {
+            return "{" + idempotency + "\"source_type\":\"ticket_call\",\"source_id\":\"call_160\",\"source_text\":\"guest asks for refund after failed service\",\"requested_by\":\"staff_1\"}";
+        }
         if (path.endsWith("/resolve")) {
             return "{" + idempotency + "\"action\":\"resolved\",\"reason\":\"handled by operator\",\"evidence_attachment_ids\":[\"att_1\"]}";
         }
@@ -215,6 +221,17 @@ class AnalyticsControllerTests {
     private RiskAlertRecord resolvedRiskAlert() {
         Instant now = now();
         return new RiskAlertRecord("alert_1", "rule_1", "metric_anomaly", "high", "merchant", "merchant_1", "Revenue dropped below threshold", "resolved", "handled by operator", List.of("att_1"), "analytics-resolve-once", now, now, now);
+    }
+
+
+    private AiQualitySuggestionResponse aiQualitySuggestion() {
+        return new AiQualitySuggestionResponse(
+                aiQualityTask(),
+                aiQualityResult(),
+                "unavailable",
+                false,
+                true
+        );
     }
 
     private AiQualityTaskRecord aiQualityTask() {

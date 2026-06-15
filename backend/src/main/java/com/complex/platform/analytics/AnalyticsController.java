@@ -48,6 +48,15 @@ public class AnalyticsController {
         return ApiResponse.ok(service.listAiQualityTasks());
     }
 
+    @PostMapping("/ai-quality/local-llm-suggestions")
+    public ApiResponse<AiQualitySuggestionResponse> generateLocalLlmAiQualitySuggestion(
+            @RequestBody(required = false) AiQualitySuggestionRequest request
+    ) {
+        authorizationService.requirePermission("analytics.risk_alert.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.generateLocalLlmAiQualitySuggestion(request));
+    }
+
     @GetMapping("/customer-intents")
     public ApiResponse<PageResponse<CustomerIntentRecord>> listCustomerIntents() {
         authorizationService.requirePermission("analytics.risk_alert.view");
