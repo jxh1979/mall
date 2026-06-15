@@ -66,12 +66,16 @@ P0/P1 当前可编码范围已经收口。下一阶段不应直接把所有 P2 �
 
 ### P2-A 商场平面图 SVG/JSON 导入
 
-状态：已完成。
+状态：已完成；后端导入能力和 Web 管理入口均已完成。
 
 交付物：
 
 - `docs/p2-floor-plan-import-api-contract-v0.1.md`
 - `docs/p2-floor-plan-import-completion-audit-v0.1.md`
+- `docs/p2-floor-plan-web-entry-completion-audit-v0.1.md`
+- `tools/verify-p2-floor-plan-web-entry.mjs`
+
+审计结论：P2-A 只覆盖 SVG/标准 JSON 导入候选和 Web 人工发布入口；CAD/DWG/DXF 原生解析、自动发布和供应商特定导入适配仍不压入本切片。
 
 ### P2-B 游乐团体/包场预订与容量锁定
 
