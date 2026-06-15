@@ -283,6 +283,73 @@ type BusinessMetricSnapshot = {
   createdAt: string;
 };
 
+type FloorPlan = {
+  id: string;
+  projectId?: string;
+  buildingCode?: string;
+  floorNo: string;
+  planName: string;
+  imageUrl: string;
+  imageWidth: number;
+  imageHeight: number;
+  versionNo: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+type FloorPlanPoint = { x: number; y: number };
+type FloorPlanShape = {
+  id: string;
+  floorPlanId: string;
+  shapeType: string;
+  refType: string;
+  refId?: string;
+  label: string;
+  polygonPoints: FloorPlanPoint[];
+  zIndex: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+type FloorPlanImportTask = {
+  id: string;
+  floorPlanId: string;
+  sourceFormat: string;
+  sourceName: string;
+  sourceHash?: string;
+  sourcePayload?: string;
+  status: string;
+  candidateCount: number;
+  errorCount: number;
+  operatorNote?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+type FloorPlanImportCandidate = {
+  id: string;
+  importTaskId: string;
+  candidateNo: number;
+  shapeType: string;
+  refType: string;
+  refId?: string;
+  label: string;
+  polygonPoints: FloorPlanPoint[];
+  zIndex: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+type FloorPlanImportError = {
+  id: string;
+  importTaskId: string;
+  lineNo?: number;
+  fieldName?: string;
+  errorCode: string;
+  errorMessage: string;
+  createdAt: string;
+};
+type FloorPlanImportDetails = { task: FloorPlanImportTask; candidates: FloorPlanImportCandidate[]; errors: FloorPlanImportError[] };
+
 type Snapshot = {
   health: HealthResponse;
   overview: Overview;
@@ -350,10 +417,14 @@ type Snapshot = {
   merchantHealthScores: MerchantHealthScore[];
   metricAnomalies: MetricAnomaly[];
   businessMetricSnapshots: BusinessMetricSnapshot[];
+  floorPlans: FloorPlan[];
+  floorPlanShapes: FloorPlanShape[];
+  floorPlanImports: FloorPlanImportTask[];
+  floorPlanImportDetails: FloorPlanImportDetails | null;
   loadedAt: string;
 };
 
-type SectionKey = "dashboard" | "foundation" | "ticketing" | "bar" | "amusement" | "analytics" | "interfaces" | "security" | "events";
+type SectionKey = 'dashboard' | 'foundation' | 'floorplan' | 'ticketing' | 'bar' | 'amusement' | 'analytics' | 'interfaces' | 'security' | 'events';
 type NavigationGroupKey = "overview" | "operations" | "platform" | "insight";
 type BusinessEntryKey = Extract<SectionKey, "ticketing" | "bar" | "amusement">;
 
@@ -407,6 +478,14 @@ const sectionMeta: Record<SectionKey, SectionMeta> = {
     groupLabel: "平台治理",
     icon: <BankOutlined />,
   },
+  floorplan: {
+    title: 'P2 平面图导入',
+    menuLabel: '商场平面图',
+    description: '图片底图 + 多边形坐标，支持 SVG/标准 JSON 导入候选，人工确认后发布。',
+    groupKey: 'platform',
+    groupLabel: '平台治理',
+    icon: <BankOutlined />,
+  },
   interfaces: {
     title: "第三方接口",
     menuLabel: "第三方接口",
@@ -444,14 +523,14 @@ const sectionMeta: Record<SectionKey, SectionMeta> = {
 const navigationGroups: Array<{ key: NavigationGroupKey; label: string; icon: React.ReactNode; children: SectionKey[] }> = [
   { key: "overview", label: "总览", icon: <DashboardOutlined />, children: ["dashboard"] },
   { key: "operations", label: "业务运营", icon: <CoffeeOutlined />, children: ["ticketing", "bar", "amusement"] },
-  { key: "platform", label: "平台治理", icon: <BankOutlined />, children: ["foundation", "interfaces", "security", "events"] },
+  { key: "platform", label: "平台治理", icon: <BankOutlined />, children: ["foundation", "floorplan", "interfaces", "security", "events"] },
   { key: "insight", label: "分析决策", icon: <BarChartOutlined />, children: ["analytics"] },
 ];
 
 const fallbackNavigationGroup = navigationGroups[0]!;
 const defaultOpenMenuKeys = navigationGroups.map((group) => group.key);
 
-const sectionQueryValues = new Set<SectionKey>(["dashboard", "foundation", "ticketing", "bar", "amusement", "analytics", "interfaces", "security", "events"]);
+const sectionQueryValues = new Set<SectionKey>(['dashboard', 'foundation', 'floorplan', 'ticketing', 'bar', 'amusement', 'analytics', 'interfaces', 'security', 'events']);
 const businessEntryPaths: Record<BusinessEntryKey, string> = {
   ticketing: "/ticketing/",
   bar: "/bar/",
@@ -723,6 +802,12 @@ function getSectionStats(section: SectionKey, snapshot: Snapshot): PageStat[] {
       { label: "场馆", value: snapshot.venues.length },
       { label: "账号", value: snapshot.users.length },
     ],
+    floorplan: [
+      { label: '平面图', value: snapshot.floorPlans.length },
+      { label: '区域点位', value: snapshot.floorPlanShapes.length },
+      { label: '导入任务', value: snapshot.floorPlanImports.length },
+      { label: '待发布候选', value: snapshot.floorPlanImportDetails?.candidates.filter((item) => item.status === 'pending').length ?? 0 },
+    ],
     ticketing: [
       { label: "票种", value: snapshot.tickets.length },
       { label: "已出票", value: snapshot.issuedEntitlements.length },
@@ -972,12 +1057,17 @@ function App() {
   const [openMenuKeys, setOpenMenuKeys] = React.useState<string[]>(defaultOpenMenuKeys);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [lastResult, setLastResult] = React.useState<unknown>(null);
+  const [selectedFloorPlanId, setSelectedFloorPlanId] = React.useState('');
+  const [selectedFloorPlanImportId, setSelectedFloorPlanImportId] = React.useState('');
   const [loginForm] = Form.useForm();
   const [ticketFlowForm] = Form.useForm();
   const [verifyForm] = Form.useForm();
   const [settlementForm] = Form.useForm();
   const [foundationForm] = Form.useForm();
   const [userForm] = Form.useForm();
+  const [floorPlanForm] = Form.useForm();
+  const [floorPlanImportForm] = Form.useForm();
+  const [floorPlanPublishForm] = Form.useForm();
   const [barFlowForm] = Form.useForm();
   const [inventoryForm] = Form.useForm();
   const [inventoryItemForm] = Form.useForm();
@@ -1078,6 +1168,7 @@ function App() {
         merchantHealthScores,
         metricAnomalies,
         businessMetricSnapshots,
+        floorPlans,
       ] = await Promise.all([
         getJson<HealthResponse>("/api/v1/system/health"),
         getJson<Overview>("/api/v1/analytics/dashboards/p0-overview"),
@@ -1145,7 +1236,25 @@ function App() {
         getJson<MerchantHealthScore[]>(t3aReadOnlyApiPaths.merchantHealth),
         getJson<MetricAnomaly[]>(t3aReadOnlyApiPaths.metricAnomalies),
         getJson<BusinessMetricSnapshot[]>(t3aReadOnlyApiPaths.businessMetricSnapshots),
+        getJson<FloorPlan[]>('/api/v1/floor-plans'),
       ]);
+      const effectiveFloorPlanId = selectedFloorPlanId && floorPlans.some((item) => item.id === selectedFloorPlanId)
+        ? selectedFloorPlanId
+        : floorPlans[0]?.id ?? '';
+      const [floorPlanShapes, floorPlanImports] = effectiveFloorPlanId
+        ? await Promise.all([
+            getJson<FloorPlanShape[]>(`/api/v1/floor-plans/${effectiveFloorPlanId}/shapes`),
+            getJson<FloorPlanImportTask[]>(`/api/v1/floor-plans/${effectiveFloorPlanId}/imports`),
+          ])
+        : [[], []] as [FloorPlanShape[], FloorPlanImportTask[]];
+      const effectiveImportId = selectedFloorPlanImportId && floorPlanImports.some((item) => item.id === selectedFloorPlanImportId)
+        ? selectedFloorPlanImportId
+        : floorPlanImports[0]?.id ?? '';
+      const floorPlanImportDetails = effectiveFloorPlanId && effectiveImportId
+        ? await getJson<FloorPlanImportDetails>(`/api/v1/floor-plans/${effectiveFloorPlanId}/imports/${effectiveImportId}/candidates`)
+        : null;
+      if (effectiveFloorPlanId !== selectedFloorPlanId) setSelectedFloorPlanId(effectiveFloorPlanId);
+      if (effectiveImportId !== selectedFloorPlanImportId) setSelectedFloorPlanImportId(effectiveImportId);
       setSnapshot({
         health,
         overview,
@@ -1213,6 +1322,10 @@ function App() {
         merchantHealthScores,
         metricAnomalies,
         businessMetricSnapshots,
+        floorPlans,
+        floorPlanShapes,
+        floorPlanImports,
+        floorPlanImportDetails,
         loadedAt: new Date().toISOString(),
       });
     } catch (loadError) {
@@ -1220,7 +1333,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedFloorPlanId, selectedFloorPlanImportId]);
 
   React.useEffect(() => {
     if (authUser) void loadData();
@@ -1304,6 +1417,57 @@ function App() {
       });
       return { organization, merchant, venue, area, point };
     }, () => foundationForm.resetFields());
+  }
+
+  function floorPlanOptions(snapshotValue: Snapshot) {
+    return snapshotValue.floorPlans.map((item) => ({
+      value: item.id,
+      label: item.planName + ' · ' + item.floorNo + ' · ' + item.versionNo,
+    }));
+  }
+
+  async function handleFloorPlanCreate(values: Record<string, string | number>) {
+    await runAction('P2 创建平面图', () => postJson<FloorPlan>('/api/v1/floor-plans', {
+      projectId: values.projectId || undefined,
+      buildingCode: values.buildingCode || undefined,
+      floorNo: values.floorNo,
+      planName: values.planName,
+      imageUrl: values.imageUrl,
+      imageWidth: Number(values.imageWidth || 1),
+      imageHeight: Number(values.imageHeight || 1),
+      versionNo: values.versionNo || 'v1',
+      status: values.status || 'active',
+      operatorNote: values.operatorNote || undefined,
+    }), () => floorPlanForm.resetFields());
+  }
+
+  async function handleFloorPlanImport(values: Record<string, string>) {
+    const floorPlanId = values.floorPlanId || selectedFloorPlanId || snapshot?.floorPlans[0]?.id;
+    if (!floorPlanId) throw new Error('未选择平面图');
+    await runAction('P2 创建导入任务', () => postJson<FloorPlanImportTask>(`/api/v1/floor-plans/${floorPlanId}/imports`, {
+      sourceFormat: values.sourceFormat || 'standard_json',
+      sourceName: values.sourceName,
+      sourcePayload: values.sourcePayload,
+      operatorNote: values.operatorNote || undefined,
+    }), () => floorPlanImportForm.resetFields());
+  }
+
+  async function handleLoadFloorPlanImportDetails(floorPlanId: string, importId: string) {
+    setSelectedFloorPlanId(floorPlanId);
+    setSelectedFloorPlanImportId(importId);
+    await runAction('P2 加载导入候选明细', () => getJson<FloorPlanImportDetails>(`/api/v1/floor-plans/${floorPlanId}/imports/${importId}/candidates`));
+  }
+
+  async function handlePublishFloorPlanImport(values: Record<string, string>) {
+    const floorPlanId = values.floorPlanId || selectedFloorPlanId || snapshot?.floorPlans[0]?.id;
+    const importId = values.importId || selectedFloorPlanImportId || snapshot?.floorPlanImports[0]?.id;
+    if (!floorPlanId || !importId) throw new Error('未选择导入任务');
+    const candidateIds = String(values.candidateIds || '').split(/[\s,，]+/).map((value) => value.trim()).filter(Boolean);
+    if (candidateIds.length === 0) throw new Error('候选 ID');
+    await runAction('P2 发布导入候选', () => postJson<FloorPlanImportTask>(`/api/v1/floor-plans/${floorPlanId}/imports/${importId}/publish`, {
+      candidateIds,
+      operatorNote: values.operatorNote || 'Web 确认后发布平面图候选',
+    }), () => floorPlanPublishForm.resetFields());
   }
 
   async function handleCreateUser(values: Record<string, string>) {
@@ -2195,6 +2359,110 @@ function App() {
     );
   }
 
+  function renderFloorPlan(snapshotValue: Snapshot) {
+    const selectedPlan = snapshotValue.floorPlans.find((item) => item.id === selectedFloorPlanId) ?? snapshotValue.floorPlans[0];
+    const selectedImport = snapshotValue.floorPlanImports.find((item) => item.id === selectedFloorPlanImportId) ?? snapshotValue.floorPlanImports[0];
+    const pendingCandidates = snapshotValue.floorPlanImportDetails?.candidates.filter((item) => item.status === 'pending') ?? [];
+    const defaultCandidateIds = pendingCandidates.map((item) => item.id).join(',');
+
+    return (
+      <section className='section-block'>
+        <SectionHeading icon={<BankOutlined />} title='P2 平面图导入' extra={<Tag color='blue'>floor_plan.import.manage</Tag>} />
+        <Alert className='status-alert' type='info' showIcon message='P2 先做图片底图 + 多边形坐标，SVG/标准 JSON 导入只生成候选，必须人工确认后才写入正式区域。' />
+        <div className='action-grid two'>
+          <div className='action-panel'>
+            <h2>创建平面图</h2>
+            <Form form={floorPlanForm} layout='vertical' onFinish={handleFloorPlanCreate} initialValues={{ planName: '1F 示意图', floorNo: '1F', imageUrl: '/assets/floor-plan-1f.png', imageWidth: 1200, imageHeight: 800, versionNo: 'v1', status: 'active' }}>
+              <div className='form-grid two'>
+                <Form.Item name='projectId' label='项目 ID'><Input /></Form.Item>
+                <Form.Item name='buildingCode' label='楼栋编码'><Input /></Form.Item>
+                <Form.Item name='floorNo' label='楼层' rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item name='planName' label='平面图名称' rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item name='imageUrl' label='底图地址' rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item name='imageWidth' label='底图宽度' rules={[{ required: true }]}><InputNumber min={1} className='full' /></Form.Item>
+                <Form.Item name='imageHeight' label='底图高度' rules={[{ required: true }]}><InputNumber min={1} className='full' /></Form.Item>
+                <Form.Item name='versionNo' label='版本'><Input /></Form.Item>
+                <Form.Item name='status' label='状态'><Select options={['active', 'inactive', 'archived'].map((value) => ({ value, label: value }))} /></Form.Item>
+                <Form.Item name='operatorNote' label='备注'><Input /></Form.Item>
+              </div>
+              <Button type='primary' icon={<PlusOutlined />} htmlType='submit'>创建平面图</Button>
+            </Form>
+          </div>
+          <div className='action-panel'>
+            <h2>导入 SVG/标准 JSON 候选</h2>
+            <Form form={floorPlanImportForm} layout='vertical' onFinish={handleFloorPlanImport} initialValues={{ sourceFormat: 'standard_json', sourceName: 'floor-plan-standard.json', sourcePayload: JSON.stringify({ shapes: [{ label: 'A101', shape_type: 'shop', ref_type: 'custom', polygon_points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.1 }, { x: 0.3, y: 0.3 }] }] }) }}>
+              <div className='form-grid two'>
+                <Form.Item name='floorPlanId' label='平面图' rules={[{ required: !selectedPlan }]}><Select allowClear value={selectedFloorPlanId || undefined} onChange={(value) => { setSelectedFloorPlanId(value || ''); setSelectedFloorPlanImportId(''); }} options={floorPlanOptions(snapshotValue)} /></Form.Item>
+                <Form.Item name='sourceFormat' label='来源格式'><Select options={[{ value: 'standard_json', label: '标准 JSON' }, { value: 'svg', label: 'SVG' }]} /></Form.Item>
+                <Form.Item name='sourceName' label='来源名称' rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item name='operatorNote' label='导入备注'><Input /></Form.Item>
+              </div>
+              <Form.Item name='sourcePayload' label='源文件内容' rules={[{ required: true }]}><Input.TextArea rows={8} /></Form.Item>
+              <Button type='primary' htmlType='submit'>创建导入任务</Button>
+            </Form>
+          </div>
+          <div className='action-panel'>
+            <h2>导入任务与候选</h2>
+            <Form layout='vertical' initialValues={{ floorPlanId: selectedPlan?.id, importId: selectedImport?.id }}>
+              <div className='form-grid two'>
+                <Form.Item label='平面图'><Select value={selectedPlan?.id} onChange={(value) => { setSelectedFloorPlanId(value); setSelectedFloorPlanImportId(''); }} options={floorPlanOptions(snapshotValue)} /></Form.Item>
+                <Form.Item label='导入任务'><Select value={selectedImport?.id} onChange={(value) => setSelectedFloorPlanImportId(value || '')} options={snapshotValue.floorPlanImports.map((item) => ({ value: item.id, label: item.sourceName + ' · ' + item.status + ' · ' + item.candidateCount + '/' + item.errorCount }))} /></Form.Item>
+              </div>
+              <Button disabled={!selectedPlan || !selectedImport} onClick={() => selectedPlan && selectedImport ? void handleLoadFloorPlanImportDetails(selectedPlan.id, selectedImport.id) : undefined}>加载候选</Button>
+            </Form>
+          </div>
+          <div className='action-panel'>
+            <h2>候选发布</h2>
+            <Form key={selectedImport?.id || 'empty-import'} form={floorPlanPublishForm} layout='vertical' onFinish={(values) => confirmHighImpactAction('发布平面图导入候选', '发布后候选会写入正式平面图区域，请确认已完成业务复核。', () => handlePublishFloorPlanImport(values))} initialValues={{ floorPlanId: selectedPlan?.id, importId: selectedImport?.id, candidateIds: defaultCandidateIds }}>
+              <Form.Item name='floorPlanId' label='平面图' rules={[{ required: true }]}><Select options={floorPlanOptions(snapshotValue)} /></Form.Item>
+              <Form.Item name='importId' label='导入任务' rules={[{ required: true }]}><Select options={snapshotValue.floorPlanImports.map((item) => ({ value: item.id, label: item.sourceName + ' · ' + item.status }))} /></Form.Item>
+              <Form.Item name='candidateIds' label='候选 ID' rules={[{ required: true }]}><Input placeholder='fpic_xxx,fpic_yyy' /></Form.Item>
+              <Form.Item name='operatorNote' label='发布备注'><Input /></Form.Item>
+              <Button type='primary' danger disabled={pendingCandidates.length === 0} htmlType='submit'>发布候选</Button>
+            </Form>
+          </div>
+        </div>
+        <div className='table-grid two'>
+          <SimpleTable title='平面图' data={snapshotValue.floorPlans.slice(0, 12)} columns={[
+            { title: '名称', dataIndex: 'planName' },
+            { title: '楼层', dataIndex: 'floorNo' },
+            { title: '版本', dataIndex: 'versionNo' },
+            { title: '尺寸', key: 'size', render: (_, row) => row.imageWidth + ' x ' + row.imageHeight },
+            { title: '状态', dataIndex: 'status', render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          ]} />
+          <SimpleTable title='正式区域' data={snapshotValue.floorPlanShapes.slice(0, 12)} columns={[
+            { title: '名称', dataIndex: 'label' },
+            { title: '类型', dataIndex: 'shapeType' },
+            { title: '绑定', key: 'ref', render: (_, row) => row.refType + ' · ' + (row.refId || '-') },
+            { title: '点数', key: 'points', render: (_, row) => row.polygonPoints.length },
+            { title: '状态', dataIndex: 'status', render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          ]} />
+          <SimpleTable title='导入任务' data={snapshotValue.floorPlanImports.slice(0, 12)} columns={[
+            { title: '文件', dataIndex: 'sourceName' },
+            { title: '格式', dataIndex: 'sourceFormat' },
+            { title: '候选', dataIndex: 'candidateCount' },
+            { title: '错误', dataIndex: 'errorCount' },
+            { title: '状态', dataIndex: 'status', render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: '操作', key: 'actions', render: (_, row) => <Button size='small' onClick={() => void handleLoadFloorPlanImportDetails(row.floorPlanId, row.id)}>明细</Button> },
+          ]} />
+          <SimpleTable title='候选明细' data={snapshotValue.floorPlanImportDetails?.candidates.slice(0, 12) ?? []} columns={[
+            { title: '候选 ID', dataIndex: 'id' },
+            { title: '名称', dataIndex: 'label' },
+            { title: '类型', dataIndex: 'shapeType' },
+            { title: '点数', key: 'points', render: (_, row) => row.polygonPoints.length },
+            { title: '状态', dataIndex: 'status', render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          ]} />
+          <SimpleTable title='导入错误' data={snapshotValue.floorPlanImportDetails?.errors.slice(0, 12) ?? []} columns={[
+            { title: '行号', dataIndex: 'lineNo' },
+            { title: '字段', dataIndex: 'fieldName' },
+            { title: '错误码', dataIndex: 'errorCode' },
+            { title: '说明', dataIndex: 'errorMessage' },
+          ]} />
+        </div>
+      </section>
+    );
+  }
+
   function renderInterfaces(snapshotValue: Snapshot) {
     return (
       <section className="section-block">
@@ -2391,6 +2659,7 @@ function App() {
   function renderContent(snapshotValue: Snapshot) {
     let sectionContent: React.ReactNode = renderDashboard(snapshotValue);
     if (activeSection === "foundation") sectionContent = renderFoundation(snapshotValue);
+    if (activeSection === "floorplan") sectionContent = renderFloorPlan(snapshotValue);
     if (activeSection === "ticketing") sectionContent = renderTicketing(snapshotValue);
     if (activeSection === "bar") sectionContent = renderBar(snapshotValue);
     if (activeSection === "amusement") sectionContent = renderAmusement(snapshotValue);

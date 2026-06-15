@@ -64,6 +64,9 @@
     },
     {
       "name": "ops"
+    },
+    {
+      "name": "floor-plan"
     }
   ],
   "paths": {
@@ -6927,6 +6930,340 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/floor-plans": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "listFloorPlans",
+        "summary": "查询 P1/P2 商场平面图",
+        "description": "返回图片底图、多边形坐标版本和状态，用于 Web 管理端选择平面图。",
+        "x-permission": "floor_plan.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.viewed",
+        "x-audit-event-failure": "floor_plan.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "createFloorPlan",
+        "summary": "创建 P1/P2 商场平面图",
+        "description": "创建图片底图与多边形坐标承载对象，不自动导入 CAD 或 SVG。",
+        "x-permission": "floor_plan.manage",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "floor_plan.created",
+        "x-audit-event-failure": "floor_plan.create_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FloorPlanCreateRequest"
+        }
+      }
+    },
+    "/api/v1/floor-plans/{id}/shapes": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "listFloorPlanShapes",
+        "summary": "查询平面图正式区域",
+        "description": "返回已发布的正式多边形区域，供商场平面图和招商运营联动查看。",
+        "x-permission": "floor_plan.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.shape_viewed",
+        "x-audit-event-failure": "floor_plan.shape_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/floor-plans/{id}/imports": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "listFloorPlanImports",
+        "summary": "查询平面图导入任务",
+        "description": "返回指定平面图的 SVG 或标准 JSON 导入任务列表。",
+        "x-permission": "floor_plan.import.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.import_viewed",
+        "x-audit-event-failure": "floor_plan.import_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "createFloorPlanImport",
+        "summary": "创建 SVG 或标准 JSON 导入任务",
+        "description": "导入任务只生成候选和错误明细，不写入正式区域，发布必须另走人工确认接口。",
+        "x-permission": "floor_plan.import.manage",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "floor_plan.import_created",
+        "x-audit-event-failure": "floor_plan.import_create_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FloorPlanImportCreateRequest"
+        }
+      }
+    },
+    "/api/v1/floor-plans/{id}/imports/{importId}/candidates": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "getFloorPlanImportDetails",
+        "summary": "查询导入候选和错误",
+        "description": "返回导入任务解析出的候选区域和错误明细，供人工复核。",
+        "x-permission": "floor_plan.import.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.import_candidate_viewed",
+        "x-audit-event-failure": "floor_plan.import_candidate_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "description": "导入任务 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/floor-plans/{id}/imports/{importId}/publish": {
+      "post": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "publishFloorPlanImport",
+        "summary": "发布平面图导入候选",
+        "description": "将人工选择的候选写入正式区域，必须携带幂等键并记录审计留痕。",
+        "x-permission": "floor_plan.import.manage",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "floor_plan.import_published",
+        "x-audit-event-failure": "floor_plan.import_publish_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "description": "导入任务 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FloorPlanImportPublishRequest"
+        }
+      }
     }
   },
   "components": {
@@ -8053,6 +8390,39 @@
               "source_id": "call_160_000001",
               "source_text": "guest asks for refund after failed service",
               "requested_by": "staff_1"
+            }
+          }
+        }
+      },
+      "FloorPlanCreateRequest": {
+        "description": "创建平面图请求体",
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FloorPlanCreateRequest"
+            }
+          }
+        }
+      },
+      "FloorPlanImportCreateRequest": {
+        "description": "创建平面图导入任务请求体",
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FloorPlanImportCreateRequest"
+            }
+          }
+        }
+      },
+      "FloorPlanImportPublishRequest": {
+        "description": "发布平面图导入候选请求体",
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FloorPlanImportPublishRequest"
             }
           }
         }
@@ -13219,6 +13589,156 @@
             "type": "string",
             "description": "Staff id that requested this suggestion for audit and manual review.",
             "maxLength": 64
+          }
+        }
+      },
+      "FloorPlanCreateRequest": {
+        "type": "object",
+        "description": "创建商场平面图。P1 支持图片底图和多边形坐标，CAD/SVG 标准化导入作为候选流转。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "floor_no",
+          "plan_name",
+          "image_url",
+          "image_width",
+          "image_height",
+          "version_no",
+          "status"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "幂等键，防止重复创建或重复发布。"
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "操作备注，进入审计留痕。"
+          },
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "项目 ID，可为空时使用当前默认项目。"
+          },
+          "building_code": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "楼栋编码。"
+          },
+          "floor_no": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "楼层编号。"
+          },
+          "plan_name": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "平面图名称。"
+          },
+          "image_url": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "底图文件地址。"
+          },
+          "image_width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "底图宽度像素。"
+          },
+          "image_height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "底图高度像素。"
+          },
+          "version_no": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "平面图版本号。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "inactive",
+              "archived"
+            ],
+            "description": "平面图状态。"
+          }
+        }
+      },
+      "FloorPlanImportCreateRequest": {
+        "type": "object",
+        "description": "创建平面图导入任务。导入任务只生成候选和错误，不直接写入正式 shape。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "source_format",
+          "source_name",
+          "source_payload"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "幂等键，防止重复创建。"
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "操作备注，进入审计留痕。"
+          },
+          "source_format": {
+            "type": "string",
+            "enum": [
+              "svg",
+              "standard_json"
+            ],
+            "description": "来源格式，支持 svg 或 standard_json。"
+          },
+          "source_name": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "来源文件名或外部资料名。"
+          },
+          "source_payload": {
+            "type": "string",
+            "maxLength": 1000000,
+            "description": "SVG 文本或标准 JSON 文本。"
+          }
+        }
+      },
+      "FloorPlanImportPublishRequest": {
+        "type": "object",
+        "description": "发布人工确认后的平面图导入候选。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "candidate_ids"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "幂等键，防止重复发布。"
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "发布备注，进入审计留痕。"
+          },
+          "candidate_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "需要发布的候选 ID 列表。"
           }
         }
       }

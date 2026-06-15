@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 191 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 198 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -212,6 +212,13 @@
 | amusement | `POST` | `/api/v1/amusement/group-bookings/{id}/approve` | `approveAmusementGroupBooking` | Approve P2 amusement group booking and lock capacity | `AmusementGroupBookingApprovalRequest` | `amusement.group_booking.approve` | `staff-token` | `project-amusement` | web | 是 | `amusement_group_booking.approved.success` | `amusement_group_booking.approved.failure` |
 | amusement | `POST` | `/api/v1/amusement/group-bookings/{id}/release` | `releaseAmusementGroupBooking` | Release P2 amusement group booking and free locked capacity | `AmusementGroupBookingReleaseRequest` | `amusement.group_booking.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement_group_booking.released.success` | `amusement_group_booking.released.failure` |
 | analytics | `GET` | `/api/v1/analytics/business-metric-snapshots` | `listBusinessMetricSnapshots` | List P2 business metric snapshots for operational analytics | `-` | `analytics.dashboard.view` | `staff-token` | `project` | web | 否 | `analytics_business_metric_snapshot.viewed.success` | `analytics_business_metric_snapshot.viewed.failure` |
+| floor-plan | `GET` | `/api/v1/floor-plans` | `listFloorPlans` | 查询 P1/P2 商场平面图 | `-` | `floor_plan.view` | `staff-token` | `project-space` | web | 否 | `floor_plan.viewed` | `floor_plan.view_failed` |
+| floor-plan | `POST` | `/api/v1/floor-plans` | `createFloorPlan` | 创建 P1/P2 商场平面图 | `FloorPlanCreateRequest` | `floor_plan.manage` | `staff-token` | `project-space` | web | 是 | `floor_plan.created` | `floor_plan.create_failed` |
+| floor-plan | `GET` | `/api/v1/floor-plans/{id}/shapes` | `listFloorPlanShapes` | 查询平面图正式区域 | `-` | `floor_plan.view` | `staff-token` | `project-space` | web | 否 | `floor_plan.shape_viewed` | `floor_plan.shape_view_failed` |
+| floor-plan | `GET` | `/api/v1/floor-plans/{id}/imports` | `listFloorPlanImports` | 查询平面图导入任务 | `-` | `floor_plan.import.view` | `staff-token` | `project-space` | web | 否 | `floor_plan.import_viewed` | `floor_plan.import_view_failed` |
+| floor-plan | `POST` | `/api/v1/floor-plans/{id}/imports` | `createFloorPlanImport` | 创建 SVG 或标准 JSON 导入任务 | `FloorPlanImportCreateRequest` | `floor_plan.import.manage` | `staff-token` | `project-space` | web | 是 | `floor_plan.import_created` | `floor_plan.import_create_failed` |
+| floor-plan | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | `getFloorPlanImportDetails` | 查询导入候选和错误 | `-` | `floor_plan.import.view` | `staff-token` | `project-space` | web | 否 | `floor_plan.import_candidate_viewed` | `floor_plan.import_candidate_view_failed` |
+| floor-plan | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | `publishFloorPlanImport` | 发布平面图导入候选 | `FloorPlanImportPublishRequest` | `floor_plan.import.manage` | `staff-token` | `project-space` | web | 是 | `floor_plan.import_published` | `floor_plan.import_publish_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -279,5 +286,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 191 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 198 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

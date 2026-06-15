@@ -2,8 +2,7 @@ openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
   version: 0.1.0
-  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
-    springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
+  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
   - url: /
     description: 同域部署或由网关转发
@@ -26,6 +25,7 @@ tags:
   - name: integration
   - name: open-platform
   - name: ops
+  - name: floor-plan
 paths:
   /api/open/auth/token:
     post:
@@ -4011,9 +4011,9 @@ paths:
                   bound_space_id: project_p0
                   location_point_id: project_p0
                   status: bound
-                  updated_at: 2026-06-14T00:00:00Z
+                  updated_at: '2026-06-14T00:00:00Z'
                   device_token: kiosk_example_token_returned_once
-                timestamp: 2026-06-14T00:00:00Z
+                timestamp: '2026-06-14T00:00:00Z'
         "409":
           $ref: "#/components/responses/Error"
         "500":
@@ -4718,7 +4718,7 @@ paths:
         - ticketing
       operationId: createTicketDynamicPricingRule
       summary: Create P2 ticket dynamic pricing rule draft
-      description: Create P2 ticket dynamic pricing rule draft. Dynamic pricing remains a simulation/rule container and must not alter P0 ticket order price settlement.
+      description: Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.manage
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -4779,7 +4779,7 @@ paths:
         - ticketing
       operationId: simulateTicketDynamicPricing
       summary: Simulate P2 ticket dynamic pricing without changing order price
-      description: Simulate P2 ticket dynamic pricing without changing order price. The response is for operational preview only and must not create ticket orders or receivables.
+      description: Simulate P2 ticket dynamic pricing without changing order price. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.simulate
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -4830,7 +4830,7 @@ paths:
         - amusement
       operationId: createAmusementGroupBooking
       summary: Create P2 amusement group or private booking request
-      description: Create P2 amusement group or private booking request. Approval must lock capacity in backend transaction; frontend display cannot decide capacity success.
+      description: Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -4860,7 +4860,7 @@ paths:
         - amusement
       operationId: approveAmusementGroupBooking
       summary: Approve P2 amusement group booking and lock capacity
-      description: Approve P2 amusement group booking and lock capacity. Capacity success must be decided by backend transaction.
+      description: Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.approve
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -4893,7 +4893,7 @@ paths:
         - amusement
       operationId: releaseAmusementGroupBooking
       summary: Release P2 amusement group booking and free locked capacity
-      description: Release P2 amusement group booking and free locked capacity. Release must leave audit evidence.
+      description: Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -4926,7 +4926,7 @@ paths:
         - analytics
       operationId: listBusinessMetricSnapshots
       summary: List P2 business metric snapshots for operational analytics
-      description: List P2 business metric snapshots for operational analytics. This is read-only analytics and not finance settlement.
+      description: List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -4942,6 +4942,244 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/floor-plans:
+    get:
+      tags:
+        - floor-plan
+      operationId: listFloorPlans
+      summary: 查询 P1/P2 商场平面图
+      description: 返回图片底图、多边形坐标版本和状态，用于 Web 管理端选择平面图。
+      x-permission: floor_plan.view
+      x-data-scope: project-space
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: floor_plan.viewed
+      x-audit-event-failure: floor_plan.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - floor-plan
+      operationId: createFloorPlan
+      summary: 创建 P1/P2 商场平面图
+      description: 创建图片底图与多边形坐标承载对象，不自动导入 CAD 或 SVG。
+      x-permission: floor_plan.manage
+      x-data-scope: project-space
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: floor_plan.created
+      x-audit-event-failure: floor_plan.create_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/FloorPlanCreateRequest"
+  /api/v1/floor-plans/{id}/shapes:
+    get:
+      tags:
+        - floor-plan
+      operationId: listFloorPlanShapes
+      summary: 查询平面图正式区域
+      description: 返回已发布的正式多边形区域，供商场平面图和招商运营联动查看。
+      x-permission: floor_plan.view
+      x-data-scope: project-space
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: floor_plan.shape_viewed
+      x-audit-event-failure: floor_plan.shape_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 平面图 ID
+          schema:
+            type: string
+            maxLength: 64
+  /api/v1/floor-plans/{id}/imports:
+    get:
+      tags:
+        - floor-plan
+      operationId: listFloorPlanImports
+      summary: 查询平面图导入任务
+      description: 返回指定平面图的 SVG 或标准 JSON 导入任务列表。
+      x-permission: floor_plan.import.view
+      x-data-scope: project-space
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: floor_plan.import_viewed
+      x-audit-event-failure: floor_plan.import_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 平面图 ID
+          schema:
+            type: string
+            maxLength: 64
+    post:
+      tags:
+        - floor-plan
+      operationId: createFloorPlanImport
+      summary: 创建 SVG 或标准 JSON 导入任务
+      description: 导入任务只生成候选和错误明细，不写入正式区域，发布必须另走人工确认接口。
+      x-permission: floor_plan.import.manage
+      x-data-scope: project-space
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: floor_plan.import_created
+      x-audit-event-failure: floor_plan.import_create_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 平面图 ID
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FloorPlanImportCreateRequest"
+  /api/v1/floor-plans/{id}/imports/{importId}/candidates:
+    get:
+      tags:
+        - floor-plan
+      operationId: getFloorPlanImportDetails
+      summary: 查询导入候选和错误
+      description: 返回导入任务解析出的候选区域和错误明细，供人工复核。
+      x-permission: floor_plan.import.view
+      x-data-scope: project-space
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: floor_plan.import_candidate_viewed
+      x-audit-event-failure: floor_plan.import_candidate_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 平面图 ID
+          schema:
+            type: string
+            maxLength: 64
+        - name: importId
+          in: path
+          required: true
+          description: 导入任务 ID
+          schema:
+            type: string
+            maxLength: 64
+  /api/v1/floor-plans/{id}/imports/{importId}/publish:
+    post:
+      tags:
+        - floor-plan
+      operationId: publishFloorPlanImport
+      summary: 发布平面图导入候选
+      description: 将人工选择的候选写入正式区域，必须携带幂等键并记录审计留痕。
+      x-permission: floor_plan.import.manage
+      x-data-scope: project-space
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: floor_plan.import_published
+      x-audit-event-failure: floor_plan.import_publish_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 平面图 ID
+          schema:
+            type: string
+            maxLength: 64
+        - name: importId
+          in: path
+          required: true
+          description: 导入任务 ID
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FloorPlanImportPublishRequest"
 components:
   securitySchemes:
     BearerAuth:
@@ -5098,36 +5336,6 @@ components:
         maxLength: 128
       description: EventId 路径参数；必须引用当前数据范围内存在且允许访问的记录。
   requestBodies:
-    TicketDynamicPricingRuleRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TicketDynamicPricingRuleRequest"
-    TicketDynamicPricingSimulationRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/TicketDynamicPricingSimulationRequest"
-    AmusementGroupBookingRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/AmusementGroupBookingRequest"
-    AmusementGroupBookingApprovalRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/AmusementGroupBookingApprovalRequest"
-    AmusementGroupBookingReleaseRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/AmusementGroupBookingReleaseRequest"
     StatusChange:
       required: true
       content:
@@ -5140,18 +5348,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/RiskAlertStatusChangeRequest"
-    AiQualitySuggestion:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/AiQualitySuggestionRequest"
-          example:
-            idempotency_key: local_llm_quality_20260615_000001
-            source_type: ticket_call
-            source_id: call_160_000001
-            source_text: guest asks for refund after failed service
-            requested_by: staff_1
     PaymentIntent:
       required: true
       content:
@@ -5195,7 +5391,7 @@ components:
           example:
             event_id: evt_provider_20260612_000001
             event_type: payment.paid
-            occurred_at: 2026-06-12T20:30:00+08:00
+            occurred_at: '2026-06-12T20:30:00+08:00'
             provider: aggregate_pay
             provider_order_id: po_20260612_000001
             idempotency_key: provider_evt_evt_provider_20260612_000001
@@ -5359,7 +5555,7 @@ components:
             ticket_type_id: ticket_weekend_adult
             price_rule_id: price_weekend_202606
             quantity: 2
-            visit_date: 2026-06-20
+            visit_date: '2026-06-20'
             contact_phone: "13800138000"
             buyer_note: 周末双人票
     CustomerBarReservationRequest:
@@ -5372,7 +5568,7 @@ components:
             bar_id: bar_a
             table_id: table_a_vip_01
             table_type: vip_sofa
-            reservation_time: 2026-06-20T21:00:00+08:00
+            reservation_time: '2026-06-20T21:00:00+08:00'
             guest_count: 6
             contact_phone: "13800138000"
     BarTableRequest:
@@ -5667,36 +5863,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ProjectRequest"
-    AiQualitySuggestionRequest:
-      type: object
-      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and truncate before model invocation.
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - source_type
-        - source_id
-        - source_text
-      properties:
-        idempotency_key:
-          type: string
-          description: Idempotency key. Retries for the same AI quality suggestion must reuse it.
-          maxLength: 128
-        source_type:
-          type: string
-          description: Quality source type, such as ticket_call or wecom_message.
-          maxLength: 64
-        source_id:
-          type: string
-          description: Quality source business object id.
-          maxLength: 64
-        source_text:
-          type: string
-          description: Text to inspect. Do not submit ID card, face image, payment proof, or unredacted sensitive source content.
-          maxLength: 12000
-        requested_by:
-          type: string
-          description: Staff id that requested this suggestion for audit and manual review.
-          maxLength: 64
     RiskAlertRequest:
       required: true
       content:
@@ -5709,6 +5875,69 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/EventBatchRequest"
+    TicketDynamicPricingRuleRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TicketDynamicPricingRuleRequest"
+    TicketDynamicPricingSimulationRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TicketDynamicPricingSimulationRequest"
+    AmusementGroupBookingRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementGroupBookingRequest"
+    AmusementGroupBookingApprovalRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementGroupBookingApprovalRequest"
+    AmusementGroupBookingReleaseRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementGroupBookingReleaseRequest"
+    AiQualitySuggestion:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AiQualitySuggestionRequest"
+          example:
+            idempotency_key: local_llm_quality_20260615_000001
+            source_type: ticket_call
+            source_id: call_160_000001
+            source_text: guest asks for refund after failed service
+            requested_by: staff_1
+    FloorPlanCreateRequest:
+      description: 创建平面图请求体
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FloorPlanCreateRequest"
+    FloorPlanImportCreateRequest:
+      description: 创建平面图导入任务请求体
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FloorPlanImportCreateRequest"
+    FloorPlanImportPublishRequest:
+      description: 发布平面图导入候选请求体
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FloorPlanImportPublishRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -5723,7 +5952,7 @@ components:
               id: biz_object_000001
               status: accepted
             meta:
-              server_time: 2026-06-12T12:00:00Z
+              server_time: '2026-06-12T12:00:00Z'
     Page:
       description: 统一分页响应
       content:
@@ -5758,237 +5987,8 @@ components:
               dedup_status: created
               compensation_required: false
             meta:
-              server_time: 2026-06-12T12:00:00Z
+              server_time: '2026-06-12T12:00:00Z'
   schemas:
-    TicketDynamicPricingRuleRequest:
-      type: object
-      description: P2 ticket dynamic pricing rule write request. Dynamic pricing remains a simulation/rule container and must not alter P0 ticket order price settlement.
-      additionalProperties: false
-      required:
-        - ticket_type_id
-        - rule_name
-        - adjustment_type
-      properties:
-        idempotency_key:
-          type: string
-          description: Idempotency key for duplicate submit protection.
-          maxLength: 128
-        operator_note:
-          type: string
-          description: Operator note retained in audit evidence.
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: Evidence attachment ids for approval or operational trace.
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-        ticket_type_id:
-          type: string
-          description: Ticket type id in current project scope.
-          maxLength: 64
-        rule_name:
-          type: string
-          description: Rule display name for operations and audit review.
-          maxLength: 120
-        priority:
-          type: integer
-          description: Higher priority wins when multiple rules match.
-          minimum: 0
-          maximum: 999999
-        effective_from:
-          type: string
-          format: date
-          description: First valid visit date for the rule.
-        effective_to:
-          type: string
-          format: date
-          description: Last valid visit date for the rule; must not be before effective_from.
-        sales_channel:
-          type: string
-          description: Sales channel filter; null means all channels.
-          enum:
-            - admin
-            - kiosk
-            - miniapp
-            - app
-            - web
-            - channel
-          maxLength: 64
-        adjustment_type:
-          type: string
-          description: Adjustment calculation mode.
-          enum:
-            - percent_delta
-            - fixed_delta
-          maxLength: 64
-        adjustment_rate:
-          type: number
-          description: Percent delta value; required when adjustment_type is percent_delta.
-          minimum: -100
-          maximum: 1000
-          multipleOf: 0.01
-          x-java-type: java.math.BigDecimal
-        adjustment_amount_cent:
-          type: integer
-          description: Fixed delta amount in cents; required when adjustment_type is fixed_delta.
-          minimum: -999999999999
-          maximum: 999999999999
-        min_price_cent:
-          type: integer
-          description: Minimum final price in cents.
-          minimum: 0
-          maximum: 999999999999
-        max_price_cent:
-          type: integer
-          description: Maximum final price in cents.
-          minimum: 0
-          maximum: 999999999999
-        condition_rule:
-          type: object
-          description: Structured matching condition, for example weekday, holiday, channel, crowd, or campaign segment.
-          additionalProperties: true
-    TicketDynamicPricingSimulationRequest:
-      type: object
-      description: P2 ticket dynamic pricing simulation request. The response is for operational preview only and must not create ticket orders or receivables.
-      additionalProperties: false
-      required:
-        - ticket_type_id
-        - sales_channel
-      properties:
-        idempotency_key:
-          type: string
-          description: Idempotency key for duplicate submit protection.
-          maxLength: 128
-        ticket_type_id:
-          type: string
-          description: Ticket type id in current project scope.
-          maxLength: 64
-        visit_date:
-          type: string
-          format: date
-          description: Visit date used to resolve calendar base price and matching rules.
-        sales_channel:
-          type: string
-          description: Sales channel used in rule matching.
-          enum:
-            - admin
-            - kiosk
-            - miniapp
-            - app
-            - web
-            - channel
-          maxLength: 64
-        context:
-          type: object
-          description: Additional matching context such as party_size, is_holiday, or segment tags.
-          additionalProperties: true
-    AmusementGroupBookingRequest:
-      type: object
-      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend display cannot decide capacity success.
-      additionalProperties: false
-      required:
-        - project_id
-        - session_id
-        - customer_name
-        - party_size
-        - reserved_capacity
-      properties:
-        idempotency_key:
-          type: string
-          description: Idempotency key for duplicate submit protection.
-          maxLength: 128
-        operator_note:
-          type: string
-          description: Operator note retained in audit evidence.
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: Evidence attachment ids for approval or operational trace.
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-        project_id:
-          type: string
-          description: Amusement project id in current project scope.
-          maxLength: 64
-        session_id:
-          type: string
-          description: Amusement session id to reserve capacity from.
-          maxLength: 64
-        booking_type:
-          type: string
-          description: Group or private booking type.
-          enum:
-            - group
-            - private
-          maxLength: 64
-        customer_name:
-          type: string
-          description: Contact customer or organization name.
-          maxLength: 120
-        contact_phone:
-          type: string
-          description: Contact phone shown only to authorized operators.
-          maxLength: 32
-        party_size:
-          type: integer
-          description: Expected guest count.
-          minimum: 0
-          maximum: 999999
-        reserved_capacity:
-          type: integer
-          description: Capacity to lock after approval.
-          minimum: 0
-          maximum: 999999
-    AmusementGroupBookingApprovalRequest:
-      type: object
-      description: P2 amusement group/private booking approval request. Approval locks capacity and must leave audit evidence.
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - approval_note
-      properties:
-        idempotency_key:
-          type: string
-          description: Idempotency key for duplicate submit protection.
-          maxLength: 128
-        approval_note:
-          type: string
-          description: Approval note explaining capacity lock and operation basis.
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: Evidence attachment ids for approval trace.
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-    AmusementGroupBookingReleaseRequest:
-      type: object
-      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave audit evidence.
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - reason
-      properties:
-        idempotency_key:
-          type: string
-          description: Idempotency key for duplicate submit protection.
-          maxLength: 128
-        reason:
-          type: string
-          description: Release reason for audit and dispute handling.
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: Evidence attachment ids for release trace.
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
     SuccessResponse:
       type: object
       required:
@@ -6496,7 +6496,7 @@ components:
           pattern: ^\+?[0-9]{6,20}$
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - draft
             - active
@@ -6606,11 +6606,11 @@ components:
           maxLength: 64
         effective_date:
           type: string
-          description: "`effective_date` 日期字段；使用 YYYY-MM-DD。"
+          description: '`effective_date` 日期字段；使用 YYYY-MM-DD。'
           format: date
         expiry_date:
           type: string
-          description: "`expiry_date` 日期字段；使用 YYYY-MM-DD。"
+          description: '`expiry_date` 日期字段；使用 YYYY-MM-DD。'
           format: date
         rent_terms:
           type: object
@@ -6623,7 +6623,7 @@ components:
           multipleOf: 0.01
         attachment_ids:
           type: array
-          description: "`attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          description: '`attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。'
           items:
             type: string
             maxLength: 64
@@ -6718,7 +6718,7 @@ components:
           maxLength: 2048
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - draft
             - active
@@ -6922,7 +6922,7 @@ components:
           maxLength: 64
         target_user_ids:
           type: array
-          description: "`target_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          description: '`target_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。'
           items:
             type: string
             maxLength: 64
@@ -7183,7 +7183,7 @@ components:
           maxLength: 64
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - online
             - degraded
@@ -7378,7 +7378,7 @@ components:
           maximum: 999999999999
         entitlement_template_ids:
           type: array
-          description: "`entitlement_template_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          description: '`entitlement_template_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。'
           items:
             type: string
             maxLength: 64
@@ -7388,7 +7388,7 @@ components:
           description: 是否强制库存扣减；为 true 时售票必须锁定并扣减库存。
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - draft
             - active
@@ -7507,7 +7507,7 @@ components:
           maximum: 999999
         visit_date:
           type: string
-          description: "`visit_date` 日期字段；使用 YYYY-MM-DD。"
+          description: '`visit_date` 日期字段；使用 YYYY-MM-DD。'
           format: date
         sales_channel:
           type: string
@@ -7600,7 +7600,7 @@ components:
           maxLength: 64
         refund_amount_cent:
           type: integer
-          description: "`refund_amount_cent` 金额字段，单位分；不得使用浮点数。"
+          description: '`refund_amount_cent` 金额字段，单位分；不得使用浮点数。'
           minimum: 1
           maximum: 999999999999
         reason:
@@ -7684,7 +7684,7 @@ components:
           maximum: 999999
         visit_date:
           type: string
-          description: "`visit_date` 日期字段；使用 YYYY-MM-DD。"
+          description: '`visit_date` 日期字段；使用 YYYY-MM-DD。'
           format: date
         contact_phone:
           type: string
@@ -7722,7 +7722,7 @@ components:
           maxLength: 64
         reservation_time:
           type: string
-          description: "`reservation_time` 时间字段；使用 ISO 8601 格式。"
+          description: '`reservation_time` 时间字段；使用 ISO 8601 格式。'
           format: date-time
         guest_count:
           type: integer
@@ -7786,7 +7786,7 @@ components:
           maximum: 999999
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - active
             - paused
@@ -7827,7 +7827,7 @@ components:
           maxLength: 64
         reservation_time:
           type: string
-          description: "`reservation_time` 时间字段；使用 ISO 8601 格式。"
+          description: '`reservation_time` 时间字段；使用 ISO 8601 格式。'
           format: date-time
         guest_count:
           type: integer
@@ -7931,7 +7931,7 @@ components:
           maxLength: 64
         service_user_ids:
           type: array
-          description: "`service_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          description: '`service_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。'
           items:
             type: string
             maxLength: 64
@@ -7979,7 +7979,7 @@ components:
           maxLength: 64
         delivery_photo_attachment_ids:
           type: array
-          description: "`delivery_photo_attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          description: '`delivery_photo_attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。'
           items:
             type: string
             maxLength: 64
@@ -8012,7 +8012,7 @@ components:
           maxLength: 64
         settlement_amount_cent:
           type: integer
-          description: "`settlement_amount_cent` 金额字段，单位分；不得使用浮点数。"
+          description: '`settlement_amount_cent` 金额字段，单位分；不得使用浮点数。'
           minimum: 0
           maximum: 999999999999
         payment_channel:
@@ -8077,7 +8077,7 @@ components:
           pattern: ^\+?[0-9]{6,20}$
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - active
             - paused
@@ -8117,7 +8117,7 @@ components:
           maxItems: 200
         expected_arrival_date:
           type: string
-          description: "`expected_arrival_date` 日期字段；使用 YYYY-MM-DD。"
+          description: '`expected_arrival_date` 日期字段；使用 YYYY-MM-DD。'
           format: date
     StockInRequest:
       type: object
@@ -8247,7 +8247,7 @@ components:
           maxItems: 200
         expire_at:
           type: string
-          description: "`expire_at` 时间字段；使用 ISO 8601 格式。"
+          description: '`expire_at` 时间字段；使用 ISO 8601 格式。'
           format: date-time
     SavedBottleClaimRequest:
       type: object
@@ -8364,7 +8364,7 @@ components:
           maximum: 999999
         open_status:
           type: string
-          description: "`open_status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`open_status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - open
             - paused
@@ -8409,11 +8409,11 @@ components:
           maxLength: 64
         start_time:
           type: string
-          description: "`start_time` 时间字段；使用 ISO 8601 格式。"
+          description: '`start_time` 时间字段；使用 ISO 8601 格式。'
           format: date-time
         end_time:
           type: string
-          description: "`end_time` 时间字段；使用 ISO 8601 格式。"
+          description: '`end_time` 时间字段；使用 ISO 8601 格式。'
           format: date-time
         capacity:
           type: integer
@@ -8422,7 +8422,7 @@ components:
           maximum: 999999
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: '`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。'
           enum:
             - scheduled
             - open
@@ -8560,7 +8560,7 @@ components:
           maxLength: 255
         inspected_at:
           type: string
-          description: "`inspected_at` 时间字段；使用 ISO 8601 格式。"
+          description: '`inspected_at` 时间字段；使用 ISO 8601 格式。'
           format: date-time
     AmusementSafetyActionRequest:
       type: object
@@ -8594,7 +8594,7 @@ components:
           maxLength: 255
         attachment_ids:
           type: array
-          description: "`attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          description: '`attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。'
           items:
             type: string
             maxLength: 64
@@ -8643,7 +8643,7 @@ components:
           maxLength: 255
         confirmed_at:
           type: string
-          description: "`confirmed_at` 时间字段；使用 ISO 8601 格式。"
+          description: '`confirmed_at` 时间字段；使用 ISO 8601 格式。'
           format: date-time
     ArApItemRequest:
       type: object
@@ -8702,7 +8702,7 @@ components:
           maximum: 999999999999
         due_date:
           type: string
-          description: "`due_date` 日期字段；使用 YYYY-MM-DD。"
+          description: '`due_date` 日期字段；使用 YYYY-MM-DD。'
           format: date
         accounting_period:
           type: string
@@ -8742,7 +8742,7 @@ components:
           maxLength: 255
         payment_time:
           type: string
-          description: "`payment_time` 时间字段；使用 ISO 8601 格式。"
+          description: '`payment_time` 时间字段；使用 ISO 8601 格式。'
           format: date-time
         bank_flow_ref:
           type: string
@@ -8774,7 +8774,7 @@ components:
           maxItems: 50
         business_date:
           type: string
-          description: "`business_date` 日期字段；使用 YYYY-MM-DD。"
+          description: '`business_date` 日期字段；使用 YYYY-MM-DD。'
           format: date
         scope_type:
           type: string
@@ -9615,36 +9615,6 @@ components:
             - disabled
             - archived
           maxLength: 64
-    AiQualitySuggestionRequest:
-      type: object
-      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and truncate before model invocation.
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - source_type
-        - source_id
-        - source_text
-      properties:
-        idempotency_key:
-          type: string
-          description: Idempotency key. Retries for the same AI quality suggestion must reuse it.
-          maxLength: 128
-        source_type:
-          type: string
-          description: Quality source type, such as ticket_call or wecom_message.
-          maxLength: 64
-        source_id:
-          type: string
-          description: Quality source business object id.
-          maxLength: 64
-        source_text:
-          type: string
-          description: Text to inspect. Do not submit ID card, face image, payment proof, or unredacted sensitive source content.
-          maxLength: 12000
-        requested_by:
-          type: string
-          description: Staff id that requested this suggestion for audit and manual review.
-          maxLength: 64
     RiskAlertRequest:
       type: object
       description: 风险alert请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
@@ -9775,27 +9745,400 @@ components:
           maxItems: 200
           items:
             $ref: "#/components/schemas/TerminalEventItem"
+    TicketDynamicPricingRuleRequest:
+      type: object
+      description: P2 ticket dynamic pricing rule write request. Dynamic pricing remains a simulation/rule container and must not alter P0 ticket order price settlement.
+      additionalProperties: false
+      required:
+        - ticket_type_id
+        - rule_name
+        - adjustment_type
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        operator_note:
+          type: string
+          description: Operator note retained in audit evidence.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for approval or operational trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        ticket_type_id:
+          type: string
+          description: Ticket type id in current project scope.
+          maxLength: 64
+        rule_name:
+          type: string
+          description: Rule display name for operations and audit review.
+          maxLength: 120
+        priority:
+          type: integer
+          description: Higher priority wins when multiple rules match.
+          minimum: 0
+          maximum: 999999
+        effective_from:
+          type: string
+          format: date
+          description: First valid visit date for the rule.
+        effective_to:
+          type: string
+          format: date
+          description: Last valid visit date for the rule; must not be before effective_from.
+        sales_channel:
+          type: string
+          description: Sales channel filter; null means all channels.
+          maxLength: 64
+          enum:
+            - admin
+            - kiosk
+            - miniapp
+            - app
+            - web
+            - channel
+        adjustment_type:
+          type: string
+          description: Adjustment calculation mode.
+          maxLength: 64
+          enum:
+            - percent_delta
+            - fixed_delta
+        adjustment_rate:
+          type: number
+          description: Percent delta value; required when adjustment_type is percent_delta.
+          minimum: -100
+          maximum: 1000
+          multipleOf: 0.01
+          x-java-type: java.math.BigDecimal
+        adjustment_amount_cent:
+          type: integer
+          description: Fixed delta amount in cents; required when adjustment_type is fixed_delta.
+          minimum: -999999999999
+          maximum: 999999999999
+        min_price_cent:
+          type: integer
+          description: Minimum final price in cents.
+          minimum: 0
+          maximum: 999999999999
+        max_price_cent:
+          type: integer
+          description: Maximum final price in cents.
+          minimum: 0
+          maximum: 999999999999
+        condition_rule:
+          type: object
+          description: Structured matching condition, for example weekday, holiday, channel, crowd, or campaign segment.
+          additionalProperties: true
+    TicketDynamicPricingSimulationRequest:
+      type: object
+      description: P2 ticket dynamic pricing simulation request. The response is for operational preview only and must not create ticket orders or receivables.
+      additionalProperties: false
+      required:
+        - ticket_type_id
+        - sales_channel
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        ticket_type_id:
+          type: string
+          description: Ticket type id in current project scope.
+          maxLength: 64
+        visit_date:
+          type: string
+          format: date
+          description: Visit date used to resolve calendar base price and matching rules.
+        sales_channel:
+          type: string
+          description: Sales channel used in rule matching.
+          maxLength: 64
+          enum:
+            - admin
+            - kiosk
+            - miniapp
+            - app
+            - web
+            - channel
+        context:
+          type: object
+          description: Additional matching context such as party_size, is_holiday, or segment tags.
+          additionalProperties: true
+    AmusementGroupBookingRequest:
+      type: object
+      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend display cannot decide capacity success.
+      additionalProperties: false
+      required:
+        - project_id
+        - session_id
+        - customer_name
+        - party_size
+        - reserved_capacity
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        operator_note:
+          type: string
+          description: Operator note retained in audit evidence.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for approval or operational trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        project_id:
+          type: string
+          description: Amusement project id in current project scope.
+          maxLength: 64
+        session_id:
+          type: string
+          description: Amusement session id to reserve capacity from.
+          maxLength: 64
+        booking_type:
+          type: string
+          description: Group or private booking type.
+          maxLength: 64
+          enum:
+            - group
+            - private
+        customer_name:
+          type: string
+          description: Contact customer or organization name.
+          maxLength: 120
+        contact_phone:
+          type: string
+          description: Contact phone shown only to authorized operators.
+          maxLength: 32
+        party_size:
+          type: integer
+          description: Expected guest count.
+          minimum: 0
+          maximum: 999999
+        reserved_capacity:
+          type: integer
+          description: Capacity to lock after approval.
+          minimum: 0
+          maximum: 999999
+    AmusementGroupBookingApprovalRequest:
+      type: object
+      description: P2 amusement group/private booking approval request. Approval locks capacity and must leave audit evidence.
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - approval_note
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        approval_note:
+          type: string
+          description: Approval note explaining capacity lock and operation basis.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for approval trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+    AmusementGroupBookingReleaseRequest:
+      type: object
+      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave audit evidence.
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key for duplicate submit protection.
+          maxLength: 128
+        reason:
+          type: string
+          description: Release reason for audit and dispute handling.
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: Evidence attachment ids for release trace.
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+    AiQualitySuggestionRequest:
+      type: object
+      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and truncate before model invocation.
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - source_type
+        - source_id
+        - source_text
+      properties:
+        idempotency_key:
+          type: string
+          description: Idempotency key. Retries for the same AI quality suggestion must reuse it.
+          maxLength: 128
+        source_type:
+          type: string
+          description: Quality source type, such as ticket_call or wecom_message.
+          maxLength: 64
+        source_id:
+          type: string
+          description: Quality source business object id.
+          maxLength: 64
+        source_text:
+          type: string
+          description: Text to inspect. Do not submit ID card, face image, payment proof, or unredacted sensitive source content.
+          maxLength: 12000
+        requested_by:
+          type: string
+          description: Staff id that requested this suggestion for audit and manual review.
+          maxLength: 64
+    FloorPlanCreateRequest:
+      type: object
+      description: 创建商场平面图。P1 支持图片底图和多边形坐标，CAD/SVG 标准化导入作为候选流转。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - floor_no
+        - plan_name
+        - image_url
+        - image_width
+        - image_height
+        - version_no
+        - status
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 幂等键，防止重复创建或重复发布。
+        operator_note:
+          type: string
+          maxLength: 1000
+          description: 操作备注，进入审计留痕。
+        project_id:
+          type: string
+          maxLength: 64
+          description: 项目 ID，可为空时使用当前默认项目。
+        building_code:
+          type: string
+          maxLength: 64
+          description: 楼栋编码。
+        floor_no:
+          type: string
+          maxLength: 64
+          description: 楼层编号。
+        plan_name:
+          type: string
+          maxLength: 120
+          description: 平面图名称。
+        image_url:
+          type: string
+          maxLength: 2048
+          description: 底图文件地址。
+        image_width:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          description: 底图宽度像素。
+        image_height:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          description: 底图高度像素。
+        version_no:
+          type: string
+          maxLength: 64
+          description: 平面图版本号。
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            - archived
+          description: 平面图状态。
+    FloorPlanImportCreateRequest:
+      type: object
+      description: 创建平面图导入任务。导入任务只生成候选和错误，不直接写入正式 shape。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - source_format
+        - source_name
+        - source_payload
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 幂等键，防止重复创建。
+        operator_note:
+          type: string
+          maxLength: 1000
+          description: 操作备注，进入审计留痕。
+        source_format:
+          type: string
+          enum:
+            - svg
+            - standard_json
+          description: 来源格式，支持 svg 或 standard_json。
+        source_name:
+          type: string
+          maxLength: 255
+          description: 来源文件名或外部资料名。
+        source_payload:
+          type: string
+          maxLength: 1000000
+          description: SVG 文本或标准 JSON 文本。
+    FloorPlanImportPublishRequest:
+      type: object
+      description: 发布人工确认后的平面图导入候选。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - candidate_ids
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 幂等键，防止重复发布。
+        operator_note:
+          type: string
+          maxLength: 1000
+          description: 发布备注，进入审计留痕。
+        candidate_ids:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: string
+            maxLength: 64
+          description: 需要发布的候选 ID 列表。
 x-contract-rules:
-  permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
-  authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
+  permissionExtension: '`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态'
+  authContextExtension: '`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文'
   requestBodyRule: 所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入
   idempotencyRule: x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕
-  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码；设备能力写入
-    x-device-capability，服务端/监控调用写入 x-invocation-channel。
-  authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为
-    public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或
-    x-data-scope 代替认证上下文。
+  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码；设备能力写入 x-device-capability，服务端/监控调用写入 x-invocation-channel。
+  authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为 public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或 x-data-scope 代替认证上下文。
 x-contract-hardening:
-  date: 2026-06-12
+  date: '2026-06-12'
   scope: P0 OpenAPI 字段级可编码补强
   rules:
     - 写接口 DTO 字段不得只依赖模板化描述，必须声明类型、必填、枚举、长度或数值边界。
     - 金额字段单位统一为分，比例字段范围为 0-100，数量字段必须非负。
     - 路径、方法、operationId、权限、认证上下文和业务枚举不在本次机械补强中改变。
 x-p0-example-coverage:
-  strategy: P0 first keeps high-risk write and external integration examples as the minimum gate; every
-    P0 write or external-facing operation must add request, success response, and primary failure response
-    examples before coding, SDK/mock, automation, or supplier integration.
+  strategy: P0 first keeps high-risk write and external integration examples as the minimum gate; every P0 write or external-facing operation must add request, success response, and primary failure response examples before coding, SDK/mock, automation, or supplier integration.
   request_bodies:
     - OpenAuthTokenRequest
     - Webhook
