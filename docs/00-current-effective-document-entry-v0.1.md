@@ -341,6 +341,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 2026-06-15 | V0.1 旧原型物理清理 | `apps/api` 已从 160 正式仓库物理移除；`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract`，防止旧原型回流 |
 | 2026-06-15 | V0.1 160 编码保护基线 | 新增 `coding-host-protection-baseline-v0.1.md`、`verify:coding-host-protection` 和实施证据；完整 P0 验证、正式提交和安全扫描只认 160 仓库证据 |
 | 2026-06-15 | V0.1 T3-0 编码包 | 新增 T3 编码入口、用户故事地图、安全与供应商就绪闸口、入口审计和 `verify:t3-coding-package`；下一步只允许优先进入 T3-A 只读经营分析 |
+| 2026-06-15 | V0.1 T3-A 只读经营分析 | Web 管理端经营分析入口按 T3-A 只读边界收口，修正 analytics 字段映射并新增 `verify:t3a-readonly-analytics` |
 | 2026-06-12 | V0.1 客户端旧路径闸口 | 新增 `npm run audit:client-routes` 和 `npm run verify:client-routes` 作为 Web/Android/一体机/供应商 mock 正式联调前置检查 |
 | 2026-06-12 | V0.1 客户端 OpenAPI 覆盖闸口 | 新增 `npm run audit:client-openapi` 和 `npm run verify:client-openapi`，覆盖检查升级为路径模板 + HTTP 方法一致性，防止客户端只改路径前缀但未补机器契约 |
 | 2026-06-12 | V0.1 客户端请求字段闸口 | 新增 `npm run audit:client-payload` 和 `npm run verify:client-payload`，防止客户端路径正确但请求字段未对齐 OpenAPI requestBody |

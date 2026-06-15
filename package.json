@@ -50,7 +50,8 @@
     "verify:p0": "npm run verify:coding-host-protection && npm run verify:p0-contract && npm run verify:security-baseline && npm run test:backend && npm run build && npm run verify:android-env && npm run android:p0:build && npm run android:p0:smoke && npm run android:p0:apk",
     "verify:no-legacy-api-prototype": "node tools/verify-no-legacy-api-prototype.mjs",
     "verify:coding-host-protection": "node tools/verify-coding-host-protection.mjs",
-    "verify:t3-coding-package": "node tools/verify-t3-coding-package.mjs"
+    "verify:t3-coding-package": "node tools/verify-t3-coding-package.mjs",
+    "verify:t3a-readonly-analytics": "node tools/verify-t3a-readonly-analytics.mjs"
   },
   "engines": {
     "node": ">=22"

@@ -67,11 +67,17 @@ type Venue = { id: string; merchantId: string; name: string; code?: string; venu
 type Area = { id: string; venueId?: string; name: string; areaType: string; status: string };
 type LocationPoint = { id: string; areaId: string; name: string; code?: string; pointType: string; status: string };
 type UserAccount = { id: string; username: string; accountType: string; status: string; merchantId?: string; organizationId?: string };
-type MerchantRow = {
-  merchant?: { id: string; displayName: string; status: string; riskLevel: string };
-  verifications: number;
-  settlementAmount?: { _sum?: { amount?: number | null } };
-  barOrders: number;
+type AnalyticsMerchantSummary = {
+  merchantId: string;
+  merchantName: string;
+  merchantType: string;
+  revenueAmountCents: number;
+  orderCount: number;
+  riskAlertCount: number;
+  settlementStatus: string;
+  businessDate: string;
+  createdAt: string;
+  updatedAt: string;
 };
 type TicketProduct = {
   id: string;
@@ -239,14 +245,25 @@ type WecomRiskHit = { id: string; riskType: string; riskLevel: string; keyword?:
 type DeviceIntegrationDevice = { id: string; deviceCode: string; deviceType: string; status: string; createdAt: string };
 type DeviceIntegrationEvent = { id: string; deviceCode?: string; eventType: string; status: string; occurredAt: string };
 type DeviceOfflineSyncBatch = { id: string; batchNo: string; totalCount: number; rejectedCount: number; status: string; createdAt: string };
-type RobotAnalytics = { total: number; signed: number; delivered: number; abnormal: number; pending: number; completionRate: number; abnormalRate: number };
-type MetricDefinition = { id: string; metricCode: string; metricName: string; category: string; status: string; createdAt: string };
-type AiQualityTask = { id: string; taskNo: string; taskType: string; objectType?: string; status: string; retryCount: number; createdAt: string };
-type AiQualityResult = { id: string; sourceType: string; objectType?: string; riskLevel: string; score: number; summary: string; createdAt: string };
-type CustomerIntent = { id: string; intentType: string; label: string; confidence: number; status: string; createdAt: string };
-type StaffServiceScore = { id: string; staffUserId?: string; score: number; riskPenalty: number; sampleSize: number; snapshotDate: string; createdAt: string };
-type MerchantHealthScore = { id: string; merchantId?: string; score: number; operationsScore: number; financeScore: number; riskScore: number; serviceScore: number; snapshotDate: string; createdAt: string };
-type MetricAnomalyExplanation = { id: string; metricCode: string; metricName: string; severity: string; changeRate: number; explanation: string; createdAt: string };
+type RobotMetric = {
+  metricId: string;
+  robotId: string;
+  providerCode: string;
+  taskCount: number;
+  successCount: number;
+  failureCount: number;
+  businessDate: string;
+  summary: string;
+  createdAt: string;
+};
+type RobotAnalyticsSummary = { taskCount: number; successCount: number; failureCount: number; completionRate: number; abnormalRate: number };
+type MetricDefinition = { metricKey: string; name: string; domain: string; unit: string; calculationNote: string; ownerRole: string; status: string; createdAt: string; updatedAt: string };
+type AiQualityTask = { taskId: string; sourceType: string; sourceId: string; processingMode: string; modelProvider: string; modelVersion: string; status: string; requestedBy: string; createdAt: string; completedAt?: string };
+type AiQualityResult = { resultId: string; taskId: string; sourceType: string; sourceId: string; qualityScore: number; riskLevel: string; confidenceScore: number; summary: string; findingCount: number; createdAt: string };
+type CustomerIntent = { intentId: string; sourceType: string; sourceId: string; customerRef: string; intentType: string; confidenceScore: number; riskLevel: string; summary: string; createdAt: string };
+type StaffServiceScore = { scoreId: string; staffId: string; staffName: string; roleCode: string; serviceScore: number; complaintCount: number; positiveEventCount: number; riskLevel: string; businessDate: string; createdAt: string };
+type MerchantHealthScore = { merchantId: string; score: number; scoreLevel: string; riskCount: number; overdueArAmountCents: number; lastReviewedAt: string; summary: string; createdAt: string; updatedAt: string };
+type MetricAnomaly = { id: string; metricKey: string; domain: string; riskLevel: string; observedValue: number; expectedValue: number; summary: string; status: string; detectedAt: string; resolvedAt?: string };
 type BusinessMetricSnapshot = {
   snapshotId: string;
   metricKey: string;
@@ -276,7 +293,7 @@ type Snapshot = {
   areas: Area[];
   locationPoints: LocationPoint[];
   users: UserAccount[];
-  merchants: MerchantRow[];
+  merchants: AnalyticsMerchantSummary[];
   tickets: TicketProduct[];
   ticketDynamicPricingRules: TicketDynamicPricingRule[];
   entitlementTemplates: EntitlementTemplate[];
@@ -324,14 +341,14 @@ type Snapshot = {
   deviceIntegrationDevices: DeviceIntegrationDevice[];
   deviceIntegrationEvents: DeviceIntegrationEvent[];
   deviceOfflineSyncBatches: DeviceOfflineSyncBatch[];
-  robotAnalytics: RobotAnalytics;
+  robotMetrics: RobotMetric[];
   metricDefinitions: MetricDefinition[];
   aiQualityTasks: AiQualityTask[];
   aiQualityResults: AiQualityResult[];
   customerIntents: CustomerIntent[];
   staffServiceScores: StaffServiceScore[];
   merchantHealthScores: MerchantHealthScore[];
-  metricAnomalyExplanations: MetricAnomalyExplanation[];
+  metricAnomalies: MetricAnomaly[];
   businessMetricSnapshots: BusinessMetricSnapshot[];
   loadedAt: string;
 };
@@ -415,9 +432,9 @@ const sectionMeta: Record<SectionKey, SectionMeta> = {
     icon: <AuditOutlined />,
   },
   analytics: {
-    title: "经营看板",
-    menuLabel: "经营看板",
-    description: "商户经营、业务量、结算和风险概览。",
+    title: "T3-A 只读经营分析",
+    menuLabel: "T3-A 分析",
+    description: "跨业务经营趋势、风险摘要和指标口径，只读查看。",
     groupKey: "insight",
     groupLabel: "分析决策",
     icon: <BarChartOutlined />,
@@ -484,6 +501,19 @@ let apiAccessToken = "";
 const openApiPrefix = ["/api", "open"].join("/");
 const formalApiPrefix = ["/api", "v1"].join("/");
 const authApiPrefix = [formalApiPrefix, "auth"].join("/");
+const t3aReadOnlyApiPaths = {
+  robot: "/api/v1/analytics/robot",
+  metricDefinitions: "/api/v1/analytics/metric-definitions",
+  aiQualityTasks: "/api/v1/analytics/ai-quality/tasks",
+  aiQualityResults: "/api/v1/analytics/ai-quality/results",
+  customerIntents: "/api/v1/analytics/customer-intents",
+  staffServiceScores: "/api/v1/analytics/staff-service-score",
+  merchantHealth: "/api/v1/analytics/merchant-health",
+  metricAnomalies: "/api/v1/analytics/metric-anomalies",
+  businessMetricSnapshots: "/api/v1/analytics/business-metric-snapshots",
+} as const;
+const t3aReadOnlyAnalyticsMarker = "T3A_READONLY_ANALYTICS_READY";
+const t3aReadOnlyBoundaryText = "只读分析，不发控制指令，不改变票价、核销、支付、库存、合同或结算状态。";
 
 function setApiAccessToken(token: string) {
   apiAccessToken = token;
@@ -598,6 +628,42 @@ function formatMetricValue(metricKey: string, value: number | null | undefined) 
   if (metricKey.includes("amount_cents")) return formatMoney(value);
   return (value ?? 0).toLocaleString("zh-CN", { maximumFractionDigits: 4 });
 }
+function averageNumber(values: Array<number | null | undefined>) {
+  const validValues = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (validValues.length === 0) return 0;
+  return validValues.reduce((sum, value) => sum + value, 0) / validValues.length;
+}
+
+function formatRatio(numerator: number, denominator: number) {
+  if (denominator <= 0) return "0.00%";
+  return `${((numerator / denominator) * 100).toFixed(2)}%`;
+}
+
+function formatConfidence(value: number | null | undefined) {
+  return `${((value ?? 0) * 100).toFixed(0)}%`;
+}
+
+function latestBusinessDate(rows: Array<{ businessDate?: string }>) {
+  return rows.map((row) => row.businessDate).filter(Boolean).sort().at(-1) ?? "-";
+}
+
+function summarizeRobotMetrics(metrics: RobotMetric[]): RobotAnalyticsSummary {
+  const taskCount = metrics.reduce((sum, metric) => sum + metric.taskCount, 0);
+  const successCount = metrics.reduce((sum, metric) => sum + metric.successCount, 0);
+  const failureCount = metrics.reduce((sum, metric) => sum + metric.failureCount, 0);
+  return {
+    taskCount,
+    successCount,
+    failureCount,
+    completionRate: taskCount > 0 ? successCount / taskCount : 0,
+    abnormalRate: taskCount > 0 ? failureCount / taskCount : 0,
+  };
+}
+
+function metricDisplayName(metricKey: string, definitions: MetricDefinition[]) {
+  return definitions.find((item) => item.metricKey === metricKey)?.name ?? metricKey;
+}
+
 
 function toCents(value: number | null | undefined) {
   return Math.round((value ?? 0) * 100);
@@ -676,10 +742,10 @@ function getSectionStats(section: SectionKey, snapshot: Snapshot): PageStat[] {
       { label: "故障", value: snapshot.amusementFaults.length, tone: snapshot.amusementFaults.length > 0 ? "warning" : "good" },
     ],
     analytics: [
-      { label: "指标", value: snapshot.metricDefinitions.length },
-      { label: "AI任务", value: snapshot.aiQualityTasks.length },
-      { label: "客户意图", value: snapshot.customerIntents.length },
-      { label: "异常解释", value: snapshot.metricAnomalyExplanations.length },
+      { label: "T3-A 指标", value: snapshot.businessMetricSnapshots.length },
+      { label: "商户健康", value: snapshot.merchantHealthScores.length },
+      { label: "员工评分", value: snapshot.staffServiceScores.length },
+      { label: "只读异常", value: snapshot.metricAnomalies.length },
     ],
     interfaces: [
       { label: "接口目录", value: snapshot.integration.interfaces.length },
@@ -1003,14 +1069,14 @@ function App() {
         deviceIntegrationDevices,
         deviceIntegrationEvents,
         deviceOfflineSyncBatches,
-        robotAnalytics,
+        robotMetrics,
         metricDefinitions,
         aiQualityTasks,
         aiQualityResults,
         customerIntents,
         staffServiceScores,
         merchantHealthScores,
-        metricAnomalyExplanations,
+        metricAnomalies,
         businessMetricSnapshots,
       ] = await Promise.all([
         getJson<HealthResponse>("/api/v1/system/health"),
@@ -1022,7 +1088,7 @@ function App() {
         getJson<Area[]>("/api/v1/platform/spaces"),
         getJson<LocationPoint[]>("/api/v1/platform/spaces"),
         getJson<UserAccount[]>("/api/v1/access/users"),
-        getJson<MerchantRow[]>("/api/v1/analytics/merchants"),
+        getJson<AnalyticsMerchantSummary[]>("/api/v1/analytics/merchants"),
         getJson<TicketProduct[]>("/api/v1/ticketing/ticket-types"),
         getJson<TicketDynamicPricingRule[]>("/api/v1/ticketing/dynamic-pricing-rules"),
         getJson<EntitlementTemplate[]>("/api/v1/ticketing/entitlement-templates"),
@@ -1070,15 +1136,15 @@ function App() {
         getJson<DeviceIntegrationDevice[]>("/api/v1/integration/devices"),
         getJson<DeviceIntegrationEvent[]>("/api/v1/integration/devices/events"),
         getJson<DeviceOfflineSyncBatch[]>("/api/v1/integration/devices/offline-sync-batches"),
-        getJson<RobotAnalytics>("/api/v1/analytics/robot"),
-        getJson<MetricDefinition[]>("/api/v1/analytics/metric-definitions"),
-        getJson<AiQualityTask[]>("/api/v1/analytics/ai-quality/tasks"),
-        getJson<AiQualityResult[]>("/api/v1/analytics/ai-quality/results"),
-        getJson<CustomerIntent[]>("/api/v1/analytics/customer-intents"),
-        getJson<StaffServiceScore[]>("/api/v1/analytics/staff-service-score"),
-        getJson<MerchantHealthScore[]>("/api/v1/analytics/merchant-health"),
-        getJson<MetricAnomalyExplanation[]>("/api/v1/analytics/metric-anomalies"),
-        getJson<BusinessMetricSnapshot[]>("/api/v1/analytics/business-metric-snapshots"),
+        getJson<RobotMetric[]>(t3aReadOnlyApiPaths.robot),
+        getJson<MetricDefinition[]>(t3aReadOnlyApiPaths.metricDefinitions),
+        getJson<AiQualityTask[]>(t3aReadOnlyApiPaths.aiQualityTasks),
+        getJson<AiQualityResult[]>(t3aReadOnlyApiPaths.aiQualityResults),
+        getJson<CustomerIntent[]>(t3aReadOnlyApiPaths.customerIntents),
+        getJson<StaffServiceScore[]>(t3aReadOnlyApiPaths.staffServiceScores),
+        getJson<MerchantHealthScore[]>(t3aReadOnlyApiPaths.merchantHealth),
+        getJson<MetricAnomaly[]>(t3aReadOnlyApiPaths.metricAnomalies),
+        getJson<BusinessMetricSnapshot[]>(t3aReadOnlyApiPaths.businessMetricSnapshots),
       ]);
       setSnapshot({
         health,
@@ -1138,14 +1204,14 @@ function App() {
         deviceIntegrationDevices,
         deviceIntegrationEvents,
         deviceOfflineSyncBatches,
-        robotAnalytics,
+        robotMetrics,
         metricDefinitions,
         aiQualityTasks,
         aiQualityResults,
         customerIntents,
         staffServiceScores,
         merchantHealthScores,
-        metricAnomalyExplanations,
+        metricAnomalies,
         businessMetricSnapshots,
         loadedAt: new Date().toISOString(),
       });
@@ -2023,81 +2089,108 @@ function App() {
     );
   }
 
-  function renderAnalytics(snapshotValue: Snapshot) {
+  function renderT3AReadOnlyAnalytics(snapshotValue: Snapshot) {
+    const robotSummary = summarizeRobotMetrics(snapshotValue.robotMetrics);
+    const averageMerchantHealth = averageNumber(snapshotValue.merchantHealthScores.map((item) => item.score));
+    const averageStaffScore = averageNumber(snapshotValue.staffServiceScores.map((item) => item.serviceScore));
+    const averageAiQuality = averageNumber(snapshotValue.aiQualityResults.map((item) => item.qualityScore));
+    const latestMetricDate = latestBusinessDate(snapshotValue.businessMetricSnapshots);
+
     return (
-      <section className="section-block">
-        <SectionHeading icon={<BarChartOutlined />} title="经营看板" />
+      <section className="section-block" data-boundary={t3aReadOnlyAnalyticsMarker}>
+        {/* T3A_READONLY_ANALYTICS_VIEW_START */}
+        <SectionHeading
+          icon={<BarChartOutlined />}
+          title="T3-A 只读经营分析"
+          extra={<Tag color="blue">analytics.dashboard.view</Tag>}
+        />
+        <Alert className="status-alert" type="info" showIcon message={t3aReadOnlyBoundaryText} />
         <div className="summary-grid compact">
-          {metricItems(snapshotValue).map((item) => <div className="metric" key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>{item.hint}</small></div>)}
-        </div>
-        <SimpleTable title="商户经营" data={snapshotValue.merchants.map((row, index) => ({ key: row.merchant?.id ?? index, name: row.merchant?.displayName ?? "未命名商户", status: row.merchant?.status ?? "-", risk: row.merchant?.riskLevel ?? "normal", verifications: row.verifications, barOrders: row.barOrders, settlement: row.settlementAmount?._sum?.amount ?? 0 }))} columns={[
-          { title: "商户", dataIndex: "name" },
-          { title: "核销", dataIndex: "verifications" },
-          { title: "酒吧订单", dataIndex: "barOrders" },
-          { title: "结算金额", dataIndex: "settlement", render: formatMoney },
-          { title: "风险", dataIndex: "risk", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
-        ]} />
-        <div className="summary-grid compact">
-          <div className="metric"><span>P3 机器人任务</span><strong>{snapshotValue.robotAnalytics.total}</strong><small>完成率 {formatRate(snapshotValue.robotAnalytics.completionRate)}</small></div>
-          <div className="metric"><span>P3 机器人异常</span><strong>{snapshotValue.robotAnalytics.abnormal}</strong><small>异常率 {formatRate(snapshotValue.robotAnalytics.abnormalRate)}</small></div>
-          <div className="metric"><span>P3 AI质检</span><strong>{snapshotValue.aiQualityResults.length}</strong><small>任务 {snapshotValue.aiQualityTasks.length}</small></div>
-          <div className="metric"><span>P3 客户意图</span><strong>{snapshotValue.customerIntents.length}</strong><small>企微需求识别</small></div>
+          <div className="metric"><span>经营指标</span><strong>{snapshotValue.businessMetricSnapshots.length}</strong><small>最新日期 {latestMetricDate}</small></div>
+          <div className="metric"><span>商户健康均分</span><strong>{averageMerchantHealth.toFixed(0)}</strong><small>{snapshotValue.merchantHealthScores.length} 个评分</small></div>
+          <div className="metric"><span>员工服务均分</span><strong>{averageStaffScore.toFixed(0)}</strong><small>{snapshotValue.staffServiceScores.length} 个样本</small></div>
+          <div className="metric"><span>客户意图</span><strong>{snapshotValue.customerIntents.length}</strong><small>只读摘要</small></div>
+          <div className="metric"><span>机器人任务</span><strong>{robotSummary.taskCount}</strong><small>完成率 {formatRatio(robotSummary.successCount, robotSummary.taskCount)}</small></div>
+          <div className="metric"><span>AI 质检均分</span><strong>{averageAiQuality.toFixed(0)}</strong><small>{snapshotValue.aiQualityResults.length} 条结果</small></div>
         </div>
         <div className="table-grid two">
-          <SimpleTable title="P2 经营指标快照" data={snapshotValue.businessMetricSnapshots.slice(0, 12).map((row) => ({ ...row, key: row.snapshotId }))} columns={[
-            { title: "指标", dataIndex: "metricKey" },
+          <SimpleTable title="T3-A 经营指标快照" data={snapshotValue.businessMetricSnapshots.slice(0, 12).map((row) => ({ ...row, key: row.snapshotId }))} columns={[
+            { title: "指标", key: "metric", render: (_, row) => metricDisplayName(row.metricKey, snapshotValue.metricDefinitions) },
             { title: "领域", dataIndex: "domain" },
+            { title: "时间窗", dataIndex: "periodType" },
             { title: "日期", dataIndex: "businessDate" },
             { title: "实际值", key: "actual", render: (_, row) => formatMetricValue(row.metricKey, row.actualValue) },
             { title: "基准", key: "baseline", render: (_, row) => formatMetricValue(row.metricKey, row.baselineValue) },
             { title: "变化", dataIndex: "varianceRate", render: formatPercentPoint },
-            { title: "趋势", dataIndex: "trendDirection", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: "来源口径", key: "method", render: (_, row) => `${row.projectionMethod} · ${formatConfidence(row.confidenceScore)}` },
           ]} />
-          <SimpleTable title="P3 指标字典" data={snapshotValue.metricDefinitions.slice(0, 12)} columns={[
-            { title: "编码", dataIndex: "metricCode" },
-            { title: "名称", dataIndex: "metricName" },
-            { title: "分类", dataIndex: "category" },
-            { title: "状态", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          <SimpleTable title="T3-A 商户经营摘要" data={snapshotValue.merchants.slice(0, 12).map((row) => ({ ...row, key: row.merchantId }))} columns={[
+            { title: "商户", dataIndex: "merchantName" },
+            { title: "类型", dataIndex: "merchantType" },
+            { title: "营收", dataIndex: "revenueAmountCents", render: formatMoney },
+            { title: "订单", dataIndex: "orderCount" },
+            { title: "风险", dataIndex: "riskAlertCount" },
+            { title: "结算", dataIndex: "settlementStatus", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
           ]} />
-          <SimpleTable title="P3 AI任务" data={snapshotValue.aiQualityTasks.slice(0, 12)} columns={[
-            { title: "任务号", dataIndex: "taskNo" },
-            { title: "类型", dataIndex: "taskType" },
-            { title: "对象", dataIndex: "objectType" },
-            { title: "状态", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          <SimpleTable title="T3-A 商户健康" data={snapshotValue.merchantHealthScores.slice(0, 12).map((row) => ({ ...row, key: row.merchantId }))} columns={[
+            { title: "商户ID", dataIndex: "merchantId" },
+            { title: "分数", dataIndex: "score" },
+            { title: "等级", dataIndex: "scoreLevel", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: "风险数", dataIndex: "riskCount" },
+            { title: "逾期应收", dataIndex: "overdueArAmountCents", render: formatMoney },
+            { title: "摘要", dataIndex: "summary" },
           ]} />
-          <SimpleTable title="P3 AI质检结果" data={snapshotValue.aiQualityResults.slice(0, 12)} columns={[
+          <SimpleTable title="T3-A 员工服务评分" data={snapshotValue.staffServiceScores.slice(0, 12).map((row) => ({ ...row, key: row.scoreId }))} columns={[
+            { title: "员工", dataIndex: "staffName" },
+            { title: "角色", dataIndex: "roleCode" },
+            { title: "服务分", dataIndex: "serviceScore" },
+            { title: "投诉", dataIndex: "complaintCount" },
+            { title: "正向事件", dataIndex: "positiveEventCount" },
+            { title: "风险", dataIndex: "riskLevel", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+          ]} />
+          <SimpleTable title="T3-A 客户意图摘要" data={snapshotValue.customerIntents.slice(0, 12).map((row) => ({ ...row, key: row.intentId }))} columns={[
+            { title: "类型", dataIndex: "intentType" },
             { title: "来源", dataIndex: "sourceType" },
-            { title: "对象", dataIndex: "objectType" },
-            { title: "评分", dataIndex: "score" },
+            { title: "置信度", dataIndex: "confidenceScore", render: formatConfidence },
             { title: "风险", dataIndex: "riskLevel", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
             { title: "摘要", dataIndex: "summary" },
           ]} />
-          <SimpleTable title="P3 客户意图" data={snapshotValue.customerIntents.slice(0, 12)} columns={[
-            { title: "类型", dataIndex: "intentType" },
-            { title: "标签", dataIndex: "label" },
-            { title: "置信度", dataIndex: "confidence" },
-            { title: "状态", dataIndex: "status" },
+          <SimpleTable title="T3-A 机器人经营指标" data={snapshotValue.robotMetrics.slice(0, 12).map((row) => ({ ...row, key: row.metricId }))} columns={[
+            { title: "机器人", dataIndex: "robotId" },
+            { title: "服务商", dataIndex: "providerCode" },
+            { title: "任务", dataIndex: "taskCount" },
+            { title: "成功", dataIndex: "successCount" },
+            { title: "失败", dataIndex: "failureCount" },
+            { title: "日期", dataIndex: "businessDate" },
+            { title: "摘要", dataIndex: "summary" },
           ]} />
-          <SimpleTable title="P3 员工服务评分" data={snapshotValue.staffServiceScores.slice(0, 12)} columns={[
-            { title: "员工", dataIndex: "staffUserId" },
-            { title: "评分", dataIndex: "score" },
-            { title: "风险扣分", dataIndex: "riskPenalty" },
-            { title: "样本", dataIndex: "sampleSize" },
+          <SimpleTable title="T3-A AI 质检只读结果" data={snapshotValue.aiQualityResults.slice(0, 12).map((row) => ({ ...row, key: row.resultId }))} columns={[
+            { title: "来源", dataIndex: "sourceType" },
+            { title: "评分", dataIndex: "qualityScore" },
+            { title: "置信度", dataIndex: "confidenceScore", render: formatConfidence },
+            { title: "风险", dataIndex: "riskLevel", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: "发现", dataIndex: "findingCount" },
+            { title: "摘要", dataIndex: "summary" },
           ]} />
-          <SimpleTable title="P3 商户健康评分" data={snapshotValue.merchantHealthScores.slice(0, 12)} columns={[
-            { title: "商户ID", dataIndex: "merchantId" },
-            { title: "总分", dataIndex: "score" },
-            { title: "经营", dataIndex: "operationsScore" },
-            { title: "财务", dataIndex: "financeScore" },
-            { title: "风险", dataIndex: "riskScore" },
+          <SimpleTable title="T3-A 指标口径" data={snapshotValue.metricDefinitions.slice(0, 12).map((row) => ({ ...row, key: row.metricKey }))} columns={[
+            { title: "编码", dataIndex: "metricKey" },
+            { title: "名称", dataIndex: "name" },
+            { title: "领域", dataIndex: "domain" },
+            { title: "单位", dataIndex: "unit" },
+            { title: "口径", dataIndex: "calculationNote" },
+            { title: "责任角色", dataIndex: "ownerRole" },
           ]} />
-          <SimpleTable title="P3 指标异常解释" data={snapshotValue.metricAnomalyExplanations.slice(0, 12)} columns={[
-            { title: "指标", dataIndex: "metricName" },
-            { title: "变化", dataIndex: "changeRate", render: formatRate },
-            { title: "级别", dataIndex: "severity", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
-            { title: "解释", dataIndex: "explanation" },
+          <SimpleTable title="T3-A 指标异常" data={snapshotValue.metricAnomalies.slice(0, 12).map((row) => ({ ...row, key: row.id }))} columns={[
+            { title: "指标", key: "metric", render: (_, row) => metricDisplayName(row.metricKey, snapshotValue.metricDefinitions) },
+            { title: "领域", dataIndex: "domain" },
+            { title: "观察值", key: "observed", render: (_, row) => formatMetricValue(row.metricKey, row.observedValue) },
+            { title: "期望值", key: "expected", render: (_, row) => formatMetricValue(row.metricKey, row.expectedValue) },
+            { title: "风险", dataIndex: "riskLevel", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: "状态", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+            { title: "摘要", dataIndex: "summary" },
           ]} />
         </div>
+        {/* T3A_READONLY_ANALYTICS_VIEW_END */}
       </section>
     );
   }
@@ -2301,7 +2394,7 @@ function App() {
     if (activeSection === "ticketing") sectionContent = renderTicketing(snapshotValue);
     if (activeSection === "bar") sectionContent = renderBar(snapshotValue);
     if (activeSection === "amusement") sectionContent = renderAmusement(snapshotValue);
-    if (activeSection === "analytics") sectionContent = renderAnalytics(snapshotValue);
+    if (activeSection === "analytics") sectionContent = renderT3AReadOnlyAnalytics(snapshotValue);
     if (activeSection === "interfaces") sectionContent = renderInterfaces(snapshotValue);
     if (activeSection === "security") sectionContent = renderSecurity(snapshotValue);
     if (activeSection === "events") sectionContent = renderEvents(snapshotValue);
