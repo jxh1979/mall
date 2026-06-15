@@ -40,6 +40,7 @@ class TicketingJdbcIntegrationTests {
         assertThat(regclass("ticket_credentials")).isEqualTo("ticket_credentials");
         assertThat(regclass("ticket_refunds")).isEqualTo("ticket_refunds");
         assertThat(regclass("ticket_refund_lines")).isEqualTo("ticket_refund_lines");
+        assertThat(regclass("ticket_dynamic_pricing_rules")).isEqualTo("ticket_dynamic_pricing_rules");
 
         assertThat(permissionCodes()).contains(
                 "ticket.product.view",
@@ -56,6 +57,10 @@ class TicketingJdbcIntegrationTests {
                 "ticket.refund.view",
                 "ticket.refund.request",
                 "ticket.refund.approve",
+                "ticket.dynamic_pricing.view",
+                "ticket.dynamic_pricing.manage",
+                "ticket.dynamic_pricing.publish",
+                "ticket.dynamic_pricing.simulate",
                 "verification.execute",
                 "verification.view",
                 "terminal.device.bind"
@@ -70,6 +75,10 @@ class TicketingJdbcIntegrationTests {
                 "ticket.credential.view",
                 "ticket.refund.view",
                 "ticket.refund.approve",
+                "ticket.dynamic_pricing.view",
+                "ticket.dynamic_pricing.manage",
+                "ticket.dynamic_pricing.publish",
+                "ticket.dynamic_pricing.simulate",
                 "verification.execute",
                 "terminal.device.bind"
         );
@@ -376,6 +385,78 @@ class TicketingJdbcIntegrationTests {
                 .contains(tuple("refund_line_jdbc", 7900L, "requested"));
         assertThat(flywayMigrationSucceeded("009")).isTrue();
         assertThat(flywayMigrationSucceeded("031")).isTrue();
+    }
+
+
+    @Test
+    void persistDynamicPricingRuleSliceTables() {
+        Instant now = Instant.parse("2026-06-15T00:00:00Z");
+        repository.saveTicketType(new TicketTypeRecord(
+                "ticket_type_dynamic_jdbc",
+                "P2 Dynamic Pass",
+                "weekday_weekend_holiday",
+                9900L,
+                11900L,
+                12900L,
+                false,
+                "published",
+                now,
+                now
+        ));
+        TicketDynamicPricingRuleRecord draft = repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
+                "dynamic_rule_jdbc",
+                "ticket_type_dynamic_jdbc",
+                "Summer weekend uplift",
+                100,
+                java.time.LocalDate.parse("2026-06-01"),
+                java.time.LocalDate.parse("2026-06-30"),
+                "web",
+                "percent_delta",
+                new java.math.BigDecimal("20.00"),
+                null,
+                9900L,
+                15000L,
+                "draft",
+                Map.of("inventory_level", "low"),
+                "ops create",
+                List.of("att_dynamic"),
+                now,
+                now
+        ));
+        repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
+                draft.id(),
+                draft.ticketTypeId(),
+                draft.ruleName(),
+                draft.priority(),
+                draft.effectiveFrom(),
+                draft.effectiveTo(),
+                draft.salesChannel(),
+                draft.adjustmentType(),
+                draft.adjustmentRate(),
+                draft.adjustmentAmountCent(),
+                draft.minPriceCent(),
+                draft.maxPriceCent(),
+                "published",
+                draft.conditionRule(),
+                "ops publish",
+                List.of("att_publish"),
+                draft.createdAt(),
+                now.plusSeconds(60)
+        ));
+
+        assertThat(repository.findDynamicPricingRuleById("dynamic_rule_jdbc"))
+                .get()
+                .extracting(
+                        TicketDynamicPricingRuleRecord::status,
+                        TicketDynamicPricingRuleRecord::salesChannel,
+                        TicketDynamicPricingRuleRecord::conditionRule,
+                        TicketDynamicPricingRuleRecord::evidenceAttachmentIds
+                )
+                .containsExactly("published", "web", Map.of("inventory_level", "low"), List.of("att_publish"));
+        assertThat(repository.listDynamicPricingRules())
+                .extracting(TicketDynamicPricingRuleRecord::id, TicketDynamicPricingRuleRecord::priority)
+                .contains(tuple("dynamic_rule_jdbc", 100));
+        assertThat(flywayMigrationSucceeded("036")).isTrue();
     }
 
     private String regclass(String tableName) {

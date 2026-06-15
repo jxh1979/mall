@@ -10,6 +10,7 @@ public record AmusementSessionRecord(
         Instant endTime,
         int capacity,
         int usedCapacity,
+        int lockedCapacity,
         String status,
         List<String> evidenceAttachmentIds,
         Instant createdAt,

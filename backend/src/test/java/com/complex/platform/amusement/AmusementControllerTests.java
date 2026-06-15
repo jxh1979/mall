@@ -71,6 +71,10 @@ class AmusementControllerTests {
         when(service.listReservations()).thenReturn(new PageResponse<>(List.of(reservation()), 1, 50, 1));
         when(service.createReservation(any(AmusementReservationRequest.class))).thenReturn(reservation());
         when(service.changeReservationStatus(eq("reservation_1"), any(StatusChangeRequest.class))).thenReturn(completedReservation());
+        when(service.listGroupBookings()).thenReturn(new PageResponse<>(List.of(groupBooking()), 1, 50, 1));
+        when(service.createGroupBooking(any(AmusementGroupBookingRequest.class))).thenReturn(groupBooking());
+        when(service.approveGroupBooking(eq("group_booking_1"), any(AmusementGroupBookingApprovalRequest.class))).thenReturn(approvedGroupBooking());
+        when(service.releaseGroupBooking(eq("group_booking_1"), any(AmusementGroupBookingReleaseRequest.class))).thenReturn(releasedGroupBooking());
         when(service.listSafetyInspections()).thenReturn(new PageResponse<>(List.of(inspection()), 1, 50, 1));
         when(service.createSafetyInspection(any(AmusementSafetyInspectionRequest.class))).thenReturn(inspection());
         when(service.approveReopen(eq("inspection_1"), any(StatusChangeRequest.class))).thenReturn(reopenedInspection());
@@ -100,6 +104,10 @@ class AmusementControllerTests {
             "GET,/api/v1/amusement/reservations,amusement.reservation.view",
             "POST,/api/v1/amusement/reservations,amusement.reservation.manage",
             "POST,/api/v1/amusement/reservations/reservation_1/status,amusement.reservation.manage",
+            "GET,/api/v1/amusement/group-bookings,amusement.group_booking.view",
+            "POST,/api/v1/amusement/group-bookings,amusement.group_booking.manage",
+            "POST,/api/v1/amusement/group-bookings/group_booking_1/approve,amusement.group_booking.approve",
+            "POST,/api/v1/amusement/group-bookings/group_booking_1/release,amusement.group_booking.manage",
             "GET,/api/v1/amusement/safety-inspections,amusement.safety_inspection.view",
             "POST,/api/v1/amusement/safety-inspections,amusement.safety_inspection.create",
             "POST,/api/v1/amusement/safety-inspections/inspection_1/approve-reopen,amusement.safety_inspection.approve_reopen",
@@ -137,6 +145,9 @@ class AmusementControllerTests {
             "/api/v1/amusement/queue-entries/queue_1/status",
             "/api/v1/amusement/reservations",
             "/api/v1/amusement/reservations/reservation_1/status",
+            "/api/v1/amusement/group-bookings",
+            "/api/v1/amusement/group-bookings/group_booking_1/approve",
+            "/api/v1/amusement/group-bookings/group_booking_1/release",
             "/api/v1/amusement/safety-inspections",
             "/api/v1/amusement/safety-inspections/inspection_1/approve-reopen",
             "/api/v1/amusement/safety-inspections/inspection_1/recheck",
@@ -228,7 +239,7 @@ class AmusementControllerTests {
 
     private AmusementSessionRecord session() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementSessionRecord("session_1", "project_1", now, now.plusSeconds(3600), 2, 0, "open", List.of("att_1"), now, now);
+        return new AmusementSessionRecord("session_1", "project_1", now, now.plusSeconds(3600), 2, 0, 0, "open", List.of("att_1"), now, now);
     }
 
     private AmusementSafetyTemplateRecord template() {
@@ -297,6 +308,21 @@ class AmusementControllerTests {
     private AmusementProjectRuleRecord projectRule() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new AmusementProjectRuleRecord("rule_1", "project_1", "safety_notice", "operator briefing required", "2026-06-14", null, true, "active", List.of("att_1"), now, now);
+    }
+
+    private AmusementGroupBookingRecord groupBooking() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new AmusementGroupBookingRecord("group_booking_1", "project_1", "session_1", "group", "Company Team", "13800000000", 2, 2, "pending_approval", null, "operator note", List.of("att_group"), null, null, now, now);
+    }
+
+    private AmusementGroupBookingRecord approvedGroupBooking() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new AmusementGroupBookingRecord("group_booking_1", "project_1", "session_1", "group", "Company Team", "13800000000", 2, 2, "approved", "ops approved", "operator note", List.of("att_approve"), now, null, now, now);
+    }
+
+    private AmusementGroupBookingRecord releasedGroupBooking() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new AmusementGroupBookingRecord("group_booking_1", "project_1", "session_1", "group", "Company Team", "13800000000", 2, 2, "released", "ops approved", "customer changed plan", List.of("att_release"), now, now, now, now);
     }
 
     @TestConfiguration

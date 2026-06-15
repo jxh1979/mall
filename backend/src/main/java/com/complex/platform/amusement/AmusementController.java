@@ -125,6 +125,41 @@ public class AmusementController {
         return ApiResponse.ok(service.changeReservationStatus(id, request));
     }
 
+    @GetMapping("/group-bookings")
+    public ApiResponse<PageResponse<AmusementGroupBookingRecord>> listGroupBookings() {
+        authorizationService.requirePermission("amusement.group_booking.view");
+        return ApiResponse.ok(service.listGroupBookings());
+    }
+
+    @PostMapping("/group-bookings")
+    public ApiResponse<AmusementGroupBookingRecord> createGroupBooking(
+            @RequestBody(required = false) AmusementGroupBookingRequest request
+    ) {
+        authorizationService.requirePermission("amusement.group_booking.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createGroupBooking(request));
+    }
+
+    @PostMapping("/group-bookings/{id}/approve")
+    public ApiResponse<AmusementGroupBookingRecord> approveGroupBooking(
+            @PathVariable String id,
+            @RequestBody(required = false) AmusementGroupBookingApprovalRequest request
+    ) {
+        authorizationService.requirePermission("amusement.group_booking.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveGroupBooking(id, request));
+    }
+
+    @PostMapping("/group-bookings/{id}/release")
+    public ApiResponse<AmusementGroupBookingRecord> releaseGroupBooking(
+            @PathVariable String id,
+            @RequestBody(required = false) AmusementGroupBookingReleaseRequest request
+    ) {
+        authorizationService.requirePermission("amusement.group_booking.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.releaseGroupBooking(id, request));
+    }
+
     @GetMapping("/safety-inspections")
     public ApiResponse<PageResponse<AmusementSafetyInspectionRecord>> listSafetyInspections() {
         authorizationService.requirePermission("amusement.safety_inspection.view");

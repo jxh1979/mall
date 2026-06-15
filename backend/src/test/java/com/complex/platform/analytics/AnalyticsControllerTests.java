@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
+import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
@@ -73,6 +74,7 @@ class AnalyticsControllerTests {
         when(service.listAiQualityTasks()).thenReturn(new PageResponse<>(List.of(aiQualityTask()), 1, 50, 1));
         when(service.listCustomerIntents()).thenReturn(new PageResponse<>(List.of(customerIntent()), 1, 50, 1));
         when(service.getP0OverviewDashboard()).thenReturn(dashboard());
+        when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
         when(service.listMerchantHealthScores()).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
         when(service.listAnalyticsMerchants()).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
         when(service.listMetricAnomalies()).thenReturn(new PageResponse<>(List.of(metricAnomaly()), 1, 50, 1));
@@ -91,6 +93,7 @@ class AnalyticsControllerTests {
             "GET,/api/v1/analytics/ai-quality/tasks,analytics.risk_alert.view",
             "GET,/api/v1/analytics/customer-intents,analytics.risk_alert.view",
             "GET,/api/v1/analytics/dashboards/p0-overview,analytics.dashboard.view",
+            "GET,/api/v1/analytics/business-metric-snapshots,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchant-health,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchants,analytics.dashboard.view",
             "GET,/api/v1/analytics/metric-anomalies,analytics.risk_alert.view",
@@ -159,6 +162,28 @@ class AnalyticsControllerTests {
                 2,
                 1,
                 Map.of("top_domain", "bar"),
+                now()
+        );
+    }
+
+
+    private BusinessMetricSnapshotRecord businessMetricSnapshot() {
+        return new BusinessMetricSnapshotRecord(
+                "metric_snapshot_1",
+                "gmv_amount_cents",
+                "finance",
+                "daily",
+                LocalDate.parse("2026-06-14"),
+                "project",
+                "project_1",
+                new BigDecimal("128800"),
+                new BigDecimal("118800"),
+                new BigDecimal("8.42"),
+                "up",
+                "manual_baseline",
+                new BigDecimal("135000"),
+                new BigDecimal("0.70"),
+                Map.of("source", "p2_seed"),
                 now()
         );
     }

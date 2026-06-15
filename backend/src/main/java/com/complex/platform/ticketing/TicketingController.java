@@ -71,6 +71,41 @@ public class TicketingController {
         return ApiResponse.ok(service.createTicketPriceRule(request));
     }
 
+
+    @GetMapping("/ticketing/dynamic-pricing-rules")
+    public ApiResponse<PageResponse<TicketDynamicPricingRuleRecord>> listDynamicPricingRules() {
+        authorizationService.requirePermission("ticket.dynamic_pricing.view");
+        return ApiResponse.ok(service.listDynamicPricingRules());
+    }
+
+    @PostMapping("/ticketing/dynamic-pricing-rules")
+    public ApiResponse<TicketDynamicPricingRuleRecord> createDynamicPricingRule(
+            @RequestBody TicketDynamicPricingRuleRequest request
+    ) {
+        authorizationService.requirePermission("ticket.dynamic_pricing.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createDynamicPricingRule(request));
+    }
+
+    @PostMapping("/ticketing/dynamic-pricing-rules/{id}/publish")
+    public ApiResponse<TicketDynamicPricingRuleRecord> publishDynamicPricingRule(
+            @PathVariable String id,
+            @RequestBody StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("ticket.dynamic_pricing.publish");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.publishDynamicPricingRule(id, request));
+    }
+
+    @PostMapping("/ticketing/dynamic-pricing/simulations")
+    public ApiResponse<TicketDynamicPricingSimulationResponse> simulateDynamicPricing(
+            @RequestBody TicketDynamicPricingSimulationRequest request
+    ) {
+        authorizationService.requirePermission("ticket.dynamic_pricing.simulate");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.simulateDynamicPricing(request));
+    }
+
     @GetMapping("/ticketing/entitlement-templates")
     public ApiResponse<PageResponse<EntitlementTemplateRecord>> listEntitlementTemplates() {
         authorizationService.requirePermission("ticket.entitlement.view");

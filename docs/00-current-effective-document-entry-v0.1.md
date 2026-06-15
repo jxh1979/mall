@@ -27,6 +27,21 @@
 | P2-A 平面图导入开发计划 | `docs/superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md` |
 | P2-A 平面图导入接口契约 | `docs/p2-floor-plan-import-api-contract-v0.1.md` |
 | P2-A 平面图导入完成审计 | `docs/p2-floor-plan-import-completion-audit-v0.1.md` |
+| P2-B 游乐团体/包场开发计划 | `docs/superpowers/plans/2026-06-15-p2-amusement-group-private-booking.md` |
+| P2-B 游乐团体/包场接口契约 | `docs/p2-amusement-group-private-booking-api-contract-v0.1.md` |
+| P2-B 游乐团体/包场完成审计 | `docs/p2-amusement-group-private-booking-completion-audit-v0.1.md` |
+| P2-C 票务动态定价开发计划 | `docs/superpowers/plans/2026-06-15-p2-ticket-dynamic-pricing.md` |
+| P2-C 票务动态定价接口契约 | `docs/p2-ticket-dynamic-pricing-api-contract-v0.1.md` |
+| P2-C 票务动态定价完成审计 | `docs/p2-ticket-dynamic-pricing-completion-audit-v0.1.md` |
+| P2-D 经营指标快照开发计划 | `docs/superpowers/plans/2026-06-15-p2-business-metric-snapshots.md` |
+| P2-D 经营指标快照接口契约 | `docs/p2-business-metric-snapshots-api-contract-v0.1.md` |
+| P2-D 经营指标快照完成审计 | `docs/p2-business-metric-snapshots-completion-audit-v0.1.md` |
+| P2-E 第三方深度集成边界契约 | `docs/p2-third-party-deep-integration-boundary-contract-v0.1.md` |
+| P2-E 第三方深度集成边界完成审计 | `docs/p2-third-party-deep-integration-boundary-completion-audit-v0.1.md` |
+| P2-F 独立 Python AI 服务边界契约 | `docs/p2-python-ai-service-boundary-contract-v0.1.md` |
+| P2-F 独立 Python AI 服务边界完成审计 | `docs/p2-python-ai-service-boundary-completion-audit-v0.1.md` |
+| P2 全量完成审计 | `docs/p2-full-completion-audit-v0.1.md` |
+| P2 当前差异对抗式审计 | `docs/p2-current-diff-adversarial-review-v0.1.md` |
 | 正式安全基线待生成任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
@@ -66,14 +81,17 @@
 | 10 | `superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md` | 查看 P2-A 平面图 SVG/标准 JSON 导入开发计划 |
 | 11 | `p2-floor-plan-import-api-contract-v0.1.md` | 查看 P2-A 平面图导入接口、权限、事件和验收 |
 | 12 | `p2-floor-plan-import-completion-audit-v0.1.md` | 查看 P2-A 当前完成范围、验证证据和后置边界 |
-| 13 | `p0-implementation-task-list.md` | 查看 P0 开发任务和优先级 |
-| 14 | `production-readiness-implementation-ledger-template-v0.1.md` | 查看生产前置资料实施台账、状态、责任、证据和阻塞范围 |
-| 15 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成条件、输入、输出和阻断项 |
-| 16 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看 P0 接口契约基线和机器可读契约 |
-| 17 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 181 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径 |
-| 18 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 OpenAPI 反向生成的权限、事件、任务追溯和样例准入口径 |
-| 19 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 查看 P0 用户故事地图和迭代切片 |
-| 20 | `requirement-traceability-matrix-v0.1.md` | 查看需求到设计、任务、验收的追踪关系 |
+| 13 | `p2-amusement-group-private-booking-api-contract-v0.1.md`、`p2-ticket-dynamic-pricing-api-contract-v0.1.md`、`p2-business-metric-snapshots-api-contract-v0.1.md` | 查看 P2-B/C/D 当前已编码接口、权限、事件和验收 |
+| 14 | `p2-third-party-deep-integration-boundary-contract-v0.1.md`、`p2-python-ai-service-boundary-contract-v0.1.md` | 查看 P2-E/F 仅边界收口、暂不做真实供应商/AI 服务编码的原因 |
+| 15 | `p2-full-completion-audit-v0.1.md`、`p2-current-diff-adversarial-review-v0.1.md` | 查看 P2 当前完成范围、验证证据、差异审计和后续候选 B 入口 |
+| 16 | `p0-implementation-task-list.md` | 查看 P0 开发任务和优先级 |
+| 17 | `production-readiness-implementation-ledger-template-v0.1.md` | 查看生产前置资料实施台账、状态、责任、证据和阻塞范围 |
+| 18 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成条件、输入、输出和阻断项 |
+| 19 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看 P0 接口契约基线和机器可读契约 |
+| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 181 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径 |
+| 21 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 OpenAPI 反向生成的权限、事件、任务追溯和样例准入口径 |
+| 22 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 查看 P0 用户故事地图和迭代切片 |
+| 23 | `requirement-traceability-matrix-v0.1.md` | 查看需求到设计、任务、验收的追踪关系 |
 
 ### 3.2 后端、数据库、架构和运维
 
@@ -163,6 +181,21 @@
 | `superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md` | P2-A 平面图导入开发计划 | S1 | 总控、产品、开发、测试、运维 | 是，作为 P2-A 正式 TDD 编码执行清单 | P2 候选审计、P1 平面图能力、FloorPlan 后端模块 |
 | `p2-floor-plan-import-api-contract-v0.1.md` | P2-A 平面图导入接口契约 | S1 | 产品、开发、测试、运营、实施 | 是，作为 P2-A 接口、权限、事件和验收依据 | P2-A 开发计划、后端实现、V034 迁移 |
 | `p2-floor-plan-import-completion-audit-v0.1.md` | P2-A 平面图导入完成审计 | S1 | 总控、产品、开发、测试、实施 | 是，作为 P2-A 当前完成结论和验证证据入口 | 160 测试结果、P0 契约闸口、Semgrep 扫描 |
+| `superpowers/plans/2026-06-15-p2-amusement-group-private-booking.md` | P2-B 游乐团体/包场开发计划 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-B TDD 编码执行清单 | P2 候选审计、游乐业务设计、Amusement 后端模块 |
+| `p2-amusement-group-private-booking-api-contract-v0.1.md` | P2-B 游乐团体/包场接口契约 | S1 | 产品、开发、测试、运营 | 是，作为团体/包场容量锁、审批、释放、权限和事件依据 | P2-B 开发计划、V035 迁移、后端实现 |
+| `p2-amusement-group-private-booking-completion-audit-v0.1.md` | P2-B 游乐团体/包场完成审计 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-B 完成结论和验证证据入口 | 160 测试结果、容量锁测试、权限测试 |
+| `superpowers/plans/2026-06-15-p2-ticket-dynamic-pricing.md` | P2-C 票务动态定价开发计划 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-C TDD 编码执行清单 | P2 候选审计、票务业务设计、Ticketing 后端模块 |
+| `p2-ticket-dynamic-pricing-api-contract-v0.1.md` | P2-C 票务动态定价接口契约 | S1 | 产品、开发、测试、运营 | 是，作为动态定价规则、发布、模拟、权限和事件依据 | P2-C 开发计划、V036 迁移、后端实现 |
+| `p2-ticket-dynamic-pricing-completion-audit-v0.1.md` | P2-C 票务动态定价完成审计 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-C 完成结论和验证证据入口 | 160 测试结果、订单价格不受影响测试、权限测试 |
+| `superpowers/plans/2026-06-15-p2-business-metric-snapshots.md` | P2-D 经营指标快照开发计划 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-D TDD 编码执行清单 | P2 候选审计、数据分析设计、Analytics 后端模块 |
+| `p2-business-metric-snapshots-api-contract-v0.1.md` | P2-D 经营指标快照接口契约 | S1 | 产品、开发、测试、运营 | 是，作为经营指标快照读取、权限和验收依据 | P2-D 开发计划、V037 迁移、后端实现 |
+| `p2-business-metric-snapshots-completion-audit-v0.1.md` | P2-D 经营指标快照完成审计 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-D 完成结论和验证证据入口 | 160 测试结果、种子数据和读取测试 |
+| `p2-third-party-deep-integration-boundary-contract-v0.1.md` | P2-E 第三方深度集成边界契约 | S1 | 总控、产品、开发、供应商、测试 | 是，限边界、适配器契约和后续资料清单；不得替代真实供应商 API | P2 候选审计、第三方接入包、供应商资料 |
+| `p2-third-party-deep-integration-boundary-completion-audit-v0.1.md` | P2-E 第三方深度集成边界完成审计 | S1 | 总控、产品、开发、供应商、测试 | 是，作为“边界已收口、真实接入待资料”的验收入口 | 边界契约、供应商资料到位情况 |
+| `p2-python-ai-service-boundary-contract-v0.1.md` | P2-F 独立 Python AI 服务边界契约 | S1 | 总控、产品、开发、算法/AI、测试 | 是，限服务边界、接口占位和后续资料清单；不得替代正式 AI 服务实现 | P2 候选审计、AI/规则处理口径 |
+| `p2-python-ai-service-boundary-completion-audit-v0.1.md` | P2-F 独立 Python AI 服务边界完成审计 | S1 | 总控、产品、开发、算法/AI、测试 | 是，作为“边界已收口、正式服务后置”的验收入口 | 边界契约、模型和部署资料到位情况 |
+| `p2-full-completion-audit-v0.1.md` | P2 全量完成审计 | S1 | 总控、产品、开发、测试、运营、供应商 | 是，作为 P2-A 至 P2-F 当前完成和暂缓边界总入口 | 各 P2 子项完成审计、160 验证结果 |
+| `p2-current-diff-adversarial-review-v0.1.md` | P2 当前差异对抗式审计 | S1 | 总控、产品、开发、测试、安全、运维 | 是，作为 160 未提交 P2 差异的质量、安全和回滚判断入口 | 当前 git diff、测试结果、Semgrep 扫描 |
 | `production-readiness-implementation-ledger-template-v0.1.md` | 生产前置实施台账模板 | S1 | 运维、IT、采购、财务、测试、项目管理 | 是，作为生产准入资料管理入口 | 本文档、各 Runbook、OpenAPI |
 | `formal-security-baseline-generation-task-v0.1.md` | 正式安全基线生成任务 | S1 | 技术负责人、安全、测试、运维 | 是，作为正式安全基线生成和安全准入入口 | 本文档、OpenAPI、运行时安全报告 |
 | `p0-api-contract-pack-v0.1.md` | 接口契约说明 | S1 | 后端、前端、Android、一体机、供应商、测试 | 是 | 本文档、OpenAPI |

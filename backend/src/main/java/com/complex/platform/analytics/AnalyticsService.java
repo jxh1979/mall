@@ -2,6 +2,7 @@ package com.complex.platform.analytics;
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
+import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
@@ -99,6 +100,17 @@ public class AnalyticsService {
                 "analytics.dashboard.view",
                 "analytics_dashboard_snapshot",
                 repository::getP0OverviewDashboard
+        );
+    }
+
+
+    public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {
+        return readPage(
+                "analytics.business_metric_snapshot.viewed",
+                "analytics.business_metric_snapshot.view_failed",
+                "analytics.dashboard.view",
+                "analytics_business_metric_snapshot",
+                repository::listBusinessMetricSnapshots
         );
     }
 

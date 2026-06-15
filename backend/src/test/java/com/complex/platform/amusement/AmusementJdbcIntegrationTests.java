@@ -44,7 +44,8 @@ class AmusementJdbcIntegrationTests {
         assertThat(regclass("amusement_device_statuses")).isEqualTo("amusement_device_statuses");
         assertThat(regclass("amusement_queue_entries")).isEqualTo("amusement_queue_entries");
         assertThat(regclass("amusement_reservations")).isEqualTo("amusement_reservations");
-        assertThat(currentFlywayVersion()).isEqualTo("034");
+        assertThat(regclass("amusement_group_bookings")).isEqualTo("amusement_group_bookings");
+        assertThat(currentFlywayVersion()).isEqualTo("037");
 
         assertThat(permissionCodes()).contains(
                 "amusement.device_status.view",
@@ -57,6 +58,9 @@ class AmusementJdbcIntegrationTests {
                 "amusement.queue.manage",
                 "amusement.reservation.view",
                 "amusement.reservation.manage",
+                "amusement.group_booking.view",
+                "amusement.group_booking.manage",
+                "amusement.group_booking.approve",
                 "amusement.safety_inspection.create",
                 "amusement.safety_inspection.approve_reopen",
                 "amusement.safety_inspection.recheck",
@@ -73,6 +77,8 @@ class AmusementJdbcIntegrationTests {
                 "amusement.project.manage",
                 "amusement.queue.manage",
                 "amusement.reservation.manage",
+                "amusement.group_booking.manage",
+                "amusement.group_booking.approve",
                 "amusement.safety_inspection.approve_reopen",
                 "amusement.safety_template.manage",
                 "amusement.verification.execute"
@@ -121,6 +127,7 @@ class AmusementJdbcIntegrationTests {
                 now.plusSeconds(3600),
                 now.plusSeconds(7200),
                 2,
+                0,
                 0,
                 "open",
                 List.of("att_session"),
@@ -207,6 +214,24 @@ class AmusementJdbcIntegrationTests {
                 now,
                 now
         ));
+        repository.saveGroupBooking(new AmusementGroupBookingRecord(
+                "group_booking_jdbc",
+                "project_jdbc",
+                "session_jdbc",
+                "private",
+                "Private Event",
+                "13900000000",
+                8,
+                2,
+                "pending_approval",
+                null,
+                "operator note",
+                List.of("att_group"),
+                null,
+                null,
+                now,
+                now
+        ));
 
         assertThat(repository.listSafetyTemplates())
                 .extracting(AmusementSafetyTemplateRecord::id, AmusementSafetyTemplateRecord::templateName)
@@ -217,11 +242,18 @@ class AmusementJdbcIntegrationTests {
         assertThat(repository.listActiveBlockingProjectRules("project_jdbc"))
                 .extracting(AmusementProjectRuleRecord::id, AmusementProjectRuleRecord::ruleType)
                 .contains(tuple("rule_jdbc", "safety_notice"));
+        assertThat(repository.lockSessionCapacityIfAvailable("session_jdbc", 1)).isTrue();
         assertThat(repository.incrementSessionUsedCapacityIfAvailable("session_jdbc")).isTrue();
+        assertThat(repository.incrementSessionUsedCapacityIfAvailable("session_jdbc")).isFalse();
         assertThat(repository.findSessionById("session_jdbc"))
                 .get()
-                .extracting(AmusementSessionRecord::usedCapacity)
-                .isEqualTo(1);
+                .extracting(AmusementSessionRecord::usedCapacity, AmusementSessionRecord::lockedCapacity)
+                .containsExactly(1, 1);
+        repository.releaseSessionLockedCapacity("session_jdbc", 1);
+        assertThat(repository.findSessionById("session_jdbc"))
+                .get()
+                .extracting(AmusementSessionRecord::lockedCapacity)
+                .isEqualTo(0);
         assertThat(repository.latestSafetyInspectionForProject("project_jdbc"))
                 .get()
                 .extracting(AmusementSafetyInspectionRecord::id, AmusementSafetyInspectionRecord::reopenStatus)
@@ -249,6 +281,10 @@ class AmusementJdbcIntegrationTests {
                 .get()
                 .extracting(AmusementReservationRecord::id, AmusementReservationRecord::reservationStatus)
                 .containsExactly("reservation_jdbc", "reserved");
+        assertThat(repository.findGroupBookingById("group_booking_jdbc"))
+                .get()
+                .extracting(AmusementGroupBookingRecord::bookingType, AmusementGroupBookingRecord::bookingStatus)
+                .containsExactly("private", "pending_approval");
     }
 
     private String regclass(String tableName) {

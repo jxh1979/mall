@@ -631,6 +631,103 @@ class TicketingServiceTests {
                 .contains("ticket_refund.requested", "ticket_refund_line.viewed", "ticket_refund.approved");
     }
 
+    @Test
+    void dynamicPricingRuleSimulationDoesNotChangeOrderPricingUntilFutureIntegration() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-pricing");
+        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-rule-create",
+                "summer weekend uplift",
+                List.of("att_dynamic"),
+                ticketType.id(),
+                "Summer weekend uplift",
+                100,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "percent_delta",
+                new BigDecimal("20.00"),
+                null,
+                9900L,
+                15000L,
+                Map.of("inventory_level", "low")
+        ));
+
+        TicketDynamicPricingSimulationResponse simulation = service.simulateDynamicPricing(new TicketDynamicPricingSimulationRequest(
+                "dynamic-simulate",
+                ticketType.id(),
+                LocalDate.parse("2026-06-20"),
+                "web",
+                Map.of("inventory_level", "low")
+        ));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-order-unaffected",
+                "create order",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic"
+        ));
+
+        assertThat(draft.status()).isEqualTo("draft");
+        assertThat(simulation)
+                .extracting(
+                        TicketDynamicPricingSimulationResponse::basePriceCent,
+                        TicketDynamicPricingSimulationResponse::adjustmentCent,
+                        TicketDynamicPricingSimulationResponse::finalPriceCent,
+                        TicketDynamicPricingSimulationResponse::matchedRuleId
+                )
+                .containsExactly(11900L, 2380L, 14280L, draft.id());
+        assertThat(order.amountCent()).isEqualTo(11900L);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("ticket_dynamic_pricing.changed", "ticket_dynamic_pricing.simulated", "ticket_order.created");
+    }
+
+    @Test
+    void dynamicPricingPublishAndNoMatchSimulationAreAudited() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-publish");
+        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-publish-create",
+                "weekday discount",
+                List.of(),
+                ticketType.id(),
+                "Weekday discount",
+                10,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "app",
+                "fixed_delta",
+                null,
+                -1000L,
+                6900L,
+                15000L,
+                Map.of("member_level", "gold")
+        ));
+
+        TicketDynamicPricingRuleRecord published = service.publishDynamicPricingRule(
+                draft.id(),
+                new StatusChangeRequest("dynamic-publish-once", "publish", "approved by ops", List.of("att_publish"))
+        );
+        TicketDynamicPricingSimulationResponse noMatch = service.simulateDynamicPricing(new TicketDynamicPricingSimulationRequest(
+                "dynamic-no-match",
+                ticketType.id(),
+                LocalDate.parse("2026-07-01"),
+                "app",
+                Map.of("member_level", "gold")
+        ));
+
+        assertThat(published.status()).isEqualTo("published");
+        assertThat(noMatch.matchedRuleId()).isNull();
+        assertThat(noMatch.finalPriceCent()).isEqualTo(noMatch.basePriceCent());
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("ticket_dynamic_pricing.published", "ticket_dynamic_pricing.simulated");
+    }
+
     private TicketTypeRecord createTicketType(String key) {
         return service.createTicketType(new TicketTypeRequest(
                 key,
@@ -773,6 +870,7 @@ class TicketingServiceTests {
         private final Map<String, VerificationRecord> verifications = new LinkedHashMap<>();
         private final Map<String, TerminalSyncTaskRecord> terminalSyncTasks = new LinkedHashMap<>();
         private final Map<String, TicketPriceRuleRecord> priceRules = new LinkedHashMap<>();
+        private final Map<String, TicketDynamicPricingRuleRecord> dynamicPricingRules = new LinkedHashMap<>();
         private final Map<String, TicketOrderRecord> ticketOrders = new LinkedHashMap<>();
         private final Map<String, TicketPaymentIntentRecord> paymentIntents = new LinkedHashMap<>();
         private final Map<String, TicketCredentialRecord> credentials = new LinkedHashMap<>();
@@ -891,6 +989,22 @@ class TicketingServiceTests {
         @Override
         public Optional<TicketPriceRuleRecord> findPriceRuleById(String id) {
             return Optional.ofNullable(priceRules.get(id));
+        }
+
+        @Override
+        public TicketDynamicPricingRuleRecord saveDynamicPricingRule(TicketDynamicPricingRuleRecord rule) {
+            dynamicPricingRules.put(rule.id(), rule);
+            return rule;
+        }
+
+        @Override
+        public List<TicketDynamicPricingRuleRecord> listDynamicPricingRules() {
+            return new ArrayList<>(dynamicPricingRules.values());
+        }
+
+        @Override
+        public Optional<TicketDynamicPricingRuleRecord> findDynamicPricingRuleById(String id) {
+            return Optional.ofNullable(dynamicPricingRules.get(id));
         }
 
         @Override

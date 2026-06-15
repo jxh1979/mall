@@ -24,6 +24,8 @@ class JdbcTicketingRepository implements TicketingRepository {
     };
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE = new TypeReference<>() {
     };
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
+    };
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -337,6 +339,53 @@ class JdbcTicketingRepository implements TicketingRepository {
                   FROM ticket_price_rules
                  WHERE id = :id
                 """, Map.of("id", id), this::mapPriceRule).stream().findFirst();
+    }
+
+
+    @Override
+    public TicketDynamicPricingRuleRecord saveDynamicPricingRule(TicketDynamicPricingRuleRecord rule) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_dynamic_pricing_rules (
+                    id, ticket_type_id, rule_name, priority, effective_from, effective_to, sales_channel,
+                    adjustment_type, adjustment_rate, adjustment_amount_cent, min_price_cent, max_price_cent,
+                    status, condition_rule_json, operator_note, evidence_attachment_ids, created_at, updated_at
+                )
+                VALUES (
+                    :id, :ticket_type_id, :rule_name, :priority, :effective_from, :effective_to, :sales_channel,
+                    :adjustment_type, :adjustment_rate, :adjustment_amount_cent, :min_price_cent, :max_price_cent,
+                    :status, :condition_rule_json::jsonb, :operator_note, :evidence_attachment_ids::jsonb, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    ticket_type_id = EXCLUDED.ticket_type_id,
+                    rule_name = EXCLUDED.rule_name,
+                    priority = EXCLUDED.priority,
+                    effective_from = EXCLUDED.effective_from,
+                    effective_to = EXCLUDED.effective_to,
+                    sales_channel = EXCLUDED.sales_channel,
+                    adjustment_type = EXCLUDED.adjustment_type,
+                    adjustment_rate = EXCLUDED.adjustment_rate,
+                    adjustment_amount_cent = EXCLUDED.adjustment_amount_cent,
+                    min_price_cent = EXCLUDED.min_price_cent,
+                    max_price_cent = EXCLUDED.max_price_cent,
+                    status = EXCLUDED.status,
+                    condition_rule_json = EXCLUDED.condition_rule_json,
+                    operator_note = EXCLUDED.operator_note,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    updated_at = EXCLUDED.updated_at
+                """, dynamicPricingRuleParameters(rule));
+        return rule;
+    }
+
+    @Override
+    public List<TicketDynamicPricingRuleRecord> listDynamicPricingRules() {
+        return jdbcTemplate.query(dynamicPricingRuleSelect() + " ORDER BY priority DESC, updated_at DESC, id",
+                this::mapDynamicPricingRule);
+    }
+
+    @Override
+    public Optional<TicketDynamicPricingRuleRecord> findDynamicPricingRuleById(String id) {
+        return jdbcTemplate.query(dynamicPricingRuleSelect() + " WHERE id = :id", Map.of("id", id),
+                this::mapDynamicPricingRule).stream().findFirst();
     }
 
     @Override
@@ -653,6 +702,29 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
     }
 
+
+    private MapSqlParameterSource dynamicPricingRuleParameters(TicketDynamicPricingRuleRecord rule) {
+        return new MapSqlParameterSource()
+                .addValue("id", rule.id())
+                .addValue("ticket_type_id", rule.ticketTypeId())
+                .addValue("rule_name", rule.ruleName())
+                .addValue("priority", rule.priority())
+                .addValue("effective_from", rule.effectiveFrom())
+                .addValue("effective_to", rule.effectiveTo())
+                .addValue("sales_channel", rule.salesChannel())
+                .addValue("adjustment_type", rule.adjustmentType())
+                .addValue("adjustment_rate", rule.adjustmentRate())
+                .addValue("adjustment_amount_cent", rule.adjustmentAmountCent())
+                .addValue("min_price_cent", rule.minPriceCent())
+                .addValue("max_price_cent", rule.maxPriceCent())
+                .addValue("status", rule.status())
+                .addValue("condition_rule_json", writeJson(rule.conditionRule()))
+                .addValue("operator_note", rule.operatorNote())
+                .addValue("evidence_attachment_ids", writeJsonList(rule.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
+    }
+
     private MapSqlParameterSource ticketOrderParameters(TicketOrderRecord order) {
         return new MapSqlParameterSource()
                 .addValue("id", order.id())
@@ -851,6 +923,30 @@ class JdbcTicketingRepository implements TicketingRepository {
         );
     }
 
+
+    private TicketDynamicPricingRuleRecord mapDynamicPricingRule(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new TicketDynamicPricingRuleRecord(
+                resultSet.getString("id"),
+                resultSet.getString("ticket_type_id"),
+                resultSet.getString("rule_name"),
+                resultSet.getInt("priority"),
+                resultSet.getObject("effective_from", LocalDate.class),
+                resultSet.getObject("effective_to", LocalDate.class),
+                resultSet.getString("sales_channel"),
+                resultSet.getString("adjustment_type"),
+                nullableBigDecimal(resultSet, "adjustment_rate"),
+                nullableLong(resultSet, "adjustment_amount_cent"),
+                nullableLong(resultSet, "min_price_cent"),
+                nullableLong(resultSet, "max_price_cent"),
+                resultSet.getString("status"),
+                readObjectMap(resultSet.getString("condition_rule_json")),
+                resultSet.getString("operator_note"),
+                readStringList(resultSet.getString("evidence_attachment_ids")),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
+        );
+    }
+
     private TicketOrderRecord mapTicketOrder(ResultSet resultSet, int rowNumber) throws SQLException {
         return new TicketOrderRecord(
                 resultSet.getString("id"),
@@ -922,6 +1018,17 @@ class JdbcTicketingRepository implements TicketingRepository {
         );
     }
 
+
+    private String dynamicPricingRuleSelect() {
+        return """
+                SELECT id, ticket_type_id, rule_name, priority, effective_from, effective_to, sales_channel,
+                       adjustment_type, adjustment_rate, adjustment_amount_cent, min_price_cent, max_price_cent,
+                       status, condition_rule_json::text AS condition_rule_json, operator_note,
+                       evidence_attachment_ids::text AS evidence_attachment_ids, created_at, updated_at
+                  FROM ticket_dynamic_pricing_rules
+                """;
+    }
+
     private String ticketOrderSelect() {
         return """
                 SELECT id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
@@ -971,6 +1078,24 @@ class JdbcTicketingRepository implements TicketingRepository {
             return value == null ? Map.of() : objectMapper.readValue(value, STRING_MAP_TYPE);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("terminal sync payload is not readable", exception);
+        }
+    }
+
+
+
+    private String writeJsonList(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value == null ? List.of() : value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("ticketing JSON list is not serializable", exception);
+        }
+    }
+
+    private List<String> readStringList(String value) {
+        try {
+            return value == null ? List.of() : objectMapper.readValue(value, STRING_LIST_TYPE);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("ticketing JSON list is not readable", exception);
         }
     }
 

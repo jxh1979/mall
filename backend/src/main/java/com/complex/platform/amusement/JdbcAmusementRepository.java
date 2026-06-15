@@ -159,11 +159,11 @@ class JdbcAmusementRepository implements AmusementRepository {
     public AmusementSessionRecord saveSession(AmusementSessionRecord session) {
         jdbcTemplate.update("""
                 INSERT INTO amusement_sessions (
-                    id, project_id, start_time, end_time, capacity, used_capacity,
+                    id, project_id, start_time, end_time, capacity, used_capacity, locked_capacity,
                     status, evidence_attachment_ids, created_at, updated_at
                 )
                 VALUES (
-                    :id, :project_id, :start_time, :end_time, :capacity, :used_capacity,
+                    :id, :project_id, :start_time, :end_time, :capacity, :used_capacity, :locked_capacity,
                     :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -172,6 +172,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                     end_time = EXCLUDED.end_time,
                     capacity = EXCLUDED.capacity,
                     used_capacity = EXCLUDED.used_capacity,
+                    locked_capacity = EXCLUDED.locked_capacity,
                     status = EXCLUDED.status,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     updated_at = EXCLUDED.updated_at
@@ -182,7 +183,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     @Override
     public List<AmusementSessionRecord> listSessions() {
         return jdbcTemplate.query("""
-                SELECT id, project_id, start_time, end_time, capacity, used_capacity,
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity, locked_capacity,
                        status, evidence_attachment_ids, created_at, updated_at
                   FROM amusement_sessions
                  ORDER BY start_time DESC, id
@@ -192,7 +193,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     @Override
     public Optional<AmusementSessionRecord> findSessionById(String id) {
         return jdbcTemplate.query("""
-                SELECT id, project_id, start_time, end_time, capacity, used_capacity,
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity, locked_capacity,
                        status, evidence_attachment_ids, created_at, updated_at
                   FROM amusement_sessions
                  WHERE id = :id
@@ -206,9 +207,41 @@ class JdbcAmusementRepository implements AmusementRepository {
                    SET used_capacity = used_capacity + 1,
                        updated_at = :updated_at
                  WHERE id = :id
-                   AND used_capacity < capacity
+                   AND used_capacity + locked_capacity < capacity
                 """, Map.of("id", sessionId, "updated_at", timestampWithTimeZone(Instant.now())));
         return updated > 0;
+    }
+
+    @Override
+    public boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock) {
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_sessions
+                   SET locked_capacity = locked_capacity + :capacity_to_lock,
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND :capacity_to_lock > 0
+                   AND used_capacity + locked_capacity + :capacity_to_lock <= capacity
+                """, Map.of(
+                "id", sessionId,
+                "capacity_to_lock", capacityToLock,
+                "updated_at", timestampWithTimeZone(Instant.now())
+        ));
+        return updated > 0;
+    }
+
+    @Override
+    public void releaseSessionLockedCapacity(String sessionId, int capacityToRelease) {
+        jdbcTemplate.update("""
+                UPDATE amusement_sessions
+                   SET locked_capacity = GREATEST(locked_capacity - :capacity_to_release, 0),
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND :capacity_to_release > 0
+                """, Map.of(
+                "id", sessionId,
+                "capacity_to_release", capacityToRelease,
+                "updated_at", timestampWithTimeZone(Instant.now())
+        ));
     }
 
     @Override
@@ -453,6 +486,145 @@ class JdbcAmusementRepository implements AmusementRepository {
                 """, Map.of("id", id), this::mapReservation).stream().findFirst();
     }
 
+    @Override
+    public AmusementGroupBookingRecord saveGroupBooking(AmusementGroupBookingRecord booking) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_group_bookings (
+                    id, project_id, session_id, booking_type, customer_name, contact_phone,
+                    party_size, reserved_capacity, booking_status, approval_note, operator_note,
+                    evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :session_id, :booking_type, :customer_name, :contact_phone,
+                    :party_size, :reserved_capacity, :booking_status, :approval_note, :operator_note,
+                    CAST(:evidence_attachment_ids AS jsonb), :approved_at, :released_at, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    booking_status = EXCLUDED.booking_status,
+                    approval_note = EXCLUDED.approval_note,
+                    operator_note = EXCLUDED.operator_note,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    approved_at = EXCLUDED.approved_at,
+                    released_at = EXCLUDED.released_at,
+                    updated_at = EXCLUDED.updated_at
+                """, groupBookingParameters(booking));
+        return booking;
+    }
+
+    @Override
+    public List<AmusementGroupBookingRecord> listGroupBookings() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, booking_type, customer_name, contact_phone,
+                       party_size, reserved_capacity, booking_status, approval_note, operator_note,
+                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                  FROM amusement_group_bookings
+                 ORDER BY created_at DESC, id
+                """, this::mapGroupBooking);
+    }
+
+    @Override
+    public Optional<AmusementGroupBookingRecord> findGroupBookingById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, booking_type, customer_name, contact_phone,
+                       party_size, reserved_capacity, booking_status, approval_note, operator_note,
+                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                  FROM amusement_group_bookings
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapGroupBooking).stream().findFirst();
+    }
+
+    @Override
+    public Optional<AmusementGroupBookingRecord> approveGroupBookingWithCapacityLock(
+            String id,
+            String approvalNote,
+            List<String> evidenceAttachmentIds,
+            Instant approvedAt
+    ) {
+        return jdbcTemplate.query("""
+                WITH candidate AS (
+                    SELECT id, session_id, reserved_capacity
+                      FROM amusement_group_bookings
+                     WHERE id = :id
+                       AND booking_status = 'pending_approval'
+                     FOR UPDATE
+                ), locked_session AS (
+                    UPDATE amusement_sessions session
+                       SET locked_capacity = session.locked_capacity + candidate.reserved_capacity,
+                           updated_at = :updated_at
+                      FROM candidate
+                     WHERE session.id = candidate.session_id
+                       AND session.status IN ('scheduled', 'open')
+                       AND session.used_capacity + session.locked_capacity + candidate.reserved_capacity <= session.capacity
+                     RETURNING session.id
+                ), updated_booking AS (
+                    UPDATE amusement_group_bookings booking
+                       SET booking_status = 'approved',
+                           approval_note = :approval_note,
+                           evidence_attachment_ids = CAST(:evidence_attachment_ids AS jsonb),
+                           approved_at = :approved_at,
+                           updated_at = :updated_at
+                      FROM candidate, locked_session
+                     WHERE booking.id = candidate.id
+                     RETURNING booking.id, booking.project_id, booking.session_id, booking.booking_type,
+                               booking.customer_name, booking.contact_phone, booking.party_size,
+                               booking.reserved_capacity, booking.booking_status, booking.approval_note,
+                               booking.operator_note, booking.evidence_attachment_ids, booking.approved_at,
+                               booking.released_at, booking.created_at, booking.updated_at
+                )
+                SELECT * FROM updated_booking
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("approval_note", approvalNote)
+                .addValue("evidence_attachment_ids", writeJson(evidenceAttachmentIds))
+                .addValue("approved_at", timestampWithTimeZone(approvedAt))
+                .addValue("updated_at", timestampWithTimeZone(approvedAt)), this::mapGroupBooking).stream().findFirst();
+    }
+
+    @Override
+    public Optional<AmusementGroupBookingRecord> releaseGroupBookingAndCapacity(
+            String id,
+            String operatorNote,
+            List<String> evidenceAttachmentIds,
+            Instant releasedAt
+    ) {
+        return jdbcTemplate.query("""
+                WITH candidate AS (
+                    SELECT id, session_id, reserved_capacity
+                      FROM amusement_group_bookings
+                     WHERE id = :id
+                       AND booking_status = 'approved'
+                     FOR UPDATE
+                ), released_session AS (
+                    UPDATE amusement_sessions session
+                       SET locked_capacity = GREATEST(session.locked_capacity - candidate.reserved_capacity, 0),
+                           updated_at = :updated_at
+                      FROM candidate
+                     WHERE session.id = candidate.session_id
+                     RETURNING session.id
+                ), updated_booking AS (
+                    UPDATE amusement_group_bookings booking
+                       SET booking_status = 'released',
+                           operator_note = :operator_note,
+                           evidence_attachment_ids = CAST(:evidence_attachment_ids AS jsonb),
+                           released_at = :released_at,
+                           updated_at = :updated_at
+                      FROM candidate, released_session
+                     WHERE booking.id = candidate.id
+                     RETURNING booking.id, booking.project_id, booking.session_id, booking.booking_type,
+                               booking.customer_name, booking.contact_phone, booking.party_size,
+                               booking.reserved_capacity, booking.booking_status, booking.approval_note,
+                               booking.operator_note, booking.evidence_attachment_ids, booking.approved_at,
+                               booking.released_at, booking.created_at, booking.updated_at
+                )
+                SELECT * FROM updated_booking
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("operator_note", operatorNote)
+                .addValue("evidence_attachment_ids", writeJson(evidenceAttachmentIds))
+                .addValue("released_at", timestampWithTimeZone(releasedAt))
+                .addValue("updated_at", timestampWithTimeZone(releasedAt)), this::mapGroupBooking).stream().findFirst();
+    }
+
     private MapSqlParameterSource safetyTemplateParameters(AmusementSafetyTemplateRecord template) {
         return new MapSqlParameterSource()
                 .addValue("id", template.id())
@@ -500,6 +672,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("end_time", timestampWithTimeZone(session.endTime()))
                 .addValue("capacity", session.capacity())
                 .addValue("used_capacity", session.usedCapacity())
+                .addValue("locked_capacity", session.lockedCapacity())
                 .addValue("status", session.status())
                 .addValue("evidence_attachment_ids", writeJson(session.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(session.createdAt()))
@@ -600,6 +773,26 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("updated_at", timestampWithTimeZone(reservation.updatedAt()));
     }
 
+    private MapSqlParameterSource groupBookingParameters(AmusementGroupBookingRecord booking) {
+        return new MapSqlParameterSource()
+                .addValue("id", booking.id())
+                .addValue("project_id", booking.projectId())
+                .addValue("session_id", booking.sessionId())
+                .addValue("booking_type", booking.bookingType())
+                .addValue("customer_name", booking.customerName())
+                .addValue("contact_phone", booking.contactPhone())
+                .addValue("party_size", booking.partySize())
+                .addValue("reserved_capacity", booking.reservedCapacity())
+                .addValue("booking_status", booking.bookingStatus())
+                .addValue("approval_note", booking.approvalNote())
+                .addValue("operator_note", booking.operatorNote())
+                .addValue("evidence_attachment_ids", writeJson(booking.evidenceAttachmentIds()))
+                .addValue("approved_at", timestampWithTimeZone(booking.approvedAt()))
+                .addValue("released_at", timestampWithTimeZone(booking.releasedAt()))
+                .addValue("created_at", timestampWithTimeZone(booking.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(booking.updatedAt()));
+    }
+
     private AmusementSafetyTemplateRecord mapSafetyTemplate(ResultSet rs, int rowNum) throws SQLException {
         return new AmusementSafetyTemplateRecord(
                 rs.getString("id"),
@@ -650,6 +843,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 instant(rs, "end_time"),
                 rs.getInt("capacity"),
                 rs.getInt("used_capacity"),
+                rs.getInt("locked_capacity"),
                 rs.getString("status"),
                 readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
                 instant(rs, "created_at"),
@@ -741,6 +935,27 @@ class JdbcAmusementRepository implements AmusementRepository {
                 rs.getString("session_id"),
                 rs.getString("customer_id"),
                 rs.getString("reservation_status"),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
+    private AmusementGroupBookingRecord mapGroupBooking(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementGroupBookingRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("session_id"),
+                rs.getString("booking_type"),
+                rs.getString("customer_name"),
+                rs.getString("contact_phone"),
+                rs.getInt("party_size"),
+                rs.getInt("reserved_capacity"),
+                rs.getString("booking_status"),
+                rs.getString("approval_note"),
+                rs.getString("operator_note"),
+                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
+                instant(rs, "approved_at"),
+                instant(rs, "released_at"),
                 instant(rs, "created_at"),
                 instant(rs, "updated_at")
         );

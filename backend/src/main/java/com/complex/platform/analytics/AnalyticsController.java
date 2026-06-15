@@ -3,6 +3,7 @@ package com.complex.platform.analytics;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
+import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
@@ -57,6 +58,13 @@ public class AnalyticsController {
     public ApiResponse<DashboardSnapshotRecord> getP0OverviewDashboard() {
         authorizationService.requirePermission("analytics.dashboard.view");
         return ApiResponse.ok(service.getP0OverviewDashboard());
+    }
+
+
+    @GetMapping("/business-metric-snapshots")
+    public ApiResponse<PageResponse<BusinessMetricSnapshotRecord>> listBusinessMetricSnapshots() {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        return ApiResponse.ok(service.listBusinessMetricSnapshots());
     }
 
     @GetMapping("/merchant-health")

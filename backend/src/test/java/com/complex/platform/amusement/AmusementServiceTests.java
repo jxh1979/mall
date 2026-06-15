@@ -430,6 +430,170 @@ class AmusementServiceTests {
                 .isEqualTo("QUEUE_ENTRY_NOT_FOUND");
     }
 
+    @Test
+    void groupBookingApprovalLocksCapacityAndReleaseRestoresAvailability() {
+        AmusementProjectRecord project = projectWithTemplate("group-lock");
+        submitPassingInspection(project, "group-lock");
+        AmusementSessionRecord session = createSession("group-lock-session", project.id(), 2, "open");
+
+        AmusementGroupBookingRecord booking = service.createGroupBooking(new AmusementGroupBookingRequest(
+                "group-lock-create",
+                "operator note",
+                List.of("att_group"),
+                project.id(),
+                session.id(),
+                "group",
+                "Company Team",
+                "13800000000",
+                2,
+                2
+        ));
+
+        assertThat(booking.bookingStatus()).isEqualTo("pending_approval");
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get()
+                .extracting(AmusementSessionRecord::lockedCapacity)
+                .isEqualTo(0);
+
+        AmusementGroupBookingRecord approved = service.approveGroupBooking(
+                booking.id(),
+                new AmusementGroupBookingApprovalRequest("group-lock-approve", "ops approved", List.of("att_approve"))
+        );
+
+        assertThat(approved.bookingStatus()).isEqualTo("approved");
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get()
+                .extracting(AmusementSessionRecord::lockedCapacity)
+                .isEqualTo(2);
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-group-locked",
+                        project.id(),
+                        session.id(),
+                        "credential-group-locked"
+                )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+
+        AmusementGroupBookingRecord released = service.releaseGroupBooking(
+                booking.id(),
+                new AmusementGroupBookingReleaseRequest("group-lock-release", "customer changed plan", List.of("att_release"))
+        );
+
+        assertThat(released.bookingStatus()).isEqualTo("released");
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get()
+                .extracting(AmusementSessionRecord::lockedCapacity)
+                .isEqualTo(0);
+        assertThat(service.createVerification(verification(
+                "verify-group-after-release",
+                project.id(),
+                session.id(),
+                "credential-after-release"
+        )).verificationResult()).isEqualTo("success");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains(
+                        "amusement.group_booking.created",
+                        "amusement.group_booking.approved",
+                        "amusement.group_booking.released"
+                );
+    }
+
+    @Test
+    void groupBookingRejectsRepeatedApproveAndRepeatedReleaseWithoutCapacityDrift() {
+        AmusementProjectRecord project = projectWithTemplate("group-repeat");
+        submitPassingInspection(project, "group-repeat");
+        AmusementSessionRecord session = createSession("group-repeat-session", project.id(), 3, "open");
+        AmusementGroupBookingRecord booking = service.createGroupBooking(new AmusementGroupBookingRequest(
+                "group-repeat-create",
+                "operator note",
+                List.of("att_group"),
+                project.id(),
+                session.id(),
+                "group",
+                "Company Team",
+                "13800000000",
+                2,
+                2
+        ));
+
+        service.approveGroupBooking(
+                booking.id(),
+                new AmusementGroupBookingApprovalRequest("group-repeat-approve", "ops approved", List.of())
+        );
+
+        assertThatThrownBy(() -> service.approveGroupBooking(
+                        booking.id(),
+                        new AmusementGroupBookingApprovalRequest("group-repeat-approve-again", "ops approved again", List.of())
+                ))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("GROUP_BOOKING_NOT_PENDING");
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get()
+                .extracting(AmusementSessionRecord::lockedCapacity)
+                .isEqualTo(2);
+
+        service.releaseGroupBooking(
+                booking.id(),
+                new AmusementGroupBookingReleaseRequest("group-repeat-release", "customer changed plan", List.of())
+        );
+
+        assertThatThrownBy(() -> service.releaseGroupBooking(
+                        booking.id(),
+                        new AmusementGroupBookingReleaseRequest("group-repeat-release-again", "customer changed plan again", List.of())
+                ))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("GROUP_BOOKING_NOT_APPROVED");
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get()
+                .extracting(AmusementSessionRecord::lockedCapacity)
+                .isEqualTo(0);
+    }
+
+    @Test
+    void groupBookingApprovalRejectsInsufficientRemainingCapacityWithoutMutation() {
+        AmusementProjectRecord project = projectWithTemplate("group-capacity");
+        submitPassingInspection(project, "group-capacity");
+        AmusementSessionRecord session = createSession("group-capacity-session", project.id(), 2, "open");
+        service.createVerification(verification("verify-before-group-lock", project.id(), session.id(), "credential-before-lock"));
+
+        AmusementGroupBookingRecord booking = service.createGroupBooking(new AmusementGroupBookingRequest(
+                "group-capacity-create",
+                "operator note",
+                List.of("att_group"),
+                project.id(),
+                session.id(),
+                "private",
+                "Private Event",
+                "13900000000",
+                2,
+                2
+        ));
+
+        assertThatThrownBy(() -> service.approveGroupBooking(
+                        booking.id(),
+                        new AmusementGroupBookingApprovalRequest("group-capacity-approve", "ops approved", List.of())
+                ))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SESSION_CAPACITY_LOCK_FAILED");
+
+        assertThat(amusementRepository.findGroupBookingById(booking.id()))
+                .get()
+                .extracting(AmusementGroupBookingRecord::bookingStatus)
+                .isEqualTo("pending_approval");
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get()
+                .extracting(AmusementSessionRecord::usedCapacity, AmusementSessionRecord::lockedCapacity)
+                .containsExactly(1, 0);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.group_booking.approve_failed");
+    }
+
     private AmusementProjectRecord projectWithTemplate(String key) {
         AmusementSafetyTemplateRecord template = createTemplate(key + "-template");
         return createProject(key, template.id(), "open", 2);
@@ -512,6 +676,7 @@ class AmusementServiceTests {
         private final Map<String, AmusementDeviceStatusRecord> deviceStatuses = new LinkedHashMap<>();
         private final Map<String, AmusementQueueEntryRecord> queueEntries = new LinkedHashMap<>();
         private final Map<String, AmusementReservationRecord> reservations = new LinkedHashMap<>();
+        private final Map<String, AmusementGroupBookingRecord> groupBookings = new LinkedHashMap<>();
         private final List<AmusementSafetyActionRecord> safetyActions = new ArrayList<>();
 
         @Override
@@ -580,7 +745,7 @@ class AmusementServiceTests {
         @Override
         public boolean incrementSessionUsedCapacityIfAvailable(String sessionId) {
             AmusementSessionRecord session = sessions.get(sessionId);
-            if (session == null || session.usedCapacity() >= session.capacity()) {
+            if (session == null || session.usedCapacity() + session.lockedCapacity() >= session.capacity()) {
                 return false;
             }
             Instant now = Instant.parse("2026-06-14T12:00:00Z");
@@ -591,12 +756,144 @@ class AmusementServiceTests {
                     session.endTime(),
                     session.capacity(),
                     session.usedCapacity() + 1,
+                    session.lockedCapacity(),
                     session.status(),
                     session.evidenceAttachmentIds(),
                     session.createdAt(),
                     now
             ));
             return true;
+        }
+
+        @Override
+        public boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock) {
+            AmusementSessionRecord session = sessions.get(sessionId);
+            if (session == null || capacityToLock <= 0 || session.usedCapacity() + session.lockedCapacity() + capacityToLock > session.capacity()) {
+                return false;
+            }
+            Instant now = Instant.parse("2026-06-14T12:00:00Z");
+            sessions.put(sessionId, new AmusementSessionRecord(
+                    session.id(),
+                    session.projectId(),
+                    session.startTime(),
+                    session.endTime(),
+                    session.capacity(),
+                    session.usedCapacity(),
+                    session.lockedCapacity() + capacityToLock,
+                    session.status(),
+                    session.evidenceAttachmentIds(),
+                    session.createdAt(),
+                    now
+            ));
+            return true;
+        }
+
+        @Override
+        public void releaseSessionLockedCapacity(String sessionId, int capacityToRelease) {
+            AmusementSessionRecord session = sessions.get(sessionId);
+            if (session == null || capacityToRelease <= 0) {
+                return;
+            }
+            Instant now = Instant.parse("2026-06-14T12:00:00Z");
+            sessions.put(sessionId, new AmusementSessionRecord(
+                    session.id(),
+                    session.projectId(),
+                    session.startTime(),
+                    session.endTime(),
+                    session.capacity(),
+                    session.usedCapacity(),
+                    Math.max(session.lockedCapacity() - capacityToRelease, 0),
+                    session.status(),
+                    session.evidenceAttachmentIds(),
+                    session.createdAt(),
+                    now
+            ));
+        }
+
+        @Override
+        public AmusementGroupBookingRecord saveGroupBooking(AmusementGroupBookingRecord booking) {
+            groupBookings.put(booking.id(), booking);
+            return booking;
+        }
+
+        @Override
+        public List<AmusementGroupBookingRecord> listGroupBookings() {
+            return new ArrayList<>(groupBookings.values());
+        }
+
+        @Override
+        public Optional<AmusementGroupBookingRecord> findGroupBookingById(String id) {
+            return Optional.ofNullable(groupBookings.get(id));
+        }
+
+        @Override
+        public Optional<AmusementGroupBookingRecord> approveGroupBookingWithCapacityLock(
+                String id,
+                String approvalNote,
+                List<String> evidenceAttachmentIds,
+                Instant approvedAt
+        ) {
+            AmusementGroupBookingRecord existing = groupBookings.get(id);
+            if (existing == null || !"pending_approval".equals(existing.bookingStatus())) {
+                return Optional.empty();
+            }
+            if (!lockSessionCapacityIfAvailable(existing.sessionId(), existing.reservedCapacity())) {
+                return Optional.empty();
+            }
+            AmusementGroupBookingRecord approved = new AmusementGroupBookingRecord(
+                    existing.id(),
+                    existing.projectId(),
+                    existing.sessionId(),
+                    existing.bookingType(),
+                    existing.customerName(),
+                    existing.contactPhone(),
+                    existing.partySize(),
+                    existing.reservedCapacity(),
+                    "approved",
+                    approvalNote,
+                    existing.operatorNote(),
+                    evidenceAttachmentIds,
+                    approvedAt,
+                    existing.releasedAt(),
+                    existing.createdAt(),
+                    approvedAt
+            );
+            groupBookings.put(id, approved);
+            return Optional.of(approved);
+        }
+
+        @Override
+        public Optional<AmusementGroupBookingRecord> releaseGroupBookingAndCapacity(
+                String id,
+                String operatorNote,
+                List<String> evidenceAttachmentIds,
+                Instant releasedAt
+        ) {
+            AmusementGroupBookingRecord existing = groupBookings.get(id);
+            if (existing == null || !"approved".equals(existing.bookingStatus())) {
+                return Optional.empty();
+            }
+            releaseSessionLockedCapacity(existing.sessionId(), existing.reservedCapacity());
+            AmusementGroupBookingRecord released = new AmusementGroupBookingRecord(
+                    existing.id(),
+                    existing.projectId(),
+                    existing.sessionId(),
+                    existing.bookingType(),
+                    existing.customerName(),
+                    existing.contactPhone(),
+                    existing.partySize(),
+                    existing.reservedCapacity(),
+                    "released",
+                    existing.approvalNote(),
+                    operatorNote,
+                    evidenceAttachmentIds,
+                    existing.approvedAt(),
+                    releasedAt,
+                    existing.createdAt(),
+                    releasedAt
+            );
+            groupBookings.put(id, released);
+            return Optional.of(released);
         }
 
         @Override

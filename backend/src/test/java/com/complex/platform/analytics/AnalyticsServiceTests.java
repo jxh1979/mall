@@ -6,6 +6,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
+import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
@@ -66,6 +67,7 @@ class AnalyticsServiceTests {
         assertThat(service.listAiQualityTasks().items()).extracting(AiQualityTaskRecord::taskId).contains("task_1");
         assertThat(service.listCustomerIntents().items()).extracting(CustomerIntentRecord::intentId).contains("intent_1");
         assertThat(service.getP0OverviewDashboard().snapshotKey()).isEqualTo("p0_overview_today");
+        assertThat(service.listBusinessMetricSnapshots().items()).extracting(BusinessMetricSnapshotRecord::metricKey).contains("gmv_amount_cents");
         assertThat(service.listMerchantHealthScores().items()).extracting(MerchantHealthScoreRecord::merchantId).contains("merchant_1");
         assertThat(service.listAnalyticsMerchants().items()).extracting(MerchantSummaryRecord::merchantId).contains("merchant_1");
         assertThat(service.listMetricAnomalies().items()).extracting(MetricAnomalyRecord::id).contains("anomaly_1");
@@ -82,6 +84,7 @@ class AnalyticsServiceTests {
                         "analytics.ai_quality_task.viewed",
                         "analytics.customer_intent.viewed",
                         "analytics.dashboard_viewed",
+                        "analytics.business_metric_snapshot.viewed",
                         "analytics.merchant_health.viewed",
                         "analytics.merchant_summary.viewed",
                         "analytics.metric_anomaly.viewed",
@@ -287,6 +290,24 @@ class AnalyticsServiceTests {
                 Map.of("top_domain", "bar"),
                 now
         );
+        analyticsRepository.businessMetricSnapshots.add(new BusinessMetricSnapshotRecord(
+                "metric_snapshot_1",
+                "gmv_amount_cents",
+                "finance",
+                "daily",
+                LocalDate.parse("2026-06-14"),
+                "project",
+                "project_1",
+                new BigDecimal("128800"),
+                new BigDecimal("118800"),
+                new BigDecimal("8.42"),
+                "up",
+                "manual_baseline",
+                new BigDecimal("135000"),
+                new BigDecimal("0.70"),
+                Map.of("source", "p2_seed"),
+                now
+        ));
         analyticsRepository.merchantSummaries.add(new MerchantSummaryRecord(
                 "merchant_1",
                 "Blue Bar",
@@ -414,6 +435,7 @@ class AnalyticsServiceTests {
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
         private final List<MetricDefinitionRecord> metricDefinitions = new ArrayList<>();
         private DashboardSnapshotRecord dashboardSnapshot;
+        private final List<BusinessMetricSnapshotRecord> businessMetricSnapshots = new ArrayList<>();
         private final List<MerchantSummaryRecord> merchantSummaries = new ArrayList<>();
         private final List<MerchantHealthScoreRecord> merchantHealthScores = new ArrayList<>();
         private final List<MetricAnomalyRecord> metricAnomalies = new ArrayList<>();
@@ -449,6 +471,11 @@ class AnalyticsServiceTests {
         @Override
         public DashboardSnapshotRecord getP0OverviewDashboard() {
             return dashboardSnapshot;
+        }
+
+        @Override
+        public List<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {
+            return businessMetricSnapshots;
         }
 
         @Override

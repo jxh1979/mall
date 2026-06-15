@@ -45,7 +45,7 @@ class IntegrationJdbcIntegrationTests {
         assertThat(regclass("integration_compensation_tasks")).isEqualTo("integration_compensation_tasks");
         assertThat(regclass("integration_reconciliation_batches")).isEqualTo("integration_reconciliation_batches");
         assertThat(regclass("integration_reconciliation_differences")).isEqualTo("integration_reconciliation_differences");
-        assertThat(currentFlywayVersion()).isEqualTo("034");
+        assertThat(currentFlywayVersion()).isEqualTo("037");
 
         assertThat(permissionCodes()).contains(
                 "integration.provider_adapter.view",

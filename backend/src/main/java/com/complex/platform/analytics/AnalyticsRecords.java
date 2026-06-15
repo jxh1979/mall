@@ -37,6 +37,27 @@ public final class AnalyticsRecords {
     ) {
     }
 
+
+    public record BusinessMetricSnapshotRecord(
+            String snapshotId,
+            String metricKey,
+            String domain,
+            String periodType,
+            LocalDate businessDate,
+            String segmentType,
+            String segmentId,
+            BigDecimal actualValue,
+            BigDecimal baselineValue,
+            BigDecimal varianceRate,
+            String trendDirection,
+            String projectionMethod,
+            BigDecimal projectedValue,
+            BigDecimal confidenceScore,
+            Map<String, Object> payload,
+            Instant createdAt
+    ) {
+    }
+
     public record MerchantSummaryRecord(
             String merchantId,
             String merchantName,

@@ -2,6 +2,7 @@ package com.complex.platform.analytics;
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
+import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
@@ -84,6 +85,18 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 """, this::mapDashboardSnapshot).stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("P0 overview dashboard snapshot is not seeded"));
+    }
+
+
+    @Override
+    public List<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {
+        return jdbcTemplate.query("""
+                SELECT snapshot_id, metric_key, domain, period_type, business_date, segment_type,
+                       segment_id, actual_value, baseline_value, variance_rate, trend_direction,
+                       projection_method, projected_value, confidence_score, payload_json, created_at
+                  FROM analytics_business_metric_snapshots
+                 ORDER BY business_date DESC, domain, metric_key, segment_type, segment_id NULLS FIRST
+                """, this::mapBusinessMetricSnapshot);
     }
 
     @Override
@@ -271,6 +284,28 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 resultSet.getInt("order_count"),
                 resultSet.getInt("risk_alert_count"),
                 resultSet.getInt("critical_risk_count"),
+                readJson(resultSet.getString("payload_json"), MAP_TYPE),
+                instant(resultSet, "created_at")
+        );
+    }
+
+
+    private BusinessMetricSnapshotRecord mapBusinessMetricSnapshot(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new BusinessMetricSnapshotRecord(
+                resultSet.getString("snapshot_id"),
+                resultSet.getString("metric_key"),
+                resultSet.getString("domain"),
+                resultSet.getString("period_type"),
+                resultSet.getObject("business_date", java.time.LocalDate.class),
+                resultSet.getString("segment_type"),
+                resultSet.getString("segment_id"),
+                resultSet.getBigDecimal("actual_value"),
+                resultSet.getBigDecimal("baseline_value"),
+                resultSet.getBigDecimal("variance_rate"),
+                resultSet.getString("trend_direction"),
+                resultSet.getString("projection_method"),
+                resultSet.getBigDecimal("projected_value"),
+                resultSet.getBigDecimal("confidence_score"),
                 readJson(resultSet.getString("payload_json"), MAP_TYPE),
                 instant(resultSet, "created_at")
         );

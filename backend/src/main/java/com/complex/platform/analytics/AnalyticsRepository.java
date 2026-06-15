@@ -2,6 +2,7 @@ package com.complex.platform.analytics;
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
+import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
@@ -24,6 +25,8 @@ public interface AnalyticsRepository {
     List<CustomerIntentRecord> listCustomerIntents();
 
     DashboardSnapshotRecord getP0OverviewDashboard();
+
+    List<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots();
 
     List<MerchantHealthScoreRecord> listMerchantHealthScores();
 

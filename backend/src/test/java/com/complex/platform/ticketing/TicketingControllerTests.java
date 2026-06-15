@@ -3,6 +3,7 @@ package com.complex.platform.ticketing;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -364,6 +365,118 @@ class TicketingControllerTests {
         verify(authorizationService).requirePermission("ticket.refund.request");
         verify(authorizationService).requirePermission("ticket.refund.approve");
         verify(authorizationService).requirePermission("ticket.refund.view");
+    }
+
+
+    @Test
+    void dynamicPricingRoutesUseExactPermissionsAndRequireIdempotency() throws Exception {
+        TicketDynamicPricingRuleRecord rule = new TicketDynamicPricingRuleRecord(
+                "dyn_rule_1",
+                "ticket_type_1",
+                "Summer uplift",
+                100,
+                java.time.LocalDate.parse("2026-06-01"),
+                java.time.LocalDate.parse("2026-06-30"),
+                "web",
+                "percent_delta",
+                new java.math.BigDecimal("20.00"),
+                null,
+                9900L,
+                15000L,
+                "draft",
+                Map.of("inventory_level", "low"),
+                "ops",
+                List.of("att_dyn"),
+                Instant.parse("2026-06-15T00:00:00Z"),
+                Instant.parse("2026-06-15T00:00:00Z")
+        );
+        when(service.listDynamicPricingRules()).thenReturn(new PageResponse<>(List.of(rule), 1, 50, 1));
+        when(service.createDynamicPricingRule(any(TicketDynamicPricingRuleRequest.class))).thenReturn(rule);
+        when(service.publishDynamicPricingRule(any(String.class), any(StatusChangeRequest.class)))
+                .thenReturn(new TicketDynamicPricingRuleRecord(
+                        rule.id(), rule.ticketTypeId(), rule.ruleName(), rule.priority(), rule.effectiveFrom(),
+                        rule.effectiveTo(), rule.salesChannel(), rule.adjustmentType(), rule.adjustmentRate(),
+                        rule.adjustmentAmountCent(), rule.minPriceCent(), rule.maxPriceCent(), "published",
+                        rule.conditionRule(), "publish", List.of("att_publish"), rule.createdAt(), rule.updatedAt()
+                ));
+        when(service.simulateDynamicPricing(any(TicketDynamicPricingSimulationRequest.class)))
+                .thenReturn(new TicketDynamicPricingSimulationResponse(
+                        "ticket_type_1",
+                        java.time.LocalDate.parse("2026-06-20"),
+                        "web",
+                        11900L,
+                        2380L,
+                        14280L,
+                        "dyn_rule_1",
+                        "matched dynamic pricing rule"
+                ));
+
+        mockMvc.perform(get("/api/v1/ticketing/dynamic-pricing-rules")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value("dyn_rule_1"));
+        mockMvc.perform(post("/api/v1/ticketing/dynamic-pricing-rules")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "dyn-create",
+                                  "ticket_type_id": "ticket_type_1",
+                                  "rule_name": "Summer uplift",
+                                  "priority": 100,
+                                  "effective_from": "2026-06-01",
+                                  "effective_to": "2026-06-30",
+                                  "sales_channel": "web",
+                                  "adjustment_type": "percent_delta",
+                                  "adjustment_rate": 20.00,
+                                  "min_price_cent": 9900,
+                                  "max_price_cent": 15000,
+                                  "condition_rule": {"inventory_level": "low"}
+                                }
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/ticketing/dynamic-pricing-rules/dyn_rule_1/publish")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "dyn-publish",
+                                  "action": "publish",
+                                  "reason": "approved"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("published"));
+        mockMvc.perform(post("/api/v1/ticketing/dynamic-pricing/simulations")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "dyn-sim",
+                                  "ticket_type_id": "ticket_type_1",
+                                  "visit_date": "2026-06-20",
+                                  "sales_channel": "web",
+                                  "context": {"inventory_level": "low"}
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.final_price_cent").value(14280));
+        mockMvc.perform(post("/api/v1/ticketing/dynamic-pricing/simulations")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "ticket_type_id": "ticket_type_1",
+                                  "visit_date": "2026-06-20",
+                                  "sales_channel": "web"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(authorizationService).requirePermission("ticket.dynamic_pricing.view");
+        verify(authorizationService).requirePermission("ticket.dynamic_pricing.manage");
+        verify(authorizationService).requirePermission("ticket.dynamic_pricing.publish");
+        verify(authorizationService, times(2)).requirePermission("ticket.dynamic_pricing.simulate");
     }
 
     @TestConfiguration

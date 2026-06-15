@@ -32,6 +32,7 @@ public class AmusementService {
     private static final Set<String> RULE_TYPES = Set.of("age", "height", "weight", "capacity", "safety_notice", "manual");
     private static final Set<String> RESERVATION_STATUSES = Set.of("reserved", "cancelled", "completed", "no_show");
     private static final Set<String> QUEUE_STATUSES = Set.of("waiting", "called", "checked_in", "cancelled", "no_show");
+    private static final Set<String> GROUP_BOOKING_TYPES = Set.of("group", "private");
     private static final Set<String> ACCEPTING_ENTRY_SESSION_STATUSES = Set.of("scheduled", "open");
 
     private final AmusementRepository repository;
@@ -243,6 +244,63 @@ public class AmusementService {
                 "amusement.reservation.manage",
                 "amusement_reservation",
                 () -> changeReservationStatusInternal(id, request)
+        );
+    }
+
+    public PageResponse<AmusementGroupBookingRecord> listGroupBookings() {
+        return readPage(
+                "amusement.group_booking.viewed",
+                "amusement.group_booking.view_failed",
+                "amusement.group_booking.view",
+                "amusement_group_booking",
+                repository::listGroupBookings
+        );
+    }
+
+    @Transactional
+    public AmusementGroupBookingRecord createGroupBooking(AmusementGroupBookingRequest request) {
+        return executeWrite(
+                "createAmusementGroupBooking",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementGroupBookingRecord.class,
+                "amusement.group_booking.created",
+                "amusement.group_booking.create_failed",
+                "amusement.group_booking.manage",
+                "amusement_group_booking",
+                () -> createGroupBookingInternal(request)
+        );
+    }
+
+    @Transactional
+    public AmusementGroupBookingRecord approveGroupBooking(String bookingId, AmusementGroupBookingApprovalRequest request) {
+        String id = requireText(bookingId, "group_booking_id");
+        return executeWrite(
+                "approveAmusementGroupBooking:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementGroupBookingRecord.class,
+                "amusement.group_booking.approved",
+                "amusement.group_booking.approve_failed",
+                "amusement.group_booking.approve",
+                "amusement_group_booking",
+                () -> approveGroupBookingInternal(id, request)
+        );
+    }
+
+    @Transactional
+    public AmusementGroupBookingRecord releaseGroupBooking(String bookingId, AmusementGroupBookingReleaseRequest request) {
+        String id = requireText(bookingId, "group_booking_id");
+        return executeWrite(
+                "releaseAmusementGroupBooking:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementGroupBookingRecord.class,
+                "amusement.group_booking.released",
+                "amusement.group_booking.release_failed",
+                "amusement.group_booking.manage",
+                "amusement_group_booking",
+                () -> releaseGroupBookingInternal(id, request)
         );
     }
 
@@ -500,6 +558,7 @@ public class AmusementService {
                 end,
                 nonNegativeOrDefault(actual.capacity(), 0, "capacity"),
                 0,
+                0,
                 enumOrDefault(actual.status(), "scheduled", SESSION_STATUSES, "status"),
                 evidence(actual.evidenceAttachmentIds()),
                 now,
@@ -600,6 +659,76 @@ public class AmusementService {
                 existing.createdAt(),
                 Instant.now()
         ));
+    }
+
+    private AmusementGroupBookingRecord createGroupBookingInternal(AmusementGroupBookingRequest request) {
+        AmusementGroupBookingRequest actual = requireRequest(request);
+        AmusementSessionRecord session = acceptingSession(
+                requireText(actual.projectId(), "project_id"),
+                requireText(actual.sessionId(), "session_id"),
+                "SESSION_NOT_ACCEPTING_GROUP_BOOKING"
+        );
+        int partySize = positiveInteger(actual.partySize(), "party_size");
+        int reservedCapacity = positiveInteger(actual.reservedCapacity(), "reserved_capacity");
+        if (reservedCapacity > session.capacity()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "reserved_capacity cannot exceed session capacity");
+        }
+        Instant now = Instant.now();
+        return repository.saveGroupBooking(new AmusementGroupBookingRecord(
+                "group_booking_" + slug(actual.idempotencyKey()),
+                session.projectId(),
+                session.id(),
+                enumOrDefault(actual.bookingType(), "group", GROUP_BOOKING_TYPES, "booking_type"),
+                requireText(actual.customerName(), "customer_name"),
+                trimToNull(actual.contactPhone()),
+                partySize,
+                reservedCapacity,
+                "pending_approval",
+                null,
+                trimToNull(actual.operatorNote()),
+                evidence(actual.evidenceAttachmentIds()),
+                null,
+                null,
+                now,
+                now
+        ));
+    }
+
+    private AmusementGroupBookingRecord approveGroupBookingInternal(String bookingId, AmusementGroupBookingApprovalRequest request) {
+        AmusementGroupBookingApprovalRequest actual = requireRequest(request);
+        String approvalNote = requireText(actual.approvalNote(), "approval_note");
+        AmusementGroupBookingRecord existing = repository.findGroupBookingById(bookingId)
+                .orElseThrow(() -> ApiException.notFound("GROUP_BOOKING_NOT_FOUND", "group booking not found"));
+        if (!"pending_approval".equals(existing.bookingStatus())) {
+            throw ApiException.conflict("GROUP_BOOKING_NOT_PENDING", "group booking must be pending approval");
+        }
+        acceptingSession(existing.projectId(), existing.sessionId(), "SESSION_NOT_ACCEPTING_GROUP_BOOKING");
+        Instant now = Instant.now();
+        return repository.approveGroupBookingWithCapacityLock(
+                        existing.id(),
+                        approvalNote,
+                        evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
+                        now
+                )
+                .orElseThrow(() -> ApiException.conflict("SESSION_CAPACITY_LOCK_FAILED", "session remaining capacity is insufficient"));
+    }
+
+    private AmusementGroupBookingRecord releaseGroupBookingInternal(String bookingId, AmusementGroupBookingReleaseRequest request) {
+        AmusementGroupBookingReleaseRequest actual = requireRequest(request);
+        String reason = requireText(actual.reason(), "reason");
+        AmusementGroupBookingRecord existing = repository.findGroupBookingById(bookingId)
+                .orElseThrow(() -> ApiException.notFound("GROUP_BOOKING_NOT_FOUND", "group booking not found"));
+        if (!"approved".equals(existing.bookingStatus())) {
+            throw ApiException.conflict("GROUP_BOOKING_NOT_APPROVED", "only approved group booking can be released");
+        }
+        Instant now = Instant.now();
+        return repository.releaseGroupBookingAndCapacity(
+                        existing.id(),
+                        trimToDefault(existing.operatorNote(), reason),
+                        evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
+                        now
+                )
+                .orElseThrow(() -> ApiException.conflict("GROUP_BOOKING_RELEASE_FAILED", "group booking capacity release failed"));
     }
 
     private AmusementSessionRecord acceptingSession(String projectId, String sessionId, String blockedCode) {
@@ -897,7 +1026,7 @@ public class AmusementService {
             if (!"open".equals(session.status())) {
                 reasons.add("SESSION_NOT_OPEN");
             }
-            if (session.usedCapacity() >= session.capacity()) {
+            if (session.usedCapacity() + session.lockedCapacity() >= session.capacity()) {
                 reasons.add("SESSION_CAPACITY_EXHAUSTED");
             }
         }
@@ -1015,6 +1144,9 @@ public class AmusementService {
         if (response instanceof AmusementQueueEntryRecord record) {
             return record.id();
         }
+        if (response instanceof AmusementGroupBookingRecord record) {
+            return record.id();
+        }
         return "unknown";
     }
 
@@ -1049,6 +1181,14 @@ public class AmusementService {
         int actual = value == null ? defaultValue : value;
         if (actual < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+        }
+        return actual;
+    }
+
+    private int positiveInteger(Integer value, String fieldName) {
+        int actual = value == null ? 0 : value;
+        if (actual <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be positive");
         }
         return actual;
     }

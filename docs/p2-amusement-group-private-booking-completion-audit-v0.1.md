@@ -1,0 +1,49 @@
+# P2-B 游乐团体/包场预订与容量锁定完成审计 V0.1
+
+## 1. 审计结论
+
+P2-B 已完成可编码闭环。系统现在支持后台创建团体/包场预订、人工审批锁定容量、释放归还容量，并且普通核销会扣除已锁定容量，避免场次超容。
+
+P2-B 明确不覆盖收费、退款、改期和销售归属，避免把未决业务压入当前切片。
+
+## 2. 已完成内容
+
+| 类别 | 完成项 |
+| --- | --- |
+| 数据库 | 新增 `V035__p2_amusement_group_private_bookings.sql` |
+| 场次容量 | `amusement_sessions.locked_capacity` 已加入容量判断 |
+| 预订表 | 新增 `amusement_group_bookings` |
+| 权限 | 新增 view/manage/approve 三类权限 |
+| 服务 | 创建、审批、释放、列表查询 |
+| 幂等 | 所有写接口要求 `idempotency_key` |
+| 审计 | 创建、审批、释放、查看均有留痕 |
+| 并发 | 审批/释放使用数据库原子更新防止容量漂移 |
+
+## 3. 验收覆盖
+
+- 创建预订不锁容量。
+- 审批预订锁容量。
+- 容量不足审批失败。
+- 重复审批不会重复增加锁定容量。
+- 释放预订归还容量。
+- 重复释放不会重复扣减锁定容量。
+- 普通核销使用 `used_capacity + locked_capacity < capacity`。
+- 控制器权限和幂等键已覆盖。
+- JDBC 集成测试覆盖迁移、字段和权限。
+
+## 4. 对抗式审计
+
+| 发现 | 结论 | 处理 |
+| --- | --- | --- |
+| 容量锁定可能导致并发超卖 | 高风险 | 使用数据库原子更新和容量条件校验 |
+| 创建后立即锁容量会造成误占 | 已规避 | 创建只进入 `pending_approval` |
+| 释放重复执行可能导致容量负漂移 | 已规避 | 仅 `approved` 可释放 |
+| 价格/退款/改期未定义 | 不压入本期 | 文档明确后置 |
+
+## 5. 验证命令
+
+- `mvn -q -Dtest=AmusementServiceTests test`
+- `mvn -q -Dtest=AmusementControllerTests test`
+- `mvn -q -Dtest=AmusementJdbcIntegrationTests test`
+
+最终收口阶段已运行后端全量测试、P0 契约闸口和 Semgrep。

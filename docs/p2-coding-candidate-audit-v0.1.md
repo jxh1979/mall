@@ -61,3 +61,72 @@ P0/P1 当前可编码范围已经收口。下一阶段不应直接把所有 P2 �
 4. 新增权限种子和默认管理员授权。
 5. 新增单元测试、Controller 测试和 JDBC 集成测试。
 6. 在 160 上运行后端全量测试、P0 契约闸口和 Semgrep。
+
+## 7. 当前执行状态
+
+### P2-A 商场平面图 SVG/JSON 导入
+
+状态：已完成。
+
+交付物：
+
+- `docs/p2-floor-plan-import-api-contract-v0.1.md`
+- `docs/p2-floor-plan-import-completion-audit-v0.1.md`
+
+### P2-B 游乐团体/包场预订与容量锁定
+
+状态：已完成。
+
+交付物：
+
+- `docs/superpowers/plans/2026-06-15-p2-amusement-group-private-booking.md`
+- `docs/p2-amusement-group-private-booking-api-contract-v0.1.md`
+- `docs/p2-amusement-group-private-booking-completion-audit-v0.1.md`
+
+审计结论：P2-B 只覆盖后台创建、人工审批、容量锁定和释放；价格、退款、改期和销售归属仍不压入本切片。
+
+### P2-C 票务动态定价规则容器
+
+状态：已完成。
+
+交付物：
+
+- `docs/superpowers/plans/2026-06-15-p2-ticket-dynamic-pricing.md`
+- `docs/p2-ticket-dynamic-pricing-api-contract-v0.1.md`
+- `docs/p2-ticket-dynamic-pricing-completion-audit-v0.1.md`
+
+审计结论：P2-C 只覆盖动态规则容器和价格模拟，不自动影响正式下单价格。
+
+### P2-D 经营分析/预测看板指标沉淀
+
+状态：已完成。
+
+交付物：
+
+- `docs/superpowers/plans/2026-06-15-p2-business-metric-snapshots.md`
+- `docs/p2-business-metric-snapshots-api-contract-v0.1.md`
+- `docs/p2-business-metric-snapshots-completion-audit-v0.1.md`
+
+审计结论：P2-D 只做指标快照与查询接口，不做预测模型和自动经营建议。
+
+### P2-E 供应商深度联动
+
+状态：边界收口已完成；厂商特定实现待供应商 API/SDK 到位后进入正式联调。
+
+交付物：
+
+- `docs/p2-third-party-deep-integration-boundary-contract-v0.1.md`
+- `docs/p2-third-party-deep-integration-boundary-completion-audit-v0.1.md`
+
+审计结论：现有 integration 模块已经覆盖通用供应商适配器、开放平台、Webhook、轮询校验、重试、补偿和对账，不应伪造厂商 SDK 实现。
+
+### P2-F 独立 Python AI 服务
+
+状态：边界收口已完成；正式服务编码暂缓。
+
+交付物：
+
+- `docs/p2-python-ai-service-boundary-contract-v0.1.md`
+- `docs/p2-python-ai-service-boundary-completion-audit-v0.1.md`
+
+审计结论：当前 Java 内置规则处理器继续承担生产路径；独立 Python AI 服务只有在模型、SLA、数据集、安全和合规评审到位后再实施。

@@ -31,6 +31,7 @@ class AnalyticsJdbcIntegrationTests {
     void migrationCreatesAnalyticsTablesSeedsPermissionsAndCurrentFlywayVersion() {
         assertThat(regclass("analytics_metric_definitions")).isEqualTo("analytics_metric_definitions");
         assertThat(regclass("analytics_dashboard_snapshots")).isEqualTo("analytics_dashboard_snapshots");
+        assertThat(regclass("analytics_business_metric_snapshots")).isEqualTo("analytics_business_metric_snapshots");
         assertThat(regclass("analytics_merchant_summaries")).isEqualTo("analytics_merchant_summaries");
         assertThat(regclass("analytics_merchant_health_scores")).isEqualTo("analytics_merchant_health_scores");
         assertThat(regclass("analytics_metric_anomalies")).isEqualTo("analytics_metric_anomalies");
@@ -41,7 +42,7 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(regclass("analytics_customer_intents")).isEqualTo("analytics_customer_intents");
         assertThat(regclass("analytics_robot_metrics")).isEqualTo("analytics_robot_metrics");
         assertThat(regclass("analytics_staff_service_scores")).isEqualTo("analytics_staff_service_scores");
-        assertThat(currentFlywayVersion()).isEqualTo("034");
+        assertThat(currentFlywayVersion()).isEqualTo("037");
 
         assertThat(permissionCodes()).contains(
                 "analytics.dashboard.view",
@@ -59,6 +60,7 @@ class AnalyticsJdbcIntegrationTests {
     void migrationSeedsOneDeterministicRowForEveryReadEndpoint() {
         assertThat(rowCount("analytics_metric_definitions")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_dashboard_snapshots")).isGreaterThanOrEqualTo(1);
+        assertThat(rowCount("analytics_business_metric_snapshots")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_merchant_summaries")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_merchant_health_scores")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_metric_anomalies")).isGreaterThanOrEqualTo(1);
@@ -77,6 +79,9 @@ class AnalyticsJdbcIntegrationTests {
                 .extracting(AnalyticsRecords.MetricDefinitionRecord::metricKey, AnalyticsRecords.MetricDefinitionRecord::unit)
                 .contains(tuple("gmv_amount_cents", "cent"));
         assertThat(repository.getP0OverviewDashboard().snapshotKey()).isEqualTo("p0_overview_today");
+        assertThat(repository.listBusinessMetricSnapshots())
+                .extracting(AnalyticsRecords.BusinessMetricSnapshotRecord::metricKey, AnalyticsRecords.BusinessMetricSnapshotRecord::trendDirection)
+                .contains(tuple("gmv_amount_cents", "up"));
         assertThat(repository.listAnalyticsMerchants())
                 .extracting(AnalyticsRecords.MerchantSummaryRecord::merchantId, AnalyticsRecords.MerchantSummaryRecord::revenueAmountCents)
                 .contains(tuple("merchant_p0", 128800L));
@@ -176,6 +181,10 @@ class AnalyticsJdbcIntegrationTests {
             case "analytics_dashboard_snapshots" -> """
                     SELECT count(*)
                       FROM analytics_dashboard_snapshots
+                    """;
+            case "analytics_business_metric_snapshots" -> """
+                    SELECT count(*)
+                      FROM analytics_business_metric_snapshots
                     """;
             case "analytics_merchant_summaries" -> """
                     SELECT count(*)

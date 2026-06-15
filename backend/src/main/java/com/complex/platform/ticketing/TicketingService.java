@@ -45,6 +45,7 @@ public class TicketingService {
     private static final Set<String> PRICE_VARIANTS = Set.of("group", "new_customer", "student", "channel", "member");
     private static final Set<String> PRICE_MODES = Set.of("derive_from_calendar_price", "fixed_price");
     private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel");
+    private static final Set<String> DYNAMIC_ADJUSTMENT_TYPES = Set.of("percent_delta", "fixed_delta");
 
     private final TicketingRepository repository;
     private final IdempotencyService idempotencyService;
@@ -77,6 +78,62 @@ public class TicketingService {
                 "ticket.price_variant.view",
                 "ticket_price_rule",
                 repository::listPriceRules
+        );
+    }
+
+    public PageResponse<TicketDynamicPricingRuleRecord> listDynamicPricingRules() {
+        return readPage(
+                "ticket_dynamic_pricing.viewed",
+                "ticket_dynamic_pricing.view_failed",
+                "ticket.dynamic_pricing.view",
+                "ticket_dynamic_pricing_rule",
+                repository::listDynamicPricingRules
+        );
+    }
+
+    @Transactional
+    public TicketDynamicPricingRuleRecord createDynamicPricingRule(TicketDynamicPricingRuleRequest request) {
+        return executeWrite(
+                "createTicketDynamicPricingRule",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketDynamicPricingRuleRecord.class,
+                "ticket_dynamic_pricing.changed",
+                "ticket_dynamic_pricing.change_failed",
+                "ticket.dynamic_pricing.manage",
+                "ticket_dynamic_pricing_rule",
+                () -> createDynamicPricingRuleInternal(request)
+        );
+    }
+
+    @Transactional
+    public TicketDynamicPricingRuleRecord publishDynamicPricingRule(String ruleId, StatusChangeRequest request) {
+        String id = requireText(ruleId, "dynamic_pricing_rule_id");
+        return executeWrite(
+                "publishTicketDynamicPricingRule:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketDynamicPricingRuleRecord.class,
+                "ticket_dynamic_pricing.published",
+                "ticket_dynamic_pricing.publish_failed",
+                "ticket.dynamic_pricing.publish",
+                "ticket_dynamic_pricing_rule",
+                () -> publishDynamicPricingRuleInternal(id, request)
+        );
+    }
+
+    @Transactional
+    public TicketDynamicPricingSimulationResponse simulateDynamicPricing(TicketDynamicPricingSimulationRequest request) {
+        return executeWrite(
+                "simulateTicketDynamicPricing",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketDynamicPricingSimulationResponse.class,
+                "ticket_dynamic_pricing.simulated",
+                "ticket_dynamic_pricing.simulate_failed",
+                "ticket.dynamic_pricing.simulate",
+                "ticket_dynamic_pricing_simulation",
+                () -> simulateDynamicPricingInternal(request)
         );
     }
 
@@ -532,6 +589,125 @@ public class TicketingService {
                 entitlement.validFrom().toString(),
                 entitlement.validTo().toString(),
                 entitlement.updatedAt().toString()
+        );
+    }
+
+    private TicketDynamicPricingRuleRecord createDynamicPricingRuleInternal(TicketDynamicPricingRuleRequest request) {
+        TicketDynamicPricingRuleRequest actual = requireRequest(request);
+        String ticketTypeId = requireText(actual.ticketTypeId(), "ticket_type_id");
+        repository.findTicketTypeById(ticketTypeId)
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        LocalDate effectiveFrom = actual.effectiveFrom() == null ? LocalDate.now() : actual.effectiveFrom();
+        LocalDate effectiveTo = actual.effectiveTo() == null ? effectiveFrom : actual.effectiveTo();
+        if (effectiveTo.isBefore(effectiveFrom)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "effective_to must be on or after effective_from");
+        }
+        String adjustmentType = requireEnum(actual.adjustmentType(), DYNAMIC_ADJUSTMENT_TYPES, "adjustment_type");
+        if ("percent_delta".equals(adjustmentType) && actual.adjustmentRate() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "adjustment_rate is required");
+        }
+        if ("fixed_delta".equals(adjustmentType) && actual.adjustmentAmountCent() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "adjustment_amount_cent is required");
+        }
+        validateNonNegative(actual.minPriceCent(), "min_price_cent");
+        validateNonNegative(actual.maxPriceCent(), "max_price_cent");
+        if (actual.minPriceCent() != null && actual.maxPriceCent() != null && actual.minPriceCent() > actual.maxPriceCent()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "min_price_cent cannot exceed max_price_cent");
+        }
+        Instant now = Instant.now();
+        return repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
+                "dynamic_price_rule_" + slug(actual.idempotencyKey()),
+                ticketTypeId,
+                requireText(actual.ruleName(), "rule_name"),
+                actual.priority() == null ? 0 : actual.priority(),
+                effectiveFrom,
+                effectiveTo,
+                trimToNull(actual.salesChannel()),
+                adjustmentType,
+                actual.adjustmentRate(),
+                actual.adjustmentAmountCent(),
+                actual.minPriceCent(),
+                actual.maxPriceCent(),
+                "draft",
+                actual.conditionRule() == null ? Map.of() : Map.copyOf(actual.conditionRule()),
+                trimToNull(actual.operatorNote()),
+                evidence(actual.evidenceAttachmentIds()),
+                now,
+                now
+        ));
+    }
+
+    private TicketDynamicPricingRuleRecord publishDynamicPricingRuleInternal(String ruleId, StatusChangeRequest request) {
+        StatusChangeRequest actual = requireRequest(request);
+        requireText(actual.reason(), "reason");
+        TicketDynamicPricingRuleRecord existing = repository.findDynamicPricingRuleById(ruleId)
+                .orElseThrow(() -> ApiException.notFound("DYNAMIC_PRICING_RULE_NOT_FOUND", "dynamic pricing rule not found"));
+        Instant now = Instant.now();
+        return repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
+                existing.id(),
+                existing.ticketTypeId(),
+                existing.ruleName(),
+                existing.priority(),
+                existing.effectiveFrom(),
+                existing.effectiveTo(),
+                existing.salesChannel(),
+                existing.adjustmentType(),
+                existing.adjustmentRate(),
+                existing.adjustmentAmountCent(),
+                existing.minPriceCent(),
+                existing.maxPriceCent(),
+                "published",
+                existing.conditionRule(),
+                trimToDefault(existing.operatorNote(), actual.reason()),
+                evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
+                existing.createdAt(),
+                now
+        ));
+    }
+
+    private TicketDynamicPricingSimulationResponse simulateDynamicPricingInternal(TicketDynamicPricingSimulationRequest request) {
+        TicketDynamicPricingSimulationRequest actual = requireRequest(request);
+        TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        LocalDate visitDate = actual.visitDate() == null ? LocalDate.now() : actual.visitDate();
+        String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
+        long basePrice = resolveUnitPrice(ticketType, null, visitDate);
+        Map<String, Object> context = actual.context() == null ? Map.of() : actual.context();
+        TicketDynamicPricingRuleRecord matched = repository.listDynamicPricingRules().stream()
+                .filter(rule -> ticketType.id().equals(rule.ticketTypeId()))
+                .filter(rule -> "draft".equals(rule.status()) || "published".equals(rule.status()))
+                .filter(rule -> !visitDate.isBefore(rule.effectiveFrom()) && !visitDate.isAfter(rule.effectiveTo()))
+                .filter(rule -> rule.salesChannel() == null || rule.salesChannel().equals(salesChannel))
+                .filter(rule -> matchesCondition(rule.conditionRule(), context))
+                .sorted((left, right) -> {
+                    int priority = Integer.compare(right.priority(), left.priority());
+                    return priority != 0 ? priority : right.updatedAt().compareTo(left.updatedAt());
+                })
+                .findFirst()
+                .orElse(null);
+        if (matched == null) {
+            return new TicketDynamicPricingSimulationResponse(
+                    ticketType.id(),
+                    visitDate,
+                    salesChannel,
+                    basePrice,
+                    0L,
+                    basePrice,
+                    null,
+                    "no matching dynamic pricing rule"
+            );
+        }
+        long rawAdjustment = dynamicAdjustment(basePrice, matched);
+        long finalPrice = clampPrice(basePrice + rawAdjustment, matched.minPriceCent(), matched.maxPriceCent());
+        return new TicketDynamicPricingSimulationResponse(
+                ticketType.id(),
+                visitDate,
+                salesChannel,
+                basePrice,
+                finalPrice - basePrice,
+                finalPrice,
+                matched.id(),
+                "matched " + matched.ruleName()
         );
     }
 
@@ -1179,6 +1355,21 @@ public class TicketingService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private List<String> evidence(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .toList();
+    }
+
+    private List<String> evidenceOrExisting(List<String> values, List<String> existing) {
+        List<String> evidence = evidence(values);
+        return evidence.isEmpty() ? List.copyOf(existing == null ? List.of() : existing) : evidence;
+    }
+
     private String slug(String value) {
         String slug = trimToDefault(value, UUID.randomUUID().toString())
                 .toLowerCase(Locale.ROOT)
@@ -1187,6 +1378,33 @@ public class TicketingService {
         String fallback = UUID.randomUUID().toString().replace("-", "");
         String resolved = slug.isEmpty() ? fallback : slug;
         return resolved.length() > 40 ? resolved.substring(0, 40) : resolved;
+    }
+
+    private boolean matchesCondition(Map<String, Object> conditionRule, Map<String, Object> context) {
+        if (conditionRule == null || conditionRule.isEmpty()) {
+            return true;
+        }
+        return conditionRule.entrySet().stream()
+                .allMatch(entry -> {
+                    Object actual = context.get(entry.getKey());
+                    return actual != null && String.valueOf(actual).equals(String.valueOf(entry.getValue()));
+                });
+    }
+
+    private long dynamicAdjustment(long basePrice, TicketDynamicPricingRuleRecord rule) {
+        if ("fixed_delta".equals(rule.adjustmentType())) {
+            return rule.adjustmentAmountCent() == null ? 0L : rule.adjustmentAmountCent();
+        }
+        BigDecimal rate = rule.adjustmentRate() == null ? BigDecimal.ZERO : rule.adjustmentRate();
+        return BigDecimal.valueOf(basePrice)
+                .multiply(rate)
+                .divide(MAX_DISCOUNT_RATE, 0, RoundingMode.HALF_UP)
+                .longValueExact();
+    }
+
+    private long clampPrice(long value, Long minPriceCent, Long maxPriceCent) {
+        long clamped = minPriceCent == null ? value : Math.max(value, minPriceCent);
+        return maxPriceCent == null ? clamped : Math.min(clamped, maxPriceCent);
     }
 
     private long resolveUnitPrice(TicketTypeRecord ticketType, TicketPriceRuleRecord priceRule, LocalDate visitDate) {

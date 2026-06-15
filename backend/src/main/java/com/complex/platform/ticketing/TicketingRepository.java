@@ -42,6 +42,12 @@ public interface TicketingRepository {
 
     Optional<TicketPriceRuleRecord> findPriceRuleById(String id);
 
+    TicketDynamicPricingRuleRecord saveDynamicPricingRule(TicketDynamicPricingRuleRecord rule);
+
+    List<TicketDynamicPricingRuleRecord> listDynamicPricingRules();
+
+    Optional<TicketDynamicPricingRuleRecord> findDynamicPricingRuleById(String id);
+
     TicketOrderRecord saveTicketOrder(TicketOrderRecord order);
 
     Optional<TicketOrderRecord> findTicketOrderById(String id);

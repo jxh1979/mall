@@ -31,7 +31,7 @@ class ComplianceJdbcIntegrationTests {
         assertThat(regclass("contract_key_dates")).isEqualTo("contract_key_dates");
         assertThat(regclass("compliance_expiry_items")).isEqualTo("compliance_expiry_items");
         assertThat(regclass("compliance_reminders")).isEqualTo("compliance_reminders");
-        assertThat(currentFlywayVersion()).isEqualTo("034");
+        assertThat(currentFlywayVersion()).isEqualTo("037");
 
         assertThat(permissionCodes()).contains(
                 "compliance.contract_key_date.view",

@@ -28,6 +28,30 @@ public interface AmusementRepository {
 
     boolean incrementSessionUsedCapacityIfAvailable(String sessionId);
 
+    boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock);
+
+    void releaseSessionLockedCapacity(String sessionId, int capacityToRelease);
+
+    AmusementGroupBookingRecord saveGroupBooking(AmusementGroupBookingRecord booking);
+
+    List<AmusementGroupBookingRecord> listGroupBookings();
+
+    Optional<AmusementGroupBookingRecord> findGroupBookingById(String id);
+
+    Optional<AmusementGroupBookingRecord> approveGroupBookingWithCapacityLock(
+            String id,
+            String approvalNote,
+            List<String> evidenceAttachmentIds,
+            java.time.Instant approvedAt
+    );
+
+    Optional<AmusementGroupBookingRecord> releaseGroupBookingAndCapacity(
+            String id,
+            String operatorNote,
+            List<String> evidenceAttachmentIds,
+            java.time.Instant releasedAt
+    );
+
     AmusementSafetyInspectionRecord saveSafetyInspection(AmusementSafetyInspectionRecord inspection);
 
     List<AmusementSafetyInspectionRecord> listSafetyInspections();
