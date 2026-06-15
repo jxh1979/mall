@@ -1,0 +1,341 @@
+{
+  "register_version": "v0.1",
+  "status": "open_blockers_present",
+  "generated_from": [
+    "docs/production-readiness-implementation-ledger-template-v0.1.md",
+    "security-scans/findings-register-v1.md"
+  ],
+  "policy": {
+    "no_fake_closure": true,
+    "no_plaintext_secrets": true,
+    "no_supplier_mock_as_production_evidence": true,
+    "current_domain_https_binding_deferred": true
+  },
+  "counts": {
+    "readiness_blockers": 12,
+    "credential_blockers": 7,
+    "finding_blockers": 4,
+    "deferred_items": 1,
+    "accepted_dev_smoke_findings": 1
+  },
+  "readiness_blockers": [
+    {
+      "id": "PRD-MDM-001",
+      "category": "MDM",
+      "name": "Android 设备纳管",
+      "status": "pending_info",
+      "owner_department": "IT/采购",
+      "supplier_name": "TBD",
+      "blocking_scope": "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
+      "runbook_ref": "mdm-android-enterprise-implementation-plan-v0.1.md",
+      "next_action": "IT 选型、设备 enroll、策略下发和截图归档",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-PAY-001",
+      "category": "payment",
+      "name": "聚合支付测试商户",
+      "status": "pending_info",
+      "owner_department": "财务/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "阻塞真实收款测试；不阻塞支付 mock",
+      "runbook_ref": "p0-api-contract-pack-v0.1.md",
+      "next_action": "获取测试商户号、回调地址、对账文件样例",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-PAY-002",
+      "category": "payment",
+      "name": "生产商户与退款权限",
+      "status": "pending_info",
+      "owner_department": "财务/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "阻塞生产收款、退款和日结",
+      "runbook_ref": "finance-ar-ap-ledger-development-design-v0.1.md",
+      "next_action": "建立商户资料、密钥引用、退款审批和对账口径",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-FACE-001",
+      "category": "face_age",
+      "name": "酒吧年龄/人脸核验",
+      "status": "pending_info",
+      "owner_department": "采购/IT/运营",
+      "supplier_name": "TBD",
+      "blocking_scope": "阻塞酒吧生产年龄核验通过",
+      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
+      "next_action": "获取 SDK/API、错误码、测试账号、合规材料",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-NAS-AUTOMOUNT-001",
+      "category": "nas",
+      "name": "NAS 开机自动挂载",
+      "status": "pending_info",
+      "owner_department": "IT/运维",
+      "supplier_name": "192.168.88.113",
+      "blocking_scope": "阻塞长期预生产和生产自动恢复；不阻塞开发验证",
+      "runbook_ref": "nas-backup-and-restore-runbook-v0.1.md#64-p0-a-no-system-write-boundary",
+      "next_action": "IT 安装后回填重启后 findmnt、读写删除测试和截图",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-NAS-SCHEDULE-001",
+      "category": "nas",
+      "name": "NAS 定时备份",
+      "status": "pending_info",
+      "owner_department": "IT/运维",
+      "supplier_name": "自管",
+      "blocking_scope": "阻塞长期预生产和生产自动备份；不阻塞手动备份演练",
+      "runbook_ref": "nas-backup-and-restore-runbook-v0.1.md#64-p0-a-no-system-write-boundary",
+      "next_action": "IT 安装后回填调度配置、最近一次 scheduled 备份和 .sha256",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-NAS-ALERT-001",
+      "category": "nas",
+      "name": "NAS 容量告警和失败告警",
+      "status": "pending_info",
+      "owner_department": "IT/运维/安全",
+      "supplier_name": "企业微信/邮件",
+      "blocking_scope": "阻塞长期预生产和生产运维准入；不阻塞开发验证",
+      "runbook_ref": "server-160-runbook-v0.2.md#51-p0-a-no-system-write-boundary",
+      "next_action": "回填容量告警、失败告警和通知送达证据",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-NAS-DRILL-CADENCE-001",
+      "category": "nas",
+      "name": "周期恢复演练",
+      "status": "pending_info",
+      "owner_department": "IT/运维",
+      "supplier_name": "192.168.88.113",
+      "blocking_scope": "阻塞长期预生产和生产可恢复结论；不阻塞当前编码",
+      "runbook_ref": "nas-backup-and-restore-runbook-v0.1.md#64-p0-a-no-system-write-boundary",
+      "next_action": "回填最近一次恢复演练报告、临时库清理和验证表",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-CRED-001",
+      "category": "credential",
+      "name": "生产账号和密钥轮换",
+      "status": "pending_info",
+      "owner_department": "IT/安全/财务",
+      "supplier_name": "TBD",
+      "blocking_scope": "阻塞长期预生产和生产",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md",
+      "next_action": "建立密钥引用、轮换周期、责任人和应急回滚",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-WECOM-001",
+      "category": "wecom",
+      "name": "企业微信配置",
+      "status": "pending_info",
+      "owner_department": "IT/运营",
+      "supplier_name": "企业微信",
+      "blocking_scope": "阻塞企业微信 P0 同步能力",
+      "runbook_ref": "third-party-integration-development-design.md",
+      "next_action": "配置应用、通讯录、会话存档、回调和同步任务",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-3P-001",
+      "category": "third_party",
+      "name": "机器人/视频/设备厂商接入资料",
+      "status": "pending_info",
+      "owner_department": "采购/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "不阻塞 P0 主闭环；阻塞真实厂商联调",
+      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
+      "next_action": "收集 SDK/API、签名、回调、字段映射和测试账号",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-160-001",
+      "category": "ops160",
+      "name": "160 运行配置生产化",
+      "status": "pending_info",
+      "owner_department": "IT/运维",
+      "supplier_name": "自管",
+      "blocking_scope": "阻塞长期预生产和生产；不阻塞用户级覆盖开发验证",
+      "runbook_ref": "server-160-runbook-v0.2.md",
+      "next_action": "迁移用户级覆盖到系统配置，接入 systemd 和告警",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    }
+  ],
+  "credential_blockers": [
+    {
+      "id": "PRD-CRED-OPS-001",
+      "category": "credential",
+      "name": "生产服务器/运维账号",
+      "status": "pending_info",
+      "owner_department": "IT/运维/安全",
+      "supplier_name": "自管",
+      "blocking_scope": "阻塞长期预生产和生产",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#71-生产服务器运维账号轮换",
+      "next_action": "建立账号负责人、授权范围、到期日和停用步骤",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-DB-001",
+      "category": "credential",
+      "name": "PostgreSQL 生产库",
+      "status": "pending_info",
+      "owner_department": "IT/运维/安全",
+      "supplier_name": "PostgreSQL",
+      "blocking_scope": "阻塞生产数据库接入",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#72-postgresql-生产库密码轮换",
+      "next_action": "生成强密码、写入安全保管位置、补到期日和维护窗口",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-OBJ-001",
+      "category": "credential",
+      "name": "对象存储",
+      "status": "pending_info",
+      "owner_department": "IT/运维/安全",
+      "supplier_name": "MinIO 或等效厂商",
+      "blocking_scope": "阻塞生产附件、证据包、对象备份接入",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#73-对象存储-access-keysecret-key-轮换",
+      "next_action": "确认桶范围、权限、Access Key 引用和停用方式",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-JWT-001",
+      "category": "credential",
+      "name": "JWT/Token 签名密钥",
+      "status": "pending_info",
+      "owner_department": "IT/安全/技术负责人",
+      "supplier_name": "自管",
+      "blocking_scope": "阻塞生产登录和开放接口签发",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#74-jwttoken-签名密钥轮换",
+      "next_action": "设计签名版本、双验窗口、旧 token 失效计划",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-3P-001",
+      "category": "credential",
+      "name": "第三方供应商 API 密钥 / 聚合支付凭证 / 企业微信凭证",
+      "status": "pending_info",
+      "owner_department": "IT/采购/财务/运营/安全",
+      "supplier_name": "TBD",
+      "blocking_scope": "阻塞真实供应商联调或生产通过",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
+      "next_action": "收集 SDK/API、签名算法、回调地址、测试账号和证据",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-OPEN-001",
+      "category": "credential",
+      "name": "开放平台应用/回调签名密钥",
+      "status": "pending_info",
+      "owner_department": "IT/安全/集成开发",
+      "supplier_name": "外部应用方/TBD",
+      "blocking_scope": "阻塞第三方双向开放生产接入",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
+      "next_action": "建立应用、endpoint、allowed scopes、密钥引用和轮换窗口",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-NAS-001",
+      "category": "credential",
+      "name": "NAS SMB 凭证",
+      "status": "pending_info",
+      "owner_department": "IT/运维/安全",
+      "supplier_name": "NAS",
+      "blocking_scope": "阻塞生产可恢复结论",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#41-p0-必登凭证类型",
+      "next_action": "IT 将真实密码写入安全保管位置或 160 受控凭证文件，不得写入文档、聊天或仓库",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    }
+  ],
+  "finding_blockers": [
+    {
+      "severity": "P0",
+      "id": "SEC-P0-MDM-DEVICE-001",
+      "title": "MDM/Android Enterprise 生产纳管仍处 pending_info",
+      "status": "open",
+      "owner": "IT/采购/运维",
+      "blocking_scope": "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作",
+      "next_action": "完成 MDM 选型、enroll、策略下发、设备绑定截图和生产准入记录",
+      "source": "security-scans/findings-register-v1.md"
+    },
+    {
+      "severity": "P0",
+      "id": "SEC-P0-OPS-RECOVERY-001",
+      "title": "NAS 挂载、真实同步和从 NAS 恢复证据已完成，生产凭证发放证据仍需补齐",
+      "status": "open",
+      "owner": "IT/安全/运维",
+      "blocking_scope": "阻塞公开生产安全准入；不阻塞开发联调",
+      "next_action": "P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据",
+      "source": "security-scans/findings-register-v1.md"
+    },
+    {
+      "severity": "P1",
+      "id": "SEC-P1-WEBHOOK-REPLAY-001",
+      "title": "真实供应商 Webhook 签名、防重放和轮询校验需在供应商资料到位后补实",
+      "status": "open",
+      "owner": "后端/IT/供应商联调负责人",
+      "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
+      "next_action": "按供应商 SDK/API 补字段映射、nonce、timestamp、签名验签、幂等、补偿和对账测试",
+      "source": "security-scans/findings-register-v1.md"
+    },
+    {
+      "severity": "P2",
+      "id": "SEC-P2-CSRF-API-001",
+      "title": "当前 API 关闭 CSRF，需在最终认证形态中复核 Web Cookie 场景",
+      "status": "open_for_prod_review",
+      "owner": "后端/前端/安全",
+      "blocking_scope": "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
+      "next_action": "正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核",
+      "source": "security-scans/findings-register-v1.md"
+    }
+  ],
+  "deferred_items": [
+    {
+      "id": "PRD-HTTPS-001",
+      "category": "domain",
+      "name": "域名 HTTPS",
+      "status": "not_started",
+      "owner_department": "IT/总控",
+      "supplier_name": "TBD",
+      "blocking_scope": "仅阻塞公开生产域名访问，不阻塞内网预生产和开发验收",
+      "runbook_ref": "server-160-runbook-v0.2.md",
+      "next_action": "等总控启动公开访问后再配置",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    }
+  ],
+  "accepted_dev_smoke_findings": [
+    {
+      "severity": "P2",
+      "id": "SEC-P2-SMOKE-HASH-001",
+      "title": "dev smoke AuthService 使用 SHA-256 密码摘要，不可迁移到生产认证",
+      "status": "accepted_for_dev_smoke",
+      "owner": "后端/安全",
+      "blocking_scope": "仅允许 local/dev/test；公开生产必须替换为正式身份源或强密码哈希方案",
+      "next_action": "生产认证不得复用该 smoke 账号存储；若自建密码，采用 Argon2id/bcrypt/PBKDF2 并补 MFA/锁定策略",
+      "source": "security-scans/findings-register-v1.md"
+    }
+  ]
+}

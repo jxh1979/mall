@@ -50,6 +50,7 @@ if (packageJson) {
     "verify:p0-contract",
     "verify:security-baseline",
     "verify:production-readiness-evidence",
+    "verify:production-blockers",
   ];
   if (!deliveryScript) {
     failures.push("package.json must expose verify:delivery-gates");
@@ -73,6 +74,7 @@ requireIncludes("docs/delivery-readiness-gates-v0.1.md", [
   "verify:external-dependency-gates",
   "verify:coding-host-protection",
   "verify:production-readiness-evidence",
+  "verify:production-blockers",
 ]);
 
 requireIncludes("docs/external-dependency-gates-v0.1.md", [
