@@ -61,6 +61,7 @@
 | 生产证据责任组回填说明包 | `docs/production-evidence-owner-guides-v0.1.md`、`docs/production-readiness-evidence/production-evidence-owner-guides-latest.json` |
 | 生产证据提交状态看板 | `docs/production-evidence-submission-status-v0.1.md`、`docs/production-readiness-evidence/production-evidence-submission-status-latest.json` |
 | 生产证据提交目录护栏 | `docs/production-readiness-evidence/submissions/README.md`、`docs/production-readiness-evidence/submissions/.gitignore` |
+| 生产证据回填优先级看板 | `docs/production-evidence-backfill-priority-v0.1.md`、`docs/production-readiness-evidence/production-evidence-backfill-priority-latest.json` |
 | 生产前置证据回填模板 | `docs/production-readiness-evidence-intake-template-v0.1.md` |
 | 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |

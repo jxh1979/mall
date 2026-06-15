@@ -26,6 +26,8 @@
 
 证据链接口径：`evidence_links`、`failure_case_evidence`、`approval_record` 必须是外部可追溯引用或批准的证据编号；`credential_refs` 必须是 `cred://...`，并且不得包含占位词。
 
+配套优先级看板：`production-evidence-backfill-priority-v0.1.md` 按责任组、P0 缺口、状态和类别生成下一批真实证据回填顺序。
+
 ## 3. 通用证据字段
 
 | 字段 | 必填 | 说明 |
