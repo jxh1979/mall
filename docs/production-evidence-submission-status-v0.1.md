@@ -13,7 +13,7 @@
 
 ## 2. 定位
 
-本文从 `docs/production-readiness-evidence/production-evidence-submission-kit-latest.json` 自动生成，并扫描各责任组提交目录下的 `manifest-<item_id>.json`。未提交 manifest 只显示为 `awaiting_submission`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥、占位值、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 `invalid_submission` 并阻断交付闸口。
+本文从 `docs/production-readiness-evidence/production-evidence-submission-kit-latest.json` 自动生成，并扫描各责任组提交目录下的 `manifest-<item_id>.json`。未提交 manifest 只显示为 `awaiting_submission`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误、明文密钥、占位值、模板专用字段、本地路径、localhost、不可追溯证据链接或关键字段不匹配，则进入 `invalid_submission` 并阻断交付闸口。
 
 ## 3. 总览
 
