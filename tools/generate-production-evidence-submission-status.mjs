@@ -315,6 +315,28 @@ function validateManifest(template, manifest) {
   return { status: failures.length > 0 ? "invalid_submission" : "valid_submission", failures, warnings };
 }
 
+function addCrossSubmissionEvidenceIdFailures(rows) {
+  const byEvidenceId = new Map();
+  for (const row of rows) {
+    for (const evidenceId of row.evidence_ids ?? []) {
+      const key = String(evidenceId).trim().toLowerCase();
+      if (!key) continue;
+      if (!byEvidenceId.has(key)) byEvidenceId.set(key, []);
+      byEvidenceId.get(key).push(row);
+    }
+  }
+  for (const [key, owners] of byEvidenceId.entries()) {
+    const uniqueManifestPaths = new Set(owners.map((row) => row.manifest_path));
+    if (uniqueManifestPaths.size <= 1) continue;
+    const evidenceId = owners[0]?.evidence_ids?.find((value) => String(value).trim().toLowerCase() === key) ?? key;
+    const paths = [...uniqueManifestPaths].sort().join(", ");
+    for (const row of owners) {
+      row.failures.push(`evidence_id ${evidenceId} is reused across submission manifests: ${paths}`);
+      row.status = "invalid_submission";
+    }
+  }
+}
+
 function statusRank(status) {
   return {
     invalid_submission: 0,
@@ -345,10 +367,13 @@ for (const template of kit.submissions ?? []) {
     status: validation.status,
     failures: validation.failures,
     warnings: validation.warnings,
+    evidence_ids: Array.isArray(manifest.data?.evidence_ids) ? manifest.data.evidence_ids : [],
     required_fields_count: (template.required_fields ?? []).length,
     accepted_evidence_types_count: (template.accepted_evidence_types ?? []).length,
   });
 }
+
+addCrossSubmissionEvidenceIdFailures(rows);
 
 rows.sort((a, b) => statusRank(a.status) - statusRank(b.status) || String(a.owner_group).localeCompare(String(b.owner_group)) || String(a.item_id).localeCompare(String(b.item_id)));
 
@@ -388,10 +413,10 @@ const output = {
   },
   counts,
   owner_summaries: ownerRows,
-  submissions: rows,
+  submissions: rows.map(({ evidence_ids, ...row }) => row),
 };
 
-const md = normalize(`# 生产证据提交状态看板 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY\n- STATUS_FROM_PRODUCTION_EVIDENCE_SUBMISSION_KIT\n- MISSING_MANIFEST_IS_AWAITING_NOT_PASSED\n- INVALID_MANIFEST_BLOCKS_DELIVERY_GATE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- PRODUCTION_CREDENTIAL_REF_REQUIRED\n- RAW_EVIDENCE_STAYS_EXTERNAL\n- TRACEABLE_EVIDENCE_LINKS_REQUIRED\n- CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN\n\n## 2. 定位\n\n本文从 \`${kitPath}\` 自动生成，并扫描各责任组提交目录下的 \`manifest-<item_id>.json\`。未提交 manifest 只显示为 \`awaiting_submission\`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误（兼容 UTF-8 BOM）、明文密钥、非生产 credential_ref、占位值、模板专用字段、未知字段、证据编号格式错误、重复证据引用、证据数组字段结构错误、未接受的证据类型、result 非 passed、无效日历日期、未来提交/测试时间、过期复测日期、提交人与复核人相同、本地路径、localhost/保留测试域名、明文 HTTP 证据链接、敏感 URL 参数、不可追溯证据链接或关键字段不匹配，则进入 \`invalid_submission\` 并阻断交付闸口。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 预期提交项 | ${counts.expected_submissions} |\n| 等待提交 | ${counts.awaiting_submission} |\n| 有效提交 | ${counts.valid_submission} |\n| 无效提交 | ${counts.invalid_submission} |\n| P0 等待提交 | ${counts.p0_awaiting_submission} |\n| P0 有效提交 | ${counts.p0_valid_submission} |\n| P0 无效提交 | ${counts.p0_invalid_submission} |\n\n## 4. 责任组状态\n\n${mdTable(ownerRows, [
+const md = normalize(`# 生产证据提交状态看板 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY\n- STATUS_FROM_PRODUCTION_EVIDENCE_SUBMISSION_KIT\n- MISSING_MANIFEST_IS_AWAITING_NOT_PASSED\n- INVALID_MANIFEST_BLOCKS_DELIVERY_GATE\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- PRODUCTION_CREDENTIAL_REF_REQUIRED\n- RAW_EVIDENCE_STAYS_EXTERNAL\n- TRACEABLE_EVIDENCE_LINKS_REQUIRED\n- CREDENTIAL_REF_PLACEHOLDER_FORBIDDEN\n\n## 2. 定位\n\n本文从 \`${kitPath}\` 自动生成，并扫描各责任组提交目录下的 \`manifest-<item_id>.json\`。未提交 manifest 只显示为 \`awaiting_submission\`，不会被误判为 passed；一旦提交 manifest 出现缺字段、格式错误（兼容 UTF-8 BOM）、明文密钥、非生产 credential_ref、占位值、模板专用字段、未知字段、证据编号格式错误、重复证据引用、跨提交重复证据编号、证据数组字段结构错误、未接受的证据类型、result 非 passed、无效日历日期、未来提交/测试时间、过期复测日期、提交人与复核人相同、本地路径、localhost/保留测试域名、明文 HTTP 证据链接、敏感 URL 参数、不可追溯证据链接或关键字段不匹配，则进入 \`invalid_submission\` 并阻断交付闸口。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 预期提交项 | ${counts.expected_submissions} |\n| 等待提交 | ${counts.awaiting_submission} |\n| 有效提交 | ${counts.valid_submission} |\n| 无效提交 | ${counts.invalid_submission} |\n| P0 等待提交 | ${counts.p0_awaiting_submission} |\n| P0 有效提交 | ${counts.p0_valid_submission} |\n| P0 无效提交 | ${counts.p0_invalid_submission} |\n\n## 4. 责任组状态\n\n${mdTable(ownerRows, [
   { key: "owner_group", label: "owner_group" },
   { key: "expected_submissions", label: "expected_submissions" },
   { key: "awaiting_submission", label: "awaiting_submission" },
