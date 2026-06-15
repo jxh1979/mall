@@ -49,6 +49,7 @@ if (packageJson) {
     "verify:t3d-local-llm-ai-quality",
     "verify:p0-contract",
     "verify:security-baseline",
+    "verify:production-readiness-evidence",
   ];
   if (!deliveryScript) {
     failures.push("package.json must expose verify:delivery-gates");
@@ -71,6 +72,7 @@ requireIncludes("docs/delivery-readiness-gates-v0.1.md", [
   "npm run verify:delivery-gates",
   "verify:external-dependency-gates",
   "verify:coding-host-protection",
+  "verify:production-readiness-evidence",
 ]);
 
 requireIncludes("docs/external-dependency-gates-v0.1.md", [

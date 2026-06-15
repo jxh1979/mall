@@ -34,6 +34,7 @@ npm run verify:delivery-gates
 | 6 | `npm run verify:t3d-local-llm-ai-quality` | 校验 160 本地大模型质检仍为 loopback-only、脱敏、人工复核建议 |
 | 7 | `npm run verify:p0-contract` | 校验 P0 OpenAPI、示例、operation 矩阵、闭环附录和客户端契约 |
 | 8 | `npm run verify:security-baseline` | 校验正式安全基线输入和生产文档访问策略 |
+| 9 | `npm run verify:production-readiness-evidence` | 校验生产前置证据、台账状态和安全基线 evidence 是否一致 |
 
 ## 3. 交付阻断规则
 

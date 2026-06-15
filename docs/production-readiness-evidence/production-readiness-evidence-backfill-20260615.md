@@ -13,6 +13,7 @@
 | P0 编码基线 | passed | 最新提交 `5463ee1 fix: harden credential storage and webhook signatures`，160 工作区干净 | 160 本地 git `master` | 160 未配置 remote，未 push |
 | P0 自动化闸口 | passed | `npm run verify:p0` 通过 | 160 命令执行记录 | 覆盖 P0 契约、安全基线、后端 547 测试、Web build、Android env/build/smoke/APK |
 | P0-A 运维闸口 | passed | `npm run verify:ops160-recovery` 通过 | 160 命令执行记录 | 覆盖执行策略、备份恢复脚本、生产凭证台账结构、P0-A ops hardening |
+| PRD-SEC-001 | passed | 正式安全基线 V1 与 findings register 已生成并通过机器校验 | `security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md`、`docs/production-readiness-evidence/security-baseline-latest.json` | 不关闭 MDM、生产凭证、真实支付/企微/供应商等 open 阻断项 |
 | PRD-NAS-001 | passed | NAS `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup` 且可写；已补 live mount + write/read/delete 机器证据 | `docs/production-readiness-evidence/nas-smb-mount-latest.json`、`docs/nas-backup-and-restore-runbook-v0.1.md#63-最新真实-nas-验证证据2026-06-15` | 系统级自动挂载仍需 IT 固化；可用 `npm run verify:nas-smb-mount-evidence` 复核 |
 | PRD-NAS-002 | passed | 当前版本备份 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 已从 NAS 恢复成功 | `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 恢复 Flyway 版本 `039` |
 | PRD-CRED-NAS-001 | structure_passed | NAS SMB 凭证引用已记录为 `cred://prod/nas/smb/complex-backup-rw` | `docs/production-readiness-implementation-ledger-template-v0.1.md` | 真实密码不得进入仓库；轮换证据仍需 IT 回填 |
@@ -40,6 +41,7 @@
 | 2026-06-15 11:27 UTC | 执行当前版本 NAS 备份 | 生成 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 并同步到 NAS |
 | 2026-06-15 11:27 UTC | 从 NAS 归档执行恢复演练 | `restore.drill_completed`，Flyway `039`，临时库已删除 |
 | 2026-06-15 19:56 UTC | 执行 NAS SMB 挂载/读写机器校验 | `npm run verify:nas-smb-mount-evidence` 通过，不读取或记录 SMB 密码 |
+| 2026-06-15 20:05 UTC | 执行正式安全基线与生产前置证据校验 | `npm run verify:security-baseline` 和 `npm run verify:production-readiness-evidence` 通过 |
 | 2026-06-15 | 执行 `npm run verify:p0` | 通过 |
 | 2026-06-15 | 执行 `npm run verify:ops160-recovery` | 通过 |
 
@@ -57,4 +59,4 @@
 3. IT/安全/财务按 PRD-CRED-* 明细补齐真实生产凭证引用、到期提醒和轮换证据。
 4. 财务/IT 回填聚合支付商户、退款、回调和对账证据。
 5. 运营/IT 回填企业微信、人脸年龄核验和第三方供应商真实资料。
-6. 每补齐一批证据后执行：`npm run docs:security-baseline && npm run verify:security-baseline && npm run verify:p0 && npm run verify:ops160-recovery`。
+6. 每补齐一批证据后执行：`npm run docs:security-baseline && npm run verify:security-baseline && npm run verify:production-readiness-evidence && npm run verify:p0 && npm run verify:ops160-recovery`。
