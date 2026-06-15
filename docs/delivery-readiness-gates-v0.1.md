@@ -16,6 +16,7 @@
 - OWNER_ACTION_PACKS_FROM_PRODUCTION_BLOCKERS
 - PRODUCTION_EVIDENCE_SUBMISSION_KIT_READY
 - PRODUCTION_EVIDENCE_MANIFEST_TEMPLATES_READY
+- PRODUCTION_EVIDENCE_OWNER_GUIDES_READY
 - PRODUCTION_EVIDENCE_SUBMISSION_STATUS_READY
 
 ## 2. 必跑命令
@@ -43,8 +44,9 @@ npm run verify:delivery-gates
 | 11 | `npm run verify:production-owner-actions` | 校验生产阻断项已按责任人拆成可执行动作包，且动作包由阻断清单自动生成 |
 | 12 | `npm run verify:production-evidence-submission-kit` | 校验证据提交包由责任人动作包自动生成，且仍保持等待真实证据状态 |
 | 13 | `npm run verify:production-evidence-manifest-templates` | 校验 manifest 填写模板齐全，且默认 blocked、仅为模板不是真实证据 |
-| 14 | `npm run verify:production-evidence-submission-status` | 扫描实际 manifest 提交状态，缺失为 awaiting，格式错误或明文密钥为阻断 |
-| 15 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
+| 14 | `npm run verify:production-evidence-owner-guides` | 校验责任组回填说明包齐全，且只做分派说明不关闭阻断 |
+| 15 | `npm run verify:production-evidence-submission-status` | 扫描实际 manifest 提交状态，缺失为 awaiting，格式错误或明文密钥为阻断 |
+| 16 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
 
 ## 3. 交付阻断规则
 
@@ -75,5 +77,5 @@ npm run verify:delivery-gates
 2. 如果是 OpenAPI 附录漂移，先生成闭环附录，再复跑契约闸口。
 3. 如果是外部依赖阻断，回到供应商资料、生产前置台账和外部依赖闸口，不写假实现。
 4. 如果是 160 主机保护失败，先确认是否在正式仓库 `/home/james/complex-management` 和主机 `192.168.88.160` 上运行。
-5. 如果是责任人动作包、证据提交包、manifest 模板或提交状态看板漂移，先运行 `npm run docs:production-blockers`，再运行 `npm run docs:production-owner-actions`、`npm run docs:production-evidence-submission-kit`、`npm run docs:production-evidence-manifest-templates` 和 `npm run docs:production-evidence-submission-status`。
+5. 如果是责任人动作包、证据提交包、manifest 模板、责任组说明包或提交状态看板漂移，先运行 `npm run docs:production-blockers`，再运行 `npm run docs:production-owner-actions`、`npm run docs:production-evidence-submission-kit`、`npm run docs:production-evidence-manifest-templates`、`npm run docs:production-evidence-owner-guides` 和 `npm run docs:production-evidence-submission-status`。
 6. 修复后必须重新运行 `npm run verify:delivery-gates` 并保留输出证据。

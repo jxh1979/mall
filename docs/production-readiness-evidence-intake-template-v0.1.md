@@ -18,6 +18,8 @@
 
 配套 manifest 模板：`production-evidence-manifest-templates-v0.1.md` 提供可复制 JSON 样例；模板默认 `result=blocked`、`redaction_confirmed=false`，不是真实证据。
 
+配套责任组说明包：`production-evidence-owner-guides-v0.1.md` 将模板路径、真实提交路径和复测命令按责任组拆分，便于 IT、财务、采购、运营、法务和技术负责人执行。
+
 配套状态看板：`production-evidence-submission-status-v0.1.md` 扫描实际 manifest 提交状态；未提交保持 awaiting，格式错误、缺字段或明文密钥会阻断交付闸口。
 
 ## 3. 通用证据字段
