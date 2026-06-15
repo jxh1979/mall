@@ -14,8 +14,9 @@
 | P0 自动化闸口 | passed | `npm run verify:p0` 通过 | 160 命令执行记录 | 覆盖 P0 契约、安全基线、后端 547 测试、Web build、Android env/build/smoke/APK |
 | P0-A 运维闸口 | passed | `npm run verify:ops160-recovery` 通过 | 160 命令执行记录 | 覆盖执行策略、备份恢复脚本、生产凭证台账结构、P0-A ops hardening |
 | PRD-SEC-001 | passed | 正式安全基线 V1 与 findings register 已生成并通过机器校验 | `security-scans/formal-security-baseline-v1.md`、`security-scans/findings-register-v1.md`、`docs/production-readiness-evidence/security-baseline-latest.json` | 不关闭 MDM、生产凭证、真实支付/企微/供应商等 open 阻断项 |
-| 交付闸口脚本 Semgrep | passed | `pipx run semgrep --config p/javascript` 扫描 4 个新增/修改 Node 校验/生成脚本，0 findings | `security-scans/delivery-readiness-semgrep-20260615.json` | 不替代完整发布前安全扫描 |
+| 交付闸口脚本 Semgrep | passed | `pipx run semgrep --config p/javascript` 扫描 5 个新增/修改 Node 校验/生成脚本，0 findings | `security-scans/delivery-readiness-semgrep-20260615.json` | 不替代完整发布前安全扫描 |
 | 生产阻断清单 | open_blockers_present | 已从生产前置台账和 findings register 生成机器可读阻断清单 | `docs/production-blocker-register-v0.1.md`、`docs/production-readiness-evidence/production-blocker-register-latest.json` | 当前仍有外部/IT/供应商阻断项，不得伪关闭 |
+| 生产前置证据回填模板 | passed | 已按 MDM、NAS、凭证、支付、企微、人脸、第三方和 160 运行配置补齐证据字段模板 | `docs/production-readiness-evidence-intake-template-v0.1.md` | 模板不关闭阻断项，只规范回填材料 |
 | PRD-NAS-001 | passed | NAS `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup` 且可写；已补 live mount + write/read/delete 机器证据 | `docs/production-readiness-evidence/nas-smb-mount-latest.json`、`docs/nas-backup-and-restore-runbook-v0.1.md#63-最新真实-nas-验证证据2026-06-15` | 系统级自动挂载仍需 IT 固化；可用 `npm run verify:nas-smb-mount-evidence` 复核 |
 | PRD-NAS-002 | passed | 当前版本备份 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 已从 NAS 恢复成功 | `docs/production-readiness-evidence/nas-restore-drill-latest.json` | 恢复 Flyway 版本 `039` |
 | PRD-CRED-NAS-001 | structure_passed | NAS SMB 凭证引用已记录为 `cred://prod/nas/smb/complex-backup-rw` | `docs/production-readiness-implementation-ledger-template-v0.1.md` | 真实密码不得进入仓库；轮换证据仍需 IT 回填 |
@@ -44,8 +45,9 @@
 | 2026-06-15 11:27 UTC | 从 NAS 归档执行恢复演练 | `restore.drill_completed`，Flyway `039`，临时库已删除 |
 | 2026-06-15 19:56 UTC | 执行 NAS SMB 挂载/读写机器校验 | `npm run verify:nas-smb-mount-evidence` 通过，不读取或记录 SMB 密码 |
 | 2026-06-15 20:05 UTC | 执行正式安全基线与生产前置证据校验 | `npm run verify:security-baseline` 和 `npm run verify:production-readiness-evidence` 通过 |
-| 2026-06-15 20:06 UTC | 执行交付闸口脚本 Semgrep 增量扫描 | `pipx run semgrep --config p/javascript` 扫描 4 个脚本，0 findings |
+| 2026-06-15 20:06 UTC | 执行交付闸口脚本 Semgrep 增量扫描 | `pipx run semgrep --config p/javascript` 扫描 5 个脚本，0 findings |
 | 2026-06-15 20:12 UTC | 生成生产阻断清单 | `npm run docs:production-blockers` 与 `npm run verify:production-blockers` 通过 |
+| 2026-06-15 20:18 UTC | 校验生产前置证据回填模板 | `npm run verify:production-evidence-intake` 通过 |
 | 2026-06-15 | 执行 `npm run verify:p0` | 通过 |
 | 2026-06-15 | 执行 `npm run verify:ops160-recovery` | 通过 |
 

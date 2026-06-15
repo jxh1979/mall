@@ -126,7 +126,7 @@ if (semgrepEvidence) {
   const scanned = Array.isArray(semgrepEvidence.paths?.scanned) ? semgrepEvidence.paths.scanned : [];
   if (results.length !== 0) failures.push(`delivery readiness semgrep must have 0 findings, got ${results.length}`);
   if (errors.length !== 0) failures.push(`delivery readiness semgrep must have 0 errors, got ${errors.length}`);
-  for (const target of ["tools/generate-production-blocker-register.mjs", "tools/verify-delivery-gates.mjs", "tools/verify-nas-smb-mount-evidence.mjs", "tools/verify-production-readiness-evidence.mjs"]) {
+  for (const target of ["tools/generate-production-blocker-register.mjs", "tools/verify-delivery-gates.mjs", "tools/verify-nas-smb-mount-evidence.mjs", "tools/verify-production-evidence-intake-templates.mjs", "tools/verify-production-readiness-evidence.mjs"]) {
     if (!scanned.includes(target)) failures.push(`delivery readiness semgrep must scan ${target}`);
   }
 }

@@ -51,6 +51,7 @@ if (packageJson) {
     "verify:security-baseline",
     "verify:production-readiness-evidence",
     "verify:production-blockers",
+    "verify:production-evidence-intake",
   ];
   if (!deliveryScript) {
     failures.push("package.json must expose verify:delivery-gates");
@@ -75,6 +76,7 @@ requireIncludes("docs/delivery-readiness-gates-v0.1.md", [
   "verify:coding-host-protection",
   "verify:production-readiness-evidence",
   "verify:production-blockers",
+  "verify:production-evidence-intake",
 ]);
 
 requireIncludes("docs/external-dependency-gates-v0.1.md", [

@@ -36,6 +36,7 @@ npm run verify:delivery-gates
 | 8 | `npm run verify:security-baseline` | 校验正式安全基线输入和生产文档访问策略 |
 | 9 | `npm run verify:production-readiness-evidence` | 校验生产前置证据、台账状态和安全基线 evidence 是否一致 |
 | 10 | `npm run verify:production-blockers` | 校验生产阻断清单与台账、findings register 同步 |
+| 11 | `npm run verify:production-evidence-intake` | 校验生产前置证据回填模板齐全且不包含明文密钥 |
 
 ## 3. 交付阻断规则
 

@@ -55,6 +55,7 @@
 | 正式安全基线生成与维护任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
 | 生产阻断清单 | `docs/production-blocker-register-v0.1.md`、`docs/production-readiness-evidence/production-blocker-register-latest.json` |
+| 生产前置证据回填模板 | `docs/production-readiness-evidence-intake-template-v0.1.md` |
 | 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
 | 废止技术路线 | TypeScript / SQLite / Prisma / Fastify 后端仅可作为历史预研原型，不得作为正式开发、测试、部署、安全审计依据；`apps/api` 已于 2026-06-15 从 160 正式仓库物理移除，`verify:no-legacy-api-prototype` 已纳入 `verify:p0-contract`，用于阻断旧目录、旧脚本、旧依赖和旧 lockfile 标记回流 |
