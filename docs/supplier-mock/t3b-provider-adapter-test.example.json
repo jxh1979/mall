@@ -1,0 +1,22 @@
+{
+  "method": "POST",
+  "path": "/api/v1/integration/provider-adapters/{id}/test-mock",
+  "headers": {
+    "Authorization": "Bearer {{staff_token}}",
+    "Content-Type": "application/json",
+    "Idempotency-Key": "idem-t3b-adapter-test"
+  },
+  "body": {
+    "idempotency_key": "idem-t3b-adapter-test",
+    "provider_code": "mock-provider",
+    "scenario": "t3b_contract_smoke",
+    "mock_payload": {
+      "event_type": "payment.paid",
+      "provider_order_id": "mock-order-1001",
+      "status": "paid"
+    },
+    "operator_note": "T3-B mock contract test; no production vendor control",
+    "evidence_attachment_ids": []
+  },
+  "production_policy": "NO_PRODUCTION_VENDOR_CONTROL"
+}

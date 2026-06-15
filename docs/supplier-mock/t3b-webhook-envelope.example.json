@@ -1,0 +1,20 @@
+{
+  "method": "POST",
+  "path": "/api/open/d/p0-default/webhooks/mock-provider/payment.paid",
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Webhook-Signature": "{{generated_hmac_sha256}}",
+    "X-Idempotency-Key": "idem-t3b-webhook"
+  },
+  "body": {
+    "event_id": "evt-t3b-payment-paid",
+    "idempotency_key": "idem-t3b-webhook",
+    "payload": {
+      "provider_order_id": "mock-order-1001",
+      "status": "paid",
+      "amount_cent": 9900
+    }
+  },
+  "signature_canonical_template": "endpoint_key=p0-default\nevent=payment.paid\nidempotency_key=idem-t3b-webhook\npayload_hash={{sha256_stable_json_body}}\nprovider=mock-provider",
+  "signing_key_policy": "NO_REAL_SECRET; generated locally for mock only"
+}

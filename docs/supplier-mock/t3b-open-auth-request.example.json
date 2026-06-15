@@ -1,0 +1,15 @@
+{
+  "method": "POST",
+  "path": "/api/open/auth/token",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "app_key": "p0-open-app",
+    "timestamp": 1781424000000,
+    "nonce": "nonce-t3b-auth",
+    "signature": "{{generated_hmac_sha256}}"
+  },
+  "signature_canonical": "app_key=p0-open-app\nnonce=nonce-t3b-auth\ntimestamp=1781424000000",
+  "signing_key_policy": "NO_REAL_SECRET; read local mock signing key from environment only"
+}
