@@ -49,6 +49,9 @@
 | T3 编码包机器校验 | `npm run verify:t3-coding-package` |
 | T3-D1 本地大模型 AI 质检建议 | `docs/t3d-local-llm-ai-quality-v0.1.md` |
 | T3-D1 本地大模型 AI 质检机器校验 | `npm run verify:t3d-local-llm-ai-quality` |
+| 外部依赖准入闸口 | `docs/external-dependency-gates-v0.1.md` |
+| 交付总闸口文档 | `docs/delivery-readiness-gates-v0.1.md` |
+| 交付总闸口机器校验 | `npm run verify:delivery-gates` |
 | 正式安全基线待生成任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
 | 生产前置资料实施台账模板 | `docs/production-readiness-implementation-ledger-template-v0.1.md` |
 | 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
@@ -96,6 +99,7 @@
 | 17 | `production-readiness-implementation-ledger-template-v0.1.md` | 查看生产前置资料实施台账、状态、责任、证据和阻塞范围 |
 | 18 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成条件、输入、输出和阻断项 |
 | 19 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看 P0 接口契约基线和机器可读契约 |
+| 19A | `external-dependency-gates-v0.1.md`、`delivery-readiness-gates-v0.1.md` | 查看外部依赖阻断、交付总闸口和 `npm run verify:delivery-gates` 准入口径 |
 | 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 181 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径 |
 | 21 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 OpenAPI 反向生成的权限、事件、任务追溯和样例准入口径 |
 | 22 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 查看 P0 用户故事地图和迭代切片 |

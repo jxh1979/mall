@@ -21,7 +21,7 @@
 
 > 说明：交付包根目录为 `complex-management-system/docs/`。当前活跃交付包共 **81 个文件 = 77 个 Markdown + 2 个交付 HTML + 1 个 OpenAPI YAML + 1 个 OpenAPI JSON**；其中主目录活跃入口为 **79 个文件 = 77 个 Markdown + 2 个 HTML**。已丢弃不再使用的旧技术路线快照、旧进度快照和相关历史审计材料；保留的归档文件只作为历史证据，不作为当前产品、开发或验收入口。
 >
-> 可编码交付口径：上面的 81 个文件是“文档包”计数，不包含根脚本、OpenAPI 生成/校验工具、160 运维脚本、Android/后端运行器和 `backend/` 正式后端骨架。外部智能体或开发团队接手编码时，必须同时读取 `package.json`、`tools/run-backend-maven.mjs`、`tools/run-android-gradle.mjs`、`tools/apply-openapi-p0-examples.mjs`、`tools/verify-openapi-p0-examples.mjs`、`tools/generate-openapi-operation-matrix.mjs`、`tools/generate-openapi-contract-closure-appendix.mjs`、`tools/verify-openapi-contract.mjs`、`ops/160/*.sh`、`backend/README.md`、`apps/android-terminal/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md` 和 `nas-backup-and-restore-runbook-v0.1.md`；否则会漏掉后端/Android 环境前置校验、契约闸口、示例闸口、OpenAPI 权限/事件/任务追溯闸口、BE-000 环境准入、MDM、密钥轮换、NAS 备份恢复和 160 部署口径。
+> 可编码交付口径：上面的 81 个文件是“文档包”计数，不包含根脚本、OpenAPI 生成/校验工具、160 运维脚本、Android/后端运行器和 `backend/` 正式后端骨架。外部智能体或开发团队接手编码时，必须同时读取 `package.json`、`tools/run-backend-maven.mjs`、`tools/run-android-gradle.mjs`、`tools/apply-openapi-p0-examples.mjs`、`tools/verify-openapi-p0-examples.mjs`、`tools/generate-openapi-operation-matrix.mjs`、`tools/generate-openapi-contract-closure-appendix.mjs`、`tools/verify-openapi-contract.mjs`、`ops/160/*.sh`、`backend/README.md`、`apps/android-terminal/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md`、`nas-backup-and-restore-runbook-v0.1.md`、`external-dependency-gates-v0.1.md` 和 `delivery-readiness-gates-v0.1.md`；交付前必须运行 `npm run verify:delivery-gates`。否则会漏掉后端/Android 环境前置校验、契约闸口、示例闸口、OpenAPI 权限/事件/任务追溯闸口、外部依赖阻断、BE-000 环境准入、MDM、密钥轮换、NAS 备份恢复和 160 部署口径。
 >
 > 计数口径提示：下方多条“修订说明”保留的是当时阶段的历史文件数，用于追溯文档演进；当前交付数量一律以上一段“当前活跃交付包共 81 个文件”和最后一条 2026-06-13 生产前置薄 Runbook 收口说明为准。
 >
@@ -97,6 +97,8 @@
    - `00-current-effective-document-entry-v0.1.md` —— 当前第一阅读入口，说明哪些文档有效、哪些内容废止、正式技术栈和 P0 开发准入条件。
    - `prototype-deprecation-and-technology-baseline-v0.1.md` —— 原型废止与正式技术栈基线，说明旧 TypeScript/Fastify/Prisma/SQLite 后端不得作为正式开发依据。
    - `p0-coding-entry-pack-v0.1.md` —— P0 编码、联调、测试和供应商 mock 的统一入口，说明正式工程、契约、权限、留痕、验收和旧原型阻断规则。
+   - `external-dependency-gates-v0.1.md` —— 外部依赖准入闸口，阻断未确定供应商前的真实机器人、视频、设备控制和独立 Python AI 服务伪实现。
+   - `delivery-readiness-gates-v0.1.md` —— 交付总闸口，要求交付前运行 `npm run verify:delivery-gates`。
    - `p0-api-contract-pack-v0.1.md` —— P0 接口契约基线，供前端、后端、Android、一体机、小程序/App/Web、第三方和测试共同对齐。
    - `openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` —— P0 机器可读接口契约，供 springdoc 比对、SDK/mock 生成、接口自动化和供应商 Adapter 契约测试使用。
    - `p0-openapi-operation-acceptance-matrix-v0.1.md` —— P0 operation 级验收矩阵，覆盖请求体、权限、认证上下文、终端、幂等、事件、边界情况和开发用户故事。
