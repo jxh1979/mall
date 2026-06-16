@@ -52,6 +52,23 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
     }
 
     @Override
+    public boolean tryUpdateWhenResponseCode(IdempotencyRecord record, String expectedResponseCode) {
+        String sql = """
+                UPDATE idempotency_records
+                   SET response_code = :response_code,
+                       response_body = CAST(:response_body AS jsonb),
+                       http_status = :http_status
+                 WHERE operation_id = :operation_id
+                   AND idempotency_key = :idempotency_key
+                   AND request_hash = :request_hash
+                   AND response_code = :expected_response_code
+                """;
+        MapSqlParameterSource parameters = parameters(record)
+                .addValue("expected_response_code", expectedResponseCode);
+        return jdbcTemplate.update(sql, parameters) == 1;
+    }
+
+    @Override
     public IdempotencyRecord complete(IdempotencyRecord record) {
         String sql = """
                 UPDATE idempotency_records

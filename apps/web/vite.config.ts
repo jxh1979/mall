@@ -16,6 +16,14 @@ export default defineConfig({
         bar: "bar/index.html",
         amusement: "amusement/index.html",
       },
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) return "vendor-react";
+          if (id.includes("node_modules/@ant-design/icons")) return "vendor-antd-icons";
+          if (id.includes("node_modules/antd") || id.includes("node_modules/@ant-design")) return "vendor-antd";
+          if (id.includes("node_modules")) return "vendor";
+        },
+      },
     },
   },
 });

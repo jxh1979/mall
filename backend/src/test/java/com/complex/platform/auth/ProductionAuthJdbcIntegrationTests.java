@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -41,6 +42,11 @@ class ProductionAuthJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ProductionAuthService productionAuthService;
+
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
 
     @Test
     void prodProfileLoginRefreshAndLogoutUseJdbcSessionsWithoutPlaintextTokens() throws Exception {
@@ -126,6 +132,37 @@ class ProductionAuthJdbcIntegrationTests {
                 .getResponse()
                 .getStatus();
         assertThat(afterLogoutStatus).isIn(401, 403);
+    }
+
+    @Test
+    void seedAdminDoesNotOverwriteExistingCredentialWhenConfiguredAgain() throws Exception {
+        String userId = jdbcTemplate.queryForObject(
+                "SELECT id FROM access_users WHERE username = ?",
+                String.class,
+                "p0_prod_test_admin"
+        );
+        jdbcTemplate.update("""
+                UPDATE auth_credentials
+                   SET password_hash = ?,
+                       failed_attempt_count = 0,
+                       locked_until = NULL,
+                       status = 'active'
+                 WHERE user_id = ?
+                """, passwordEncoder.encode("operator-rotated-password"), userId);
+
+        productionAuthService.seedAdminWhenConfigured();
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login_name": "p0_prod_test_admin",
+                                  "password": "p0_prod_test_password"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        login("p0_prod_test_admin", "operator-rotated-password");
     }
 
     @Test

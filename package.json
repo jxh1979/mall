@@ -77,9 +77,15 @@
     "docs:production-evidence-backfill-priority": "node tools/generate-production-evidence-backfill-priority.mjs",
     "verify:production-evidence-backfill-priority": "node tools/generate-production-evidence-backfill-priority.mjs --check",
     "docs:production-evidence-backfill-execution-ledger": "node tools/generate-production-evidence-backfill-execution-ledger.mjs",
-    "verify:production-evidence-backfill-execution-ledger": "node tools/generate-production-evidence-backfill-execution-ledger.mjs --check"
+    "verify:production-evidence-backfill-execution-ledger": "node tools/generate-production-evidence-backfill-execution-ledger.mjs --check",
+    "test:ui": "playwright test",
+    "verify:ui": "playwright test",
+    "test:ui:update": "playwright test --update-snapshots"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0"
   }
 }

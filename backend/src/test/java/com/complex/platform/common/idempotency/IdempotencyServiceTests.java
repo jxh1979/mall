@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -189,6 +190,56 @@ class IdempotencyServiceTests {
         assertThat(actionRan).isFalse();
     }
 
+    @Test
+    void failedActionMarksReservationRetryableAndAllowsSameRequestToRunAgain() {
+        TestRequest request = new TestRequest("same-payload");
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThatThrownBy(() -> service.execute(
+                "operation",
+                "key",
+                request,
+                () -> {
+                    attempts.incrementAndGet();
+                    throw ApiException.conflict("UPSTREAM_TEMPORARY_FAILURE", "temporary failure");
+                },
+                TestResponse.class
+        ))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("UPSTREAM_TEMPORARY_FAILURE"));
+
+        assertThat(repository.findByOperationIdAndIdempotencyKey("operation", "key"))
+                .hasValueSatisfying(record -> {
+                    assertThat(record.responseCode()).isEqualTo("FAILED_RETRYABLE");
+                    assertThat(record.responseBody()).isNull();
+                    assertThat(record.httpStatus()).isEqualTo(500);
+                });
+
+        AtomicReference<Optional<IdempotencyRecord>> recordDuringRetry = new AtomicReference<>();
+        TestResponse response = service.execute(
+                "operation",
+                "key",
+                request,
+                () -> {
+                    attempts.incrementAndGet();
+                    recordDuringRetry.set(repository.findByOperationIdAndIdempotencyKey("operation", "key"));
+                    return new TestResponse("recovered");
+                },
+                TestResponse.class
+        );
+
+        assertThat(response).isEqualTo(new TestResponse("recovered"));
+        assertThat(attempts).hasValue(2);
+        assertThat(recordDuringRetry.get())
+                .hasValueSatisfying(record -> assertThat(record.responseCode()).isEqualTo("IN_PROGRESS"));
+        assertThat(repository.findByOperationIdAndIdempotencyKey("operation", "key"))
+                .hasValueSatisfying(record -> {
+                    assertThat(record.responseCode()).isEqualTo("OK");
+                    assertThat(record.responseBody()).isEqualTo("{\"value\":\"recovered\"}");
+                    assertThat(record.httpStatus()).isEqualTo(200);
+                });
+    }
+
     private String hashJson(Object value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -218,6 +269,19 @@ class IdempotencyServiceTests {
         public boolean tryReserve(IdempotencyRecord record) {
             String key = key(record.operationId(), record.idempotencyKey());
             if (records.containsKey(key)) {
+                return false;
+            }
+            records.put(key, record);
+            return true;
+        }
+
+        @Override
+        public boolean tryUpdateWhenResponseCode(IdempotencyRecord record, String expectedResponseCode) {
+            String key = key(record.operationId(), record.idempotencyKey());
+            IdempotencyRecord existing = records.get(key);
+            if (existing == null
+                    || !existing.requestHash().equals(record.requestHash())
+                    || !expectedResponseCode.equals(existing.responseCode())) {
                 return false;
             }
             records.put(key, record);

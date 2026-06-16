@@ -19,3 +19,7 @@ build
 *.aab
 local.properties
 **/local.properties
+
+playwright-report
+
+test-results

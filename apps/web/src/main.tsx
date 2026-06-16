@@ -226,7 +226,23 @@ type AmusementGroupBooking = {
 type RiskRule = { id: string; ruleCode: string; ruleName: string; ruleType: string; threshold: number; status: string };
 type RiskAlert = { id: string; alertType: string; riskLevel: string; summary: string; status: string; createdAt: string };
 type AuditEvent = { id: string; eventType: string; eventCategory: string; sourceType: string; result: string; riskLevel: string; summary: string; occurredAt: string };
-type OpenApp = { id: string; appCode: string; appName: string; appType: string; status: string; credentials?: Array<{ loginAccount: string; status: string }> };
+type ProviderAdapter = {
+  id: string;
+  providerCode: string;
+  adapterType: string;
+  mode: string;
+  capabilities?: string[];
+  environment?: string;
+  status: string;
+  webhookEnabled: boolean;
+  pollingCheckEnabled: boolean;
+  credentialSecretRef?: string;
+  productionReady: boolean;
+  operatorNote?: string;
+  evidenceAttachmentIds?: string[];
+  createdAt: string;
+  updatedAt: string;
+};
 type ThirdPartyOrderSync = { id: string; businessType: string; syncType: string; externalBusinessId: string; amount: number; status: string; createdAt: string };
 type ThirdPartyVoucherVerification = { id: string; businessType: string; externalVerificationId: string; status: string; createdAt: string };
 type IntegrationRetryTask = { id: string; businessType: string; taskType: string; status: string; attemptCount: number; createdAt: string };
@@ -389,7 +405,7 @@ type Snapshot = {
   riskRules: RiskRule[];
   riskAlerts: RiskAlert[];
   events: AuditEvent[];
-  openApps: OpenApp[];
+  providerAdapters: ProviderAdapter[];
   thirdPartyOrderSyncs: ThirdPartyOrderSync[];
   thirdPartyVoucherVerifications: ThirdPartyVoucherVerification[];
   integrationRetryTasks: IntegrationRetryTask[];
@@ -775,6 +791,43 @@ function metricItems(snapshot: Snapshot) {
   ];
 }
 
+function buildIntegrationCatalog(providerAdapters: ProviderAdapter[]): IntegrationResponse {
+  const reservedInterfaces: InterfaceItem[] = [
+    {
+      code: "open.webhook.device",
+      name: "\u8bbe\u5907/\u673a\u5668\u4eba/\u89c6\u9891\u4e8b\u4ef6\u56de\u8c03",
+      method: "POST",
+      path: "/api/open/d/{appCode}/webhooks/device/{eventType}",
+      status: "reserved",
+    },
+    {
+      code: "integration.provider-adapters",
+      name: "\u4f9b\u5e94\u5546\u9002\u914d\u5668\u914d\u7f6e",
+      method: "GET/POST",
+      path: "/api/v1/integration/provider-adapters",
+      status: "active",
+    },
+    {
+      code: "finance.reconciliation",
+      name: "\u5bf9\u8d26\u6279\u6b21\u4e0e\u5dee\u5f02\u8bfb\u53d6",
+      method: "GET",
+      path: "/api/v1/finance/reconciliation/batches*",
+      status: "active",
+    },
+  ];
+  const adapterInterfaces = providerAdapters.map((adapter) => ({
+    code: `adapter.${adapter.providerCode}`,
+    name: `${adapter.providerCode} - ${adapter.adapterType}`,
+    method: adapter.webhookEnabled ? "Webhook/API" : "API/Polling",
+    path: "/api/v1/integration/provider-adapters",
+    status: adapter.status,
+  }));
+  return {
+    policy: "\u53cc\u5411\u5f00\u653e\uff1a\u7edf\u4e00 OpenAPI/Webhook + \u4f9b\u5e94\u5546 SDK/API \u9002\u914d\u5668\uff1bWebhook \u4e3a\u4e3b\uff0c\u5b9a\u65f6\u8f6e\u8be2\u6821\u9a8c\u3002",
+    interfaces: [...reservedInterfaces, ...adapterInterfaces],
+  };
+}
+
 type PageStat = {
   label: string;
   value: string | number;
@@ -834,7 +887,7 @@ function getSectionStats(section: SectionKey, snapshot: Snapshot): PageStat[] {
     ],
     interfaces: [
       { label: "接口目录", value: snapshot.integration.interfaces.length },
-      { label: "开放应用", value: snapshot.openApps.length },
+      { label: "\u4f9b\u5e94\u5546\u9002\u914d\u5668", value: snapshot.providerAdapters.length },
       { label: "重试任务", value: snapshot.integrationRetryTasks.length, tone: snapshot.integrationRetryTasks.length > 0 ? "warning" : "default" },
       { label: "对账差异", value: snapshot.reconciliationDifferences.length, tone: snapshot.reconciliationDifferences.length > 0 ? "warning" : "good" },
     ],
@@ -857,7 +910,7 @@ function getSectionStats(section: SectionKey, snapshot: Snapshot): PageStat[] {
 
 function ResultBox({ value }: { value: unknown }) {
   if (!value) return null;
-  return <pre className="result-box">{JSON.stringify(value, null, 2)}</pre>;
+  return <pre className="result-box" data-testid="action-result">{JSON.stringify(value, null, 2)}</pre>;
 }
 
 function SectionHeading({ icon, title, extra }: { icon: React.ReactNode; title: string; extra?: React.ReactNode }) {
@@ -1057,6 +1110,7 @@ function App() {
   const [openMenuKeys, setOpenMenuKeys] = React.useState<string[]>(defaultOpenMenuKeys);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [lastResult, setLastResult] = React.useState<unknown>(null);
+  const [pendingConfirmation, setPendingConfirmation] = React.useState<{ title: string; content: string; action: () => Promise<void> } | null>(null);
   const [selectedFloorPlanId, setSelectedFloorPlanId] = React.useState('');
   const [selectedFloorPlanImportId, setSelectedFloorPlanImportId] = React.useState('');
   const [loginForm] = Form.useForm();
@@ -1080,7 +1134,7 @@ function App() {
   const [dynamicPricingForm] = Form.useForm();
   const [dynamicPricingSimulationForm] = Form.useForm();
   const [riskForm] = Form.useForm();
-  const [openAppForm] = Form.useForm();
+  const [providerAdapterForm] = Form.useForm();
 
   const navigateToSection = React.useCallback((section: SectionKey) => {
     setActiveSection(section);
@@ -1104,7 +1158,7 @@ function App() {
       const [
         health,
         overview,
-        integration,
+        providerAdapters,
         organizations,
         merchantsRaw,
         venues,
@@ -1140,7 +1194,6 @@ function App() {
         riskRules,
         riskAlerts,
         events,
-        openApps,
         thirdPartyOrderSyncs,
         thirdPartyVoucherVerifications,
         integrationRetryTasks,
@@ -1172,7 +1225,7 @@ function App() {
       ] = await Promise.all([
         getJson<HealthResponse>("/api/v1/system/health"),
         getJson<Overview>("/api/v1/analytics/dashboards/p0-overview"),
-        getJson<IntegrationResponse>("/api/v1/integration/provider-adapters"),
+        getJson<ProviderAdapter[]>("/api/v1/integration/provider-adapters"),
         getJson<Organization[]>("/api/v1/platform/business-entities"),
         getJson<Merchant[]>("/api/v1/platform/merchants"),
         getJson<Venue[]>("/api/v1/platform/projects"),
@@ -1208,7 +1261,6 @@ function App() {
         getJson<RiskRule[]>("/api/v1/analytics/risk-rules"),
         getJson<RiskAlert[]>("/api/v1/analytics/risk-alerts"),
         getJson<AuditEvent[]>("/api/v1/evidence/events?limit=80"),
-        getJson<OpenApp[]>("/api/v1/integration/provider-adapters"),
         getJson<ThirdPartyOrderSync[]>("/api/v1/integration/order-syncs"),
         getJson<ThirdPartyVoucherVerification[]>("/api/v1/integration/voucher-verifications"),
         getJson<IntegrationRetryTask[]>("/api/v1/integration/retry-tasks"),
@@ -1255,6 +1307,7 @@ function App() {
         : null;
       if (effectiveFloorPlanId !== selectedFloorPlanId) setSelectedFloorPlanId(effectiveFloorPlanId);
       if (effectiveImportId !== selectedFloorPlanImportId) setSelectedFloorPlanImportId(effectiveImportId);
+      const integration = buildIntegrationCatalog(providerAdapters);
       setSnapshot({
         health,
         overview,
@@ -1294,7 +1347,7 @@ function App() {
         riskRules,
         riskAlerts,
         events,
-        openApps,
+        providerAdapters,
         thirdPartyOrderSyncs,
         thirdPartyVoucherVerifications,
         integrationRetryTasks,
@@ -1355,6 +1408,15 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleLogout() {
+    setApiAccessToken("");
+    setAuthUser(null);
+    setSnapshot(null);
+    setLastResult(null);
+    setError(null);
+    message.success("\u5df2\u9000\u51fa");
   }
 
   async function runAction<T>(label: string, action: () => Promise<T>, reset?: () => void) {
@@ -1738,13 +1800,7 @@ function App() {
   }
 
   function confirmHighImpactAction(title: string, content: string, action: () => Promise<void>) {
-    Modal.confirm({
-      title,
-      content,
-      okText: "确认",
-      cancelText: "取消",
-      onOk: action,
-    });
+    setPendingConfirmation({ title, content, action });
   }
 
   async function handleRiskAlert(values: Record<string, string>) {
@@ -1769,16 +1825,18 @@ function App() {
     }));
   }
 
-  async function handleCreateOpenApp(values: Record<string, string>) {
-    await runAction("开放应用创建", () => postJson("/api/v1/integration/provider-adapters", {
-      appName: values.appName,
-      appType: values.appType || "reserved_partner",
-      contactName: values.contactName || "P0 Contact",
-      contactPhone: values.contactPhone || "18800000003",
-      callbackUrl: values.callbackUrl || undefined,
-      loginAccount: values.loginAccount,
-      password: values.password,
-    }), () => openAppForm.resetFields());
+  async function handleCreateProviderAdapter(values: Record<string, string>) {
+    await runAction("\u4f9b\u5e94\u5546\u9002\u914d\u5668\u521b\u5efa", () => postJson<ProviderAdapter>("/api/v1/integration/provider-adapters", {
+      providerCode: values.providerCode,
+      adapterType: values.adapterType || "reservation_resource",
+      mode: values.mode || "sdk_api",
+      fieldMapping: {},
+      webhookConfig: { preferred: values.webhookEnabled !== "false" },
+      pollingConfig: { enabled: true, intervalMinutes: Number(values.pollingIntervalMinutes || 10) },
+      productionReady: false,
+      operatorNote: values.operatorNote || undefined,
+      evidenceAttachmentIds: [],
+    }), () => providerAdapterForm.resetFields());
   }
 
   const interfaceColumns: ColumnsType<InterfaceItem> = [
@@ -1882,7 +1940,7 @@ function App() {
         <div className="action-grid two">
           <div className="action-panel">
             <h2>创建票种并出票</h2>
-            <Form form={ticketFlowForm} layout="vertical" onFinish={handleTicketFlow} initialValues={{
+            <Form form={ticketFlowForm} data-testid="ticket-flow-form" layout="vertical" onFinish={handleTicketFlow} initialValues={{
               productName: `P0 Web Pass ${Date.now()}`,
               entitlementName: "P0 Web Entry Entitlement",
               entitlementType: "entry",
@@ -1935,7 +1993,7 @@ function App() {
           <div className="action-panel">
             <h2>P2 动态定价规则</h2>
             <Alert className="status-alert" type="info" showIcon message="仅用于规则容器和模拟，不改变当前正式订单实收。" />
-            <Form form={dynamicPricingForm} layout="vertical" onFinish={handleDynamicPricingRule} initialValues={{ priority: 10, salesChannel: "web", adjustmentType: "percent_delta", adjustmentRate: 10, minPriceYuan: 0 }}>
+            <Form form={dynamicPricingForm} data-testid="dynamic-pricing-form" layout="vertical" onFinish={handleDynamicPricingRule} initialValues={{ ticketTypeId: snapshotValue.tickets[0]?.id, ruleName: "Weekend Boost", effectiveFrom: "2026-06-01", effectiveTo: "2026-06-30", priority: 10, salesChannel: "web", adjustmentType: "percent_delta", adjustmentRate: 10, minPriceYuan: 0 }}>
               <div className="form-grid two">
                 <Form.Item name="ticketTypeId" label="票种" rules={[{ required: true }]}><Select options={snapshotValue.tickets.map((item) => ({ value: item.id, label: `${item.productName} · ${formatMoney(item.priceAmount)}` }))} /></Form.Item>
                 <Form.Item name="ruleName" label="规则名称" rules={[{ required: true }]}><Input /></Form.Item>
@@ -1957,7 +2015,7 @@ function App() {
           </div>
           <div className="action-panel">
             <h2>P2 动态定价模拟</h2>
-            <Form form={dynamicPricingSimulationForm} layout="vertical" onFinish={handleDynamicPricingSimulation} initialValues={{ salesChannel: "web" }}>
+            <Form form={dynamicPricingSimulationForm} data-testid="dynamic-pricing-simulation-form" layout="vertical" onFinish={handleDynamicPricingSimulation} initialValues={{ ticketTypeId: snapshotValue.tickets[0]?.id, visitDate: "2026-06-20", salesChannel: "web" }}>
               <div className="form-grid two">
                 <Form.Item name="ticketTypeId" label="票种" rules={[{ required: true }]}><Select options={snapshotValue.tickets.map((item) => ({ value: item.id, label: item.productName }))} /></Form.Item>
                 <Form.Item name="visitDate" label="游玩日期" rules={[{ required: true }]}><Input placeholder="2026-06-20" /></Form.Item>
@@ -1976,7 +2034,7 @@ function App() {
             { title: "状态", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
             { title: "有效期", key: "period", render: (_, row) => `${row.effectiveFrom} 至 ${row.effectiveTo}` },
             { title: "调整", key: "adjustment", render: (_, row) => row.adjustmentType === "percent_delta" ? formatPercentPoint(row.adjustmentRate) : formatMoney(row.adjustmentAmountCent) },
-            { title: "操作", key: "actions", render: (_, row) => row.status === "draft" ? <Button size="small" onClick={() => confirmHighImpactAction("发布动态定价规则", "仅发布规则容器和模拟能力，不改变当前正式订单实收。", () => handlePublishDynamicPricingRule(row.id))}>发布</Button> : <Tag>{row.status}</Tag> },
+            { title: "操作", key: "actions", render: (_, row) => row.status === "draft" ? <Button size="small" data-testid={`publish-dynamic-pricing-${row.id}`} onClick={() => confirmHighImpactAction("发布动态定价规则", "仅发布规则容器和模拟能力，不改变当前正式订单实收。", () => handlePublishDynamicPricingRule(row.id))}>发布</Button> : <Tag>{row.status}</Tag> },
           ]} />
           <SimpleTable title="票种" data={snapshotValue.tickets.slice(0, 12)} columns={[
             { title: "名称", dataIndex: "productName" },
@@ -2206,7 +2264,7 @@ function App() {
             { title: "人数", dataIndex: "partySize" },
             { title: "锁定容量", dataIndex: "reservedCapacity" },
             { title: "状态", dataIndex: "bookingStatus", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
-            { title: "操作", key: "actions", render: (_, row) => <div className="button-row compact">{row.bookingStatus === "pending_approval" ? <Button size="small" onClick={() => confirmHighImpactAction("审批并锁定容量", "审批后由后端事务锁定该场次容量。", () => handleApproveGroupBooking(row.id))}>审批锁定</Button> : null}{row.bookingStatus === "approved" ? <Button size="small" onClick={() => confirmHighImpactAction("释放已锁定容量", "释放后该申请占用的场次容量会被归还。", () => handleReleaseGroupBooking(row.id))}>释放</Button> : null}</div> },
+            { title: "操作", key: "actions", render: (_, row) => <div className="button-row compact">{row.bookingStatus === "pending_approval" ? <Button size="small" onClick={() => confirmHighImpactAction("审批并锁定容量", "审批后由后端事务锁定该场次容量。", () => handleApproveGroupBooking(row.id))}>审批锁定</Button> : null}{row.bookingStatus === "approved" ? <Button size="small" data-testid={`release-group-booking-${row.id}`} onClick={() => confirmHighImpactAction("释放已锁定容量", "释放后该申请占用的场次容量会被归还。", () => handleReleaseGroupBooking(row.id))}>释放</Button> : null}</div> },
           ]} />
           <SimpleTable title="P2 场次容量池" data={snapshotValue.amusementSessions.slice(0, 12)} columns={[
             { title: "场次", dataIndex: "sessionName" },
@@ -2474,24 +2532,26 @@ function App() {
           </div>
           <div className="action-panel">
             <h2>创建开放应用</h2>
-            <Form form={openAppForm} layout="vertical" onFinish={handleCreateOpenApp} initialValues={{ appName: `P0 Reserved App ${Date.now()}`, appType: "reserved_partner", loginAccount: `p0_app_${Date.now()}` }}>
+            <Form form={providerAdapterForm} data-testid="provider-adapter-form" layout="vertical" onFinish={handleCreateProviderAdapter} initialValues={{ providerCode: `provider_${Date.now()}`, adapterType: "reservation_resource", mode: "sdk_api", webhookEnabled: "true", pollingIntervalMinutes: "10" }}>
               <div className="form-grid two">
-                <Form.Item name="appName" label="应用名称" rules={[{ required: true }]}><Input /></Form.Item>
-                <Form.Item name="appType" label="类型"><Input /></Form.Item>
-                <Form.Item name="loginAccount" label="登录账号" rules={[{ required: true }]}><Input /></Form.Item>
-                <Form.Item name="password" label="密码" rules={[{ required: true }]}><Input.Password /></Form.Item>
-                <Form.Item name="callbackUrl" label="回调地址"><Input placeholder="https://example.com/callback" /></Form.Item>
-                <Form.Item name="contactName" label="联系人"><Input /></Form.Item>
+                <Form.Item name="providerCode" label="\u4f9b\u5e94\u5546\u7f16\u7801" rules={[{ required: true }]}><Input /></Form.Item>
+                <Form.Item name="adapterType" label="\u9002\u914d\u7c7b\u578b"><Select options={["reservation_resource", "payment", "face_age_check", "robot", "video", "device"].map((value) => ({ value, label: value }))} /></Form.Item>
+                <Form.Item name="mode" label="\u63a5\u5165\u6a21\u5f0f"><Select options={["sdk_api", "openapi", "webhook", "manual_file"].map((value) => ({ value, label: value }))} /></Form.Item>
+                <Form.Item name="webhookEnabled" label="Webhook"><Select options={[{ value: "true", label: "\u4f18\u5148" }, { value: "false", label: "\u6682\u4e0d\u542f\u7528" }]} /></Form.Item>
+                <Form.Item name="pollingIntervalMinutes" label="\u8f6e\u8be2\u6821\u9a8c\u95f4\u9694\uff08\u5206\u949f\uff09"><InputNumber min={1} className="full" /></Form.Item>
+                <Form.Item name="operatorNote" label="\u5907\u6ce8"><Input /></Form.Item>
               </div>
-              <Button type="primary" htmlType="submit">创建应用</Button>
+              <Button data-testid="create-provider-adapter-button" type="primary" htmlType="submit">{"\u521b\u5efa\u9002\u914d\u5668"}</Button>
             </Form>
           </div>
         </div>
-        <SimpleTable title="开放应用" data={snapshotValue.openApps.slice(0, 12)} columns={[
-          { title: "应用", dataIndex: "appName" },
-          { title: "编码", dataIndex: "appCode" },
-          { title: "类型", dataIndex: "appType" },
-          { title: "状态", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
+        <SimpleTable title="\u4f9b\u5e94\u5546\u9002\u914d\u5668" data={snapshotValue.providerAdapters.slice(0, 12)} columns={[
+          { title: "\u4f9b\u5e94\u5546", dataIndex: "providerCode" },
+          { title: "\u7c7b\u578b", dataIndex: "adapterType" },
+          { title: "\u6a21\u5f0f", dataIndex: "mode" },
+          { title: "Webhook", dataIndex: "webhookEnabled", render: (value) => value ? <Tag color="green">on</Tag> : <Tag>off</Tag> },
+          { title: "\u8f6e\u8be2", dataIndex: "pollingCheckEnabled", render: (value) => value ? <Tag color="blue">on</Tag> : <Tag>off</Tag> },
+          { title: "\u72b6\u6001", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
         ]} />
         <div className="table-grid two">
           <SimpleTable title="P1 餐饮/零售订单同步" data={snapshotValue.thirdPartyOrderSyncs.slice(0, 12)} columns={[
@@ -2694,15 +2754,15 @@ function App() {
   if (!authUser) {
     return (
       <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#0f766e", borderRadius: 6, fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" } }}>
-        <Layout className="app-shell auth-shell">
+        <Layout className="app-shell auth-shell" data-testid="auth-shell">
           <Content className="auth-content">
-            <div className="auth-panel">
+            <div className="auth-panel" data-testid="login-view">
               <div className="brand auth-brand"><BankOutlined /><span>综合体管理系统</span></div>
-              {error ? <Alert className="status-alert" type="error" message="登录失败" description={error} /> : null}
-              <Form form={loginForm} layout="vertical" onFinish={handleLogin}>
-                <Form.Item name="username" label="账号" rules={[{ required: true }]}><Input prefix={<LockOutlined />} autoComplete="username" /></Form.Item>
-                <Form.Item name="password" label="密码" rules={[{ required: true }]}><Input.Password autoComplete="current-password" /></Form.Item>
-                <Button type="primary" htmlType="submit" loading={loading} block>登录</Button>
+              {error ? <Alert className="status-alert" data-testid="global-error" type="error" message="登录失败" description={error} /> : null}
+              <Form form={loginForm} layout="vertical" onFinish={handleLogin} data-testid="login-form">
+                <Form.Item name="username" label="\u8d26\u53f7" rules={[{ required: true }]}><Input data-testid="login-username" prefix={<LockOutlined />} autoComplete="username" /></Form.Item>
+                <Form.Item name="password" label="\u5bc6\u7801" rules={[{ required: true }]}><Input.Password data-testid="login-password" autoComplete="current-password" /></Form.Item>
+                <Button type="primary" htmlType="submit" loading={loading} block data-testid="login-submit">登录</Button>
               </Form>
             </div>
           </Content>
@@ -2713,10 +2773,11 @@ function App() {
 
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#0f766e", borderRadius: 6, fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" } }}>
-      <Layout className="app-shell">
+      <Layout className="app-shell" data-testid="app-shell">
         <Sider width={248} collapsedWidth={72} collapsed={sidebarCollapsed} className={`sidebar${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
           <div className="brand"><BankOutlined />{sidebarCollapsed ? null : <span>综合体管理系统</span>}</div>
           <Menu
+            data-testid="app-nav"
             mode="inline"
             selectedKeys={[activeSection]}
             openKeys={openMenuKeys}
@@ -2731,6 +2792,7 @@ function App() {
           <Header className="topbar">
             <div className="topbar-left">
               <Button
+                data-testid="sidebar-toggle"
                 className="icon-button"
                 icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                 onClick={handleSidebarToggle}
@@ -2741,16 +2803,33 @@ function App() {
             <div className="topbar-actions">
               <span className="user-chip">{authUser.username}</span>
               <Badge status={snapshot?.health.ok ? "success" : "warning"} text={snapshot?.health.ok ? "API 正常" : "等待数据"} />
-              <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void loadData()}>刷新</Button>
+              <Button data-testid="logout-button" onClick={handleLogout}>{"\u9000\u51fa"}</Button>
+              <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void loadData()}>{"\u5237\u65b0"}</Button>
             </div>
           </Header>
           <Content className="content">
-            {error ? <Alert className="status-alert" type="error" message="后端数据读取失败" description={error} /> : null}
+            {error ? <Alert className="status-alert" data-testid="global-error" type="error" message="后端数据读取失败" description={error} /> : null}
             {loading && !snapshot ? <div className="loading-state"><Spin size="large" /></div> : null}
             {snapshot ? renderContent(snapshot) : null}
             <ResultBox value={lastResult} />
           </Content>
         </Layout>
+        <Modal
+          open={Boolean(pendingConfirmation)}
+          title={pendingConfirmation?.title}
+          okText="\u786e\u8ba4"
+          cancelText="\u53d6\u6d88"
+          okButtonProps={{ "data-testid": "confirm-high-impact-ok" }}
+          cancelButtonProps={{ "data-testid": "confirm-high-impact-cancel" }}
+          onCancel={() => setPendingConfirmation(null)}
+          onOk={async () => {
+            const action = pendingConfirmation?.action;
+            setPendingConfirmation(null);
+            if (action) await action();
+          }}
+        >
+          <p>{pendingConfirmation?.content}</p>
+        </Modal>
       </Layout>
     </ConfigProvider>
   );

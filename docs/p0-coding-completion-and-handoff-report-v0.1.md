@@ -12,8 +12,8 @@
 |---|---|
 | 编码环境 | 192.168.88.160，工程目录 `/home/james/complex-management` |
 | 正式技术栈 | Java 21 + Spring Boot 4.x + PostgreSQL + Flyway + Maven |
-| P0 API 覆盖 | OpenAPI 181 个 operation 与 Java Controller 181 个映射一致，缺失 0，多余 0 |
-| 后端测试 | 360 个测试通过，0 失败 |
+| P0 API 覆盖 | OpenAPI 198 个 operation 与 Java Controller 198 个映射一致，缺失 0，多余 0 |
+| 后端测试 | 557 个测试通过，0 失败 |
 | 前端验证 | Web typecheck 与 Vite production build 通过 |
 | Android 验证 | Android 环境、核心构建、smoke、debug APK 均通过 |
 | 运行态验证 | API health、OpenAPI endpoint、Web、PostgreSQL、Redis、NATS、MinIO 均通过 |
@@ -34,16 +34,18 @@
 | 权限仓储接口残留默认未实现抛错 | 已改为抽象接口方法，缺实现会在编译期暴露；测试替身已补齐最小实现 |
 | 审计事件仓储残留未使用抛错映射函数 | 已移除未使用方法和相关导入，避免后续审计误判为 P0 留痕查询缺口 |
 | 根目录 `npm run verify:p0` 直接执行缺 Android smoke 配置 | `tools/run-android-gradle.mjs` 已加载 `/etc/complex/complex.env` 和 `~/.complex/complex.env`，同时保留显式环境变量优先级 |
+| 生产 seed admin 配置存在时可能覆盖已轮换密码 | 已改为仅首次插入凭证，已有凭证不覆盖；补 `ProductionAuthJdbcIntegrationTests` 防回归 |
+| 幂等业务 action 失败后可能长期卡在 `IN_PROGRESS` | 已补 `FAILED_RETRYABLE` 状态，同 key 同请求可重试并在成功后覆盖为 `OK`；补 `IdempotencyServiceTests` 防回归 |
 
 ## 4. 验证证据
 
 | 验证项 | 命令 | 结果 |
 |---|---|---|
 | 认证目标测试 | `cd backend && mvn -q -Dtest=AuthControllerTests,AuthServiceTests test` | 通过 |
-| 契约验证 | `npm run verify:p0-contract` | 通过；181 operations checked |
-| Controller 映射对比 | OpenAPI method+path vs `*Controller.java` | 181/181，missing 0，extra 0 |
+| 契约验证 | `npm run verify:p0-contract` | 通过；198 operations checked |
+| Controller 映射对比 | OpenAPI method+path vs `*Controller.java` | 198 operations，missing 0，extra 0 |
 | 完整 P0 验证 | `/opt/complex/scripts/complex-verify-p0.sh` | 通过；最终输出 `P0 verification PASS` |
-| 根目录完整 P0 验证 | `npm run verify:p0` | 通过；包含契约、安全基线、360 后端测试、Web build、Android 环境、Android smoke 和 debug APK |
+| 根目录完整 P0 验证 | `npm run verify:p0` | 通过；包含契约、安全基线、557 后端测试、Web build、Android 环境、Android smoke 和 debug APK |
 
 ## 5. 已实现能力边界
 
@@ -95,8 +97,11 @@ P0 首批编码包已经从“文档可编码”推进到“160 机器正式实�
 
 | 日期 | 类型 | 内容 |
 |---|---|---|
-| 2026-06-14 | 新增 | 记录 160 P0 编码完成、认证缺口修复、181/181 operation 对齐、360 后端测试通过和 `P0 verification PASS` 结论 |
+| 2026-06-14 | 新增 | 记录 160 P0 编码完成、认证缺口修复、198 operations 对齐、557 后端测试通过和 `P0 verification PASS` 结论 |
 | 2026-06-14 | 改 | 按总控口径明确外部采购/真实供应商/真实 NAS 账号不纳入 P0 编码完成范围；NAS 协议收口为 SMB |
 | 2026-06-14 | 改 | 清理 P0 代码中残留未实现抛错痕迹，补齐根目录 `npm run verify:p0` 对 160 运行配置的加载能力，并重新通过完整 P0 验证 |
 | 2026-06-14 | 改 | NAS 参数补齐为 `//192.168.88.113/bn`、账号 `jxh1`、160 挂载 `/mnt/complex-nas-backup`、30 天保留、1TB 容量上限；当前不启用备份归档加密 |
 | 2026-06-14 | 验证 | 已完成真实 NAS 挂载读写、无加密 `.tar.gz` 备份同步、`.sha256` 校验和从 NAS 归档恢复演练；最新 evidence 为 `docs/production-readiness-evidence/nas-restore-drill-latest.json` |
+| 2026-06-15 | 改 | 修复生产 seed admin 重启/重复初始化覆盖已轮换密码风险；补充红绿测试验证 |
+| 2026-06-15 | 改 | 修复幂等 action 失败后 `IN_PROGRESS` 卡死风险；失败记录进入 `FAILED_RETRYABLE` 并允许同请求重试 |
+| 2026-06-15 | 验证 | 当前 P0 契约口径更新为 198 operations，后端测试口径更新为 557 tests；生产前置真实证据仍按台账待回填，不因代码修复自动关闭 |

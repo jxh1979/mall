@@ -8,5 +8,9 @@ public interface IdempotencyRepository {
 
     boolean tryReserve(IdempotencyRecord record);
 
+    default boolean tryUpdateWhenResponseCode(IdempotencyRecord record, String expectedResponseCode) {
+        return false;
+    }
+
     IdempotencyRecord complete(IdempotencyRecord record);
 }

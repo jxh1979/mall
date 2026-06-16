@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -19,6 +20,7 @@ public class IdempotencyService {
     private static final long DEFAULT_TTL_SECONDS = 86_400;
     private static final String RESPONSE_CODE_OK = "OK";
     private static final String RESPONSE_CODE_IN_PROGRESS = "IN_PROGRESS";
+    private static final String RESPONSE_CODE_FAILED_RETRYABLE = "FAILED_RETRYABLE";
 
     private final IdempotencyRepository repository;
     private final ObjectMapper objectMapper;
@@ -67,12 +69,28 @@ public class IdempotencyService {
             return runAndComplete(reservation, action, responseType, storedResponseTransformer);
         }
 
-        return repository.findByOperationIdAndIdempotencyKey(operationId, idempotencyKey)
-                .map(existing -> replay(existing, requestHash, responseType))
-                .orElseThrow(() -> ApiException.conflict(
-                        "IDEMPOTENCY_IN_PROGRESS",
-                        "idempotency request is still being processed"
-                ));
+        Optional<IdempotencyRecord> existing = repository.findByOperationIdAndIdempotencyKey(operationId, idempotencyKey);
+        if (existing.isPresent()) {
+            IdempotencyRecord record = existing.get();
+            if (RESPONSE_CODE_FAILED_RETRYABLE.equals(record.responseCode()) && record.requestHash().equals(requestHash)) {
+                IdempotencyRecord retryReservation = inProgressReservation(record);
+                if (repository.tryUpdateWhenResponseCode(retryReservation, RESPONSE_CODE_FAILED_RETRYABLE)) {
+                    return runAndComplete(retryReservation, action, responseType, storedResponseTransformer);
+                }
+                return repository.findByOperationIdAndIdempotencyKey(operationId, idempotencyKey)
+                        .map(latest -> replay(latest, requestHash, responseType))
+                        .orElseThrow(() -> ApiException.conflict(
+                                "IDEMPOTENCY_IN_PROGRESS",
+                                "idempotency request is still being processed"
+                        ));
+            }
+            return replay(record, requestHash, responseType);
+        }
+
+        throw ApiException.conflict(
+                "IDEMPOTENCY_IN_PROGRESS",
+                "idempotency request is still being processed"
+        );
     }
 
     private void requireIdempotencyKey(String idempotencyKey) {
@@ -95,28 +113,65 @@ public class IdempotencyService {
         }
     }
 
+    private IdempotencyRecord inProgressReservation(IdempotencyRecord record) {
+        return new IdempotencyRecord(
+                record.id(),
+                record.operationId(),
+                record.idempotencyKey(),
+                record.requestHash(),
+                RESPONSE_CODE_IN_PROGRESS,
+                null,
+                202,
+                record.createdAt(),
+                record.expiresAt()
+        );
+    }
+
     private <T> T runAndComplete(
             IdempotencyRecord reservation,
             Supplier<T> action,
             Class<T> responseType,
             Function<T, T> storedResponseTransformer
     ) {
-        T response = action.get();
-        T storedResponse = storedResponseTransformer == null
-                ? response
-                : storedResponseTransformer.apply(response);
-        repository.complete(new IdempotencyRecord(
-                reservation.id(),
-                reservation.operationId(),
-                reservation.idempotencyKey(),
-                reservation.requestHash(),
-                RESPONSE_CODE_OK,
-                writeJson(storedResponse),
-                200,
-                reservation.createdAt(),
-                reservation.expiresAt()
-        ));
-        return responseType.cast(response);
+        try {
+            T response = action.get();
+            T storedResponse = storedResponseTransformer == null
+                    ? response
+                    : storedResponseTransformer.apply(response);
+            repository.complete(new IdempotencyRecord(
+                    reservation.id(),
+                    reservation.operationId(),
+                    reservation.idempotencyKey(),
+                    reservation.requestHash(),
+                    RESPONSE_CODE_OK,
+                    writeJson(storedResponse),
+                    200,
+                    reservation.createdAt(),
+                    reservation.expiresAt()
+            ));
+            return responseType.cast(response);
+        } catch (RuntimeException | Error exception) {
+            markRetryableFailure(reservation, exception);
+            throw exception;
+        }
+    }
+
+    private void markRetryableFailure(IdempotencyRecord reservation, Throwable failure) {
+        try {
+            repository.complete(new IdempotencyRecord(
+                    reservation.id(),
+                    reservation.operationId(),
+                    reservation.idempotencyKey(),
+                    reservation.requestHash(),
+                    RESPONSE_CODE_FAILED_RETRYABLE,
+                    null,
+                    500,
+                    reservation.createdAt(),
+                    reservation.expiresAt()
+            ));
+        } catch (RuntimeException | Error completionException) {
+            failure.addSuppressed(completionException);
+        }
     }
 
     private String hashJson(Object value) {

@@ -95,14 +95,7 @@ public class ProductionAuthService {
                 VALUES (
                     :user_id, :password_hash, 'bcrypt', 0, NULL, :now, 'active', :now, :now
                 )
-                ON CONFLICT (user_id) DO UPDATE SET
-                    password_hash = EXCLUDED.password_hash,
-                    password_algo = 'bcrypt',
-                    failed_attempt_count = 0,
-                    locked_until = NULL,
-                    status = 'active',
-                    password_changed_at = :now,
-                    updated_at = :now
+                ON CONFLICT (user_id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("user_id", userId)
                 .addValue("password_hash", passwordEncoder.encode(seedPassword))
