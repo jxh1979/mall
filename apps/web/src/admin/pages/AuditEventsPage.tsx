@@ -136,7 +136,6 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError }: 
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <div className="admin-generic-evidence" data-testid="audit-events-evidence">{TEXT.evidence}</div>
       <AuditTrailHint event="evidence.event_viewed / evidence.events_reported" />
-      {error ? <div className="admin-inline-error" data-testid="audit-events-error">{error}</div> : null}
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="audit-events-summary">
           <div className="admin-kpi-card"><span>{TEXT.total}</span><strong>{rows.length}</strong><small>{TEXT.eventType}</small></div>

@@ -48,6 +48,7 @@
 | U-12 | `tests/e2e/full-admin-visual.spec.ts-snapshots/` | 因 Overview 新增筛选行，回归基线截图（已人工查验：筛选行对齐、KPI 3×2 网格整齐、无溢出/空白）|
 | U-13 | `components/rowSearch.ts`（新）+ `RiskAlertsPage`/`IntegrationEventsPage`/`TicketOrdersPage` | 高量日志页补客户端搜索筛选：抽出共享 `rowMatchesKeyword`，三页加搜索框 + 匹配计数 + 独立 filter-empty 态（与 data-empty 区分）；AuditEvents 原已有搜索 |
 | U-14 | `components/TablePager.tsx`（新）+ 风控/集成事件/出票/审计四页 + `styles.css` + `tests/e2e/support/mock-api.ts` | 高量日志页补客户端**分页**：抽出共享 `usePagedRows`+`TablePager`（上一页/页码状态/下一页，testid 全覆盖），先筛选后分页、改关键词自动回第 1 页；扩充 mock 至每接口 12 行（命名原始行保持首位，确保 RT-1/CP-1/SYNC-1/VCH-1、TO-MOCK-1、Mock risk、event-trace-1 留在第 1 页，现有断言不破）；补 `.admin-pager` 样式 |
+| U-15 | `AuditEventsPage`/`BusinessAnalyticsPage`/`MerchantScopePage` + `full-admin-remaining.spec.ts` | 清理 3 处重复错误渲染：删除各页 `<AdminDataState>` 之前的 inline error div（`*-error`），统一由 `AdminDataState` 的 `admin-error`（含重试）呈现；同步将 ADM-REM-03 对 `audit-events-error` 的断言改为 `admin-error` |
 
 ## 4. 新增 Playwright 测试（真实断言）
 
@@ -85,4 +86,5 @@
 - 后台 30 页可登录、可路由、核心查询/动作可用、空/错/加载/移动端状态可见且可被 Playwright 稳定断言；金额类输入有数值校验；总控时间筛选补齐。
 - typecheck/build/vitest/playwright 全绿，无主包过大 warning，无文字溢出/裸表格/空白页/不可点按钮的阻断问题。
 - **续修（U-13/U-14）**：高量日志页（风控/集成事件/出票/审计）已补客户端**搜索筛选 + 分页**——抽出共享 `rowMatchesKeyword`/`usePagedRows`/`TablePager`，扩充 mock 至每接口 12 行并保命名行于首位；扩充后 legacy 总控仪表盘"待处理风险"计数随之变化，已回归其 2 张视觉基线（人工查验无破版）。
-- **未在本轮处理（记录移交，非阻断）**：部分页 `key_fields` 仍为固定验收 payload 而非可编辑表单、3 处重复错误渲染清理（`audit-events-error` 被 ADM-REM-03 依赖，清理需同步改测试）、若干"完整 CRUD/转卡-合并-续卡-回滚"动作仍为验收占位——这些属功能增强，需产品确认信息架构后再扩展。
+- **续修（U-15）**：3 处重复错误渲染（审计/经营分析/商户授权）已清理，统一由 `AdminDataState` 的 `admin-error` 呈现。
+- **未在本轮处理（记录移交，非阻断）**：部分页 `key_fields` 仍为固定验收 payload 而非可编辑表单、若干"完整 CRUD/转卡-合并-续卡-回滚"动作仍为验收占位——这些属功能增强，需产品确认信息架构后再扩展。

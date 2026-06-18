@@ -501,7 +501,7 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-compensation");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-EVD-001")!);
-    await expect(page.getByTestId("audit-events-error")).toContainText("SERVER_ERROR");
+    await expect(page.getByTestId("admin-error")).toContainText("SERVER_ERROR");
 
     await installMockApi(page, { empty: true });
     await page.reload();
