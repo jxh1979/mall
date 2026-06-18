@@ -192,6 +192,58 @@ class AccessControllerTests {
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
     }
 
+    @Test
+    void effectivePermissionsSelfReturnsGrantsDeniesAndWildcard() throws Exception {
+        when(authorizationService.effectivePermissions()).thenReturn(new EffectivePermissions(
+                "usr_self",
+                List.of("ticket.order.view", "bar.table.open_close"),
+                List.of("finance.refund.create"),
+                false,
+                java.time.Instant.parse("2026-06-18T08:30:00Z")
+        ));
+
+        mockMvc.perform(get("/api/v1/access/effective-permissions")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.user_id").value("usr_self"))
+                .andExpect(jsonPath("$.data.grants[0]").value("ticket.order.view"))
+                .andExpect(jsonPath("$.data.denies[0]").value("finance.refund.create"))
+                .andExpect(jsonPath("$.data.wildcard").value(false))
+                .andExpect(jsonPath("$.data.computed_at").value("2026-06-18T08:30:00Z"));
+    }
+
+    @Test
+    void userEffectivePermissionsWithoutUserViewPermissionReturnsPermissionDenied() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("access.user.view");
+
+        mockMvc.perform(get("/api/v1/access/users/usr_target/effective-permissions")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void userEffectivePermissionsReturnsTargetUserSetWithUserViewPermission() throws Exception {
+        when(authorizationService.effectivePermissionsForUser("usr_target")).thenReturn(new EffectivePermissions(
+                "usr_target",
+                List.of("amusement.project.view"),
+                List.of(),
+                true,
+                java.time.Instant.parse("2026-06-18T09:00:00Z")
+        ));
+
+        mockMvc.perform(get("/api/v1/access/users/usr_target/effective-permissions")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.user_id").value("usr_target"))
+                .andExpect(jsonPath("$.data.grants[0]").value("amusement.project.view"))
+                .andExpect(jsonPath("$.data.wildcard").value(true));
+    }
+
     @TestConfiguration
     static class TestBeans {
         @Bean
