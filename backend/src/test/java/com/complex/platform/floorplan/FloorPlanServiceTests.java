@@ -3,7 +3,9 @@ package com.complex.platform.floorplan;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -37,7 +39,8 @@ class FloorPlanServiceTests {
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                new FloorPlanImportParser()
+                new FloorPlanImportParser(),
+                noScopeAuth()
         );
     }
 
@@ -264,6 +267,87 @@ class FloorPlanServiceTests {
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
     }
 
+    // P1-2: saveShape 未校验 shapeId 归属 — 修复前此测试会红（无归属校验时覆写成功）
+    @Test
+    void saveShapeRejectsShapeIdBelongingToDifferentFloorPlan() {
+        FloorPlanRecord planA = service.createFloorPlan(createRequest("fp-cross-a"));
+        FloorPlanRecord planB = service.createFloorPlan(createRequest("fp-cross-b"));
+        FloorPlanShapeRecord shapeOnA = service.saveShape(planA.id(), shapeRequest("shape-cross-plan", null, polygon()));
+
+        assertThatThrownBy(() -> service.saveShape(planB.id(), shapeRequest("shape-cross-attempt", shapeOnA.id(), polygon())))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    // P1-1: 多租户范围过滤 — 修复前此测试会红（无 scope 过滤时两个商户的数据互相可见）
+    @Test
+    void listFloorPlansFiltersToMerchantScope() {
+        FloorPlanService serviceM1 = serviceWithMerchantScope("m_1");
+        FloorPlanService serviceM2 = serviceWithMerchantScope("m_2");
+        serviceM1.createFloorPlan(createRequest("fp-scope-m1-only"));
+        serviceM2.createFloorPlan(createRequest("fp-scope-m2-only"));
+
+        PageResponse<FloorPlanRecord> resultM1 = serviceM1.listFloorPlans();
+        PageResponse<FloorPlanRecord> resultM2 = serviceM2.listFloorPlans();
+        PageResponse<FloorPlanRecord> resultAdmin = service.listFloorPlans();
+
+        assertThat(resultM1.items()).extracting(FloorPlanRecord::merchantId).containsOnly("m_1");
+        assertThat(resultM2.items()).extracting(FloorPlanRecord::merchantId).containsOnly("m_2");
+        assertThat(resultAdmin.items()).hasSize(2);
+    }
+
+    // P1-1: 跨商户访问已有平面图应返回 CROSS_MERCHANT_FORBIDDEN
+    @Test
+    void accessingFloorPlanBelongingToDifferentMerchantIsForbidden() {
+        FloorPlanService serviceM1 = serviceWithMerchantScope("m_1");
+        FloorPlanRecord planM1 = serviceM1.createFloorPlan(createRequest("fp-access-m1"));
+
+        FloorPlanService serviceM2 = serviceWithMerchantScope("m_2");
+        assertThatThrownBy(() -> serviceM2.listShapes(planM1.id()))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    // P0: same idempotency key from two merchants must not collide on PK and overwrite each other's plan
+    @Test
+    void createFloorPlanWithSameKeyAcrossMerchantsDoesNotOverwrite() {
+        FloorPlanService serviceM1 = serviceWithMerchantScope("m_1");
+        FloorPlanRecord planM1 = serviceM1.createFloorPlan(createRequest("shared-create-key"));
+
+        FloorPlanService serviceM2 = serviceWithMerchantScope("m_2");
+        FloorPlanRecord planM2 = serviceM2.createFloorPlan(createRequest("shared-create-key"));
+
+        assertThat(planM2.id()).isNotEqualTo(planM1.id());
+        assertThat(repository.findFloorPlanById(planM1.id()))
+                .get().extracting(FloorPlanRecord::merchantId).isEqualTo("m_1");
+        assertThat(repository.findFloorPlanById(planM2.id()))
+                .get().extracting(FloorPlanRecord::merchantId).isEqualTo("m_2");
+    }
+
+    private AuthorizationService noScopeAuth() {
+        return new AuthorizationService(null) {
+            @Override
+            public Optional<String> currentMerchantScope() {
+                return Optional.empty();
+            }
+        };
+    }
+
+    private FloorPlanService serviceWithMerchantScope(String merchantId) {
+        return new FloorPlanService(
+                repository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                new FloorPlanImportParser(),
+                new AuthorizationService(null) {
+                    @Override
+                    public Optional<String> currentMerchantScope() {
+                        return Optional.of(merchantId);
+                    }
+                }
+        );
+    }
+
     private FloorPlanCreateRequest createRequest(String idempotencyKey) {
         return new FloorPlanCreateRequest(
                 idempotencyKey,
@@ -332,6 +416,13 @@ class FloorPlanServiceTests {
         @Override
         public List<FloorPlanRecord> findAllFloorPlans() {
             return new ArrayList<>(floorPlans.values());
+        }
+
+        @Override
+        public List<FloorPlanRecord> findAllFloorPlansByMerchant(String merchantId) {
+            return floorPlans.values().stream()
+                    .filter(fp -> merchantId.equals(fp.merchantId()))
+                    .toList();
         }
 
         @Override

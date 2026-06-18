@@ -22,6 +22,7 @@ import com.complex.platform.customer.dto.CustomerTicketOrderRequest;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.inventory.InventoryService;
 import com.complex.platform.inventory.StockAdjustmentRecord;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
@@ -57,12 +58,17 @@ class CustomerServiceTests {
         auditEventRepository = new InMemoryAuditEventRepository();
         ticketingService = Mockito.mock(TicketingService.class);
         inventoryService = Mockito.mock(InventoryService.class);
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                auditEventService
+        );
         service = new CustomerService(
                 customerRepository,
                 new FixedCustomerOtpVerifier("000000"),
                 ticketingService,
-                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository),
+                operations,
+                auditEventService,
                 inventoryService
         );
     }
@@ -233,11 +239,31 @@ class CustomerServiceTests {
     }
 
     @Test
+    void consentIdsDoNotCollideForLongKeysDifferingPastTruncationCutoff() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        // Two distinct idempotency keys that are identical for the first 45 chars and differ only afterwards.
+        String prefix = "a".repeat(45);
+        String key1 = prefix + "-tail-one";
+        String key2 = prefix + "-tail-two";
+
+        CustomerConsentRecord consent1 = service.recordConsent(login.customerToken(), key1,
+                new CustomerConsentRequest(key1, "privacy", true, "v1", "miniapp"));
+        CustomerConsentRecord consent2 = service.recordConsent(login.customerToken(), key2,
+                new CustomerConsentRequest(key2, "marketing", true, "v1", "miniapp"));
+
+        // Before the fix both slugged to the same 40-char id and the second overwrote the first.
+        assertThat(consent2.id()).isNotEqualTo(consent1.id());
+        assertThat(consent1.consentType()).isEqualTo("privacy");
+        assertThat(consent2.consentType()).isEqualTo("marketing");
+    }
+
+    @Test
     void barReservationOptionsAndCreateUseCustomerTokenWithoutStaffPermission() {
         CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
         customerRepository.saveBarTable(new BarTableRecord(
                 "table_customer",
                 "bar_1",
+                null,
                 "T-CUST",
                 "VIP Customer",
                 "card_seat",
@@ -388,7 +414,8 @@ class CustomerServiceTests {
                 "points_redemption",
                 List.of(),
                 "completed",
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
         ));
 
         CustomerPointsRedemptionRecord redemption = service.redeemPoints(
@@ -503,7 +530,58 @@ class CustomerServiceTests {
         assertThat(customerRepository.pointsLedger).isEmpty();
     }
 
-    private static final class InMemoryCustomerRepository implements CustomerRepository {
+    @Test
+    void redeemPointsSeesCurrentBalanceAfterConcurrentModification() {
+        // RED: before fix, service uses findPointsByCustomerId (no lock), hook never fires,
+        // balance reads as 120, passes check, returns success — test expects exception → FAIL.
+        // GREEN: after fix, service uses findPointsByCustomerIdForUpdate, hook fires first,
+        // sets balance to 0, service reads 0 < 120 and throws POINTS_INSUFFICIENT → PASS.
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138099", "000000", "miniapp"));
+        customerRepository.savePoints(new CustomerPointsAccountRecord(
+                "points_" + login.customerId(),
+                login.customerId(),
+                120L,
+                "base",
+                Map.of(),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
+                "gift_race_item",
+                "Race Gift",
+                "gift",
+                120L,
+                "item_race",
+                "race_shelf",
+                1,
+                "active",
+                null,
+                null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+
+        // Simulate a concurrent transaction draining balance to 0 before the lock is acquired
+        customerRepository.beforeFindForUpdate = () -> {
+            CustomerPointsAccountRecord current = customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow();
+            customerRepository.savePoints(new CustomerPointsAccountRecord(
+                    current.id(), current.customerId(), 0L, current.level(),
+                    Map.of(), current.createdAt(), Instant.parse("2026-06-14T00:00:01Z")
+            ));
+        };
+
+        assertThatThrownBy(() -> service.redeemPoints(
+                login.customerToken(),
+                "redeem-race-concurrent",
+                new CustomerPointsRedemptionRequest(null, "gift_race_item", 1, "miniapp")
+        ))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("points balance is insufficient");
+
+        assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(0L);
+    }
+
+    private static class InMemoryCustomerRepository implements CustomerRepository {
         private final Map<String, CustomerRecord> customers = new LinkedHashMap<>();
         private final Map<String, CustomerSessionRecord> sessions = new LinkedHashMap<>();
         private final Map<String, CustomerConsentRecord> consents = new LinkedHashMap<>();
@@ -513,6 +591,7 @@ class CustomerServiceTests {
         private final Map<String, CustomerPointsRedemptionRecord> redemptions = new LinkedHashMap<>();
         private final Map<String, BarTableRecord> barTables = new LinkedHashMap<>();
         private final Map<String, BarReservationRecord> barReservations = new LinkedHashMap<>();
+        Runnable beforeFindForUpdate = null;
 
         private void saveBarTable(BarTableRecord table) {
             barTables.put(table.id(), table);
@@ -555,6 +634,14 @@ class CustomerServiceTests {
 
         @Override
         public Optional<CustomerPointsAccountRecord> findPointsByCustomerId(String customerId) {
+            return Optional.ofNullable(points.get(customerId));
+        }
+
+        @Override
+        public Optional<CustomerPointsAccountRecord> findPointsByCustomerIdForUpdate(String customerId) {
+            if (beforeFindForUpdate != null) {
+                beforeFindForUpdate.run();
+            }
             return Optional.ofNullable(points.get(customerId));
         }
 

@@ -1,15 +1,16 @@
 package com.complex.platform.governance;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,7 +19,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
-class JdbcPlatformRepository implements PlatformRepository {
+class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepository {
 
     private static final TypeReference<List<Map<String, Object>>> POLYGON_POINTS_TYPE = new TypeReference<>() {
     };
@@ -65,6 +66,7 @@ class JdbcPlatformRepository implements PlatformRepository {
                        bank_account_ref, status, created_at, updated_at
                   FROM business_entities
                  ORDER BY created_at DESC, id
+                 LIMIT 500
                 """, this::mapBusinessEntity);
     }
 
@@ -73,11 +75,15 @@ class JdbcPlatformRepository implements PlatformRepository {
         jdbcTemplate.update("""
                 INSERT INTO merchants (
                     id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
-                    settlement_entity_id, contact_name, contact_phone, status, created_at, updated_at
+                    settlement_entity_id, contact_name, contact_phone, mall_block_code, area_square_meter,
+                    leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
+                    rent_per_square_meter, cooperation_form, status, created_at, updated_at
                 )
                 VALUES (
                     :id, :merchant_name, :merchant_type, :business_entity_id, :contract_entity_id,
-                    :settlement_entity_id, :contact_name, :contact_phone, :status, :created_at, :updated_at
+                    :settlement_entity_id, :contact_name, :contact_phone, :mall_block_code, :area_square_meter,
+                    :leased_area_square_meter, :secondary_contact_name, :secondary_contact_phone,
+                    :rent_per_square_meter, :cooperation_form, :status, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_name = EXCLUDED.merchant_name,
@@ -87,6 +93,13 @@ class JdbcPlatformRepository implements PlatformRepository {
                     settlement_entity_id = EXCLUDED.settlement_entity_id,
                     contact_name = EXCLUDED.contact_name,
                     contact_phone = EXCLUDED.contact_phone,
+                    mall_block_code = EXCLUDED.mall_block_code,
+                    area_square_meter = EXCLUDED.area_square_meter,
+                    leased_area_square_meter = EXCLUDED.leased_area_square_meter,
+                    secondary_contact_name = EXCLUDED.secondary_contact_name,
+                    secondary_contact_phone = EXCLUDED.secondary_contact_phone,
+                    rent_per_square_meter = EXCLUDED.rent_per_square_meter,
+                    cooperation_form = EXCLUDED.cooperation_form,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
                 """, merchantParameters(merchant));
@@ -97,9 +110,12 @@ class JdbcPlatformRepository implements PlatformRepository {
     public List<MerchantRecord> listMerchants() {
         return jdbcTemplate.query("""
                 SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
-                       settlement_entity_id, contact_name, contact_phone, status, created_at, updated_at
+                       settlement_entity_id, contact_name, contact_phone, mall_block_code, area_square_meter,
+                       leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
+                       rent_per_square_meter, cooperation_form, status, created_at, updated_at
                   FROM merchants
                  ORDER BY created_at DESC, id
+                 LIMIT 500
                 """, this::mapMerchant);
     }
 
@@ -131,6 +147,7 @@ class JdbcPlatformRepository implements PlatformRepository {
                 SELECT id, merchant_id, venue_type, name, code, floor, capacity, status, created_at, updated_at
                   FROM projects
                  ORDER BY created_at DESC, id
+                 LIMIT 500
                 """, this::mapProject);
     }
 
@@ -167,6 +184,7 @@ class JdbcPlatformRepository implements PlatformRepository {
                        area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
                   FROM spaces
                  ORDER BY created_at DESC, id
+                 LIMIT 500
                 """, this::mapSpace);
     }
 
@@ -207,6 +225,7 @@ class JdbcPlatformRepository implements PlatformRepository {
                   FROM business_entity_bindings
                  WHERE merchant_id IS NOT NULL
                  ORDER BY created_at DESC, id
+                 LIMIT 500
                 """, this::mapBusinessEntityBinding);
     }
 
@@ -271,6 +290,7 @@ class JdbcPlatformRepository implements PlatformRepository {
                        lifecycle_status, created_at, updated_at
                   FROM contracts
                  ORDER BY created_at DESC, id
+                 LIMIT 500
                 """, this::mapContract);
     }
 
@@ -309,6 +329,13 @@ class JdbcPlatformRepository implements PlatformRepository {
                 .addValue("settlement_entity_id", merchant.settlementEntityId())
                 .addValue("contact_name", merchant.contactName())
                 .addValue("contact_phone", merchant.contactPhone())
+                .addValue("mall_block_code", merchant.mallBlockCode())
+                .addValue("area_square_meter", merchant.areaSquareMeter())
+                .addValue("leased_area_square_meter", merchant.leasedAreaSquareMeter())
+                .addValue("secondary_contact_name", merchant.secondaryContactName())
+                .addValue("secondary_contact_phone", merchant.secondaryContactPhone())
+                .addValue("rent_per_square_meter", merchant.rentPerSquareMeter())
+                .addValue("cooperation_form", merchant.cooperationForm())
                 .addValue("status", merchant.status())
                 .addValue("created_at", timestampWithTimeZone(merchant.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(merchant.updatedAt()));
@@ -400,6 +427,13 @@ class JdbcPlatformRepository implements PlatformRepository {
                 resultSet.getString("settlement_entity_id"),
                 resultSet.getString("contact_name"),
                 resultSet.getString("contact_phone"),
+                resultSet.getString("mall_block_code"),
+                resultSet.getBigDecimal("area_square_meter"),
+                resultSet.getBigDecimal("leased_area_square_meter"),
+                resultSet.getString("secondary_contact_name"),
+                resultSet.getString("secondary_contact_phone"),
+                resultSet.getBigDecimal("rent_per_square_meter"),
+                resultSet.getString("cooperation_form"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")
@@ -477,17 +511,84 @@ class JdbcPlatformRepository implements PlatformRepository {
         return resultSet.wasNull() ? null : value;
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
-    private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
 
     private LocalDate nullableLocalDate(ResultSet resultSet, String columnName) throws SQLException {
         return resultSet.getObject(columnName, LocalDate.class);
+    }
+
+    @Override
+    public SupervisorReviewDecisionRecord saveSupervisorReview(SupervisorReviewDecisionRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO supervisor_review_decisions (
+                    review_id, policy_code, action_type, object_type, object_id,
+                    blocked, review_status, required_level, reviewer_level, decision,
+                    reason, evidence_attachment_ids, evaluated_at, initiated_by
+                )
+                VALUES (
+                    :review_id, :policy_code, :action_type, :object_type, :object_id,
+                    :blocked, :review_status, :required_level, :reviewer_level, :decision,
+                    :reason, CAST(:evidence_attachment_ids AS jsonb), :evaluated_at, :initiated_by
+                )
+                ON CONFLICT (review_id) DO UPDATE SET
+                    review_status = EXCLUDED.review_status,
+                    reviewer_level = EXCLUDED.reviewer_level,
+                    decision = EXCLUDED.decision,
+                    reason = EXCLUDED.reason,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    evaluated_at = EXCLUDED.evaluated_at
+                """, supervisorReviewParameters(record));
+        return record;
+    }
+
+    @Override
+    public Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId) {
+        return jdbcTemplate.query("""
+                SELECT review_id, policy_code, action_type, object_type, object_id,
+                       blocked, review_status, required_level, reviewer_level, decision,
+                       reason, evidence_attachment_ids::text AS evidence_attachment_ids, evaluated_at,
+                       initiated_by
+                  FROM supervisor_review_decisions
+                 WHERE review_id = :review_id
+                   AND review_status = 'pending_review'
+                """, Map.of("review_id", reviewId), this::mapSupervisorReview).stream().findFirst();
+    }
+
+    private MapSqlParameterSource supervisorReviewParameters(SupervisorReviewDecisionRecord record) {
+        return new MapSqlParameterSource()
+                .addValue("review_id", record.reviewId())
+                .addValue("policy_code", record.policyCode())
+                .addValue("action_type", record.actionType())
+                .addValue("object_type", record.objectType())
+                .addValue("object_id", record.objectId())
+                .addValue("blocked", record.blocked())
+                .addValue("review_status", record.reviewStatus())
+                .addValue("required_level", record.requiredLevel())
+                .addValue("reviewer_level", record.reviewerLevel())
+                .addValue("decision", record.decision())
+                .addValue("reason", record.reason())
+                .addValue("evidence_attachment_ids", writeJson(record.evidenceAttachmentIds() == null ? List.of() : record.evidenceAttachmentIds()))
+                .addValue("evaluated_at", timestampWithTimeZone(record.evaluatedAt()))
+                .addValue("initiated_by", record.initiatedBy());
+    }
+
+    private SupervisorReviewDecisionRecord mapSupervisorReview(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SupervisorReviewDecisionRecord(
+                resultSet.getString("review_id"),
+                resultSet.getString("policy_code"),
+                resultSet.getString("action_type"),
+                resultSet.getString("object_type"),
+                resultSet.getString("object_id"),
+                resultSet.getBoolean("blocked"),
+                resultSet.getString("review_status"),
+                resultSet.getInt("required_level"),
+                integerValue(resultSet, "reviewer_level"),
+                resultSet.getString("decision"),
+                resultSet.getString("reason"),
+                readStringList(resultSet.getString("evidence_attachment_ids")),
+                nullableInstant(resultSet, "evaluated_at"),
+                resultSet.getString("initiated_by")
+        );
     }
 
     private String writeJson(Object value) {

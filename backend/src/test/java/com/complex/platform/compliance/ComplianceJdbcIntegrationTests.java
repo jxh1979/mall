@@ -31,7 +31,7 @@ class ComplianceJdbcIntegrationTests {
         assertThat(regclass("contract_key_dates")).isEqualTo("contract_key_dates");
         assertThat(regclass("compliance_expiry_items")).isEqualTo("compliance_expiry_items");
         assertThat(regclass("compliance_reminders")).isEqualTo("compliance_reminders");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
 
         assertThat(permissionCodes()).contains(
                 "compliance.contract_key_date.view",
@@ -90,6 +90,7 @@ class ComplianceJdbcIntegrationTests {
         ));
         repository.saveReminder(new ComplianceReminderRecord(
                 "cr_jdbc",
+                "merchant_jdbc",
                 "compliance_expiry_item",
                 "cei_jdbc",
                 "expired",

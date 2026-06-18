@@ -1,5 +1,6 @@
 package com.complex.platform.evidence;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.dto.EvidenceAttachmentBindRequest;
@@ -12,9 +13,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,15 +32,18 @@ public class EvidenceEventService {
     private final EvidenceEventRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     @Transactional
@@ -53,8 +59,9 @@ public class EvidenceEventService {
 
     public List<EvidenceEventRecord> listEvents(int limit) {
         int safeLimit = limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         try {
-            List<EvidenceEventRecord> events = repository.listLatest(safeLimit);
+            List<EvidenceEventRecord> events = repository.listLatest(safeLimit, merchantId);
             auditEventService.recordSuccess(
                     "evidence.event_viewed",
                     VIEW_PERMISSION,
@@ -96,6 +103,7 @@ public class EvidenceEventService {
                     String fileName = requireText(actual.fileName(), "file_name");
                     String contentType = requireText(actual.contentType(), "content_type");
                     String businessType = requireText(actual.businessType(), "business_type");
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
                     String id = "att_" + slug(actual.idempotencyKey());
                     String objectKey = "evidence/pending/" + id + "/" + slug(fileName);
@@ -112,7 +120,8 @@ public class EvidenceEventService {
                             "pending",
                             null,
                             now,
-                            now
+                            now,
+                            merchantId
                     ));
                 }
         );
@@ -135,6 +144,20 @@ public class EvidenceEventService {
                     EvidenceAttachmentBindRequest actual = requireRequest(request);
                     EvidenceAttachmentRecord existing = repository.findAttachmentById(id)
                             .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "attachment not found"));
+
+                    // P1: state machine guard — can only bind a pending attachment
+                    if (!"pending".equals(existing.status())) {
+                        throw ApiException.conflict("INVALID_STATE",
+                                "attachment cannot be bound in state: " + existing.status());
+                    }
+
+                    // P0: ownership check — merchant users can only bind their own attachments
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (scope.isPresent() && !scope.get().equals(existing.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                "attachment does not belong to current merchant");
+                    }
+
                     return repository.saveAttachment(new EvidenceAttachmentRecord(
                             existing.id(),
                             existing.fileName(),
@@ -148,7 +171,8 @@ public class EvidenceEventService {
                             "bound",
                             existing.checksum(),
                             existing.createdAt(),
-                            Instant.now()
+                            Instant.now(),
+                            existing.merchantId()
                     ));
                 }
         );
@@ -171,6 +195,20 @@ public class EvidenceEventService {
                     EvidenceAttachmentCompleteRequest actual = requireRequest(request);
                     EvidenceAttachmentRecord existing = repository.findAttachmentById(id)
                             .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "attachment not found"));
+
+                    // P1: state machine guard — can only complete a pending or bound attachment
+                    if (!"pending".equals(existing.status()) && !"bound".equals(existing.status())) {
+                        throw ApiException.conflict("INVALID_STATE",
+                                "attachment cannot be completed in state: " + existing.status());
+                    }
+
+                    // P0: ownership check — merchant users can only complete their own attachments
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (scope.isPresent() && !scope.get().equals(existing.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                "attachment does not belong to current merchant");
+                    }
+
                     return repository.saveAttachment(new EvidenceAttachmentRecord(
                             existing.id(),
                             existing.fileName(),
@@ -182,9 +220,10 @@ public class EvidenceEventService {
                             requireText(actual.objectKey(), "object_key"),
                             existing.uploadUrl(),
                             "uploaded",
-                            requireText(actual.checksum(), "checksum"),
+                            requireChecksum(actual.checksum()),
                             existing.createdAt(),
-                            Instant.now()
+                            Instant.now(),
+                            existing.merchantId()
                     ));
                 }
         );
@@ -204,18 +243,42 @@ public class EvidenceEventService {
                 EvidenceReviewRecord::businessId,
                 () -> {
                     EvidenceReviewRequest actual = requireRequest(request);
+                    String reqBusinessType = requireText(actual.businessType(), "business_type");
+                    String reqBusinessId = requireText(actual.businessId(), "business_id");
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
+
+                    // P1: validate each attachment ID exists, belongs to the correct business object,
+                    //     and has been fully uploaded
+                    List<String> attachmentIds = actual.evidenceAttachmentIds() == null
+                            ? List.of()
+                            : List.copyOf(actual.evidenceAttachmentIds());
+                    for (String attachmentId : attachmentIds) {
+                        EvidenceAttachmentRecord att = repository.findAttachmentById(attachmentId)
+                                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
+                                        "attachment not found: " + attachmentId));
+                        if (!reqBusinessType.equals(att.businessType()) || !reqBusinessId.equals(att.businessId())) {
+                            throw ApiException.badRequest("VALIDATION_FAILED",
+                                    "attachment does not belong to the specified business object: " + attachmentId);
+                        }
+                        if (!"uploaded".equals(att.status())) {
+                            throw ApiException.badRequest("VALIDATION_FAILED",
+                                    "attachment is not in uploaded state: " + attachmentId);
+                        }
+                    }
+
                     return repository.saveReview(new EvidenceReviewRecord(
                             "rev_" + slug(actual.idempotencyKey()),
-                            requireText(actual.businessType(), "business_type"),
-                            requireText(actual.businessId(), "business_id"),
+                            reqBusinessType,
+                            reqBusinessId,
                             "medium",
                             requireText(actual.reviewResult(), "review_result"),
                             trimToNull(actual.comment()),
-                            actual.evidenceAttachmentIds() == null ? List.of() : List.copyOf(actual.evidenceAttachmentIds()),
+                            attachmentIds,
                             "created",
                             now,
-                            now
+                            now,
+                            merchantId
                     ));
                 }
         );
@@ -224,8 +287,9 @@ public class EvidenceEventService {
     public List<EvidenceTimelineItem> getTimeline(String objectType, String objectId) {
         String type = requireText(objectType, "object_type");
         String id = requireText(objectId, "object_id");
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         try {
-            List<EvidenceTimelineItem> timeline = repository.listTimeline(type, id);
+            List<EvidenceTimelineItem> timeline = repository.listTimeline(type, id, merchantId);
             auditEventService.recordSuccess(
                     "evidence.timeline_viewed",
                     "evidence.timeline.view",
@@ -257,9 +321,10 @@ public class EvidenceEventService {
         if (events.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "events is required");
         }
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant receivedAt = Instant.now();
         List<EvidenceEventRecord> records = events.stream()
-                .map(event -> toRecord(deviceCode, trimToNull(actual.staffId()), event, receivedAt))
+                .map(event -> toRecord(deviceCode, trimToNull(actual.staffId()), event, receivedAt, merchantId))
                 .toList();
         repository.saveAll(records);
         return new EventBatchResponse(records.size(), receivedAt);
@@ -269,7 +334,8 @@ public class EvidenceEventService {
             String deviceCode,
             String staffId,
             TerminalEventItemRequest event,
-            Instant receivedAt
+            Instant receivedAt,
+            String merchantId
     ) {
         if (event == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "event is required");
@@ -284,7 +350,8 @@ public class EvidenceEventService {
                 requireText(event.summary(), "summary"),
                 event.payload() == null ? Map.of() : Map.copyOf(event.payload()),
                 requireInstant(event.occurredAt(), "occurred_at"),
-                receivedAt
+                receivedAt,
+                merchantId
         );
     }
 
@@ -295,9 +362,12 @@ public class EvidenceEventService {
             Class<T> responseType,
             Supplier<T> action
     ) {
+        // P0: scope idempotency key to the current actor to prevent cross-user cache sharing
+        String actorId = authorizationService.currentActor().id();
+        String scopedOperationId = actorId + ":" + operationId;
         try {
             return idempotencyService.execute(
-                    operationId,
+                    scopedOperationId,
                     idempotencyKey,
                     request,
                     () -> {
@@ -341,9 +411,12 @@ public class EvidenceEventService {
             Function<T, String> businessId,
             Supplier<T> action
     ) {
+        // P0: scope idempotency key to the current actor to prevent cross-user cache sharing
+        String actorId = authorizationService.currentActor().id();
+        String scopedOperationId = actorId + ":" + operationId;
         try {
             return idempotencyService.execute(
-                    operationId,
+                    scopedOperationId,
                     idempotencyKey,
                     request,
                     () -> {
@@ -395,6 +468,25 @@ public class EvidenceEventService {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
         }
         return trimmed;
+    }
+
+    private static final Pattern SHA256_CHECKSUM = Pattern.compile("^sha256:[0-9a-f]{64}$");
+
+    /**
+     * The completed attachment checksum is the tamper-evidence digest stored against the object. There is
+     * no object store in this slice to recompute the hash from bytes, but the digest must at least be a
+     * well-formed, normalized SHA-256 value so a structurally-invalid/garbage token cannot be stored and
+     * later trusted as integrity proof. Combined with the state machine (an uploaded attachment cannot be
+     * re-completed), the stored checksum is well-formed, immutable and audited.
+     */
+    private String requireChecksum(String value) {
+        String normalized = requireText(value, "checksum").toLowerCase(Locale.ROOT);
+        if (!SHA256_CHECKSUM.matcher(normalized).matches()) {
+            throw ApiException.badRequest(
+                    "EVIDENCE_CHECKSUM_INVALID",
+                    "checksum must be a sha256 digest of the form 'sha256:<64 hex chars>'");
+        }
+        return normalized;
     }
 
     private Instant requireInstant(Instant value, String fieldName) {

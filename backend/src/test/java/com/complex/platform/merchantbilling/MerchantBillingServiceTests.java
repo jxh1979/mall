@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
@@ -54,7 +55,8 @@ class MerchantBillingServiceTests {
                 merchantBillingRepository,
                 financeRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository),
+                noScopeAuth()
         );
     }
 
@@ -189,6 +191,47 @@ class MerchantBillingServiceTests {
     }
 
     @Test
+    void confirmBillRejectsCrossMerchantScope() {
+        financeRepository.saveArApItem(arApItem("arap_merchant_1", "merchant_1", "receivable", 168800L));
+        MerchantBillRecord bill = service.createBill(createRequest("bill-xmerchant-confirm", "arap_merchant_1"));
+
+        MerchantBillingService otherMerchant = serviceWithAuth(scopedAuth("merchant_2"));
+        assertThatThrownBy(() -> otherMerchant.confirmBill(bill.id(), new MerchantBillConfirmRequest(
+                "bill-xmerchant-confirm-act", "confirm", "staff_finance")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+        assertThat(merchantBillingRepository.findBillById(bill.id()))
+                .get().extracting(MerchantBillRecord::status).isEqualTo("issued");
+    }
+
+    @Test
+    void submitDisputeRejectsCrossMerchantScope() {
+        financeRepository.saveArApItem(arApItem("arap_merchant_1", "merchant_1", "receivable", 168800L));
+        MerchantBillRecord bill = service.createBill(createRequest("bill-xmerchant-dispute", "arap_merchant_1"));
+
+        MerchantBillingService otherMerchant = serviceWithAuth(scopedAuth("merchant_2"));
+        assertThatThrownBy(() -> otherMerchant.submitDispute(bill.id(), new MerchantBillDisputeRequest(
+                "bill-xmerchant-dispute-act", "x", List.of(), "energy_amount_mismatch", "x", "staff_finance")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void recordDunningRejectsCrossMerchantScope() {
+        financeRepository.saveArApItem(arApItem("arap_merchant_1", "merchant_1", "receivable", 168800L));
+        MerchantBillRecord bill = service.createBill(createRequest("bill-xmerchant-dunning", "arap_merchant_1"));
+
+        MerchantBillingService otherMerchant = serviceWithAuth(scopedAuth("merchant_2"));
+        assertThatThrownBy(() -> otherMerchant.recordDunning(bill.id(), new MerchantBillDunningRequest(
+                "bill-xmerchant-dunning-act", "x", "wecom", "rent_overdue_first_notice", "sent", null, "staff_finance")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
     void listBillsReturnsPageAndReadAudit() {
         financeRepository.saveArApItem(arApItem("arap_merchant_1", "merchant_1", "receivable", 168800L));
         service.createBill(createRequest("bill-list", "arap_merchant_1"));
@@ -202,11 +245,88 @@ class MerchantBillingServiceTests {
                 .contains("merchant_billing.bill.viewed");
     }
 
+    // ── P1 Bug 1: 租户越权读 ──────────────────────────────────────────────────
+    @Test
+    void listBillsMerchantScopeFiltersToOwnBills() {
+        financeRepository.saveArApItem(arApItem("arap_m1", "merchant_1", "receivable", 168800L));
+        financeRepository.saveArApItem(arApItem("arap_m2", "merchant_2", "receivable", 168800L));
+        MerchantBillingService adminService = serviceWithAuth(noScopeAuth());
+        adminService.createBill(createRequestForMerchant("bill-m1-iso", "merchant_1", "arap_m1"));
+        adminService.createBill(createRequestForMerchant("bill-m2-iso", "merchant_2", "arap_m2"));
+
+        PageResponse<MerchantBillRecord> pageM1 = serviceWithAuth(scopedAuth("merchant_1")).listBills();
+
+        assertThat(pageM1.items()).hasSize(1);
+        assertThat(pageM1.items().get(0).merchantId()).isEqualTo("merchant_1");
+    }
+
+    // ── P1 Bug 2: 幂等键命名空间跨商户碰撞 ─────────────────────────────────
+    @Test
+    void createBillIdempotencyKeyIsIsolatedPerMerchant() {
+        InMemoryIdempotencyRepository sharedRepo = new InMemoryIdempotencyRepository();
+        financeRepository.saveArApItem(arApItem("arap_m1b", "merchant_1", "receivable", 168800L));
+        financeRepository.saveArApItem(arApItem("arap_m2b", "merchant_2", "receivable", 168800L));
+        MerchantBillingService svcM1 = serviceWithSharedIdempotency(sharedRepo, noScopeAuth());
+        MerchantBillingService svcM2 = serviceWithSharedIdempotency(sharedRepo, noScopeAuth());
+
+        MerchantBillRecord bill1 = svcM1.createBill(createRequestForMerchant("shared-key", "merchant_1", "arap_m1b"));
+        MerchantBillRecord bill2 = svcM2.createBill(createRequestForMerchant("shared-key", "merchant_2", "arap_m2b"));
+
+        assertThat(bill1.merchantId()).isEqualTo("merchant_1");
+        assertThat(bill2.merchantId()).isEqualTo("merchant_2");
+        assertThat(merchantBillingRepository.billSaveCount).isEqualTo(2);
+    }
+
+    // ── P1 Bug 3: 明细 ID 碰撞（同 feeType 两行静默覆盖） ──────────────────
+    @Test
+    void createBillWithDuplicateFeeTypeLinesIsRejected() {
+        financeRepository.saveArApItem(arApItem("arap_dup", "merchant_1", "receivable", 168800L));
+
+        assertThatThrownBy(() -> service.createBill(new MerchantBillCreateRequest(
+                "bill-dup-fee",
+                "test",
+                "merchant_1",
+                "arap_dup",
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                LocalDate.parse("2026-07-05"),
+                168800L,
+                "manual",
+                null,
+                List.of(
+                        new MerchantBillLineRequest("rent", "June rent part 1", 100000L),
+                        new MerchantBillLineRequest("rent", "June rent part 2", 68800L)
+                )
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
     private MerchantBillCreateRequest createRequest(String idempotencyKey, String arApItemId) {
         return new MerchantBillCreateRequest(
                 idempotencyKey,
                 "issue bill",
                 "merchant_1",
+                arApItemId,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                LocalDate.parse("2026-07-05"),
+                168800L,
+                "manual",
+                "billing_batch_202606",
+                List.of(
+                        new MerchantBillLineRequest("rent", "June rent", 128800L),
+                        new MerchantBillLineRequest("cam", "June CAM", 40000L)
+                )
+        );
+    }
+
+    private MerchantBillCreateRequest createRequestForMerchant(String idempotencyKey, String merchantId, String arApItemId) {
+        return new MerchantBillCreateRequest(
+                idempotencyKey,
+                "issue bill",
+                merchantId,
                 arApItemId,
                 LocalDate.parse("2026-06-01"),
                 LocalDate.parse("2026-06-30"),
@@ -237,7 +357,8 @@ class MerchantBillingServiceTests {
                 "2026-06",
                 "receivable".equals(direction) ? "pending_collection" : "pending_payment",
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                merchantId
         );
     }
 
@@ -250,6 +371,13 @@ class MerchantBillingServiceTests {
         @Override
         public List<MerchantBillRecord> findAllBills() {
             return new ArrayList<>(bills.values());
+        }
+
+        @Override
+        public List<MerchantBillRecord> findBillsByMerchantId(String merchantId) {
+            return bills.values().stream()
+                    .filter(bill -> merchantId.equals(bill.merchantId()))
+                    .toList();
         }
 
         @Override
@@ -311,7 +439,19 @@ class MerchantBillingServiceTests {
         }
 
         @Override
+        public List<ArApItemRecord> listArApItemsByMerchant(String merchantId) {
+            return items.values().stream()
+                    .filter(item -> merchantId.equals(item.merchantId()))
+                    .toList();
+        }
+
+        @Override
         public Optional<ArApItemRecord> findArApItemById(String id) {
+            return Optional.ofNullable(items.get(id));
+        }
+
+        @Override
+        public Optional<ArApItemRecord> findArApItemByIdForUpdate(String id) {
             return Optional.ofNullable(items.get(id));
         }
 
@@ -327,8 +467,23 @@ class MerchantBillingServiceTests {
         }
 
         @Override
+        public Optional<ArApPaymentRecord> findArApPaymentById(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public long sumRefundedAmountByTargetId(String targetId) {
+            return 0L;
+        }
+
+        @Override
         public DailyCloseRecord saveDailyClose(DailyCloseRecord dailyClose) {
             return dailyClose;
+        }
+
+        @Override
+        public boolean dailyCloseExists(java.time.LocalDate businessDate, String scopeType, String scopeId) {
+            return false;
         }
 
         @Override
@@ -400,5 +555,44 @@ class MerchantBillingServiceTests {
             return event;
         }
 
+    }
+
+    private AuthorizationService noScopeAuth() {
+        return new AuthorizationService(null) {
+            @Override
+            public Optional<String> currentMerchantScope() {
+                return Optional.empty();
+            }
+        };
+    }
+
+    private AuthorizationService scopedAuth(String merchantId) {
+        return new AuthorizationService(null) {
+            @Override
+            public Optional<String> currentMerchantScope() {
+                return Optional.of(merchantId);
+            }
+        };
+    }
+
+    private MerchantBillingService serviceWithAuth(AuthorizationService auth) {
+        return new MerchantBillingService(
+                merchantBillingRepository,
+                financeRepository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                auth
+        );
+    }
+
+    private MerchantBillingService serviceWithSharedIdempotency(
+            InMemoryIdempotencyRepository sharedRepo, AuthorizationService auth) {
+        return new MerchantBillingService(
+                merchantBillingRepository,
+                financeRepository,
+                new IdempotencyService(sharedRepo, new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                auth
+        );
     }
 }

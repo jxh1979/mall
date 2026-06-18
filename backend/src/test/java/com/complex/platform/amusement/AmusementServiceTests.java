@@ -3,7 +3,10 @@ package com.complex.platform.amusement;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.Mockito.mock;
 
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -11,6 +14,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,16 +35,71 @@ class AmusementServiceTests {
     private InMemoryAmusementRepository amusementRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private AmusementService service;
+    private AuthorizationService authorizationService;
 
     @BeforeEach
     void setUp() {
         amusementRepository = new InMemoryAmusementRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        authorizationService = new AuthorizationService(mock(AccessRepository.class));
+        TestSecurityActors.asPlatformAdmin();
         service = new AmusementService(
                 amusementRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository),
+                authorizationService
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        TestSecurityActors.clear();
+    }
+
+    @Test
+    void createSessionRejectsCrossMerchantProject() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementSafetyTemplateRecord template = createTemplate("xmerchant");
+        AmusementProjectRecord project = createProject("xmerchant", template.id(), "open", 2);
+
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> createSession("xmerchant", project.id(), 2, "open"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void createManualOverrideRejectsCrossMerchantProject() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementSafetyTemplateRecord template = createTemplate("xmerchant-override");
+        AmusementProjectRecord project = createProject("xmerchant-override", template.id(), "open", 2);
+
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.createManualOverride(new AmusementManualOverrideRequest(
+                        "override-xmerchant",
+                        "override",
+                        List.of("att_1"),
+                        project.id(),
+                        null,
+                        "allow",
+                        "supervisor approved")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void getOpenEligibilityRejectsCrossMerchantProject() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementSafetyTemplateRecord template = createTemplate("xmerchant-eligibility");
+        AmusementProjectRecord project = createProject("xmerchant-eligibility", template.id(), "open", 2);
+
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.getOpenEligibility(project.id()))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
     @Test
@@ -189,7 +249,8 @@ class AmusementServiceTests {
                 closedProject.safetyTemplateId(),
                 closedProject.eligibilityRule(),
                 closedProject.createdAt(),
-                Instant.parse("2026-06-14T09:00:00Z")
+                Instant.parse("2026-06-14T09:00:00Z"),
+                null
         ));
         AmusementSessionRecord closedSession = createSession("closed-session", closedProject.id(), 1, "open");
 
@@ -267,7 +328,8 @@ class AmusementServiceTests {
         AmusementVerificationRecord first = service.createVerification(request);
         AmusementVerificationRecord second = service.createVerification(request);
 
-        assertThat(second).isEqualTo(first);
+        // credentialPayload is intentionally excluded from idempotency cache (P1 security fix)
+        assertThat(second).usingRecursiveComparison().ignoringFields("credentialPayload").isEqualTo(first);
         assertThat(amusementRepository.findSessionById(session.id()))
                 .get()
                 .extracting(AmusementSessionRecord::usedCapacity)
@@ -988,6 +1050,76 @@ class AmusementServiceTests {
         @Override
         public Optional<AmusementReservationRecord> findReservationById(String id) {
             return Optional.ofNullable(reservations.get(id));
+        }
+
+        @Override
+        public List<AmusementSafetyTemplateRecord> listSafetyTemplatesByMerchant(String merchantId) {
+            return safetyTemplates.values().stream()
+                    .filter(t -> merchantId.equals(t.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementProjectRecord> listProjectsByMerchant(String merchantId) {
+            return projects.values().stream()
+                    .filter(p -> merchantId.equals(p.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementSessionRecord> listSessionsByMerchant(String merchantId) {
+            return sessions.values().stream()
+                    .filter(s -> projects.containsKey(s.projectId()) && merchantId.equals(projects.get(s.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementGroupBookingRecord> listGroupBookingsByMerchant(String merchantId) {
+            return groupBookings.values().stream()
+                    .filter(b -> projects.containsKey(b.projectId()) && merchantId.equals(projects.get(b.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementSafetyInspectionRecord> listSafetyInspectionsByMerchant(String merchantId) {
+            return inspections.values().stream()
+                    .filter(i -> projects.containsKey(i.projectId()) && merchantId.equals(projects.get(i.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementVerificationRecord> listVerificationsByMerchant(String merchantId) {
+            return verifications.values().stream()
+                    .filter(v -> projects.containsKey(v.projectId()) && merchantId.equals(projects.get(v.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId) {
+            return manualOverrides.values().stream()
+                    .filter(o -> projects.containsKey(o.projectId()) && merchantId.equals(projects.get(o.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementDeviceStatusRecord> listDeviceStatusesByMerchant(String merchantId) {
+            return deviceStatuses.values().stream()
+                    .filter(d -> projects.containsKey(d.projectId()) && merchantId.equals(projects.get(d.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementQueueEntryRecord> listQueueEntriesByMerchant(String merchantId) {
+            return queueEntries.values().stream()
+                    .filter(q -> projects.containsKey(q.projectId()) && merchantId.equals(projects.get(q.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementReservationRecord> listReservationsByMerchant(String merchantId) {
+            return reservations.values().stream()
+                    .filter(r -> projects.containsKey(r.projectId()) && merchantId.equals(projects.get(r.projectId()).merchantId()))
+                    .toList();
         }
     }
 

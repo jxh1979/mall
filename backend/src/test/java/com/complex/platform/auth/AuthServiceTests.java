@@ -7,6 +7,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -168,6 +169,35 @@ class AuthServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("auth.login.succeeded", "auth.logout_failed");
+    }
+
+    @Test
+    void createUserStoresSaltedBcryptHashNotPlaintextOrSha256() {
+        AuthService.UserRecord alice = service.createUser(new AuthService.CreateUserCommand(
+                "alice", "secret", "staff", "org_1", "merchant_1", "active"));
+        AuthService.UserRecord bob = service.createUser(new AuthService.CreateUserCommand(
+                "bob", "secret", "staff", "org_1", "merchant_1", "active"));
+
+        // bcrypt hash, not plaintext and not an unsalted SHA-256 hex digest
+        assertThat(alice.passwordHash()).startsWith("$2");
+        assertThat(alice.passwordHash()).isNotEqualTo("secret");
+        assertThat(alice.passwordHash()).doesNotMatch("[0-9a-f]{64}");
+        // salted: the same password produces a different hash per user
+        assertThat(alice.passwordHash()).isNotEqualTo(bob.passwordHash());
+        // login with the raw password still succeeds against the bcrypt hash
+        assertThat(service.login(new AuthService.LoginRequest("alice", "secret", null, "d1", "web")).accessToken())
+                .startsWith("p0_access_");
+    }
+
+    @Test
+    void accessTokenIsRejectedAfterItsTtlElapses() {
+        AuthService shortLived = new AuthService(
+                "p0_admin", "secret", new AuditEventService(auditEventRepository), Duration.ofSeconds(-1));
+        AuthService.LoginResponse login = shortLived.login(new AuthService.LoginRequest(
+                "p0_admin", "secret", null, "d1", "web"));
+
+        // The token was issued already-expired (negative TTL), so it must not authenticate.
+        assertThat(shortLived.authenticateToken(login.accessToken())).isEmpty();
     }
 
     private AuthService.LoginResponse login() {

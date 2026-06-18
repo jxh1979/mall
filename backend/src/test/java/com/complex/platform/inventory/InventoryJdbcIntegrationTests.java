@@ -40,7 +40,7 @@ class InventoryJdbcIntegrationTests {
         assertThat(regclass("inventory_stock_batches")).isEqualTo("inventory_stock_batches");
         assertThat(regclass("inventory_risk_alerts")).isEqualTo("inventory_risk_alerts");
         assertThat(regclass("inventory_supplier_reconciliations")).isEqualTo("inventory_supplier_reconciliations");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
 
         assertThat(permissionCodes()).contains(
                 "inventory.stock.view",
@@ -83,7 +83,8 @@ class InventoryJdbcIntegrationTests {
                 2,
                 "active",
                 now,
-                now
+                now,
+                null
         ));
         repository.saveInventorySupplier(new InventorySupplierRecord(
                 "supplier_jdbc",
@@ -93,7 +94,8 @@ class InventoryJdbcIntegrationTests {
                 "13800138000",
                 "active",
                 now,
-                now
+                now,
+                null
         ));
         repository.saveStockBalance(new StockBalanceRecord(
                 "balance_jdbc",
@@ -102,7 +104,8 @@ class InventoryJdbcIntegrationTests {
                 10,
                 1,
                 9,
-                now
+                now,
+                null
         ));
         repository.saveStockMovement(new StockMovementRecord(
                 "movement_jdbc",
@@ -117,7 +120,8 @@ class InventoryJdbcIntegrationTests {
                 "staff_jdbc",
                 List.of("attachment_jdbc"),
                 "completed",
-                now
+                now,
+                null
         ));
         repository.savePurchaseRequest(new PurchaseRequestRecord(
                 "purchase_jdbc",
@@ -129,7 +133,8 @@ class InventoryJdbcIntegrationTests {
                 "created",
                 List.of("attachment_jdbc"),
                 now,
-                now
+                now,
+                null
         ));
 
         assertThat(repository.listInventoryItems())
@@ -164,7 +169,8 @@ class InventoryJdbcIntegrationTests {
                 5,
                 "active",
                 now,
-                now
+                now,
+                null
         ));
         repository.saveInventorySupplier(new InventorySupplierRecord(
                 "supplier_p1_jdbc",
@@ -174,7 +180,8 @@ class InventoryJdbcIntegrationTests {
                 "13900139000",
                 "active",
                 now,
-                now
+                now,
+                null
         ));
         repository.saveStockBatch(new InventoryStockBatchRecord(
                 "batch_p1_jdbc",
@@ -187,7 +194,8 @@ class InventoryJdbcIntegrationTests {
                 "active",
                 List.of("att_batch_jdbc"),
                 now,
-                now
+                now,
+                null
         ));
         repository.saveRiskAlert(new InventoryRiskAlertRecord(
                 "risk_p1_jdbc",
@@ -201,7 +209,8 @@ class InventoryJdbcIntegrationTests {
                 Instant.parse("2026-06-20T00:00:00Z"),
                 "open",
                 "staff_ops",
-                now
+                now,
+                null
         ));
         repository.saveSupplierReconciliation(new SupplierReconciliationRecord(
                 "supplier_recon_p1_jdbc",
@@ -215,7 +224,8 @@ class InventoryJdbcIntegrationTests {
                 List.of("att_invoice_jdbc"),
                 "staff_finance",
                 now,
-                now
+                now,
+                null
         ));
 
         assertThat(repository.listStockBatches())

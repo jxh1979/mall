@@ -3,9 +3,8 @@ package com.complex.platform.auth;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
-import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +13,8 @@ import java.util.concurrent.ConcurrentMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -26,14 +27,20 @@ public class AuthService {
     private final ConcurrentMap<String, String> accessTokensToSessionId = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> refreshTokensToSessionId = new ConcurrentHashMap<>();
     private final AuditEventService auditEventService;
+    // Salted, work-factored hashing — never store unsalted digests, even for the dev provider.
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
+    private final Duration accessTokenTtl;
 
     @Autowired
     public AuthService(
             @Value("${complex.smoke.admin.username:${P0_ADMIN_USERNAME:}}") String seedUsername,
             @Value("${complex.smoke.admin.password:${P0_ADMIN_PASSWORD:}}") String seedPassword,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            @Value("${complex.auth.access-token-ttl:PT30M}") Duration accessTokenTtl
     ) {
         this.auditEventService = auditEventService;
+        // null → default 30m; explicit (incl. short/negative) values are respected so expiry is testable.
+        this.accessTokenTtl = accessTokenTtl == null ? Duration.ofMinutes(30) : accessTokenTtl;
         if (!isBlank(seedUsername) && !isBlank(seedPassword)) {
             createUser(new CreateUserCommand(
                     seedUsername,
@@ -44,6 +51,10 @@ public class AuthService {
                     "active"
             ));
         }
+    }
+
+    public AuthService(String seedUsername, String seedPassword, AuditEventService auditEventService) {
+        this(seedUsername, seedPassword, auditEventService, Duration.ofMinutes(30));
     }
 
     public AuthService(String seedUsername, String seedPassword) {
@@ -65,7 +76,7 @@ public class AuthService {
             UserRecord user = new UserRecord(
                     "usr_" + UUID.randomUUID(),
                     command.username(),
-                    hash(command.password()),
+                    passwordEncoder.encode(command.password()),
                     blankToDefault(command.accountType(), "staff"),
                     command.organizationId(),
                     command.merchantId(),
@@ -85,7 +96,7 @@ public class AuthService {
             UserRecord user = Optional.ofNullable(usersByUsername.get(request.loginName()))
                     .orElseThrow(() -> ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password"));
 
-            if (!constantTimeEquals(user.passwordHash(), hash(request.password()))) {
+            if (!passwordEncoder.matches(request.password(), user.passwordHash())) {
                 throw ApiException.unauthorized("INVALID_CREDENTIALS", "invalid username or password");
             }
             if (!"active".equals(user.status())) {
@@ -203,7 +214,8 @@ public class AuthService {
                     session.terminalType(),
                     "logged_out",
                     session.createdAt(),
-                    Instant.now()
+                    Instant.now(),
+                    session.accessExpiresAt()
             );
             sessionsById.put(loggedOut.id(), loggedOut);
             auditEventService.recordSuccess(
@@ -240,11 +252,13 @@ public class AuthService {
         return Optional.ofNullable(accessTokensToSessionId.get(token))
                 .map(sessionsById::get)
                 .filter(session -> "active".equals(session.status()))
+                .filter(session -> session.accessExpiresAt() == null || Instant.now().isBefore(session.accessExpiresAt()))
                 .map(SessionRecord::userId)
                 .map(usersById::get);
     }
 
     private SessionRecord createSession(UserRecord user, String deviceId, String terminalType) {
+        Instant now = Instant.now();
         SessionRecord session = new SessionRecord(
                 "sess_" + UUID.randomUUID(),
                 user.id(),
@@ -253,8 +267,9 @@ public class AuthService {
                 blankToDefault(deviceId, "unknown"),
                 blankToDefault(terminalType, "web"),
                 "active",
-                Instant.now(),
-                Instant.now()
+                now,
+                now,
+                now.plus(accessTokenTtl)
         );
         sessionsById.put(session.id(), session);
         accessTokensToSessionId.put(session.accessToken(), session.id());
@@ -265,6 +280,7 @@ public class AuthService {
     private SessionRecord rotateSessionTokens(SessionRecord session) {
         accessTokensToSessionId.remove(session.accessToken());
         refreshTokensToSessionId.remove(session.refreshToken());
+        Instant now = Instant.now();
         SessionRecord refreshed = new SessionRecord(
                 session.id(),
                 session.userId(),
@@ -274,7 +290,8 @@ public class AuthService {
                 session.terminalType(),
                 "active",
                 session.createdAt(),
-                Instant.now()
+                now,
+                now.plus(accessTokenTtl)
         );
         sessionsById.put(refreshed.id(), refreshed);
         accessTokensToSessionId.put(refreshed.accessToken(), refreshed.id());
@@ -304,22 +321,6 @@ public class AuthService {
         if (isBlank(value)) {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
         }
-    }
-
-    private String hash(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        } catch (Exception exception) {
-            throw new IllegalStateException("password hashing unavailable", exception);
-        }
-    }
-
-    private boolean constantTimeEquals(String expected, String actual) {
-        return MessageDigest.isEqual(
-                expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                actual.getBytes(java.nio.charset.StandardCharsets.UTF_8)
-        );
     }
 
     private String blankToDefault(String value, String defaultValue) {
@@ -413,7 +414,8 @@ public class AuthService {
             String terminalType,
             String status,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            Instant accessExpiresAt
     ) {
     }
 }

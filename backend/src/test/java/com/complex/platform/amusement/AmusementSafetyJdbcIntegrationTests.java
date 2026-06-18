@@ -31,7 +31,7 @@ class AmusementSafetyJdbcIntegrationTests {
         assertThat(regclass("amusement_waiver_acknowledgements")).isEqualTo("amusement_waiver_acknowledgements");
         assertThat(regclass("amusement_incidents")).isEqualTo("amusement_incidents");
         assertThat(regclass("amusement_incident_actions")).isEqualTo("amusement_incident_actions");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
 
         assertThat(permissionCodes()).contains(
                 "amusement.safety_notice.view",
@@ -68,7 +68,8 @@ class AmusementSafetyJdbcIntegrationTests {
                 "staff_ops",
                 List.of("att-notice"),
                 now,
-                now
+                now,
+                null
         ));
         repository.saveWaiverAcknowledgement(new AmusementWaiverAcknowledgementRecord(
                 "awa_jdbc",
@@ -105,7 +106,8 @@ class AmusementSafetyJdbcIntegrationTests {
                 null,
                 List.of("att-photo"),
                 now,
-                now
+                now,
+                null
         ));
         repository.saveIncidentAction(new AmusementIncidentActionRecord(
                 "amia_jdbc",

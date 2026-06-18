@@ -4,7 +4,8 @@ import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.customer.dto.CustomerBarReservationRequest;
 import com.complex.platform.customer.dto.CustomerConsentRequest;
 import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
@@ -18,7 +19,10 @@ import com.complex.platform.ticketing.TicketOrderRecord;
 import com.complex.platform.ticketing.TicketTypeRecord;
 import com.complex.platform.ticketing.TicketingService;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,7 +40,7 @@ public class CustomerService {
     private final CustomerRepository repository;
     private final CustomerOtpVerifier otpVerifier;
     private final TicketingService ticketingService;
-    private final IdempotencyService idempotencyService;
+    private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
     private final InventoryService inventoryService;
 
@@ -44,14 +48,14 @@ public class CustomerService {
             CustomerRepository repository,
             CustomerOtpVerifier otpVerifier,
             TicketingService ticketingService,
-            IdempotencyService idempotencyService,
+            AuditedOperationExecutor operations,
             AuditEventService auditEventService,
             InventoryService inventoryService
     ) {
         this.repository = repository;
         this.otpVerifier = otpVerifier;
         this.ticketingService = ticketingService;
-        this.idempotencyService = idempotencyService;
+        this.operations = operations;
         this.auditEventService = auditEventService;
         this.inventoryService = inventoryService;
     }
@@ -312,31 +316,14 @@ public class CustomerService {
                 "customer_points_redemption",
                 () -> {
                     Instant now = Instant.now();
-                    CustomerRedemptionCatalogItemRecord item = repository.findRedemptionCatalogItemById(
-                                    requireText(actual.catalogItemId(), "catalog_item_id"))
-                            .filter(candidate -> redemptionItemIsActive(candidate, now))
-                            .orElseThrow(() -> ApiException.notFound(
-                                    "REDEMPTION_ITEM_NOT_AVAILABLE",
-                                    "redemption item is not available"
-                            ));
+                    CustomerRedemptionCatalogItemRecord item = resolveActiveRedemptionItem(
+                            requireText(actual.catalogItemId(), "catalog_item_id"), now);
                     int quantity = actual.quantity() == null ? 1 : actual.quantity();
                     if (quantity <= 0) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "quantity must be positive");
                     }
                     long totalPoints = item.pointsCost() * quantity;
-                    CustomerPointsAccountRecord account = repository.findPointsByCustomerId(customer.id())
-                            .orElseGet(() -> {
-                                Instant createdAt = Instant.now();
-                                return repository.savePoints(new CustomerPointsAccountRecord(
-                                        "points_" + customer.id(),
-                                        customer.id(),
-                                        0L,
-                                        "base",
-                                        Map.of(),
-                                        createdAt,
-                                        createdAt
-                                ));
-                            });
+                    CustomerPointsAccountRecord account = loadOrCreatePointsAccountForUpdate(customer.id());
                     if (account.balance() < totalPoints) {
                         throw ApiException.conflict("POINTS_INSUFFICIENT", "points balance is insufficient");
                     }
@@ -396,6 +383,31 @@ public class CustomerService {
         );
     }
 
+    private CustomerRedemptionCatalogItemRecord resolveActiveRedemptionItem(String catalogItemId, Instant now) {
+        return repository.findRedemptionCatalogItemById(catalogItemId)
+                .filter(candidate -> redemptionItemIsActive(candidate, now))
+                .orElseThrow(() -> ApiException.notFound(
+                        "REDEMPTION_ITEM_NOT_AVAILABLE",
+                        "redemption item is not available"
+                ));
+    }
+
+    private CustomerPointsAccountRecord loadOrCreatePointsAccountForUpdate(String customerId) {
+        return repository.findPointsByCustomerIdForUpdate(customerId)
+                .orElseGet(() -> {
+                    Instant createdAt = Instant.now();
+                    return repository.savePoints(new CustomerPointsAccountRecord(
+                            "points_" + customerId,
+                            customerId,
+                            0L,
+                            "base",
+                            Map.of(),
+                            createdAt,
+                            createdAt
+                    ));
+                });
+    }
+
     public PageResponse<CustomerBarReservationOptionResponse> listBarReservationOptions(String customerToken) {
         requireCustomer(customerToken);
         return readPage(
@@ -442,6 +454,7 @@ public class CustomerService {
                     return repository.saveCustomerBarReservation(new BarReservationRecord(
                             "reservation_" + slug(key),
                             barId,
+                            null,
                             table.id(),
                             customer.id(),
                             actual.reservationTime() == null ? now : actual.reservationTime(),
@@ -495,30 +508,10 @@ public class CustomerService {
             String businessType,
             Supplier<List<T>> action
     ) {
-        try {
-            List<T> items = action.get();
-            auditEventService.recordSuccess(
-                    successEvent,
-                    permissionCode,
-                    businessType,
-                    "all",
-                    null,
-                    null,
-                    Map.of("count", items.size())
-            );
-            return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    "all",
-                    null,
-                    null,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.readPage(
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action
+        );
     }
 
     private <T> T executeWrite(
@@ -532,38 +525,16 @@ public class CustomerService {
             String businessType,
             Supplier<T> action
     ) {
-        try {
-            return idempotencyService.execute(
-                    operationId,
-                    idempotencyKey,
-                    request,
-                    () -> {
-                        T saved = action.get();
-                        auditEventService.recordSuccess(
-                                successEvent,
-                                permissionCode,
-                                businessType,
-                                businessId(saved),
-                                null,
-                                idempotencyKey,
-                                Map.of()
-                        );
-                        return saved;
-                    },
-                    responseType
-            );
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    null,
-                    null,
-                    idempotencyKey,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.executeWrite(
+                operationId,
+                idempotencyKey,
+                request,
+                responseType,
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action,
+                this::businessId,
+                Map.of()
+        );
     }
 
     private <T> T requireRequest(T request) {
@@ -616,7 +587,22 @@ public class CustomerService {
                 .replaceAll("^_+|_+$", "");
         String fallback = UUID.randomUUID().toString().replace("-", "");
         String resolved = slug.isEmpty() ? fallback : slug;
-        return resolved.length() > 40 ? resolved.substring(0, 40) : resolved;
+        if (resolved.length() <= 40) {
+            return resolved;
+        }
+        // Keep a readable prefix but disambiguate by a hash of the full value so two distinct keys that
+        // differ only past the 40-char cutoff cannot truncate to the same id and overwrite each other.
+        return resolved.substring(0, 31) + "_" + shortHash(value);
+    }
+
+    private String shortHash(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, 8);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 hashing unavailable", exception);
+        }
     }
 
     private String businessId(Object value) {

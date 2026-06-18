@@ -1,6 +1,7 @@
 package com.complex.platform.customer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import com.complex.platform.bar.BarReservationRecord;
@@ -41,7 +42,19 @@ class CustomerJdbcIntegrationTests {
         assertThat(regclass("customer_points_redemptions")).isEqualTo("customer_points_redemptions");
         assertThat(regclass("bar_tables")).isEqualTo("bar_tables");
         assertThat(regclass("bar_reservations")).isEqualTo("bar_reservations");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
+    }
+
+    @Test
+    void pointsAccountBalanceCannotGoNegativeAtDatabaseLevel() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveCustomer(new CustomerRecord(
+                "customer_neg", "13900139000", "139****9000", "active", now, now, now));
+
+        // The V054 CHECK backstop must reject a negative balance even if a writer bypasses the service guard.
+        assertThatThrownBy(() -> repository.savePoints(new CustomerPointsAccountRecord(
+                "points_neg", "customer_neg", -100L, "base", Map.of(), now, now)))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
     @Test
@@ -128,6 +141,7 @@ class CustomerJdbcIntegrationTests {
         BarReservationRecord reservation = repository.saveCustomerBarReservation(new BarReservationRecord(
                 "reservation_customer_jdbc",
                 "bar_customer_jdbc",
+                null,
                 "table_customer_jdbc",
                 "customer_jdbc",
                 now.plusSeconds(3600),

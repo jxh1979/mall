@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -49,7 +50,7 @@ class BarJdbcIntegrationTests {
         assertThat(regclass("bar_bill_adjustments")).isEqualTo("bar_bill_adjustments");
         assertThat(regclass("bar_bill_operations")).isEqualTo("bar_bill_operations");
         assertThat(columnNames("bar_bill_adjustments")).contains("ar_ap_item_id");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
 
         assertThat(permissionCodes()).contains(
                 "bar.entry.age_verify",
@@ -97,6 +98,7 @@ class BarJdbcIntegrationTests {
         repository.saveTable(new BarTableRecord(
                 "table_jdbc",
                 "bar_jdbc",
+                null,
                 "T-JDBC",
                 "VIP JDBC",
                 "card_seat",
@@ -111,6 +113,7 @@ class BarJdbcIntegrationTests {
         repository.saveReservation(new BarReservationRecord(
                 "reservation_jdbc",
                 "bar_jdbc",
+                null,
                 "table_jdbc",
                 "customer_jdbc",
                 now.plusSeconds(3600),
@@ -143,6 +146,7 @@ class BarJdbcIntegrationTests {
         repository.saveProduct(new BarProductRecord(
                 "product_jdbc",
                 "bar_jdbc",
+                null,
                 "Whisky",
                 "spirit",
                 128800L,
@@ -157,6 +161,7 @@ class BarJdbcIntegrationTests {
         repository.saveOrder(new BarOrderRecord(
                 "order_jdbc",
                 "bar_jdbc",
+                null,
                 "table_jdbc",
                 "reservation_jdbc",
                 "customer_jdbc",
@@ -186,6 +191,7 @@ class BarJdbcIntegrationTests {
                 "ticket_jdbc",
                 "order_jdbc",
                 "bar_jdbc",
+                null,
                 "created",
                 now,
                 now
@@ -210,6 +216,7 @@ class BarJdbcIntegrationTests {
                 "BILL-JDBC-001",
                 "order_jdbc",
                 "bar_jdbc",
+                null,
                 "table_jdbc",
                 "reservation_jdbc",
                 128800L,
@@ -237,10 +244,10 @@ class BarJdbcIntegrationTests {
                 now
         ));
 
-        assertThat(repository.listTables())
+        assertThat(repository.listTables(Optional.empty()))
                 .extracting(BarTableRecord::id, BarTableRecord::allowedPassFreeGuestCount, BarTableRecord::minConsumptionCent)
                 .contains(tuple("table_jdbc", 2, 50000L));
-        assertThat(repository.listReservations())
+        assertThat(repository.listReservations(Optional.empty()))
                 .extracting(BarReservationRecord::id, BarReservationRecord::depositAmountCent, BarReservationRecord::salesStaffId)
                 .contains(tuple("reservation_jdbc", 10000L, "staff_sales"));
         assertThat(repository.countGuestCheckins("reservation_jdbc")).isEqualTo(1);
@@ -299,6 +306,7 @@ class BarJdbcIntegrationTests {
                 "BILL-JDBC-001-S1",
                 "order_jdbc",
                 "bar_jdbc",
+                null,
                 "table_jdbc",
                 "reservation_jdbc",
                 40000L,
@@ -346,6 +354,7 @@ class BarJdbcIntegrationTests {
         repository.saveTable(new BarTableRecord(
                 "table_session_jdbc",
                 "bar_jdbc",
+                null,
                 "T-SESSION-JDBC",
                 "VIP Session JDBC",
                 "card_seat",
@@ -405,7 +414,7 @@ class BarJdbcIntegrationTests {
                 now
         ));
 
-        assertThat(repository.listTableSessions())
+        assertThat(repository.listTableSessions(Optional.empty()))
                 .extracting(
                         BarTableSessionRecord::id,
                         BarTableSessionRecord::merchantId,

@@ -192,6 +192,33 @@ class ProductionAuthJdbcIntegrationTests {
     }
 
     @Test
+    void lockingCredentialImmediatelyRevokesAlreadyIssuedAccessToken() throws Exception {
+        JsonNode login = login("p0_prod_test_admin", "p0_prod_test_password");
+        String accessToken = login.at("/data/access_token").asText();
+
+        // Token is valid before the credential is locked
+        mockMvc.perform(get("/api/v1/ops/production-readiness/items")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk());
+
+        // Admin/lockout disables the credential (lock window in the future)
+        String userId = jdbcTemplate.queryForObject(
+                "SELECT id FROM access_users WHERE username = ?", String.class, "p0_prod_test_admin");
+        jdbcTemplate.update("""
+                UPDATE auth_credentials
+                   SET status = 'locked',
+                       locked_until = now() + interval '15 minutes'
+                 WHERE user_id = ?
+                """, userId);
+
+        // The already-issued access token must now be rejected, not honoured until expiry
+        int statusAfterLock = mockMvc.perform(get("/api/v1/ops/production-readiness/items")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andReturn().getResponse().getStatus();
+        assertThat(statusAfterLock).isIn(401, 403);
+    }
+
+    @Test
     void prodProfileProtectsOpenApiAndSwaggerEndpointsFromAnonymousAccess() throws Exception {
         expectAnonymousAccessProtected("/v3/api-docs");
         expectAnonymousAccessProtected("/swagger-ui/index.html");

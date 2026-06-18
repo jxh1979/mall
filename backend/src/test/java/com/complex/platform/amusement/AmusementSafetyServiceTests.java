@@ -2,7 +2,10 @@ package com.complex.platform.amusement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.dto.AmusementIncidentActionRequest;
 import com.complex.platform.amusement.dto.AmusementIncidentCloseRequest;
 import com.complex.platform.amusement.dto.AmusementIncidentCreateRequest;
@@ -15,6 +18,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -22,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,16 +35,25 @@ class AmusementSafetyServiceTests {
     private InMemoryAmusementSafetyRepository repository;
     private InMemoryAuditEventRepository auditEventRepository;
     private AmusementSafetyService service;
+    private AuthorizationService authorizationService;
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryAmusementSafetyRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        authorizationService = new AuthorizationService(mock(AccessRepository.class));
+        TestSecurityActors.asPlatformAdmin();
         service = new AmusementSafetyService(
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository),
+                authorizationService
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        TestSecurityActors.clear();
     }
 
     @Test
@@ -102,6 +116,18 @@ class AmusementSafetyServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("amusement.waiver.acknowledged");
+    }
+
+    @Test
+    void acknowledgeWaiverRejectsCrossMerchantNotice() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementSafetyNoticeRecord notice = service.createSafetyNotice(noticeRequest("notice-xmerchant"));
+
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.acknowledgeWaiver(notice.id(), waiverRequest("waiver-xmerchant")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
     @Test
@@ -324,6 +350,20 @@ class AmusementSafetyServiceTests {
         public List<AmusementIncidentActionRecord> findIncidentActionsByIncidentId(String incidentId) {
             return actions.stream()
                     .filter(action -> action.incidentId().equals(incidentId))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementSafetyNoticeRecord> findSafetyNoticesByMerchant(String merchantId) {
+            return notices.values().stream()
+                    .filter(n -> merchantId.equals(n.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementIncidentRecord> findIncidentsByMerchant(String merchantId) {
+            return incidents.values().stream()
+                    .filter(i -> merchantId.equals(i.merchantId()))
                     .toList();
         }
     }

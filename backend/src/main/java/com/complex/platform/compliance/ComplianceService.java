@@ -1,5 +1,6 @@
 package com.complex.platform.compliance;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -14,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -39,19 +41,25 @@ public class ComplianceService {
     private final ComplianceRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
 
     public ComplianceService(
             ComplianceRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<ContractKeyDateRecord> listContractKeyDates() {
-        List<ContractKeyDateRecord> records = repository.findAllContractKeyDates();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<ContractKeyDateRecord> records = scope.isPresent()
+                ? repository.findContractKeyDatesByMerchant(scope.get())
+                : repository.findAllContractKeyDates();
         auditEventService.recordSuccess(
                 "compliance.contract_key_date.viewed",
                 "compliance.contract_key_date.view",
@@ -79,7 +87,10 @@ public class ComplianceService {
     }
 
     public PageResponse<ComplianceExpiryItemRecord> listExpiryItems() {
-        List<ComplianceExpiryItemRecord> records = repository.findAllExpiryItems();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<ComplianceExpiryItemRecord> records = scope.isPresent()
+                ? repository.findExpiryItemsByMerchant(scope.get())
+                : repository.findAllExpiryItems();
         auditEventService.recordSuccess(
                 "compliance.expiry_item.viewed",
                 "compliance.expiry_item.view",
@@ -107,7 +118,10 @@ public class ComplianceService {
     }
 
     public PageResponse<ComplianceReminderRecord> listReminders() {
-        List<ComplianceReminderRecord> records = repository.findAllReminders();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<ComplianceReminderRecord> records = scope.isPresent()
+                ? repository.findRemindersByMerchant(scope.get())
+                : repository.findAllReminders();
         auditEventService.recordSuccess(
                 "compliance.reminder.viewed",
                 "compliance.reminder.view",
@@ -137,9 +151,9 @@ public class ComplianceService {
     private ContractKeyDateRecord createContractKeyDateOnce(ContractKeyDateRequest request) {
         Instant now = Instant.now();
         ContractKeyDateRecord record = repository.saveContractKeyDate(new ContractKeyDateRecord(
-                "ckd_" + slug(request.idempotencyKey()),
+                "ckd_" + UUID.randomUUID(),
                 requireText(request.contractId(), "contract_id"),
-                requireText(request.merchantId(), "merchant_id"),
+                resolveMerchantScopedId(request.merchantId()),
                 normalizeAllowed(request.dateType(), "date_type", CONTRACT_DATE_TYPES),
                 requireText(request.title(), "title"),
                 requireDate(request.dueDate(), "due_date"),
@@ -167,10 +181,10 @@ public class ComplianceService {
     private ComplianceExpiryItemRecord createExpiryItemOnce(ComplianceExpiryItemRequest request) {
         Instant now = Instant.now();
         ComplianceExpiryItemRecord record = repository.saveExpiryItem(new ComplianceExpiryItemRecord(
-                "cei_" + slug(request.idempotencyKey()),
+                "cei_" + UUID.randomUUID(),
                 normalizeAllowed(request.subjectType(), "subject_type", EXPIRY_SUBJECT_TYPES),
                 requireText(request.subjectId(), "subject_id"),
-                requireText(request.merchantId(), "merchant_id"),
+                resolveMerchantScopedId(request.merchantId()),
                 normalizeAllowed(request.itemType(), "item_type", EXPIRY_ITEM_TYPES),
                 requireText(request.itemName(), "item_name"),
                 trimToNull(request.documentNo()),
@@ -205,11 +219,18 @@ public class ComplianceService {
         if (defaultLookaheadDays < 0 || defaultLookaheadDays > 366) {
             throw ApiException.badRequest("VALIDATION_FAILED", "default_lookahead_days must be between 0 and 366");
         }
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<ContractKeyDateRecord> dates = scope.isPresent()
+                ? repository.findContractKeyDatesByMerchant(scope.get())
+                : repository.findAllContractKeyDates();
+        List<ComplianceExpiryItemRecord> items = scope.isPresent()
+                ? repository.findExpiryItemsByMerchant(scope.get())
+                : repository.findAllExpiryItems();
         List<ComplianceReminderRecord> generated = java.util.stream.Stream.concat(
-                        repository.findAllContractKeyDates().stream()
+                        dates.stream()
                                 .filter(record -> "active".equals(record.status()))
                                 .flatMap(record -> reminderForContractDate(record, scanDate, defaultLookaheadDays).stream()),
-                        repository.findAllExpiryItems().stream()
+                        items.stream()
                                 .filter(record -> "active".equals(record.status()))
                                 .flatMap(record -> reminderForExpiryItem(record, scanDate, defaultLookaheadDays).stream())
                 )
@@ -236,6 +257,7 @@ public class ComplianceService {
         if (days < 0) {
             boolean blocking = "contract_end".equals(record.dateType());
             return List.of(reminder(
+                    record.merchantId(),
                     CONTRACT_DATE_TYPE,
                     record.id(),
                     "expired",
@@ -248,6 +270,7 @@ public class ComplianceService {
         }
         if (days <= lookaheadDays(record.reminderDays(), defaultLookaheadDays)) {
             return List.of(reminder(
+                    record.merchantId(),
                     CONTRACT_DATE_TYPE,
                     record.id(),
                     "upcoming",
@@ -270,6 +293,7 @@ public class ComplianceService {
         boolean blocking = !"remind_only".equals(record.expiryAction());
         if (days < 0) {
             return List.of(reminder(
+                    record.merchantId(),
                     EXPIRY_ITEM_TYPE,
                     record.id(),
                     "expired",
@@ -282,6 +306,7 @@ public class ComplianceService {
         }
         if (days <= lookaheadDays(record.reminderDays(), defaultLookaheadDays)) {
             return List.of(reminder(
+                    record.merchantId(),
                     EXPIRY_ITEM_TYPE,
                     record.id(),
                     "upcoming",
@@ -296,6 +321,7 @@ public class ComplianceService {
     }
 
     private ComplianceReminderRecord reminder(
+            String merchantId,
             String sourceType,
             String sourceId,
             String reminderType,
@@ -307,6 +333,7 @@ public class ComplianceService {
     ) {
         return new ComplianceReminderRecord(
                 "cr_" + UUID.randomUUID(),
+                merchantId,
                 sourceType,
                 sourceId,
                 reminderType,
@@ -461,18 +488,30 @@ public class ComplianceService {
         return trimmed == null ? fallback : trimmed;
     }
 
+    /**
+     * Merchant ownership must come from the caller's security scope, never blindly from the request body.
+     * For a merchant-scoped caller the body merchant_id (if present) must match their own scope; the stored
+     * value is always the caller's scope. For an unscoped caller (e.g. platform admin) the body value is required.
+     */
+    private String resolveMerchantScopedId(String requestedMerchantId) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent()) {
+            String requested = trimToNull(requestedMerchantId);
+            if (requested != null && !scope.get().equals(requested)) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "cannot create compliance records for another merchant");
+            }
+            return scope.get();
+        }
+        return requireText(requestedMerchantId, "merchant_id");
+    }
+
     private String trimToNull(String value) {
         if (value == null) {
             return null;
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private String slug(String value) {
-        String text = requireText(value, "idempotency_key").toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9_-]", "_");
-        return text.length() <= 48 ? text : text.substring(0, 48);
     }
 
     private String requestId() {

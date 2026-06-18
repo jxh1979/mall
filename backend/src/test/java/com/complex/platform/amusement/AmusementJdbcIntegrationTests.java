@@ -45,7 +45,7 @@ class AmusementJdbcIntegrationTests {
         assertThat(regclass("amusement_queue_entries")).isEqualTo("amusement_queue_entries");
         assertThat(regclass("amusement_reservations")).isEqualTo("amusement_reservations");
         assertThat(regclass("amusement_group_bookings")).isEqualTo("amusement_group_bookings");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
 
         assertThat(permissionCodes()).contains(
                 "amusement.device_status.view",
@@ -96,7 +96,8 @@ class AmusementJdbcIntegrationTests {
                 "active",
                 List.of("att_template"),
                 now,
-                now
+                now,
+                null
         ));
         repository.saveProject(new AmusementProjectRecord(
                 "project_jdbc",
@@ -106,7 +107,8 @@ class AmusementJdbcIntegrationTests {
                 "template_jdbc",
                 Map.of("min_age", 12),
                 now,
-                now
+                now,
+                null
         ));
         repository.saveProjectRule(new AmusementProjectRuleRecord(
                 "rule_jdbc",

@@ -1,4 +1,5 @@
 package com.complex.platform.auth;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.api.ApiException;
@@ -9,7 +10,6 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Map;
@@ -185,6 +185,10 @@ public class ProductionAuthService {
             if (!"active".equals(session.userStatus())) {
                 throw ApiException.unauthorized("USER_NOT_ACTIVE", "user is not active");
             }
+            // A locked/disabled credential must not be able to extend session life via refresh either.
+            if (!credentialUsable(session, now)) {
+                throw ApiException.unauthorized("ACCOUNT_LOCKED", "account is temporarily locked");
+            }
 
             SessionRecord refreshed = rotateSessionTokens(session, now);
             auditEventService.recordSuccess(
@@ -274,10 +278,21 @@ public class ProductionAuthService {
         if (isBlank(token)) {
             return Optional.empty();
         }
+        Instant now = Instant.now();
         return findActiveSessionByAccessToken(token)
-                .filter(session -> Instant.now().isBefore(session.accessExpiresAt()))
+                .filter(session -> now.isBefore(session.accessExpiresAt()))
                 .filter(session -> "active".equals(session.userStatus()))
+                // A locked or disabled credential immediately invalidates already-issued access tokens.
+                .filter(session -> credentialUsable(session, now))
                 .map(SessionWithUser::toActor);
+    }
+
+    private boolean credentialUsable(SessionWithUser session, Instant now) {
+        boolean statusUsable = "active".equals(session.credentialStatus())
+                || "locked".equals(session.credentialStatus());
+        boolean notCurrentlyLocked = session.credentialLockedUntil() == null
+                || !now.isBefore(session.credentialLockedUntil());
+        return statusUsable && notCurrentlyLocked;
     }
 
     private SessionRecord createSession(AccessActor actor, String deviceId, String terminalType, Instant now) {
@@ -347,30 +362,24 @@ public class ProductionAuthService {
     }
 
     private void registerFailedLogin(CredentialRecord credential, Instant now) {
-        int nextCount = credential.failedAttemptCount() + 1;
-        Instant lockedUntil = nextCount >= maxFailedAttempts ? now.plus(lockDuration) : null;
-        MapSqlParameterSource parameters = new MapSqlParameterSource()
-                .addValue("user_id", credential.userId())
-                .addValue("failed_attempt_count", nextCount)
-                .addValue("now", timestampWithTimeZone(now));
-        if (lockedUntil == null) {
-            jdbcTemplate.update("""
-                    UPDATE auth_credentials
-                       SET failed_attempt_count = :failed_attempt_count,
-                           updated_at = :now
-                     WHERE user_id = :user_id
-                    """, parameters);
-            return;
-        }
-
+        // Atomic increment-and-lock in a single statement: the SET expressions read the pre-update
+        // failed_attempt_count under the row lock, so concurrent failed logins cannot read the same
+        // baseline and undercount the way a read-modify-write would. Locking triggers exactly when the
+        // post-increment count reaches the threshold.
         jdbcTemplate.update("""
                 UPDATE auth_credentials
-                   SET failed_attempt_count = :failed_attempt_count,
-                       locked_until = :locked_until,
-                       status = 'locked',
+                   SET failed_attempt_count = failed_attempt_count + 1,
+                       locked_until = CASE WHEN failed_attempt_count + 1 >= :max_attempts
+                                           THEN :locked_until ELSE locked_until END,
+                       status = CASE WHEN failed_attempt_count + 1 >= :max_attempts
+                                     THEN 'locked' ELSE status END,
                        updated_at = :now
                  WHERE user_id = :user_id
-                """, parameters.addValue("locked_until", timestampWithTimeZone(lockedUntil)));
+                """, new MapSqlParameterSource()
+                .addValue("user_id", credential.userId())
+                .addValue("max_attempts", maxFailedAttempts)
+                .addValue("locked_until", timestampWithTimeZone(now.plus(lockDuration)))
+                .addValue("now", timestampWithTimeZone(now)));
     }
 
     private void resetFailedLogin(String userId, Instant now) {
@@ -429,9 +438,11 @@ public class ProductionAuthService {
         return findActiveSessionByTokenHash("""
                 SELECT s.id, s.user_id, s.access_token_hash, s.refresh_token_hash, s.device_id, s.terminal_type,
                        s.access_expires_at, s.refresh_expires_at,
-                       u.username, u.account_type, u.organization_id, u.merchant_id, u.status AS user_status
+                       u.username, u.account_type, u.organization_id, u.merchant_id, u.status AS user_status,
+                       c.status AS credential_status, c.locked_until AS credential_locked_until
                   FROM auth_sessions s
                   JOIN access_users u ON u.id = s.user_id
+                  JOIN auth_credentials c ON c.user_id = s.user_id
                  WHERE s.access_token_hash = :token_hash
                    AND s.status = 'active'
                 """, sha256Hex(accessToken));
@@ -441,9 +452,11 @@ public class ProductionAuthService {
         return findActiveSessionByTokenHash("""
                 SELECT s.id, s.user_id, s.access_token_hash, s.refresh_token_hash, s.device_id, s.terminal_type,
                        s.access_expires_at, s.refresh_expires_at,
-                       u.username, u.account_type, u.organization_id, u.merchant_id, u.status AS user_status
+                       u.username, u.account_type, u.organization_id, u.merchant_id, u.status AS user_status,
+                       c.status AS credential_status, c.locked_until AS credential_locked_until
                   FROM auth_sessions s
                   JOIN access_users u ON u.id = s.user_id
+                  JOIN auth_credentials c ON c.user_id = s.user_id
                  WHERE s.refresh_token_hash = :token_hash
                    AND s.status = 'active'
                 """, sha256Hex(refreshToken));
@@ -464,7 +477,9 @@ public class ProductionAuthService {
                     rs.getString("account_type"),
                     rs.getString("organization_id"),
                     rs.getString("merchant_id"),
-                    rs.getString("user_status")
+                    rs.getString("user_status"),
+                    rs.getString("credential_status"),
+                    instant(rs.getObject("credential_locked_until", OffsetDateTime.class))
             )));
         } catch (EmptyResultDataAccessException exception) {
             return Optional.empty();
@@ -523,9 +538,6 @@ public class ProductionAuthService {
         return value == null || value.isBlank();
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private Instant instant(OffsetDateTime value) {
         return value == null ? null : value.toInstant();
@@ -578,7 +590,9 @@ public class ProductionAuthService {
             String accountType,
             String organizationId,
             String merchantId,
-            String userStatus
+            String userStatus,
+            String credentialStatus,
+            Instant credentialLockedUntil
     ) {
         AccessActor toActor() {
             return new AccessActor(userId, username, accountType, organizationId, merchantId, userStatus);

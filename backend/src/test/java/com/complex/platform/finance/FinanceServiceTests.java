@@ -3,7 +3,10 @@ package com.complex.platform.finance;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
@@ -12,6 +15,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
@@ -26,25 +30,47 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.support.TestSecurityActors;
 
 class FinanceServiceTests {
 
     private InMemoryFinanceRepository financeRepository;
     private InMemoryAuditEventRepository auditEventRepository;
+    private AuthorizationService authorizationService;
     private FinanceService service;
 
     @BeforeEach
     void setUp() {
         financeRepository = new InMemoryFinanceRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        // Default: platform admin — no merchant filter, all writes permitted
+        authorizationService = mock(AuthorizationService.class);
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                auditEventService
+        );
         service = new FinanceService(
                 financeRepository,
-                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                operations,
+                auditEventService,
+                authorizationService
         );
     }
+
+    @AfterEach
+    void tearDown() {
+        TestSecurityActors.clear();
+    }
+
+    // ─── existing functional tests (preserved) ────────────────────────────────
 
     @Test
     void createReceivableItemComputesUnpaidAmountAndWritesFinanceArApCreated() {
@@ -147,39 +173,44 @@ class FinanceServiceTests {
 
     @Test
     void writeSideFinanceActionsEmitExactOpenApiAuditEvents() {
+        // Provide a real ar_ap_payment for the refund to reference (P1 fix requires existence check)
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-for-refund-audit", "receivable", 128800L));
+        ArApPaymentResponse paymentResp = service.registerArApPayment(item.id(), paymentRequest("pay-for-refund-audit", 128800L));
+        String paymentId = paymentResp.payment().id();
+
         service.createDailyClose(new DailyCloseRequest(
-                "daily-close",
+                "daily-close-audit",
                 "lock",
                 List.of(),
                 LocalDate.parse("2026-06-14"),
                 "project",
-                "project_1",
+                "project_audit_1",
                 false
         ));
         service.createPaymentIntent(new PaymentIntentRequest(
-                "payment-intent",
+                "payment-intent-audit",
                 "create",
                 List.of(),
                 "ticket_order",
-                "order_1",
+                "order_audit_1",
                 128800L,
                 "CNY",
                 "mock"
         ));
-        service.confirmOfflinePayment("payment_1", new OfflinePaymentConfirmRequest(
-                "offline-confirm",
+        service.confirmOfflinePayment("payment_intent_1", new OfflinePaymentConfirmRequest(
+                "offline-confirm-audit",
                 "confirm",
                 List.of("attachment_1"),
-                "payment_1",
+                "payment_intent_1",
                 128800L,
                 "cash",
                 Instant.parse("2026-06-14T00:05:00Z")
         ));
         service.createRefund(new RefundRequest(
-                "refund-create",
+                "refund-create-audit",
                 "refund",
                 List.of(),
-                "payment_1",
+                paymentId,
                 18800L,
                 "guest request",
                 "original_channel"
@@ -190,7 +221,7 @@ class FinanceServiceTests {
                 .contains(
                         "finance_daily_close.locked",
                         "payment.intent_created",
-                        "finance_payment.registered",
+                        "finance_offline_payment.confirmed",
                         "finance_refund.created"
                 );
     }
@@ -226,6 +257,276 @@ class FinanceServiceTests {
                 .contains("finance.reconciliation_batch.viewed", "finance_reconciliation.difference_found");
     }
 
+    @Test
+    void reconciliationReadsAreForbiddenForMerchantScopedCallers() {
+        financeRepository.saveReconciliationBatch(new ReconciliationBatchRecord(
+                "recon_batch_iso", "RB202606180001", "project", "project_1",
+                LocalDate.parse("2026-06-18"), "created", Instant.parse("2026-06-18T00:00:00Z")));
+
+        // Reconciliation has no merchant dimension; a merchant-scoped caller must not read cross-merchant data.
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
+
+        assertThatThrownBy(() -> service.listReconciliationBatches())
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("RECONCILIATION_PLATFORM_ONLY");
+        assertThatThrownBy(() -> service.listReconciliationDifferences())
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("RECONCILIATION_PLATFORM_ONLY");
+    }
+
+    // ─── P0 fix tests ─────────────────────────────────────────────────────────
+
+    @Test
+    void sameIdempotencyKeyOnDifferentItemsProducesDifferentPaymentIds() {
+        // Before fix: both calls would produce id = "arap_pay_<slug(key)>", causing
+        // the second to overwrite the first payment's ar_ap_item_id in the DB.
+        ArApItemRecord item1 = service.createArApItem(itemRequest("arap-coll-1", "receivable", 50000L));
+        ArApItemRecord item2 = service.createArApItem(itemRequest("arap-coll-2", "receivable", 50000L));
+
+        ArApPaymentResponse r1 = service.registerArApPayment(item1.id(), paymentRequest("same-key", 50000L));
+        // Use a different idempotency key so the idempotency guard doesn't block it.
+        // The critical invariant: same real-money key conceptually but scoped to different items.
+        ArApPaymentResponse r2 = service.registerArApPayment(item2.id(), paymentRequest("same-key-item2", 50000L));
+
+        assertThat(r1.payment().id()).isNotEqualTo(r2.payment().id());
+        assertThat(r1.payment().arApItemId()).isEqualTo(item1.id());
+        assertThat(r2.payment().arApItemId()).isEqualTo(item2.id());
+    }
+
+    @Test
+    void paymentIdIncludesArApItemIdToAvoidCrossItemCollision() {
+        ArApItemRecord item1 = service.createArApItem(itemRequest("arap-id-a", "receivable", 10000L));
+        ArApItemRecord item2 = service.createArApItem(itemRequest("arap-id-b", "receivable", 10000L));
+
+        ArApPaymentResponse r1 = service.registerArApPayment(item1.id(), paymentRequest("shared-key-x", 10000L));
+        ArApPaymentResponse r2 = service.registerArApPayment(item2.id(), paymentRequest("shared-key-x", 10000L));
+
+        // P0 fix: payment IDs incorporate the item ID so two items with the same idempotency
+        // key produce distinct payment records rather than colliding on the same primary key.
+        assertThat(r1.payment().id()).isNotEqualTo(r2.payment().id());
+    }
+
+    // ─── P1 refund validation tests ───────────────────────────────────────────
+
+    @Test
+    void refundTargetNotFoundReturnsNotFound() {
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-no-target",
+                "refund",
+                List.of(),
+                "nonexistent_payment_id",
+                1000L,
+                "test",
+                null
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("PAYMENT_NOT_FOUND");
+    }
+
+    @Test
+    void refundAmountExceedingOriginalPaymentIsRejected() {
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-refund-limit", "receivable", 50000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-refund-limit", 50000L));
+
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-too-much",
+                "refund",
+                List.of(),
+                payment.payment().id(),
+                50001L,
+                "overage",
+                null
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void cumulativeRefundsCannotExceedOriginalPaymentAmount() {
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-cumulative-refund", "receivable", 10000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-cumulative", 10000L));
+        String paymentId = payment.payment().id();
+
+        service.createRefund(new RefundRequest("refund-part1", "refund", List.of(), paymentId, 6000L, "partial", null));
+
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-part2",
+                "refund",
+                List.of(),
+                paymentId,
+                5000L,
+                "over cumulative",
+                null
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void validRefundWithinOriginalPaymentAmountSucceeds() {
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-valid-refund", "receivable", 30000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-valid", 30000L));
+
+        FinanceRefundRecord refund = service.createRefund(new RefundRequest(
+                "refund-valid",
+                "refund",
+                List.of(),
+                payment.payment().id(),
+                15000L,
+                "partial refund",
+                null
+        ));
+
+        assertThat(refund.refundAmountCent()).isEqualTo(15000L);
+        assertThat(refund.status()).isEqualTo("requested");
+    }
+
+    // ─── P1 DailyClose uniqueness tests ───────────────────────────────────────
+
+    @Test
+    void duplicateDailyCloseForSameScopeAndDateIsRejected() {
+        service.createDailyClose(new DailyCloseRequest(
+                "close-first",
+                "lock",
+                List.of(),
+                LocalDate.parse("2026-06-15"),
+                "project",
+                "proj_dup_test",
+                false
+        ));
+
+        assertThatThrownBy(() -> service.createDailyClose(new DailyCloseRequest(
+                "close-second-different-key",
+                "lock",
+                List.of(),
+                LocalDate.parse("2026-06-15"),
+                "project",
+                "proj_dup_test",
+                false
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DAILY_CLOSE_EXISTS");
+    }
+
+    @Test
+    void dailyCloseIdempotentRetryWithSameKeySucceeds() {
+        DailyCloseRequest request = new DailyCloseRequest(
+                "close-idempotent",
+                "lock",
+                List.of(),
+                LocalDate.parse("2026-06-16"),
+                "bar",
+                "bar_idem_test",
+                false
+        );
+
+        DailyCloseRecord first = service.createDailyClose(request);
+        DailyCloseRecord second = service.createDailyClose(request);
+
+        assertThat(second).isEqualTo(first);
+    }
+
+    // ─── P1 merchant scope isolation tests ───────────────────────────────────
+
+    @Test
+    void merchantUserSeesOnlyTheirOwnArApItems() {
+        // Set up merchant A scope to create item A
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
+        ArApItemRecord itemA = service.createArApItem(itemRequest("arap-merchant-a", "receivable", 10000L));
+        assertThat(itemA.merchantId()).isEqualTo("merchant_a");
+
+        // Set up merchant B scope to create item B
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_b"));
+        service.createArApItem(itemRequest("arap-merchant-b", "receivable", 20000L));
+
+        // Merchant A lists: should only see their item
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
+        PageResponse<ArApItemRecord> result = service.listArApItems();
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().get(0).merchantId()).isEqualTo("merchant_a");
+    }
+
+    @Test
+    void platformAdminSeesAllMerchantArApItems() {
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
+        service.createArApItem(itemRequest("arap-pa-a", "receivable", 10000L));
+
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_b"));
+        service.createArApItem(itemRequest("arap-pa-b", "receivable", 20000L));
+
+        // Platform admin: empty scope = see all
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        PageResponse<ArApItemRecord> result = service.listArApItems();
+        assertThat(result.items()).hasSize(2);
+    }
+
+    @Test
+    void merchantCannotRegisterPaymentAgainstAnotherMerchantItem() {
+        // Create item owned by merchant_a
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
+        ArApItemRecord itemA = service.createArApItem(itemRequest("arap-cross-pay", "receivable", 50000L));
+
+        // Merchant B tries to pay merchant A's item
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_b"));
+
+        assertThatThrownBy(() ->
+                service.registerArApPayment(itemA.id(), paymentRequest("pay-cross", 50000L))
+        )
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void merchantCannotRefundAnotherMerchantPayment() {
+        // Create item + payment for merchant_a
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
+        ArApItemRecord itemA = service.createArApItem(itemRequest("arap-cross-refund", "receivable", 50000L));
+        ArApPaymentResponse payment = service.registerArApPayment(itemA.id(), paymentRequest("pay-cross-ref", 50000L));
+
+        // Merchant B tries to refund merchant A's payment
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_b"));
+
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-cross",
+                "refund",
+                List.of(),
+                payment.payment().id(),
+                10000L,
+                "cross merchant refund attempt",
+                null
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void platformAdminCanPayAndRefundAnyMerchantItem() {
+        // Admin creates item (no merchant)
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-admin-pay", "receivable", 50000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-admin", 50000L));
+
+        FinanceRefundRecord refund = service.createRefund(new RefundRequest(
+                "refund-admin",
+                "refund",
+                List.of(),
+                payment.payment().id(),
+                20000L,
+                "admin refund",
+                null
+        ));
+
+        assertThat(refund.refundAmountCent()).isEqualTo(20000L);
+    }
+
+    // ─── helpers ─────────────────────────────────────────────────────────────
+
     private ArApItemRequest itemRequest(String idempotencyKey, String direction, long amountCent) {
         return new ArApItemRequest(
                 idempotencyKey,
@@ -252,6 +553,8 @@ class FinanceServiceTests {
                 "bank_flow_" + idempotencyKey
         );
     }
+
+    // ─── in-memory test doubles ───────────────────────────────────────────────
 
     private static final class InMemoryFinanceRepository implements FinanceRepository {
         private final Map<String, ArApItemRecord> arApItems = new LinkedHashMap<>();
@@ -284,7 +587,20 @@ class FinanceServiceTests {
         }
 
         @Override
+        public List<ArApItemRecord> listArApItemsByMerchant(String merchantId) {
+            return arApItems.values().stream()
+                    .filter(item -> merchantId.equals(item.merchantId()))
+                    .toList();
+        }
+
+        @Override
         public Optional<ArApItemRecord> findArApItemById(String id) {
+            return Optional.ofNullable(arApItems.get(id));
+        }
+
+        @Override
+        public Optional<ArApItemRecord> findArApItemByIdForUpdate(String id) {
+            // In-memory: same as findArApItemById (no real locking needed in unit tests)
             return Optional.ofNullable(arApItems.get(id));
         }
 
@@ -296,14 +612,36 @@ class FinanceServiceTests {
 
         @Override
         public ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment) {
-            arApPayments.put(payment.id(), payment);
-            return payment;
+            // Mirror DO NOTHING semantics: only insert if the ID is genuinely new.
+            arApPayments.putIfAbsent(payment.id(), payment);
+            return arApPayments.get(payment.id());
+        }
+
+        @Override
+        public Optional<ArApPaymentRecord> findArApPaymentById(String id) {
+            return Optional.ofNullable(arApPayments.get(id));
+        }
+
+        @Override
+        public long sumRefundedAmountByTargetId(String targetId) {
+            return refunds.values().stream()
+                    .filter(r -> targetId.equals(r.targetId()))
+                    .mapToLong(FinanceRefundRecord::refundAmountCent)
+                    .sum();
         }
 
         @Override
         public DailyCloseRecord saveDailyClose(DailyCloseRecord dailyClose) {
             dailyCloses.put(dailyClose.id(), dailyClose);
             return dailyClose;
+        }
+
+        @Override
+        public boolean dailyCloseExists(java.time.LocalDate businessDate, String scopeType, String scopeId) {
+            return dailyCloses.values().stream().anyMatch(dc ->
+                    businessDate.equals(dc.businessDate())
+                            && scopeType.equals(dc.scopeType())
+                            && scopeId.equals(dc.scopeId()));
         }
 
         @Override

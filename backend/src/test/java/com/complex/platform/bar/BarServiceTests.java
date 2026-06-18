@@ -3,7 +3,10 @@ package com.complex.platform.bar;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.Mockito.mock;
 
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
@@ -12,8 +15,10 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -23,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,20 +37,166 @@ class BarServiceTests {
     private InMemoryBarRepository barRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private CapturingBarReceivableLedgerService receivableLedgerService;
+    private AuthorizationService authorizationService;
     private BarService service;
 
     @BeforeEach
     void setUp() {
+        TestSecurityActors.asPlatformAdmin();
         barRepository = new InMemoryBarRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
         receivableLedgerService = new CapturingBarReceivableLedgerService();
+        authorizationService = new AuthorizationService(mock(AccessRepository.class));
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
+        BarEntryService entryService = new BarEntryService(barRepository, authorizationService);
         service = new BarService(
                 barRepository,
-                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository),
-                receivableLedgerService
+                new BarOperationExecutor(operations),
+                new BarBillingService(barRepository, receivableLedgerService, authorizationService),
+                new BarTableSessionService(barRepository, authorizationService),
+                new BarOrderService(barRepository, authorizationService),
+                entryService,
+                new BarAgeVerificationService(idempotencyService, auditEventService, entryService),
+                authorizationService
         );
     }
+
+    @AfterEach
+    void tearDown() {
+        TestSecurityActors.clear();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // P0-2: settleBill state guard and amount cap
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void settleBillRejectsAlreadySettledBillToPreventDoubleSettlement() {
+        BarBillRecord bill = billForOrder("already-settled", "staff_sales");
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-first", "first settlement", List.of(), "pay_1",
+                bill.payableAmountCent(), "aggregate_pay"
+        ));
+
+        assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-second", "duplicate settlement", List.of(), "pay_2",
+                bill.payableAmountCent(), "aggregate_pay"
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_BILL_ALREADY_SETTLED");
+    }
+
+    @Test
+    void settleBillRejectsAmountExceedingPayableToPreventOverpaymentManipulation() {
+        BarBillRecord bill = billForOrder("overpay-settle", "staff_sales");
+
+        assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-overpay", "overpay", List.of(), "pay_overpay",
+                bill.payableAmountCent() + 100_00L, "aggregate_pay"
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // P1-1: list interface tenant isolation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void listTablesReturnsOnlyCurrentMerchantRecordsWhenScopedToMerchant() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarTableRecord merchantATable = service.createTable(new BarTableRequest(
+                "table-isolation-a", "create", List.of(), "bar_1", "VIP A", "card_seat", 50000L, 2, "active"
+        ));
+
+        TestSecurityActors.asMerchantUser("merchant_b");
+        service.createTable(new BarTableRequest(
+                "table-isolation-b", "create", List.of(), "bar_1", "VIP B", "card_seat", 60000L, 2, "active"
+        ));
+
+        TestSecurityActors.asMerchantUser("merchant_a");
+        PageResponse<BarTableRecord> result = service.listTables();
+
+        assertThat(result.items())
+                .extracting(BarTableRecord::id)
+                .containsExactly(merchantATable.id());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // P1-2: by-ID writes verify resource ownership
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void settleBillRejectsCrossMerchantAccessWithForbiddenError() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarBillRecord bill = billForOrder("cross-merchant-settle", "staff_sales");
+
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-cross", "cross settle", List.of(), "pay_x", bill.payableAmountCent(), "aggregate_pay"
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void deliverOrderRejectsCrossMerchantAccessWithForbiddenError() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarReservationRecord reservation = createReservation("cross-merchant-deliver", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-cross-deliver", "create", List.of(), "bar_1", "Gin", "spirit", 8800L,
+                null, null, "active", null, null, false
+        ));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-cross-deliver", "create", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"
+        ));
+        String itemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-cross", "cross deliver", List.of(),
+                List.of(Map.of("order_item_id", itemId, "quantity", 1)), "staff_1", List.of()
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // P1-3: audit attribution comes from auth token, not request body
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void billAdjustmentRecordsAuthenticatedActorAsRequestedByUserIdIgnoringRequestBody() {
+        BarBillRecord bill = billForOrder("audit-actor", "staff_sales");
+
+        BarBillAdjustmentRecord adjustment = service.applyBillAdjustment(
+                bill.id(),
+                new BarBillAdjustmentRequest(
+                        "bill-audit-actor",
+                        "test audit actor",
+                        List.of(),
+                        "service_fee",
+                        5000L,
+                        "audit test",
+                        "injected_attacker_id"
+                )
+        );
+
+        assertThat(adjustment.requestedByUserId())
+                .as("requestedByUserId must come from the auth token, not the request body")
+                .isEqualTo("usr_admin");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Existing tests — preserved intact with updated assertions
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     void checkInConsumesOnlyReservationFreeGuestQuotaAndRejectsExhaustion() {
@@ -211,6 +363,273 @@ class BarServiceTests {
     }
 
     @Test
+    void deliveryRejectsAlreadyDeliveredOrderItemAndDoesNotDeductStockAgain() {
+        BarReservationRecord reservation = createReservation("reservation-stock-repeat", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-stock-repeat",
+                "create product",
+                List.of(),
+                "bar_1",
+                "Champagne",
+                "spirit",
+                188800L,
+                null,
+                null,
+                "active",
+                "inventory_champagne_repeat",
+                "bar_1",
+                true
+        ));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-repeat",
+                "inventory_champagne_repeat",
+                "bar_1",
+                5,
+                0,
+                5,
+                Instant.now()
+        ));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-stock-repeat",
+                "create order",
+                List.of(),
+                "bar_1",
+                reservation.tableId(),
+                reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)),
+                null,
+                List.of(),
+                "offline"
+        ));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-stock-repeat-1",
+                "deliver once",
+                List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)),
+                "staff_1",
+                List.of("att_delivery_1")
+        ));
+
+        assertThatThrownBy(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-stock-repeat-2",
+                "deliver twice",
+                List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)),
+                "staff_1",
+                List.of("att_delivery_2")
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_ITEM_ALREADY_DELIVERED");
+
+        assertThat(barRepository.findStockBalance("inventory_champagne_repeat", "bar_1"))
+                .get()
+                .extracting(StockBalanceSnapshot::quantity, StockBalanceSnapshot::availableQuantity)
+                .containsExactly(3, 3);
+        assertThat(barRepository.stockMovements).hasSize(1);
+        assertThat(barRepository.orderItems.get(orderItemId).deliveryStatus()).isEqualTo("delivered");
+    }
+
+    @Test
+    void deliveryRejectsOrderItemFromAnotherOrderAndKeepsBothOrdersPending() {
+        BarReservationRecord firstReservation = createReservation("reservation-scope-1", "bar_1", 2);
+        BarReservationRecord secondReservation = createReservation("reservation-scope-2", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-scope",
+                "create product",
+                List.of(),
+                "bar_1",
+                "Soda",
+                "soft_drink",
+                1800L,
+                null,
+                null,
+                "active",
+                null,
+                null,
+                false
+        ));
+        BarOrderRecord firstOrder = service.createOrder(new BarOrderRequest(
+                "order-scope-1",
+                "create first order",
+                List.of(),
+                "bar_1",
+                firstReservation.tableId(),
+                firstReservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)),
+                null,
+                List.of(),
+                "offline"
+        ));
+        BarOrderRecord secondOrder = service.createOrder(new BarOrderRequest(
+                "order-scope-2",
+                "create second order",
+                List.of(),
+                "bar_1",
+                secondReservation.tableId(),
+                secondReservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)),
+                null,
+                List.of(),
+                "offline"
+        ));
+        String secondOrderItemId = barRepository.listOrderItems(secondOrder.id()).getFirst().id();
+
+        assertThatThrownBy(() -> service.deliverOrder(firstOrder.id(), new BarOrderDeliveryRequest(
+                "deliver-scope-mismatch",
+                "deliver wrong item",
+                List.of(),
+                List.of(Map.of("order_item_id", secondOrderItemId, "quantity", 1)),
+                "staff_1",
+                List.of("att_delivery_scope")
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_ITEM_SCOPE_MISMATCH");
+
+        assertThat(barRepository.findOrderById(firstOrder.id()))
+                .get()
+                .extracting(BarOrderRecord::status)
+                .isEqualTo("created");
+        assertThat(barRepository.findOrderById(secondOrder.id()))
+                .get()
+                .extracting(BarOrderRecord::status)
+                .isEqualTo("created");
+        assertThat(barRepository.orderItems.values())
+                .extracting(BarOrderItemRecord::deliveryStatus)
+                .containsOnly("pending");
+    }
+
+    @Test
+    void deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement() {
+        BarReservationRecord reservation = createReservation("reservation-delivery-evidence", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-delivery-evidence",
+                "create product",
+                List.of(),
+                "bar_1",
+                "Champagne",
+                "spirit",
+                188800L,
+                null,
+                null,
+                "active",
+                "inventory_champagne_evidence",
+                "bar_1",
+                true
+        ));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-evidence",
+                "inventory_champagne_evidence",
+                "bar_1",
+                3,
+                0,
+                3,
+                Instant.now()
+        ));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-delivery-evidence",
+                "create order",
+                List.of(),
+                "bar_1",
+                reservation.tableId(),
+                reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)),
+                null,
+                List.of(),
+                "offline"
+        ));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-with-photo-evidence",
+                "deliver with photo evidence",
+                List.of("att_delivery_doc", "att_shared"),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 1)),
+                "staff_1",
+                List.of("att_delivery_photo", "att_shared")
+        ));
+
+        assertThat(barRepository.stockMovements).hasSize(1);
+        assertThat(barRepository.stockMovements.getFirst().evidenceAttachmentIds())
+                .containsExactly("att_delivery_doc", "att_shared", "att_delivery_photo");
+        assertThat(barRepository.productionTicketEvents)
+                .extracting(BarProductionTicketEventRecord::evidenceAttachmentIds)
+                .containsExactly(List.of("att_delivery_doc", "att_shared", "att_delivery_photo"));
+    }
+
+    @Test
+    void deliveryRejectsPartialQuantityAndKeepsOrderInventoryAndTicketPending() {
+        BarReservationRecord reservation = createReservation("reservation-partial-delivery", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-partial-delivery",
+                "create product",
+                List.of(),
+                "bar_1",
+                "Champagne",
+                "spirit",
+                188800L,
+                null,
+                null,
+                "active",
+                "inventory_champagne_partial",
+                "bar_1",
+                true
+        ));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-partial",
+                "inventory_champagne_partial",
+                "bar_1",
+                5,
+                0,
+                5,
+                Instant.now()
+        ));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-partial-delivery",
+                "create order",
+                List.of(),
+                "bar_1",
+                reservation.tableId(),
+                reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)),
+                null,
+                List.of(),
+                "offline"
+        ));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        assertThatThrownBy(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-partial-quantity",
+                "deliver partial quantity",
+                List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 1)),
+                "staff_1",
+                List.of("att_partial_delivery")
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_PARTIAL_DELIVERY_UNSUPPORTED");
+
+        assertThat(barRepository.findOrderById(order.id()))
+                .get()
+                .extracting(BarOrderRecord::status)
+                .isEqualTo("created");
+        assertThat(barRepository.orderItems.get(orderItemId).deliveryStatus()).isEqualTo("pending");
+        assertThat(barRepository.findStockBalance("inventory_champagne_partial", "bar_1"))
+                .get()
+                .extracting(StockBalanceSnapshot::quantity, StockBalanceSnapshot::availableQuantity)
+                .containsExactly(5, 5);
+        assertThat(barRepository.stockMovements).isEmpty();
+        assertThat(barRepository.findProductionTicketByOrderId(order.id()))
+                .get()
+                .extracting(BarProductionTicketRecord::ticketStatus)
+                .isEqualTo("created");
+    }
+
+    @Test
     void barBillPayIntentReusesFinancePaymentIntentSemantics() {
         BarBillRecord bill = billForOrder("pay-intent-order", "staff_sales");
 
@@ -307,6 +726,7 @@ class BarServiceTests {
         assertThat(accepted.ticketStatus()).isEqualTo("accepted");
         assertThat(preparing.ticketStatus()).isEqualTo("preparing");
         assertThat(ready.ticketStatus()).isEqualTo("ready");
+        // P1-3 fix: operatorUserId is now from auth token ("usr_admin"), not request body ("staff_bar_1")
         assertThat(service.listProductionTicketEvents("ticket_production_flow").items())
                 .extracting(
                         BarProductionTicketEventRecord::actionType,
@@ -316,13 +736,65 @@ class BarServiceTests {
                         BarProductionTicketEventRecord::operatorUserId
                 )
                 .containsExactly(
-                        tuple("mark_ready", "preparing", "ready", "bar-counter-1", "staff_bar_1"),
-                        tuple("start_prepare", "accepted", "preparing", "bar-counter-1", "staff_bar_1"),
-                        tuple("accept", "created", "accepted", "bar-counter-1", "staff_bar_1")
+                        tuple("mark_ready", "preparing", "ready", "bar-counter-1", "usr_admin"),
+                        tuple("start_prepare", "accepted", "preparing", "bar-counter-1", "usr_admin"),
+                        tuple("accept", "created", "accepted", "bar-counter-1", "usr_admin")
                 );
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("bar.production_ticket.transitioned");
+    }
+
+    @Test
+    void productionTicketExceptionTransitionUsesDbAllowedActionType() {
+        BarReservationRecord reservation = createReservation("reservation-production-exception", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-production-exception",
+                "create product",
+                List.of(),
+                "bar_1",
+                "Old Fashioned",
+                "cocktail",
+                9800L,
+                null,
+                null,
+                "active",
+                null,
+                null,
+                false
+        ));
+        service.createOrder(new BarOrderRequest(
+                "production-exception",
+                "create order",
+                List.of(),
+                "bar_1",
+                reservation.tableId(),
+                reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)),
+                null,
+                List.of(),
+                "offline"
+        ));
+
+        BarProductionTicketRecord exception = service.transitionProductionTicket(
+                "ticket_production_exception",
+                new BarProductionTicketTransitionRequest(
+                        "production-exception-mark",
+                        "spill incident",
+                        List.of(),
+                        "exception",
+                        "bar-counter-1",
+                        "staff_bar_1",
+                        null
+                )
+        );
+
+        assertThat(exception.ticketStatus()).isEqualTo("exception");
+        // action_type must be one of the values allowed by V029 chk_bar_production_ticket_event_action
+        // ('accept','start_prepare','mark_ready','cancel','exception','deliver') — NOT "mark_exception".
+        assertThat(service.listProductionTicketEvents("ticket_production_exception").items())
+                .extracting(BarProductionTicketEventRecord::actionType, BarProductionTicketEventRecord::toStatus)
+                .containsExactly(tuple("exception", "exception"));
     }
 
     @Test
@@ -427,6 +899,39 @@ class BarServiceTests {
         assertThat(barRepository.productionTicketEvents)
                 .extracting(BarProductionTicketEventRecord::actionType, BarProductionTicketEventRecord::toStatus)
                 .contains(tuple("deliver", "delivered"));
+    }
+
+    @Test
+    void partialSettlementKeepsOriginalPayableAndMarksPartialStatuses() {
+        BarBillRecord bill = billForOrder("partial-settle", "staff_sales");
+
+        BarBillRecord settled = service.settleBill(
+                bill.id(),
+                new BarBillSettleRequest(
+                        "partial-settle-once",
+                        "customer pays deposit first",
+                        List.of("att_partial_settle"),
+                        "pay_partial_1",
+                        40000L,
+                        "aggregate_pay"
+                )
+        );
+
+        assertThat(settled)
+                .extracting(
+                        BarBillRecord::payableAmountCent,
+                        BarBillRecord::paidAmountCent,
+                        BarBillRecord::paymentStatus,
+                        BarBillRecord::settlementStatus
+                )
+                .containsExactly(128800L, 40000L, "partial_paid", "partial_settled");
+        assertThat(barRepository.findBillById(bill.id()))
+                .get()
+                .extracting(BarBillRecord::payableAmountCent, BarBillRecord::paidAmountCent)
+                .containsExactly(128800L, 40000L);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("bar.bill.settled");
     }
 
     @Test
@@ -738,6 +1243,7 @@ class BarServiceTests {
                 bill.billNo(),
                 bill.orderId(),
                 bill.barId(),
+                bill.merchantId(),
                 bill.tableId(),
                 bill.reservationId(),
                 bill.subtotalAmountCent(),
@@ -777,6 +1283,7 @@ class BarServiceTests {
                 secondary.billNo(),
                 secondary.orderId(),
                 "bar_2",
+                secondary.merchantId(),
                 secondary.tableId(),
                 secondary.reservationId(),
                 secondary.subtotalAmountCent(),
@@ -1131,8 +1638,12 @@ class BarServiceTests {
         }
 
         @Override
-        public List<BarTableRecord> listTables() {
-            return new ArrayList<>(tables.values());
+        public List<BarTableRecord> listTables(Optional<String> merchantScope) {
+            List<BarTableRecord> all = new ArrayList<>(tables.values());
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
         }
 
         @Override
@@ -1147,8 +1658,12 @@ class BarServiceTests {
         }
 
         @Override
-        public List<BarReservationRecord> listReservations() {
-            return new ArrayList<>(reservations.values());
+        public List<BarReservationRecord> listReservations(Optional<String> merchantScope) {
+            List<BarReservationRecord> all = new ArrayList<>(reservations.values());
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
         }
 
         @Override
@@ -1181,8 +1696,12 @@ class BarServiceTests {
         }
 
         @Override
-        public List<BarProductRecord> listProducts() {
-            return new ArrayList<>(products.values());
+        public List<BarProductRecord> listProducts(Optional<String> merchantScope) {
+            List<BarProductRecord> all = new ArrayList<>(products.values());
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
         }
 
         @Override
@@ -1197,8 +1716,12 @@ class BarServiceTests {
         }
 
         @Override
-        public List<BarOrderRecord> listOrders() {
-            return new ArrayList<>(orders.values());
+        public List<BarOrderRecord> listOrders(Optional<String> merchantScope) {
+            List<BarOrderRecord> all = new ArrayList<>(orders.values());
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
         }
 
         @Override
@@ -1232,8 +1755,12 @@ class BarServiceTests {
         }
 
         @Override
-        public List<BarProductionTicketRecord> listProductionTickets() {
-            return List.copyOf(productionTickets);
+        public List<BarProductionTicketRecord> listProductionTickets(Optional<String> merchantScope) {
+            List<BarProductionTicketRecord> all = List.copyOf(productionTickets);
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
         }
 
         @Override
@@ -1319,8 +1846,12 @@ class BarServiceTests {
         }
 
         @Override
-        public List<BarTableSessionRecord> listTableSessions() {
-            return new ArrayList<>(tableSessions.values());
+        public List<BarTableSessionRecord> listTableSessions(Optional<String> merchantScope) {
+            List<BarTableSessionRecord> all = new ArrayList<>(tableSessions.values());
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
         }
 
         @Override
@@ -1344,6 +1875,25 @@ class BarServiceTests {
         @Override
         public Optional<StockBalanceSnapshot> findStockBalance(String itemId, String locationId) {
             return Optional.ofNullable(stockBalances.get(itemId + ":" + locationId));
+        }
+
+        @Override
+        public boolean atomicDecreaseStock(String itemId, String locationId, int quantity) {
+            String key = itemId + ":" + locationId;
+            StockBalanceSnapshot current = stockBalances.get(key);
+            if (current == null || current.availableQuantity() < quantity) {
+                return false;
+            }
+            stockBalances.put(key, new StockBalanceSnapshot(
+                    current.id(),
+                    current.itemId(),
+                    current.locationId(),
+                    current.quantity() - quantity,
+                    current.reservedQuantity(),
+                    current.availableQuantity() - quantity,
+                    Instant.now()
+            ));
+            return true;
         }
 
         @Override

@@ -1,5 +1,6 @@
 package com.complex.platform.merchantservice;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -13,36 +14,53 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MerchantServiceService {
 
+    private static final int DEFAULT_PAGE_LIMIT = 100;
     private static final String BUSINESS_TYPE = "merchant_service_work_order";
     private static final Set<String> TYPES = Set.of("repair", "complaint", "rectification", "service");
     private static final Set<String> PRIORITIES = Set.of("low", "medium", "high", "critical");
     private static final Set<String> ACTION_TARGET_STATUSES = Set.of("assigned", "processing", "pending_merchant", "resolved");
     private static final Set<String> TERMINAL_STATUSES = Set.of("closed", "cancelled");
 
+    // Allowed forward/lateral status transitions for addAction. Re-affirming the current status is a
+    // comment (always allowed) and handled separately. This forbids illegal skips (e.g. created->resolved)
+    // and regressions (e.g. resolved->assigned). Terminal states (closed/cancelled) are rejected earlier.
+    private static final Map<String, Set<String>> ALLOWED_ACTION_TRANSITIONS = Map.of(
+            "created", Set.of("assigned"),
+            "assigned", Set.of("processing", "pending_merchant", "resolved"),
+            "processing", Set.of("pending_merchant", "resolved"),
+            "pending_merchant", Set.of("processing", "resolved"),
+            "resolved", Set.of());
+
     private final MerchantServiceRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
 
     public MerchantServiceService(
             MerchantServiceRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<MerchantWorkOrderRecord> listWorkOrders() {
-        List<MerchantWorkOrderRecord> records = repository.findAllWorkOrders();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<MerchantWorkOrderRecord> records = repository.findWorkOrdersByScope(scope, DEFAULT_PAGE_LIMIT);
         auditEventService.recordSuccess(
                 "merchant_service.work_order.viewed",
                 "merchant.service_work_order.view",
@@ -52,12 +70,14 @@ public class MerchantServiceService {
                 null,
                 Map.of("count", records.size())
         );
-        return new PageResponse<>(records, 1, 50, records.size());
+        return new PageResponse<>(records, 1, DEFAULT_PAGE_LIMIT, records.size());
     }
 
+    @Transactional
     public MerchantWorkOrderRecord createWorkOrder(MerchantWorkOrderCreateRequest request) {
+        String operationId = "createMerchantWorkOrder:" + authorizationService.currentActor().id();
         return executeWrite(
-                "createMerchantWorkOrder",
+                operationId,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 "merchant_service.work_order.create_failed",
@@ -68,6 +88,7 @@ public class MerchantServiceService {
         );
     }
 
+    @Transactional
     public MerchantWorkOrderRecord assignWorkOrder(String id, MerchantWorkOrderAssignRequest request) {
         String workOrderId = requireText(id, "id");
         return executeWrite(
@@ -85,6 +106,7 @@ public class MerchantServiceService {
         );
     }
 
+    @Transactional
     public MerchantWorkOrderRecord addAction(String id, MerchantWorkOrderActionRequest request) {
         String workOrderId = requireText(id, "id");
         return executeWrite(
@@ -102,6 +124,7 @@ public class MerchantServiceService {
         );
     }
 
+    @Transactional
     public MerchantWorkOrderRecord closeWorkOrder(String id, MerchantWorkOrderCloseRequest request) {
         String workOrderId = requireText(id, "id");
         return executeWrite(
@@ -122,10 +145,15 @@ public class MerchantServiceService {
     private MerchantWorkOrderRecord createWorkOrderOnce(MerchantWorkOrderCreateRequest request) {
         String type = normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
         String priority = normalizeAllowed(request.priority(), "priority", PRIORITIES);
+        // Merchant scope from token; platform admin must supply merchant_id in request
+        String merchantId = authorizationService.currentMerchantScope()
+                .orElseGet(() -> requireText(request.merchantId(), "merchant_id"));
+        // Operator identity always comes from the authenticated principal
+        String reportedByUserId = authorizationService.currentActor().id();
         Instant now = Instant.now();
         MerchantWorkOrderRecord record = repository.saveWorkOrder(new MerchantWorkOrderRecord(
-                "mswo_" + slug(request.idempotencyKey()),
-                requireText(request.merchantId(), "merchant_id"),
+                "mswo_" + UUID.randomUUID().toString().replace("-", ""),
+                merchantId,
                 trimToNull(request.spaceId()),
                 trimToNull(request.contractId()),
                 type,
@@ -133,7 +161,7 @@ public class MerchantServiceService {
                 "created",
                 requireText(request.title(), "title"),
                 requireText(request.description(), "description"),
-                requireText(request.reportedByUserId(), "reported_by_user_id"),
+                reportedByUserId,
                 requireText(request.reportedChannel(), "reported_channel"),
                 null,
                 null,
@@ -150,7 +178,7 @@ public class MerchantServiceService {
                 "created",
                 null,
                 "created",
-                record.reportedByUserId(),
+                reportedByUserId,
                 defaultNote(request.operatorNote(), "created"),
                 record.evidenceAttachmentIds()
         ));
@@ -169,6 +197,9 @@ public class MerchantServiceService {
     private MerchantWorkOrderRecord assignWorkOrderOnce(String id, MerchantWorkOrderAssignRequest request) {
         MerchantWorkOrderRecord existing = findWorkOrder(id);
         rejectTerminal(existing);
+        if (!"created".equals(existing.status())) {
+            throw ApiException.conflict("INVALID_STATE", "can only assign a work order in created status");
+        }
         MerchantWorkOrderRecord assigned = repository.saveWorkOrder(existing.assign(
                 requireText(request.ownerDepartment(), "owner_department"),
                 requireText(request.ownerUserId(), "owner_user_id"),
@@ -179,7 +210,7 @@ public class MerchantServiceService {
                 "assigned",
                 existing.status(),
                 assigned.status(),
-                requireText(request.operatorUserId(), "operator_user_id"),
+                authorizationService.currentActor().id(),
                 requireText(request.operatorNote(), "operator_note"),
                 evidenceIds(request.evidenceAttachmentIds())
         ));
@@ -198,13 +229,14 @@ public class MerchantServiceService {
     private MerchantWorkOrderRecord addActionOnce(String id, MerchantWorkOrderActionRequest request) {
         MerchantWorkOrderRecord existing = findWorkOrder(id);
         rejectTerminal(existing);
-        String operatorUserId = requireText(request.operatorUserId(), "operator_user_id");
+        String operatorUserId = authorizationService.currentActor().id();
         String operatorNote = requireText(request.operatorNote(), "operator_note");
         String targetStatus = trimToNull(request.targetStatus());
         MerchantWorkOrderRecord saved = existing;
         String actionType = "commented";
         if (targetStatus != null) {
             targetStatus = normalizeAllowed(targetStatus, "target_status", ACTION_TARGET_STATUSES);
+            requireValidActionTransition(existing.status(), targetStatus);
             saved = repository.saveWorkOrder(existing.transitionTo(targetStatus, Instant.now()));
             actionType = existing.status().equals(targetStatus) ? "commented" : "status_changed";
         }
@@ -244,7 +276,7 @@ public class MerchantServiceService {
                 "closed",
                 existing.status(),
                 "closed",
-                requireText(request.operatorUserId(), "operator_user_id"),
+                authorizationService.currentActor().id(),
                 defaultNote(request.operatorNote(), "closed"),
                 evidenceIds(request.evidenceAttachmentIds())
         ));
@@ -266,7 +298,19 @@ public class MerchantServiceService {
     }
 
     private void ensureWorkOrderCanChange(String id) {
-        rejectTerminal(findWorkOrder(id));
+        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        rejectTerminal(existing);
+        checkMerchantOwnership(existing.merchantId());
+    }
+
+    private void checkMerchantOwnership(String recordMerchantId) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isEmpty()) {
+            return; // platform admin sees all merchants
+        }
+        if (!scope.get().equals(recordMerchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "access to another merchant's work order is forbidden");
+        }
     }
 
     private void validateCreateRequest(MerchantWorkOrderCreateRequest request) {
@@ -274,12 +318,10 @@ public class MerchantServiceService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
-        requireText(request.merchantId(), "merchant_id");
         normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
         normalizeAllowed(request.priority(), "priority", PRIORITIES);
         requireText(request.title(), "title");
         requireText(request.description(), "description");
-        requireText(request.reportedByUserId(), "reported_by_user_id");
         requireText(request.reportedChannel(), "reported_channel");
     }
 
@@ -290,7 +332,6 @@ public class MerchantServiceService {
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.ownerDepartment(), "owner_department");
         requireText(request.ownerUserId(), "owner_user_id");
-        requireText(request.operatorUserId(), "operator_user_id");
         requireText(request.operatorNote(), "operator_note");
     }
 
@@ -299,7 +340,6 @@ public class MerchantServiceService {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
-        requireText(request.operatorUserId(), "operator_user_id");
         requireText(request.operatorNote(), "operator_note");
         String targetStatus = trimToNull(request.targetStatus());
         if (targetStatus != null) {
@@ -313,7 +353,6 @@ public class MerchantServiceService {
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.resolution(), "resolution");
-        requireText(request.operatorUserId(), "operator_user_id");
         validateSatisfactionScore(request.satisfactionScore());
     }
 
@@ -378,6 +417,17 @@ public class MerchantServiceService {
         }
     }
 
+    private void requireValidActionTransition(String fromStatus, String toStatus) {
+        if (fromStatus.equals(toStatus)) {
+            return; // re-affirming the current status is a comment, not a transition
+        }
+        if (!ALLOWED_ACTION_TRANSITIONS.getOrDefault(fromStatus, Set.of()).contains(toStatus)) {
+            throw ApiException.conflict(
+                    "MERCHANT_WORK_ORDER_INVALID_TRANSITION",
+                    "cannot move work order from " + fromStatus + " to " + toStatus);
+        }
+    }
+
     private void validateSatisfactionScore(Integer score) {
         if (score != null && (score < 1 || score > 5)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "satisfaction_score must be between 1 and 5");
@@ -425,12 +475,6 @@ public class MerchantServiceService {
             }
         }
         return List.copyOf(cleaned);
-    }
-
-    private String slug(String value) {
-        String text = requireText(value, "idempotency_key").toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9_-]", "_");
-        return text.length() <= 48 ? text : text.substring(0, 48);
     }
 
     private String requestId() {

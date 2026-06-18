@@ -2,13 +2,16 @@ package com.complex.platform.ticketing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
@@ -43,10 +46,22 @@ class TicketingServiceTests {
     void setUp() {
         ticketingRepository = new InMemoryTicketingRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
+        TicketPricingService pricingService = new TicketPricingService(ticketingRepository);
+        TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository);
+        AuthorizationService authorizationService = new AuthorizationService(null);
         service = new TicketingService(
                 ticketingRepository,
-                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                new TicketCatalogService(ticketingRepository),
+                pricingService,
+                new TicketOrderService(ticketingRepository, pricingService, authorizationService),
+                new TicketRefundService(ticketingRepository),
+                verificationService,
+                new TicketCredentialService(verificationService, auditEventService),
+                new TicketOfflinePackageService(ticketingRepository, auditEventService),
+                new TicketingOperationExecutor(operations)
         );
     }
 
@@ -601,6 +616,32 @@ class TicketingServiceTests {
     }
 
     @Test
+    void approveTicketRefundRejectsAlreadyApprovedRefund() {
+        IssuedEntitlementRecord entitlement = issueOrderEntitlement("refund-reapprove");
+        TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
+
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "refund-reapprove-request",
+                "refund",
+                List.of(),
+                order.id(),
+                order.amountCent(),
+                "customer request",
+                "original"
+        ));
+        service.approveTicketRefund(refund.id(), new StatusChangeRequest(
+                "refund-reapprove-1", "approve", "approved", List.of()));
+
+        // A second approval (fresh idempotency key, so not an idempotent replay) must be rejected
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.approveTicketRefund(
+                        refund.id(),
+                        new StatusChangeRequest("refund-reapprove-2", "approve", "approved", List.of())))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code")
+                .isEqualTo("TICKET_REFUND_NOT_APPROVABLE");
+    }
+
+    @Test
     void refundRequestCreatesEntitlementLevelLinesAndApprovalMarksLinesApproved() {
         TicketTypeRecord ticketType = createTicketType("refund-lines-ticket");
         EntitlementTemplateRecord template = createTemplate("refund-lines-template", 1, 9900L);
@@ -732,9 +773,224 @@ class TicketingServiceTests {
                 )
                 .containsExactly(11900L, 2380L, 14280L, draft.id());
         assertThat(order.amountCent()).isEqualTo(11900L);
+        assertThat(order.dynamicPricingRuleId()).isNull();
+        assertThat(order.baseAmountCent()).isEqualTo(11900L);
+        assertThat(order.dynamicAdjustmentCent()).isZero();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("ticket_dynamic_pricing.changed", "ticket_dynamic_pricing.simulated", "ticket_order.created");
+    }
+
+    @Test
+    void publishedDynamicPricingRuleChangesFormalOrderAmount() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-order-applied");
+        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-order-applied-create",
+                "publish uplift",
+                List.of("att_dynamic_order"),
+                ticketType.id(),
+                "Published weekend uplift",
+                100,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "fixed_delta",
+                null,
+                2000L,
+                9900L,
+                16000L,
+                Map.of()
+        ));
+        TicketDynamicPricingRuleRecord published = service.publishDynamicPricingRule(
+                draft.id(),
+                new StatusChangeRequest("dynamic-order-applied-publish", "publish", "approved for order pricing", List.of())
+        );
+
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-order-applied-order",
+                "create order with published dynamic pricing",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_order"
+        ));
+
+        assertThat(published.status()).isEqualTo("published");
+        assertThat(order.amountCent()).isEqualTo(13900L);
+        assertThat(order.dynamicPricingRuleId()).isEqualTo(published.id());
+        assertThat(order.baseAmountCent()).isEqualTo(11900L);
+        assertThat(order.dynamicAdjustmentCent()).isEqualTo(2000L);
+    }
+
+    @Test
+    void publishedDynamicPricingRuleRequiresMatchingOrderContext() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-order-context");
+        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-order-context-create",
+                "conditional uplift",
+                List.of(),
+                ticketType.id(),
+                "Conditional weekend uplift",
+                100,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "percent_delta",
+                new BigDecimal("20.00"),
+                null,
+                9900L,
+                15000L,
+                Map.of("inventory_level", "low")
+        ));
+        TicketDynamicPricingRuleRecord published = service.publishDynamicPricingRule(
+                draft.id(),
+                new StatusChangeRequest("dynamic-order-context-publish", "publish", "approved for conditional order pricing", List.of())
+        );
+
+        TicketOrderRecord unmatched = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-order-context-unmatched",
+                "create without context",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_context"
+        ));
+        TicketOrderRecord matched = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-order-context-matched",
+                "create with context",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_context",
+                Map.of("inventory_level", "low")
+        ));
+
+        assertThat(unmatched.amountCent()).isEqualTo(11900L);
+        assertThat(unmatched.dynamicPricingRuleId()).isNull();
+        assertThat(matched.amountCent()).isEqualTo(14280L);
+        assertThat(matched.dynamicPricingRuleId()).isEqualTo(published.id());
+        assertThat(matched.baseAmountCent()).isEqualTo(11900L);
+        assertThat(matched.dynamicAdjustmentCent()).isEqualTo(2380L);
+    }
+
+    @Test
+    void dynamicPricingNeverProducesNegativeFinalPrice() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-non-negative");
+        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-non-negative-create",
+                "large discount",
+                List.of(),
+                ticketType.id(),
+                "Large discount",
+                100,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "fixed_delta",
+                null,
+                -20000L,
+                null,
+                null,
+                Map.of()
+        ));
+        service.publishDynamicPricingRule(
+                draft.id(),
+                new StatusChangeRequest("dynamic-non-negative-publish", "publish", "approved discount", List.of())
+        );
+
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-non-negative-order",
+                "create non negative order",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_non_negative"
+        ));
+
+        assertThat(order.amountCent()).isZero();
+        assertThat(order.baseAmountCent()).isEqualTo(11900L);
+        assertThat(order.dynamicAdjustmentCent()).isEqualTo(-11900L);
+    }
+
+    @Test
+    void publishedDynamicPricingUsesHighestPriorityMatchingRuleForFormalOrder() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-priority");
+        TicketDynamicPricingRuleRecord lowPriority = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-priority-low",
+                "low priority large uplift",
+                List.of(),
+                ticketType.id(),
+                "Low priority large uplift",
+                10,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "fixed_delta",
+                null,
+                5000L,
+                null,
+                null,
+                Map.of()
+        ));
+        TicketDynamicPricingRuleRecord highPriority = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-priority-high",
+                "high priority small uplift",
+                List.of(),
+                ticketType.id(),
+                "High priority small uplift",
+                100,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "fixed_delta",
+                null,
+                1000L,
+                null,
+                null,
+                Map.of()
+        ));
+        service.publishDynamicPricingRule(
+                lowPriority.id(),
+                new StatusChangeRequest("dynamic-priority-low-publish", "publish", "approved low priority", List.of())
+        );
+        TicketDynamicPricingRuleRecord publishedHigh = service.publishDynamicPricingRule(
+                highPriority.id(),
+                new StatusChangeRequest("dynamic-priority-high-publish", "publish", "approved high priority", List.of())
+        );
+
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-priority-order",
+                "create order with competing dynamic rules",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_priority"
+        ));
+
+        assertThat(order.amountCent()).isEqualTo(12900L);
+        assertThat(order.dynamicPricingRuleId()).isEqualTo(publishedHigh.id());
+        assertThat(order.baseAmountCent()).isEqualTo(11900L);
+        assertThat(order.dynamicAdjustmentCent()).isEqualTo(1000L);
     }
 
     @Test
@@ -776,6 +1032,166 @@ class TicketingServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("ticket_dynamic_pricing.published", "ticket_dynamic_pricing.simulated");
+    }
+
+    @Test
+    void verificationFailsWhenEntitlementIsExpired() {
+        TicketTypeRecord ticketType = createTicketType("expired-ticket");
+        EntitlementTemplateRecord template = createTemplate("expired-template", 2, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "expired-bind", "bind", List.of(), template.id(), 1, 2, 9900L, "default"
+        ));
+        IssuedTicketResponse issued = service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
+                "expired-issue", "issue", List.of(), "order_expired", "manual", List.of("qr")
+        ));
+        String code = issued.issuedEntitlements().getFirst().entitlementCode();
+        IssuedEntitlementRecord entitlement = ticketingRepository.findIssuedEntitlementByCode(code).orElseThrow();
+        // Manually expire the entitlement by overwriting with past validTo
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                entitlement.id(), entitlement.entitlementCode(), entitlement.ticketTypeId(),
+                entitlement.orderId(), entitlement.entitlementTemplateId(), entitlement.entitlementType(),
+                entitlement.merchantId(), entitlement.venueId(), entitlement.pointId(),
+                entitlement.totalTimes(), entitlement.usedTimes(), entitlement.valueAmountCent(),
+                entitlement.status(), entitlement.validFrom(),
+                Instant.now().minusSeconds(3600), // expired 1 hour ago
+                entitlement.createdAt(), entitlement.updatedAt()
+        ));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
+                        "expired-verify", "qr", code, "dev_1", "gate_1", Map.of()
+                )))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("entitlement has expired");
+
+        VerificationPreviewResponse preview = service.previewVerification(new VerificationRequest(
+                "expired-preview", "qr", code, "dev_1", "gate_1", Map.of()
+        ));
+        org.assertj.core.api.Assertions.assertThat(preview.allowed()).isFalse();
+    }
+
+    @Test
+    void atomicVerificationPreventsDoubleUseWhenRemainingTimesExhausted() {
+        TicketTypeRecord ticketType = createTicketType("atomic-ticket");
+        EntitlementTemplateRecord template = createTemplate("atomic-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "atomic-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+        ));
+        IssuedTicketResponse issued = service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
+                "atomic-issue", "issue", List.of(), "order_atomic", "manual", List.of("qr")
+        ));
+        String code = issued.issuedEntitlements().getFirst().entitlementCode();
+
+        service.createVerification(new VerificationRequest(
+                "atomic-first", "qr", code, "dev_1", "gate_1", Map.of()
+        ));
+
+        // Second call with different idempotency key should fail – entitlement is now exhausted
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
+                        "atomic-second-key", "qr", code, "dev_1", "gate_1", Map.of()
+                )))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("entitlement has no remaining times");
+
+        org.assertj.core.api.Assertions.assertThat(ticketingRepository.findIssuedEntitlementByCode(code))
+                .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(1);
+    }
+
+    @Test
+    void duplicateRefundRequestsCannotExceedOrderTotal() {
+        IssuedEntitlementRecord entitlement = issueOrderEntitlement("dup-refund");
+        TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
+
+        // First refund for full amount succeeds
+        service.requestTicketRefund(new TicketRefundRequest(
+                "dup-refund-1", "refund", List.of(), order.id(), order.amountCent(), "first", "original"
+        ));
+
+        // Second refund of any positive amount should fail (already reached order total)
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
+                        "dup-refund-2", "refund", List.of(), order.id(), 1L, "second", "original"
+                )))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("refund amount exceeds order amount");
+    }
+
+    @Test
+    void issueOrderRequiresPaymentForNonAdminChannel() {
+        TicketTypeRecord ticketType = createTicketType("payment-guard");
+        EntitlementTemplateRecord template = createTemplate("payment-guard-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "payment-guard-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+        ));
+
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "payment-guard-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "web", "13800138000", "customer_guard"
+        ));
+
+        org.assertj.core.api.Assertions.assertThat(order.payStatus()).isEqualTo("unpaid");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.issueTicketOrder(order.id(),
+                        new StatusChangeRequest("payment-guard-issue", "issue", "force issue", List.of())
+                ))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("order must be paid before issuing");
+    }
+
+    @Test
+    void issueOrderToctouLockPreventsDoubleIssuance() {
+        TicketTypeRecord ticketType = createTicketType("toctou-ticket");
+        EntitlementTemplateRecord template = createTemplate("toctou-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "toctou-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+        ));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "toctou-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_toctou"
+        ));
+
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "toctou-issue-once", "issue", "first issue", List.of()
+        ));
+
+        // tryLockOrderForIssuance must now return false (order is in 'issued' state)
+        org.assertj.core.api.Assertions.assertThat(
+                ticketingRepository.tryLockOrderForIssuance(order.id())
+        ).isFalse();
+        org.assertj.core.api.Assertions.assertThat(ticketingRepository.issuedEntitlements).hasSize(1);
+    }
+
+    @Test
+    void offlineEntitlementFilterExcludesOtherMerchantsWhenMerchantIdPopulated() {
+        TestSecurityActors.asMerchantUser("mch_filter_test");
+        try {
+            TicketTypeRecord ticketType = createTicketType("merchant-filter");
+            EntitlementTemplateRecord template = createTemplate("merchant-filter-template", 1, 9900L);
+            service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                    "merchant-filter-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+            ));
+            service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
+                    "merchant-filter-issue", "issue", List.of(), "order_mch_filter", "manual", List.of("qr")
+            ));
+
+            // Entitlement should have merchantId from the security context
+            List<IssuedEntitlementRecord> entitlements = ticketingRepository.listIssuedEntitlements().stream()
+                    .filter(e -> "order_mch_filter".equals(e.orderId()))
+                    .toList();
+            org.assertj.core.api.Assertions.assertThat(entitlements).hasSize(1);
+            org.assertj.core.api.Assertions.assertThat(entitlements.getFirst().merchantId()).isEqualTo("mch_filter_test");
+
+            // Same merchant can see its own entitlement
+            List<OfflineEntitlementResponse> visible = ticketingRepository.listOfflineEntitlements("mch_filter_test", null, 100);
+            org.assertj.core.api.Assertions.assertThat(visible)
+                    .extracting(OfflineEntitlementResponse::entitlementCode)
+                    .contains(entitlements.getFirst().entitlementCode());
+
+            // Different merchant cannot see it
+            List<OfflineEntitlementResponse> invisible = ticketingRepository.listOfflineEntitlements("mch_other", null, 100);
+            org.assertj.core.api.Assertions.assertThat(invisible)
+                    .extracting(OfflineEntitlementResponse::entitlementCode)
+                    .doesNotContain(entitlements.getFirst().entitlementCode());
+        } finally {
+            TestSecurityActors.clear();
+        }
     }
 
     private TicketTypeRecord createTicketType(String key) {
@@ -999,7 +1415,7 @@ class TicketingServiceTests {
                     .filter(entitlement -> merchantId == null || merchantId.equals(entitlement.merchantId()))
                     .filter(entitlement -> venueId == null || venueId.equals(entitlement.venueId()))
                     .limit(limit)
-                    .map(TicketingService::toOfflineEntitlementResponse)
+                    .map(TicketEntitlementMapper::toOfflineEntitlementResponse)
                     .toList();
         }
 
@@ -1137,6 +1553,42 @@ class TicketingServiceTests {
             return refundLines.values().stream()
                     .filter(line -> refundId.equals(line.refundId()))
                     .toList();
+        }
+
+        @Override
+        public long sumPendingRefundAmountByOrderId(String orderId) {
+            return refunds.values().stream()
+                    .filter(r -> orderId.equals(r.targetId()))
+                    .filter(r -> "requested".equals(r.status()) || "approved".equals(r.status()))
+                    .mapToLong(TicketRefundRecord::refundAmountCent)
+                    .sum();
+        }
+
+        @Override
+        public java.util.Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt) {
+            IssuedEntitlementRecord entitlement = issuedEntitlements.get(id);
+            if (entitlement == null || entitlement.remainingTimes() <= 0) {
+                return java.util.Optional.empty();
+            }
+            IssuedEntitlementRecord updated = entitlement.useOnce(updatedAt);
+            issuedEntitlements.put(id, updated);
+            return java.util.Optional.of(updated);
+        }
+
+        @Override
+        public boolean tryLockOrderForIssuance(String orderId) {
+            TicketOrderRecord order = ticketOrders.get(orderId);
+            if (order == null || !"not_issued".equals(order.issueStatus())) {
+                return false;
+            }
+            ticketOrders.put(orderId, new TicketOrderRecord(
+                    order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(),
+                    order.priceRuleId(), order.quantity(), order.visitDate(), order.salesChannel(),
+                    order.buyerPhone(), order.amountCent(), order.dynamicPricingRuleId(),
+                    order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
+                    order.payStatus(), "issuing", order.status(), order.createdAt(), order.updatedAt()
+            ));
+            return true;
         }
 
         @Override

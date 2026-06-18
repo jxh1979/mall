@@ -1,9 +1,11 @@
 package com.complex.platform.finance;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
@@ -15,6 +17,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -33,17 +36,20 @@ public class FinanceService {
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
 
     private final FinanceRepository repository;
-    private final IdempotencyService idempotencyService;
+    private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
 
     public FinanceService(
             FinanceRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditedOperationExecutor operations,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
-        this.idempotencyService = idempotencyService;
+        this.operations = operations;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<ArApItemRecord> listArApItems() {
@@ -52,7 +58,12 @@ public class FinanceService {
                 "finance_ar_ap.view_failed",
                 "finance.ar_ap.view",
                 "ar_ap_item",
-                repository::listArApItems
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.isPresent()
+                            ? repository.listArApItemsByMerchant(scope.get())
+                            : repository.listArApItems();
+                }
         );
     }
 
@@ -128,8 +139,8 @@ public class FinanceService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 OfflinePaymentConfirmationRecord.class,
-                "finance_payment.registered",
-                "finance_payment.register_failed",
+                "finance_offline_payment.confirmed",
+                "finance_offline_payment.confirm_failed",
                 "finance.payment.register",
                 "finance_offline_payment_confirmation",
                 () -> confirmOffline(pathPaymentId, request)
@@ -142,7 +153,10 @@ public class FinanceService {
                 "finance.reconciliation_batch.viewed_failed",
                 "finance.reconciliation.view",
                 "finance_reconciliation_batch",
-                repository::listReconciliationBatches
+                () -> {
+                    requirePlatformReconciliationAccess();
+                    return repository.listReconciliationBatches();
+                }
         );
     }
 
@@ -152,8 +166,24 @@ public class FinanceService {
                 "finance_reconciliation.view_failed",
                 "openplatform.reconcile.execute",
                 "finance_reconciliation_difference",
-                repository::listReconciliationDifferences
+                () -> {
+                    requirePlatformReconciliationAccess();
+                    return repository.listReconciliationDifferences();
+                }
         );
+    }
+
+    /**
+     * Reconciliation batches/differences are platform/channel-level finance artifacts with no merchant
+     * dimension in the data model. A merchant-scoped caller must not read them — otherwise it would see
+     * every merchant's reconciliation data. Platform admins (no merchant scope) may read.
+     */
+    private void requirePlatformReconciliationAccess() {
+        if (authorizationService.currentMerchantScope().isPresent()) {
+            throw ApiException.forbidden(
+                    "RECONCILIATION_PLATFORM_ONLY",
+                    "reconciliation data is platform-scoped and not available to merchant-scoped users");
+        }
     }
 
     @Transactional
@@ -180,6 +210,7 @@ public class FinanceService {
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
         String id = "arap_" + slug;
+        Optional<String> scope = authorizationService.currentMerchantScope();
         ArApItemRecord item = new ArApItemRecord(
                 id,
                 "ARAP" + now.toEpochMilli() + "-" + slug.substring(0, Math.min(12, slug.length())),
@@ -195,7 +226,8 @@ public class FinanceService {
                 trimToNull(actual.accountingPeriod()),
                 "receivable".equals(direction) ? "pending_collection" : "pending_payment",
                 now,
-                now
+                now,
+                scope.orElse(null)
         );
         ArApItemRecord saved = repository.saveArApItem(item);
         if (saved.sourceId() != null && saved.sourceType() != null) {
@@ -214,14 +246,23 @@ public class FinanceService {
     private ArApPaymentResponse registerPayment(String arApItemId, ArApPaymentRequest request) {
         ArApPaymentRequest actual = requireRequest(request);
         long amountCent = requirePositive(actual.amountCent(), "amount_cent");
-        ArApItemRecord current = repository.findArApItemById(arApItemId)
+
+        // P0 fix: SELECT FOR UPDATE prevents concurrent reads from both seeing unpaid > 0
+        // and both writing a payment, which would silently double-charge the ledger.
+        ArApItemRecord current = repository.findArApItemByIdForUpdate(arApItemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+
+        // P1 fix: reject cross-merchant writes
+        checkMerchantOwnership(current.merchantId());
+
         if (amountCent > current.unpaidAmountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "payment amount exceeds unpaid amount");
         }
         Instant now = Instant.now();
+        // P0 fix: include arApItemId in the slug so the same idempotency key used on two
+        // different items produces two different payment IDs, preventing ON CONFLICT overwrite.
         ArApPaymentRecord payment = repository.saveArApPayment(new ArApPaymentRecord(
-                "arap_pay_" + slug(actual.idempotencyKey()),
+                "arap_pay_" + slug(arApItemId + "_" + actual.idempotencyKey()),
                 current.id(),
                 amountCent,
                 requireText(actual.paymentMethod(), "payment_method"),
@@ -247,19 +288,29 @@ public class FinanceService {
                 current.accountingPeriod(),
                 status,
                 current.createdAt(),
-                now
+                now,
+                current.merchantId()
         ));
         return new ArApPaymentResponse(payment, updated);
     }
 
     private DailyCloseRecord lockDailyClose(DailyCloseRequest request) {
         DailyCloseRequest actual = requireRequest(request);
+        LocalDate businessDate = requireDate(actual.businessDate(), "business_date");
+        String scopeType = requireEnum(actual.scopeType(), DAILY_CLOSE_SCOPES, "scope_type");
+        String scopeId = requireText(actual.scopeId(), "scope_id");
+
+        // P1 fix: prevent duplicate locks for the same date + scope using different keys
+        if (repository.dailyCloseExists(businessDate, scopeType, scopeId)) {
+            throw ApiException.conflict("DAILY_CLOSE_EXISTS",
+                    "daily close already locked for date " + businessDate + " scope " + scopeType + "/" + scopeId);
+        }
         Instant now = Instant.now();
         return repository.saveDailyClose(new DailyCloseRecord(
                 "daily_close_" + slug(actual.idempotencyKey()),
-                requireDate(actual.businessDate(), "business_date"),
-                requireEnum(actual.scopeType(), DAILY_CLOSE_SCOPES, "scope_type"),
-                requireText(actual.scopeId(), "scope_id"),
+                businessDate,
+                scopeType,
+                scopeId,
                 actual.forceClose() != null && actual.forceClose(),
                 "locked",
                 now,
@@ -307,15 +358,43 @@ public class FinanceService {
 
     private FinanceRefundRecord refund(RefundRequest request) {
         RefundRequest actual = requireRequest(request);
+        String targetId = requireText(actual.targetId(), "target_id");
+        long refundAmountCent = requirePositive(actual.refundAmountCent(), "refund_amount_cent");
+
+        // P1 fix: validate target payment exists
+        ArApPaymentRecord payment = repository.findArApPaymentById(targetId)
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_NOT_FOUND", "payment not found: " + targetId));
+
+        // P1 fix: reject cross-merchant refund attempts
+        ArApItemRecord item = repository.findArApItemById(payment.arApItemId())
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+        checkMerchantOwnership(item.merchantId());
+
+        // P1 fix: prevent refunding more than the original payment (cumulative check)
+        long alreadyRefunded = repository.sumRefundedAmountByTargetId(targetId);
+        if (alreadyRefunded + refundAmountCent > payment.amountCent()) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "refund amount exceeds refundable balance (payment: " + payment.amountCent()
+                            + ", already refunded: " + alreadyRefunded + ")");
+        }
+
         return repository.saveRefund(new FinanceRefundRecord(
                 "refund_" + slug(actual.idempotencyKey()),
-                requireText(actual.targetId(), "target_id"),
-                requirePositive(actual.refundAmountCent(), "refund_amount_cent"),
+                targetId,
+                refundAmountCent,
                 requireText(actual.reason(), "reason"),
                 trimToDefault(actual.refundChannel(), "manual"),
                 "requested",
                 Instant.now()
         ));
+    }
+
+    private void checkMerchantOwnership(String resourceMerchantId) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    "access to another merchant's resource is not allowed");
+        }
     }
 
     private <T> PageResponse<T> readPage(
@@ -325,30 +404,10 @@ public class FinanceService {
             String businessType,
             Supplier<List<T>> action
     ) {
-        try {
-            List<T> items = action.get();
-            auditEventService.recordSuccess(
-                    successEvent,
-                    permissionCode,
-                    businessType,
-                    "all",
-                    null,
-                    null,
-                    Map.of("count", items.size())
-            );
-            return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    "all",
-                    null,
-                    null,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.readPage(
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action
+        );
     }
 
     private <T> T executeWrite(
@@ -362,38 +421,16 @@ public class FinanceService {
             String businessType,
             Supplier<T> action
     ) {
-        try {
-            return idempotencyService.execute(
-                    operationId,
-                    idempotencyKey,
-                    request,
-                    () -> {
-                        T saved = action.get();
-                        auditEventService.recordSuccess(
-                                successEvent,
-                                permissionCode,
-                                businessType,
-                                businessId(saved),
-                                null,
-                                idempotencyKey,
-                                Map.of()
-                        );
-                        return saved;
-                    },
-                    responseType
-            );
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    null,
-                    null,
-                    idempotencyKey,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.executeWrite(
+                operationId,
+                idempotencyKey,
+                request,
+                responseType,
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action,
+                this::businessId,
+                Map.of()
+        );
     }
 
     private <T> T requireRequest(T request) {
@@ -487,12 +524,5 @@ public class FinanceService {
             return record.id();
         }
         return null;
-    }
-
-    private String codeOf(RuntimeException exception) {
-        if (exception instanceof ApiException apiException) {
-            return apiException.code();
-        }
-        return exception.getClass().getSimpleName();
     }
 }

@@ -1,5 +1,6 @@
 package com.complex.platform.floorplan;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -16,6 +17,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -35,21 +37,27 @@ public class FloorPlanService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final FloorPlanImportParser importParser;
+    private final AuthorizationService authorizationService;
 
     public FloorPlanService(
             FloorPlanRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            FloorPlanImportParser importParser
+            FloorPlanImportParser importParser,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.importParser = importParser;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<FloorPlanRecord> listFloorPlans() {
-        List<FloorPlanRecord> records = repository.findAllFloorPlans();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<FloorPlanRecord> records = scope.isPresent()
+                ? repository.findAllFloorPlansByMerchant(scope.get())
+                : repository.findAllFloorPlans();
         auditEventService.recordSuccess(
                 "floor_plan.viewed",
                 "floor_plan.view",
@@ -201,8 +209,9 @@ public class FloorPlanService {
 
     private FloorPlanRecord createFloorPlanOnce(FloorPlanCreateRequest request) {
         Instant now = Instant.now();
+        Optional<String> scope = authorizationService.currentMerchantScope();
         FloorPlanRecord record = repository.saveFloorPlan(new FloorPlanRecord(
-                "fp_" + slug(request.idempotencyKey()),
+                "fp_" + UUID.randomUUID(),
                 trimToNull(request.projectId()),
                 trimToNull(request.buildingCode()),
                 requireText(request.floorNo(), "floor_no"),
@@ -213,7 +222,8 @@ public class FloorPlanService {
                 requireText(request.versionNo(), "version_no"),
                 normalizeAllowed(request.status(), "status", STATUSES),
                 now,
-                now
+                now,
+                scope.orElse(null)
         ));
         auditEventService.recordSuccess(
                 "floor_plan.created",
@@ -232,6 +242,9 @@ public class FloorPlanService {
         FloorPlanShapeRecord existing = requestedShapeId == null
                 ? null
                 : repository.findShapeById(requestedShapeId).orElse(null);
+        if (existing != null && !existing.floorPlanId().equals(floorPlanId)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "shape does not belong to this floor plan");
+        }
         Instant now = Instant.now();
         FloorPlanShapeRecord record = repository.saveShape(new FloorPlanShapeRecord(
                 requestedShapeId == null ? "fps_" + slug(request.idempotencyKey()) : requestedShapeId,
@@ -523,9 +536,18 @@ public class FloorPlanService {
         }
     }
 
-    private void ensureFloorPlanExists(String id) {
-        repository.findFloorPlanById(id)
+    private FloorPlanRecord ensureFloorPlanExists(String id) {
+        FloorPlanRecord fp = repository.findFloorPlanById(id)
                 .orElseThrow(() -> ApiException.notFound("FLOOR_PLAN_NOT_FOUND", "floor plan not found"));
+        checkMerchantOwnership(fp.merchantId());
+        return fp;
+    }
+
+    private void checkMerchantOwnership(String resourceMerchantId) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "floor plan belongs to a different merchant");
+        }
     }
 
     private FloorPlanImportTaskRecord ensureImportTaskBelongsToFloorPlan(String floorPlanId, String importTaskId) {

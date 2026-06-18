@@ -1,5 +1,6 @@
 package com.complex.platform.amusement;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.dto.AmusementIncidentActionRequest;
 import com.complex.platform.amusement.dto.AmusementIncidentCloseRequest;
 import com.complex.platform.amusement.dto.AmusementIncidentCreateRequest;
@@ -9,15 +10,19 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AmusementSafetyService {
@@ -31,19 +36,25 @@ public class AmusementSafetyService {
     private final AmusementSafetyRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
 
     public AmusementSafetyService(
             AmusementSafetyRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<AmusementSafetyNoticeRecord> listSafetyNotices() {
-        List<AmusementSafetyNoticeRecord> records = repository.findAllSafetyNotices();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<AmusementSafetyNoticeRecord> records = scope.isPresent()
+                ? repository.findSafetyNoticesByMerchant(scope.get())
+                : repository.findAllSafetyNotices();
         auditEventService.recordSuccess(
                 "amusement.safety_notice.viewed",
                 "amusement.safety_notice.view",
@@ -56,6 +67,7 @@ public class AmusementSafetyService {
         return new PageResponse<>(records, 1, 50, records.size());
     }
 
+    @Transactional
     public AmusementSafetyNoticeRecord createSafetyNotice(AmusementSafetyNoticeCreateRequest request) {
         return executeNoticeWrite(
                 "createAmusementSafetyNotice",
@@ -69,6 +81,7 @@ public class AmusementSafetyService {
         );
     }
 
+    @Transactional
     public AmusementWaiverAcknowledgementRecord acknowledgeWaiver(
             String noticeId,
             AmusementWaiverAcknowledgementRequest request
@@ -90,7 +103,10 @@ public class AmusementSafetyService {
     }
 
     public PageResponse<AmusementIncidentRecord> listIncidents() {
-        List<AmusementIncidentRecord> records = repository.findAllIncidents();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<AmusementIncidentRecord> records = scope.isPresent()
+                ? repository.findIncidentsByMerchant(scope.get())
+                : repository.findAllIncidents();
         auditEventService.recordSuccess(
                 "amusement.incident.viewed",
                 "amusement.incident.view",
@@ -103,6 +119,7 @@ public class AmusementSafetyService {
         return new PageResponse<>(records, 1, 50, records.size());
     }
 
+    @Transactional
     public AmusementIncidentRecord createIncident(AmusementIncidentCreateRequest request) {
         return executeIncidentWrite(
                 "createAmusementIncident",
@@ -116,6 +133,7 @@ public class AmusementSafetyService {
         );
     }
 
+    @Transactional
     public AmusementIncidentRecord addIncidentAction(String incidentId, AmusementIncidentActionRequest request) {
         String id = requireText(incidentId, "incident_id");
         return executeIncidentWrite(
@@ -133,6 +151,7 @@ public class AmusementSafetyService {
         );
     }
 
+    @Transactional
     public AmusementIncidentRecord closeIncident(String incidentId, AmusementIncidentCloseRequest request) {
         String id = requireText(incidentId, "incident_id");
         return executeIncidentWrite(
@@ -166,7 +185,8 @@ public class AmusementSafetyService {
                 requireText(request.operatorUserId(), "operator_user_id"),
                 evidenceIds(request.evidenceAttachmentIds()),
                 now,
-                now
+                now,
+                authorizationService.currentMerchantScope().orElse(null)
         ));
         auditEventService.recordSuccess(
                 "amusement.safety_notice.created",
@@ -236,7 +256,8 @@ public class AmusementSafetyService {
                 null,
                 evidenceIds(request.evidenceAttachmentIds()),
                 now,
-                now
+                now,
+                authorizationService.currentMerchantScope().orElse(null)
         ));
         repository.saveIncidentAction(action(
                 record.id(),
@@ -261,6 +282,7 @@ public class AmusementSafetyService {
 
     private AmusementIncidentRecord addIncidentActionOnce(String incidentId, AmusementIncidentActionRequest request) {
         AmusementIncidentRecord existing = findIncident(incidentId);
+        checkIncidentOwnership(existing);
         rejectClosed(existing);
         String targetStatus = normalizeAllowed(request.targetStatus(), "target_status", ACTION_TARGET_STATUSES);
         AmusementIncidentRecord saved = repository.saveIncident(existing.transitionTo(targetStatus, Instant.now()));
@@ -287,6 +309,7 @@ public class AmusementSafetyService {
 
     private AmusementIncidentRecord closeIncidentOnce(String incidentId, AmusementIncidentCloseRequest request) {
         AmusementIncidentRecord existing = findIncident(incidentId);
+        checkIncidentOwnership(existing);
         rejectClosed(existing);
         AmusementIncidentRecord closed = repository.saveIncident(existing.close(
                 requireText(request.resolution(), "resolution"),
@@ -319,8 +342,14 @@ public class AmusementSafetyService {
     }
 
     private void ensureNoticeExists(String id) {
-        repository.findSafetyNoticeById(id)
+        AmusementSafetyNoticeRecord notice = repository.findSafetyNoticeById(id)
                 .orElseThrow(() -> ApiException.notFound("SAFETY_NOTICE_NOT_FOUND", "safety notice not found"));
+        authorizationService.currentMerchantScope().ifPresent(merchantId -> {
+            if (!merchantId.equals(notice.merchantId())) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "safety notice does not belong to your merchant");
+            }
+        });
     }
 
     private void validateNoticeRequest(AmusementSafetyNoticeCreateRequest request) {
@@ -499,6 +528,14 @@ public class AmusementSafetyService {
         }
     }
 
+    private void checkIncidentOwnership(AmusementIncidentRecord incident) {
+        authorizationService.currentMerchantScope().ifPresent(merchantId -> {
+            if (!merchantId.equals(incident.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "incident does not belong to your merchant");
+            }
+        });
+    }
+
     private String normalizeAllowed(String value, String field, Set<String> allowed) {
         String normalized = requireText(value, field).toLowerCase(Locale.ROOT);
         if (!allowed.contains(normalized)) {
@@ -543,8 +580,20 @@ public class AmusementSafetyService {
     }
 
     private String slug(String value) {
-        return requireText(value, "idempotency_key").toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9_-]", "_");
+        String source = requireText(value, "idempotency_key");
+        UUID uuid = UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8));
+        return HexFormat.of().formatHex(asBytes(uuid)).substring(0, 24);
+    }
+
+    private byte[] asBytes(UUID uuid) {
+        byte[] bytes = new byte[16];
+        long most = uuid.getMostSignificantBits();
+        long least = uuid.getLeastSignificantBits();
+        for (int index = 0; index < 8; index++) {
+            bytes[index] = (byte) (most >>> (8 * (7 - index)));
+            bytes[index + 8] = (byte) (least >>> (8 * (7 - index)));
+        }
+        return bytes;
     }
 
     private String requestId() {

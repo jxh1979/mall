@@ -24,6 +24,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -55,10 +56,13 @@ class AnalyticsServiceTests {
         auditEventRepository = new InMemoryAuditEventRepository();
         localLlmClient = new CapturingLocalLlmClient();
         seedReadModels();
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(
+                new IdempotencyService(idempotencyRepository, new ObjectMapper()),
+                new AuditEventService(auditEventRepository)
+        );
         service = new AnalyticsService(
                 analyticsRepository,
-                new IdempotencyService(idempotencyRepository, new ObjectMapper()),
-                new AuditEventService(auditEventRepository),
+                operations,
                 FIXED_CLOCK,
                 localLlmClient
         );
@@ -264,6 +268,33 @@ class AnalyticsServiceTests {
         assertThat(response.result().riskLevel()).isEqualTo("suspicious");
         assertThat(analyticsRepository.aiQualityTaskSaveCount).isEqualTo(1);
         assertThat(analyticsRepository.aiQualityResultSaveCount).isEqualTo(1);
+    }
+
+    @Test
+    void localLlmSuggestionRedactsInternationalPhonesIbanSecretsAndLongTokens() {
+        localLlmClient.nextSuggestion = LocalLlmSuggestion.completed(
+                "local_llm", "gemma-local", 80, "normal", new BigDecimal("0.10"), "ok", 0);
+
+        AiQualitySuggestionResponse response = service.generateLocalLlmAiQualitySuggestion(new AiQualitySuggestionRequest(
+                "llm-intl-redact",
+                "ticket_call",
+                "call_intl",
+                "intl +14155552671 iban GB82WEST12345698765432 aws AKIAIOSFODNN7EXAMPLE "
+                        + "key sk-live_abcdefghijklmnop token deadbeefdeadbeefdeadbeefdeadbeef12345678 ssn 123-45-6789",
+                "staff_1"
+        ));
+
+        assertThat(response.redactionApplied()).isTrue();
+        assertThat(localLlmClient.lastSourceText)
+                .doesNotContain("+14155552671")
+                .doesNotContain("GB82WEST12345698765432")
+                .doesNotContain("AKIAIOSFODNN7EXAMPLE")
+                .doesNotContain("sk-live_abcdefghijklmnop")
+                .doesNotContain("deadbeefdeadbeefdeadbeefdeadbeef12345678")
+                .doesNotContain("123-45-6789")
+                .contains("[PHONE_REDACTED]")
+                .contains("[SECRET_REDACTED]")
+                .contains("[ID_REDACTED]");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("analytics.ai_quality.local_llm_suggestion.created");

@@ -32,7 +32,7 @@ class FloorPlanJdbcIntegrationTests {
         assertThat(regclass("floor_plan_import_tasks")).isEqualTo("floor_plan_import_tasks");
         assertThat(regclass("floor_plan_import_candidates")).isEqualTo("floor_plan_import_candidates");
         assertThat(regclass("floor_plan_import_errors")).isEqualTo("floor_plan_import_errors");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
 
         assertThat(permissionCodes()).contains(
                 "floor_plan.view",
@@ -63,7 +63,8 @@ class FloorPlanJdbcIntegrationTests {
                 "v1",
                 "active",
                 now,
-                now
+                now,
+                null
         ));
         repository.saveShape(new FloorPlanShapeRecord(
                 "fps_jdbc",
@@ -118,7 +119,8 @@ class FloorPlanJdbcIntegrationTests {
                 "v1",
                 "active",
                 now,
-                now
+                now,
+                null
         ));
         repository.saveImportTask(new FloorPlanImportTaskRecord(
                 "fpi_jdbc",

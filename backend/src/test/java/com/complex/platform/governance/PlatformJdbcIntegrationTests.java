@@ -50,7 +50,10 @@ class PlatformJdbcIntegrationTests {
                 "entity.binding.manage",
                 "merchant.profile.manage",
                 "governance.project.manage",
-                "governance.space.manage"
+                "governance.space.manage",
+                "governance.supervisor_review.view",
+                "governance.supervisor_review.manage",
+                "governance.supervisor_review.approve"
         );
     }
 
@@ -101,6 +104,13 @@ class PlatformJdbcIntegrationTests {
                 "be_settlement",
                 "Jane Contact",
                 "18800000011",
+                "1F-A",
+                new BigDecimal("128.50"),
+                new BigDecimal("120.00"),
+                "Jack Contact",
+                "18800000013",
+                new BigDecimal("12.30"),
+                "fixed_rent_plus_commission",
                 "draft",
                 createdAt,
                 createdAt
@@ -115,6 +125,13 @@ class PlatformJdbcIntegrationTests {
                 "be_settlement",
                 "Jane Contact",
                 "18800000012",
+                "1F-B",
+                new BigDecimal("188.00"),
+                new BigDecimal("170.00"),
+                "Jill Contact",
+                "18800000014",
+                new BigDecimal("15.80"),
+                "revenue_share",
                 "active",
                 createdAt,
                 Instant.parse("2026-06-14T03:00:00Z")
@@ -128,6 +145,13 @@ class PlatformJdbcIntegrationTests {
                         MerchantRecord::merchantType,
                         MerchantRecord::businessEntityId,
                         MerchantRecord::contactPhone,
+                        MerchantRecord::mallBlockCode,
+                        MerchantRecord::areaSquareMeter,
+                        MerchantRecord::leasedAreaSquareMeter,
+                        MerchantRecord::secondaryContactName,
+                        MerchantRecord::secondaryContactPhone,
+                        MerchantRecord::rentPerSquareMeter,
+                        MerchantRecord::cooperationForm,
                         MerchantRecord::status
                 )
                 .contains(tuple(
@@ -136,6 +160,13 @@ class PlatformJdbcIntegrationTests {
                         "retail",
                         "be_jdbc_formal",
                         "18800000012",
+                        "1F-B",
+                        new BigDecimal("188.00"),
+                        new BigDecimal("170.00"),
+                        "Jill Contact",
+                        "18800000014",
+                        new BigDecimal("15.80"),
+                        "revenue_share",
                         "active"
                 ));
     }
@@ -197,7 +228,7 @@ class PlatformJdbcIntegrationTests {
     void residualMigrationCreatesBindingContractTablesAndSeedsPermissions() {
         assertThat(regclass("business_entity_bindings")).isEqualTo("business_entity_bindings");
         assertThat(regclass("contracts")).isEqualTo("contracts");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
         assertThat(permissionCodes()).contains(
                 "contract.view",
                 "contract.draft.manage",

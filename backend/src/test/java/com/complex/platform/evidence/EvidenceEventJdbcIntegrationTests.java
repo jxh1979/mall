@@ -58,7 +58,8 @@ class EvidenceEventJdbcIntegrationTests {
                         "login",
                         Map.of("mode", "online"),
                         occurred,
-                        occurred.plusSeconds(1)
+                        occurred.plusSeconds(1),
+                        null
                 ),
                 new EvidenceEventRecord(
                         "evt_new",
@@ -70,17 +71,18 @@ class EvidenceEventJdbcIntegrationTests {
                         "verification",
                         Map.of("verification_no", "V1"),
                         occurred.plusSeconds(2),
-                        occurred.plusSeconds(3)
+                        occurred.plusSeconds(3),
+                        null
                 )
         ));
 
-        assertThat(repository.listLatest(2))
+        assertThat(repository.listLatest(2, null))
                 .extracting(EvidenceEventRecord::id, EvidenceEventRecord::eventType)
                 .containsExactly(
                         tuple("evt_new", "terminal.verification.online"),
                         tuple("evt_old", "terminal.login")
                 );
-        assertThat(repository.listLatest(1))
+        assertThat(repository.listLatest(1, null))
                 .singleElement()
                 .satisfies(event -> assertThat(event.payload()).containsEntry("verification_no", "V1"));
     }
@@ -98,7 +100,8 @@ class EvidenceEventJdbcIntegrationTests {
                 "exception evidence",
                 Map.of("business_type", "contract", "business_id", "ctr_jdbc"),
                 now,
-                now.plusSeconds(1)
+                now.plusSeconds(1),
+                null
         )));
         repository.saveAttachment(new EvidenceAttachmentRecord(
                 "att_jdbc",
@@ -111,9 +114,10 @@ class EvidenceEventJdbcIntegrationTests {
                 "evidence/contracts/ctr_jdbc.pdf",
                 "https://object-storage.local/upload/att_jdbc",
                 "uploaded",
-                "sha256:jdbc",
+                "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                 now,
-                now.plusSeconds(2)
+                now.plusSeconds(2),
+                null
         ));
         repository.saveReview(new EvidenceReviewRecord(
                 "rev_jdbc",
@@ -125,16 +129,17 @@ class EvidenceEventJdbcIntegrationTests {
                 List.of("att_jdbc"),
                 "created",
                 now.plusSeconds(3),
-                now.plusSeconds(3)
+                now.plusSeconds(3),
+                null
         ));
 
         assertThat(repository.findAttachmentById("att_jdbc"))
                 .get()
                 .satisfies(attachment -> {
                     assertThat(attachment.status()).isEqualTo("uploaded");
-                    assertThat(attachment.checksum()).isEqualTo("sha256:jdbc");
+                    assertThat(attachment.checksum()).isEqualTo("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
                 });
-        assertThat(repository.listTimeline("contract", "ctr_jdbc"))
+        assertThat(repository.listTimeline("contract", "ctr_jdbc", null))
                 .extracting(EvidenceTimelineItem::itemType)
                 .contains("evidence_event", "attachment", "review");
     }

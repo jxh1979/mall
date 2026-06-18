@@ -1,5 +1,6 @@
 package com.complex.platform.merchantbilling;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -14,10 +15,13 @@ import com.complex.platform.merchantbilling.dto.MerchantBillLineRequest;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -40,21 +44,27 @@ public class MerchantBillingService {
     private final FinanceRepository financeRepository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
 
     public MerchantBillingService(
             MerchantBillingRepository repository,
             FinanceRepository financeRepository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.financeRepository = financeRepository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<MerchantBillRecord> listBills() {
-        List<MerchantBillRecord> records = repository.findAllBills();
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        List<MerchantBillRecord> records = scope.isPresent()
+                ? repository.findBillsByMerchantId(scope.get())
+                : repository.findAllBills();
         auditEventService.recordSuccess(
                 "merchant_billing.bill.viewed",
                 "merchant.billing.view",
@@ -69,8 +79,9 @@ public class MerchantBillingService {
 
     @Transactional
     public MerchantBillRecord createBill(MerchantBillCreateRequest request) {
+        String merchantId = request != null && request.merchantId() != null ? request.merchantId().trim() : "";
         return executeWrite(
-                "createMerchantBill",
+                "createMerchantBill:" + merchantId,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 MerchantBillRecord.class,
@@ -296,11 +307,15 @@ public class MerchantBillingService {
             throw ApiException.badRequest("VALIDATION_FAILED", "lines are required");
         }
         long sum = 0L;
+        Set<String> seenFeeTypes = new HashSet<>();
         for (MerchantBillLineRequest line : lines) {
             if (line == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "line is required");
             }
-            normalizeAllowed(line.feeType(), "fee_type", FEE_TYPES);
+            String feeType = normalizeAllowed(line.feeType(), "fee_type", FEE_TYPES);
+            if (!seenFeeTypes.add(feeType)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "duplicate fee_type: " + feeType);
+            }
             requireText(line.description(), "description");
             sum += requirePositive(line.amountCent(), "line.amount_cent");
         }
@@ -324,17 +339,21 @@ public class MerchantBillingService {
     private List<MerchantBillLineRecord> buildLines(MerchantBillCreateRequest request) {
         Instant now = Instant.now();
         String billId = "mbill_" + slug(request.idempotencyKey());
-        return request.lines().stream()
-                .map(line -> new MerchantBillLineRecord(
-                        "mbill_line_" + slug(request.idempotencyKey()) + "_" + normalizeAllowed(line.feeType(), "fee_type", FEE_TYPES),
-                        billId,
-                        normalizeAllowed(line.feeType(), "fee_type", FEE_TYPES),
-                        requireText(line.description(), "description"),
-                        requirePositive(line.amountCent(), "line.amount_cent"),
-                        CURRENCY_CNY,
-                        now
-                ))
-                .toList();
+        List<MerchantBillLineRequest> lineRequests = request.lines();
+        List<MerchantBillLineRecord> result = new ArrayList<>();
+        for (int i = 0; i < lineRequests.size(); i++) {
+            MerchantBillLineRequest line = lineRequests.get(i);
+            result.add(new MerchantBillLineRecord(
+                    "mbill_line_" + slug(request.idempotencyKey()) + "_" + i,
+                    billId,
+                    normalizeAllowed(line.feeType(), "fee_type", FEE_TYPES),
+                    requireText(line.description(), "description"),
+                    requirePositive(line.amountCent(), "line.amount_cent"),
+                    CURRENCY_CNY,
+                    now
+            ));
+        }
+        return result;
     }
 
     private ArApItemRecord findArApItem(String id) {
@@ -343,8 +362,15 @@ public class MerchantBillingService {
     }
 
     private MerchantBillRecord findBill(String id) {
-        return repository.findBillById(requireText(id, "id"))
+        MerchantBillRecord bill = repository.findBillById(requireText(id, "id"))
                 .orElseThrow(() -> ApiException.notFound("MERCHANT_BILL_NOT_FOUND", "merchant bill not found"));
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(bill.merchantId())) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's bill is not allowed");
+            }
+        });
+        return bill;
     }
 
     private <T> T executeWrite(

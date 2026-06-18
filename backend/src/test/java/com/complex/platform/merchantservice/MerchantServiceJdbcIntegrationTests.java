@@ -5,6 +5,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,7 +30,7 @@ class MerchantServiceJdbcIntegrationTests {
     void migrationCreatesMerchantServiceTablesAndSeedsPermissions() {
         assertThat(regclass("merchant_service_work_orders")).isEqualTo("merchant_service_work_orders");
         assertThat(regclass("merchant_service_work_order_actions")).isEqualTo("merchant_service_work_order_actions");
-        assertThat(currentFlywayVersion()).isEqualTo("040");
+        assertThat(currentFlywayVersion()).isEqualTo("054");
 
         assertThat(permissionCodes()).contains(
                 "merchant.service_work_order.view",
@@ -108,7 +109,7 @@ class MerchantServiceJdbcIntegrationTests {
                         MerchantWorkOrderRecord::ownerUserId
                 )
                 .containsExactly("mch_jdbc", "assigned", "property", "staff_owner");
-        assertThat(repository.findAllWorkOrders())
+        assertThat(repository.findWorkOrdersByScope(Optional.empty(), 100))
                 .extracting(MerchantWorkOrderRecord::id, MerchantWorkOrderRecord::workOrderType, MerchantWorkOrderRecord::priority)
                 .contains(tuple("mswo_jdbc", "repair", "high"));
         assertThat(repository.findActionsByWorkOrderId("mswo_jdbc"))

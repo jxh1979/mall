@@ -2,7 +2,11 @@ package com.complex.platform.merchantservice;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -28,31 +32,40 @@ class MerchantServiceServiceTests {
 
     private InMemoryMerchantServiceRepository repository;
     private InMemoryAuditEventRepository auditEventRepository;
+    private AuthorizationService authorizationService;
     private MerchantServiceService service;
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryMerchantServiceRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        authorizationService = mock(AuthorizationService.class);
         service = new MerchantServiceService(
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository),
+                authorizationService
         );
+        // Default: merchant user scoped to "mch_1"
+        when(authorizationService.currentActor())
+                .thenReturn(new AccessActor("user_test", "test", "merchant", null, "mch_1", "active"));
+        when(authorizationService.currentMerchantScope())
+                .thenReturn(Optional.of("mch_1"));
     }
 
     @Test
     void createWorkOrderRequiresCoreFieldsAndWritesFailureAudit() {
+        // Empty title is always required regardless of scope
         assertThatThrownBy(() -> service.createWorkOrder(new MerchantWorkOrderCreateRequest(
-                "wo-missing-merchant",
-                "missing merchant",
+                "wo-missing-title",
+                "missing title",
                 List.of(),
-                " ",
+                "mch_1",
                 null,
                 null,
                 "repair",
                 "high",
-                "Water leak",
+                " ",
                 "Shop ceiling is leaking",
                 "staff_reporter",
                 "web",
@@ -118,6 +131,55 @@ class MerchantServiceServiceTests {
                 "staff_ops"
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("WORK_ORDER_CLOSED"));
+    }
+
+    @Test
+    void addActionRejectsIllegalForwardSkip() {
+        MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-skip-create"));
+
+        // created -> resolved skips assigned/processing and must be rejected
+        assertThatThrownBy(() -> service.addAction(created.id(), new MerchantWorkOrderActionRequest(
+                "wo-skip-action",
+                "jump straight to resolved",
+                List.of(),
+                "resolved",
+                "staff_ops"
+        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+                assertThat(exception.code()).isEqualTo("MERCHANT_WORK_ORDER_INVALID_TRANSITION"));
+        assertThat(repository.findWorkOrderById(created.id()))
+                .get().extracting(MerchantWorkOrderRecord::status).isEqualTo("created");
+    }
+
+    @Test
+    void addActionRejectsStatusRegression() {
+        MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-regress-create"));
+        service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
+                "wo-regress-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+        service.addAction(created.id(), new MerchantWorkOrderActionRequest(
+                "wo-regress-process", "start", List.of(), "processing", "staff_ops"));
+
+        // processing -> assigned is a regression and must be rejected
+        assertThatThrownBy(() -> service.addAction(created.id(), new MerchantWorkOrderActionRequest(
+                "wo-regress-back",
+                "go back to assigned",
+                List.of(),
+                "assigned",
+                "staff_ops"
+        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+                assertThat(exception.code()).isEqualTo("MERCHANT_WORK_ORDER_INVALID_TRANSITION"));
+    }
+
+    @Test
+    void addActionAllowsValidForwardTransition() {
+        MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-forward-create"));
+        service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
+                "wo-forward-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+
+        MerchantWorkOrderRecord processing = service.addAction(created.id(), new MerchantWorkOrderActionRequest(
+                "wo-forward-process", "start processing", List.of(), "processing", "staff_ops"));
+
+        assertThat(processing.status()).isEqualTo("processing");
+        assertThat(repository.actions.getLast().toStatus()).isEqualTo("processing");
     }
 
     @Test
@@ -196,16 +258,17 @@ class MerchantServiceServiceTests {
 
     @Test
     void validationFailureDoesNotReserveIdempotencyKey() {
+        // Empty title triggers VALIDATION_FAILED in preValidation
         assertThatThrownBy(() -> service.createWorkOrder(new MerchantWorkOrderCreateRequest(
                 "wo-validation-retry",
-                "missing merchant",
+                "missing title",
                 List.of(),
-                " ",
+                "mch_1",
                 null,
                 null,
                 "repair",
                 "high",
-                "Water leak",
+                " ",
                 "Shop ceiling is leaking",
                 "staff_reporter",
                 "web",
@@ -217,6 +280,140 @@ class MerchantServiceServiceTests {
 
         assertThat(retry.status()).isEqualTo("created");
     }
+
+    // ── P0: Tenant isolation ──────────────────────────────────────────────────
+
+    @Test
+    void listWorkOrdersFilteredByMerchantScope() {
+        // Place work orders for two merchants directly in the repository
+        repository.saveWorkOrder(workOrderRecord("mswo_m1", "mch_1", "created"));
+        repository.saveWorkOrder(workOrderRecord("mswo_m2", "mch_2", "created"));
+
+        // Default scope = "mch_1": must only see mch_1's order
+        var result = service.listWorkOrders();
+        assertThat(result.items()).extracting(MerchantWorkOrderRecord::id).containsExactly("mswo_m1");
+        assertThat(result.items()).noneMatch(r -> "mch_2".equals(r.merchantId()));
+    }
+
+    @Test
+    void platformAdminListWorkOrdersSeesAll() {
+        repository.saveWorkOrder(workOrderRecord("mswo_m1", "mch_1", "created"));
+        repository.saveWorkOrder(workOrderRecord("mswo_m2", "mch_2", "created"));
+
+        when(authorizationService.currentActor())
+                .thenReturn(new AccessActor("admin_user", "admin", "platform_admin", null, null, "active"));
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+
+        var result = service.listWorkOrders();
+        assertThat(result.items()).extracting(MerchantWorkOrderRecord::id)
+                .contains("mswo_m1", "mswo_m2");
+    }
+
+    // ── P0: Cross-merchant write protection ──────────────────────────────────
+
+    @Test
+    void assignWorkOrderCrossMerchantThrowsForbidden() {
+        // Work order belongs to mch_2
+        repository.saveWorkOrder(workOrderRecord("mswo_other", "mch_2", "created"));
+
+        // Caller is scoped to mch_1 (default mock)
+        assertThatThrownBy(() -> service.assignWorkOrder("mswo_other", new MerchantWorkOrderAssignRequest(
+                "wo-cross-assign",
+                "assign",
+                List.of(),
+                "property",
+                "staff_owner",
+                "staff_manager"
+        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+                assertThat(exception.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    // ── P1: Assign state machine guard ───────────────────────────────────────
+
+    @Test
+    void assignAlreadyAssignedWorkOrderThrowsInvalidState() {
+        MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-assign-state"));
+        service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
+                "wo-assign-first",
+                "first assign",
+                List.of(),
+                "property",
+                "staff_owner",
+                "staff_manager"
+        ));
+
+        // Work order is now in "assigned" state; second assign must be rejected
+        assertThatThrownBy(() -> service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
+                "wo-assign-second",
+                "second assign",
+                List.of(),
+                "property",
+                "staff_owner2",
+                "staff_manager"
+        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+                assertThat(exception.code()).isEqualTo("INVALID_STATE"));
+    }
+
+    // ── P1: Operator identity from security context ───────────────────────────
+
+    @Test
+    void reportedByUserIdTakenFromSecurityContextOnCreate() {
+        // Actor id is "user_test" (from mock); request supplies a different value that must be ignored
+        MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-actor-create"));
+
+        assertThat(created.reportedByUserId()).isEqualTo("user_test");
+        assertThat(repository.actions.getFirst().operatorUserId()).isEqualTo("user_test");
+    }
+
+    @Test
+    void operatorUserIdTakenFromSecurityContextOnAssign() {
+        MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-actor-assign"));
+        service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
+                "wo-actor-assign-key",
+                "assign",
+                List.of(),
+                "property",
+                "staff_owner",
+                "SHOULD_BE_IGNORED"
+        ));
+
+        MerchantWorkOrderActionRecord assignAction = repository.actions.getLast();
+        assertThat(assignAction.operatorUserId()).isEqualTo("user_test");
+        assertThat(assignAction.operatorUserId()).isNotEqualTo("SHOULD_BE_IGNORED");
+    }
+
+    // ── P1: Idempotency scoped per user ───────────────────────────────────────
+
+    @Test
+    void differentUsersCanUseSameIdempotencyKeyForCreate() {
+        // user_test creates with key "shared-key"
+        MerchantWorkOrderRecord first = service.createWorkOrder(createRequest("shared-key"));
+
+        // Switch to a different user
+        when(authorizationService.currentActor())
+                .thenReturn(new AccessActor("user_other", "other", "merchant", null, "mch_1", "active"));
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("mch_1"));
+
+        MerchantWorkOrderRecord second = service.createWorkOrder(createRequest("shared-key"));
+
+        // Each user's slot is isolated; both records are created and distinct
+        assertThat(second.id()).isNotEqualTo(first.id());
+        assertThat(repository.saveCount).isEqualTo(2);
+    }
+
+    // ── P1: UUID-based work order IDs (no slug collision) ────────────────────
+
+    @Test
+    void workOrderIdIsUuidBasedAndNotDerivedFromIdempotencyKey() {
+        MerchantWorkOrderRecord r1 = service.createWorkOrder(createRequest("key abc xyz"));
+        MerchantWorkOrderRecord r2 = service.createWorkOrder(createRequest("key abc!xyz"));
+
+        // Both keys slug to "key_abc_xyz" under the old scheme; with UUIDs they must differ
+        assertThat(r1.id()).isNotEqualTo(r2.id());
+        assertThat(r1.id()).matches("mswo_[0-9a-f]{32}");
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
 
     private MerchantWorkOrderCreateRequest createRequest(String idempotencyKey) {
         return new MerchantWorkOrderCreateRequest(
@@ -247,14 +444,26 @@ class MerchantServiceServiceTests {
         );
     }
 
+    private MerchantWorkOrderRecord workOrderRecord(String id, String merchantId, String status) {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new MerchantWorkOrderRecord(
+                id, merchantId, null, null, "repair", "high", status,
+                "Test", "Test description", "reporter", "web",
+                null, null, null, null, null, null, List.of(), now, now
+        );
+    }
+
     private static final class InMemoryMerchantServiceRepository implements MerchantServiceRepository {
         private final Map<String, MerchantWorkOrderRecord> workOrders = new LinkedHashMap<>();
         private final List<MerchantWorkOrderActionRecord> actions = new ArrayList<>();
         private int saveCount;
 
         @Override
-        public List<MerchantWorkOrderRecord> findAllWorkOrders() {
-            return new ArrayList<>(workOrders.values());
+        public List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, int limit) {
+            return workOrders.values().stream()
+                    .filter(r -> merchantScope.isEmpty() || merchantScope.get().equals(r.merchantId()))
+                    .limit(limit)
+                    .toList();
         }
 
         @Override
