@@ -538,6 +538,53 @@ class TicketingServiceTests {
                 .hasMessageContaining("credential is expired");
     }
 
+    // T4：刷新窗口与票种级 refresh_interval_seconds 联动（替换硬编码 300s）。
+    @Test
+    void credentialRefreshExpiryUsesRefreshIntervalNotHardcoded300s() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("credential-window");
+        TicketCredentialResponse credential = service.getTicketCredential(entitlement.id());
+
+        long windowSeconds = java.time.Duration.between(credential.issuedAt(), credential.expiresAt()).getSeconds();
+        TicketCredentialRecord stored = ticketingRepository.findTicketCredentialByToken(credential.credentialToken()).orElseThrow();
+
+        assertThat(windowSeconds).isEqualTo(stored.refreshIntervalSeconds());
+        assertThat(windowSeconds).isNotEqualTo(300L);
+        assertThat(stored.windowStartedAt()).isEqualTo(credential.issuedAt());
+        assertThat(stored.signatureValue()).isNull();
+        assertThat(stored.signatureVersion()).isNull();
+    }
+
+    // T4：成功核销留 nonce/merchant_id/window_valid=true 事后核对维度，signature_valid 本期恒 null。
+    @Test
+    void successfulVerificationRecordsNonceMerchantAndWindowValid() {
+        TestSecurityActors.asMerchantUser("mch_window_test");
+        try {
+            IssuedEntitlementRecord entitlement = issueSingleEntitlement("credential-window-dims");
+            TicketCredentialResponse credential = service.getTicketCredential(entitlement.id());
+
+            service.createVerification(new VerificationRequest(
+                    "credential-window-dims-once",
+                    "dynamic_qr",
+                    credential.credentialToken(),
+                    "dev_1",
+                    "gate_1",
+                    Map.of()
+            ));
+
+            assertThat(ticketingRepository.verifications.values())
+                    .filteredOn(v -> "success".equals(v.status()))
+                    .singleElement()
+                    .satisfies(v -> {
+                        assertThat(v.nonce()).isNotBlank();
+                        assertThat(v.merchantId()).isEqualTo("mch_window_test");
+                        assertThat(v.windowValid()).isTrue();
+                        assertThat(v.signatureValid()).isNull();
+                    });
+        } finally {
+            TestSecurityActors.clear();
+        }
+    }
+
     @Test
     void dynamicCredentialVerificationStoresHashedPayloadOnly() {
         IssuedEntitlementRecord entitlement = issueSingleEntitlement("credential-payload-hash");

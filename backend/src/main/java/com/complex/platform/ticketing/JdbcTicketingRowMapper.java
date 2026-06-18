@@ -104,7 +104,12 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("result_reason"),
                 resultSet.getString("source_type"),
                 resultSet.getString("client_task_id"),
-                nullableInstant(resultSet, "created_at")
+                nullableInstant(resultSet, "created_at"),
+                resultSet.getString("nonce"),
+                resultSet.getString("staff_id"),
+                resultSet.getString("merchant_id"),
+                nullableBoolean(resultSet, "window_valid"),
+                nullableBoolean(resultSet, "signature_valid")
         );
     }
 
@@ -206,7 +211,10 @@ final class JdbcTicketingRowMapper {
                 resultSet.getInt("refreshed_count"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
-                resultSet.getInt("refresh_interval_seconds")
+                resultSet.getInt("refresh_interval_seconds"),
+                nullableInstant(resultSet, "window_started_at"),
+                resultSet.getString("signature_value"),
+                resultSet.getString("signature_version")
         );
     }
 
@@ -244,6 +252,11 @@ final class JdbcTicketingRowMapper {
 
     private Long nullableLong(ResultSet resultSet, String columnName) throws SQLException {
         long value = resultSet.getLong(columnName);
+        return resultSet.wasNull() ? null : value;
+    }
+
+    private Boolean nullableBoolean(ResultSet resultSet, String columnName) throws SQLException {
+        boolean value = resultSet.getBoolean(columnName);
         return resultSet.wasNull() ? null : value;
     }
 

@@ -223,12 +223,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO ticket_verifications (
                     id, verification_no, entitlement_id, entitlement_code, credential_type,
                     credential_payload, device_id, point_id, status, result_reason, source_type,
-                    client_task_id, created_at
+                    client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid
                 )
                 VALUES (
                     :id, :verification_no, :entitlement_id, :entitlement_code, :credential_type,
                     :credential_payload, :device_id, :point_id, :status, :result_reason, :source_type,
-                    :client_task_id, :created_at
+                    :client_task_id, :created_at, :nonce, :staff_id, :merchant_id, :window_valid, :signature_valid
                 )
                 """, parameterSource.verificationParameters(verification));
         return verification;
@@ -239,7 +239,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, verification_no, entitlement_id, entitlement_code, credential_type,
                        credential_payload, device_id, point_id, status, result_reason, source_type,
-                       client_task_id, created_at
+                       client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid
                   FROM ticket_verifications
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapVerification);
@@ -475,11 +475,13 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_credentials (
                     id, entitlement_id, order_id, credential_token, nonce, credential_hash, credential_type,
-                    issued_at, expires_at, status, refreshed_count, created_at, updated_at, refresh_interval_seconds
+                    issued_at, expires_at, status, refreshed_count, created_at, updated_at, refresh_interval_seconds,
+                    window_started_at, signature_value, signature_version
                 )
                 VALUES (
                     :id, :entitlement_id, :order_id, :credential_token, :nonce, :credential_hash, :credential_type,
-                    :issued_at, :expires_at, :status, :refreshed_count, :created_at, :updated_at, :refresh_interval_seconds
+                    :issued_at, :expires_at, :status, :refreshed_count, :created_at, :updated_at, :refresh_interval_seconds,
+                    :window_started_at, :signature_value, :signature_version
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     credential_token = NULL,
@@ -491,7 +493,10 @@ class JdbcTicketingRepository implements TicketingRepository {
                     status = EXCLUDED.status,
                     refreshed_count = EXCLUDED.refreshed_count,
                     updated_at = EXCLUDED.updated_at,
-                    refresh_interval_seconds = EXCLUDED.refresh_interval_seconds
+                    refresh_interval_seconds = EXCLUDED.refresh_interval_seconds,
+                    window_started_at = EXCLUDED.window_started_at,
+                    signature_value = EXCLUDED.signature_value,
+                    signature_version = EXCLUDED.signature_version
                 """, parameterSource.ticketCredentialParameters(credential));
         return credential;
     }
@@ -503,7 +508,8 @@ class JdbcTicketingRepository implements TicketingRepository {
         }
         return jdbcTemplate.query("""
                 SELECT id, entitlement_id, order_id, credential_token, nonce, credential_hash, credential_type,
-                       issued_at, expires_at, status, refreshed_count, created_at, updated_at, refresh_interval_seconds
+                       issued_at, expires_at, status, refreshed_count, created_at, updated_at, refresh_interval_seconds,
+                       window_started_at, signature_value, signature_version
                   FROM ticket_credentials
                  WHERE credential_hash = :credential_hash
                 """, Map.of("credential_hash", parameterSource.credentialTokenHash(credentialToken)), rowMapper::mapTicketCredential).stream().findFirst();

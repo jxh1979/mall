@@ -201,7 +201,12 @@ class TicketingJdbcIntegrationTests {
                 null,
                 "android_terminal_online",
                 null,
-                now
+                now,
+                "nonce_jdbc",
+                "staff_jdbc",
+                "mch_jdbc",
+                Boolean.TRUE,
+                null
         ));
         repository.saveTerminalSyncTask(new TerminalSyncTaskRecord(
                 "sync_jdbc",
@@ -231,6 +236,17 @@ class TicketingJdbcIntegrationTests {
         assertThat(repository.listVerifications())
                 .extracting(VerificationRecord::verificationNo, VerificationRecord::status)
                 .contains(tuple("V20260614000001", "success"));
+        // T4：核销记录回读 nonce/staff_id/merchant_id/window_valid 五列（signature_valid 本期为 P1 占位，恒 null）。
+        assertThat(repository.listVerifications())
+                .filteredOn(v -> "ver_jdbc".equals(v.id()))
+                .singleElement()
+                .satisfies(v -> {
+                    assertThat(v.nonce()).isEqualTo("nonce_jdbc");
+                    assertThat(v.staffId()).isEqualTo("staff_jdbc");
+                    assertThat(v.merchantId()).isEqualTo("mch_jdbc");
+                    assertThat(v.windowValid()).isTrue();
+                    assertThat(v.signatureValid()).isNull();
+                });
         TerminalSyncTaskRecord syncTask = repository.findTerminalSyncTask("P0-ANDROID-JDBC", "client_task_jdbc")
                 .orElseThrow();
         assertThat(syncTask.verificationNo()).isEqualTo("V20260614000001");
@@ -341,7 +357,10 @@ class TicketingJdbcIntegrationTests {
                 1,
                 now,
                 now,
-                60
+                60,
+                now,
+                null,
+                null
         ));
         repository.saveTicketRefund(new TicketRefundRecord(
                 "refund_jdbc",
@@ -381,6 +400,14 @@ class TicketingJdbcIntegrationTests {
                 .get()
                 .extracting(TicketCredentialRecord::entitlementId)
                 .isEqualTo("ent_order_jdbc");
+        // T4：凭证回读 window_started_at 锚点 + 预留签名位（signature_value/version 本期为 P1，恒 null）。
+        assertThat(repository.findTicketCredentialByToken("cred_jdbc"))
+                .get()
+                .satisfies(c -> {
+                    assertThat(c.windowStartedAt()).isNotNull();
+                    assertThat(c.signatureValue()).isNull();
+                    assertThat(c.signatureVersion()).isNull();
+                });
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT credential_token FROM ticket_credentials WHERE id = 'credential_jdbc'",
                 String.class
@@ -488,6 +515,27 @@ class TicketingJdbcIntegrationTests {
         long baseAmountCent = 11900L;
         long dynamicAdjustmentCent = -2000L;
         long amountCent = baseAmountCent + dynamicAdjustmentCent;
+        // 订单 dynamic_pricing_rule_id 有 FK 约束，先建被引用的规则行
+        repository.saveDynamicPricingRule(new TicketDynamicPricingRuleRecord(
+                "dynamic_rule_trace_jdbc",
+                "ticket_type_trace_jdbc",
+                "Trace rule",
+                100,
+                java.time.LocalDate.parse("2026-06-01"),
+                java.time.LocalDate.parse("2026-06-30"),
+                "web",
+                "percent_delta",
+                new java.math.BigDecimal("20.00"),
+                null,
+                9900L,
+                15000L,
+                "published",
+                Map.of(),
+                "ops create",
+                List.of(),
+                now,
+                now
+        ));
         repository.saveTicketOrder(new TicketOrderRecord(
                 "ticket_order_trace_jdbc",
                 "TO20260616000001",

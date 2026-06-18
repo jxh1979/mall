@@ -15,6 +15,11 @@ public record VerificationRecord(
         String resultReason,
         String sourceType,
         String clientTaskId,
-        Instant createdAt
+        Instant createdAt,
+        String nonce,
+        String staffId,
+        String merchantId,
+        Boolean windowValid,
+        Boolean signatureValid
 ) {
 }

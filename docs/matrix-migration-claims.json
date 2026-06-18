@@ -47,7 +47,10 @@
     {"req": "REQ-21", "table": "bar_bill_settlements", "column": "settle_channel", "expected": "present", "note": "V062 A3: 结算渠道统一词表（与 finance 对账归并）；现金/POS 发 payment.cash_received/pos_received 事件"},
 
     {"req": "REQ-06", "table": "ticket_credentials", "column": "anti_fake_code_hash", "expected": "absent", "note": "R5: 设计/矩阵称已补防伪码哈希，V001–V065 与代码零命中；生效仅 credential_hash(SHA-256)+nonce+expires_at。R5 裁决：HMAC 签名版本化降 P1"},
-    {"req": "REQ-06", "table": "ticket_credentials", "column": "signature_version", "expected": "absent", "note": "R5: 无 HMAC 签名/签名版本字段；核销端不校验签名/nonce/刷新窗口，截图窗口内可重放。R5 裁决：P0=折中(哈希+核销端强制 30/60s 刷新窗口+nonce 防重放)，HMAC 签名版本化 P1"},
+    {"req": "REQ-06", "table": "ticket_credentials", "column": "signature_version", "expected": "present", "note": "R5 T4: V066 预留 signature_value/signature_version 列（schema 已落，gate 校验列存在故标 present）；但 HMAC 签名为 P1，本期不写签名/校验逻辑、signature_valid 恒 NULL，待 P1 接算法"},
+    {"req": "REQ-06", "table": "ticket_credentials", "column": "window_started_at", "expected": "present", "note": "R5 T4 折中防伪已落（V066）：刷新窗口锚点 window_started_at；refreshCredential 的 expires_at 与票种级 refresh_interval_seconds({30,60}) 联动，替换硬编码 300s，截图超窗口即失效"},
+    {"req": "REQ-06", "table": "ticket_verifications", "column": "nonce", "expected": "present", "note": "R5 T4 折中防伪已落（V066）：核销 nonce + 唯一索引 uq_ticket_verifications_nonce(entitlement_id,nonce) WHERE status='success' 防重放，重放第二次撞唯一键被拒"},
+    {"req": "REQ-06", "table": "ticket_verifications", "column": "window_valid", "expected": "present", "note": "R5 T4 折中防伪已落（V066）：核销端事后核对维度 window_valid + staff_id/merchant_id，成功核销 window_valid=true，补齐 HTML 按员工/防伪结果核对"},
     {"req": "REQ-28", "table": "supply_contracts", "column": null, "expected": "absent", "note": "R5: 供应合同三模式表 supply_contracts/contract_mode 迁移零命中；设计 §6.2 有设计无实现。R5 裁决：本期 P0 建表(三模式+采购周期完整流转+结构化库房)"},
     {"req": "REQ-27", "table": "warehouses", "column": null, "expected": "absent", "note": "R5: 库房类型表未建，inventory_stock_balances.location_id 为自由文本；采购周期 inventory_purchase_requests 仅'申请'create，无审批/到货/入库流转"},
     {"req": "REQ-54", "table": "wecom_conversation_retention", "column": null, "expected": "absent", "note": "R5: 企微会话留存/到期归档销毁匿名化/脱敏/查看访问审计零落地，仅 V015 一行 mock 种子。R5 裁决：平台侧合规能力本期 P0；企微同步接口按第三方原则预留+开关"},

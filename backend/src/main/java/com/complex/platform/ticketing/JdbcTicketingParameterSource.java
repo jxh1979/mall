@@ -92,7 +92,12 @@ final class JdbcTicketingParameterSource {
                 .addValue("result_reason", verification.resultReason())
                 .addValue("source_type", verification.sourceType())
                 .addValue("client_task_id", verification.clientTaskId())
-                .addValue("created_at", timestampWithTimeZone(verification.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(verification.createdAt()))
+                .addValue("nonce", verification.nonce())
+                .addValue("staff_id", verification.staffId())
+                .addValue("merchant_id", verification.merchantId())
+                .addValue("window_valid", verification.windowValid())
+                .addValue("signature_valid", verification.signatureValid());
     }
 
     MapSqlParameterSource terminalSyncTaskParameters(TerminalSyncTaskRecord task) {
@@ -202,6 +207,9 @@ final class JdbcTicketingParameterSource {
                 .addValue("status", credential.status())
                 .addValue("refreshed_count", credential.refreshedCount())
                 .addValue("refresh_interval_seconds", credential.refreshIntervalSeconds())
+                .addValue("window_started_at", timestampWithTimeZone(credential.windowStartedAt()))
+                .addValue("signature_value", credential.signatureValue())
+                .addValue("signature_version", credential.signatureVersion())
                 .addValue("created_at", timestampWithTimeZone(credential.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(credential.updatedAt()));
     }

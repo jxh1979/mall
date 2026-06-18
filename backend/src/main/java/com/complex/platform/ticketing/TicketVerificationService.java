@@ -36,6 +36,9 @@ public class TicketVerificationService {
         }
         Instant now = Instant.now();
         String token = "cred_" + UUID.randomUUID().toString().replace("-", "");
+        // T4：刷新窗口与 refresh_interval_seconds（票种级 {30,60}）联动，替换硬编码 300s；
+        // window_started_at=now，截图离线展示的旧 token 超过本窗口即过期被拒。signature_value/version 为 P1 预留，本期为 null。
+        int refreshIntervalSeconds = 60;
         TicketCredentialRecord saved = repository.saveTicketCredential(new TicketCredentialRecord(
                 "credential_" + UUID.randomUUID().toString().replace("-", ""),
                 entitlement.id(),
@@ -45,12 +48,15 @@ public class TicketVerificationService {
                 hash(token),
                 "dynamic_qr",
                 now,
-                now.plusSeconds(300),
+                now.plusSeconds(refreshIntervalSeconds),
                 "active",
                 1,
                 now,
                 now,
-                60
+                refreshIntervalSeconds,
+                now,
+                null,
+                null
         ));
         return toCredentialResponse(saved);
     }
@@ -110,7 +116,12 @@ public class TicketVerificationService {
                 reason == null || reason.isBlank() ? "manual override" : reason.trim(),
                 "manual_override",
                 null,
-                Instant.now()
+                Instant.now(),
+                credential == null ? null : credential.nonce(),
+                null,
+                entitlement.merchantId(),
+                null,
+                null
         ));
         return new VerificationResponse(verification.id(), verification.verificationNo(),
                 verification.status(), verification.resultReason());
@@ -147,7 +158,12 @@ public class TicketVerificationService {
                 null,
                 sourceType,
                 clientTaskId,
-                now
+                now,
+                credential == null ? null : credential.nonce(),
+                null,
+                updated.merchantId(),
+                Boolean.TRUE,
+                null
         ));
         if (credential != null) {
             repository.saveTicketCredential(new TicketCredentialRecord(
@@ -164,7 +180,10 @@ public class TicketVerificationService {
                     credential.refreshedCount(),
                     credential.createdAt(),
                     now,
-                    credential.refreshIntervalSeconds()
+                    credential.refreshIntervalSeconds(),
+                    credential.windowStartedAt(),
+                    credential.signatureValue(),
+                    credential.signatureVersion()
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());
