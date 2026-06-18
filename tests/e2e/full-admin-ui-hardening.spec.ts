@@ -1,0 +1,101 @@
+import { test, expect, type Page } from "@playwright/test";
+import { installMockApi } from "./support/mock-api";
+
+async function adminLogin(page: Page, path = "/admin/overview") {
+  await page.goto(path);
+  await expect(page.getByTestId("login-view")).toBeVisible();
+  await page.getByTestId("login-username").fill("admin");
+  await page.getByTestId("login-password").fill("admin-pass");
+  await page.getByTestId("login-submit").click();
+  await expect(page.getByTestId("admin-shell")).toBeVisible();
+  await expect(page.locator(".loading-state")).toHaveCount(0);
+}
+
+async function openNav(page: Page, pageId: string) {
+  await page.getByTestId(`admin-nav-${pageId}`).click();
+  await expect(page.locator(".loading-state")).toHaveCount(0);
+}
+
+test.describe("full admin UI hardening acceptance", () => {
+  test("ADM-UI-HARDEN-01 restructured pages expose root + headered scrollable tables", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page, "/admin/access/users");
+
+    await openNav(page, "ADM-ACC-001");
+    await expect(page.getByTestId("access-users-page")).toBeVisible();
+    await expect(page.getByTestId("access-users-table").locator("thead")).toContainText("岗位角色");
+
+    await openNav(page, "ADM-ACC-002");
+    await expect(page.getByTestId("permission-templates-page")).toBeVisible();
+    await expect(page.getByTestId("permission-templates-table").locator("thead")).toContainText("模板名称");
+
+    await openNav(page, "ADM-BAR-001");
+    await expect(page.getByTestId("bar-table-sessions-page")).toBeVisible();
+    await expect(page.getByTestId("bar-table-sessions-table").locator("thead")).toContainText("卡座");
+
+    await openNav(page, "ADM-FIN-001");
+    await expect(page.getByTestId("finance-ledger-page")).toBeVisible();
+    await expect(page.getByTestId("finance-ledger-table").locator("thead")).toContainText("方向");
+
+    await openNav(page, "ADM-INT-001");
+    await expect(page.getByTestId("integration-adapters-page")).toBeVisible();
+    await expect(page.getByTestId("integration-adapters-table").locator("thead")).toContainText("供应商");
+
+    await openNav(page, "ADM-OPS-001");
+    await expect(page.getByTestId("ops-readiness-table").locator("thead")).toContainText("责任人");
+
+    // Restructured tables live in a horizontal-scroll wrapper, so the page itself never overflows.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(80);
+  });
+
+  test("ADM-UI-HARDEN-02 shared empty and error states expose stable testids", async ({ page }) => {
+    await installMockApi(page, { empty: true });
+    await adminLogin(page, "/admin/access/users");
+    await openNav(page, "ADM-ACC-001");
+    await expect(page.getByTestId("admin-empty")).toBeVisible();
+
+    await installMockApi(page, { errorPath: "/api/v1/access/users" });
+    await page.reload();
+    await adminLogin(page, "/admin/access/users");
+    await openNav(page, "ADM-ACC-001");
+    await expect(page.getByTestId("admin-error")).toContainText("读取失败");
+    await expect(page.getByTestId("admin-retry")).toBeVisible();
+  });
+
+  test("ADM-UI-HARDEN-03 overview date-range filter is operable and KPIs are addressable", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page, "/admin/overview");
+
+    await expect(page.getByTestId("overview-kpi-ticket")).toBeVisible();
+    await expect(page.getByTestId("overview-kpi-finance")).toBeVisible();
+
+    await page.getByTestId("overview-date-from").fill("2026-06-01");
+    await page.getByTestId("overview-date-to").fill("2026-06-30");
+    await page.getByTestId("overview-date-apply").click();
+
+    await expect(page.getByTestId("overview-date-applied")).toContainText("2026-06-01");
+    await expect(page.getByTestId("overview-date-applied")).toContainText("2026-06-30");
+    // dashboard survives the filtered refetch
+    await expect(page.getByTestId("overview-kpi-ticket")).toBeVisible();
+  });
+
+  test("ADM-UI-HARDEN-04 money inputs reject non-positive values before any write", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page, "/admin/ticketing/policies");
+
+    await openNav(page, "ADM-TKT-001");
+    await page.getByTestId("ticket-weekday-price").fill("0");
+    await page.getByTestId("ticket-weekend-price").fill("100");
+    await page.getByTestId("ticket-holiday-price").fill("120");
+    await page.getByTestId("ticket-publish").click();
+    await expect(page.getByTestId("ticket-policy-error")).toContainText("平日价");
+    await expect(page.getByTestId("admin-action-result")).toHaveCount(0);
+
+    await openNav(page, "ADM-FIN-001");
+    await page.getByTestId("finance-payment-amount").fill("0");
+    await page.getByTestId("finance-payment-reason").fill("测试核销");
+    await page.getByTestId("finance-payment-submit").click();
+    await expect(page.getByTestId("finance-ledger-error")).toContainText("大于 0");
+  });
+});

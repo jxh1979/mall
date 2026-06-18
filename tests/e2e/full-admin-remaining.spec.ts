@@ -1,0 +1,531 @@
+import { expect, test } from "@playwright/test";
+import { installMockApi } from "./support/mock-api";
+
+type RouteSpec = {
+  pageId: string;
+  label: string;
+  route: string;
+  contractGap?: boolean;
+};
+
+const remainingRoutes: RouteSpec[] = [
+  { pageId: "ADM-GOV-001", label: "集团/综合体拓扑", route: "/admin/governance/topology" },
+  { pageId: "ADM-GOV-002", label: "组织与商户档案", route: "/admin/governance/organizations" },
+  { pageId: "ADM-GOV-003", label: "四类主体绑定", route: "/admin/governance/subject-bindings" },
+  { pageId: "ADM-GOV-004", label: "合同审批与附件归档", route: "/admin/contracts" },
+  { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
+  { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
+  { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },
+  { pageId: "ADM-TKT-003", label: "出票与核销追踪", route: "/admin/ticketing/orders" },
+  { pageId: "ADM-BAR-002", label: "订单/出品/账单", route: "/admin/bar/orders" },
+  { pageId: "ADM-BAR-003", label: "存酒", route: "/admin/bar/stored-wine" },
+  { pageId: "ADM-BAR-004", label: "销售提成", route: "/admin/bar/commissions" },
+  { pageId: "ADM-AMU-001", label: "项目与场次", route: "/admin/amusement/sessions" },
+  { pageId: "ADM-AMU-002", label: "团体/包场", route: "/admin/amusement/group-bookings" },
+  { pageId: "ADM-AMU-003", label: "安全巡检/事故", route: "/admin/amusement/safety-incidents" },
+  { pageId: "ADM-INV-001", label: "库存台账", route: "/admin/inventory/ledger" },
+  { pageId: "ADM-FIN-002", label: "对账差异", route: "/admin/finance/reconciliation" },
+  { pageId: "ADM-MER-001", label: "商户服务工单", route: "/admin/merchant-service/tickets" },
+  { pageId: "ADM-MER-002", label: "商户授权工作台", route: "/admin/merchant-portal/scope" },
+  { pageId: "ADM-INT-002", label: "回调/轮询/补偿", route: "/admin/integrations/events" },
+  { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },
+  { pageId: "ADM-EVD-001", label: "审计事件", route: "/admin/audit/events" },
+  { pageId: "ADM-ANA-001", label: "经营分析", route: "/admin/analytics/business" },
+];
+
+async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
+  await page.goto(path);
+  await expect(page.getByTestId("login-view")).toBeVisible();
+  await page.getByTestId("login-username").fill("admin");
+  await page.getByTestId("login-password").fill("admin-pass");
+  await page.getByTestId("login-submit").click();
+  await expect(page.getByTestId("admin-shell")).toBeVisible();
+  await expect(page.locator(".loading-state")).toHaveCount(0);
+}
+
+async function openAdminRoute(page: import("@playwright/test").Page, spec: RouteSpec) {
+  await page.getByTestId(`admin-nav-${spec.pageId}`).click();
+  await expect(page).toHaveURL(new RegExp(`${spec.route}$`));
+  await expect(page.getByTestId("admin-page-title")).toContainText(spec.label);
+  if (spec.pageId === "ADM-GOV-001") {
+    await expect(page.getByTestId("governance-topology-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-GOV-002") {
+    await expect(page.getByTestId("organization-merchant-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-GOV-003") {
+    await expect(page.getByTestId("subject-bindings-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-BAR-002") {
+    await expect(page.getByTestId("bar-orders-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-TKT-002") {
+    await expect(page.getByTestId("dynamic-pricing-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-TKT-003") {
+    await expect(page.getByTestId("ticket-orders-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-BAR-003") {
+    await expect(page.getByTestId("stored-wine-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-BAR-004") {
+    await expect(page.getByTestId("bar-commissions-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-INV-001") {
+    await expect(page.getByTestId("inventory-ledger-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-FIN-002") {
+    await expect(page.getByTestId("reconciliation-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-MER-001") {
+    await expect(page.getByTestId("merchant-work-orders-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-MER-002") {
+    await expect(page.getByTestId("merchant-scope-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-AMU-001") {
+    await expect(page.getByTestId("amusement-sessions-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-AMU-002") {
+    await expect(page.getByTestId("amusement-group-bookings-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-AMU-003") {
+    await expect(page.getByTestId("amusement-safety-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-GOV-006") {
+    await expect(page.getByTestId("supervisor-review-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-GOV-004") {
+    await expect(page.getByTestId("contract-approval-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-GOV-005") {
+    await expect(page.getByTestId("admission-audits-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-RISK-001") {
+    await expect(page.getByTestId("risk-alerts-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-INT-002") {
+    await expect(page.getByTestId("integration-events-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-EVD-001") {
+    await expect(page.getByTestId("audit-events-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-001") {
+    await expect(page.getByTestId("business-analytics-page")).toBeVisible();
+  } else {
+    await expect(page.getByTestId("admin-generic-page")).toBeVisible();
+  }
+}
+
+test.describe("full admin remaining pages acceptance", () => {
+  test("ADM-REM-01 exposes all non-first admin pages with route, evidence and readable content", async ({ page }) => {
+    test.slow(); // visits all 22 remaining pages with detailed assertions; triple the timeout under parallel load
+    await installMockApi(page);
+    await adminLogin(page, "/admin/governance/topology");
+
+    for (const spec of remainingRoutes) {
+      await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toBeVisible();
+      await openAdminRoute(page, spec);
+      if (spec.pageId === "ADM-GOV-001") {
+        await expect(page.getByTestId("governance-topology-evidence")).toContainText("/api/v1/platform/business-entities");
+        await expect(page.getByTestId("governance-topology-evidence")).toContainText("/api/v1/platform/spaces");
+        await expect(page.getByTestId("governance-topology-summary")).toContainText("经营主体");
+        await expect(page.getByTestId("governance-topology-summary")).toContainText("商户");
+        await expect(page.getByTestId("governance-topology-table")).toContainText("Platform Org");
+        await expect(page.getByTestId("governance-topology-table")).toContainText("Main Merchant");
+        await expect(page.getByTestId("governance-topology-table")).toContainText("Main Venue");
+        await expect(page.getByTestId("governance-topology-spaces-table")).toContainText("Gate A");
+        await expect(page.getByTestId("governance-topology-boundary")).toContainText("集团、综合体、商户、项目和空间点位");
+        continue;
+      }
+      if (spec.pageId === "ADM-GOV-002") {
+        await expect(page.getByTestId("organization-merchant-evidence")).toContainText("/api/v1/platform/business-entities");
+        await expect(page.getByTestId("organization-merchant-evidence")).toContainText("/api/v1/platform/merchants");
+        await expect(page.getByTestId("organization-merchant-summary")).toContainText("商户档案");
+        await expect(page.getByTestId("organization-entities-table")).toContainText("Platform Org");
+        await expect(page.getByTestId("organization-merchants-table")).toContainText("Main Merchant");
+        await expect(page.getByTestId("organization-projects-table")).toContainText("Main Venue");
+        await expect(page.getByTestId("organization-merchant-boundary")).toContainText("运营主体、合同主体和结算主体");
+        continue;
+      }
+      if (spec.pageId === "ADM-GOV-003") {
+        await expect(page.getByTestId("subject-bindings-evidence")).toContainText("/api/v1/platform/business-entity-bindings");
+        await expect(page.getByTestId("subject-bindings-summary")).toContainText("唯一绑定");
+        await expect(page.getByTestId("subject-bindings-table")).toContainText("merchant-1");
+        await expect(page.getByTestId("subject-bindings-table")).toContainText("Main Contract Co");
+        await expect(page.getByTestId("subject-bindings-table")).toContainText("audit://admission/binding-1");
+        await expect(page.getByTestId("subject-bindings-boundary")).toContainText("四类主体");
+        continue;
+      }
+      if (spec.pageId === "ADM-BAR-002") {
+        await expect(page.getByTestId("bar-orders-evidence")).toContainText("/api/v1/bar/orders");
+        const barOrdersTable = page.getByTestId("bar-orders-table");
+        await expect(barOrdersTable).toBeVisible();
+        await expect(barOrdersTable).toContainText("ORD-1");
+        await expect(barOrdersTable).toContainText("15%");
+        continue;
+      }
+      if (spec.pageId === "ADM-TKT-002") {
+        await expect(page.getByTestId("dynamic-pricing-evidence")).toContainText("/api/v1/ticketing/dynamic-pricing-rules");
+        const dynamicPricingTable = page.getByTestId("dynamic-pricing-table");
+        await expect(dynamicPricingTable).toBeVisible();
+        await expect(dynamicPricingTable).toContainText("Weekend Boost");
+        await expect(dynamicPricingTable).toContainText("percent_delta");
+        await expect(dynamicPricingTable).toContainText("draft");
+        continue;
+      }
+      if (spec.pageId === "ADM-TKT-003") {
+        await expect(page.getByTestId("ticket-orders-evidence")).toContainText("/api/v1/ticketing/orders");
+        const ticketOrdersTable = page.getByTestId("ticket-orders-table");
+        await expect(ticketOrdersTable).toBeVisible();
+        await expect(ticketOrdersTable).toContainText("TO-MOCK-1");
+        await expect(ticketOrdersTable).toContainText("not_issued");
+        await expect(page.getByTestId("ticket-orders-summary")).toContainText("ENT-0001");
+        continue;
+      }
+      if (spec.pageId === "ADM-BAR-003") {
+        await expect(page.getByTestId("stored-wine-evidence")).toContainText("/api/v1/inventory/saved-bottles");
+        await expect(page.getByTestId("stored-wine-summary")).toContainText("在线校验");
+        const storedWineTable = page.getByTestId("stored-wine-table");
+        await expect(storedWineTable).toBeVisible();
+        await expect(storedWineTable).toContainText("SAVED-1");
+        await expect(storedWineTable).toContainText("stored");
+        continue;
+      }
+      if (spec.pageId === "ADM-BAR-004") {
+        await expect(page.getByTestId("bar-commissions-evidence")).toContainText("/api/v1/bar/bills/{bill_id}/commissions/calculate");
+        await expect(page.getByTestId("bar-commissions-summary")).toContainText("15%");
+        await expect(page.getByTestId("bar-commissions-summary")).toContainText("10%");
+        await expect(page.getByTestId("bar-commissions-boundary")).toContainText("不含通票");
+        const commissionsTable = page.getByTestId("bar-commissions-table");
+        await expect(commissionsTable).toBeVisible();
+        await expect(commissionsTable).toContainText("ORD-1");
+        await expect(commissionsTable).toContainText("15%");
+        continue;
+      }
+      if (spec.pageId === "ADM-AMU-001") {
+        await expect(page.getByTestId("amusement-sessions-evidence")).toContainText("/api/v1/amusement/projects");
+        await expect(page.getByTestId("amusement-sessions-evidence")).toContainText("/api/v1/amusement/sessions");
+        await expect(page.getByTestId("amusement-sessions-summary")).toContainText("场次");
+        await expect(page.getByTestId("amusement-projects-table")).toContainText("Adventure");
+        await expect(page.getByTestId("amusement-sessions-table")).toContainText("Morning Session");
+        await expect(page.getByTestId("amusement-sessions-boundary")).toContainText("预约、核销和安全规则");
+        continue;
+      }
+      if (spec.pageId === "ADM-AMU-002") {
+        await expect(page.getByTestId("amusement-group-bookings-evidence")).toContainText("/api/v1/amusement/group-bookings");
+        await expect(page.getByTestId("amusement-group-bookings-summary")).toContainText("团体");
+        await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("Team A");
+        await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("approved");
+        await expect(page.getByTestId("amusement-group-bookings-boundary")).toContainText("容量占用");
+        continue;
+      }
+      if (spec.pageId === "ADM-INV-001") {
+        await expect(page.getByTestId("inventory-ledger-evidence")).toContainText("/api/v1/inventory/stock-movements");
+        await expect(page.getByTestId("inventory-ledger-summary")).toContainText("负库存禁止");
+        await expect(page.getByTestId("inventory-ledger-items-table")).toContainText("WINE");
+        await expect(page.getByTestId("inventory-ledger-balances-table")).toContainText("10");
+        continue;
+      }
+      if (spec.pageId === "ADM-FIN-002") {
+        await expect(page.getByTestId("reconciliation-evidence")).toContainText("/api/v1/finance/reconciliation/differences");
+        await expect(page.getByTestId("reconciliation-summary")).toContainText("正式关闭接口未声明");
+        await expect(page.getByTestId("reconciliation-differences-table")).toContainText("DIFF-1");
+        await expect(page.getByTestId("reconciliation-boundary")).toContainText("原因和附件");
+        continue;
+      }
+      if (spec.pageId === "ADM-MER-001") {
+        await expect(page.getByTestId("merchant-work-orders-evidence")).toContainText("/api/v1/merchant-service/work-orders");
+        await expect(page.getByTestId("merchant-work-orders-summary")).toContainText("待处理");
+        await expect(page.getByTestId("merchant-work-orders-table")).toContainText("空调漏水");
+        await expect(page.getByTestId("merchant-work-orders-boundary")).toContainText("维修 / 投诉 / 整改 / 服务");
+        continue;
+      }
+      if (spec.pageId === "ADM-AMU-003") {
+        await expect(page.getByTestId("amusement-safety-evidence")).toContainText("/api/v1/amusement/safety-inspections");
+        await expect(page.getByTestId("amusement-safety-summary")).toContainText("待整改");
+        await expect(page.getByTestId("amusement-safety-table")).toContainText("SAFE-1");
+        await expect(page.getByTestId("amusement-safety-boundary")).toContainText("事故工单深度闭环");
+        continue;
+      }
+      if (spec.pageId === "ADM-GOV-004") {
+        await expect(page.getByTestId("contract-approval-evidence")).toContainText("/api/v1/platform/contracts");
+        await expect(page.getByTestId("contract-approval-summary")).toContainText("附件归档");
+        await expect(page.getByTestId("contract-approval-table")).toContainText("contract-subject-1");
+        await expect(page.getByTestId("contract-approval-table")).toContainText("2027-05-31");
+        await expect(page.getByTestId("contract-approval-table")).toContainText("att-contract-1");
+        await expect(page.getByTestId("contract-approval-boundary")).toContainText("股东比例只用于利润报表");
+        continue;
+      }
+      if (spec.pageId === "ADM-GOV-005") {
+        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/merchants");
+        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/business-entity-bindings");
+        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/contracts");
+        await expect(page.getByTestId("admission-audits-summary")).toContainText("准入闭环");
+        await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("Main Merchant");
+        await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("audit://admission/merchant-1");
+        await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("Main Contract Co");
+        await expect(page.getByTestId("admission-audits-bindings-table")).toContainText("audit://admission/binding-1");
+        await expect(page.getByTestId("admission-audits-contracts-table")).toContainText("contract-subject-1");
+        await expect(page.getByTestId("admission-audits-contracts-table")).toContainText("att-contract-1");
+        await expect(page.getByTestId("admission-audits-boundary")).toContainText("商户档案、四类主体绑定、合同审批");
+        continue;
+      }
+      if (spec.pageId === "ADM-GOV-006") {
+        await expect(page.getByTestId("supervisor-review-evidence")).toContainText("/api/v1/platform/supervisor-review/evaluate");
+        await expect(page.getByTestId("supervisor-review-summary")).toContainText("默认阻断");
+        await expect(page.getByTestId("supervisor-review-table")).toContainText("contract_violation");
+        await expect(page.getByTestId("supervisor-review-table")).toContainText("base_definition_violation");
+        await expect(page.getByTestId("supervisor-review-boundary")).toContainText("违规动作必须先阻断");
+        continue;
+      }
+      if (spec.pageId === "ADM-RISK-001") {
+        await expect(page.getByTestId("risk-alerts-evidence")).toContainText("/api/v1/analytics/risk-alerts");
+        await expect(page.getByTestId("risk-alerts-summary")).toContainText("高风险");
+        await expect(page.getByTestId("risk-alerts-table")).toContainText("Mock risk");
+        await expect(page.getByTestId("risk-alerts-boundary")).toContainText("忽略高风险预警需审批");
+        continue;
+      }
+      if (spec.pageId === "ADM-INT-002") {
+        await expect(page.getByTestId("integration-events-evidence")).toContainText("/api/v1/integration/retry-tasks");
+        await expect(page.getByTestId("integration-events-evidence")).toContainText("/api/v1/integration/voucher-verifications");
+        await expect(page.getByTestId("integration-events-summary")).toContainText("待处理");
+        await expect(page.getByTestId("integration-events-table")).toContainText("RT-1");
+        await expect(page.getByTestId("integration-events-table")).toContainText("CP-1");
+        await expect(page.getByTestId("integration-events-table")).toContainText("SYNC-1");
+        await expect(page.getByTestId("integration-events-table")).toContainText("VCH-1");
+        await expect(page.getByTestId("integration-events-summary")).toContainText("4/4");
+        await expect(page.getByTestId("integration-events-boundary")).toContainText("Webhook + 定时轮询校验");
+        await expect(page.getByTestId("integration-events-boundary")).toContainText("不得伪造第三方生产补偿执行");
+        continue;
+      }
+      if (spec.pageId === "ADM-MER-002") {
+        await expect(page.getByTestId("merchant-scope-evidence")).toContainText("/api/v1/merchant-service/work-orders");
+        await expect(page.getByTestId("merchant-scope-evidence")).toContainText("/api/v1/merchant-billing/bills");
+        await expect(page.getByTestId("merchant-scope-summary")).toContainText("授权范围");
+        await expect(page.getByTestId("merchant-scope-work-orders-table")).toContainText("merchant-1:work-orders");
+        await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
+        await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("audit://merchant-scope/bill-1");
+        await expect(page.getByTestId("merchant-scope-boundary")).toContainText("不得访问平台治理");
+        continue;
+      }
+      if (spec.pageId === "ADM-EVD-001") {
+        await expect(page.getByTestId("audit-events-evidence")).toContainText("/api/v1/evidence/events");
+        await expect(page.getByTestId("audit-events-summary")).toContainText("成功事件");
+        await expect(page.getByTestId("audit-events-table")).toContainText("event-trace-1");
+        await page.getByTestId("audit-events-search").fill("ticket");
+        await expect(page.getByTestId("audit-events-table")).toContainText("ticket.order.created");
+        await page.getByTestId("audit-events-search").fill("no-match");
+        await expect(page.getByTestId("audit-events-filter-empty")).toContainText("无匹配审计事件");
+        await page.getByTestId("audit-events-search").fill("event-trace-1");
+        await page.getByTestId("audit-events-show-detail").click();
+        await expect(page.getByTestId("audit-events-detail")).toContainText("beforeAfter");
+        await page.getByTestId("audit-events-export-reason").fill("验收导出审计事件");
+        await page.getByTestId("audit-events-export").click();
+        await expect(page.getByTestId("admin-action-result")).toContainText("audit_events_exported");
+        await expect(page.getByTestId("admin-action-result")).toContainText("evidence.events_reported");
+        continue;
+      }
+      if (spec.pageId === "ADM-ANA-001") {
+        await expect(page.getByTestId("business-analytics-evidence")).toContainText("/api/v1/analytics/business-metric-snapshots");
+        await expect(page.getByTestId("business-analytics-evidence")).toContainText("/api/v1/analytics/metric-definitions");
+        await expect(page.getByTestId("business-analytics-summary")).toContainText("上升");
+        await expect(page.getByTestId("business-analytics-table")).toContainText("gmv_amount_cents");
+        await expect(page.getByTestId("business-analytics-definitions-table")).toContainText("GMV");
+        await expect(page.getByTestId("business-analytics-anomalies-table")).toContainText("Revenue dropped");
+        await page.getByTestId("business-analytics-domain-filter").selectOption("bar");
+        await expect(page.getByTestId("business-analytics-table")).toContainText("bar_order_count");
+        await page.getByTestId("business-analytics-domain-filter").selectOption("all");
+        await page.getByTestId("business-analytics-lock-note").fill("总控周会复盘锁定");
+        await page.getByTestId("business-analytics-lock-snapshot").click();
+        await expect(page.getByTestId("admin-action-result")).toContainText("business_snapshot_locked");
+        await expect(page.getByTestId("admin-action-result")).toContainText("management_review_ready");
+        continue;
+      }
+      await expect(page.getByTestId("admin-generic-evidence")).toBeVisible();
+      if (spec.contractGap) {
+        await expect(page.getByTestId("admin-contract-gap")).toContainText("正式接口");
+      } else {
+        const table = page.getByTestId("admin-generic-table");
+        await expect(table).toBeVisible();
+        await expect(table.locator("tbody tr").first()).toBeVisible();
+      }
+    }
+  });
+
+  test("ADM-REM-02 governance, contract, ticketing, bar and amusement actions are auditable", async ({ page }) => {
+    test.slow(); // exercises auditable actions across many modules; triple the timeout under parallel load
+    await installMockApi(page);
+    await adminLogin(page);
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-002")!);
+    await page.getByTestId("organization-merchant-name").fill("二期测试商户");
+    await page.getByTestId("organization-merchant-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_profile_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("Created Merchant");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-003")!);
+    await page.getByTestId("subject-bindings-change-reason").fill("总控验收主体绑定变更");
+    await page.getByTestId("subject-bindings-submit-change").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("binding_changed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("evidence-full-admin");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-004")!);
+    await page.getByTestId("contract-approval-draft-title").fill("主力店补充协议");
+    await page.getByTestId("contract-approval-create-draft").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("contract_draft_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("att-contract-draft");
+    await page.getByTestId("contract-approval-comment").fill("主体、附件和日期均已核验");
+    await page.getByTestId("contract-approval-approve").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("contract_approved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("approved");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-005")!);
+    await page.getByTestId("admission-audits-export-reason").fill("总控导出准入审计片段");
+    await page.getByTestId("admission-audits-export").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("admission_audit_exported");
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_admission_trace_ready");
+    await expect(page.getByTestId("admin-action-result")).toContainText("att-admission-audit-export");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-006")!);
+    await page.getByTestId("supervisor-review-violation-summary").fill("合同主体与基础定义不一致");
+    await page.getByTestId("supervisor-review-evaluate").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("supervisor_review_evaluated");
+    await expect(page.getByTestId("admin-action-result")).toContainText("pending_review");
+    await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
+    await page.getByTestId("supervisor-review-approval-comment").fill("证据齐备，同意放行");
+    await page.getByTestId("supervisor-review-approve").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("supervisor_review_approved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("approved");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-TKT-002")!);
+    await page.getByTestId("dynamic-pricing-simulate").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("finalPriceCent");
+    await page.getByTestId("dynamic-pricing-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("draft");
+    await page.getByTestId("dynamic-pricing-publish").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("published");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-TKT-003")!);
+    await page.getByTestId("ticket-order-issue").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("issued");
+    await page.getByTestId("ticket-verification-preview").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("preview_ok");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-BAR-002")!);
+    await page.getByTestId("bar-order-create-bill").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("billed");
+    await page.getByTestId("bar-order-deliver").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("delivered");
+    await page.getByTestId("bar-order-settle").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("paid");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-BAR-003")!);
+    await page.getByTestId("stored-wine-claim-code").fill("123456");
+    await page.getByTestId("stored-wine-claim").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("claimed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("claim_items");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-BAR-004")!);
+    await page.getByTestId("bar-commission-calculate").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("calculated");
+    await expect(page.getByTestId("admin-action-result")).toContainText("includeTicketAmount");
+    await expect(page.getByTestId("admin-action-result")).toContainText("false");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-INV-001")!);
+    await page.getByTestId("inventory-movement-quantity").fill("1");
+    await page.getByTestId("inventory-movement-submit").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("inventory_stock_movement_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("from_location_id");
+    await expect(page.getByTestId("admin-action-result")).toContainText("items");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-FIN-002")!);
+    await page.getByTestId("reconciliation-review-reason").fill("支付通道入账时间差异，待供应商对账单复核");
+    await page.getByTestId("reconciliation-review-attachment").fill("att-recon-1");
+    await page.getByTestId("reconciliation-review-submit").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("reconciliation_manual_reviewed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("att-recon-1");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-001")!);
+    await page.getByTestId("amusement-session-name").fill("验收场次");
+    await page.getByTestId("amusement-session-capacity").fill("12");
+    await page.getByTestId("amusement-session-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_session_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("P0 Web Session");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-002")!);
+    await page.getByTestId("amusement-group-booking-release-reason").fill("验收释放团体容量");
+    await page.getByTestId("amusement-group-booking-release").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("group_booking_released");
+    await expect(page.getByTestId("admin-action-result")).toContainText("released");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-003")!);
+    await page.getByTestId("amusement-safety-create-title").fill("开放前护栏检查");
+    await page.getByTestId("amusement-safety-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_inspection_created");
+    await page.getByTestId("amusement-safety-submit").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_inspection_submitted");
+    await page.getByTestId("amusement-safety-rectify-note").fill("已更换防护垫并上传照片");
+    await page.getByTestId("amusement-safety-rectify").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_rectified");
+    await page.getByTestId("amusement-safety-recheck").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_rechecked");
+    await page.getByTestId("amusement-safety-approve-reopen").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_reopen_approved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-001")!);
+    await page.getByTestId("merchant-work-order-title").fill("排水异味投诉");
+    await page.getByTestId("merchant-work-order-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("idempotencyKey");
+    await page.getByTestId("merchant-work-order-assign").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_assigned");
+    await page.getByTestId("merchant-work-order-process-note").fill("已到场排查，等待商户确认");
+    await page.getByTestId("merchant-work-order-process").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_processed");
+    await page.getByTestId("merchant-work-order-resolution").fill("已维修完成，商户确认关闭");
+    await page.getByTestId("merchant-work-order-close").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_closed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
+  });
+
+  test("ADM-REM-03 risk, audit, analytics and integration pages cover empty/error/mobile states", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installMockApi(page, { errorPath: "/api/v1/evidence/events" });
+    await adminLogin(page, "/admin/risk/alerts");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-RISK-001")!);
+    await page.getByTestId("risk-alert-summary-input").fill("员工异常折扣触发高风险预警");
+    await page.getByTestId("risk-alert-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("risk_alert_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("att-risk-alert-create");
+    await page.getByTestId("risk-alert-resolution-reason").fill("已复核订单、员工和支付证据，确认关闭");
+    await page.getByTestId("risk-alert-resolve").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("risk_alert_resolved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("resolved");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-INT-002")!);
+    await page.getByTestId("integration-events-polling-note").fill("已完成 Webhook 与定时轮询一致性校验");
+    await page.getByTestId("integration-events-log-polling").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("integration_polling_checked");
+    await expect(page.getByTestId("admin-action-result")).toContainText("webhook_plus_polling_verified");
+    await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-polling");
+    await page.getByTestId("integration-events-retry-reason").fill("供应商超时后人工触发重试");
+    await page.getByTestId("integration-events-run-retry").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("integration_retry_run_now");
+    await expect(page.getByTestId("admin-action-result")).toContainText("ready");
+    await page.getByTestId("integration-events-compensation-note").fill("已核对订单和券核销回流，处理补偿任务");
+    await page.getByTestId("integration-events-resolve-compensation").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("integration_compensation_resolved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("resolved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-compensation");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-EVD-001")!);
+    await expect(page.getByTestId("audit-events-error")).toContainText("SERVER_ERROR");
+
+    await installMockApi(page, { empty: true });
+    await page.reload();
+    await adminLogin(page, "/admin/analytics/business");
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-ANA-001")!);
+    await expect(page.getByTestId("business-analytics-empty")).toContainText("暂无经营指标");
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(80);
+  });
+  test("ADM-REM-04 merchant scoped role can use authorized merchant workspace but is denied platform pages", async ({ page }) => {
+    await installMockApi(page, { user: { username: "merchant-user", accountType: "merchant_operator", merchantId: "merchant-1" } });
+    await adminLogin(page, "/admin/merchant-portal/scope");
+
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-002")!);
+    await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
+    await expect(page.getByTestId("merchant-scope-work-orders-table")).toContainText("merchant-1:work-orders");
+    await page.getByTestId("merchant-scope-confirm").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_scope_confirmed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_authorized_scope_checked");
+
+    await page.getByTestId("admin-logout").click();
+    await adminLogin(page, "/admin/finance/ar-ap-ledger");
+    await expect(page.getByTestId("admin-permission-denied")).toContainText("权限不足");
+  });
+
+});
