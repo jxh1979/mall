@@ -47,15 +47,17 @@
 | U-11 | `tests/e2e/full-admin-remaining.spec.ts` | `ADM-REM-01`/`ADM-REM-02` 加 `test.slow()`（最重的全页遍历测试，并发下三倍超时），修复基线唯一失败项 |
 | U-12 | `tests/e2e/full-admin-visual.spec.ts-snapshots/` | 因 Overview 新增筛选行，回归基线截图（已人工查验：筛选行对齐、KPI 3×2 网格整齐、无溢出/空白）|
 | U-13 | `components/rowSearch.ts`（新）+ `RiskAlertsPage`/`IntegrationEventsPage`/`TicketOrdersPage` | 高量日志页补客户端搜索筛选：抽出共享 `rowMatchesKeyword`，三页加搜索框 + 匹配计数 + 独立 filter-empty 态（与 data-empty 区分）；AuditEvents 原已有搜索 |
+| U-14 | `components/TablePager.tsx`（新）+ 风控/集成事件/出票/审计四页 + `styles.css` + `tests/e2e/support/mock-api.ts` | 高量日志页补客户端**分页**：抽出共享 `usePagedRows`+`TablePager`（上一页/页码状态/下一页，testid 全覆盖），先筛选后分页、改关键词自动回第 1 页；扩充 mock 至每接口 12 行（命名原始行保持首位，确保 RT-1/CP-1/SYNC-1/VCH-1、TO-MOCK-1、Mock risk、event-trace-1 留在第 1 页，现有断言不破）；补 `.admin-pager` 样式 |
 
 ## 4. 新增 Playwright 测试（真实断言）
 
-`tests/e2e/full-admin-ui-hardening.spec.ts`（4 用例，全部通过）：
+`tests/e2e/full-admin-ui-hardening.spec.ts`（6 用例，全部通过）：
 - **ADM-UI-HARDEN-01**：6 个重构页根 testid 可见、表格 `<thead>` 含正确表头文案、页面无横向溢出（scrollWidth-clientWidth ≤ 80）。
 - **ADM-UI-HARDEN-02**：空数据 → `admin-empty` 可见；错误（errorPath mock）→ `admin-error` 含"读取失败"且 `admin-retry` 可见。
 - **ADM-UI-HARDEN-03**：Overview 填起止日期、点"筛选时间" → `overview-date-applied` 含所选区间；KPI testid 可寻址且筛选后仍渲染。
 - **ADM-UI-HARDEN-04**：票务价格填 0 → `ticket-policy-error` 含"平日价"且**未触发任何写动作**（`admin-action-result` count 0）；财务核销金额填 0 → `finance-ledger-error` 含"大于 0"。
 - **ADM-UI-HARDEN-05**：风控/集成事件/出票三页搜索框——非匹配关键词 → `*-filter-empty` 可见且表格 count 0；匹配关键词（`staff_behavior`/`mock`/`TO-MOCK`）→ 表格恢复并含目标行。
+- **ADM-UI-HARDEN-06**：四页分页——风控页 12 行/页大小 10 → 显示"第 1/2 页 共 12 条"，命名行在第 1 页、上一页禁用；点下一页 → 第 2/2 页、下一页禁用、出现 Filler 行；搜索后回"第 1/1 页 共 1 条"；集成事件 RT-1/CP-1/SYNC-1/VCH-1 全在第 1 页；出票点下一页见 `TO-FILL`；审计共 12 条且 `event-trace-1` 留第 1 页。
 
 ## 5. 修复后复跑（全绿）
 
@@ -64,7 +66,7 @@
 | `npm run typecheck` | exit 0 |
 | `npm run build --workspace apps/web` | exit 0，无主包过大 warning |
 | `npm run test:unit`（Vitest） | **16 passed** |
-| `npx playwright test` | **33 passed / 0 failed**（28→33：+5 新用例，原 `ADM-REM-01` 失败已修，视觉基线已更新）|
+| `npx playwright test` | **34 passed / 0 failed**（28→34：+6 新用例，原 `ADM-REM-01` 失败已修，视觉基线已更新）|
 
 ## 6. UI 验收矩阵（核心路径，全部 Playwright 覆盖且有真实断言）
 
@@ -82,5 +84,5 @@
 
 - 后台 30 页可登录、可路由、核心查询/动作可用、空/错/加载/移动端状态可见且可被 Playwright 稳定断言；金额类输入有数值校验；总控时间筛选补齐。
 - typecheck/build/vitest/playwright 全绿，无主包过大 warning，无文字溢出/裸表格/空白页/不可点按钮的阻断问题。
-- **续修（U-13）**：高量日志页（风控/集成事件/出票）已补客户端**搜索筛选**（审计页原已有）；**分页**仍待补——当前 mock 每接口仅 1 行，分页需先扩充多行 mock 数据再实现，避免破坏现有断言。
-- **未在本轮处理（记录移交，非阻断）**：高量日志页**分页**、部分页 `key_fields` 仍为固定验收 payload 而非可编辑表单、3 处重复错误渲染清理（`audit-events-error` 被 ADM-REM-03 依赖，清理需同步改测试）、若干"完整 CRUD/转卡-合并-续卡-回滚"动作仍为验收占位——这些属功能增强，需产品确认信息架构后再扩展。
+- **续修（U-13/U-14）**：高量日志页（风控/集成事件/出票/审计）已补客户端**搜索筛选 + 分页**——抽出共享 `rowMatchesKeyword`/`usePagedRows`/`TablePager`，扩充 mock 至每接口 12 行并保命名行于首位；扩充后 legacy 总控仪表盘"待处理风险"计数随之变化，已回归其 2 张视觉基线（人工查验无破版）。
+- **未在本轮处理（记录移交，非阻断）**：部分页 `key_fields` 仍为固定验收 payload 而非可编辑表单、3 处重复错误渲染清理（`audit-events-error` 被 ADM-REM-03 依赖，清理需同步改测试）、若干"完整 CRUD/转卡-合并-续卡-回滚"动作仍为验收占位——这些属功能增强，需产品确认信息架构后再扩展。

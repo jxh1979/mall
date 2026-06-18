@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { rowMatchesKeyword } from "../components/rowSearch";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, IntegrationEventRow } from "../types";
 
 const ENDPOINTS = [
@@ -90,6 +91,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
   const selectedRetry = rows.find((row) => row.source === "retry_task");
   const selectedCompensation = rows.find((row) => row.source === "compensation_task");
   const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
+  const paged = usePagedRows(filteredRows, 10, query);
 
   async function runAction(action: string, request: Record<string, unknown>, call: () => Promise<unknown>) {
     setBusyAction(action);
@@ -194,7 +196,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="integration-events-table">
             <thead><tr><th>{TEXT.source}</th><th>{TEXT.taskNo}</th><th>{TEXT.provider}</th><th>{TEXT.eventType}</th><th>{TEXT.status}</th><th>{TEXT.retryCount}</th><th>{TEXT.updatedAt}</th></tr></thead>
-            <tbody>{filteredRows.map((row, index) => (
+            <tbody>{paged.pageRows.map((row, index) => (
               <tr key={eventKey(row, index)}>
                 <td>{row.sourceLabel}</td>
                 <td>{row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}</td>
@@ -206,6 +208,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
               </tr>
             ))}</tbody>
           </table>
+          <TablePager testid="integration-events-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
         )}
       </AdminDataState>

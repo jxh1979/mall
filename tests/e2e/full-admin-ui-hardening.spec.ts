@@ -128,4 +128,48 @@ test.describe("full admin UI hardening acceptance", () => {
     await page.getByTestId("ticket-orders-search").fill("TO-MOCK");
     await expect(page.getByTestId("ticket-orders-table")).toContainText("TO-MOCK-1");
   });
+
+  test("ADM-UI-HARDEN-06 log pages paginate filtered rows and reset on search", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page, "/admin/risk/alerts");
+
+    // Risk alerts: 12 rows / page size 10 → two pages; named row stays on page 1
+    await openNav(page, "ADM-RISK-001");
+    await expect(page.getByTestId("risk-alerts-pager-status")).toContainText("第 1 / 2 页");
+    await expect(page.getByTestId("risk-alerts-pager-status")).toContainText("共 12 条");
+    await expect(page.getByTestId("risk-alerts-table")).toContainText("Mock risk");
+    await expect(page.getByTestId("risk-alerts-pager-prev")).toBeDisabled();
+    await page.getByTestId("risk-alerts-pager-next").click();
+    await expect(page.getByTestId("risk-alerts-pager-status")).toContainText("第 2 / 2 页");
+    await expect(page.getByTestId("risk-alerts-pager-next")).toBeDisabled();
+    await expect(page.getByTestId("risk-alerts-table")).toContainText("Filler risk");
+    await page.getByTestId("risk-alerts-pager-prev").click();
+    await expect(page.getByTestId("risk-alerts-pager-status")).toContainText("第 1 / 2 页");
+
+    // Searching narrows to a single page and resets pagination
+    await page.getByTestId("risk-alerts-search").fill("Mock risk");
+    await expect(page.getByTestId("risk-alerts-pager-status")).toContainText("第 1 / 1 页");
+    await expect(page.getByTestId("risk-alerts-pager-status")).toContainText("共 1 条");
+
+    // Integration events: the four named source rows must all remain on page 1
+    await openNav(page, "ADM-INT-002");
+    await expect(page.getByTestId("integration-events-pager-status")).toContainText("第 1 / 2 页");
+    const intTable = page.getByTestId("integration-events-table");
+    await expect(intTable).toContainText("RT-1");
+    await expect(intTable).toContainText("CP-1");
+    await expect(intTable).toContainText("SYNC-1");
+    await expect(intTable).toContainText("VCH-1");
+
+    // Ticket orders: named order on page 1, fillers on page 2
+    await openNav(page, "ADM-TKT-003");
+    await expect(page.getByTestId("ticket-orders-pager-status")).toContainText("共 12 条");
+    await expect(page.getByTestId("ticket-orders-table")).toContainText("TO-MOCK-1");
+    await page.getByTestId("ticket-orders-pager-next").click();
+    await expect(page.getByTestId("ticket-orders-table")).toContainText("TO-FILL");
+
+    // Audit events: 12 events, named trace stays on page 1
+    await openNav(page, "ADM-EVD-001");
+    await expect(page.getByTestId("audit-events-pager-status")).toContainText("共 12 条");
+    await expect(page.getByTestId("audit-events-table")).toContainText("event-trace-1");
+  });
 });

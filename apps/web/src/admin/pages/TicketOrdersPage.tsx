@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketVerificationRow } from "../types";
 
 const TEXT = {
@@ -76,6 +77,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError }: Admin
   const paidCount = orders.filter((order) => order.payStatus === "paid").length;
   const pendingIssueCount = orders.filter((order) => order.issueStatus !== "issued").length;
   const filteredOrders = orders.filter((order) => rowMatchesKeyword(order, query));
+  const paged = usePagedRows(filteredOrders, 10, query);
 
   async function runAction(action: string, request: () => Promise<unknown>, reload = true) {
     setBusyAction(action);
@@ -150,7 +152,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError }: Admin
               <tr><th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.ticketType}</th><th>{TEXT.quantity}</th><th>{TEXT.visitDate}</th><th>{TEXT.channel}</th><th>{TEXT.amount}</th><th>{TEXT.payStatus}</th><th>{TEXT.issueStatus}</th><th>{TEXT.status}</th></tr>
             </thead>
             <tbody>
-              {filteredOrders.map((order) => (
+              {paged.pageRows.map((order) => (
                 <tr key={order.id}>
                   <td><input type="radio" data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                   <td>{order.orderNo ?? order.id}</td>
@@ -166,6 +168,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError }: Admin
               ))}
             </tbody>
           </table>
+          <TablePager testid="ticket-orders-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
         )}
       </AdminDataState>

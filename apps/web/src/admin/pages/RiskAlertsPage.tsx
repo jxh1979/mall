@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, RiskAlertRow } from "../types";
 
 const TEXT = {
@@ -71,6 +72,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError }: AdminPa
   const highRiskCount = rows.filter((row) => ["high", "critical"].includes(row.riskLevel ?? "")).length;
   const openCount = rows.filter((row) => !["resolved", "dismissed", "ignored"].includes(row.status ?? "")).length;
   const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
+  const paged = usePagedRows(filteredRows, 10, query);
 
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
     reload,
@@ -156,7 +158,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError }: AdminPa
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="risk-alerts-table">
             <thead><tr><th>{TEXT.select}</th><th>{TEXT.alertType}</th><th>{TEXT.riskLevel}</th><th>{TEXT.objectType}</th><th>{TEXT.objectId}</th><th>{TEXT.summary}</th><th>{TEXT.owner}</th><th>{TEXT.status}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.createdAt}</th></tr></thead>
-            <tbody>{filteredRows.map((row) => (
+            <tbody>{paged.pageRows.map((row) => (
               <tr key={row.id}>
                 <td><button type="button" data-testid={`risk-alert-select-${row.id}`} onClick={() => setSelectedId(row.id)}>{TEXT.select}</button></td>
                 <td>{row.alertType ?? "-"}</td>
@@ -171,6 +173,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError }: AdminPa
               </tr>
             ))}</tbody>
           </table>
+          <TablePager testid="risk-alerts-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
         )}
       </AdminDataState>
