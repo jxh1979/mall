@@ -3,7 +3,7 @@ import { ConfigProvider, theme } from "antd";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
 import { adminRoutes, findAdminRoute } from "./adminRoutes";
-import { PermissionGate, userHasPermissions } from "./security/PermissionGate";
+import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AccessUsersPage } from "./pages/AccessUsersPage";
 import { PermissionTemplatesPage } from "./pages/PermissionTemplatesPage";
@@ -35,7 +35,7 @@ import { BarCommissionsPage } from "./pages/BarCommissionsPage";
 import { IntegrationAdaptersPage } from "./pages/IntegrationAdaptersPage";
 import { OpsReadinessPage } from "./pages/OpsReadinessPage";
 import { GenericAdminPage } from "./pages/GenericAdminPage";
-import type { AdminPageProps, AdminRoute, AdminUser } from "./types";
+import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
 
 type LoginResponse = {
   accessToken: string;
@@ -120,6 +120,7 @@ export default function AdminApp() {
   const [route, setRoute] = React.useState<AdminRoute>(activeRouteFromLocation);
   const [token, setToken] = React.useState("");
   const [user, setUser] = React.useState<AdminUser | null>(null);
+  const [effectivePermissions, setEffectivePermissions] = React.useState<EffectivePermissionsState>({ status: "loading" });
   const [username, setUsername] = React.useState("admin");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -133,6 +134,28 @@ export default function AdminApp() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  React.useEffect(() => {
+    if (!user || !token) {
+      setEffectivePermissions({ status: "loading" });
+      return;
+    }
+    let cancelled = false;
+    setEffectivePermissions({ status: "loading" });
+    api
+      .get<EffectivePermissions>("/api/v1/access/effective-permissions")
+      .then((value) => {
+        if (cancelled) return;
+        setEffectivePermissions({ status: "ready", value });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEffectivePermissions({ status: "error" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, token, user]);
 
   function navigate(nextRoute: AdminRoute) {
     setRoute(nextRoute);
@@ -162,6 +185,7 @@ export default function AdminApp() {
   function logout() {
     setToken("");
     setUser(null);
+    setEffectivePermissions({ status: "loading" });
     setActionResult(null);
     setGlobalError(null);
   }
@@ -182,7 +206,7 @@ export default function AdminApp() {
         <div className="admin-brand">综合体完整后台</div>
         <nav data-testid="admin-nav">
           {adminRoutes.map((item) => {
-            const allowed = userHasPermissions(user, item.requiredPermissions);
+            const allowed = hasPermissions(effectivePermissions, item.requiredPermissions);
             return (
               <button
                 type="button"
@@ -205,7 +229,7 @@ export default function AdminApp() {
           <div className="admin-topbar-actions"><span>{user.username}</span><button type="button" data-testid="admin-logout" onClick={logout}>退出</button></div>
         </header>
         {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
-        <PermissionGate user={user} permissions={route.requiredPermissions}>
+        <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
           {renderPage(route, { api, user, setActionResult, setGlobalError })}
         </PermissionGate>
         {actionResult ? <pre className="admin-result" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}

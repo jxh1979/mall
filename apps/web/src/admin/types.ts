@@ -4,8 +4,19 @@ export type AdminUser = {
   accountType: string;
   organizationId?: string | null;
   merchantId?: string | null;
-  permissions?: string[];
 };
+
+export type EffectivePermissions = {
+  grants: string[];
+  denies: string[];
+  wildcard: boolean;
+  computedAt?: string;
+};
+
+export type EffectivePermissionsState =
+  | { status: "loading" }
+  | { status: "ready"; value: EffectivePermissions }
+  | { status: "error" };
 
 export type AdminRoute = {
   pageId: string;

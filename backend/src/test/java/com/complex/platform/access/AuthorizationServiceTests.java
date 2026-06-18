@@ -179,6 +179,69 @@ class AuthorizationServiceTests {
                 });
     }
 
+    @Test
+    void effectivePermissionsRemovesDenyCoveredCodesFromGrantsAndListsDenies() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(effect("usr_staff", "ticket.order.view", AccessRepository.Effect.GRANT));
+        repository.addEffect(effect("usr_staff", "finance.refund.create", AccessRepository.Effect.GRANT));
+        repository.addEffect(effect("usr_staff", "finance.refund.create", AccessRepository.Effect.DENY));
+
+        EffectivePermissions result = service.effectivePermissions();
+
+        assertThat(result.userId()).isEqualTo("usr_staff");
+        assertThat(result.grants()).containsExactly("ticket.order.view");
+        assertThat(result.denies()).containsExactly("finance.refund.create");
+        assertThat(result.wildcard()).isFalse();
+        assertThat(result.computedAt()).isNotNull();
+    }
+
+    @Test
+    void effectivePermissionsMarksWildcardForActivePlatformAdmin() {
+        authenticate("usr_admin", "seed-admin", "platform_admin");
+        assertThat(service.effectivePermissions().wildcard()).isTrue();
+    }
+
+    @Test
+    void effectivePermissionsQueryDoesNotConsumeSingleUseGrant() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(new AccessRepository.PermissionEffect(
+                "usr_staff",
+                "ops.production_readiness.manage",
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPLATE_APPLICATION,
+                "application_once",
+                Instant.parse("2026-06-13T00:00:00Z"),
+                null,
+                true,
+                false
+        ));
+
+        EffectivePermissions first = service.effectivePermissions();
+        EffectivePermissions second = service.effectivePermissions();
+
+        assertThat(first.grants()).contains("ops.production_readiness.manage");
+        assertThat(second.grants()).contains("ops.production_readiness.manage");
+        assertThat(repository.consumedSourceIds).isEmpty();
+    }
+
+    @Test
+    void effectivePermissionsExcludesExpiredGrant() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(new AccessRepository.PermissionEffect(
+                "usr_staff",
+                "ops.production_readiness.view",
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPLATE_APPLICATION,
+                "application_expired",
+                Instant.parse("2026-06-13T00:00:00Z"),
+                Instant.parse("2026-06-13T01:00:00Z"),
+                false,
+                false
+        ));
+
+        assertThat(service.effectivePermissions().grants()).doesNotContain("ops.production_readiness.view");
+    }
+
     private AccessRepository.PermissionEffect effect(
             String userId,
             String permissionCode,

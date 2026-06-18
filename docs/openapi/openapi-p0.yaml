@@ -5503,6 +5503,56 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/access/effective-permissions:
+    get:
+      tags:
+        - access
+      operationId: getEffectivePermissions
+      summary: 查询当前账号有效权限集
+      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先 + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
+      x-permission: authenticated
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: access.effective_permission.viewed
+      x-audit-event-failure: access.effective_permission.viewed_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/access/users/{id}/effective-permissions:
+    get:
+      tags:
+        - access
+      operationId: getUserEffectivePermissions
+      summary: 查询指定账号有效权限集
+      description: 平台管理用：返回指定账号的有效权限集（四源合并、DENY 优先）。需 access.user.view 权限；只读不消费单次授权。
+      x-permission: access.user.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: access.effective_permission.viewed
+      x-audit-event-failure: access.effective_permission.viewed_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/access/users/{id}/staff-level:
     put:
       tags:

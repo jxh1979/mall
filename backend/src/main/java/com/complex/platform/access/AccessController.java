@@ -126,6 +126,18 @@ public class AccessController {
         return ApiResponse.ok(service.createAccessUser(request));
     }
 
+    @GetMapping("/effective-permissions")
+    public ApiResponse<EffectivePermissions> effectivePermissions() {
+        // self 端：仅需已登录（currentActor 在未认证时抛 UNAUTHENTICATED），返回自身有效集，scope 安全。
+        return ApiResponse.ok(authorizationService.effectivePermissions());
+    }
+
+    @GetMapping("/users/{id}/effective-permissions")
+    public ApiResponse<EffectivePermissions> effectivePermissionsForUser(@PathVariable String id) {
+        authorizationService.requirePermission("access.user.view");
+        return ApiResponse.ok(authorizationService.effectivePermissionsForUser(id));
+    }
+
     @GetMapping("/staff-levels")
     public ApiResponse<PageResponse<StaffLevelRecord>> listStaffLevels() {
         authorizationService.requirePermission("access.staff_level.view");

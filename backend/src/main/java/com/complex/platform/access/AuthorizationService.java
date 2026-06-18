@@ -61,6 +61,46 @@ public class AuthorizationService implements CallerScopeResolver {
         }
     }
 
+    /**
+     * 当前 actor 自身的有效权限集（self 端，只读）。不消费单次授权——
+     * 单次授权仅在真正执行动作的 {@link #requirePermission} 中消费，避免"看一眼菜单就烧掉"。
+     */
+    public EffectivePermissions effectivePermissions() {
+        AccessActor actor = currentActor();
+        return computeEffectivePermissions(actor.id(), isPlatformAdminBridge(actor));
+    }
+
+    /** 指定用户的有效权限集（平台管理用；调用方须先校验 {@code access.user.view}）。 */
+    public EffectivePermissions effectivePermissionsForUser(String userId) {
+        boolean wildcard = accessRepository.findUserById(userId)
+                .map(user -> "active".equals(user.status())
+                        && "platform_admin".equals(normalize(user.accountType())))
+                .orElse(false);
+        return computeEffectivePermissions(userId, wildcard);
+    }
+
+    private EffectivePermissions computeEffectivePermissions(String userId, boolean wildcard) {
+        Instant checkedAt = Instant.now();
+        List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
+                .filter(effect -> isActive(effect, checkedAt))
+                .toList();
+        List<String> denies = active.stream()
+                .filter(effect -> effect.effect() == AccessRepository.Effect.DENY)
+                .map(AccessRepository.PermissionEffect::permissionCode)
+                .distinct()
+                .sorted()
+                .toList();
+        // 实现 A：grants 预扣 denies（DENY 优先），denies 仍单独返回供前端展示冲突来源。
+        List<String> grants = active.stream()
+                .filter(effect -> effect.effect() == AccessRepository.Effect.GRANT)
+                .map(AccessRepository.PermissionEffect::permissionCode)
+                .filter(code -> !denies.contains(code))
+                .distinct()
+                .sorted()
+                .toList();
+        return new EffectivePermissions(userId, grants, denies, wildcard, checkedAt);
+    }
+
     public AccessActor currentActor() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
