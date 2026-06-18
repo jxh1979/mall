@@ -1,9 +1,11 @@
 package com.complex.platform.access;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
 import com.complex.platform.access.dto.RoleRequest;
+import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
 import com.complex.platform.common.api.ApiException;
@@ -124,9 +126,28 @@ public class AccessController {
         return ApiResponse.ok(service.createAccessUser(request));
     }
 
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
+    @GetMapping("/staff-levels")
+    public ApiResponse<PageResponse<StaffLevelRecord>> listStaffLevels() {
+        authorizationService.requirePermission("access.staff_level.view");
+        return ApiResponse.ok(service.listStaffLevels());
+    }
+
+    @PutMapping("/users/{id}/staff-level")
+    public ApiResponse<StaffLevelAssignment> assignStaffLevel(
+            @PathVariable String id,
+            @RequestBody StaffLevelAssignmentRequest request
+    ) {
+        authorizationService.requirePermission("access.staff_level.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        StaffLevelAssignmentRequest withUser = new StaffLevelAssignmentRequest(
+                request == null ? null : request.idempotencyKey(),
+                request == null ? null : request.operatorNote(),
+                id,
+                request == null ? null : request.staffLevelId(),
+                request == null ? null : request.baseSalaryAmountCent(),
+                request == null ? null : request.salaryCurrency(),
+                request == null ? null : request.salaryDetail()
+        );
+        return ApiResponse.ok(service.assignStaffLevel(withUser));
     }
 }

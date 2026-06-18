@@ -67,6 +67,12 @@
     },
     {
       "name": "floor-plan"
+    },
+    {
+      "name": "merchant-service"
+    },
+    {
+      "name": "merchant-billing"
     }
   ],
   "paths": {
@@ -690,6 +696,172 @@
             "$ref": "#/components/responses/Page"
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/group-bookings": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementGroupBookings",
+        "summary": "List P2 amusement group and private bookings",
+        "description": "List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "amusement.group_booking.view",
+        "x-data-scope": "project-amusement",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement_group_booking.viewed.success",
+        "x-audit-event-failure": "amusement_group_booking.viewed.failure",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "createAmusementGroupBooking",
+        "summary": "Create P2 amusement group or private booking request",
+        "description": "Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "amusement.group_booking.manage",
+        "x-data-scope": "project-amusement",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement_group_booking.created.success",
+        "x-audit-event-failure": "amusement_group_booking.created.failure",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AmusementGroupBookingRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/group-bookings/{id}/approve": {
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "approveAmusementGroupBooking",
+        "summary": "Approve P2 amusement group booking and lock capacity",
+        "description": "Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "amusement.group_booking.approve",
+        "x-data-scope": "project-amusement",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement_group_booking.approved.success",
+        "x-audit-event-failure": "amusement_group_booking.approved.failure",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "Resource id path parameter."
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AmusementGroupBookingApprovalRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/group-bookings/{id}/release": {
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "releaseAmusementGroupBooking",
+        "summary": "Release P2 amusement group booking and free locked capacity",
+        "description": "Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "amusement.group_booking.manage",
+        "x-data-scope": "project-amusement",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement_group_booking.released.success",
+        "x-audit-event-failure": "amusement_group_booking.released.failure",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "Resource id path parameter."
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AmusementGroupBookingReleaseRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -1397,6 +1569,45 @@
         "description": "用于查询游乐核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
       }
     },
+    "/api/v1/analytics/ai-quality/local-llm-suggestions": {
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "generateLocalLlmAiQualitySuggestion",
+        "summary": "Generate local LLM AI quality suggestion",
+        "description": "T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result writes only AI quality task and result records and never changes payment, verification, refund, punishment, commission, contract, inventory, or device state.",
+        "x-permission": "analytics.risk_alert.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "analytics.ai_quality.local_llm_suggestion.created",
+        "x-audit-event-failure": "analytics.ai_quality.local_llm_suggestion.failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AiQualitySuggestion"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/analytics/ai-quality/results": {
       "get": {
         "tags": [
@@ -1457,43 +1668,34 @@
         "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/analytics/ai-quality/local-llm-suggestions": {
-      "post": {
+    "/api/v1/analytics/business-metric-snapshots": {
+      "get": {
         "tags": [
           "analytics"
         ],
-        "operationId": "generateLocalLlmAiQualitySuggestion",
-        "summary": "Generate local LLM AI quality suggestion",
-        "description": "T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result writes only AI quality task and result records and never changes payment, verification, refund, punishment, commission, contract, inventory, or device state.",
-        "x-permission": "analytics.risk_alert.manage",
+        "operationId": "listBusinessMetricSnapshots",
+        "summary": "List P2 business metric snapshots for operational analytics",
+        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "analytics.dashboard.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "analytics.ai_quality.local_llm_suggestion.created",
-        "x-audit-event-failure": "analytics.ai_quality.local_llm_suggestion.failed",
-        "x-auth-context": "staff-token",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/AiQualitySuggestion"
-        },
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics_business_metric_snapshot.viewed.success",
+        "x-audit-event-failure": "analytics_business_metric_snapshot.viewed.failure",
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
+            "$ref": "#/components/responses/Page"
           },
           "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "x-auth-context": "staff-token"
       }
     },
     "/api/v1/analytics/customer-intents": {
@@ -3552,6 +3754,340 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/floor-plans": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "listFloorPlans",
+        "summary": "查询 P1/P2 商场平面图",
+        "description": "返回图片底图、多边形坐标版本和状态，用于 Web 管理端选择平面图。",
+        "x-permission": "floor_plan.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.viewed",
+        "x-audit-event-failure": "floor_plan.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "createFloorPlan",
+        "summary": "创建 P1/P2 商场平面图",
+        "description": "创建图片底图与多边形坐标承载对象，不自动导入 CAD 或 SVG。",
+        "x-permission": "floor_plan.manage",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "floor_plan.created",
+        "x-audit-event-failure": "floor_plan.create_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FloorPlanCreateRequest"
+        }
+      }
+    },
+    "/api/v1/floor-plans/{id}/imports": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "listFloorPlanImports",
+        "summary": "查询平面图导入任务",
+        "description": "返回指定平面图的 SVG 或标准 JSON 导入任务列表。",
+        "x-permission": "floor_plan.import.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.import_viewed",
+        "x-audit-event-failure": "floor_plan.import_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "createFloorPlanImport",
+        "summary": "创建 SVG 或标准 JSON 导入任务",
+        "description": "导入任务只生成候选和错误明细，不写入正式区域，发布必须另走人工确认接口。",
+        "x-permission": "floor_plan.import.manage",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "floor_plan.import_created",
+        "x-audit-event-failure": "floor_plan.import_create_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FloorPlanImportCreateRequest"
+        }
+      }
+    },
+    "/api/v1/floor-plans/{id}/imports/{importId}/candidates": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "getFloorPlanImportDetails",
+        "summary": "查询导入候选和错误",
+        "description": "返回导入任务解析出的候选区域和错误明细，供人工复核。",
+        "x-permission": "floor_plan.import.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.import_candidate_viewed",
+        "x-audit-event-failure": "floor_plan.import_candidate_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "description": "导入任务 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/floor-plans/{id}/imports/{importId}/publish": {
+      "post": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "publishFloorPlanImport",
+        "summary": "发布平面图导入候选",
+        "description": "将人工选择的候选写入正式区域，必须携带幂等键并记录审计留痕。",
+        "x-permission": "floor_plan.import.manage",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "floor_plan.import_published",
+        "x-audit-event-failure": "floor_plan.import_publish_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "description": "导入任务 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FloorPlanImportPublishRequest"
+        }
+      }
+    },
+    "/api/v1/floor-plans/{id}/shapes": {
+      "get": {
+        "tags": [
+          "floor-plan"
+        ],
+        "operationId": "listFloorPlanShapes",
+        "summary": "查询平面图正式区域",
+        "description": "返回已发布的正式多边形区域，供商场平面图和招商运营联动查看。",
+        "x-permission": "floor_plan.view",
+        "x-data-scope": "project-space",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "floor_plan.shape_viewed",
+        "x-audit-event-failure": "floor_plan.shape_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "平面图 ID",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ]
+      }
+    },
     "/api/v1/integration/compensation-tasks": {
       "get": {
         "tags": [
@@ -4814,6 +5350,356 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/merchant-service/work-orders": {
+      "get": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "listMerchantServiceWorkOrders",
+        "summary": "List merchant service work orders",
+        "description": "List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.",
+        "x-permission": "merchant.service_work_order.view",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "merchant_service.listMerchantServiceWorkOrders.succeeded",
+        "x-audit-event-failure": "merchant_service.listMerchantServiceWorkOrders.failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "createMerchantServiceWorkOrder",
+        "summary": "Create merchant service work order",
+        "description": "Create merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.",
+        "x-permission": "merchant.service_work_order.create",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.createMerchantServiceWorkOrder.succeeded",
+        "x-audit-event-failure": "merchant_service.createMerchantServiceWorkOrder.failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MerchantWorkOrderCreateRequest"
+        }
+      }
+    },
+    "/api/v1/merchant-service/work-orders/{id}/actions": {
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "addMerchantServiceWorkOrderAction",
+        "summary": "Append merchant service work order action",
+        "description": "Append merchant service work order action. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.",
+        "x-permission": "merchant.service_work_order.process",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.addMerchantServiceWorkOrderAction.succeeded",
+        "x-audit-event-failure": "merchant_service.addMerchantServiceWorkOrderAction.failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MerchantWorkOrderActionRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ]
+      }
+    },
+    "/api/v1/merchant-service/work-orders/{id}/assign": {
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "assignMerchantServiceWorkOrder",
+        "summary": "Assign merchant service work order",
+        "description": "Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.",
+        "x-permission": "merchant.service_work_order.assign",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.assignMerchantServiceWorkOrder.succeeded",
+        "x-audit-event-failure": "merchant_service.assignMerchantServiceWorkOrder.failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MerchantWorkOrderAssignRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ]
+      }
+    },
+    "/api/v1/merchant-service/work-orders/{id}/close": {
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "closeMerchantServiceWorkOrder",
+        "summary": "Close merchant service work order",
+        "description": "Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.",
+        "x-permission": "merchant.service_work_order.close",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.closeMerchantServiceWorkOrder.succeeded",
+        "x-audit-event-failure": "merchant_service.closeMerchantServiceWorkOrder.failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MerchantWorkOrderCloseRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ]
+      }
+    },
+    "/api/v1/ops/production-readiness/checks": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "createProductionReadinessCheck",
+        "summary": "执行生产前置准入检查",
+        "description": "汇总所有生产前置项并生成准入检查结果；任一阻断项未通过时不得标记真实生产就绪。",
+        "x-permission": "ops.production_readiness.check",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "production_readiness.checked",
+        "x-audit-event-failure": "production_readiness.check_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ProductionReadinessCheckRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ops/production-readiness/items": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "listProductionReadinessItems",
+        "summary": "查询生产前置责任状态",
+        "description": "查询 MDM、聚合支付、年龄核验、NAS 备份、密钥轮换、企业微信、第三方联动和 160 环境等生产前置项状态；用于总控和 IT 判断真实生产阻断项。",
+        "x-permission": "ops.production_readiness.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "production_readiness.viewed",
+        "x-audit-event-failure": "production_readiness.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ops/production-readiness/items/{id}": {
+      "put": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "updateProductionReadinessItem",
+        "summary": "更新生产前置责任状态",
+        "description": "更新单个生产前置项的责任部门、责任人、计划日期、验收状态、证据链接、阻断范围和降级方式；不得绕过审计事件。",
+        "x-permission": "ops.production_readiness.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "production_readiness.updated",
+        "x-audit-event-failure": "production_readiness.update_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "生产前置责任项 ID；必须引用当前项目下存在且允许访问的记录。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ProductionReadinessItemUpdateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/platform/business-entities": {
       "get": {
         "tags": [
@@ -5379,117 +6265,6 @@
         "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/ops/production-readiness/items": {
-      "get": {
-        "tags": [
-          "ops"
-        ],
-        "operationId": "listProductionReadinessItems",
-        "summary": "查询生产前置责任状态",
-        "description": "查询 MDM、聚合支付、年龄核验、NAS 备份、密钥轮换、企业微信、第三方联动和 160 环境等生产前置项状态；用于总控和 IT 判断真实生产阻断项。",
-        "x-permission": "ops.production_readiness.view",
-        "x-data-scope": "project",
-        "x-terminal-allowed": [
-          "web",
-          "mobile_admin"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "production_readiness.viewed",
-        "x-audit-event-failure": "production_readiness.view_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Page"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/ops/production-readiness/items/{id}": {
-      "put": {
-        "tags": [
-          "ops"
-        ],
-        "operationId": "updateProductionReadinessItem",
-        "summary": "更新生产前置责任状态",
-        "description": "更新单个生产前置项的责任部门、责任人、计划日期、验收状态、证据链接、阻断范围和降级方式；不得绕过审计事件。",
-        "x-permission": "ops.production_readiness.manage",
-        "x-data-scope": "project",
-        "x-terminal-allowed": [
-          "web",
-          "mobile_admin"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "production_readiness.updated",
-        "x-audit-event-failure": "production_readiness.update_failed",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Id",
-            "description": "生产前置责任项 ID；必须引用当前项目下存在且允许访问的记录。"
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ProductionReadinessItemUpdateRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/ops/production-readiness/checks": {
-      "post": {
-        "tags": [
-          "ops"
-        ],
-        "operationId": "createProductionReadinessCheck",
-        "summary": "执行生产前置准入检查",
-        "description": "汇总所有生产前置项并生成准入检查结果；任一阻断项未通过时不得标记真实生产就绪。",
-        "x-permission": "ops.production_readiness.check",
-        "x-data-scope": "project",
-        "x-terminal-allowed": [
-          "web",
-          "mobile_admin"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "production_readiness.checked",
-        "x-audit-event-failure": "production_readiness.check_failed",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/ProductionReadinessCheckRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
     "/api/v1/terminals/capability-switches": {
       "get": {
         "tags": [
@@ -5873,6 +6648,163 @@
         }
       }
     },
+    "/api/v1/ticketing/dynamic-pricing-rules": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "listTicketDynamicPricingRules",
+        "summary": "List P2 ticket dynamic pricing rules",
+        "description": "List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "ticket.dynamic_pricing.view",
+        "x-data-scope": "project-channel",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "ticket_dynamic_pricing.viewed.success",
+        "x-audit-event-failure": "ticket_dynamic_pricing.viewed.failure",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "createTicketDynamicPricingRule",
+        "summary": "Create P2 ticket dynamic pricing rule draft",
+        "description": "Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "ticket.dynamic_pricing.manage",
+        "x-data-scope": "project-channel",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_dynamic_pricing.created.success",
+        "x-audit-event-failure": "ticket_dynamic_pricing.created.failure",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TicketDynamicPricingRuleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/dynamic-pricing-rules/{id}/publish": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "publishTicketDynamicPricingRule",
+        "summary": "Publish P2 ticket dynamic pricing rule",
+        "description": "Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "x-permission": "ticket.dynamic_pricing.publish",
+        "x-data-scope": "project-channel",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_dynamic_pricing.published.success",
+        "x-audit-event-failure": "ticket_dynamic_pricing.published.failure",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "Resource id path parameter."
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StatusChange"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/dynamic-pricing/simulations": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "simulateTicketDynamicPricing",
+        "summary": "Simulate P2 ticket dynamic pricing without creating an order",
+        "description": "Simulate P2 ticket dynamic pricing. Simulation may include draft and published rules, but does not create orders or receivables.",
+        "x-permission": "ticket.dynamic_pricing.simulate",
+        "x-data-scope": "project-channel",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_dynamic_pricing.simulated.success",
+        "x-audit-event-failure": "ticket_dynamic_pricing.simulated.failure",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/TicketDynamicPricingSimulationRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/ticketing/entitlement-templates": {
       "get": {
         "tags": [
@@ -6005,7 +6937,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation."
       }
     },
     "/api/v1/ticketing/orders/{order_id}/issue": {
@@ -6578,22 +7511,23 @@
         "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/ticketing/dynamic-pricing-rules": {
+    "/api/v1/merchant-billing/bills": {
       "get": {
         "tags": [
-          "ticketing"
+          "merchant-billing"
         ],
-        "operationId": "listTicketDynamicPricingRules",
-        "summary": "List P2 ticket dynamic pricing rules",
-        "description": "List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "ticket.dynamic_pricing.view",
-        "x-data-scope": "project-channel",
+        "operationId": "listMerchantBills",
+        "summary": "List merchant bills",
+        "description": "List merchant bills for merchant portal and admin read-only scope checks. This P1/P2 merchant billing workflow must enforce server-side permissions, project-merchant data scope, and audit evidence.",
+        "x-permission": "merchant.billing.view",
+        "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web"
+          "web",
+          "merchant_portal"
         ],
         "x-idempotency-required": false,
-        "x-audit-event-success": "ticket_dynamic_pricing.viewed.success",
-        "x-audit-event-failure": "ticket_dynamic_pricing.viewed.failure",
+        "x-audit-event-success": "merchant_billing.bill.viewed",
+        "x-audit-event-failure": "merchant_billing.bill.view_failed",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Page"
@@ -6606,151 +7540,24 @@
           }
         },
         "x-auth-context": "staff-token"
-      },
-      "post": {
-        "tags": [
-          "ticketing"
-        ],
-        "operationId": "createTicketDynamicPricingRule",
-        "summary": "Create P2 ticket dynamic pricing rule draft",
-        "description": "Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "ticket.dynamic_pricing.manage",
-        "x-data-scope": "project-channel",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "ticket_dynamic_pricing.created.success",
-        "x-audit-event-failure": "ticket_dynamic_pricing.created.failure",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/TicketDynamicPricingRuleRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/ticketing/dynamic-pricing-rules/{id}/publish": {
-      "post": {
-        "tags": [
-          "ticketing"
-        ],
-        "operationId": "publishTicketDynamicPricingRule",
-        "summary": "Publish P2 ticket dynamic pricing rule",
-        "description": "Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "ticket.dynamic_pricing.publish",
-        "x-data-scope": "project-channel",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "ticket_dynamic_pricing.published.success",
-        "x-audit-event-failure": "ticket_dynamic_pricing.published.failure",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Id",
-            "description": "Resource id path parameter."
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/StatusChange"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/ticketing/dynamic-pricing/simulations": {
-      "post": {
-        "tags": [
-          "ticketing"
-        ],
-        "operationId": "simulateTicketDynamicPricing",
-        "summary": "Simulate P2 ticket dynamic pricing without changing order price",
-        "description": "Simulate P2 ticket dynamic pricing without changing order price. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "ticket.dynamic_pricing.simulate",
-        "x-data-scope": "project-channel",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "ticket_dynamic_pricing.simulated.success",
-        "x-audit-event-failure": "ticket_dynamic_pricing.simulated.failure",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/TicketDynamicPricingSimulationRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/amusement/group-bookings": {
+    "/api/v1/platform/supervisor-review-policies": {
       "get": {
         "tags": [
-          "amusement"
+          "platform"
         ],
-        "operationId": "listAmusementGroupBookings",
-        "summary": "List P2 amusement group and private bookings",
-        "description": "List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "amusement.group_booking.view",
-        "x-data-scope": "project-amusement",
+        "operationId": "listSupervisorReviewPolicies",
+        "summary": "查询主管复核与违规阻断策略",
+        "description": "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。",
+        "x-permission": "governance.supervisor_review.view",
+        "x-data-scope": "project-entity",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": false,
-        "x-audit-event-success": "amusement_group_booking.viewed.success",
-        "x-audit-event-failure": "amusement_group_booking.viewed.failure",
+        "x-audit-event-success": "governance.supervisor_review.policies_viewed",
+        "x-audit-event-failure": "governance.supervisor_review.policies_view_failed",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Page"
@@ -6763,24 +7570,65 @@
           }
         },
         "x-auth-context": "staff-token"
-      },
+      }
+    },
+    "/api/v1/platform/supervisor-review/evaluate": {
       "post": {
         "tags": [
-          "amusement"
+          "platform"
         ],
-        "operationId": "createAmusementGroupBooking",
-        "summary": "Create P2 amusement group or private booking request",
-        "description": "Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "amusement.group_booking.manage",
-        "x-data-scope": "project-amusement",
+        "operationId": "evaluateSupervisorReview",
+        "summary": "评估业务动作是否需要主管复核",
+        "description": "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。",
+        "x-permission": "governance.supervisor_review.manage",
+        "x-data-scope": "project-entity",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": true,
-        "x-audit-event-success": "amusement_group_booking.created.success",
-        "x-audit-event-failure": "amusement_group_booking.created.failure",
+        "x-audit-event-success": "governance.supervisor_review.evaluated",
+        "x-audit-event-failure": "governance.supervisor_review.evaluate_failed",
         "requestBody": {
-          "$ref": "#/components/requestBodies/AmusementGroupBookingRequest"
+          "$ref": "#/components/requestBodies/SupervisorReviewEvaluateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/platform/supervisor-review/{review_id}/approve": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "approveSupervisorReview",
+        "summary": "主管审批或驳回复核记录",
+        "description": "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。",
+        "x-permission": "governance.supervisor_review.approve",
+        "x-data-scope": "project-entity",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "governance.supervisor_review.decided",
+        "x-audit-event-failure": "governance.supervisor_review.decide_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/SupervisorReviewApprovalRequest"
         },
         "responses": {
           "200": {
@@ -6802,121 +7650,30 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/amusement/group-bookings/{id}/approve": {
-      "post": {
-        "tags": [
-          "amusement"
-        ],
-        "operationId": "approveAmusementGroupBooking",
-        "summary": "Approve P2 amusement group booking and lock capacity",
-        "description": "Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "amusement.group_booking.approve",
-        "x-data-scope": "project-amusement",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "amusement_group_booking.approved.success",
-        "x-audit-event-failure": "amusement_group_booking.approved.failure",
+        "x-auth-context": "staff-token",
         "parameters": [
           {
-            "$ref": "#/components/parameters/Id",
-            "description": "Resource id path parameter."
+            "$ref": "#/components/parameters/ReviewId"
           }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/AmusementGroupBookingApprovalRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
+        ]
       }
     },
-    "/api/v1/amusement/group-bookings/{id}/release": {
-      "post": {
-        "tags": [
-          "amusement"
-        ],
-        "operationId": "releaseAmusementGroupBooking",
-        "summary": "Release P2 amusement group booking and free locked capacity",
-        "description": "Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "amusement.group_booking.manage",
-        "x-data-scope": "project-amusement",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "amusement_group_booking.released.success",
-        "x-audit-event-failure": "amusement_group_booking.released.failure",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Id",
-            "description": "Resource id path parameter."
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/AmusementGroupBookingReleaseRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/analytics/business-metric-snapshots": {
+    "/api/v1/access/staff-levels": {
       "get": {
         "tags": [
-          "analytics"
+          "access"
         ],
-        "operationId": "listBusinessMetricSnapshots",
-        "summary": "List P2 business metric snapshots for operational analytics",
-        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
-        "x-permission": "analytics.dashboard.view",
+        "operationId": "listStaffLevels",
+        "summary": "查询职级目录",
+        "description": "用于查询职级目录（M1-M10 上中下，level_rank 1..30）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "access.staff_level.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": false,
-        "x-audit-event-success": "analytics_business_metric_snapshot.viewed.success",
-        "x-audit-event-failure": "analytics_business_metric_snapshot.viewed.failure",
+        "x-audit-event-success": "access.staff_level.viewed",
+        "x-audit-event-failure": "access.staff_level.viewed_failed",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Page"
@@ -6931,30 +7688,48 @@
         "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/floor-plans": {
-      "get": {
+    "/api/v1/access/users/{id}/staff-level": {
+      "put": {
         "tags": [
-          "floor-plan"
+          "access"
         ],
-        "operationId": "listFloorPlans",
-        "summary": "查询 P1/P2 商场平面图",
-        "description": "返回图片底图、多边形坐标版本和状态，用于 Web 管理端选择平面图。",
-        "x-permission": "floor_plan.view",
-        "x-data-scope": "project-space",
+        "operationId": "assignStaffLevel",
+        "summary": "分配员工职级与薪资",
+        "description": "用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "access.staff_level.manage",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "floor_plan.viewed",
-        "x-audit-event-failure": "floor_plan.view_failed",
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.staff_level.assigned",
+        "x-audit-event-failure": "access.staff_level.assign_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "目标员工 user_id 路径参数；必须引用当前数据范围内存在且允许访问的记录。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StaffLevelAssignmentRequest"
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
           },
           "403": {
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -6962,307 +7737,6 @@
           }
         },
         "x-auth-context": "staff-token"
-      },
-      "post": {
-        "tags": [
-          "floor-plan"
-        ],
-        "operationId": "createFloorPlan",
-        "summary": "创建 P1/P2 商场平面图",
-        "description": "创建图片底图与多边形坐标承载对象，不自动导入 CAD 或 SVG。",
-        "x-permission": "floor_plan.manage",
-        "x-data-scope": "project-space",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "floor_plan.created",
-        "x-audit-event-failure": "floor_plan.create_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/FloorPlanCreateRequest"
-        }
-      }
-    },
-    "/api/v1/floor-plans/{id}/shapes": {
-      "get": {
-        "tags": [
-          "floor-plan"
-        ],
-        "operationId": "listFloorPlanShapes",
-        "summary": "查询平面图正式区域",
-        "description": "返回已发布的正式多边形区域，供商场平面图和招商运营联动查看。",
-        "x-permission": "floor_plan.view",
-        "x-data-scope": "project-space",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "floor_plan.shape_viewed",
-        "x-audit-event-failure": "floor_plan.shape_view_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "平面图 ID",
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            }
-          }
-        ]
-      }
-    },
-    "/api/v1/floor-plans/{id}/imports": {
-      "get": {
-        "tags": [
-          "floor-plan"
-        ],
-        "operationId": "listFloorPlanImports",
-        "summary": "查询平面图导入任务",
-        "description": "返回指定平面图的 SVG 或标准 JSON 导入任务列表。",
-        "x-permission": "floor_plan.import.view",
-        "x-data-scope": "project-space",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "floor_plan.import_viewed",
-        "x-audit-event-failure": "floor_plan.import_view_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "平面图 ID",
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            }
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "floor-plan"
-        ],
-        "operationId": "createFloorPlanImport",
-        "summary": "创建 SVG 或标准 JSON 导入任务",
-        "description": "导入任务只生成候选和错误明细，不写入正式区域，发布必须另走人工确认接口。",
-        "x-permission": "floor_plan.import.manage",
-        "x-data-scope": "project-space",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "floor_plan.import_created",
-        "x-audit-event-failure": "floor_plan.import_create_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "平面图 ID",
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            }
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/FloorPlanImportCreateRequest"
-        }
-      }
-    },
-    "/api/v1/floor-plans/{id}/imports/{importId}/candidates": {
-      "get": {
-        "tags": [
-          "floor-plan"
-        ],
-        "operationId": "getFloorPlanImportDetails",
-        "summary": "查询导入候选和错误",
-        "description": "返回导入任务解析出的候选区域和错误明细，供人工复核。",
-        "x-permission": "floor_plan.import.view",
-        "x-data-scope": "project-space",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "floor_plan.import_candidate_viewed",
-        "x-audit-event-failure": "floor_plan.import_candidate_view_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "平面图 ID",
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            }
-          },
-          {
-            "name": "importId",
-            "in": "path",
-            "required": true,
-            "description": "导入任务 ID",
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            }
-          }
-        ]
-      }
-    },
-    "/api/v1/floor-plans/{id}/imports/{importId}/publish": {
-      "post": {
-        "tags": [
-          "floor-plan"
-        ],
-        "operationId": "publishFloorPlanImport",
-        "summary": "发布平面图导入候选",
-        "description": "将人工选择的候选写入正式区域，必须携带幂等键并记录审计留痕。",
-        "x-permission": "floor_plan.import.manage",
-        "x-data-scope": "project-space",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "floor_plan.import_published",
-        "x-audit-event-failure": "floor_plan.import_publish_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "平面图 ID",
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            }
-          },
-          {
-            "name": "importId",
-            "in": "path",
-            "required": true,
-            "description": "导入任务 ID",
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            }
-          }
-        ],
-        "requestBody": {
-          "$ref": "#/components/requestBodies/FloorPlanImportPublishRequest"
-        }
       }
     }
   },
@@ -7459,6 +7933,15 @@
           "maxLength": 128
         },
         "description": "EventId 路径参数；必须引用当前数据范围内存在且允许访问的记录。"
+      },
+      "ReviewId": {
+        "name": "review_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "主管复核记录 ID。"
       }
     },
     "requestBodies": {
@@ -8426,6 +8909,108 @@
             }
           }
         }
+      },
+      "MerchantWorkOrderCreateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MerchantWorkOrderCreateRequest"
+            }
+          }
+        }
+      },
+      "MerchantWorkOrderAssignRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MerchantWorkOrderAssignRequest"
+            }
+          }
+        }
+      },
+      "MerchantWorkOrderActionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MerchantWorkOrderActionRequest"
+            }
+          }
+        }
+      },
+      "MerchantWorkOrderCloseRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MerchantWorkOrderCloseRequest"
+            }
+          }
+        }
+      },
+      "SupervisorReviewEvaluateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SupervisorReviewEvaluateRequest"
+            },
+            "examples": {
+              "contractViolation": {
+                "summary": "Evaluate contract violation blocking",
+                "value": {
+                  "idempotency_key": "review-evaluate-1",
+                  "operator_note": "完整后台验收主管复核评估",
+                  "evidence_attachment_ids": [
+                    "att_contract_snapshot"
+                  ],
+                  "action_type": "contract_violation",
+                  "object_type": "contract",
+                  "object_id": "contract_1",
+                  "amount_cent": 0,
+                  "violation_summary": "合同主体与基础定义不一致"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SupervisorReviewApprovalRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SupervisorReviewApprovalRequest"
+            },
+            "examples": {
+              "approve": {
+                "summary": "Approve supervisor review decision",
+                "value": {
+                  "idempotency_key": "review-approve-1",
+                  "operator_note": "主管复核证据已核验",
+                  "evidence_attachment_ids": [
+                    "att_review_evidence"
+                  ],
+                  "reviewer_level": 3,
+                  "decision": "approved",
+                  "comment": "同意放行"
+                }
+              }
+            }
+          }
+        }
+      },
+      "StaffLevelAssignmentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StaffLevelAssignmentRequest"
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -9147,6 +9732,52 @@
               "active",
               "suspended",
               "archived"
+            ],
+            "maxLength": 64
+          },
+          "mall_block_code": {
+            "type": "string",
+            "description": "商场区块编码；用于定位商户所在楼层/区块，并与平面图、多边形坐标和合同档案关联。",
+            "maxLength": 128
+          },
+          "area_square_meter": {
+            "type": "number",
+            "format": "decimal",
+            "description": "商户实际经营面积，单位平方米；用于经营分析、空间管理和合同核对。",
+            "minimum": 0
+          },
+          "leased_area_square_meter": {
+            "type": "number",
+            "format": "decimal",
+            "description": "合同租赁面积，单位平方米；用于租金、物业费、能源费和公摊口径计算。",
+            "minimum": 0
+          },
+          "secondary_contact_name": {
+            "type": "string",
+            "description": "第二联系人姓名；用于负责人不可达时的运营、维修、投诉和整改协同。",
+            "maxLength": 120
+          },
+          "secondary_contact_phone": {
+            "type": "string",
+            "description": "第二联系人手机号；保存和展示必须遵守脱敏规则。",
+            "maxLength": 20,
+            "pattern": "^\\+?[0-9]{6,20}$"
+          },
+          "rent_per_square_meter": {
+            "type": "number",
+            "format": "decimal",
+            "description": "每平方米租金；用于合同摘要、应收台账和经营分析。",
+            "minimum": 0
+          },
+          "cooperation_form": {
+            "type": "string",
+            "description": "合作形式；例如固定租金、流水分成、固定租金加分成或联营。",
+            "enum": [
+              "fixed_rent",
+              "revenue_share",
+              "fixed_rent_plus_commission",
+              "joint_operation",
+              "other"
             ],
             "maxLength": 64
           }
@@ -10369,7 +11000,7 @@
       },
       "TicketOrderRequest": {
         "type": "object",
-        "description": "请求载荷 `TicketOrderRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
+        "description": "Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount; draft rules remain simulation-only.",
         "additionalProperties": false,
         "required": [
           "ticket_type_id",
@@ -10440,6 +11071,11 @@
             "type": "string",
             "description": "客人/会员唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
             "maxLength": 64
+          },
+          "dynamic_pricing_context": {
+            "type": "object",
+            "description": "Optional matching context for published dynamic pricing rules. Missing context only matches rules without conditions.",
+            "additionalProperties": true
           }
         }
       },
@@ -13268,7 +13904,7 @@
       },
       "TicketDynamicPricingRuleRequest": {
         "type": "object",
-        "description": "P2 ticket dynamic pricing rule write request. Dynamic pricing remains a simulation/rule container and must not alter P0 ticket order price settlement.",
+        "description": "P2 ticket dynamic pricing rule write request. Draft rules are simulation-only; published matching rules may affect formal ticket order settlement and must retain price trace evidence.",
         "additionalProperties": false,
         "required": [
           "ticket_type_id",
@@ -13378,7 +14014,7 @@
       },
       "TicketDynamicPricingSimulationRequest": {
         "type": "object",
-        "description": "P2 ticket dynamic pricing simulation request. The response is for operational preview only and must not create ticket orders or receivables.",
+        "description": "P2 ticket dynamic pricing simulation request. The response is for operational preview and must not create ticket orders or receivables.",
         "additionalProperties": false,
         "required": [
           "ticket_type_id",
@@ -13741,6 +14377,478 @@
             "description": "需要发布的候选 ID 列表。"
           }
         }
+      },
+      "MerchantWorkOrderCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "merchant_id",
+          "work_order_type",
+          "priority",
+          "title",
+          "description",
+          "reported_by_user_id",
+          "reported_channel"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Idempotency key for write operations; repeated submissions must return the same result."
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Operator note for manual processing, exception handling, and audit review."
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50,
+            "description": "Evidence attachment id list for photos, complaints, repairs, or rectification proof."
+          },
+          "merchant_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Merchant id in the current authorized complex or merchant data scope."
+          },
+          "space_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Optional space id; when present it must belong to the merchant."
+          },
+          "contract_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Optional contract id used to preserve the contract responsibility chain."
+          },
+          "work_order_type": {
+            "type": "string",
+            "enum": [
+              "repair",
+              "complaint",
+              "rectification",
+              "service"
+            ],
+            "maxLength": 64,
+            "description": "Work order type."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "urgent"
+            ],
+            "maxLength": 64,
+            "description": "Processing priority."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Work order title."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Work order description."
+          },
+          "reported_by_user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Reporter user id."
+          },
+          "reported_channel": {
+            "type": "string",
+            "enum": [
+              "web",
+              "merchant_portal",
+              "phone",
+              "wechat",
+              "offline"
+            ],
+            "maxLength": 64,
+            "description": "Reporting channel."
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Expected due time."
+          }
+        },
+        "description": "MerchantWorkOrderCreateRequest payload."
+      },
+      "MerchantWorkOrderAssignRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "owner_department",
+          "owner_user_id",
+          "operator_user_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Idempotency key for write operations; repeated submissions must return the same result."
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Operator note for manual processing, exception handling, and audit review."
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50,
+            "description": "Evidence attachment id list for photos, complaints, repairs, or rectification proof."
+          },
+          "owner_department": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Responsible department."
+          },
+          "owner_user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Responsible user id."
+          },
+          "operator_user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Operator user id."
+          }
+        },
+        "description": "MerchantWorkOrderAssignRequest payload."
+      },
+      "MerchantWorkOrderActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "target_status",
+          "operator_user_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Idempotency key for write operations; repeated submissions must return the same result."
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Operator note for manual processing, exception handling, and audit review."
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50,
+            "description": "Evidence attachment id list for photos, complaints, repairs, or rectification proof."
+          },
+          "target_status": {
+            "type": "string",
+            "enum": [
+              "assigned",
+              "processing",
+              "pending_merchant",
+              "resolved"
+            ],
+            "maxLength": 64,
+            "description": "Target processing status."
+          },
+          "operator_user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Operator user id."
+          }
+        },
+        "description": "MerchantWorkOrderActionRequest payload."
+      },
+      "MerchantWorkOrderCloseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "resolution",
+          "operator_user_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Idempotency key for write operations; repeated submissions must return the same result."
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Operator note for manual processing, exception handling, and audit review."
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50,
+            "description": "Evidence attachment id list for photos, complaints, repairs, or rectification proof."
+          },
+          "resolution": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Close resolution."
+          },
+          "satisfaction_score": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Merchant satisfaction score from 1 to 5."
+          },
+          "operator_user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Operator user id."
+          }
+        },
+        "description": "MerchantWorkOrderCloseRequest payload."
+      },
+      "MerchantWorkOrderRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Merchant service work order record.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "space_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "contract_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "work_order_type": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "priority": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "reported_by_user_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "reported_channel": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "owner_department": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "owner_user_id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolution": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "satisfaction_score": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SupervisorReviewEvaluateRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "action_type",
+          "object_type",
+          "object_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operator_note": {
+            "type": "string"
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "action_type": {
+            "type": "string",
+            "enum": [
+              "manual_release",
+              "bill_waiver",
+              "refund",
+              "ar_ap_adjustment",
+              "contract_violation",
+              "base_definition_violation"
+            ]
+          },
+          "object_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "object_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "violation_summary": {
+            "type": "string"
+          }
+        }
+      },
+      "SupervisorReviewApprovalRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "reviewer_level",
+          "decision"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operator_note": {
+            "type": "string"
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reviewer_level": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "StaffLevelAssignmentRequest": {
+        "type": "object",
+        "description": "员工职级与薪资分配请求体。字段必须与 OpenAPI、后端 DTO、前端请求和审计保持一致。user_id 由路径参数提供，不在请求体。",
+        "additionalProperties": false,
+        "required": [
+          "staff_level_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "职级薪资分配.idempotency_key 字段；测试必须覆盖缺失、错类型和越界场景。"
+          },
+          "operator_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "职级薪资分配.operator_note 字段；测试必须覆盖缺失、错类型和越界场景。"
+          },
+          "staff_level_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "职级薪资分配.staff_level_id 字段；必须为已存在的职级 id。"
+          },
+          "base_salary_amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "职级薪资分配.base_salary_amount_cent 字段；具体薪资，整数分；测试必须覆盖缺失、错类型和越界场景。"
+          },
+          "salary_currency": {
+            "type": "string",
+            "enum": [
+              "CNY"
+            ],
+            "description": "职级薪资分配.salary_currency 字段；P0 仅 CNY。"
+          },
+          "salary_detail": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "职级薪资分配.salary_detail 字段；测试必须覆盖缺失、错类型和越界场景。"
+          }
+        }
       }
     }
   },
@@ -13762,7 +14870,7 @@
     ]
   },
   "x-p0-example-coverage": {
-    "strategy": "P0 first keeps high-risk write and external integration examples as the minimum gate; every P0 write or external-facing operation must add request, success response, and primary failure response examples before coding, SDK/mock, automation, or supplier integration.",
+    "strategy": "P0 first covers high-risk write flows and external integration flows; full operation examples are P1 documentation hardening.",
     "request_bodies": [
       "OpenAuthTokenRequest",
       "Webhook",

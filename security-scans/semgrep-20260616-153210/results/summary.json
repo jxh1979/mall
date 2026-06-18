@@ -1,0 +1,242 @@
+{
+  "generated_at": "2026-06-16T15:33:03.989017+00:00",
+  "output_dir": "/home/james/complex-management/security-scans/semgrep-20260616-153210",
+  "mode": "run-all",
+  "engine": "Semgrep OSS",
+  "raw_json_files": [
+    {
+      "file": "official.json",
+      "results": 13,
+      "errors": 2
+    },
+    {
+      "file": "thirdparty-atlassian.json",
+      "results": 0,
+      "errors": 24
+    },
+    {
+      "file": "thirdparty-federicodotta.json",
+      "results": 0,
+      "errors": 0
+    }
+  ],
+  "raw_parse_errors": [],
+  "total_raw_findings": 13,
+  "total_deduped_findings": 13,
+  "by_severity": {
+    "ERROR": 2,
+    "WARNING": 11
+  },
+  "by_category": {
+    "security": 13
+  },
+  "top_files": [
+    [
+      "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      8
+    ],
+    [
+      "/home/james/complex-management/backend/src/main/java/com/complex/platform/integration/OpenPlatformSecretResolver.java",
+      2
+    ],
+    [
+      "/home/james/complex-management/apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt",
+      1
+    ],
+    [
+      "/home/james/complex-management/backend/src/main/java/com/complex/platform/analytics/AnalyticsService.java",
+      1
+    ],
+    [
+      "/home/james/complex-management/backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java",
+      1
+    ]
+  ],
+  "top_findings": [
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs_kotlin.URLCONNECTION_SSRF_FD-1",
+      "path": "/home/james/complex-management/apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt",
+      "start": 48,
+      "end": 48,
+      "severity": "ERROR",
+      "message": "Server-Side Request Forgery occur when a web server executes a request to a user supplied\ndestination parameter that is not validated. Such vulnerabilities could allow an attacker to\naccess internal services or to launch attacks from your web server.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": [
+        "A1:2017-Injection",
+        "A10:2021-Server-Side Request Forgery"
+      ],
+      "cwe": "CWE-918"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 343,
+      "end": 343,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 768,
+      "end": 768,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 769,
+      "end": 769,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 807,
+      "end": 807,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 808,
+      "end": 808,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 827,
+      "end": 827,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 884,
+      "end": 884,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/amusement/AmusementService.java",
+      "start": 1012,
+      "end": 1012,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.IMPROPER_UNICODE-1",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/analytics/AnalyticsService.java",
+      "start": 518,
+      "end": 522,
+      "severity": "ERROR",
+      "message": "Improper Handling of Unicode Encoding\n",
+      "category": "security",
+      "confidence": "HIGH",
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-176"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-4",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java",
+      "start": 32,
+      "end": 32,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-2",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/integration/OpenPlatformSecretResolver.java",
+      "start": 16,
+      "end": 16,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    },
+    {
+      "source_file": "official.json",
+      "check_id": "gitlab.find_sec_bugs.HARD_CODE_KEY-3",
+      "path": "/home/james/complex-management/backend/src/main/java/com/complex/platform/integration/OpenPlatformSecretResolver.java",
+      "start": 16,
+      "end": 16,
+      "severity": "WARNING",
+      "message": "Cryptographic keys should not be kept in the source code. The source code can be widely shared\nin an enterprise environment, and is certainly shared in open source. To be managed safely,\npasswords and secret keys should be stored in separate configuration files or keystores.\n",
+      "category": "security",
+      "confidence": null,
+      "impact": null,
+      "owasp": null,
+      "cwe": "CWE-321: Use of Hard-coded Cryptographic Key"
+    }
+  ]
+}

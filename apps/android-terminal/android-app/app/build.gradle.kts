@@ -14,6 +14,7 @@ android {
     versionCode = 1
     versionName = "0.1.0"
     buildConfigField("String", "COMPLEX_API_BASE_URL", "\"${System.getenv("COMPLEX_ANDROID_API_BASE_URL") ?: "https://192.168.88.160"}\"")
+    buildConfigField("String", "COMPLEX_API_ALLOWED_HOSTS", "\"${System.getenv("COMPLEX_ANDROID_API_ALLOWED_HOSTS") ?: "192.168.88.160,localhost,127.0.0.1,::1"}\"")
   }
 
   buildFeatures {

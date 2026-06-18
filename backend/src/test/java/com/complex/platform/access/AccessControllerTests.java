@@ -1,10 +1,12 @@
 package com.complex.platform.access;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -131,6 +133,59 @@ class AccessControllerTests {
                                   "idempotency_key": "temporary-missing-validity",
                                   "target_user_id": "usr_1",
                                   "permission_codes": ["ops.production_readiness.check"]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void listStaffLevelsReturnsApiResponsePageShape() throws Exception {
+        when(service.listStaffLevels()).thenReturn(new PageResponse<>(
+                List.of(new StaffLevelRecord(
+                        "lvl_m1_lower", "M1", "lower", 1, "M1 薪资大范围", "active",
+                        java.time.Instant.parse("2026-06-14T00:00:00Z"))),
+                1, 50, 1));
+
+        mockMvc.perform(get("/api/v1/access/staff-levels")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.items[0].id").value("lvl_m1_lower"))
+                .andExpect(jsonPath("$.data.items[0].level_rank").value(1));
+    }
+
+    @Test
+    void assignStaffLevelReturnsOkWithAssignment() throws Exception {
+        when(service.assignStaffLevel(any())).thenReturn(new StaffLevelAssignment(
+                "usr_emp1", "lvl_m1_lower", 100000L, "CNY", "月薪", "org", "merchant",
+                "access-api", java.time.Instant.parse("2026-06-14T00:00:00Z")));
+
+        mockMvc.perform(put("/api/v1/access/users/usr_emp1/staff-level")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "assign-1",
+                                  "staff_level_id": "lvl_m1_lower",
+                                  "base_salary_amount_cent": 100000,
+                                  "salary_currency": "CNY"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"))
+                .andExpect(jsonPath("$.data.staff_level_id").value("lvl_m1_lower"))
+                .andExpect(jsonPath("$.data.salary_currency").value("CNY"));
+    }
+
+    @Test
+    void assignStaffLevelMissingIdempotencyKeyReturnsValidationFailed() throws Exception {
+        mockMvc.perform(put("/api/v1/access/users/usr_emp1/staff-level")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "staff_level_id": "lvl_m1_lower"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())

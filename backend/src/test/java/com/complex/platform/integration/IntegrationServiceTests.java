@@ -79,6 +79,60 @@ class IntegrationServiceTests {
     }
 
     @Test
+    void p1ReconciliationDifferenceAmountIsComputedServerSideIgnoringRequestValue() {
+        ReconciliationBatchRecord batch = service.createReconciliationBatch(new ReconciliationBatchRequest(
+                "batch-for-diff-amount-test",
+                "batch note",
+                List.of(),
+                "mock-provider",
+                "catering",
+                LocalDate.parse("2026-06-14"),
+                LocalDate.parse("2026-06-14"),
+                10,
+                9,
+                1,
+                100L
+        ));
+
+        // Caller passes wrong differenceAmountCent=999; server must compute Math.abs(128800-128700)=100
+        ReconciliationDifferenceRecord difference = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
+                "diff-for-amount-test",
+                "diff note",
+                List.of(),
+                batch.id(),
+                "mock-provider",
+                "catering",
+                "ext-order-1",
+                "amount_mismatch",
+                128800L,
+                128700L,
+                999L,
+                null,
+                Map.of()
+        ));
+
+        assertThat(difference.differenceAmountCent()).isEqualTo(100L);
+    }
+
+    @Test
+    void p1ReconciliationBatchRejectsZeroDifferenceCountWhenActualDiffersFromExpected() {
+        assertThatThrownBy(() -> service.createReconciliationBatch(new ReconciliationBatchRequest(
+                "batch-zero-diff-mismatch",
+                "bad batch",
+                List.of(),
+                "mock-provider",
+                "catering",
+                LocalDate.parse("2026-06-14"),
+                LocalDate.parse("2026-06-14"),
+                10,
+                9,
+                0,
+                0L
+        ))).isInstanceOfSatisfying(ApiException.class, e ->
+                assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
     void openAuthStoresOnlyTokenHashAndRejectsNonceReplay() {
         long timestamp = NOW.toEpochMilli();
         OpenAuthTokenRequest request = new OpenAuthTokenRequest(

@@ -42,7 +42,7 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(regclass("analytics_customer_intents")).isEqualTo("analytics_customer_intents");
         assertThat(regclass("analytics_robot_metrics")).isEqualTo("analytics_robot_metrics");
         assertThat(regclass("analytics_staff_service_scores")).isEqualTo("analytics_staff_service_scores");
-        assertThat(currentFlywayVersion()).isEqualTo("054");
+        assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
 
         assertThat(permissionCodes()).contains(
                 "analytics.dashboard.view",

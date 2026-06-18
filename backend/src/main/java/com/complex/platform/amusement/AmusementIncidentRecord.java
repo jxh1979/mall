@@ -1,5 +1,6 @@
 package com.complex.platform.amusement;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 import java.util.List;
 
@@ -21,7 +22,9 @@ public record AmusementIncidentRecord(
         Instant closedAt,
         List<String> evidenceAttachmentIds,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore
+        String merchantId
 ) {
 
     public AmusementIncidentRecord transitionTo(String targetStatus, Instant now) {
@@ -43,7 +46,8 @@ public record AmusementIncidentRecord(
                 closedAt,
                 evidenceAttachmentIds,
                 createdAt,
-                now
+                now,
+                merchantId
         );
     }
 
@@ -66,7 +70,8 @@ public record AmusementIncidentRecord(
                 now,
                 evidenceAttachmentIds,
                 createdAt,
-                now
+                now,
+                merchantId
         );
     }
 }

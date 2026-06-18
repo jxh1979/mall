@@ -1,14 +1,9 @@
 package com.complex.platform.integration;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,17 +14,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcIntegrationRepository implements IntegrationRepository {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
-    };
-
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final JdbcIntegrationRowMapper rowMapper;
 
     JdbcIntegrationRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.rowMapper = new JdbcIntegrationRowMapper(this.objectMapper);
     }
 
     @Override
@@ -38,7 +30,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 SELECT id, app_key, secret_ref, status, allowed_endpoint_keys, created_at, updated_at
                   FROM open_app_credentials
                  WHERE app_key = :app_key
-                """, Map.of("app_key", appKey), this::mapOpenAppCredential).stream().findFirst();
+                """, Map.of("app_key", appKey), rowMapper::mapOpenAppCredential).stream().findFirst();
     }
 
     @Override
@@ -84,7 +76,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        webhook_enabled, polling_check_enabled, created_at, updated_at
                   FROM open_endpoint_configs
                  WHERE endpoint_key = :endpoint_key
-                """, Map.of("endpoint_key", endpointKey), this::mapEndpointConfig).stream().findFirst();
+                """, Map.of("endpoint_key", endpointKey), rowMapper::mapEndpointConfig).stream().findFirst();
     }
 
     @Override
@@ -101,7 +93,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 "endpoint_key", endpointKey,
                 "provider_code", providerCode,
                 "idempotency_key", idempotencyKey
-        ), this::mapOpenApiEvent).stream().findFirst();
+        ), rowMapper::mapOpenApiEvent).stream().findFirst();
     }
 
     @Override
@@ -113,7 +105,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                   FROM open_api_events
                  WHERE endpoint_key = :endpoint_key
                    AND id = :id
-                """, Map.of("endpoint_key", endpointKey, "id", eventId), this::mapOpenApiEvent).stream().findFirst();
+                """, Map.of("endpoint_key", endpointKey, "id", eventId), rowMapper::mapOpenApiEvent).stream().findFirst();
     }
 
     @Override
@@ -147,7 +139,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        production_ready, operator_note, evidence_attachment_ids, created_at, updated_at
                   FROM integration_provider_adapters
                  ORDER BY created_at DESC, id
-                """, this::mapProviderAdapter);
+                 LIMIT 200
+                """, rowMapper::mapProviderAdapter);
     }
 
     @Override
@@ -159,7 +152,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        production_ready, operator_note, evidence_attachment_ids, created_at, updated_at
                   FROM integration_provider_adapters
                  WHERE id = :id
-                """, Map.of("id", id), this::mapProviderAdapter).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapProviderAdapter).stream().findFirst();
     }
 
     @Override
@@ -229,7 +222,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                   FROM integration_read_ledger
                  WHERE ledger_type = :ledger_type
                  ORDER BY created_at DESC, id
-                """, Map.of("ledger_type", ledgerType), this::mapLedger);
+                 LIMIT 200
+                """, Map.of("ledger_type", ledgerType), rowMapper::mapLedger);
     }
 
     @Override
@@ -260,7 +254,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        status, amount_cent, currency, provider_payload_json, created_at, updated_at
                   FROM integration_order_syncs
                  ORDER BY created_at DESC, id
-                """, this::mapOrderSync);
+                 LIMIT 200
+                """, rowMapper::mapOrderSync);
     }
 
     @Override
@@ -283,7 +278,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 "business_type", businessType,
                 "sync_type", syncType,
                 "external_business_id", externalBusinessId
-        ), this::mapOrderSync).stream().findFirst();
+        ), rowMapper::mapOrderSync).stream().findFirst();
     }
 
     @Override
@@ -392,7 +387,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        created_at, updated_at
                   FROM integration_reconciliation_batches
                  WHERE id = :id
-                """, Map.of("id", id), this::mapReconciliationBatch).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapReconciliationBatch).stream().findFirst();
     }
 
     @Override
@@ -403,7 +398,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        created_at, updated_at
                   FROM integration_reconciliation_batches
                  ORDER BY period_end DESC, created_at DESC, id
-                """, this::mapReconciliationBatch);
+                 LIMIT 200
+                """, rowMapper::mapReconciliationBatch);
     }
 
     @Override
@@ -441,7 +437,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        provider_payload_json, evidence_attachment_ids, created_at, updated_at
                   FROM integration_reconciliation_differences
                  WHERE id = :id
-                """, Map.of("id", id), this::mapReconciliationDifference).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapReconciliationDifference).stream().findFirst();
     }
 
     @Override
@@ -453,102 +449,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        provider_payload_json, evidence_attachment_ids, created_at, updated_at
                   FROM integration_reconciliation_differences
                  ORDER BY created_at DESC, id
-                """, this::mapReconciliationDifference);
-    }
-
-    private OpenAppCredentialRecord mapOpenAppCredential(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new OpenAppCredentialRecord(
-                resultSet.getString("id"),
-                resultSet.getString("app_key"),
-                resultSet.getString("secret_ref"),
-                resultSet.getString("status"),
-                readStringList(resultSet.getString("allowed_endpoint_keys")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private OpenEndpointConfigRecord mapEndpointConfig(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new OpenEndpointConfigRecord(
-                resultSet.getString("id"),
-                resultSet.getString("endpoint_key"),
-                resultSet.getString("provider_code"),
-                resultSet.getString("secret_ref"),
-                resultSet.getString("status"),
-                resultSet.getBoolean("webhook_enabled"),
-                resultSet.getBoolean("polling_check_enabled"),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private OpenApiEventRecord mapOpenApiEvent(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new OpenApiEventRecord(
-                resultSet.getString("id"),
-                resultSet.getString("endpoint_key"),
-                resultSet.getString("provider_code"),
-                resultSet.getString("event_name"),
-                resultSet.getString("idempotency_key"),
-                resultSet.getBoolean("signature_valid"),
-                resultSet.getString("event_status"),
-                readMap(resultSet.getString("payload_json")),
-                readMap(resultSet.getString("result_json")),
-                resultSet.getString("failure_reason"),
-                instant(resultSet, "received_at"),
-                instant(resultSet, "processed_at")
-        );
-    }
-
-    private ProviderAdapterRecord mapProviderAdapter(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new ProviderAdapterRecord(
-                resultSet.getString("id"),
-                resultSet.getString("provider_code"),
-                resultSet.getString("adapter_type"),
-                resultSet.getString("mode"),
-                readStringList(resultSet.getString("capabilities")),
-                resultSet.getString("environment"),
-                resultSet.getString("status"),
-                resultSet.getBoolean("webhook_enabled"),
-                resultSet.getBoolean("polling_check_enabled"),
-                readMap(resultSet.getString("field_mapping_json")),
-                readMap(resultSet.getString("webhook_config_json")),
-                readMap(resultSet.getString("polling_config_json")),
-                resultSet.getString("credential_secret_ref"),
-                resultSet.getBoolean("production_ready"),
-                resultSet.getString("operator_note"),
-                readStringList(resultSet.getString("evidence_attachment_ids")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private IntegrationLedgerRecord mapLedger(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new IntegrationLedgerRecord(
-                resultSet.getString("id"),
-                resultSet.getString("ledger_type"),
-                resultSet.getString("provider_code"),
-                resultSet.getString("business_id"),
-                resultSet.getString("status"),
-                readMap(resultSet.getString("payload_json")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private IntegrationOrderSyncRecord mapOrderSync(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new IntegrationOrderSyncRecord(
-                resultSet.getString("id"),
-                resultSet.getString("provider_code"),
-                resultSet.getString("business_type"),
-                resultSet.getString("sync_type"),
-                resultSet.getString("external_business_id"),
-                resultSet.getString("status"),
-                resultSet.getLong("amount_cent"),
-                resultSet.getString("currency"),
-                readMap(resultSet.getString("provider_payload_json")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
+                 LIMIT 200
+                """, rowMapper::mapReconciliationDifference);
     }
 
     private Optional<IntegrationTaskRecord> findTaskById(String tableName, String taskCategory, String id) {
@@ -559,7 +461,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        created_at, updated_at
                   FROM %s
                  WHERE id = :id
-                """.formatted(tableName), Map.of("id", id), (rs, row) -> mapTask(rs, row, taskCategory)).stream().findFirst();
+                """.formatted(tableName), Map.of("id", id), (rs, row) -> rowMapper.mapTask(rs, row, taskCategory)).stream().findFirst();
     }
 
     private List<IntegrationTaskRecord> listTasks(String tableName, String taskCategory) {
@@ -570,66 +472,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                        created_at, updated_at
                   FROM %s
                  ORDER BY created_at DESC, id
-                """.formatted(tableName), (rs, row) -> mapTask(rs, row, taskCategory));
-    }
-
-    private IntegrationTaskRecord mapTask(ResultSet resultSet, int rowNumber, String taskCategory) throws SQLException {
-        return new IntegrationTaskRecord(
-                resultSet.getString("id"),
-                taskCategory,
-                resultSet.getString("provider_code"),
-                resultSet.getString("task_type"),
-                resultSet.getString("business_type"),
-                resultSet.getString("external_business_id"),
-                resultSet.getString("status"),
-                resultSet.getInt("retry_count"),
-                resultSet.getInt("max_retry_count"),
-                instant(resultSet, "next_retry_at"),
-                resultSet.getString("operator_user_id"),
-                resultSet.getString("resolution_note"),
-                readMap(resultSet.getString("payload_json")),
-                readStringList(resultSet.getString("evidence_attachment_ids")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private ReconciliationBatchRecord mapReconciliationBatch(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new ReconciliationBatchRecord(
-                resultSet.getString("id"),
-                resultSet.getString("provider_code"),
-                resultSet.getString("business_type"),
-                localDate(resultSet, "period_start"),
-                localDate(resultSet, "period_end"),
-                resultSet.getString("status"),
-                resultSet.getInt("expected_count"),
-                resultSet.getInt("actual_count"),
-                resultSet.getInt("difference_count"),
-                resultSet.getLong("total_difference_cent"),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private ReconciliationDifferenceRecord mapReconciliationDifference(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new ReconciliationDifferenceRecord(
-                resultSet.getString("id"),
-                resultSet.getString("batch_id"),
-                resultSet.getString("provider_code"),
-                resultSet.getString("business_type"),
-                resultSet.getString("external_business_id"),
-                resultSet.getString("difference_type"),
-                resultSet.getLong("internal_amount_cent"),
-                resultSet.getLong("provider_amount_cent"),
-                resultSet.getLong("difference_amount_cent"),
-                resultSet.getString("status"),
-                resultSet.getString("assigned_to_user_id"),
-                resultSet.getString("resolution_note"),
-                readMap(resultSet.getString("provider_payload_json")),
-                readStringList(resultSet.getString("evidence_attachment_ids")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
+                 LIMIT 200
+                """.formatted(tableName), (rs, row) -> rowMapper.mapTask(rs, row, taskCategory));
     }
 
     private MapSqlParameterSource openEventParameters(OpenApiEventRecord event) {
@@ -740,28 +584,6 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
     }
 
-    private Map<String, Object> readMap(String value) {
-        if (value == null || value.isBlank()) {
-            return Map.of();
-        }
-        try {
-            return objectMapper.readValue(value, MAP_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("json object field is unreadable", exception);
-        }
-    }
-
-    private List<String> readStringList(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(value, STRING_LIST_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("json array field is unreadable", exception);
-        }
-    }
-
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value == null ? Map.of() : value);
@@ -770,17 +592,5 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         }
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
-    private Instant instant(ResultSet resultSet, String columnName) throws SQLException {
-        var timestamp = resultSet.getTimestamp(columnName);
-        return timestamp == null ? null : timestamp.toInstant();
-    }
-
-    private LocalDate localDate(ResultSet resultSet, String columnName) throws SQLException {
-        var date = resultSet.getDate(columnName);
-        return date == null ? null : date.toLocalDate();
-    }
 }

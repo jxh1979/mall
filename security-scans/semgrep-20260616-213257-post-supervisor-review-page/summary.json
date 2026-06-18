@@ -1,0 +1,16 @@
+{
+  "scan_dir": "security-scans/semgrep-20260616-213257-post-supervisor-review-page",
+  "rulesets": [
+    "p/secrets",
+    "p/owasp-top-ten"
+  ],
+  "results_count": 0,
+  "errors_count": 0,
+  "paths_scanned_count": 993,
+  "paths_skipped_count": 0,
+  "json_exitcode": 0,
+  "sarif_exitcode": 0,
+  "results": 0,
+  "errors": 0,
+  "clean": true
+}

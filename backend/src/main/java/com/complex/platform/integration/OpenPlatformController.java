@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -31,10 +30,10 @@ public class OpenPlatformController {
     public ApiResponse<OpenEventResultResponse> getEventResult(
             @PathVariable("endpoint_key") String endpointKey,
             @PathVariable("event_id") String eventId,
-            @RequestParam("app_key") String appKey,
-            @RequestParam("timestamp") Long timestamp,
-            @RequestParam("nonce") String nonce,
-            @RequestParam("signature") String signature
+            @RequestHeader("X-Open-App-Key") String appKey,
+            @RequestHeader("X-Open-Timestamp") Long timestamp,
+            @RequestHeader("X-Open-Nonce") String nonce,
+            @RequestHeader("X-Open-Signature") String signature
     ) {
         return ApiResponse.ok(service.getOpenEventResult(
                 endpointKey,

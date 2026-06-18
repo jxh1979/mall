@@ -6,6 +6,8 @@ import java.util.Optional;
 public interface MerchantBillingRepository {
     List<MerchantBillRecord> findAllBills();
 
+    List<MerchantBillRecord> findBillsByMerchantId(String merchantId);
+
     Optional<MerchantBillRecord> findBillById(String id);
 
     MerchantBillRecord saveBill(MerchantBillRecord record);

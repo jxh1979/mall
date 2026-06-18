@@ -49,7 +49,8 @@ public class TicketVerificationService {
                 "active",
                 1,
                 now,
-                now
+                now,
+                60
         ));
         return toCredentialResponse(saved);
     }
@@ -84,6 +85,35 @@ public class TicketVerificationService {
                 .map(task -> syncTask(deviceCode, staffId, task))
                 .toList();
         return new SyncTasksResponse(Instant.now().toString(), results);
+    }
+
+    /**
+     * C1/REQ-05：人工放行（manual override）。主管对核销做人工放行决策，留痕为 status=manual_overridden 的核销记录，
+     * 对齐权威状态/事件 verification.manual_overridden。放行不自动扣减权益（是否扣减为后续策略）；权限在端点层按主管权限码控制。
+     */
+    VerificationResponse manualOverride(VerificationRequest request, String reason) {
+        TicketCredentialRecord credential = credentialByPayload(request == null ? null : request.credentialPayload()).orElse(null);
+        IssuedEntitlementRecord entitlement = credential == null
+                ? entitlementByCredential(request)
+                : repository.findIssuedEntitlementById(credential.entitlementId())
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+        VerificationRecord verification = repository.saveVerification(new VerificationRecord(
+                "ver_" + UUID.randomUUID().toString().replace("-", ""),
+                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
+                entitlement.id(),
+                entitlement.entitlementCode(),
+                requireText(request.credentialType(), "credential_type"),
+                verificationPayload(request.credentialPayload(), credential),
+                requireText(request.deviceId(), "device_id"),
+                requireText(request.pointId(), "point_id"),
+                "manual_overridden",
+                reason == null || reason.isBlank() ? "manual override" : reason.trim(),
+                "manual_override",
+                null,
+                Instant.now()
+        ));
+        return new VerificationResponse(verification.id(), verification.verificationNo(),
+                verification.status(), verification.resultReason());
     }
 
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
@@ -133,7 +163,8 @@ public class TicketVerificationService {
                     "consumed",
                     credential.refreshedCount(),
                     credential.createdAt(),
-                    now
+                    now,
+                    credential.refreshIntervalSeconds()
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());

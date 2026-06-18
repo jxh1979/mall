@@ -340,7 +340,8 @@ class TicketingJdbcIntegrationTests {
                 "active",
                 1,
                 now,
-                now
+                now,
+                60
         ));
         repository.saveTicketRefund(new TicketRefundRecord(
                 "refund_jdbc",

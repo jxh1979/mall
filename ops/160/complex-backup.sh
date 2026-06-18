@@ -92,10 +92,13 @@ if [[ "$ENCRYPT_BACKUP" == "true" ]]; then
     exit 1
   fi
   PASS_MODE="$(stat -c '%a' "$PASSPHRASE_FILE")"
-  if (( (8#$PASS_MODE & 077) != 0 )); then
-    echo "Backup encryption passphrase file must not be group/world readable: $PASSPHRASE_FILE" >&2
-    exit 1
-  fi
+  case "$PASS_MODE" in
+    *00) ;;
+    *)
+      echo "Backup encryption passphrase file must not be group/world readable: $PASSPHRASE_FILE" >&2
+      exit 1
+      ;;
+  esac
   if ! command -v openssl >/dev/null 2>&1; then
     echo "openssl is required for encrypted backups" >&2
     exit 1

@@ -1,0 +1,6 @@
+trailofbits|https://github.com/trailofbits/semgrep-rules
+elttam|https://github.com/elttam/semgrep-rules
+kondukto|https://github.com/kondukto-io/semgrep-rules
+federicodotta|https://github.com/federicodotta/semgrep-rules
+atlassian|https://github.com/atlassian-labs/atlassian-sast-ruleset
+apiiro|https://github.com/apiiro/malicious-code-ruleset

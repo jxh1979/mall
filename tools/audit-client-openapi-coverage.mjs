@@ -7,6 +7,10 @@ const openapiPath = path.join(rootDir, 'docs', 'openapi', 'openapi-p0.json');
 
 const scanFiles = [
   'apps/web/src/main.tsx',
+  'apps/web/src/legacy-console/apiClient.ts',
+  'apps/web/src/legacy-console/snapshotClient.ts',
+  'apps/web/src/admin/adminPageConfigs.ts',
+  'apps/web/src/admin/client/adminClient.ts',
   'apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt',
   'apps/android-terminal/src/main/kotlin/com/complex/terminal/P0Fixture.kt',
   'apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt',

@@ -1,4 +1,5 @@
 package com.complex.platform.analytics;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -19,8 +20,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -543,9 +542,6 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return timestamp == null ? null : timestamp.toInstant();
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private String writeJson(Object value) {
         try {

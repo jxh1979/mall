@@ -126,13 +126,15 @@ class EvidenceEventControllerTests {
                 "login",
                 Map.of("mode", "online"),
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:01Z")
+                Instant.parse("2026-06-14T00:00:01Z"),
+                null
         )));
 
         mockMvc.perform(get("/api/v1/evidence/events?limit=20")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].event_type").value("terminal.login"));
+                .andExpect(jsonPath("$.data[0].event_type").value("terminal.login"))
+                .andExpect(jsonPath("$.data[0].merchant_id").doesNotExist());
 
         verify(authorizationService).requirePermission("evidence.event.view");
     }
@@ -153,7 +155,8 @@ class EvidenceEventControllerTests {
                         "pending",
                         null,
                         Instant.parse("2026-06-14T00:00:00Z"),
-                        Instant.parse("2026-06-14T00:00:00Z")
+                        Instant.parse("2026-06-14T00:00:00Z"),
+                        null
                 ));
 
         mockMvc.perform(post("/api/v1/evidence/attachments/upload-intents")
@@ -170,7 +173,8 @@ class EvidenceEventControllerTests {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("pending"));
+                .andExpect(jsonPath("$.data.status").value("pending"))
+                .andExpect(jsonPath("$.data.merchant_id").doesNotExist());
 
         verify(authorizationService).requirePermission("evidence.attachment.create");
     }
@@ -191,7 +195,8 @@ class EvidenceEventControllerTests {
                         "bound",
                         null,
                         Instant.parse("2026-06-14T00:00:00Z"),
-                        Instant.parse("2026-06-14T00:01:00Z")
+                        Instant.parse("2026-06-14T00:01:00Z"),
+                        null
                 ));
         when(service.completeAttachment(eq("att_1"), any(EvidenceAttachmentCompleteRequest.class)))
                 .thenReturn(new EvidenceAttachmentRecord(
@@ -207,7 +212,8 @@ class EvidenceEventControllerTests {
                         "uploaded",
                         "sha256:abc",
                         Instant.parse("2026-06-14T00:00:00Z"),
-                        Instant.parse("2026-06-14T00:02:00Z")
+                        Instant.parse("2026-06-14T00:02:00Z"),
+                        null
                 ));
 
         mockMvc.perform(post("/api/v1/evidence/attachments/att_1/bind")
@@ -254,7 +260,8 @@ class EvidenceEventControllerTests {
                         List.of("att_1"),
                         "created",
                         Instant.parse("2026-06-14T00:00:00Z"),
-                        Instant.parse("2026-06-14T00:00:00Z")
+                        Instant.parse("2026-06-14T00:00:00Z"),
+                        null
                 ));
         when(service.getTimeline("contract", "ctr_1"))
                 .thenReturn(List.of(new EvidenceTimelineItem(
@@ -280,7 +287,8 @@ class EvidenceEventControllerTests {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.decision").value("pass"));
+                .andExpect(jsonPath("$.data.decision").value("pass"))
+                .andExpect(jsonPath("$.data.merchant_id").doesNotExist());
 
         mockMvc.perform(get("/api/v1/evidence/timelines/contract/ctr_1")
                         .with(user("ops").roles("P0_SMOKE")))

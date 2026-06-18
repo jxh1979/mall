@@ -12,6 +12,8 @@ public record BarOrderItemRecord(
         long amountCent,
         String deliveryStatus,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Integer actualPourVolume,
+        long lossVolume
 ) {
 }

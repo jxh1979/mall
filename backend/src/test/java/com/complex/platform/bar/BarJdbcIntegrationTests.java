@@ -50,7 +50,7 @@ class BarJdbcIntegrationTests {
         assertThat(regclass("bar_bill_adjustments")).isEqualTo("bar_bill_adjustments");
         assertThat(regclass("bar_bill_operations")).isEqualTo("bar_bill_operations");
         assertThat(columnNames("bar_bill_adjustments")).contains("ar_ap_item_id");
-        assertThat(currentFlywayVersion()).isEqualTo("054");
+        assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
 
         assertThat(permissionCodes()).contains(
                 "bar.entry.age_verify",
@@ -128,7 +128,8 @@ class BarJdbcIntegrationTests {
                 "device_1",
                 List.of("att_reservation"),
                 now,
-                now
+                now,
+                null
         ));
         repository.saveGuestCheckin(new BarTableGuestCheckinRecord(
                 "checkin_jdbc",
@@ -156,7 +157,10 @@ class BarJdbcIntegrationTests {
                 false,
                 "active",
                 now,
-                now
+                now,
+                30,
+                "ml",
+                10
         ));
         repository.saveOrder(new BarOrderRecord(
                 "order_jdbc",
@@ -185,7 +189,9 @@ class BarJdbcIntegrationTests {
                 128800L,
                 "pending",
                 now,
-                now
+                now,
+                null,
+                0L
         ));
         repository.saveProductionTicket(new BarProductionTicketRecord(
                 "ticket_jdbc",

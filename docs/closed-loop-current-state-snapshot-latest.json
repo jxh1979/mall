@@ -1,0 +1,405 @@
+{
+  "markers": [
+    "CLOSED_LOOP_CURRENT_STATE_SNAPSHOT_READY",
+    "SNAPSHOT_FROM_REQUIREMENTS_CODE_MATRIX",
+    "SNAPSHOT_FROM_SEMGREP_LATEST_SUMMARY",
+    "SNAPSHOT_FROM_PRODUCTION_EVIDENCE_STATUS",
+    "SNAPSHOT_FROM_NAS_CURRENT_STATE_DRIFT",
+    "SNAPSHOT_FROM_NAS_DIAGNOSTIC_REPORT",
+    "SNAPSHOT_FROM_RUNTIME_ACCEPTANCE_EVIDENCE",
+    "SNAPSHOT_FROM_PARTIAL_REQUIREMENT_MOCK_COVERAGE",
+    "SNAPSHOT_FROM_PRODUCTION_OWNER_ACTION_MANIFEST_LINKS",
+    "OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS",
+    "NO_PRODUCTION_READY_CLAIM_WITH_OPEN_MANIFESTS"
+  ],
+  "matrices": {
+    "requirements": {
+      "path": "docs/requirements-code-implementation-matrix-v0.1.csv",
+      "total": 96,
+      "complete": 88,
+      "gap": 8,
+      "external_gaps": [
+        {
+          "requirement_id": "REQ-17",
+          "module": "酒吧",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        },
+        {
+          "requirement_id": "REQ-21",
+          "module": "酒吧",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        },
+        {
+          "requirement_id": "REQ-23b",
+          "module": "酒吧",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        },
+        {
+          "requirement_id": "REQ-25",
+          "module": "酒吧",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        },
+        {
+          "requirement_id": "REQ-32",
+          "module": "酒吧",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        },
+        {
+          "requirement_id": "REQ-40",
+          "module": "第三方",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        },
+        {
+          "requirement_id": "REQ-41",
+          "module": "第三方",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        },
+        {
+          "requirement_id": "REQ-44",
+          "module": "第三方",
+          "status": "部分实现",
+          "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+        }
+      ]
+    },
+    "full_admin_mvp": {
+      "path": "docs/full-admin-mvp-requirements-code-matrix-v0.1.csv",
+      "total": 9,
+      "complete": 9,
+      "gap": 0
+    },
+    "full_admin_remaining": {
+      "path": "docs/full-admin-remaining-requirements-code-matrix-v0.1.csv",
+      "total": 22,
+      "complete": 22,
+      "gap": 0
+    }
+  },
+  "architecture_line_counts": {
+    "apps/web/src/main.tsx": 31,
+    "apps/web/src/legacy-console/LegacyConsoleApp.tsx": 313,
+    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 332,
+    "backend/src/main/java/com/complex/platform/bar/BarService.java": 360,
+    "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 390,
+    "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 354,
+    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 411
+  },
+  "gates": {
+    "semgrep": {
+      "scan_dir": "security-scans/semgrep-20260617-064855-manual-request",
+      "results": 0,
+      "errors": 0,
+      "paths_scanned": 1543,
+      "clean": true
+    },
+    "production_evidence": {
+      "expected_submissions": 15,
+      "awaiting_submission": 15,
+      "valid_submission": 0,
+      "invalid_submission": 0,
+      "p0_expected": 13,
+      "p0_awaiting_submission": 13,
+      "p0_valid_submission": 0,
+      "p0_invalid_submission": 0,
+      "complete": false
+    },
+    "production_blockers": {
+      "readiness_blockers": 6,
+      "credential_blockers": 4,
+      "finding_blockers": 2,
+      "blocking_total": 12,
+      "complete": false
+    },
+    "nas_current_state": {
+      "live_status": "passed",
+      "can_close_sec_p0_ops_recovery": false,
+      "reason": "current live mount is usable, but production manifest still needs IT owner, reviewer, approval, scheduled backup, alert and cadence evidence"
+    },
+    "runtime_acceptance": {
+      "backend_tests": 579,
+      "backend_failures": 0,
+      "backend_errors": 0,
+      "web_unit_tests": 16,
+      "ui_tests": 28,
+      "real_backend_ui_tests": 2,
+      "last_run_passed": true,
+      "web_main_bundle_ok": true,
+      "ready_for_integration_and_business_acceptance": true
+    },
+    "nas_diagnostic": {
+      "live_status": "passed",
+      "network_ping_reachable": true,
+      "smb_445_reachable": true,
+      "expected_cifs_mount_active": true,
+      "preflight_passed": true,
+      "root_cause": "expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence"
+    },
+    "external_evidence": {
+      "partial_requirements": 8,
+      "complete": false
+    },
+    "partial_mock_coverage": {
+      "partial_requirements": 8,
+      "mock_acceptance_ready": 8,
+      "production_blocking_requirements": 0,
+      "unique_mock_files": 20,
+      "status": "mock_or_sandbox_acceptance_ready_but_production_evidence_pending"
+    },
+    "owner_action_manifest_links": {
+      "unique_unresolved_items": 12,
+      "owner_action_packs": 3,
+      "duplicated_owner_action_rows": 15,
+      "related_submission_rows": 15,
+      "items_without_manifest": 0,
+      "complete": true,
+      "status": "open_actions_present"
+    }
+  },
+  "production_ready_next_actions": {
+    "p0_awaiting_submission_total": 13,
+    "p0_awaiting_submission_sample": [
+      {
+        "item_id": "PRD-160-001",
+        "owner_group": "IT/运维/安全",
+        "category": "ops160",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-160-001/manifest-PRD-160-001.json"
+      },
+      {
+        "item_id": "PRD-CRED-001",
+        "owner_group": "IT/运维/安全",
+        "category": "credential",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json"
+      },
+      {
+        "item_id": "PRD-CRED-DB-001",
+        "owner_group": "IT/运维/安全",
+        "category": "credential",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-DB-001/manifest-PRD-CRED-DB-001.json"
+      },
+      {
+        "item_id": "PRD-CRED-JWT-001",
+        "owner_group": "IT/运维/安全",
+        "category": "credential",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json"
+      },
+      {
+        "item_id": "PRD-CRED-NAS-001",
+        "owner_group": "IT/运维/安全",
+        "category": "credential",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-NAS-001/manifest-PRD-CRED-NAS-001.json"
+      },
+      {
+        "item_id": "PRD-CRED-OPS-001",
+        "owner_group": "IT/运维/安全",
+        "category": "credential",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/manifest-PRD-CRED-OPS-001.json"
+      },
+      {
+        "item_id": "PRD-NAS-ALERT-001",
+        "owner_group": "IT/运维/安全",
+        "category": "nas",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-ALERT-001/manifest-PRD-NAS-ALERT-001.json"
+      },
+      {
+        "item_id": "PRD-NAS-AUTOMOUNT-001",
+        "owner_group": "IT/运维/安全",
+        "category": "nas",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-AUTOMOUNT-001/manifest-PRD-NAS-AUTOMOUNT-001.json"
+      },
+      {
+        "item_id": "PRD-NAS-DRILL-CADENCE-001",
+        "owner_group": "IT/运维/安全",
+        "category": "nas",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-DRILL-CADENCE-001/manifest-PRD-NAS-DRILL-CADENCE-001.json"
+      },
+      {
+        "item_id": "PRD-NAS-SCHEDULE-001",
+        "owner_group": "IT/运维/安全",
+        "category": "nas",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-SCHEDULE-001/manifest-PRD-NAS-SCHEDULE-001.json"
+      },
+      {
+        "item_id": "SEC-P0-OPS-RECOVERY-001",
+        "owner_group": "IT/运维/安全",
+        "category": "ops160",
+        "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-OPS-RECOVERY-001/manifest-SEC-P0-OPS-RECOVERY-001.json"
+      },
+      {
+        "item_id": "PRD-CRED-JWT-001",
+        "owner_group": "技术实现负责人",
+        "category": "credential",
+        "manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json"
+      }
+    ],
+    "readiness_blockers": [
+      {
+        "id": "PRD-NAS-AUTOMOUNT-001",
+        "owner": "IT/运维",
+        "status": "pending_info",
+        "blocking_scope": "阻塞长期预生产和生产自动恢复；不阻塞开发验证",
+        "next_action": "IT 安装后回填重启后 findmnt、读写删除测试和截图"
+      },
+      {
+        "id": "PRD-NAS-SCHEDULE-001",
+        "owner": "IT/运维",
+        "status": "pending_info",
+        "blocking_scope": "阻塞长期预生产和生产自动备份；不阻塞手动备份演练",
+        "next_action": "IT 安装后回填调度配置、最近一次 scheduled 备份和 .sha256"
+      },
+      {
+        "id": "PRD-NAS-ALERT-001",
+        "owner": "IT/运维/安全",
+        "status": "pending_info",
+        "blocking_scope": "阻塞长期预生产和生产运维准入；不阻塞开发验证",
+        "next_action": "回填容量告警、失败告警和通知送达证据"
+      },
+      {
+        "id": "PRD-NAS-DRILL-CADENCE-001",
+        "owner": "IT/运维",
+        "status": "pending_info",
+        "blocking_scope": "阻塞长期预生产和生产可恢复结论；不阻塞当前编码",
+        "next_action": "回填最近一次恢复演练报告、临时库清理和验证表"
+      },
+      {
+        "id": "PRD-CRED-001",
+        "owner": "IT/安全/财务",
+        "status": "pending_info",
+        "blocking_scope": "阻塞长期预生产和生产",
+        "next_action": "建立密钥引用、轮换周期、责任人和应急回滚"
+      },
+      {
+        "id": "PRD-160-001",
+        "owner": "IT/运维",
+        "status": "pending_info",
+        "blocking_scope": "阻塞长期预生产和生产；不阻塞用户级覆盖开发验证",
+        "next_action": "迁移用户级覆盖到系统配置，接入 systemd 和告警"
+      }
+    ],
+    "credential_blockers": [
+      {
+        "id": "PRD-CRED-OPS-001",
+        "owner": "IT/运维/安全",
+        "status": "pending_info",
+        "blocking_scope": "阻塞长期预生产和生产",
+        "next_action": "建立账号负责人、授权范围、到期日和停用步骤"
+      },
+      {
+        "id": "PRD-CRED-DB-001",
+        "owner": "IT/运维/安全",
+        "status": "pending_info",
+        "blocking_scope": "阻塞生产数据库接入",
+        "next_action": "生成强密码、写入安全保管位置、补到期日和维护窗口"
+      },
+      {
+        "id": "PRD-CRED-JWT-001",
+        "owner": "IT/安全/技术负责人",
+        "status": "pending_info",
+        "blocking_scope": "阻塞生产登录和开放接口签发",
+        "next_action": "设计签名版本、双验窗口、旧 token 失效计划"
+      },
+      {
+        "id": "PRD-CRED-NAS-001",
+        "owner": "IT/运维/安全",
+        "status": "pending_info",
+        "blocking_scope": "阻塞生产可恢复结论",
+        "next_action": "IT 将真实密码写入安全保管位置或 160 受控凭证文件，不得写入文档、聊天或仓库"
+      }
+    ],
+    "security_finding_blockers": [
+      {
+        "id": "SEC-P0-OPS-RECOVERY-001",
+        "severity": "P0",
+        "owner": "IT/安全/运维",
+        "status": "open",
+        "blocking_scope": "阻塞公开生产安全准入；不阻塞开发联调",
+        "next_action": "P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据"
+      },
+      {
+        "id": "SEC-P2-CSRF-API-001",
+        "severity": "P2",
+        "owner": "后端/前端/安全",
+        "status": "open_for_prod_review",
+        "blocking_scope": "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
+        "next_action": "正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核"
+      }
+    ],
+    "external_partial_requirements": [
+      {
+        "requirement_id": "REQ-17",
+        "module": "酒吧",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      },
+      {
+        "requirement_id": "REQ-21",
+        "module": "酒吧",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      },
+      {
+        "requirement_id": "REQ-23b",
+        "module": "酒吧",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      },
+      {
+        "requirement_id": "REQ-25",
+        "module": "酒吧",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      },
+      {
+        "requirement_id": "REQ-32",
+        "module": "酒吧",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      },
+      {
+        "requirement_id": "REQ-40",
+        "module": "第三方",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      },
+      {
+        "requirement_id": "REQ-41",
+        "module": "第三方",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      },
+      {
+        "requirement_id": "REQ-44",
+        "module": "第三方",
+        "status": "部分实现",
+        "gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。"
+      }
+    ],
+    "nas_next_action": "IT must backfill approved production manifests for automount, schedule, alert and drill evidence",
+    "nas_root_cause": "expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence",
+    "source_documents": [
+      "docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.json",
+      "docs/production-readiness-evidence/production-blocker-register-latest.json",
+      "docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json",
+      "docs/partial-requirement-mock-coverage-latest.json",
+      "docs/production-readiness-evidence/production-owner-action-packs-latest.json",
+      "docs/production-readiness-evidence/nas-current-state-drift-latest.json"
+    ]
+  },
+  "go_no_go": {
+    "can_enter_integration": true,
+    "can_enter_business_acceptance": true,
+    "can_claim_production_ready": false,
+    "production_ready_blockers": [
+      "15 production evidence submissions awaiting, including 13 P0",
+      "NAS current state is passed; SEC-P0-OPS-RECOVERY-001 cannot close",
+      "12 production blocker register items remain open (6 readiness, 4 credential, 2 security findings)",
+      "8 external evidence or supplier-backed requirements remain partial"
+    ]
+  }
+}

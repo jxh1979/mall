@@ -10,4 +10,7 @@ interface BarReceivableLedgerService {
             String operatorNote,
             List<String> evidenceAttachmentIds
     );
+
+    /** A5(REQ-26b 增强)：卡座销售提成生成 finance 应付台账（source_type=employee_commission）。 */
+    String createPayableForCommission(BarCommissionCalculationRecord commission);
 }

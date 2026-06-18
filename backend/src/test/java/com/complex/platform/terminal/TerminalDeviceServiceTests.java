@@ -228,6 +228,93 @@ class TerminalDeviceServiceTests {
     }
 
     @Test
+    void returnDeviceRejectsUnboundDeviceWithInvalidStatus() {
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-return-unbound", "P0-ANDROID-5"));
+        service.unbindDevice(bound.id(), new DeviceUnbindRequest(
+                "unbind-before-return-5",
+                "replaced",
+                "unbind",
+                List.of()
+        ));
+
+        assertThatThrownBy(() -> service.returnDevice(new DeviceReturnRequest(
+                "return-unbound-5",
+                "return",
+                List.of(),
+                "P0-ANDROID-5",
+                "staff_1",
+                false,
+                "shift closed"
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_DEVICE_STATUS");
+
+        assertThat(deviceRepository.findByDeviceCode("P0-ANDROID-5"))
+                .get()
+                .extracting(TerminalDeviceRecord::status)
+                .isEqualTo("unbound");
+    }
+
+    @Test
+    void returnDeviceRejectsAlreadyReturnedDeviceWithInvalidStatus() {
+        service.bindDevice(bindRequest("bind-return-twice", "P0-ANDROID-6"));
+        service.returnDevice(new DeviceReturnRequest(
+                "return-first-6",
+                "return",
+                List.of(),
+                "P0-ANDROID-6",
+                "staff_1",
+                false,
+                "shift closed"
+        ));
+
+        assertThatThrownBy(() -> service.returnDevice(new DeviceReturnRequest(
+                "return-second-6",
+                "return",
+                List.of(),
+                "P0-ANDROID-6",
+                "staff_1",
+                false,
+                "shift closed again"
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_DEVICE_STATUS");
+
+        assertThat(deviceRepository.findByDeviceCode("P0-ANDROID-6"))
+                .get()
+                .extracting(TerminalDeviceRecord::status)
+                .isEqualTo("returned");
+    }
+
+    @Test
+    void unbindDeviceRejectsAlreadyUnboundDeviceWithInvalidStatus() {
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-unbind-twice", "P0-ANDROID-7"));
+        service.unbindDevice(bound.id(), new DeviceUnbindRequest(
+                "unbind-first-7",
+                "replaced",
+                "unbind",
+                List.of()
+        ));
+
+        assertThatThrownBy(() -> service.unbindDevice(bound.id(), new DeviceUnbindRequest(
+                "unbind-second-7",
+                "replaced again",
+                "unbind",
+                List.of()
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_DEVICE_STATUS");
+
+        assertThat(deviceRepository.findById(bound.id()))
+                .get()
+                .extracting(TerminalDeviceRecord::status)
+                .isEqualTo("unbound");
+    }
+
+    @Test
     void updateCapabilitySwitchPersistsEnabledStateAndWritesAudit() {
         TerminalCapabilitySwitchRecord enabled = service.updateCapabilitySwitch("switch_ticketing", new CapabilitySwitchRequest(
                 "switch-enable",

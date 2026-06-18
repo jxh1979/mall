@@ -48,14 +48,14 @@ parse_jdbc_host_port() {
   local url="$1"
   local stripped="${url#jdbc:postgresql://}"
   local host_port="${stripped%%/*}"
-  local host="${host_port%%:*}"
+  local jdbc_host="${host_port%%:*}"
   local port="${host_port##*:}"
 
-  if [[ "$host" == "$host_port" ]]; then
+  if [[ "$jdbc_host" == "$host_port" ]]; then
     port="5432"
   fi
 
-  echo "$host" "$port"
+  echo "$jdbc_host" "$port"
 }
 
 load_env

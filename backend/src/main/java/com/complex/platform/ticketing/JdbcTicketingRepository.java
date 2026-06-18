@@ -1,19 +1,6 @@
 package com.complex.platform.ticketing;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,19 +11,15 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcTicketingRepository implements TicketingRepository {
 
-    private static final TypeReference<Map<String, String>> STRING_MAP_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
-    };
-
     private final NamedParameterJdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
+    private final JdbcTicketingRowMapper rowMapper;
+    private final JdbcTicketingParameterSource parameterSource;
 
     JdbcTicketingRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
-        this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        var jdbcObjectMapper = objectMapper.copy().findAndRegisterModules();
+        this.rowMapper = new JdbcTicketingRowMapper(jdbcObjectMapper);
+        this.parameterSource = new JdbcTicketingParameterSource(jdbcObjectMapper);
     }
 
     @Override
@@ -59,7 +42,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     stock_required = EXCLUDED.stock_required,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
-                """, ticketTypeParameters(ticketType));
+                """, parameterSource.ticketTypeParameters(ticketType));
         return ticketType;
     }
 
@@ -70,7 +53,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, created_at, updated_at
                   FROM ticket_types
                  ORDER BY created_at DESC, id
-                """, this::mapTicketType);
+                """, rowMapper::mapTicketType);
     }
 
     @Override
@@ -80,7 +63,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, created_at, updated_at
                   FROM ticket_types
                  WHERE id = :id
-                """, Map.of("id", id), this::mapTicketType).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
     }
 
     @Override
@@ -101,7 +84,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     default_value_cent = EXCLUDED.default_value_cent,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
-                """, entitlementTemplateParameters(template));
+                """, parameterSource.entitlementTemplateParameters(template));
         return template;
     }
 
@@ -112,7 +95,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, created_at, updated_at
                   FROM entitlement_templates
                  ORDER BY created_at DESC, id
-                """, this::mapEntitlementTemplate);
+                """, rowMapper::mapEntitlementTemplate);
     }
 
     @Override
@@ -122,7 +105,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status, created_at, updated_at
                   FROM entitlement_templates
                  WHERE id = :id
-                """, Map.of("id", id), this::mapEntitlementTemplate).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();
     }
 
     @Override
@@ -144,7 +127,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     value_amount_cent = EXCLUDED.value_amount_cent,
                     effective_rule = EXCLUDED.effective_rule,
                     updated_at = EXCLUDED.updated_at
-                """, ticketTypeEntitlementParameters(entitlement));
+                """, parameterSource.ticketTypeEntitlementParameters(entitlement));
         return entitlement;
     }
 
@@ -156,7 +139,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                   FROM ticket_type_entitlements
                  WHERE ticket_type_id = :ticket_type_id
                  ORDER BY created_at ASC, id
-                """, Map.of("ticket_type_id", ticketTypeId), this::mapTicketTypeEntitlement);
+                """, Map.of("ticket_type_id", ticketTypeId), rowMapper::mapTicketTypeEntitlement);
     }
 
     @Override
@@ -188,7 +171,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     valid_from = EXCLUDED.valid_from,
                     valid_to = EXCLUDED.valid_to,
                     updated_at = EXCLUDED.updated_at
-                """, issuedEntitlementParameters(entitlement));
+                """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
     }
 
@@ -200,7 +183,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
-                """, Map.of("entitlement_code", entitlementCode), this::mapIssuedEntitlement).stream().findFirst();
+                """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
     }
 
     @Override
@@ -211,7 +194,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        status = :status,
                        updated_at = :updated_at
                  WHERE id = :id
-                """, issuedEntitlementParameters(entitlement));
+                """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
     }
 
@@ -223,15 +206,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at
                   FROM issued_entitlements
                  WHERE status = 'active'
-                   AND (:merchant_id IS NULL OR merchant_id = :merchant_id OR merchant_id IS NULL)
-                   AND (:venue_id IS NULL OR venue_id = :venue_id OR venue_id IS NULL)
+                   AND (merchant_id = :merchant_id OR :merchant_id IS NULL)
+                   AND (venue_id = :venue_id OR :venue_id IS NULL)
                  ORDER BY updated_at DESC, id
                  LIMIT :limit
                 """, new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId)
                 .addValue("venue_id", venueId)
                 .addValue("limit", limit), (resultSet, rowNumber) ->
-                TicketingService.toOfflineEntitlementResponse(mapIssuedEntitlement(resultSet, rowNumber)));
+                TicketEntitlementMapper.toOfflineEntitlementResponse(rowMapper.mapIssuedEntitlement(resultSet, rowNumber)));
     }
 
     @Override
@@ -247,7 +230,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     :credential_payload, :device_id, :point_id, :status, :result_reason, :source_type,
                     :client_task_id, :created_at
                 )
-                """, verificationParameters(verification));
+                """, parameterSource.verificationParameters(verification));
         return verification;
     }
 
@@ -259,7 +242,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        client_task_id, created_at
                   FROM ticket_verifications
                  ORDER BY created_at DESC, id
-                """, this::mapVerification);
+                """, rowMapper::mapVerification);
     }
 
     @Override
@@ -273,7 +256,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 """, Map.of(
                 "device_code", deviceCode,
                 "client_task_id", clientTaskId
-        ), this::mapTerminalSyncTask).stream().findFirst();
+        ), rowMapper::mapTerminalSyncTask).stream().findFirst();
     }
 
     @Override
@@ -289,7 +272,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                 )
                 ON CONFLICT (device_code, client_task_id) DO UPDATE SET
                     status = terminal_sync_tasks.status
-                """, terminalSyncTaskParameters(task));
+                """, parameterSource.terminalSyncTaskParameters(task));
         return task;
     }
 
@@ -319,7 +302,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     status = EXCLUDED.status,
                     eligibility_rule = EXCLUDED.eligibility_rule,
                     updated_at = EXCLUDED.updated_at
-                """, priceRuleParameters(rule));
+                """, parameterSource.priceRuleParameters(rule));
         return rule;
     }
 
@@ -331,7 +314,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        eligibility_rule::text AS eligibility_rule, created_at, updated_at
                   FROM ticket_price_rules
                  ORDER BY created_at DESC, id
-                """, this::mapPriceRule);
+                """, rowMapper::mapPriceRule);
     }
 
     @Override
@@ -342,7 +325,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        eligibility_rule::text AS eligibility_rule, created_at, updated_at
                   FROM ticket_price_rules
                  WHERE id = :id
-                """, Map.of("id", id), this::mapPriceRule).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapPriceRule).stream().findFirst();
     }
 
 
@@ -376,20 +359,20 @@ class JdbcTicketingRepository implements TicketingRepository {
                     operator_note = EXCLUDED.operator_note,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     updated_at = EXCLUDED.updated_at
-                """, dynamicPricingRuleParameters(rule));
+                """, parameterSource.dynamicPricingRuleParameters(rule));
         return rule;
     }
 
     @Override
     public List<TicketDynamicPricingRuleRecord> listDynamicPricingRules() {
-        return jdbcTemplate.query(dynamicPricingRuleSelect() + " ORDER BY priority DESC, updated_at DESC, id",
-                this::mapDynamicPricingRule);
+        return jdbcTemplate.query(JdbcTicketingSql.dynamicPricingRuleSelect() + " ORDER BY priority DESC, updated_at DESC, id",
+                rowMapper::mapDynamicPricingRule);
     }
 
     @Override
     public Optional<TicketDynamicPricingRuleRecord> findDynamicPricingRuleById(String id) {
-        return jdbcTemplate.query(dynamicPricingRuleSelect() + " WHERE id = :id", Map.of("id", id),
-                this::mapDynamicPricingRule).stream().findFirst();
+        return jdbcTemplate.query(JdbcTicketingSql.dynamicPricingRuleSelect() + " WHERE id = :id", Map.of("id", id),
+                rowMapper::mapDynamicPricingRule).stream().findFirst();
     }
 
     @Override
@@ -397,13 +380,13 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_orders (
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
-                    sales_channel, buyer_phone, amount_cent, currency, pay_status, issue_status,
-                    status, created_at, updated_at
+                    sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
+                    dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
-                    :sales_channel, :buyer_phone, :amount_cent, :currency, :pay_status, :issue_status,
-                    :status, :created_at, :updated_at
+                    :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
+                    :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
@@ -414,18 +397,21 @@ class JdbcTicketingRepository implements TicketingRepository {
                     sales_channel = EXCLUDED.sales_channel,
                     buyer_phone = EXCLUDED.buyer_phone,
                     amount_cent = EXCLUDED.amount_cent,
+                    dynamic_pricing_rule_id = EXCLUDED.dynamic_pricing_rule_id,
+                    base_amount_cent = EXCLUDED.base_amount_cent,
+                    dynamic_adjustment_cent = EXCLUDED.dynamic_adjustment_cent,
                     currency = EXCLUDED.currency,
                     pay_status = EXCLUDED.pay_status,
                     issue_status = EXCLUDED.issue_status,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
-                """, ticketOrderParameters(order));
+                """, parameterSource.ticketOrderParameters(order));
         return order;
     }
 
     @Override
     public Optional<TicketOrderRecord> findTicketOrderById(String id) {
-        return jdbcTemplate.query(ticketOrderSelect() + " WHERE id = :id", Map.of("id", id), this::mapTicketOrder)
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + " WHERE id = :id", Map.of("id", id), rowMapper::mapTicketOrder)
                 .stream()
                 .findFirst();
     }
@@ -437,10 +423,10 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public List<TicketOrderRecord> listTicketOrdersByCustomerId(String customerId) {
-        return jdbcTemplate.query(ticketOrderSelect() + """
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + """
                  WHERE customer_id = :customer_id
                  ORDER BY created_at DESC, id
-                """, Map.of("customer_id", customerId), this::mapTicketOrder);
+                """, Map.of("customer_id", customerId), rowMapper::mapTicketOrder);
     }
 
     @Override
@@ -460,26 +446,26 @@ class JdbcTicketingRepository implements TicketingRepository {
                     channel = EXCLUDED.channel,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
-                """, ticketPaymentIntentParameters(intent));
+                """, parameterSource.ticketPaymentIntentParameters(intent));
         return intent;
     }
 
     @Override
     public List<IssuedEntitlementRecord> listIssuedEntitlements() {
-        return jdbcTemplate.query(issuedEntitlementSelect() + " ORDER BY created_at DESC, id", this::mapIssuedEntitlement);
+        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect() + " ORDER BY created_at DESC, id", rowMapper::mapIssuedEntitlement);
     }
 
     @Override
     public List<IssuedEntitlementRecord> listIssuedEntitlementsByOrderId(String orderId) {
-        return jdbcTemplate.query(issuedEntitlementSelect() + """
+        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect() + """
                  WHERE order_id = :order_id
                  ORDER BY created_at ASC, id
-                """, Map.of("order_id", orderId), this::mapIssuedEntitlement);
+                """, Map.of("order_id", orderId), rowMapper::mapIssuedEntitlement);
     }
 
     @Override
     public Optional<IssuedEntitlementRecord> findIssuedEntitlementById(String id) {
-        return jdbcTemplate.query(issuedEntitlementSelect() + " WHERE id = :id", Map.of("id", id), this::mapIssuedEntitlement)
+        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect() + " WHERE id = :id", Map.of("id", id), rowMapper::mapIssuedEntitlement)
                 .stream()
                 .findFirst();
     }
@@ -489,11 +475,11 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_credentials (
                     id, entitlement_id, order_id, credential_token, nonce, credential_hash, credential_type,
-                    issued_at, expires_at, status, refreshed_count, created_at, updated_at
+                    issued_at, expires_at, status, refreshed_count, created_at, updated_at, refresh_interval_seconds
                 )
                 VALUES (
                     :id, :entitlement_id, :order_id, :credential_token, :nonce, :credential_hash, :credential_type,
-                    :issued_at, :expires_at, :status, :refreshed_count, :created_at, :updated_at
+                    :issued_at, :expires_at, :status, :refreshed_count, :created_at, :updated_at, :refresh_interval_seconds
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     credential_token = NULL,
@@ -504,8 +490,9 @@ class JdbcTicketingRepository implements TicketingRepository {
                     expires_at = EXCLUDED.expires_at,
                     status = EXCLUDED.status,
                     refreshed_count = EXCLUDED.refreshed_count,
-                    updated_at = EXCLUDED.updated_at
-                """, ticketCredentialParameters(credential));
+                    updated_at = EXCLUDED.updated_at,
+                    refresh_interval_seconds = EXCLUDED.refresh_interval_seconds
+                """, parameterSource.ticketCredentialParameters(credential));
         return credential;
     }
 
@@ -516,10 +503,10 @@ class JdbcTicketingRepository implements TicketingRepository {
         }
         return jdbcTemplate.query("""
                 SELECT id, entitlement_id, order_id, credential_token, nonce, credential_hash, credential_type,
-                       issued_at, expires_at, status, refreshed_count, created_at, updated_at
+                       issued_at, expires_at, status, refreshed_count, created_at, updated_at, refresh_interval_seconds
                   FROM ticket_credentials
                  WHERE credential_hash = :credential_hash
-                """, Map.of("credential_hash", sha256(credentialToken)), this::mapTicketCredential).stream().findFirst();
+                """, Map.of("credential_hash", parameterSource.credentialTokenHash(credentialToken)), rowMapper::mapTicketCredential).stream().findFirst();
     }
 
     @Override
@@ -538,7 +525,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     approved_by = EXCLUDED.approved_by,
                     approved_at = EXCLUDED.approved_at,
                     updated_at = EXCLUDED.updated_at
-                """, ticketRefundParameters(refund));
+                """, parameterSource.ticketRefundParameters(refund));
         return refund;
     }
 
@@ -549,7 +536,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        approved_by, approved_at, created_at, updated_at
                   FROM ticket_refunds
                  WHERE id = :id
-                """, Map.of("id", id), this::mapTicketRefund).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapTicketRefund).stream().findFirst();
     }
 
     @Override
@@ -571,7 +558,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     used_times_before = EXCLUDED.used_times_before,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
-                """, ticketRefundLineParameters(line));
+                """, parameterSource.ticketRefundLineParameters(line));
         return line;
     }
 
@@ -584,7 +571,45 @@ class JdbcTicketingRepository implements TicketingRepository {
                   FROM ticket_refund_lines
                  WHERE refund_id = :refund_id
                  ORDER BY created_at ASC, id
-                """, Map.of("refund_id", refundId), this::mapTicketRefundLine);
+                """, Map.of("refund_id", refundId), rowMapper::mapTicketRefundLine);
+    }
+
+    @Override
+    public long sumPendingRefundAmountByOrderId(String orderId) {
+        Long result = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(refund_amount_cent), 0)
+                  FROM ticket_refunds
+                 WHERE target_id = :order_id
+                   AND status IN ('requested', 'approved')
+                """, Map.of("order_id", orderId), Long.class);
+        return result == null ? 0L : result;
+    }
+
+    @Override
+    public Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt) {
+        int rowCount = jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET used_times = used_times + 1,
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND used_times < total_times
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
+        if (rowCount == 0) {
+            return Optional.empty();
+        }
+        return findIssuedEntitlementById(id);
+    }
+
+    @Override
+    public boolean tryLockOrderForIssuance(String orderId) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_orders
+                   SET issue_status = 'issuing'
+                 WHERE id = :id
+                   AND issue_status = 'not_issued'
+                """, Map.of("id", orderId)) > 0;
     }
 
     @Override
@@ -598,551 +623,5 @@ class JdbcTicketingRepository implements TicketingRepository {
                 """, Map.of(), String.class);
     }
 
-    private MapSqlParameterSource ticketTypeParameters(TicketTypeRecord ticketType) {
-        return new MapSqlParameterSource()
-                .addValue("id", ticketType.id())
-                .addValue("ticket_name", ticketType.ticketName())
-                .addValue("base_calendar_price_mode", ticketType.baseCalendarPriceMode())
-                .addValue("weekday_price_cent", ticketType.weekdayPriceCent())
-                .addValue("weekend_price_cent", ticketType.weekendPriceCent())
-                .addValue("holiday_price_cent", ticketType.holidayPriceCent())
-                .addValue("stock_required", ticketType.stockRequired())
-                .addValue("status", ticketType.status())
-                .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()));
-    }
 
-    private MapSqlParameterSource entitlementTemplateParameters(EntitlementTemplateRecord template) {
-        return new MapSqlParameterSource()
-                .addValue("id", template.id())
-                .addValue("name", template.name())
-                .addValue("entitlement_type", template.entitlementType())
-                .addValue("default_total_times", template.defaultTotalTimes())
-                .addValue("default_value_cent", template.defaultValueCent())
-                .addValue("status", template.status())
-                .addValue("created_at", timestampWithTimeZone(template.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
-    }
-
-    private MapSqlParameterSource ticketTypeEntitlementParameters(TicketTypeEntitlementRecord entitlement) {
-        return new MapSqlParameterSource()
-                .addValue("id", entitlement.id())
-                .addValue("ticket_type_id", entitlement.ticketTypeId())
-                .addValue("entitlement_template_id", entitlement.entitlementTemplateId())
-                .addValue("quantity", entitlement.quantity())
-                .addValue("total_times", entitlement.totalTimes())
-                .addValue("value_amount_cent", entitlement.valueAmountCent())
-                .addValue("effective_rule", entitlement.effectiveRule())
-                .addValue("created_at", timestampWithTimeZone(entitlement.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()));
-    }
-
-    private MapSqlParameterSource issuedEntitlementParameters(IssuedEntitlementRecord entitlement) {
-        return new MapSqlParameterSource()
-                .addValue("id", entitlement.id())
-                .addValue("ticket_type_id", entitlement.ticketTypeId())
-                .addValue("order_id", entitlement.orderId())
-                .addValue("entitlement_template_id", entitlement.entitlementTemplateId())
-                .addValue("entitlement_code", entitlement.entitlementCode())
-                .addValue("entitlement_type", entitlement.entitlementType())
-                .addValue("merchant_id", entitlement.merchantId())
-                .addValue("venue_id", entitlement.venueId())
-                .addValue("point_id", entitlement.pointId())
-                .addValue("total_times", entitlement.totalTimes())
-                .addValue("used_times", entitlement.usedTimes())
-                .addValue("value_amount_cent", entitlement.valueAmountCent())
-                .addValue("status", entitlement.status())
-                .addValue("valid_from", timestampWithTimeZone(entitlement.validFrom()))
-                .addValue("valid_to", timestampWithTimeZone(entitlement.validTo()))
-                .addValue("created_at", timestampWithTimeZone(entitlement.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()));
-    }
-
-    private MapSqlParameterSource verificationParameters(VerificationRecord verification) {
-        return new MapSqlParameterSource()
-                .addValue("id", verification.id())
-                .addValue("verification_no", verification.verificationNo())
-                .addValue("entitlement_id", verification.entitlementId())
-                .addValue("entitlement_code", verification.entitlementCode())
-                .addValue("credential_type", verification.credentialType())
-                .addValue("credential_payload", verification.credentialPayload())
-                .addValue("device_id", verification.deviceId())
-                .addValue("point_id", verification.pointId())
-                .addValue("status", verification.status())
-                .addValue("result_reason", verification.resultReason())
-                .addValue("source_type", verification.sourceType())
-                .addValue("client_task_id", verification.clientTaskId())
-                .addValue("created_at", timestampWithTimeZone(verification.createdAt()));
-    }
-
-    private MapSqlParameterSource terminalSyncTaskParameters(TerminalSyncTaskRecord task) {
-        return new MapSqlParameterSource()
-                .addValue("id", task.id())
-                .addValue("device_code", task.deviceCode())
-                .addValue("staff_id", task.staffId())
-                .addValue("client_task_id", task.clientTaskId())
-                .addValue("task_type", task.taskType())
-                .addValue("status", task.status())
-                .addValue("reason", task.reason())
-                .addValue("verification_id", task.verificationId())
-                .addValue("verification_no", task.verificationNo())
-                .addValue("occurred_at", task.occurredAt())
-                .addValue("payload", writeJson(sanitizedSyncPayload(task.payload())))
-                .addValue("created_at", timestampWithTimeZone(task.createdAt()));
-    }
-
-    private MapSqlParameterSource priceRuleParameters(TicketPriceRuleRecord rule) {
-        return new MapSqlParameterSource()
-                .addValue("id", rule.id())
-                .addValue("ticket_type_id", rule.ticketTypeId())
-                .addValue("variant_type", rule.variantType())
-                .addValue("price_mode", rule.priceMode())
-                .addValue("weekday_price_cent", rule.weekdayPriceCent())
-                .addValue("weekend_price_cent", rule.weekendPriceCent())
-                .addValue("holiday_price_cent", rule.holidayPriceCent())
-                .addValue("discount_rate", rule.discountRate())
-                .addValue("channel_id", rule.channelId())
-                .addValue("currency", rule.currency())
-                .addValue("status", rule.status())
-                .addValue("eligibility_rule", writeJson(rule.eligibilityRule()))
-                .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
-    }
-
-
-    private MapSqlParameterSource dynamicPricingRuleParameters(TicketDynamicPricingRuleRecord rule) {
-        return new MapSqlParameterSource()
-                .addValue("id", rule.id())
-                .addValue("ticket_type_id", rule.ticketTypeId())
-                .addValue("rule_name", rule.ruleName())
-                .addValue("priority", rule.priority())
-                .addValue("effective_from", rule.effectiveFrom())
-                .addValue("effective_to", rule.effectiveTo())
-                .addValue("sales_channel", rule.salesChannel())
-                .addValue("adjustment_type", rule.adjustmentType())
-                .addValue("adjustment_rate", rule.adjustmentRate())
-                .addValue("adjustment_amount_cent", rule.adjustmentAmountCent())
-                .addValue("min_price_cent", rule.minPriceCent())
-                .addValue("max_price_cent", rule.maxPriceCent())
-                .addValue("status", rule.status())
-                .addValue("condition_rule_json", writeJson(rule.conditionRule()))
-                .addValue("operator_note", rule.operatorNote())
-                .addValue("evidence_attachment_ids", writeJsonList(rule.evidenceAttachmentIds()))
-                .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
-    }
-
-    private MapSqlParameterSource ticketOrderParameters(TicketOrderRecord order) {
-        return new MapSqlParameterSource()
-                .addValue("id", order.id())
-                .addValue("order_no", order.orderNo())
-                .addValue("customer_id", order.customerId())
-                .addValue("ticket_type_id", order.ticketTypeId())
-                .addValue("price_rule_id", order.priceRuleId())
-                .addValue("quantity", order.quantity())
-                .addValue("visit_date", order.visitDate())
-                .addValue("sales_channel", order.salesChannel())
-                .addValue("buyer_phone", order.buyerPhone())
-                .addValue("amount_cent", order.amountCent())
-                .addValue("currency", order.currency())
-                .addValue("pay_status", order.payStatus())
-                .addValue("issue_status", order.issueStatus())
-                .addValue("status", order.status())
-                .addValue("created_at", timestampWithTimeZone(order.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(order.updatedAt()));
-    }
-
-    private MapSqlParameterSource ticketPaymentIntentParameters(TicketPaymentIntentRecord intent) {
-        return new MapSqlParameterSource()
-                .addValue("id", intent.id())
-                .addValue("business_order_type", intent.businessOrderType())
-                .addValue("business_order_id", intent.businessOrderId())
-                .addValue("amount_cent", intent.amountCent())
-                .addValue("currency", intent.currency())
-                .addValue("channel", intent.channel())
-                .addValue("status", intent.status())
-                .addValue("created_at", timestampWithTimeZone(intent.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(intent.updatedAt()));
-    }
-
-    private MapSqlParameterSource ticketCredentialParameters(TicketCredentialRecord credential) {
-        return new MapSqlParameterSource()
-                .addValue("id", credential.id())
-                .addValue("entitlement_id", credential.entitlementId())
-                .addValue("order_id", credential.orderId())
-                .addValue("credential_token", null)
-                .addValue("nonce", credential.nonce())
-                .addValue("credential_hash", credentialHash(credential))
-                .addValue("credential_type", credential.credentialType())
-                .addValue("issued_at", timestampWithTimeZone(credential.issuedAt()))
-                .addValue("expires_at", timestampWithTimeZone(credential.expiresAt()))
-                .addValue("status", credential.status())
-                .addValue("refreshed_count", credential.refreshedCount())
-                .addValue("created_at", timestampWithTimeZone(credential.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(credential.updatedAt()));
-    }
-
-    private MapSqlParameterSource ticketRefundParameters(TicketRefundRecord refund) {
-        return new MapSqlParameterSource()
-                .addValue("id", refund.id())
-                .addValue("target_id", refund.targetId())
-                .addValue("refund_amount_cent", refund.refundAmountCent())
-                .addValue("reason", refund.reason())
-                .addValue("refund_channel", refund.refundChannel())
-                .addValue("status", refund.status())
-                .addValue("approved_by", refund.approvedBy())
-                .addValue("approved_at", timestampWithTimeZone(refund.approvedAt()))
-                .addValue("created_at", timestampWithTimeZone(refund.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(refund.updatedAt()));
-    }
-
-    private MapSqlParameterSource ticketRefundLineParameters(TicketRefundLineRecord line) {
-        return new MapSqlParameterSource()
-                .addValue("id", line.id())
-                .addValue("refund_id", line.refundId())
-                .addValue("order_id", line.orderId())
-                .addValue("entitlement_id", line.entitlementId())
-                .addValue("entitlement_type", line.entitlementType())
-                .addValue("line_type", line.lineType())
-                .addValue("refund_amount_cent", line.refundAmountCent())
-                .addValue("remaining_times_before", line.remainingTimesBefore())
-                .addValue("used_times_before", line.usedTimesBefore())
-                .addValue("status", line.status())
-                .addValue("created_at", timestampWithTimeZone(line.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(line.updatedAt()));
-    }
-
-    private TicketTypeRecord mapTicketType(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketTypeRecord(
-                resultSet.getString("id"),
-                resultSet.getString("ticket_name"),
-                resultSet.getString("base_calendar_price_mode"),
-                nullableLong(resultSet, "weekday_price_cent"),
-                nullableLong(resultSet, "weekend_price_cent"),
-                nullableLong(resultSet, "holiday_price_cent"),
-                resultSet.getBoolean("stock_required"),
-                resultSet.getString("status"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private EntitlementTemplateRecord mapEntitlementTemplate(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new EntitlementTemplateRecord(
-                resultSet.getString("id"),
-                resultSet.getString("name"),
-                resultSet.getString("entitlement_type"),
-                resultSet.getInt("default_total_times"),
-                resultSet.getLong("default_value_cent"),
-                resultSet.getString("status"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private TicketTypeEntitlementRecord mapTicketTypeEntitlement(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketTypeEntitlementRecord(
-                resultSet.getString("id"),
-                resultSet.getString("ticket_type_id"),
-                resultSet.getString("entitlement_template_id"),
-                resultSet.getInt("quantity"),
-                resultSet.getInt("total_times"),
-                nullableLong(resultSet, "value_amount_cent"),
-                resultSet.getString("effective_rule"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private IssuedEntitlementRecord mapIssuedEntitlement(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new IssuedEntitlementRecord(
-                resultSet.getString("id"),
-                resultSet.getString("entitlement_code"),
-                resultSet.getString("ticket_type_id"),
-                resultSet.getString("order_id"),
-                resultSet.getString("entitlement_template_id"),
-                resultSet.getString("entitlement_type"),
-                resultSet.getString("merchant_id"),
-                resultSet.getString("venue_id"),
-                resultSet.getString("point_id"),
-                resultSet.getInt("total_times"),
-                resultSet.getInt("used_times"),
-                nullableLong(resultSet, "value_amount_cent"),
-                resultSet.getString("status"),
-                nullableInstant(resultSet, "valid_from"),
-                nullableInstant(resultSet, "valid_to"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private VerificationRecord mapVerification(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new VerificationRecord(
-                resultSet.getString("id"),
-                resultSet.getString("verification_no"),
-                resultSet.getString("entitlement_id"),
-                resultSet.getString("entitlement_code"),
-                resultSet.getString("credential_type"),
-                resultSet.getString("credential_payload"),
-                resultSet.getString("device_id"),
-                resultSet.getString("point_id"),
-                resultSet.getString("status"),
-                resultSet.getString("result_reason"),
-                resultSet.getString("source_type"),
-                resultSet.getString("client_task_id"),
-                nullableInstant(resultSet, "created_at")
-        );
-    }
-
-    private TerminalSyncTaskRecord mapTerminalSyncTask(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TerminalSyncTaskRecord(
-                resultSet.getString("id"),
-                resultSet.getString("device_code"),
-                resultSet.getString("staff_id"),
-                resultSet.getString("client_task_id"),
-                resultSet.getString("task_type"),
-                resultSet.getString("status"),
-                resultSet.getString("reason"),
-                resultSet.getString("verification_id"),
-                resultSet.getString("verification_no"),
-                resultSet.getString("occurred_at"),
-                readStringMap(resultSet.getString("payload")),
-                nullableInstant(resultSet, "created_at")
-        );
-    }
-
-    private TicketPriceRuleRecord mapPriceRule(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketPriceRuleRecord(
-                resultSet.getString("id"),
-                resultSet.getString("ticket_type_id"),
-                resultSet.getString("variant_type"),
-                resultSet.getString("price_mode"),
-                nullableLong(resultSet, "weekday_price_cent"),
-                nullableLong(resultSet, "weekend_price_cent"),
-                nullableLong(resultSet, "holiday_price_cent"),
-                nullableBigDecimal(resultSet, "discount_rate"),
-                resultSet.getString("channel_id"),
-                resultSet.getString("currency"),
-                resultSet.getString("status"),
-                readObjectMap(resultSet.getString("eligibility_rule")),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-
-    private TicketDynamicPricingRuleRecord mapDynamicPricingRule(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketDynamicPricingRuleRecord(
-                resultSet.getString("id"),
-                resultSet.getString("ticket_type_id"),
-                resultSet.getString("rule_name"),
-                resultSet.getInt("priority"),
-                resultSet.getObject("effective_from", LocalDate.class),
-                resultSet.getObject("effective_to", LocalDate.class),
-                resultSet.getString("sales_channel"),
-                resultSet.getString("adjustment_type"),
-                nullableBigDecimal(resultSet, "adjustment_rate"),
-                nullableLong(resultSet, "adjustment_amount_cent"),
-                nullableLong(resultSet, "min_price_cent"),
-                nullableLong(resultSet, "max_price_cent"),
-                resultSet.getString("status"),
-                readObjectMap(resultSet.getString("condition_rule_json")),
-                resultSet.getString("operator_note"),
-                readStringList(resultSet.getString("evidence_attachment_ids")),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private TicketOrderRecord mapTicketOrder(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketOrderRecord(
-                resultSet.getString("id"),
-                resultSet.getString("order_no"),
-                resultSet.getString("customer_id"),
-                resultSet.getString("ticket_type_id"),
-                resultSet.getString("price_rule_id"),
-                resultSet.getInt("quantity"),
-                resultSet.getObject("visit_date", LocalDate.class),
-                resultSet.getString("sales_channel"),
-                resultSet.getString("buyer_phone"),
-                resultSet.getLong("amount_cent"),
-                resultSet.getString("currency"),
-                resultSet.getString("pay_status"),
-                resultSet.getString("issue_status"),
-                resultSet.getString("status"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private TicketCredentialRecord mapTicketCredential(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketCredentialRecord(
-                resultSet.getString("id"),
-                resultSet.getString("entitlement_id"),
-                resultSet.getString("order_id"),
-                resultSet.getString("credential_token"),
-                resultSet.getString("nonce"),
-                resultSet.getString("credential_hash"),
-                resultSet.getString("credential_type"),
-                nullableInstant(resultSet, "issued_at"),
-                nullableInstant(resultSet, "expires_at"),
-                resultSet.getString("status"),
-                resultSet.getInt("refreshed_count"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private TicketRefundRecord mapTicketRefund(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketRefundRecord(
-                resultSet.getString("id"),
-                resultSet.getString("target_id"),
-                resultSet.getLong("refund_amount_cent"),
-                resultSet.getString("reason"),
-                resultSet.getString("refund_channel"),
-                resultSet.getString("status"),
-                resultSet.getString("approved_by"),
-                nullableInstant(resultSet, "approved_at"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-    private TicketRefundLineRecord mapTicketRefundLine(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TicketRefundLineRecord(
-                resultSet.getString("id"),
-                resultSet.getString("refund_id"),
-                resultSet.getString("order_id"),
-                resultSet.getString("entitlement_id"),
-                resultSet.getString("entitlement_type"),
-                resultSet.getString("line_type"),
-                resultSet.getLong("refund_amount_cent"),
-                resultSet.getInt("remaining_times_before"),
-                resultSet.getInt("used_times_before"),
-                resultSet.getString("status"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
-
-    private String dynamicPricingRuleSelect() {
-        return """
-                SELECT id, ticket_type_id, rule_name, priority, effective_from, effective_to, sales_channel,
-                       adjustment_type, adjustment_rate, adjustment_amount_cent, min_price_cent, max_price_cent,
-                       status, condition_rule_json::text AS condition_rule_json, operator_note,
-                       evidence_attachment_ids::text AS evidence_attachment_ids, created_at, updated_at
-                  FROM ticket_dynamic_pricing_rules
-                """;
-    }
-
-    private String ticketOrderSelect() {
-        return """
-                SELECT id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
-                       sales_channel, buyer_phone, amount_cent, currency, pay_status, issue_status,
-                       status, created_at, updated_at
-                  FROM ticket_orders
-                """;
-    }
-
-    private String issuedEntitlementSelect() {
-        return """
-                SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
-                       entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at
-                  FROM issued_entitlements
-                """;
-    }
-
-    private Long nullableLong(ResultSet resultSet, String columnName) throws SQLException {
-        long value = resultSet.getLong(columnName);
-        return resultSet.wasNull() ? null : value;
-    }
-
-    private BigDecimal nullableBigDecimal(ResultSet resultSet, String columnName) throws SQLException {
-        return resultSet.getBigDecimal(columnName);
-    }
-
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
-
-    private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
-
-    private String credentialHash(TicketCredentialRecord credential) {
-        if (credential.credentialToken() != null && !credential.credentialToken().isBlank()) {
-            return sha256(credential.credentialToken());
-        }
-        return credential.credentialHash();
-    }
-
-    private Map<String, String> sanitizedSyncPayload(Map<String, String> payload) {
-        if (payload == null || payload.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, String> sanitized = new LinkedHashMap<>();
-        payload.forEach((key, value) -> sanitized.put(key, sanitizedDynamicCredential(value)));
-        return sanitized;
-    }
-
-    private String sanitizedDynamicCredential(String value) {
-        if (value == null || !value.startsWith("cred_")) {
-            return value;
-        }
-        return "sha256:" + sha256(value);
-    }
-
-    private String sha256(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception exception) {
-            throw new IllegalStateException("ticket credential hashing unavailable", exception);
-        }
-    }
-
-    private String writeJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value == null ? Map.of() : value);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("ticketing JSON value is not serializable", exception);
-        }
-    }
-
-    private Map<String, String> readStringMap(String value) {
-        try {
-            return value == null ? Map.of() : objectMapper.readValue(value, STRING_MAP_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("terminal sync payload is not readable", exception);
-        }
-    }
-
-
-
-    private String writeJsonList(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value == null ? List.of() : value);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("ticketing JSON list is not serializable", exception);
-        }
-    }
-
-    private List<String> readStringList(String value) {
-        try {
-            return value == null ? List.of() : objectMapper.readValue(value, STRING_LIST_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("ticketing JSON list is not readable", exception);
-        }
-    }
-
-    private Map<String, Object> readObjectMap(String value) {
-        try {
-            return value == null ? Map.of() : objectMapper.readValue(value, OBJECT_MAP_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("ticketing JSON payload is not readable", exception);
-        }
-    }
 }

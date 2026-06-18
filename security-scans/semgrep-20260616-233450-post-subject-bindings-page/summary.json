@@ -1,0 +1,17 @@
+{
+  "scan_dir": "security-scans/semgrep-20260616-233450-post-subject-bindings-page",
+  "generated_at": "2026-06-16T23:35:02.875339+00:00",
+  "configs": [
+    "p/secrets",
+    "p/owasp-top-ten"
+  ],
+  "exit_status_json": 0,
+  "exit_status_sarif": 0,
+  "results": 0,
+  "errors": 0,
+  "results_count": 0,
+  "errors_count": 0,
+  "scanned_count": 1371,
+  "skipped_count": 0,
+  "findings": []
+}

@@ -1,4 +1,5 @@
 package com.complex.platform.common.idempotency;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.common.api.ApiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -12,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,12 +26,18 @@ public class IdempotencyService {
 
     private final IdempotencyRepository repository;
     private final ObjectMapper objectMapper;
+    private CallerScopeResolver callerScopeResolver = () -> "";
 
     public IdempotencyService(IdempotencyRepository repository, ObjectMapper objectMapper) {
         this.repository = repository;
         this.objectMapper = objectMapper.copy()
                 .findAndRegisterModules()
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
+
+    @Autowired(required = false)
+    public void setCallerScopeResolver(CallerScopeResolver callerScopeResolver) {
+        this.callerScopeResolver = callerScopeResolver != null ? callerScopeResolver : () -> "";
     }
 
     public <T> T execute(
@@ -51,11 +59,12 @@ public class IdempotencyService {
             Function<T, T> storedResponseTransformer
     ) {
         requireIdempotencyKey(idempotencyKey);
+        String scopedId = scopedOperationId(operationId);
         String requestHash = hashJson(request);
         Instant now = Instant.now();
         IdempotencyRecord reservation = new IdempotencyRecord(
                 UUID.randomUUID(),
-                operationId,
+                scopedId,
                 idempotencyKey,
                 requestHash,
                 RESPONSE_CODE_IN_PROGRESS,
@@ -69,7 +78,7 @@ public class IdempotencyService {
             return runAndComplete(reservation, action, responseType, storedResponseTransformer);
         }
 
-        Optional<IdempotencyRecord> existing = repository.findByOperationIdAndIdempotencyKey(operationId, idempotencyKey);
+        Optional<IdempotencyRecord> existing = repository.findByOperationIdAndIdempotencyKey(scopedId, idempotencyKey);
         if (existing.isPresent()) {
             IdempotencyRecord record = existing.get();
             if (RESPONSE_CODE_FAILED_RETRYABLE.equals(record.responseCode()) && record.requestHash().equals(requestHash)) {
@@ -77,7 +86,7 @@ public class IdempotencyService {
                 if (repository.tryUpdateWhenResponseCode(retryReservation, RESPONSE_CODE_FAILED_RETRYABLE)) {
                     return runAndComplete(retryReservation, action, responseType, storedResponseTransformer);
                 }
-                return repository.findByOperationIdAndIdempotencyKey(operationId, idempotencyKey)
+                return repository.findByOperationIdAndIdempotencyKey(scopedId, idempotencyKey)
                         .map(latest -> replay(latest, requestHash, responseType))
                         .orElseThrow(() -> ApiException.conflict(
                                 "IDEMPOTENCY_IN_PROGRESS",
@@ -93,10 +102,12 @@ public class IdempotencyService {
         );
     }
 
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
+    private String scopedOperationId(String operationId) {
+        String scope = callerScopeResolver.resolve();
+        if (scope == null || scope.isEmpty()) {
+            return operationId;
         }
+        return scope + ":" + operationId;
     }
 
     private <T> T replay(IdempotencyRecord existing, String requestHash, Class<T> responseType) {

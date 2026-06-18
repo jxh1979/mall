@@ -17,9 +17,9 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 待回填项 | 4 |
-| P0 待回填项 | 4 |
-| 当前 awaiting | 4 |
+| 待回填项 | 1 |
+| P0 待回填项 | 1 |
+| 当前 awaiting | 1 |
 | 当前 valid | 0 |
 | 当前 invalid | 0 |
 
@@ -28,9 +28,6 @@
 | item_id | priority | category | current_status | template_path | target_manifest_path |
 | --- | --- | --- | --- | --- | --- |
 | PRD-CRED-001 | P0 | credential | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-CRED-001.json | docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/manifest-PRD-CRED-001.json |
-| PRD-CRED-3P-001 | P0 | credential | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-CRED-3P-001.json | docs/production-readiness-evidence/submissions/finance/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json |
-| PRD-PAY-001 | P0 | payment | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-PAY-001.json | docs/production-readiness-evidence/submissions/finance/PRD-PAY-001/manifest-PRD-PAY-001.json |
-| PRD-PAY-002 | P0 | payment | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-PAY-002.json | docs/production-readiness-evidence/submissions/finance/PRD-PAY-002/manifest-PRD-PAY-002.json |
 
 ## 5. 操作步骤
 

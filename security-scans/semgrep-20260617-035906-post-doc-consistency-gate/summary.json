@@ -1,0 +1,13 @@
+{
+  "scan_id": "semgrep-20260617-035906-post-doc-consistency-gate",
+  "semgrep_exit_code": 0,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1020,
+  "paths_skipped": 0,
+  "paths_with_findings": 0,
+  "by_severity": {},
+  "top_checks": [],
+  "findings_preview": [],
+  "errors_preview": []
+}

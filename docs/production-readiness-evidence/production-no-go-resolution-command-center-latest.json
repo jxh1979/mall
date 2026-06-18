@@ -1,0 +1,290 @@
+{
+  "markers": [
+    "PRODUCTION_NO_GO_RESOLUTION_COMMAND_CENTER_READY",
+    "NO_FAKE_PRODUCTION_EVIDENCE_CLOSURE",
+    "CLOSURE_REQUIRES_VALID_SUBMISSION_MANIFESTS",
+    "NAS_REQUIRES_IT_SUDO_MAINTENANCE_WINDOW",
+    "OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS",
+    "EXTERNAL_PARTIALS_MAPPED_TO_MANIFESTS",
+    "PRODUCTION_READY_REMAINS_NO_GO_UNTIL_EXTERNAL_EVIDENCE_VALID"
+  ],
+  "generated_from": [
+    "production-evidence-submission-status-latest.json",
+    "production-blocker-register-latest.json",
+    "production-owner-action-packs-latest.json",
+    "external-evidence-requirement-traceability-latest.json",
+    "nas-current-state-drift-latest.json",
+    "nas-diagnostic-latest.json",
+    "closed-loop-current-state-snapshot-latest.json"
+  ],
+  "counts": {
+    "expected_submissions": 15,
+    "awaiting_submission": 15,
+    "valid_submission": 0,
+    "p0_awaiting_submission": 13,
+    "readiness_blockers": 6,
+    "credential_blockers": 4,
+    "finding_blockers": 2,
+    "blocker_total": 12,
+    "partial_requirements": 8,
+    "owner_actions_without_manifest": 0
+  },
+  "go_no_go": {
+    "can_enter_integration": true,
+    "can_enter_business_acceptance": true,
+    "can_claim_production_ready": false,
+    "production_ready_blockers": [
+      "15 production evidence submissions awaiting, including 13 P0",
+      "NAS current state is passed; SEC-P0-OPS-RECOVERY-001 cannot close",
+      "12 production blocker register items remain open (6 readiness, 4 credential, 2 security findings)",
+      "8 external evidence or supplier-backed requirements remain partial"
+    ]
+  },
+  "nas": {
+    "live_status": "passed",
+    "mount_path": "/mnt/complex-nas-backup",
+    "nas_unc": "//192.168.88.113/bn",
+    "credential_file": "/etc/complex/secrets/nas-smb.credentials",
+    "credential_ref": "cred://prod/nas/smb/complex-backup-rw",
+    "sudo_no_password": false,
+    "root_cause": "expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence",
+    "next_action": "IT must backfill approved production manifests for automount, schedule, alert and drill evidence",
+    "can_close_sec_p0_ops_recovery": false
+  },
+  "p0_first_owner_actions": [],
+  "blockers": [
+    {
+      "type": "readiness",
+      "severity": "P0/P1 by item priority",
+      "id": "PRD-NAS-AUTOMOUNT-001",
+      "owner": "IT/运维",
+      "category": "nas",
+      "status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产自动恢复；不阻塞开发验证",
+      "next_action": "IT 安装后回填重启后 findmnt、读写删除测试和截图",
+      "runbook_ref": "nas-backup-and-restore-runbook-v0.1.md#64-p0-a-no-system-write-boundary"
+    },
+    {
+      "type": "readiness",
+      "severity": "P0/P1 by item priority",
+      "id": "PRD-NAS-SCHEDULE-001",
+      "owner": "IT/运维",
+      "category": "nas",
+      "status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产自动备份；不阻塞手动备份演练",
+      "next_action": "IT 安装后回填调度配置、最近一次 scheduled 备份和 .sha256",
+      "runbook_ref": "nas-backup-and-restore-runbook-v0.1.md#64-p0-a-no-system-write-boundary"
+    },
+    {
+      "type": "readiness",
+      "severity": "P0/P1 by item priority",
+      "id": "PRD-NAS-ALERT-001",
+      "owner": "IT/运维/安全",
+      "category": "nas",
+      "status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产运维准入；不阻塞开发验证",
+      "next_action": "回填容量告警、失败告警和通知送达证据",
+      "runbook_ref": "server-160-runbook-v0.2.md#51-p0-a-no-system-write-boundary"
+    },
+    {
+      "type": "readiness",
+      "severity": "P0/P1 by item priority",
+      "id": "PRD-NAS-DRILL-CADENCE-001",
+      "owner": "IT/运维",
+      "category": "nas",
+      "status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产可恢复结论；不阻塞当前编码",
+      "next_action": "回填最近一次恢复演练报告、临时库清理和验证表",
+      "runbook_ref": "nas-backup-and-restore-runbook-v0.1.md#64-p0-a-no-system-write-boundary"
+    },
+    {
+      "type": "readiness",
+      "severity": "P0/P1 by item priority",
+      "id": "PRD-CRED-001",
+      "owner": "IT/安全/财务",
+      "category": "credential",
+      "status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产",
+      "next_action": "建立密钥引用、轮换周期、责任人和应急回滚",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md"
+    },
+    {
+      "type": "readiness",
+      "severity": "P0/P1 by item priority",
+      "id": "PRD-160-001",
+      "owner": "IT/运维",
+      "category": "ops160",
+      "status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产；不阻塞用户级覆盖开发验证",
+      "next_action": "迁移用户级覆盖到系统配置，接入 systemd 和告警",
+      "runbook_ref": "server-160-runbook-v0.2.md"
+    },
+    {
+      "type": "credential",
+      "severity": "P0",
+      "id": "PRD-CRED-OPS-001",
+      "owner": "IT/运维/安全",
+      "category": "credential",
+      "status": "pending_info",
+      "blocking_scope": "阻塞长期预生产和生产",
+      "next_action": "建立账号负责人、授权范围、到期日和停用步骤",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#71-生产服务器运维账号轮换"
+    },
+    {
+      "type": "credential",
+      "severity": "P0",
+      "id": "PRD-CRED-DB-001",
+      "owner": "IT/运维/安全",
+      "category": "credential",
+      "status": "pending_info",
+      "blocking_scope": "阻塞生产数据库接入",
+      "next_action": "生成强密码、写入安全保管位置、补到期日和维护窗口",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#72-postgresql-生产库密码轮换"
+    },
+    {
+      "type": "credential",
+      "severity": "P0",
+      "id": "PRD-CRED-JWT-001",
+      "owner": "IT/安全/技术负责人",
+      "category": "credential",
+      "status": "pending_info",
+      "blocking_scope": "阻塞生产登录和开放接口签发",
+      "next_action": "设计签名版本、双验窗口、旧 token 失效计划",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#74-jwttoken-签名密钥轮换"
+    },
+    {
+      "type": "credential",
+      "severity": "P0",
+      "id": "PRD-CRED-NAS-001",
+      "owner": "IT/运维/安全",
+      "category": "credential",
+      "status": "pending_info",
+      "blocking_scope": "阻塞生产可恢复结论",
+      "next_action": "IT 将真实密码写入安全保管位置或 160 受控凭证文件，不得写入文档、聊天或仓库",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#41-p0-必登凭证类型"
+    },
+    {
+      "type": "security_finding",
+      "severity": "P0",
+      "id": "SEC-P0-OPS-RECOVERY-001",
+      "owner": "IT/安全/运维",
+      "category": "security",
+      "status": "open",
+      "blocking_scope": "阻塞公开生产安全准入；不阻塞开发联调",
+      "next_action": "P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据",
+      "runbook_ref": "security-scans/findings-register-v1.md"
+    },
+    {
+      "type": "security_finding",
+      "severity": "P2",
+      "id": "SEC-P2-CSRF-API-001",
+      "owner": "后端/前端/安全",
+      "category": "security",
+      "status": "open_for_prod_review",
+      "blocking_scope": "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
+      "next_action": "正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核",
+      "runbook_ref": "security-scans/findings-register-v1.md"
+    }
+  ],
+  "partial_requirements": [
+    {
+      "requirement_id": "REQ-17",
+      "module": "酒吧",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    },
+    {
+      "requirement_id": "REQ-21",
+      "module": "酒吧",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    },
+    {
+      "requirement_id": "REQ-23b",
+      "module": "酒吧",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    },
+    {
+      "requirement_id": "REQ-25",
+      "module": "酒吧",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    },
+    {
+      "requirement_id": "REQ-32",
+      "module": "酒吧",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    },
+    {
+      "requirement_id": "REQ-40",
+      "module": "第三方",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    },
+    {
+      "requirement_id": "REQ-41",
+      "module": "第三方",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    },
+    {
+      "requirement_id": "REQ-44",
+      "module": "第三方",
+      "current_status": "部分实现",
+      "mapped_item_ids": "",
+      "owner_groups": "",
+      "awaiting_evidence_rows": 0,
+      "production_blocking": "no",
+      "target_manifest_count": 0,
+      "next_step": "Submit valid production manifests for the mapped item_ids; mock/sandbox evidence cannot close this requirement."
+    }
+  ],
+  "verification_after_submission": [
+    "npm run verify:production-evidence-submissions-guard",
+    "npm run docs:production-evidence-submission-status",
+    "npm run verify:production-evidence-submission-status",
+    "npm run docs:production-evidence-backfill-priority",
+    "npm run verify:production-evidence-backfill-priority",
+    "npm run docs:production-closure-gap-reports",
+    "npm run verify:production-closure-gap-reports",
+    "npm run verify:closed-loop-current-state",
+    "npm run verify:delivery-gates"
+  ]
+}

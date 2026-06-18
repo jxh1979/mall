@@ -1,10 +1,8 @@
 package com.complex.platform.evidence;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -25,12 +23,13 @@ class JdbcAuditEventRepository implements AuditEventRepository {
         String sql = """
                 INSERT INTO audit_events (
                     id, occurred_at, event_name, event_result, actor_type, actor_id, auth_context,
-                    terminal, permission_code, business_type, business_id, request_id, idempotency_key, metadata
+                    terminal, permission_code, business_type, business_id, request_id, idempotency_key,
+                    metadata, merchant_id
                 )
                 VALUES (
                     :id, :occurred_at, :event_name, :event_result, :actor_type, :actor_id, :auth_context,
                     :terminal, :permission_code, :business_type, :business_id, :request_id, :idempotency_key,
-                    CAST(:metadata AS jsonb)
+                    CAST(:metadata AS jsonb), :merchant_id
                 )
                 """;
         jdbcTemplate.update(sql, new MapSqlParameterSource()
@@ -47,13 +46,11 @@ class JdbcAuditEventRepository implements AuditEventRepository {
                 .addValue("business_id", event.businessId())
                 .addValue("request_id", event.requestId())
                 .addValue("idempotency_key", event.idempotencyKey())
-                .addValue("metadata", writeMetadata(event)));
+                .addValue("metadata", writeMetadata(event))
+                .addValue("merchant_id", event.merchantId()));
         return event;
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private String writeMetadata(AuditEvent event) {
         try {

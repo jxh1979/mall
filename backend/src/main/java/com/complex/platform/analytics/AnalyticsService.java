@@ -15,8 +15,8 @@ import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
 import com.complex.platform.analytics.AnalyticsRecords.StaffServiceScoreRecord;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.common.idempotency.IdempotencyService;
-import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -43,31 +43,27 @@ public class AnalyticsService {
     private static final int MAX_LLM_INPUT_CHARS = 4_000;
 
     private final AnalyticsRepository repository;
-    private final IdempotencyService idempotencyService;
-    private final AuditEventService auditEventService;
+    private final AuditedOperationExecutor operations;
     private final Clock clock;
     private final LocalLlmClient localLlmClient;
 
     @Autowired
     public AnalyticsService(
             AnalyticsRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
+            AuditedOperationExecutor operations,
             LocalLlmClient localLlmClient
     ) {
-        this(repository, idempotencyService, auditEventService, Clock.systemUTC(), localLlmClient);
+        this(repository, operations, Clock.systemUTC(), localLlmClient);
     }
 
     AnalyticsService(
             AnalyticsRepository repository,
-            IdempotencyService idempotencyService,
-            AuditEventService auditEventService,
+            AuditedOperationExecutor operations,
             Clock clock,
             LocalLlmClient localLlmClient
     ) {
         this.repository = repository;
-        this.idempotencyService = idempotencyService;
-        this.auditEventService = auditEventService;
+        this.operations = operations;
         this.clock = clock;
         this.localLlmClient = localLlmClient;
     }
@@ -363,30 +359,10 @@ public class AnalyticsService {
             String businessType,
             Supplier<List<T>> action
     ) {
-        try {
-            List<T> items = action.get();
-            auditEventService.recordSuccess(
-                    successEvent,
-                    permissionCode,
-                    businessType,
-                    "all",
-                    null,
-                    null,
-                    Map.of("count", items.size())
-            );
-            return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    "all",
-                    null,
-                    null,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.readPage(
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action
+        );
     }
 
     private <T> T readSingle(
@@ -396,30 +372,11 @@ public class AnalyticsService {
             String businessType,
             Supplier<T> action
     ) {
-        try {
-            T item = action.get();
-            auditEventService.recordSuccess(
-                    successEvent,
-                    permissionCode,
-                    businessType,
-                    businessId(item),
-                    null,
-                    null,
-                    Map.of()
-            );
-            return item;
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    "all",
-                    null,
-                    null,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.readSingle(
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action,
+                this::businessId
+        );
     }
 
     private <T> T executeWrite(
@@ -433,38 +390,16 @@ public class AnalyticsService {
             String businessType,
             Supplier<T> action
     ) {
-        try {
-            return idempotencyService.execute(
-                    operationId,
-                    idempotencyKey,
-                    request,
-                    () -> {
-                        T saved = action.get();
-                        auditEventService.recordSuccess(
-                                successEvent,
-                                permissionCode,
-                                businessType,
-                                businessId(saved),
-                                null,
-                                idempotencyKey,
-                                Map.of()
-                        );
-                        return saved;
-                    },
-                    responseType
-            );
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    null,
-                    null,
-                    idempotencyKey,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.executeWrite(
+                operationId,
+                idempotencyKey,
+                request,
+                responseType,
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action,
+                this::businessId,
+                Map.of()
+        );
     }
 
     private <T> T requireRequest(T request) {
@@ -577,12 +512,6 @@ public class AnalyticsService {
         return null;
     }
 
-    private String codeOf(RuntimeException exception) {
-        if (exception instanceof ApiException apiException) {
-            return apiException.code();
-        }
-        return exception.getClass().getSimpleName();
-    }
 
     private record NormalizedRiskLevel(String value, boolean adjusted) {
     }

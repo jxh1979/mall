@@ -1,5 +1,6 @@
 package com.complex.platform.evidence;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 
 public record EvidenceAttachmentRecord(
@@ -15,6 +16,7 @@ public record EvidenceAttachmentRecord(
         String status,
         String checksum,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore String merchantId
 ) {
 }

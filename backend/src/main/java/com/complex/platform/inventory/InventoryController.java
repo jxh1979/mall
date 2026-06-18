@@ -1,4 +1,5 @@
 package com.complex.platform.inventory;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -193,11 +194,5 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scanTraceCodeHandover(request));
-    }
-
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
     }
 }

@@ -1,4 +1,5 @@
 package com.complex.platform.customer;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.common.api.ApiException;
@@ -179,12 +180,6 @@ public class CustomerController {
     private String firstNonBlank(String first, String second) {
         String firstTrimmed = trimToNull(first);
         return firstTrimmed == null ? second : firstTrimmed;
-    }
-
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
     }
 
     private String trimToNull(String value) {

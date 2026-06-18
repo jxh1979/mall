@@ -5,6 +5,7 @@ import java.time.Instant;
 public record BarTableRecord(
         String id,
         String barId,
+        String merchantId,
         String tableCode,
         String tableName,
         String tableType,

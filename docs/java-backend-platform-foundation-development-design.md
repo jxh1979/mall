@@ -309,6 +309,37 @@ idempotency:{scope}:{key}
 - `StaffDeviceLink`
 - `TerminalCapabilitySwitch`
 
+#### 4.8.1 员工设备凭证现状与目标（D11，`staff_device_credentials` 后端承接缺失）
+
+> 现状（2026-06-18 审计）：私人手机 App 自助注册→审批、`staff_device_credentials`（Keystore 设备公钥 / 不可逆设备指纹 / 换机解绑 / Root 失效）的**后端实现设计缺失**——数据库侧已有/规划字段，但本 Java 设计无对应实体、Service、Controller 承接（DB 有字段、Java 设计无承接）。需说明：现存 `terminal_device_credentials`(V011) 是 **kiosk 一体机随机 token 的 SHA-256**，与员工私人手机设备指纹是**不同实体**，不能当作"员工设备凭证已覆盖"（详见 `android-device-terminal-development-design` R5 审计标注与 §3.1/§13.1）。两套凭证互不串用。
+
+**现状**
+
+- `staff_device_credentials`（员工私人手机设备凭证：Keystore 公钥指纹/不可逆指纹、换机解绑重绑、Root/调试失效）在 Java 后端无实体、无 Repository、无 Service、无 Controller。
+- 私人手机"自助注册 → 平台审批 → 凭证绑定生效"流程在后端无设计承接。
+- 换机的"解绑旧 → 绑新（待审）→ 生效"中间态（含 supersedes / 换机待审）无状态机定义。
+
+**目标（P0）**
+
+- 在 `device` 模块新增员工设备凭证后端设计，至少包含：
+  - 实体：`StaffDeviceCredential`（字段：`staff_id`、`user_id`、`device_key_fingerprint`(不可逆公钥指纹)、`credential_status`、`registration_status`(审批态)、`root_debug_state`、`bound_at`、`unbound_at`、`superseded_by`(换机指向)、仅持久化不可逆哈希/公钥指纹，不存原始标识，PIPL 最小化，对齐合规 C4）。
+  - 状态机：`pending_review`(自助注册待审) → `active`(绑定生效) → `superseded`(换机被取代) / `revoked`(解绑/离职注销) / `invalidated`(Root/调试/指纹 mismatch 失效待复核)。
+  - 换机：先解绑旧凭证（置 `revoked`/`superseded`）再绑新凭证（新凭证 `pending_review` → 审批 → `active`），中间保留"换机待审"态，不允许新旧同时 `active`。
+  - 失效：Root、调试、设备凭证/指纹变化或不匹配时凭证立即 `invalidated` 并进入后台复核。
+  - Service/Controller：自助注册提交、审批通过/驳回、凭证绑定、换机解绑重绑、失效与复核；与 `identity`/`access` 准入校验衔接（私人手机仅用于注册、通知、状态查看、凭证绑定，不承担现场业务）。
+  - 事件留痕：注册提交、审批、绑定、换机解绑重绑、失效复核全部写 `audit_events`。
+- 明确 `staff_device_credentials`（员工）与 `terminal_device_credentials`（kiosk 一体机）两套凭证表/实体互不串用。
+
+**候选验收**
+
+- 私人手机可完成"自助注册 → 平台审批 → 凭证绑定生效"，并能在后台查到员工/私人手机/设备公钥指纹/工作手机一一对应关系。
+- 换机走"解绑旧 → 绑新（待审）→ 生效"闭环，且任一时刻同一员工私人手机只有一条 `active` 凭证；旧凭证解绑即删除对应绑定凭据。
+- Root/调试/指纹 mismatch 设备绑定立即失效并进入复核，复核确认后封禁，未通过准入不能进入现场业务。
+- 仅持久化不可逆哈希/公钥指纹，不存原始唯一标识（PIPL 最小化校验通过）。
+- 员工设备凭证与 kiosk 一体机凭证（`terminal_device_credentials`）两套互不串用，校验路径分离。
+
+> 注：本节为后端承接设计补登；私人手机端的产品形态、PIPL 告知同意/最小化/解绑删除、Android 端注册/Keystore 指纹/Root 检测细节以 `android-device-terminal-development-design §3.1/§13.1/§13.1.1` 为准，本节负责其后端实体、状态机、Service/Controller 与事件落点。
+
 ### 4.9 `audit`
 
 负责后台操作审计的公共切面和查询入口。事件中心记录业务事件，`audit` 模块负责把后台敏感操作统一拦截并写入事件中心。
@@ -442,8 +473,8 @@ V010__ticketing_foundation_reference.sql
 - `app_lock_records`
 - `manual_unlock_records`
 - `api_call_logs`
-- `webhook_subscriptions`
-- `webhook_delivery_logs`
+
+> D8 Webhook 表优先级收口：`webhook_subscriptions`、`webhook_delivery_logs` 归 **P1**（与 `open-platform-security-auth §12.2` P1 表清单及 §18.2 "Webhook 订阅和投递"P1 任务一致）。本文 §4.5 实体清单、§8.5 后台接口、§19 P1 顺序中的 Webhook 能力均按 P1 落地，不进 V003（P0）迁移；P1 实施时新增独立迁移版本建表。原 V003 误列这两张表已据此移除。
 
 关键约束：
 
@@ -530,6 +561,9 @@ open.webhook.subscribe
 
 - `devices`
 - `device_bindings`
+- `staff_device_credentials`（员工私人手机设备凭证：Keystore 公钥指纹/不可逆指纹、注册审批态、换机解绑重绑、Root/调试失效；D11，详见 §4.8.1）
+
+> D11 现状说明：`staff_device_credentials` 后端实体/状态机/Service/Controller 设计原缺失（DB 有字段、Java 设计无承接），§4.8.1 已补"现状→目标(P0)→候选验收"。本表与 kiosk 一体机的 `terminal_device_credentials`(V011) 是不同实体，互不串用。
 
 用于后续安卓员工手机、平板、一体机、扫码/NFC设备接入。
 
@@ -708,12 +742,14 @@ metadata jsonb null
 
 ```text
 app_code
-credential_id
+login_account
 timestamp
 nonce
 signature
 password 或 password_digest
 ```
+
+> D8 字段名收口（鉴权请求标识字段）：本文原用 `credential_id`，`open-platform-security-auth` 用 `loginAccount`/`login_account`（且 `open_app_credentials.login_account` 已是数据库列名）。两文件统一为 **`login_account`**（请求体 JSON 字段名 `loginAccount`，DB 列名 `login_account`），以与 open 文档 §6.2/§12.4 和数据库列名对齐；`credential_id` 不再作为鉴权请求标识字段。
 
 签名建议：
 
@@ -1065,10 +1101,12 @@ FALSE_POSITIVE
 
 流程：
 
-1. 第三方使用 `app_code + credential_id + password/password_digest + timestamp + nonce + signature` 请求 `/api/open/auth/token`。
+1. 第三方使用 `app_code + login_account + password/password_digest + timestamp + nonce + signature` 请求 `/api/open/auth/token`。
 2. 系统校验应用状态、凭证状态、密码 Hash、签名、timestamp、nonce。
 3. 校验失败写入 `auth_failure_records` 和 `audit_events`。
-4. 同一应用连续三次失败，写入 `app_lock_records`，应用状态变为 `LOCKED`。
+4. 同一 `open_app_id + credential_id`（应用+凭证维度）连续三次失败，写入 `app_lock_records`，锁定凭证和开放应用，应用状态变为 `locked`。
+
+> D8 锁定维度收口：登录失败锁定维度以 **应用+凭证（`open_app_id + credential_id`）** 为准，与 `open-platform-security-auth §6.5` 一致（取更严口径，避免同一应用下任一凭证失败被其它凭证稀释计数）。注意此处 `credential_id` 仅作为**失败计数与锁定的内部凭证维度键**，与上文鉴权请求标识字段统一为 `login_account` 不冲突：请求方提交 `login_account`，系统据此解析出对应 `credential_id` 后再按应用+凭证维度计数。
 5. 校验成功后清理连续失败计数，签发短时效 `access_token` 和 `dynamic_endpoint`。
 6. Token 明文只返回一次，数据库只保存 Hash。
 7. 后续第三方通过动态地址调用业务 API。
@@ -1207,8 +1245,11 @@ personal_data.anonymized
 
 事件字段要求：
 
+> D8 `event_category` 落列收口（2026-06-18 技术定稿）：**定稿口径：`audit_events` 表落独立数据库列 `event_category`**（值域以 `operation-traceability-and-terminal-switch-prd §4.1` 的事件域分类为准，便于按域查询与归档），下方字段清单据此补入 `event_category`。本口径以本节为权威，`open-platform-security-auth §16.2` 与之保持同一裁定。
+
 - `event_id`
 - `event_type`
+- `event_category` 【定稿：`audit_events` 落独立数据库列；值域对齐 operation-traceability §4.1 事件域】
 - `source_system`
 - `actor_type`
 - `actor_id`
@@ -1374,7 +1415,7 @@ JWT_SECRET=<fill-at-least-32-random-characters>
 
 - 每个接口有请求 DTO、响应 DTO、错误码。
 - 开放 API 必须说明签名方式、timestamp、nonce、动态地址、Token 有效期。
-- SDK 示例第一阶段可以先生成 JavaScript、Java、Python 三类示例片段。
+- SDK 调用示例第一阶段（P0）只提供 **Java 与 JavaScript(Node.js)** 两类签名调用示例；**Python/PHP 示例为 P1**；完整多语言 SDK 包进入 P2。此口径与 `open-platform-security-auth-development-design §9.1/§21` 一字一致（D8 收口：原"JavaScript、Java、Python 三类"与 open 文档不一致，统一为 P0=Java+JavaScript(Node.js)、P1=Python/PHP、P2=完整 SDK）。
 - 文档只展示可授权给第三方的接口，不暴露内部管理接口。
 - 运行时 springdoc 输出必须能与 `docs/openapi/openapi-p0.yaml/json`、`p0-openapi-operation-acceptance-matrix-v0.1.md` 和 `p0-openapi-contract-closure-appendix-v0.1.md` 对齐；`verify:openapi-closure` 未通过时不得生成 SDK/mock、接口自动化或供应商联调包。
 
@@ -1458,3 +1499,10 @@ JWT_SECRET=<fill-at-least-32-random-characters>
 | 2026-06-10 | 增/改 | §4.4 / §6.2 / §8.4 / §21：补权限模板实体、迁移表和管理 API；确认 P0 CNY 币种口径 | 用户确认权限模板机制和币类默认按建议执行 |
 | 2026-06-12 可编码收口 | 改 | §8：将早期 REST 前缀明确标注为旧路径识别信息，不得继续作为正式 Controller 前缀；正式路径以 OpenAPI 为准 | 防止早期 `/api/admin/*`、`/api/open/*` 草案污染 Java/Spring 正式接口 |
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §8/§18：早期 REST 草案若要进入正式实现，必须先补 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md`，并通过 `verify:openapi-closure` | 防止 Java 后端按历史草案直接生成 Controller、SDK/mock、接口自动化或供应商联调包 |
+| 2026-06-18 D8 收口 | 改 | §18 SDK 首批语言统一为 P0=Java+JavaScript(Node.js)、P1=Python/PHP、P2=完整 SDK（原"JS/Java/Python 三类"与 open 不一致） | 与 open-platform §9.1/§21 收敛 |
+| 2026-06-18 D8 收口 | 改 | §8.6/§13.2 鉴权请求标识字段 `credential_id` → `login_account`（JSON `loginAccount`，DB `login_account`）；`credential_id` 仅留作失败计数/锁定的内部凭证维度键 | 与 open-platform §6.2/§12.4 及 DB 列名收敛 |
+| 2026-06-18 D8 收口 | 改 | §13.2 登录失败锁定维度由"应用"改为更严的"应用+凭证 `open_app_id + credential_id`" | 取更严口径，与 open-platform §6.5 收敛 |
+| 2026-06-18 D8 收口 | 改 | §6.3 V003（P0）误列 `webhook_subscriptions`/`webhook_delivery_logs` 移除，Webhook 表统一归 P1 | 与 open-platform §12.2 收敛 |
+| 2026-06-18 D8 收口 | 改 | §14 事件字段补入 `event_category`【待技术确认，推荐落列，值域对齐 operation-traceability §4.1】 | 与 open-platform §16.2 统一裁定，消除"落/不落"不一致 |
+| 2026-06-18 D8 定稿 | 改 | §14 `event_category` 由【待技术确认/是否落列】定稿为"`audit_events` 落独立数据库列"，值域对齐 operation-traceability §4.1 事件域 | 技术已拍板，去除两可表述，与 open-platform §16.2 同一裁定 |
+| 2026-06-18 D11 补登 | 增 | §4.8.1 / §6.6 | 补员工设备凭证 `staff_device_credentials` 后端承接设计（现状→目标P0→候选验收）：新增 `StaffDeviceCredential` 实体、注册审批/换机/失效状态机、Service/Controller 与事件落点；明确与 kiosk `terminal_device_credentials`(V011) 互不串用 | DB 有字段、Java 设计无承接；R5 审计与 android §3.1/§13.1 |

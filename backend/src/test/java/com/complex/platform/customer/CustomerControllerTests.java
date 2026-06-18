@@ -243,6 +243,7 @@ class CustomerControllerTests {
                 .thenReturn(new BarReservationRecord(
                         "reservation_customer",
                         "bar_1",
+                        null,
                         "table_1",
                         "customer_1",
                         Instant.parse("2026-06-20T21:00:00Z"),
@@ -257,7 +258,8 @@ class CustomerControllerTests {
                         null,
                         List.of(),
                         Instant.parse("2026-06-14T00:00:00Z"),
-                        Instant.parse("2026-06-14T00:00:00Z")
+                        Instant.parse("2026-06-14T00:00:00Z"),
+                        null
                 ));
 
         mockMvc.perform(get("/api/v1/customer/bar-reservation-options")

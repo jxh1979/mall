@@ -1,0 +1,8 @@
+{
+  "scan_dir": "security-scans/semgrep-20260616-181006-current",
+  "json_exit_code": 0,
+  "sarif_exit_code": 0,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1229
+}

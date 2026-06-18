@@ -1,10 +1,8 @@
 package com.complex.platform.common.idempotency;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -99,9 +97,6 @@ class JdbcIdempotencyRepository implements IdempotencyRepository {
                 .addValue("expires_at", timestampWithTimeZone(record.expiresAt()));
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private IdempotencyRecord mapRecord(ResultSet resultSet, int rowNumber) throws SQLException {
         return new IdempotencyRecord(

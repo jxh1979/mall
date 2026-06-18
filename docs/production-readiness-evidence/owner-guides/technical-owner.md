@@ -17,9 +17,9 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 待回填项 | 4 |
-| P0 待回填项 | 2 |
-| 当前 awaiting | 4 |
+| 待回填项 | 2 |
+| P0 待回填项 | 1 |
+| 当前 awaiting | 2 |
 | 当前 valid | 0 |
 | 当前 invalid | 0 |
 
@@ -28,8 +28,6 @@
 | item_id | priority | category | current_status | template_path | target_manifest_path |
 | --- | --- | --- | --- | --- | --- |
 | PRD-CRED-JWT-001 | P0 | credential | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-PRD-CRED-JWT-001.json | docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json |
-| PRD-CRED-OPEN-001 | P0 | credential | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-PRD-CRED-OPEN-001.json | docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json |
-| SEC-P1-WEBHOOK-REPLAY-001 | P1 | third_party | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-SEC-P1-WEBHOOK-REPLAY-001.json | docs/production-readiness-evidence/submissions/technical-owner/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json |
 | SEC-P2-CSRF-API-001 | P2 | security | awaiting_submission | docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-SEC-P2-CSRF-API-001.json | docs/production-readiness-evidence/submissions/technical-owner/SEC-P2-CSRF-API-001/manifest-SEC-P2-CSRF-API-001.json |
 
 ## 5. 操作步骤

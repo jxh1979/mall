@@ -303,7 +303,8 @@ class FloorPlanControllerTests {
                 "v1",
                 "active",
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
         );
     }
 

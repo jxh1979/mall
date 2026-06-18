@@ -1,0 +1,528 @@
+{
+  "mock_coverage_version": "v0.1",
+  "status": "mock_or_sandbox_acceptance_ready_but_production_evidence_pending",
+  "generated_from": [
+    "docs/requirements-code-implementation-matrix-v0.1.csv",
+    "docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json"
+  ],
+  "policy": {
+    "mock_is_not_production_evidence": true,
+    "integration_capability_switches_applied": true,
+    "no_fake_external_evidence_closure": true,
+    "partial_requirement_must_keep_production_manifest_paths": true,
+    "this_report_only_proves_business_acceptance_substitutes": true
+  },
+  "counts": {
+    "partial_requirements": 8,
+    "mock_acceptance_ready": 8,
+    "production_blocking_requirements": 0,
+    "unique_mock_files": 20,
+    "unique_production_manifest_paths": 0
+  },
+  "requirement_mock_coverage": [
+    {
+      "requirement_id": "REQ-17",
+      "module": "酒吧",
+      "acceptance": "桌台/卡座/吧台位/最低消费/点酒/支付/赠饮/账单/异常/存酒",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "酒吧桌台/卡座/最低消费/点酒/赠饮/账单/异常/存酒 mock 验收闭环；真实支付、人脸、对象存储和供应商凭证仍按生产证据回填。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/BarOrdersPage.tsx",
+          "markers": [
+            "bar-orders-page",
+            "deliveryPhotoAttachmentIds"
+          ]
+        },
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/StoredWinePage.tsx",
+          "markers": [
+            "stored-wine-page",
+            "claim_items"
+          ]
+        },
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/BarCommissionsPage.tsx",
+          "markers": [
+            "bar-commissions-page",
+            "15%",
+            "10%"
+          ]
+        },
+        {
+          "kind": "ui_e2e",
+          "path": "tests/e2e/full-admin-remaining.spec.ts",
+          "markers": [
+            "ADM-BAR-002",
+            "ADM-BAR-003",
+            "ADM-BAR-004"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+          "markers": [
+            "billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset",
+            "deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement",
+            "ageVerificationStoresAdapterBoundaryResultAndEvidence"
+          ]
+        },
+        {
+          "kind": "supplier_mock",
+          "path": "docs/t3b-supplier-sdk-mock-kit-v0.1.md",
+          "markers": [
+            "T3B_SUPPLIER_MOCK_KIT_READY",
+            "NO_PRODUCTION_VENDOR_CONTROL"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "apps/web/src/admin/pages/BarOrdersPage.tsx",
+        "apps/web/src/admin/pages/StoredWinePage.tsx",
+        "apps/web/src/admin/pages/BarCommissionsPage.tsx",
+        "tests/e2e/full-admin-remaining.spec.ts",
+        "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+        "docs/t3b-supplier-sdk-mock-kit-v0.1.md"
+      ]
+    },
+    {
+      "requirement_id": "REQ-21",
+      "module": "酒吧",
+      "acceptance": "**吧台买酒优先线上支付，但必须支持现金和 POS（中国法律）**",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "吧台买酒支付意图、现金/POS 账单口径和对账差异可 mock 验收；真实聚合支付商户、回调、退款和日结文件仍需生产证据。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/BarOrdersPage.tsx",
+          "markers": [
+            "paymentId",
+            "posBoundary",
+            "settle"
+          ]
+        },
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/ReconciliationPage.tsx",
+          "markers": [
+            "reconciliation-page",
+            "manual_review_logged"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+          "markers": [
+            "barBillPayIntentReusesFinancePaymentIntentSemantics",
+            "partialSettlementKeepsOriginalPayableAndMarksPartialStatuses"
+          ]
+        },
+        {
+          "kind": "supplier_mock",
+          "path": "docs/supplier-mock/t3b-webhook-envelope.example.json",
+          "markers": [
+            "payment.paid",
+            "idempotency_key"
+          ]
+        },
+        {
+          "kind": "openapi_contract",
+          "path": "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
+          "markers": [
+            "/api/v1/bar/bills/{bill_id}/pay-intents",
+            "/api/v1/bar/bills/{bill_id}/settle"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "apps/web/src/admin/pages/BarOrdersPage.tsx",
+        "apps/web/src/admin/pages/ReconciliationPage.tsx",
+        "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+        "docs/supplier-mock/t3b-webhook-envelope.example.json",
+        "docs/p0-openapi-operation-acceptance-matrix-v0.1.md"
+      ]
+    },
+    {
+      "requirement_id": "REQ-23b",
+      "module": "酒吧",
+      "acceptance": "酒吧入场/售酒年龄核验强制人脸或等效设备；供应商未定时只能 mock，生产不得正式通过",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "酒吧年龄/人脸核验以 adapter 结果和证据附件 mock 验收；生产必须等真实 SDK/API、合规材料和 credential_ref。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "service",
+          "path": "backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java",
+          "markers": [
+            "BarAgeVerificationService",
+            "bar.age_verification.passed"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+          "markers": [
+            "ageVerificationStoresAdapterBoundaryResultAndEvidence",
+            "bar.age_verification.rejected"
+          ]
+        },
+        {
+          "kind": "mock_api",
+          "path": "tests/e2e/support/mock-api.ts",
+          "markers": [
+            "source: \"mock\"",
+            "verification"
+          ]
+        },
+        {
+          "kind": "openapi_contract",
+          "path": "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
+          "markers": [
+            "/api/v1/bar/age-verifications",
+            "age-verification-device"
+          ]
+        },
+        {
+          "kind": "supplier_boundary",
+          "path": "docs/third-party-supplier-integration-kit-v0.1.md",
+          "markers": [
+            "人脸/年龄核验",
+            "供应商未配置不得生产通过"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java",
+        "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+        "tests/e2e/support/mock-api.ts",
+        "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
+        "docs/third-party-supplier-integration-kit-v0.1.md"
+      ]
+    },
+    {
+      "requirement_id": "REQ-25",
+      "module": "酒吧",
+      "acceptance": "**订台需支付定金**",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "订台定金在账单生成、定金抵扣、支付意图和卡座会话中可 mock 验收；真实押金收款、退款和财务日结仍由支付证据关闭。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/BarTableSessionsPage.tsx",
+          "markers": [
+            "BarTableSessionsPage",
+            "reservation"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+          "markers": [
+            "billUsesOrderCentsAndReservationDepositWithoutTicketOrMinimumSpendOffset",
+            "customer pays deposit first"
+          ]
+        },
+        {
+          "kind": "mock_api",
+          "path": "tests/e2e/support/mock-api.ts",
+          "markers": [
+            "bar/reservations",
+            "depositAmount"
+          ]
+        },
+        {
+          "kind": "openapi_contract",
+          "path": "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
+          "markers": [
+            "/api/v1/bar/reservations",
+            "/api/v1/customer/bar-reservations"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "apps/web/src/admin/pages/BarTableSessionsPage.tsx",
+        "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+        "tests/e2e/support/mock-api.ts",
+        "docs/p0-openapi-operation-acceptance-matrix-v0.1.md"
+      ]
+    },
+    {
+      "requirement_id": "REQ-32",
+      "module": "酒吧",
+      "acceptance": "**高价值报损/盘点差异/存酒作废必须拍照和视频留证 + 主管复核**",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "高价值报损、盘点差异、存酒作废和照片/视频留证用附件 ID、库存流水、主管复核和 mock 事件验收；真实对象存储、视频平台和设备证据仍待回填。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/InventoryLedgerPage.tsx",
+          "markers": [
+            "inventory-ledger-page",
+            "evidence_attachment_ids"
+          ]
+        },
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/StoredWinePage.tsx",
+          "markers": [
+            "evidence_attachment_ids",
+            "在线校验"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+          "markers": [
+            "deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement",
+            "att_delivery_photo"
+          ]
+        },
+        {
+          "kind": "ui_e2e",
+          "path": "tests/e2e/full-admin-remaining.spec.ts",
+          "markers": [
+            "ADM-INV-001",
+            "ADM-GOV-006",
+            "evidence"
+          ]
+        },
+        {
+          "kind": "supplier_mock",
+          "path": "tests/e2e/support/mock-api.ts",
+          "markers": [
+            "video",
+            "robot",
+            "webhook"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "apps/web/src/admin/pages/InventoryLedgerPage.tsx",
+        "apps/web/src/admin/pages/StoredWinePage.tsx",
+        "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+        "tests/e2e/full-admin-remaining.spec.ts",
+        "tests/e2e/support/mock-api.ts"
+      ]
+    },
+    {
+      "requirement_id": "REQ-40",
+      "module": "第三方",
+      "acceptance": "**优先自动留痕、尽量避免人工填写**，人工只补原因/照片/视频/签名",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "第三方自动留痕通过开放平台 token、Webhook、provider adapter mock、重试/补偿/轮询页面和服务测试验收；真实 SDK/API 字段映射和签名材料未到位前不能生产关闭。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/IntegrationEventsPage.tsx",
+          "markers": [
+            "integration-events-page",
+            "Webhook + 定时轮询校验"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/integration/IntegrationServiceTests.java",
+          "markers": [
+            "webhookPersistsEventAndDuplicateIdempotencyReturnsOriginalResult",
+            "mockAdapterTestScenariosAreRecorded",
+            "orderSyncRetryCompensationAndReconciliationKeepProviderPayloadOutOfCoreModels"
+          ]
+        },
+        {
+          "kind": "supplier_mock",
+          "path": "docs/t3b-supplier-sdk-mock-kit-v0.1.md",
+          "markers": [
+            "Webhook",
+            "provider adapter",
+            "NO_REAL_SECRET"
+          ]
+        },
+        {
+          "kind": "supplier_mock",
+          "path": "docs/supplier-mock/t3b-provider-adapter-test.example.json",
+          "markers": [
+            "test-mock",
+            "mock-provider"
+          ]
+        },
+        {
+          "kind": "openapi_contract",
+          "path": "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
+          "markers": [
+            "/api/open/d/{endpoint_key}/webhooks/{provider}/{event}",
+            "/api/v1/integration/provider-adapters/{id}/test-mock"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "apps/web/src/admin/pages/IntegrationEventsPage.tsx",
+        "backend/src/test/java/com/complex/platform/integration/IntegrationServiceTests.java",
+        "docs/t3b-supplier-sdk-mock-kit-v0.1.md",
+        "docs/supplier-mock/t3b-provider-adapter-test.example.json",
+        "docs/p0-openapi-operation-acceptance-matrix-v0.1.md"
+      ]
+    },
+    {
+      "requirement_id": "REQ-41",
+      "module": "第三方",
+      "acceptance": "留痕与监控视频后续一一对应，P0 不强依赖真实视频",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "留痕与监控视频对应关系在 mock 事件、附件引用和集成事件页面中可验收；真实视频平台 API、设备回调和证据链仍需供应商资料。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/AuditEventsPage.tsx",
+          "markers": [
+            "audit-events-page",
+            "eventTrace"
+          ]
+        },
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/IntegrationEventsPage.tsx",
+          "markers": [
+            "补偿处理",
+            "轮询校验"
+          ]
+        },
+        {
+          "kind": "mock_api",
+          "path": "tests/e2e/support/mock-api.ts",
+          "markers": [
+            "video",
+            "evidence_attachment_ids"
+          ]
+        },
+        {
+          "kind": "backend_integration",
+          "path": "backend/src/test/java/com/complex/platform/evidence/EvidenceEventJdbcIntegrationTests.java",
+          "markers": [
+            "EvidenceEventRecord",
+            "evidence.review.create"
+          ]
+        },
+        {
+          "kind": "supplier_boundary",
+          "path": "docs/third-party-supplier-integration-kit-v0.1.md",
+          "markers": [
+            "设备/机器人/视频",
+            "超时告警并补偿"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "apps/web/src/admin/pages/AuditEventsPage.tsx",
+        "apps/web/src/admin/pages/IntegrationEventsPage.tsx",
+        "tests/e2e/support/mock-api.ts",
+        "backend/src/test/java/com/complex/platform/evidence/EvidenceEventJdbcIntegrationTests.java",
+        "docs/third-party-supplier-integration-kit-v0.1.md"
+      ]
+    },
+    {
+      "requirement_id": "REQ-44",
+      "module": "第三方",
+      "acceptance": "P0 必须记录机器人或人工配送交接留痕、各环节扫码",
+      "current_status": "部分实现",
+      "matrix_gap": "真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。",
+      "mock_acceptance_scope": "机器人或人工配送交接扫码留痕用库存移动、出品/送达、设备事件和集成 mock 验收；真实机器人/设备 API 与 MDM 纳管证据仍阻塞生产声明。",
+      "mock_acceptance_status": "mock_or_sandbox_acceptance_ready",
+      "production_trace_status": "covered_by_disabled_integration_switches",
+      "production_blocking": false,
+      "mapped_item_ids": [],
+      "target_manifest_paths": [],
+      "mock_coverage": [
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/InventoryLedgerPage.tsx",
+          "markers": [
+            "stock-movements",
+            "出库"
+          ]
+        },
+        {
+          "kind": "admin_ui",
+          "path": "apps/web/src/admin/pages/BarOrdersPage.tsx",
+          "markers": [
+            "delivery",
+            "deliveryPhotoAttachmentIds"
+          ]
+        },
+        {
+          "kind": "backend_unit",
+          "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+          "markers": [
+            "deliveryRejectsOrderItemFromAnotherOrderAndKeepsBothOrdersPending",
+            "deliveryMarksProductionTicketDeliveredWithoutOverwritingCancelledTicket"
+          ]
+        },
+        {
+          "kind": "mock_api",
+          "path": "tests/e2e/support/mock-api.ts",
+          "markers": [
+            "robot/task-events",
+            "mock-video"
+          ]
+        },
+        {
+          "kind": "supplier_boundary",
+          "path": "docs/android-terminal-breakdown.md",
+          "markers": [
+            "机器人交接",
+            "inventory.handover_to_robot"
+          ]
+        }
+      ],
+      "mock_coverage_files": [
+        "apps/web/src/admin/pages/InventoryLedgerPage.tsx",
+        "apps/web/src/admin/pages/BarOrdersPage.tsx",
+        "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+        "tests/e2e/support/mock-api.ts",
+        "docs/android-terminal-breakdown.md"
+      ]
+    }
+  ]
+}

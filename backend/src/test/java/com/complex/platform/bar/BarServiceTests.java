@@ -14,6 +14,8 @@ import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
+import com.complex.platform.evidence.TraceabilityRepository;
+import com.complex.platform.evidence.TraceabilityService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -54,9 +56,10 @@ class BarServiceTests {
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
-                new BarBillingService(barRepository, receivableLedgerService, authorizationService),
+                new BarBillingService(barRepository, receivableLedgerService, authorizationService, auditEventService),
                 new BarTableSessionService(barRepository, authorizationService),
-                new BarOrderService(barRepository, authorizationService),
+                new BarOrderService(barRepository, authorizationService, auditEventService,
+                        new TraceabilityService(mock(TraceabilityRepository.class), authorizationService)),
                 entryService,
                 new BarAgeVerificationService(idempotencyService, auditEventService, entryService),
                 authorizationService
@@ -281,6 +284,15 @@ class BarServiceTests {
         assertThat(bill.depositDeductAmountCent()).isZero();
         assertThat(bill.payableAmountCent()).isEqualTo(257600L);
         assertThat(bill.paymentStatus()).isEqualTo("unpaid");
+    }
+
+    @Test
+    void salesCommissionGeneratesFinancePayableLedger() {
+        BarBillRecord bill = billForOrder("commission-payable", "staff_sales");
+        service.calculateCommission(bill.id(),
+                new CommissionCalculateRequest("commission-payable-1", bill.id(), true, false));
+        // A5(REQ-26b 增强)：销售提成贯通 finance 应付台账
+        assertThat(receivableLedgerService.commissionPayables).isNotEmpty();
     }
 
     @Test
@@ -558,6 +570,30 @@ class BarServiceTests {
         assertThat(barRepository.productionTicketEvents)
                 .extracting(BarProductionTicketEventRecord::evidenceAttachmentIds)
                 .containsExactly(List.of("att_delivery_doc", "att_shared", "att_delivery_photo"));
+    }
+
+    @Test
+    void deliveryWithExcessPourRecordsLossAndEmitsLossExceptionWhenOverThreshold() {
+        BarReservationRecord reservation = createReservation("reservation-pour-loss", "bar_1", 2);
+        // 标准 30ml/杯，损耗阈值 10ml；按杯销售配置（REQ-22）
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-pour-loss", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
+                "active", null, null, false, 30, "ml", 10));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-pour-loss", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        // 2 杯标准 60ml，实际 75ml → 损耗 15ml > 阈值 10ml
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-pour-loss", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2, "actual_pour_volume", 75)),
+                "staff_1", List.of()));
+
+        assertThat(barRepository.listOrderItems(order.id()).getFirst().lossVolume()).isEqualTo(15L);
+        assertThat(barRepository.listOrderItems(order.id()).getFirst().actualPourVolume()).isEqualTo(75);
+        assertThat(auditEventRepository.events.stream()
+                .anyMatch(event -> "inventory.loss_exception".equals(event.eventName()))).isTrue();
     }
 
     @Test
@@ -899,6 +935,16 @@ class BarServiceTests {
         assertThat(barRepository.productionTicketEvents)
                 .extracting(BarProductionTicketEventRecord::actionType, BarProductionTicketEventRecord::toStatus)
                 .contains(tuple("deliver", "delivered"));
+    }
+
+    // A2/A3(REQ-21): 现金结算发 payment.cash_received 事件；channel 用统一词表
+    @Test
+    void settleWithCashChannelEmitsCashReceivedEvent() {
+        BarBillRecord bill = billForOrder("settle-cash", "staff_sales");
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-cash-1", "cash settle", List.of(), "pay_cash_1", null, "cash", "cashier_1", null));
+        assertThat(auditEventRepository.events.stream()
+                .anyMatch(event -> "payment.cash_received".equals(event.eventName()))).isTrue();
     }
 
     @Test
@@ -1964,6 +2010,14 @@ class BarServiceTests {
                     List.copyOf(evidenceAttachmentIds)
             ));
             return "arap_for_" + bill.id();
+        }
+
+        private final List<String> commissionPayables = new ArrayList<>();
+
+        @Override
+        public String createPayableForCommission(BarCommissionCalculationRecord commission) {
+            commissionPayables.add(commission.id());
+            return "arap_commission_" + commission.id();
         }
     }
 

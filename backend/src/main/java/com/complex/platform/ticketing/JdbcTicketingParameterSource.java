@@ -201,6 +201,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("expires_at", timestampWithTimeZone(credential.expiresAt()))
                 .addValue("status", credential.status())
                 .addValue("refreshed_count", credential.refreshedCount())
+                .addValue("refresh_interval_seconds", credential.refreshIntervalSeconds())
                 .addValue("created_at", timestampWithTimeZone(credential.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(credential.updatedAt()));
     }

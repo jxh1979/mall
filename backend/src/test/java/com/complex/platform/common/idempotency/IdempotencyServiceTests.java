@@ -240,6 +240,66 @@ class IdempotencyServiceTests {
                 });
     }
 
+    @Test
+    void differentCallerScopesProduceIndependentIdempotencySlots() {
+        // GIVEN: a scoped service with switchable caller scope
+        AtomicReference<String> currentScope = new AtomicReference<>("");
+        InMemoryIdempotencyRepository scopedRepo = new InMemoryIdempotencyRepository();
+        IdempotencyService scopedService = new IdempotencyService(scopedRepo, objectMapper);
+        scopedService.setCallerScopeResolver(currentScope::get);
+
+        TestRequest request = new TestRequest("same-payload");
+        AtomicInteger actionCount = new AtomicInteger();
+
+        // WHEN: merchant-A completes a write
+        currentScope.set("m:merchant-A");
+        TestResponse responseA = scopedService.execute(
+                "createItem", "key-1", request,
+                () -> { actionCount.incrementAndGet(); return new TestResponse("for-A"); },
+                TestResponse.class
+        );
+
+        // WHEN: merchant-B uses the SAME operationId + idempotencyKey
+        currentScope.set("m:merchant-B");
+        TestResponse responseB = scopedService.execute(
+                "createItem", "key-1", request,
+                () -> { actionCount.incrementAndGet(); return new TestResponse("for-B"); },
+                TestResponse.class
+        );
+
+        // THEN: both actions ran (no cross-tenant collision)
+        assertThat(actionCount).hasValue(2);
+        assertThat(responseA).isEqualTo(new TestResponse("for-A"));
+        assertThat(responseB).isEqualTo(new TestResponse("for-B"));
+    }
+
+    @Test
+    void merchantBCannotReplayMerchantAStoredResponseViaSameKey() {
+        // GIVEN: merchant-A stores a completed idempotency record
+        AtomicReference<String> currentScope = new AtomicReference<>("m:merchant-A");
+        InMemoryIdempotencyRepository scopedRepo = new InMemoryIdempotencyRepository();
+        IdempotencyService scopedService = new IdempotencyService(scopedRepo, objectMapper);
+        scopedService.setCallerScopeResolver(currentScope::get);
+
+        TestRequest request = new TestRequest("same-payload");
+        scopedService.execute("createItem", "key-1", request,
+                () -> new TestResponse("secret-A"), TestResponse.class);
+
+        // WHEN: merchant-B sends the same request with the same idempotency key
+        currentScope.set("m:merchant-B");
+        AtomicBoolean bActionRan = new AtomicBoolean();
+        TestResponse responseB = scopedService.execute(
+                "createItem", "key-1", request,
+                () -> { bActionRan.set(true); return new TestResponse("for-B"); },
+                TestResponse.class
+        );
+
+        // THEN: merchant-B ran its own action and did NOT get merchant-A's data
+        assertThat(bActionRan).isTrue();
+        assertThat(responseB).isEqualTo(new TestResponse("for-B"));
+        assertThat(responseB).isNotEqualTo(new TestResponse("secret-A"));
+    }
+
     private String hashJson(Object value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

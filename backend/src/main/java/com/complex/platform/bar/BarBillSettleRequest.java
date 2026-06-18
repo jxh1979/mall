@@ -8,6 +8,20 @@ public record BarBillSettleRequest(
         List<String> evidenceAttachmentIds,
         String paymentId,
         Long settlementAmountCent,
-        String paymentChannel
+        String paymentChannel,
+        String cashierStaffId,
+        String posTransactionNo
 ) {
+    /** 向后兼容构造器（A2/A3 前签名）：既有调用方零改动。 */
+    public BarBillSettleRequest(
+            String idempotencyKey,
+            String operatorNote,
+            List<String> evidenceAttachmentIds,
+            String paymentId,
+            Long settlementAmountCent,
+            String paymentChannel
+    ) {
+        this(idempotencyKey, operatorNote, evidenceAttachmentIds, paymentId, settlementAmountCent,
+                paymentChannel, null, null);
+    }
 }

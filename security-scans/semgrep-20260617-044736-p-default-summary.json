@@ -1,0 +1,13 @@
+{
+  "generated_at": "2026-06-17T04:48:29.750296Z",
+  "command": "semgrep scan --config p/default --json --metrics off --timeout 60 --exclude security-scans",
+  "exit_code": 0,
+  "raw_result_file": "security-scans/semgrep-20260617-044736-p-default.json",
+  "result_count": 0,
+  "error_count": 0,
+  "scanned_path_count": 1033,
+  "skipped_path_count": 0,
+  "severity_counts": {},
+  "findings": [],
+  "errors": []
+}

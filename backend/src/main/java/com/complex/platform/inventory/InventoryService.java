@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -9,6 +10,7 @@ import com.complex.platform.inventory.dto.InventorySupplierRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
+import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
@@ -24,6 +26,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
@@ -40,15 +43,21 @@ public class InventoryService {
     private final InventoryRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
+    private final InventoryStockMovementService stockMovementService;
 
     public InventoryService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
+        this.stockMovementService = new InventoryStockMovementService(
+                repository, idempotencyService, auditEventService, authorizationService);
     }
 
     public PageResponse<InventoryItemRecord> listInventoryItems() {
@@ -57,7 +66,11 @@ public class InventoryService {
                 "inventory.item.viewed_failed",
                 "inventory.stock.view",
                 "inventory_item",
-                repository::listInventoryItems
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listInventoryItemsByMerchant)
+                                .orElseGet(repository::listInventoryItems);
+                }
         );
     }
 
@@ -74,6 +87,7 @@ public class InventoryService {
                 "inventory_item",
                 () -> {
                     InventoryItemRequest actual = requireRequest(request);
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
                     InventoryItemRecord item = new InventoryItemRecord(
                             "item_" + slug(actual.idempotencyKey()),
@@ -86,7 +100,8 @@ public class InventoryService {
                             nonNegativeOrDefault(actual.minQuantity(), 0, "min_quantity"),
                             trimToDefault(actual.status(), "active"),
                             now,
-                            now
+                            now,
+                            merchantId
                     );
                     return repository.saveInventoryItem(item);
                 }
@@ -99,7 +114,11 @@ public class InventoryService {
                 "inventory.purchase_request_view_failed",
                 "inventory.purchase_request.view",
                 "inventory_purchase_request",
-                repository::listPurchaseRequests
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listPurchaseRequestsByMerchant)
+                                .orElseGet(repository::listPurchaseRequests);
+                }
         );
     }
 
@@ -119,6 +138,7 @@ public class InventoryService {
                     Map<String, Object> item = firstItem(actual.items(), "items");
                     String itemId = requireItemText(item, "item_id");
                     int quantity = requirePositiveItemQuantity(item, "quantity");
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
                     String slug = slug(actual.idempotencyKey());
                     return repository.savePurchaseRequest(new PurchaseRequestRecord(
@@ -131,7 +151,8 @@ public class InventoryService {
                             "created",
                             safeList(actual.evidenceAttachmentIds()),
                             now,
-                            now
+                            now,
+                            merchantId
                     ));
                 }
         );
@@ -143,7 +164,11 @@ public class InventoryService {
                 "bar.saved_bottle.view_failed",
                 "bar.saved_bottle.manage",
                 "saved_bottle",
-                repository::listSavedBottles
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listSavedBottlesByMerchant)
+                                .orElseGet(repository::listSavedBottles);
+                }
         );
     }
 
@@ -163,6 +188,7 @@ public class InventoryService {
                     Map<String, Object> item = firstItem(actual.items(), "items");
                     String itemId = requireItemText(item, "item_id");
                     int quantity = requirePositiveItemQuantity(item, "quantity");
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
                     return repository.saveSavedBottle(new SavedBottleRecord(
                             "saved_" + slug(actual.idempotencyKey()),
@@ -177,10 +203,39 @@ public class InventoryService {
                             "stored",
                             safeList(actual.evidenceAttachmentIds()),
                             now,
-                            now
+                            now,
+                            merchantId,
+                            Boolean.TRUE.equals(actual.isHighValue()),
+                            actual.highValueThresholdCents(),
+                            trimToNull(actual.bottleLabelValue()),
+                            trimToNull(actual.customerNameOrNickname()),
+                            trimToNull(actual.customerPhone()),
+                            phoneHash(actual.customerPhone())
                     ));
                 }
         );
+    }
+
+    /** 取酒核身用：手机号 SHA-256 哈希（精确检索，不依赖明文解密）。null/空返回 null。 */
+    private static String phoneHash(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return null;
+        }
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(phone.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
+    }
+
+    /** 重建存酒记录（携带 A1 扩展字段），仅改 status/remaining/updatedAt。 */
+    private SavedBottleRecord savedBottleWith(SavedBottleRecord b, String status, int remaining, Instant updatedAt) {
+        return new SavedBottleRecord(b.id(), b.customerId(), b.barProjectId(), b.itemId(), b.bottleName(),
+                b.initialQuantity(), remaining, b.unit(), b.expireAt(), status, b.evidenceAttachmentIds(),
+                b.createdAt(), updatedAt, b.merchantId(), b.isHighValue(), b.highValueThresholdCents(),
+                b.bottleLabelValue(), b.customerNameOrNickname(), b.customerPhone(), b.customerPhoneHash());
     }
 
     @Transactional
@@ -197,13 +252,40 @@ public class InventoryService {
                 "saved_bottle_claim",
                 () -> {
                     SavedBottleClaimRequest actual = requireRequest(request);
-                    SavedBottleRecord savedBottle = repository.findSavedBottleById(id)
+                    // P1-3: verificationCode 必须提供，不可绕过
+                    requireText(actual.verificationCode(), "verification_code");
+                    // P0-2: SELECT FOR UPDATE 防止并发超领
+                    SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                    // P0-2: 跨商户越权检查
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (scope.isPresent() && !scope.get().equals(savedBottle.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                "saved bottle does not belong to your merchant");
+                    }
                     if (!"stored".equals(savedBottle.status())) {
                         throw ApiException.conflict("SAVED_BOTTLE_NOT_CLAIMABLE", "saved bottle is not claimable");
                     }
                     if (savedBottle.expireAt() != null && savedBottle.expireAt().isBefore(Instant.now())) {
                         throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "saved bottle is expired");
+                    }
+                    // REQ-30 取酒核身：登记了瓶底标签值时，verificationCode 必须与之匹配；不一致进入人工复核（不出酒）。
+                    Instant nowReview = Instant.now();
+                    if (savedBottle.bottleLabelValue() != null
+                            && !savedBottle.bottleLabelValue().equals(actual.verificationCode().trim())) {
+                        repository.saveSavedBottle(savedBottleWith(
+                                savedBottle, "pending_identity_review", savedBottle.remainingQuantity(), nowReview));
+                        return repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
+                                "claim_" + slug(actual.idempotencyKey()),
+                                savedBottle.id(),
+                                0,
+                                trimToNull(actual.claimByPhone()),
+                                "staff_work_phone",
+                                null,
+                                "pending_identity_review",
+                                safeList(actual.evidenceAttachmentIds()),
+                                nowReview
+                        ));
                     }
                     Map<String, Object> claimItem = firstItem(actual.claimItems(), "claim_items");
                     int quantity = requirePositiveItemQuantity(claimItem, "quantity");
@@ -212,21 +294,8 @@ public class InventoryService {
                     }
                     int remaining = savedBottle.remainingQuantity() - quantity;
                     Instant now = Instant.now();
-                    repository.saveSavedBottle(new SavedBottleRecord(
-                            savedBottle.id(),
-                            savedBottle.customerId(),
-                            savedBottle.barProjectId(),
-                            savedBottle.itemId(),
-                            savedBottle.bottleName(),
-                            savedBottle.initialQuantity(),
-                            remaining,
-                            savedBottle.unit(),
-                            savedBottle.expireAt(),
-                            remaining == 0 ? "claimed" : "stored",
-                            savedBottle.evidenceAttachmentIds(),
-                            savedBottle.createdAt(),
-                            now
-                    ));
+                    repository.saveSavedBottle(savedBottleWith(
+                            savedBottle, remaining == 0 ? "claimed" : "stored", remaining, now));
                     return repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
                             "claim_" + slug(actual.idempotencyKey()),
                             savedBottle.id(),
@@ -242,43 +311,44 @@ public class InventoryService {
         );
     }
 
+    /** A1/REQ-32：存酒作废。高价值存酒必须提供照片+视频双证据（>=2 附件）方可作废（主管复核闭环为后续）。 */
     @Transactional
-    public StockAdjustmentRecord createStockAdjustment(StockAdjustmentRequest request) {
+    public SavedBottleRecord cancelSavedBottle(String savedBottleId, SavedBottleCancelRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
         return executeWrite(
-                "createStockAdjustment",
+                "cancelSavedBottle:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
-                StockAdjustmentRecord.class,
-                "inventory.counted",
-                "inventory.adjustment_failed",
-                "inventory.stock.adjust",
-                "inventory_stock_adjustment",
+                SavedBottleRecord.class,
+                "bar.saved_bottle.cancelled",
+                "bar.saved_bottle.cancel_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle",
                 () -> {
-                    StockAdjustmentRequest actual = requireRequest(request);
-                    Map<String, Object> item = firstItem(actual.items(), "items");
-                    String itemId = requireItemText(item, "item_id");
-                    String locationId = requireItemText(item, "location_id");
-                    int quantity = requirePositiveItemQuantity(item, "quantity");
-                    String adjustmentType = requireText(actual.adjustmentType(), "adjustment_type");
-                    if ("gain".equals(adjustmentType)) {
-                        increaseBalance(itemId, locationId, quantity);
-                    } else {
-                        decreaseBalance(itemId, locationId, quantity);
+                    SavedBottleCancelRequest actual = requireRequest(request);
+                    SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (scope.isPresent() && !scope.get().equals(savedBottle.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                "saved bottle does not belong to your merchant");
                     }
-                    Instant now = Instant.now();
-                    return repository.saveStockAdjustment(new StockAdjustmentRecord(
-                            "adjust_" + slug(actual.idempotencyKey()),
-                            itemId,
-                            locationId,
-                            adjustmentType,
-                            quantity,
-                            requireText(actual.reason(), "reason"),
-                            safeList(actual.evidenceAttachmentIds()),
-                            "completed",
-                            now
-                    ));
+                    if (!List.of("stored", "pending_identity_review", "disputed_frozen").contains(savedBottle.status())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLABLE", "saved bottle is not cancellable");
+                    }
+                    if (savedBottle.isHighValue() && safeList(actual.evidenceAttachmentIds()).size() < 2) {
+                        throw ApiException.badRequest("HIGH_VALUE_EVIDENCE_REQUIRED",
+                                "high value saved bottle void requires photo and video evidence (>=2 attachments) and supervisor review");
+                    }
+                    return repository.saveSavedBottle(
+                            savedBottleWith(savedBottle, "cancelled", savedBottle.remainingQuantity(), Instant.now()));
                 }
         );
+    }
+
+    @Transactional
+    public StockAdjustmentRecord createStockAdjustment(StockAdjustmentRequest request) {
+        return stockMovementService.createStockAdjustment(request);
     }
 
     public PageResponse<StockBalanceRecord> listStockBalances() {
@@ -287,7 +357,11 @@ public class InventoryService {
                 "inventory.stock_balance.viewed_failed",
                 "inventory.stock.view",
                 "inventory_stock_balance",
-                repository::listStockBalances
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listStockBalancesByMerchant)
+                                .orElseGet(repository::listStockBalances);
+                }
         );
     }
 
@@ -297,7 +371,11 @@ public class InventoryService {
                 "inventory.stock_batch.view_failed",
                 "inventory.stock.view",
                 "inventory_stock_batch",
-                repository::listStockBatches
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listStockBatchesByMerchant)
+                                .orElseGet(repository::listStockBatches);
+                }
         );
     }
 
@@ -322,7 +400,11 @@ public class InventoryService {
                 "inventory.risk_alert.view_failed",
                 "inventory.risk_alert.view",
                 "inventory_risk_alert",
-                repository::listRiskAlerts
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listRiskAlertsByMerchant)
+                                .orElseGet(repository::listRiskAlerts);
+                }
         );
     }
 
@@ -347,7 +429,11 @@ public class InventoryService {
                 "inventory.supplier_reconciliation.view_failed",
                 "inventory.supplier.reconcile",
                 "inventory_supplier_reconciliation",
-                repository::listSupplierReconciliations
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listSupplierReconciliationsByMerchant)
+                                .orElseGet(repository::listSupplierReconciliations);
+                }
         );
     }
 
@@ -368,95 +454,26 @@ public class InventoryService {
 
     @Transactional
     public StockMovementRecord createStockIn(StockInRequest request) {
-        return executeWrite(
-                "createStockIn",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                StockMovementRecord.class,
-                "inventory.inbound_confirmed",
-                "inventory.inbound_failed",
-                "inventory.stock.move",
-                "inventory_stock_movement",
-                () -> {
-                    StockInRequest actual = requireRequest(request);
-                    String warehouseId = requireText(actual.warehouseId(), "warehouse_id");
-                    StockMovementRecord last = null;
-                    for (Map<String, Object> item : requireItems(actual.items(), "items")) {
-                        String itemId = requireItemText(item, "item_id");
-                        int quantity = requirePositiveItemQuantity(item, "quantity");
-                        increaseBalance(itemId, warehouseId, quantity);
-                        last = saveMovement(
-                                "movement_" + slug(actual.idempotencyKey() + ":" + itemId + ":in"),
-                                "inbound",
-                                itemId,
-                                null,
-                                warehouseId,
-                                quantity,
-                                requireText(actual.sourceType(), "source_type"),
-                                trimToNull(actual.sourceId()),
-                                null,
-                                safeList(actual.evidenceAttachmentIds())
-                        );
-                    }
-                    return last;
-                }
-        );
+        return stockMovementService.createStockIn(request);
     }
 
     public PageResponse<StockMovementRecord> listStockMovements() {
-        return readPage(
-                "inventory.stock_movement.viewed",
-                "inventory.stock_movement.view_failed",
-                "inventory.stock.view",
-                "inventory_stock_movement",
-                repository::listStockMovements
-        );
+        return stockMovementService.listStockMovements();
     }
 
     @Transactional
     public StockMovementRecord createStockMovement(StockMovementRequest request) {
-        return executeWrite(
-                "createStockMovement",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                StockMovementRecord.class,
-                "inventory.outbound_verified",
-                "inventory.stock_movement_failed",
-                "inventory.stock.move",
-                "inventory_stock_movement",
-                () -> createMovement(request, "outbound", false, true)
-        );
+        return stockMovementService.createStockMovement(request);
     }
 
     @Transactional
     public StockMovementRecord transferStockMovement(StockMovementRequest request) {
-        return executeWrite(
-                "transferStockMovement",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                StockMovementRecord.class,
-                "inventory.stock_transfer.created",
-                "inventory.stock_transfer.created_failed",
-                "inventory.stock.move",
-                "inventory_stock_movement",
-                () -> createMovement(request, "transfer", true, true)
-        );
+        return stockMovementService.transferStockMovement(request);
     }
 
     @Transactional
     public StockMovementRecord createTypedStockMovement(String movementType, StockMovementRequest request) {
-        String type = requireText(movementType, "movement_type");
-        return executeWrite(
-                "createTypedStockMovement:" + type,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                StockMovementRecord.class,
-                "inventory.stock_movement.created",
-                "inventory.stock_movement.created_failed",
-                "inventory.stock.move",
-                "inventory_stock_movement",
-                () -> createMovement(request, type, "inbound".equals(type), !"inbound".equals(type))
-        );
+        return stockMovementService.createTypedStockMovement(movementType, request);
     }
 
     public PageResponse<InventorySupplierRecord> listInventorySuppliers() {
@@ -465,7 +482,11 @@ public class InventoryService {
                 "inventory.supplier_view_failed",
                 "inventory.supplier.view",
                 "inventory_supplier",
-                repository::listInventorySuppliers
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listInventorySuppliersByMerchant)
+                                .orElseGet(repository::listInventorySuppliers);
+                }
         );
     }
 
@@ -482,6 +503,7 @@ public class InventoryService {
                 "inventory_supplier",
                 () -> {
                     InventorySupplierRequest actual = requireRequest(request);
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
                     return repository.saveInventorySupplier(new InventorySupplierRecord(
                             "supplier_" + slug(actual.idempotencyKey()),
@@ -491,7 +513,8 @@ public class InventoryService {
                             trimToNull(actual.contactPhone()),
                             trimToDefault(actual.status(), "active"),
                             now,
-                            now
+                            now,
+                            merchantId
                     ));
                 }
         );
@@ -527,52 +550,12 @@ public class InventoryService {
         );
     }
 
-    private StockMovementRecord createMovement(
-            StockMovementRequest request,
-            String movementType,
-            boolean increaseTarget,
-            boolean decreaseSource
-    ) {
-        StockMovementRequest actual = requireRequest(request);
-        String sourceLocationId = trimToNull(actual.fromLocationId());
-        String targetLocationId = trimToNull(actual.toLocationId());
-        if (decreaseSource) {
-            requireText(sourceLocationId, "from_location_id");
-        }
-        if (increaseTarget) {
-            requireText(targetLocationId, "to_location_id");
-        }
-        StockMovementRecord last = null;
-        for (Map<String, Object> item : requireItems(actual.items(), "items")) {
-            String itemId = requireItemText(item, "item_id");
-            int quantity = requirePositiveItemQuantity(item, "quantity");
-            if (decreaseSource) {
-                decreaseBalance(itemId, sourceLocationId, quantity);
-            }
-            if (increaseTarget) {
-                increaseBalance(itemId, targetLocationId, quantity);
-            }
-            last = saveMovement(
-                    "movement_" + slug(actual.idempotencyKey() + ":" + itemId + ":" + movementType),
-                    movementType,
-                    itemId,
-                    sourceLocationId,
-                    targetLocationId,
-                    quantity,
-                    "manual",
-                    null,
-                    trimToNull(actual.traceCode()),
-                    safeList(actual.evidenceAttachmentIds())
-            );
-        }
-        return last;
-    }
-
     private InventoryStockBatchRecord createStockBatchOnce(InventoryStockBatchRequest request) {
         InventoryStockBatchRequest actual = requireRequest(request);
         String itemId = requireText(actual.itemId(), "item_id");
         repository.findInventoryItemById(itemId)
                 .orElseThrow(() -> ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         return repository.saveStockBatch(new InventoryStockBatchRecord(
                 "batch_" + slug(actual.idempotencyKey()),
@@ -585,41 +568,56 @@ public class InventoryService {
                 normalizeAllowed(trimToDefault(actual.status(), "active"), STOCK_BATCH_STATUSES, "status"),
                 safeList(actual.evidenceAttachmentIds()),
                 now,
-                now
+                now,
+                merchantId
         ));
     }
 
     private InventoryRiskScanResult scanInventoryRisks(InventoryRiskScanRequest request) {
         InventoryRiskScanRequest actual = requireRequest(request);
         requireText(actual.idempotencyKey(), "idempotency_key");
-        String operatorUserId = requireText(actual.operatorUserId(), "operator_user_id");
+        // P1-5: operatorUserId 一律取自认证上下文，禁止来自请求体
+        String operatorUserId = authorizationService.currentActor().id();
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         int expiryWarningDays = expiryWarningDays(actual.expiryWarningDays());
         Instant now = Instant.now();
         Instant expiryCutoff = now.plusSeconds(expiryWarningDays * 86_400L);
-        Map<String, InventoryItemRecord> itemsById = repository.listInventoryItems().stream()
+
+        // 使用租户隔离的列表
+        List<InventoryItemRecord> items = merchantId != null
+                ? repository.listInventoryItemsByMerchant(merchantId)
+                : repository.listInventoryItems();
+        List<StockBalanceRecord> balances = merchantId != null
+                ? repository.listStockBalancesByMerchant(merchantId)
+                : repository.listStockBalances();
+        List<InventoryStockBatchRecord> batches = merchantId != null
+                ? repository.listStockBatchesByMerchant(merchantId)
+                : repository.listStockBatches();
+
+        Map<String, InventoryItemRecord> itemsById = items.stream()
                 .collect(java.util.stream.Collectors.toMap(InventoryItemRecord::id, item -> item, (left, right) -> left));
         java.util.ArrayList<InventoryRiskAlertRecord> alerts = new java.util.ArrayList<>();
         int index = 0;
 
-        for (StockBalanceRecord balance : repository.listStockBalances()) {
+        for (StockBalanceRecord balance : balances) {
             InventoryItemRecord item = itemsById.get(balance.itemId());
             int minQuantity = item == null ? 0 : item.minQuantity();
             if (balance.availableQuantity() <= 0) {
                 alerts.add(riskAlert(actual.idempotencyKey(), index++, "out_of_stock", "high", balance.itemId(),
-                        balance.locationId(), null, balance.availableQuantity(), minQuantity, null, operatorUserId, now));
+                        balance.locationId(), null, balance.availableQuantity(), minQuantity, null, operatorUserId, merchantId, now));
             } else if (minQuantity > 0 && balance.availableQuantity() < minQuantity) {
                 alerts.add(riskAlert(actual.idempotencyKey(), index++, "safety_stock_low", "medium", balance.itemId(),
-                        balance.locationId(), null, balance.availableQuantity(), minQuantity, null, operatorUserId, now));
+                        balance.locationId(), null, balance.availableQuantity(), minQuantity, null, operatorUserId, merchantId, now));
             }
         }
 
-        for (InventoryStockBatchRecord batch : repository.listStockBatches()) {
+        for (InventoryStockBatchRecord batch : batches) {
             if (!"active".equals(batch.status()) || batch.expireAt() == null || batch.quantity() <= 0) {
                 continue;
             }
             if (!batch.expireAt().isAfter(expiryCutoff)) {
                 alerts.add(riskAlert(actual.idempotencyKey(), index++, "expiry_warning", "high", batch.itemId(),
-                        batch.locationId(), batch.id(), batch.quantity(), null, batch.expireAt(), operatorUserId, now));
+                        batch.locationId(), batch.id(), batch.quantity(), null, batch.expireAt(), operatorUserId, merchantId, now));
             }
         }
 
@@ -641,6 +639,7 @@ public class InventoryService {
             Integer thresholdQuantity,
             Instant expireAt,
             String operatorUserId,
+            String merchantId,
             Instant now
     ) {
         return new InventoryRiskAlertRecord(
@@ -655,7 +654,8 @@ public class InventoryService {
                 expireAt,
                 "open",
                 operatorUserId,
-                now
+                now,
+                merchantId
         );
     }
 
@@ -674,6 +674,9 @@ public class InventoryService {
         }
         long expectedAmountCent = requireNonNegativeLong(actual.expectedAmountCent(), "expected_amount_cent");
         long actualAmountCent = requireNonNegativeLong(actual.actualAmountCent(), "actual_amount_cent");
+        // P1-5: operatorUserId 一律取自认证上下文，禁止来自请求体
+        String operatorUserId = authorizationService.currentActor().id();
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         return repository.saveSupplierReconciliation(new SupplierReconciliationRecord(
                 "supplier_recon_" + slug(actual.idempotencyKey()),
@@ -685,80 +688,10 @@ public class InventoryService {
                 actualAmountCent - expectedAmountCent,
                 normalizeAllowed(trimToDefault(actual.status(), "pending"), SUPPLIER_RECONCILIATION_STATUSES, "status"),
                 safeList(actual.evidenceAttachmentIds()),
-                requireText(actual.operatorUserId(), "operator_user_id"),
+                operatorUserId,
                 now,
-                now
-        ));
-    }
-
-    private StockMovementRecord saveMovement(
-            String id,
-            String movementType,
-            String itemId,
-            String sourceLocationId,
-            String targetLocationId,
-            int quantity,
-            String businessType,
-            String businessId,
-            String traceCode,
-            List<String> evidenceAttachmentIds
-    ) {
-        return repository.saveStockMovement(new StockMovementRecord(
-                id,
-                movementType,
-                itemId,
-                sourceLocationId,
-                targetLocationId,
-                quantity,
-                businessType,
-                businessId,
-                traceCode,
-                null,
-                evidenceAttachmentIds,
-                "completed",
-                Instant.now()
-        ));
-    }
-
-    private StockBalanceRecord increaseBalance(String itemId, String locationId, int quantity) {
-        StockBalanceRecord current = repository.findStockBalance(itemId, locationId)
-                .orElseGet(() -> emptyBalance(itemId, locationId));
-        return saveBalance(current, current.quantity() + quantity, current.reservedQuantity());
-    }
-
-    private StockBalanceRecord decreaseBalance(String itemId, String locationId, int quantity) {
-        StockBalanceRecord current = repository.findStockBalance(itemId, locationId)
-                .orElseGet(() -> emptyBalance(itemId, locationId));
-        if (current.availableQuantity() < quantity) {
-            throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
-        }
-        return saveBalance(current, current.quantity() - quantity, current.reservedQuantity());
-    }
-
-    private StockBalanceRecord emptyBalance(String itemId, String locationId) {
-        return new StockBalanceRecord(
-                "balance_" + slug(itemId + ":" + locationId),
-                itemId,
-                locationId,
-                0,
-                0,
-                0,
-                Instant.now()
-        );
-    }
-
-    private StockBalanceRecord saveBalance(StockBalanceRecord current, int quantity, int reservedQuantity) {
-        if (quantity < reservedQuantity) {
-            throw ApiException.conflict("STOCK_INSUFFICIENT", "reserved stock exceeds quantity");
-        }
-        return repository.saveStockBalance(new StockBalanceRecord(
-                current.id(),
-                current.itemId(),
-                current.locationId(),
-                quantity,
-                reservedQuantity,
-                quantity - reservedQuantity,
-                Instant.now()
+                now,
+                merchantId
         ));
     }
 

@@ -1,10 +1,10 @@
 package com.complex.platform.access;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 class JdbcAccessRepository implements AccessRepository {
@@ -56,6 +57,32 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public List<PermissionTemplate> listTemplates(String organizationId) {
+        if (organizationId == null) return listTemplates();
+        return jdbcTemplate.query("""
+                SELECT id, template_code, template_name, description, template_type, source_template_id,
+                       owner_scope_type, owner_scope_id, usage_mode, valid_from, valid_to, single_use,
+                       status, reason, approved_by, approved_at, created_at, updated_at
+                  FROM permission_templates
+                 WHERE owner_scope_id = :organization_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("organization_id", organizationId), this::mapTemplate);
+    }
+
+    @Override
+    public Optional<PermissionTemplate> findTemplateById(String id) {
+        List<PermissionTemplate> result = jdbcTemplate.query("""
+                SELECT id, template_code, template_name, description, template_type, source_template_id,
+                       owner_scope_type, owner_scope_id, usage_mode, valid_from, valid_to, single_use,
+                       status, reason, approved_by, approved_at, created_at, updated_at
+                  FROM permission_templates
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapTemplate);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    @Transactional
     public PermissionTemplate saveTemplate(PermissionTemplate template, List<PermissionTemplateItem> items) {
         jdbcTemplate.update("""
                 INSERT INTO permission_templates (
@@ -155,35 +182,133 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public List<AccessUser> listUsers(String organizationId) {
+        if (organizationId == null) return listUsers();
+        return jdbcTemplate.query("""
+                SELECT id, username, account_type, organization_id, merchant_id, status, created_at
+                  FROM access_users
+                 WHERE organization_id = :organization_id
+                 ORDER BY username
+                """, Map.of("organization_id", organizationId), this::mapUser);
+    }
+
+    @Override
+    public Optional<AccessUser> findUserById(String userId) {
+        List<AccessUser> result = jdbcTemplate.query("""
+                SELECT id, username, account_type, organization_id, merchant_id, status, created_at
+                  FROM access_users
+                 WHERE id = :id
+                """, Map.of("id", userId), this::mapUser);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public List<StaffLevelRecord> listStaffLevels() {
+        return jdbcTemplate.query("""
+                SELECT id, main_level, sub_level, level_rank, salary_policy_summary, status, created_at
+                  FROM staff_levels
+                 ORDER BY level_rank
+                """, this::mapStaffLevel);
+    }
+
+    @Override
+    public Optional<StaffLevelRecord> findStaffLevelById(String staffLevelId) {
+        List<StaffLevelRecord> result = jdbcTemplate.query("""
+                SELECT id, main_level, sub_level, level_rank, salary_policy_summary, status, created_at
+                  FROM staff_levels
+                 WHERE id = :id
+                """, Map.of("id", staffLevelId), this::mapStaffLevel);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public StaffLevelAssignment saveStaffLevelAssignment(StaffLevelAssignment assignment) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_level_assignments (
+                    user_id, staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                    organization_id, merchant_id, assigned_by, assigned_at
+                )
+                VALUES (
+                    :user_id, :staff_level_id, :base_salary_amount_cent, :salary_currency, :salary_detail,
+                    :organization_id, :merchant_id, :assigned_by, :assigned_at
+                )
+                ON CONFLICT (user_id) DO UPDATE SET
+                    staff_level_id = EXCLUDED.staff_level_id,
+                    base_salary_amount_cent = EXCLUDED.base_salary_amount_cent,
+                    salary_currency = EXCLUDED.salary_currency,
+                    salary_detail = EXCLUDED.salary_detail,
+                    organization_id = EXCLUDED.organization_id,
+                    merchant_id = EXCLUDED.merchant_id,
+                    assigned_by = EXCLUDED.assigned_by,
+                    assigned_at = EXCLUDED.assigned_at
+                """, new MapSqlParameterSource()
+                .addValue("user_id", assignment.userId())
+                .addValue("staff_level_id", assignment.staffLevelId())
+                .addValue("base_salary_amount_cent", assignment.baseSalaryAmountCent())
+                .addValue("salary_currency", assignment.salaryCurrency())
+                .addValue("salary_detail", assignment.salaryDetail())
+                .addValue("organization_id", assignment.organizationId())
+                .addValue("merchant_id", assignment.merchantId())
+                .addValue("assigned_by", assignment.assignedBy())
+                .addValue("assigned_at", timestampWithTimeZone(assignment.assignedAt())));
+        return assignment;
+    }
+
+    @Override
+    public Optional<StaffLevelAssignment> findStaffLevelAssignment(String userId) {
+        List<StaffLevelAssignment> result = jdbcTemplate.query("""
+                SELECT user_id, staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       organization_id, merchant_id, assigned_by, assigned_at
+                  FROM staff_level_assignments
+                 WHERE user_id = :user_id
+                """, Map.of("user_id", userId), this::mapStaffLevelAssignment);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
     public List<RoleRecord> listRoles() {
         return jdbcTemplate.query("""
-                SELECT id, role_name, description, data_scope, status, created_at
+                SELECT id, role_name, description, data_scope, status, created_at, organization_id
                   FROM roles
                  ORDER BY role_name
                 """, this::mapRole);
     }
 
     @Override
+    public List<RoleRecord> listRoles(String organizationId) {
+        if (organizationId == null) return listRoles();
+        return jdbcTemplate.query("""
+                SELECT id, role_name, description, data_scope, status, created_at, organization_id
+                  FROM roles
+                 WHERE organization_id IS NULL OR organization_id = :organization_id
+                 ORDER BY role_name
+                """, Map.of("organization_id", organizationId), this::mapRole);
+    }
+
+    @Override
+    @Transactional
     public RoleRecord createRole(RoleRecord role) {
         jdbcTemplate.update("""
                 INSERT INTO roles (
-                    id, role_name, description, data_scope, status, created_at
+                    id, role_name, description, data_scope, status, created_at, organization_id
                 )
                 VALUES (
-                    :id, :role_name, :description, :data_scope, :status, :created_at
+                    :id, :role_name, :description, :data_scope, :status, :created_at, :organization_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     role_name = EXCLUDED.role_name,
                     description = EXCLUDED.description,
                     data_scope = EXCLUDED.data_scope,
-                    status = EXCLUDED.status
+                    status = EXCLUDED.status,
+                    organization_id = EXCLUDED.organization_id
                 """, new MapSqlParameterSource()
                 .addValue("id", role.id())
                 .addValue("role_name", role.roleName())
                 .addValue("description", role.description())
                 .addValue("data_scope", role.dataScope())
                 .addValue("status", role.status())
-                .addValue("created_at", timestampWithTimeZone(role.createdAt())));
+                .addValue("created_at", timestampWithTimeZone(role.createdAt()))
+                .addValue("organization_id", role.organizationId()));
         jdbcTemplate.update("""
                 DELETE FROM role_permissions
                  WHERE role_id = :role_id
@@ -358,7 +483,7 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
-    public void markSingleUsePermissionConsumed(
+    public boolean markSingleUsePermissionConsumed(
             String sourceId,
             String permissionCode,
             String userId,
@@ -370,30 +495,38 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("user_id", userId)
                 .addValue("consumed_at", timestampWithTimeZone(consumedAt))
                 .addValue("usage_log_id", UUID.randomUUID());
-        jdbcTemplate.update("""
+        // AND consumed = FALSE is the atomic guard against TOCTOU races.
+        // If another concurrent request already consumed this grant, UPDATE returns 0 rows.
+        int templateRows = jdbcTemplate.update("""
                 UPDATE permission_template_applications
                    SET consumed = TRUE,
                        consumed_at = :consumed_at
                  WHERE id = :source_id
                    AND target_id = :user_id
                    AND single_use = TRUE
+                   AND consumed = FALSE
                 """, parameters);
-        jdbcTemplate.update("""
+        int grantRows = jdbcTemplate.update("""
                 UPDATE temporary_permission_grants
                    SET consumed = TRUE,
                        consumed_at = :consumed_at
                  WHERE id::text = :source_id
                    AND subject_id = :user_id
                    AND single_use = TRUE
+                   AND consumed = FALSE
                 """, parameters);
-        jdbcTemplate.update("""
-                INSERT INTO permission_template_usage_logs (
-                    id, application_id, user_id, permission_code, result, reason, occurred_at
-                )
-                VALUES (
-                    :usage_log_id, :source_id, :user_id, :permission_code, 'consumed', 'single_use', :consumed_at
-                )
-                """, parameters);
+        boolean consumed = templateRows > 0 || grantRows > 0;
+        if (consumed) {
+            jdbcTemplate.update("""
+                    INSERT INTO permission_template_usage_logs (
+                        id, application_id, user_id, permission_code, result, reason, occurred_at
+                    )
+                    VALUES (
+                        :usage_log_id, :source_id, :user_id, :permission_code, 'consumed', 'single_use', :consumed_at
+                    )
+                    """, parameters);
+        }
+        return consumed;
     }
 
     private void insertTemplateItems(List<PermissionTemplateItem> items) {
@@ -512,6 +645,34 @@ class JdbcAccessRepository implements AccessRepository {
         );
     }
 
+    private StaffLevelRecord mapStaffLevel(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new StaffLevelRecord(
+                resultSet.getString("id"),
+                resultSet.getString("main_level"),
+                resultSet.getString("sub_level"),
+                resultSet.getInt("level_rank"),
+                resultSet.getString("salary_policy_summary"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "created_at")
+        );
+    }
+
+    private StaffLevelAssignment mapStaffLevelAssignment(ResultSet resultSet, int rowNumber) throws SQLException {
+        long salary = resultSet.getLong("base_salary_amount_cent");
+        Long baseSalary = resultSet.wasNull() ? null : salary;
+        return new StaffLevelAssignment(
+                resultSet.getString("user_id"),
+                resultSet.getString("staff_level_id"),
+                baseSalary,
+                resultSet.getString("salary_currency"),
+                resultSet.getString("salary_detail"),
+                resultSet.getString("organization_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("assigned_by"),
+                nullableInstant(resultSet, "assigned_at")
+        );
+    }
+
     private RoleRecord mapRole(ResultSet resultSet, int rowNumber) throws SQLException {
         String roleId = resultSet.getString("id");
         return new RoleRecord(
@@ -521,7 +682,8 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getString("data_scope"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
-                findRolePermissionCodes(roleId)
+                findRolePermissionCodes(roleId),
+                resultSet.getString("organization_id")
         );
     }
 
@@ -537,6 +699,11 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getBoolean("single_use"),
                 resultSet.getBoolean("consumed")
         );
+    }
+
+    @Override
+    public Optional<TemporaryGrant> findTemporaryGrantById(String id) {
+        return findTemporaryGrant(id);
     }
 
     private Optional<TemporaryGrant> findTemporaryGrant(String id) {
@@ -646,12 +813,5 @@ class JdbcAccessRepository implements AccessRepository {
         return effect.name().toLowerCase(java.util.Locale.ROOT);
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
-    private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
 }

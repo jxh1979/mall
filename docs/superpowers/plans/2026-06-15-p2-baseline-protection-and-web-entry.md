@@ -115,7 +115,7 @@ Add a management section for amusement group/private bookings: list, create requ
 
 - [x] **Step 4: Implement P2-C Web entry**
 
-Add a management section for ticket dynamic pricing rules: list, create draft, publish, simulate. The UI must clearly label simulation as non-production pricing and must not alter ticket order price。
+Add a management section for ticket dynamic pricing rules: list, create draft, publish, simulate, and create a formal order pricing check. The UI must clearly label that draft rules are simulation-only and published matching rules can alter ticket order price.
 
 - [x] **Step 5: Implement P2-D Web entry**
 
@@ -139,7 +139,7 @@ Run Semgrep again and review the Web diff for XSS, overbroad data exposure, unau
 - 当前有效文档入口能直接找到 P2-B/C/D/E/F、P2 全量完成审计和当前差异审计。
 - 候选 B 完成后，运营角色不需要直接调用接口即可查看和操作 P2-B/C，并能查看 P2-D。
 - Web 不使用旧 `/api/admin/*`、`/api/mobile/*`、`/api/integration/*` 或 `apps/api` 历史后端。
-- P2-C 动态定价仍只做模拟，不影响正式订单实收。
+- P2-C 动态定价当前口径为：草稿规则只做模拟，不影响订单；已发布且匹配的规则会影响正式订单实收，并记录基础金额、动态调整金额、最终金额和命中规则。
 
 ## Risks And Rollback
 

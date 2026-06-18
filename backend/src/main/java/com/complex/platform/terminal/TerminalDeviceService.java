@@ -330,6 +330,9 @@ public class TerminalDeviceService {
         }
         TerminalDeviceRecord existing = repository.findByDeviceCode(deviceCode)
                 .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+        if (!"bound".equals(existing.status())) {
+            throw ApiException.conflict("INVALID_DEVICE_STATUS", "device must be bound to return");
+        }
         Instant now = Instant.now();
         TerminalDeviceRecord returned = new TerminalDeviceRecord(
                 existing.id(),
@@ -374,6 +377,9 @@ public class TerminalDeviceService {
         String reason = requireText(actual.reason(), "reason");
         TerminalDeviceRecord existing = repository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+        if ("unbound".equals(existing.status())) {
+            throw ApiException.conflict("INVALID_DEVICE_STATUS", "device is already unbound");
+        }
         Instant now = Instant.now();
         TerminalDeviceRecord unbound = new TerminalDeviceRecord(
                 existing.id(),

@@ -1,5 +1,12 @@
 # 游乐 P0 安全巡检闭环规格 V0.1
 
+> **⚠️ D6 字段口径修正（以真实迁移 V014 为准，2026-06-18，只读核验后回填，未改代码）**
+> 本规格 §4 原把若干字段/表声称为「现有」，与真实迁移 `V014__p0_amusement_safety_session_verification.sql` 不符。以真实迁移为准统一口径，两文件（本规格 + `amusement-operations-development-design.md`）一致：
+> - **容量计数列统一为 `used_capacity`**：真实 `amusement_sessions` 实际列为 `capacity`/`used_capacity`（带 CHECK `0 ≤ used_capacity ≤ capacity`），不存在 `checked_in_count`。
+> - **真实迁移中不存在、下文标为「目标增补字段（P0，尚未迁移）」**：`amusement_safety_inspections.session_id`、`.device_id`、`.inspector_id`；独立的 `amusement_reopen_approvals` 表；`amusement_safety_template_items` 子表及其 `severity` 列。
+> - 真实现状：巡检主记录仅挂 `project_id`，单项结果与严重度内嵌在 `items_json`；模板巡检项内嵌在 `amusement_safety_templates.items_json`；恢复审批用 `amusement_safety_inspections.reopen_status` 列 + `amusement_safety_actions` 行表达；`severity` 仅作为 V024（P1）`amusement_incidents.severity` 存在，与巡检项严重度无关。
+> - 这些是「目标」而非「已存在」，消除「声称已存在」的假象；落地需新迁移。
+
 ## 1. 文档定位
 
 本文档是游乐基础运营 P0 的执行型规格，专门固化“开放前阻断式安全巡检、严重项暂停开放、整改复检、主管恢复、核销联动和全程留痕”的闭环。
@@ -42,15 +49,17 @@
 
 ## 4. 核心对象
 
-| 对象 | 关键字段 | 说明 |
-|---|---|---|
-| `amusement_safety_templates` | `template_id`, `project_type`, `version`, `status` | 巡检模板；支持版本化 |
-| `amusement_safety_template_items` | `item_id`, `template_id`, `item_name`, `severity`, `requires_photo`, `sort_order` | 巡检项；严重度决定是否阻断 |
-| `amusement_safety_inspections` | `inspection_id`, `project_id`, `session_id`, `device_id`, `inspection_type`, `status`, `inspector_id`, `submitted_at` | 巡检主记录 |
-| `amusement_safety_inspection_items` | `inspection_id`, `item_id`, `result`, `remark`, `evidence_ids` | 单项结果和证据 |
-| `amusement_reopen_approvals` | `approval_id`, `inspection_id`, `approver_id`, `decision`, `reason`, `approved_at` | 严重项恢复审批 |
+> 口径说明（D6）：下表「字段/表是否真实存在」列已按真实迁移 V014 标注。标「目标增补」者为 P0 尚未迁移，不得当作已落地能力验收（验收口径见各 AC，但实现前需先落迁移）。
 
-严重度定义：
+| 对象 | 关键字段 | 说明 | 真实迁移现状（V014） |
+|---|---|---|---|
+| `amusement_safety_templates` | `id`, `template_name`, `items_json`, `status`, `effective_from` | 巡检模板；巡检项内嵌 `items_json` | 真实存在；无 `project_type`/`version` 列，巡检项不拆子表 |
+| `amusement_safety_template_items` | `item_id`, `template_id`, `item_name`, `severity`, `requires_photo`, `sort_order` | 巡检项；严重度决定是否阻断 | **整表目标增补（P0，尚未迁移）**：真实无此子表，项内嵌于模板 `items_json`；`severity` 列亦不存在（severity 仅在 V024/P1 `amusement_incidents`） |
+| `amusement_safety_inspections` | 真实列：`id`, `project_id`, `template_id`, `items_json`, `overall_result`, `inspection_status`, `rectification_status`, `reopen_status`, `inspected_at`, `submitted_at`, `rechecked_at`, `approved_at`, `operator_note` | 巡检主记录（仅挂项目） | 真实存在；`session_id`/`device_id`/`inspector_id` 为**目标增补字段（P0，尚未迁移）**，真实表无这三列 |
+| `amusement_safety_inspection_items` | `inspection_id`, `item_id`, `result`, `remark`, `evidence_ids` | 单项结果和证据 | **整表目标增补（P0，尚未迁移）**：真实无此子表，单项结果内嵌于 `amusement_safety_inspections.items_json` |
+| `amusement_reopen_approvals` | `approval_id`, `inspection_id`, `approver_id`, `decision`, `reason`, `approved_at` | 严重项恢复审批 | **整表目标增补（P0，尚未迁移）**：真实无此表，恢复审批以 `amusement_safety_inspections.reopen_status` 列 + `amusement_safety_actions` 行表达 |
+
+严重度定义（**承载口径**：当前真实迁移无 `amusement_safety_template_items.severity` 列，严重度内嵌在 `items_json` 中；下列枚举为目标口径，结构化 `severity` 列为目标增补字段，P0 尚未迁移）：
 
 | 严重度 | 含义 | 系统动作 |
 |---|---|---|
@@ -77,6 +86,8 @@
 | `cancelled` | 误建任务取消 | 结束，必须留原因 |
 
 ### 5.2 项目/场次/设备状态影响
+
+> 现状标注（D11，2026-06-18）：真实迁移 `amusement_projects.open_status` 仅 `open/paused/closed/maintenance` 四态，下表 `open_with_warning`/`abnormal`/`reopen_pending` 等为目标态，尚未迁移；且真实 `approveReopen` 只改 `amusement_safety_inspections.reopen_status`，**不联动 `amusement_projects.open_status`**，下表「主管审批恢复 → open」目前不会自动发生（候选验收口径：主管确认后项目 `open_status` 应自动恢复为 `open` 并产生 `amusement.project.resumed` 事件，详见开发设计文档 D11 第 2 项）。
 
 | 触发 | 项目/场次/设备状态 | 核销影响 |
 |---|---|---|
@@ -229,3 +240,4 @@ Then 不得要求 P0 完成电子免责、事故工单、预约排队、团体�
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-06-10 | V0.1 | 新增游乐 P0 安全巡检闭环规格，固化开放前巡检、阻断、整改、复检、主管恢复、核销联动、事件留痕、验收标准和边界场景 |
+| 2026-06-18 | V0.1 修正 | D6 三方字段口径统一：以真实迁移 V014 为准，容量列统一 `used_capacity`；将真实不存在的 `session_id/device_id/inspector_id`、`amusement_reopen_approvals` 表、`amusement_safety_template_items.severity` 标为「目标增补字段（P0，尚未迁移）」，消除「声称已存在」假象；§5.2 补 D11 现状标注（approveReopen 不联动 open_status） |

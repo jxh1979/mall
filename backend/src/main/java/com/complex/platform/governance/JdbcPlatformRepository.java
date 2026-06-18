@@ -523,12 +523,14 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 INSERT INTO supervisor_review_decisions (
                     review_id, policy_code, action_type, object_type, object_id,
                     blocked, review_status, required_level, reviewer_level, decision,
-                    reason, evidence_attachment_ids, evaluated_at, initiated_by
+                    reason, evidence_attachment_ids, evaluated_at, initiated_by,
+                    approval_level, required_approver_rank
                 )
                 VALUES (
                     :review_id, :policy_code, :action_type, :object_type, :object_id,
                     :blocked, :review_status, :required_level, :reviewer_level, :decision,
-                    :reason, CAST(:evidence_attachment_ids AS jsonb), :evaluated_at, :initiated_by
+                    :reason, CAST(:evidence_attachment_ids AS jsonb), :evaluated_at, :initiated_by,
+                    :approval_level, :required_approver_rank
                 )
                 ON CONFLICT (review_id) DO UPDATE SET
                     review_status = EXCLUDED.review_status,
@@ -536,7 +538,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     decision = EXCLUDED.decision,
                     reason = EXCLUDED.reason,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    evaluated_at = EXCLUDED.evaluated_at
+                    evaluated_at = EXCLUDED.evaluated_at,
+                    approval_level = EXCLUDED.approval_level,
+                    required_approver_rank = EXCLUDED.required_approver_rank
                 """, supervisorReviewParameters(record));
         return record;
     }
@@ -547,7 +551,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 SELECT review_id, policy_code, action_type, object_type, object_id,
                        blocked, review_status, required_level, reviewer_level, decision,
                        reason, evidence_attachment_ids::text AS evidence_attachment_ids, evaluated_at,
-                       initiated_by
+                       initiated_by, approval_level, required_approver_rank
                   FROM supervisor_review_decisions
                  WHERE review_id = :review_id
                    AND review_status = 'pending_review'
@@ -569,7 +573,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("reason", record.reason())
                 .addValue("evidence_attachment_ids", writeJson(record.evidenceAttachmentIds() == null ? List.of() : record.evidenceAttachmentIds()))
                 .addValue("evaluated_at", timestampWithTimeZone(record.evaluatedAt()))
-                .addValue("initiated_by", record.initiatedBy());
+                .addValue("initiated_by", record.initiatedBy())
+                .addValue("approval_level", record.approvalLevel())
+                .addValue("required_approver_rank", record.requiredApproverRank());
     }
 
     private SupervisorReviewDecisionRecord mapSupervisorReview(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -587,7 +593,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("reason"),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
                 nullableInstant(resultSet, "evaluated_at"),
-                resultSet.getString("initiated_by")
+                resultSet.getString("initiated_by"),
+                resultSet.getString("approval_level"),
+                integerValue(resultSet, "required_approver_rank")
         );
     }
 

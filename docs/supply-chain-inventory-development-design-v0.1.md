@@ -4,7 +4,8 @@
 > 以业务说明地图 #supply 为基准核验真实迁移(V012 等)+代码：
 > - **供应合同三模式（用户原始 P0）**：`supply_contracts`/`contract_mode`(§6.2 platform_self_use/merchant_self_purchase/platform_purchase_distribution) 迁移**零命中**，纯"有设计无实现"。
 > - **采购周期**：仅 `inventory_purchase_requests` 的"申请"create，审批/下单/预计到货/实际到货/入库确认状态流转全缺，`purchase_cycles` 未建。
-> - **扫码交接全链（关键）**：`inventory_trace_handovers` 为单条平面记录，`scanTraceCodeHandover` 把 `handover_result` 写死 accepted，**无出库核验→配送→后厨接收→服务员取走→送达分段状态机，无缺口/重复/差异异常**。
+> - **扫码交接全链（关键）**：`inventory_trace_handovers` 为单条平面记录，`scanTraceCodeHandover` 把 `handover_result` 写死 accepted，**无出库核验→配送→后厨接收→服务员取走→送达分段状态机，无缺口/重复/差异异常**（五段交接状态机另见 r5-spec-T17）。
+> - **唯一码主数据（B 类 D11 补）**：`items.is_traceable` 仅"是否需平台唯一二维码"标记位，**平台物品唯一二维码主数据本身无独立表/无生成与绑定流程**（trace_code 仅在交接记录里以文本出现），正向溯源/反向召回的码—批次—物品主数据链未建模，纯"有标记位无主数据"。
 > - **库房/供应商降级**：`location_id` 自由文本（`warehouses`/`warehouse_type` 未建）；`inventory_suppliers` 缺资质/结算方式（`supplier_qualifications` 未建）；外键命名分裂（设计 `suppliers` vs 真实 `inventory_suppliers`）。
 > - **高价值复核未接入**：`isHighValue` 仅校验附件数≥2，`SupervisorReviewService` 未被 inventory 调用，代码注释自认"复核闭环为后续"。
 > - **业务裁决（2026-06-18）**：供应合同三模式 + 采购周期完整流转 + 结构化库房模型，三项本期 P0。**二轮裁决（2026-06-18）**：高价值报损/存酒作废复核=**库存域内自建**（不走 governance 统一队列）；扫码交接=**员工扫码主动留痕 + 机器人上报被动留痕**，机器人上报与人工扫码出现缺口/重复/差异进复核。
@@ -31,8 +32,8 @@
 
 | 原则 | 说明 |
 |---|---|
-| 供应商主数据集中 | `suppliers` 是供货主体唯一主表，与开放平台 `service_providers`（技术服务商）是两类对象，必须区分（finding fielddb-10） |
-| 三种供应合同显式建模 | 平台自用 / 商户自采 / 平台统一采购分销三种模式落 `contract_mode` 枚举，不靠散文区分 |
+| 供应商主数据集中 | `inventory_suppliers` 是供货主体唯一主表，与开放平台 `service_providers`（技术服务商）是两类对象，必须区分（finding fielddb-10）。表名与枚举以真实迁移 + r5-spec-T6 为准 |
+| 三种供应合同显式建模 | 平台自用 / 商户自采 / 平台统一采购分销三种模式落 `contract_mode` 枚举（`platform_self_use`/`merchant_self_purchase`/`platform_purchase_distribution`），不靠散文区分。表名与枚举以真实迁移 + r5-spec-T6 为准 |
 | 金额一律整数分 | 所有金额字段单位为分（bigint），禁止 `numeric(18,2)` 元（D1） |
 | 进货查验合规先行 | 酒类/食品入库必须绑定供货方资质、票据、批次合格证明（C9，P0 合规阻断） |
 | 高价值自动判定 | 报损/作废/盘点据"平台默认阈值 + 物品 is_high_value"自动触发双证据（拍照和视频）+复核（supply-4） |
@@ -45,7 +46,7 @@
 
 | 范围 | 归属 | 说明 |
 |---|---|---|
-| 供应商主数据、供应合同、采购申请、采购周期、进货查验 | 本系统 | 跨门店、跨商户的采购侧主数据，酒吧库存 `bar_stock_batches.supplier_id` 外键引用本系统 `suppliers` |
+| 供应商主数据、供应合同、采购申请、采购周期、进货查验 | 本系统 | 跨门店、跨商户的采购侧主数据，酒吧库存 `bar_stock_batches.supplier_id` 外键引用本系统 `inventory_suppliers` |
 | 平台级库房、库存批次、库存流水（含兑换消耗、报溢） | 本系统 | 总库/平台统一分销库/礼品库等平台侧库存台账 |
 | 酒吧门店内的物料、批次、销售消耗、存酒 | 酒吧系统 | 门店现场作业，回写本系统库存或保持本地台账，二者通过 `item_id`/批次号对齐 |
 | 物品高价值标记 `is_high_value`/`high_value_threshold` | 本系统物品档案为权威 | 酒吧 `bar_inventory_items` 引用或同步本系统物品档案的高价值口径，避免两套阈值 |
@@ -85,21 +86,22 @@
 |---|---|---|
 | 供应商聚合 | `Supplier`, `SupplierContact`, `SupplierQualification` | 供货主体、联系人、资质、黑名单 |
 | 供应合同聚合 | `SupplyContract`, `SupplyContractScope`, `SupplyContractPrice` | 三种供货模式、供货范围、价格口径、账期、有效期、审批 |
-| 采购聚合 | `PurchaseRequest`, `PurchaseRequestItem`, `PurchaseCycle` | 采购申请、明细、从申请到结算的周期 |
+| 采购聚合 | `PurchaseRequest`, `PurchaseRequestItem`, `PurchaseRequestEvent` | 采购申请、明细、从申请到入库的状态流转留痕（T6：周期由申请状态机承载，不单建周期对象） |
 | 库房聚合 | `Warehouse`, `WarehouseLocation` | 库房、库位 |
 | 物品聚合 | `Item`, `ItemCategory` | 物品档案、分类、单位、成本口径、高价值标记 |
 | 库存聚合 | `StockBatch`, `StockMovement`, `StockBalance` | 批次、流水、余额 |
 | 进货查验聚合 | `PurchaseInspection` | 供货方资质/票据/合格证明绑入库批次（C9） |
 | 兑换扣减聚合 | `RedemptionStockDeduction` | 积分兑换/礼物领取的库存预占与扣减（pass-2） |
+| 高价值复核聚合 | `InventoryHighValueReview` | 报损/盘点差异/存酒作废的库存域内高价值复核（T6，不走 governance） |
 
 ### 3.2 核心对象说明
 
 | 对象 | 中文名 | 关键字段 | 说明 |
 |---|---|---|---|
 | `Supplier` | 供应商 | `supplier_code`, `supplier_category`, `settlement_method`, `status` | 供货主体，含黑名单状态；区别于开放平台技术服务商 |
-| `SupplyContract` | 供应合同 | `contract_mode`, `supply_scope`, `price_mode`, `payment_terms`, `valid_from/valid_to`, `approval_status` | 三种供货模式与供货准入 |
-| `PurchaseRequest` | 采购申请 | `supplier_id`, `contract_id`, `status` | 补货需求 |
-| `PurchaseCycle` | 采购周期 | `request_id`, `expected_arrival_at`, `actual_inbound_at`, `status` | 从申请到结算的周期记录 |
+| `SupplyContract` | 供应合同 | `contract_mode`, `supply_scope`, `purchasable_scope`, `price_mode`, `payment_terms`, `valid_from/valid_to`, `approval_status`, `status` | 三种供货模式与供货准入（审批 `draft/approved/rejected` 与生命周期 `active/suspended/expired` 分列，T6） |
+| `PurchaseRequest` | 采购申请 | `supplier_id`, `supply_contract_id`, `status` | 补货需求，状态机承载从申请到入库全流转（T6） |
+| `PurchaseRequestEvent` | 采购流转事件 | `request_id`, `from_status`, `to_status`, `operator_user_id` | 采购状态逐步留痕（T6：取代独立采购周期表） |
 | `Warehouse` | 库房 | `warehouse_type`, `merchant_id`, `status` | 总库、平台分销库、礼品库、消耗品库等 |
 | `Item` | 物品 | `item_type`, `unit`, `cost_price`, `is_high_value`, `high_value_threshold` | 平台级物品主数据，含高价值标记（supply-4） |
 | `StockBatch` | 库存批次 | `item_id`, `warehouse_id`, `batch_no`, `quantity`, `cost_price`, `expire_at` | 某次入库形成的批次 |
@@ -134,32 +136,47 @@ stateDiagram-v2
     active --> archived: 终止合作
 ```
 
-> 依据：基准 D7"供应商：新增 suppliers 表及含黑名单的 5 态，与开放平台 service_providers（技术服务商）区分"；finding fielddb-10。
+> 依据：基准 D7"供应商：新增 inventory_suppliers 表及含黑名单的 5 态，与开放平台 service_providers（技术服务商）区分"；finding fielddb-10。表名与枚举以真实迁移 + r5-spec-T6 为准。
 
 ### 4.2 供应合同审批状态
+
+> 审批状态机以 r5-spec-T6 为准（2026-06-18 业务确认）：审批状态 `approval_status` 收口为三态，合同生命周期另用独立 `status` 字段（`active/suspended/expired`）表达，二者分列，不再用单一字段混表审批与生命周期。
+
+供应合同审批状态 `approval_status`（3 态，T6）：
 
 | code | 中文 | 说明 |
 |---|---|---|
 | `draft` | 草稿 | 未提交 |
-| `pending_approval` | 待审批 | 已提交待主管/财务审批 |
-| `active` | 生效 | 在有效期内可作为采购依据 |
-| `expired` | 已过期 | 超过 `valid_to` |
-| `terminated` | 已终止 | 提前终止 |
+| `approved` | 已审批 | 审批通过，且在有效期内可作为采购依据 |
 | `rejected` | 已驳回 | 审批不通过 |
 
-### 4.3 采购周期状态
+合同生命周期状态 `status`（3 态，T6）：
 
 | code | 中文 | 说明 |
 |---|---|---|
-| `draft` | 草稿 | 申请未提交 |
-| `pending_approval` | 待审批 | 需审批的申请待审 |
-| `approved` | 已审批 | 可下单 |
+| `active` | 生效 | 合同正常有效 |
+| `suspended` | 暂停 | 临时暂停（纠纷/资质过期等） |
+| `expired` | 已过期 | 超过 `valid_to` |
+
+状态机：`approval_status`：`draft →(审批) approved/rejected`；`approved` 且在有效期内方可采购，`purchasable_scope`/`supply_scope` 卡控可采购物料。合同生命周期 `status` 在 `active/suspended/expired` 间流转，与审批解耦。
+
+### 4.3 采购状态（扩 inventory_purchase_requests 状态机，T6）
+
+> 采购周期口径以 r5-spec-T6 为准（2026-06-18 业务确认）：不再建独立 `purchase_cycles` 表，改为**扩 `inventory_purchase_requests` 状态机 + `inventory_purchase_request_events` 留痕事件表**承载从申请到入库的全流转；采购状态枚举改用 T6 口径（下表，CHECK 与之逐项对应）。
+
+采购请求状态 `inventory_purchase_requests.status`（T6）：
+
+| code | 中文 | 说明 |
+|---|---|---|
+| `submitted` | 已提交 | 采购申请提交待审批 |
+| `approved` | 已审批 | 审批通过，可下单 |
+| `rejected` | 已驳回 | 审批不通过 |
 | `ordered` | 已下单 | 已向供应商下单 |
-| `partially_received` | 部分到货 | 多批到货中 |
-| `received` | 已到货 | 全部到货待入库确认 |
-| `inbound_confirmed` | 已入库 | 生成入库批次与流水 |
-| `closed` | 已结算 | 周期结束 |
-| `cancelled` | 已取消 | 取消采购 |
+| `expected` | 预计到货 | 已确认预计到货计划 |
+| `arrived` | 已到货 | 货物到货待入库确认 |
+| `received` | 已入库 | 入库确认，生成入库 `inventory_stock_movements` 并落 warehouse/库位 |
+
+状态机：`submitted →(审批) approved/rejected → ordered → expected →(到货) arrived →(入库确认) received`；每步写 `inventory_purchase_request_events`（`from_status/to_status/operator_user_id/note`），非法跳步拒绝。
 
 ### 4.4 库存批次状态
 
@@ -201,11 +218,11 @@ flowchart TD
   B --> B1{"供应商状态是否 active"}
   B1 -- 黑名单/暂停 --> B2["拒绝：不可对该供应商采购"]
   B1 -- active --> C["填写物品、数量、预计到货"]
-  C --> D{"是否需要审批"}
-  D -- 是 --> E["主管或财务审批"]
-  D -- 否 --> F["生成采购周期记录"]
-  E --> F
-  F --> G["供应商到货"]
+  C --> C0["提交采购申请(status=submitted)"]
+  C0 --> D{"审批"}
+  D -- 通过 --> F["status=approved → ordered 下单 → expected 预计到货"]
+  D -- 驳回 --> DR["status=rejected"]
+  F --> G["供应商到货(status=arrived)，写 inventory_purchase_request_events"]
   G --> H["库管验收"]
   H --> H1["登记进货查验记录：供货方资质、票据、批次合格证明"]
   H1 --> I{"数量质量一致且查验齐全"}
@@ -264,15 +281,19 @@ sequenceDiagram
 - 扣减接口带 `idempotency_key`，重复请求返回首次结果，避免重复扣减。
 - 兑换取消/超时未领取，释放预占（reserved -> released），回补可用量。
 
-### 5.4 盘点、报损、报溢（高价值自动双证据，supply-4 / supply-5）
+### 5.4 盘点、报损、报溢（高价值自动双证据 + 域内复核，supply-4 / supply-5）
+
+> 高价值复核口径以 r5-spec-T6 为准（2026-06-18 业务确认）：高价值报损/盘点差异/存酒作废的复核**为库存域内自建**，落 §6.17 `inventory_high_value_reviews` 表与 `InventoryHighValueReviewService`，**不走 governance 统一 `supervisor_review` 队列**。复核 `pending → approved/rejected`，approved 后动作生效（扣减/作废落账），rejected 则回滚。
 
 ```mermaid
 flowchart TD
   A["库管创建盘点/报损/报溢单"] --> B["录入物品、批次、数量、原因"]
   B --> C{"是否高价值？批次成本金额 >= 生效阈值 或 物品 is_high_value=true"}
-  C -- 是 --> D["强制同时上传照片和视频(双证据)+主管复核"]
+  C -- 是 --> D["强制同时上传照片和视频(双证据)，建域内 inventory_high_value_reviews(pending)"]
   C -- 否 --> E["按普通流程，证据可选"]
-  D --> F["审批通过后生成流水"]
+  D --> D1["主管在库存域内复核 approve/reject（不走 supervisor_review）"]
+  D1 -- approve --> F["生成流水/落账"]
+  D1 -- reject --> R["回滚，不影响余额"]
   E --> F
   F --> G["count_adjust / damage / surplus 流水并更新余额"]
   G --> H["写盘点/报损/报溢事件与风险事件"]
@@ -281,7 +302,8 @@ flowchart TD
 判定与证据规则：
 
 - **高价值判定（supply-4）：** 生效阈值 = 物品 `high_value_threshold`（非空时）否则平台默认 `high_value_threshold`（单位：分）。满足"批次成本金额 ≥ 生效阈值"或物品 `is_high_value=true` 即判高价值。
-- **双证据（supply-3）：** 高价值场景报损/作废/盘点差异**必须同时**上传照片与视频（`photo_refs` 与 `video_refs` 均非空），并主管复核；非高价值证据可选。
+- **双证据（supply-3）：** 高价值场景报损/作废/盘点差异**必须同时**上传照片与视频（`photo_refs` 与 `video_refs` 均非空），并建域内复核记录由主管复核；非高价值证据可选。
+- **域内复核（T6）：** 高价值触发后建 `inventory_high_value_reviews`（`subject_type ∈ {damage_report, stock_variance, saved_bottle_void}`，`review_status ∈ {pending, approved, rejected}`），由 `InventoryHighValueReviewService` 在库存域内闭环，替换原"仅校验附件数≥2"且不接入 governance `SupervisorReviewService`。
 - **报溢（supply-5）：** 盘盈/异常增加用独立流水类型 `surplus`，单独走审批 + 证据，与盘亏 `count_adjust` 区分方向。
 
 ## 6. 数据库表结构
@@ -294,9 +316,9 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 > 金额字段一律 `bigint`，单位：分（D1）。
 >
-> 修订说明（2026-06-07 收口）：经营侧主表（suppliers/supplier_contacts/supplier_qualifications/supply_contracts/purchase_requests/purchase_inspections）统一预留 `project_id`（综合体归属，nullable）。取值口径：平台统一采购的共享主数据可空，门店/商户自采必填。warehouses（§6.8 已含 `merchant_id`）、其余库存台账表（stock_batches/stock_movements/stock_balances）的项目维度可经 `warehouse_id`→`warehouses` 或 `merchant_id` 间接定位，本轮先在采购侧主表落 `project_id`（与 finding critic-2 修复范围一致）。依据 finding critic-2、foundation-database §1「所有核心对象预留 project_id」，与地基 `complex_projects` 对齐。
+> 修订说明（2026-06-07 收口）：经营侧主表（inventory_suppliers/supplier_contacts/supplier_qualifications/supply_contracts/purchase_requests/purchase_inspections）统一预留 `project_id`（综合体归属，nullable）。取值口径：平台统一采购的共享主数据可空，门店/商户自采必填。warehouses（§6.8 已含 `merchant_id`）、其余库存台账表（stock_batches/stock_movements/stock_balances）的项目维度可经 `warehouse_id`→`warehouses` 或 `merchant_id` 间接定位，本轮先在采购侧主表落 `project_id`（与 finding critic-2 修复范围一致）。依据 finding critic-2、foundation-database §1「所有核心对象预留 project_id」，与地基 `complex_projects` 对齐。
 
-### 6.1 suppliers 供应商表
+### 6.1 inventory_suppliers 供应商表
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -312,33 +334,33 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `blacklist_reason` | text | 拉黑原因（status=blacklisted 时必填） |
 | `blacklisted_at` | timestamptz | 拉黑时间 |
 
-索引：`idx_suppliers_status`、`idx_suppliers_project_id`、`uq_suppliers_supplier_code`（唯一）。
+索引：`idx_inventory_suppliers_status`、`idx_inventory_suppliers_project_id`、`uq_inventory_suppliers_supplier_code`（唯一）。表名与枚举以真实迁移 + r5-spec-T6 为准。
 
 约束：`status='blacklisted'` 时 `blacklist_reason` 非空；黑名单/暂停供应商不可被新建供应合同与采购申请引用（业务层校验）。
 
 > 修订说明（2026-06-07 收口）：补 `project_id`（综合体归属）。依据 finding critic-2 + foundation-database §1「先支持当前一个综合体，所有核心对象预留 project_id」。`project_id` 取值规则：平台统一采购的共享供应商主数据可空（跨综合体复用），门店/商户自采的供应商必填以按项目隔离归属。`supplier_code` 平台内唯一不变（共享主数据需全局唯一）；多综合体扩展后若需按项目维度区分编码，再评估 `uq(project_id, supplier_code)`，当前保持全局唯一。与地基 `complex_projects` 对齐。
-> 设计说明：与开放平台 `service_providers`（技术服务商）是两类对象，必须区分（fielddb-10）。`supplier_category` 是 suppliers 的**唯一权威供货分类字段**（含 maintenance/service），不另设 `supplier_type`；`supplier_category=maintenance` 用于打通游乐检修单位（finding amuse-3），amusement 检修记录用 `maintenance_vendor_id` 外键引用本表并依赖该字段取值集合（dup-tables-2：本字段为唯一权威，foundation §6A.4 不再自定义 supplier_type 枚举，改为引用本表）。
+> 设计说明：与开放平台 `service_providers`（技术服务商）是两类对象，必须区分（fielddb-10）。`supplier_category` 是 inventory_suppliers 的**唯一权威供货分类字段**（含 maintenance/service），不另设 `supplier_type`；`supplier_category=maintenance` 用于打通游乐检修单位（finding amuse-3），amusement 检修记录用 `maintenance_vendor_id` 外键引用本表并依赖该字段取值集合（dup-tables-2：本字段为唯一权威，foundation §6A.4 不再自定义 supplier_type 枚举，改为引用本表）。
 
 ### 6.2 supplier_contacts 供应商联系人表
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | uuid | 主键 |
-| `project_id` | uuid | 归属综合体项目，nullable；随父供应商 `suppliers.project_id`（见修订说明） |
+| `project_id` | uuid | 归属综合体项目，nullable；随父供应商 `inventory_suppliers.project_id`（见修订说明） |
 | `supplier_id` | uuid | 供应商 |
 | `name` | varchar | 联系人姓名 |
 | `phone` | varchar | 电话（按 PIPL 脱敏/加密存储） |
 | `role` | varchar | 角色（销售/财务/售后） |
 | `is_primary` | boolean | 是否主联系人 |
 
-> 修订说明（2026-06-07 收口）：补 `project_id` 与父表 `suppliers.project_id` 一致（冗余便于按项目隔离查询）。依据 finding critic-2、foundation-database §1。
+> 修订说明（2026-06-07 收口）：补 `project_id` 与父表 `inventory_suppliers.project_id` 一致（冗余便于按项目隔离查询）。依据 finding critic-2、foundation-database §1。
 
 ### 6.3 supplier_qualifications 供应商资质表
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | uuid | 主键 |
-| `project_id` | uuid | 归属综合体项目，nullable；随父供应商 `suppliers.project_id`（见修订说明） |
+| `project_id` | uuid | 归属综合体项目，nullable；随父供应商 `inventory_suppliers.project_id`（见修订说明） |
 | `supplier_id` | uuid | 供应商 |
 | `qualification_type` | varchar | `business_license/food_permit/alcohol_permit/other` |
 | `cert_no` | varchar | 证照编号 |
@@ -346,7 +368,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `valid_to` | date | 到期（供进货查验与到期校验，C9） |
 | `attachment_refs` | jsonb | 证照影像证据索引 |
 
-> 修订说明（2026-06-07 收口）：补 `project_id` 与父表 `suppliers.project_id` 一致。依据 finding critic-2、foundation-database §1。
+> 修订说明（2026-06-07 收口）：补 `project_id` 与父表 `inventory_suppliers.project_id` 一致。依据 finding critic-2、foundation-database §1。
 
 > 说明：资质有效期到期预警/经营阻断由平台治理/地基资质管理统一负责（C9），本表保存供货侧资质并在进货查验时引用其有效性结论。
 
@@ -355,28 +377,32 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | uuid | 主键 |
-| `project_id` | uuid | 归属综合体项目，nullable；`platform_unified_distribute` 平台统一采购可空，`merchant_self`/门店自采必填（见修订说明） |
+| `project_id` | uuid | 归属综合体项目，nullable；`platform_purchase_distribution` 平台统一采购可空，`merchant_self_purchase`/门店自采必填（见修订说明） |
 | `contract_no` | varchar | 合同编号 |
 | `supplier_id` | uuid | 供应商 |
-| `merchant_id` | uuid | 商户，可空（platform_self 为空，merchant_self 必填） |
-| `contract_mode` | varchar | `platform_self/merchant_self/platform_unified_distribute`（平台自用/商户自采/平台统一采购分销，CHECK 三取值） |
+| `merchant_id` | uuid | 商户，可空（platform_self_use 为空，merchant_self_purchase 必填） |
+| `contract_mode` | varchar | `platform_self_use/merchant_self_purchase/platform_purchase_distribution`（平台自用/商户自采/平台统一采购分销，CHECK 三取值） |
 | `supply_scope` | jsonb | 供货范围（物品类别/具体物品清单） |
 | `price_mode` | varchar | `fixed/tiered/floating` 价格口径（固定价/阶梯价/浮动价） |
 | `price_terms` | jsonb | 价格明细（单价、阶梯、调价规则），金额单位：分 |
 | `payment_terms` | varchar | 账期（如 `T+30`/`prepay`/`cod`） |
 | `valid_from` | date | 有效期起 |
 | `valid_to` | date | 有效期止 |
-| `approval_status` | varchar | `draft/pending_approval/active/expired/terminated/rejected`（§4.2） |
+| `approval_status` | varchar | `draft/approved/rejected`（§4.2 审批三态，CHECK 与之对应；审批状态机以 r5-spec-T6 为准，2026-06-18 业务确认） |
+| `status` | varchar | 合同生命周期 `active/suspended/expired`（§4.2，与审批状态分列，CHECK 与之对应） |
+| `purchasable_scope` | jsonb | 可采购物料/范围，采购时卡控（T6） |
 | `approved_by` | uuid | 审批人 |
 | `attachment_refs` | jsonb | 合同附件索引 |
 
 索引：`idx_supply_contracts_supplier_id`、`idx_supply_contracts_contract_mode`、`idx_supply_contracts_project_id`、`uq_supply_contracts_contract_no`（唯一）。
 
-约束：`contract_mode='merchant_self'` 时 `merchant_id` 非空；`platform_unified_distribute` 用于平台统一采购后分销给商户，分销关系在 `supply_contract_distributions`（P1）细化。
+约束：`contract_mode='merchant_self_purchase'` 时 `merchant_id` 非空；`platform_purchase_distribution` 用于平台统一采购后分销给商户，分销关系在 `supply_contract_distributions`（P1）细化。表名、审批/生命周期枚举以真实迁移 + r5-spec-T6 为准（审批 `draft/approved/rejected`，生命周期 `active/suspended/expired`）。
 
-> 修订说明（2026-06-07 收口）：补 `project_id`（综合体归属）。依据 finding critic-2、foundation-database §1。取值规则：`platform_self`/`platform_unified_distribute` 平台侧合同可空；`merchant_self` 商户自采合同必填，按项目隔离归属。与地基 `complex_projects` 对齐。
+> 修订说明（2026-06-07 收口）：补 `project_id`（综合体归属）。依据 finding critic-2、foundation-database §1。取值规则：`platform_self_use`/`platform_purchase_distribution` 平台侧合同可空；`merchant_self_purchase` 商户自采合同必填，按项目隔离归属。与地基 `complex_projects` 对齐。
 
-### 6.5 purchase_requests 采购申请表
+### 6.5 inventory_purchase_requests 采购申请表（扩状态机承载采购全流转，T6）
+
+> 采购周期口径以 r5-spec-T6 为准（2026-06-18 业务确认）：采购全流转由本表状态机 + §6.7 `inventory_purchase_request_events` 承载，不另建 `purchase_cycles` 表。下表含 T6 新增的下单/到货/入库流转字段。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -384,14 +410,19 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `project_id` | uuid | 归属综合体项目，nullable；平台统一采购可空，门店/商户自采必填（见修订说明） |
 | `request_no` | varchar | 申请编号 |
 | `supplier_id` | uuid | 供应商 |
-| `contract_id` | uuid | 供应合同 |
+| `supply_contract_id` | uuid | 供应合同（T6，采购须在 approved 合同 `purchasable_scope` 内） |
 | `warehouse_id` | uuid | 目标入库库房 |
 | `merchant_id` | uuid | 商户，可空 |
 | `request_type` | varchar | `regular/temporary`（常规采购/临时补货） |
 | `requested_by` | uuid | 申请人 |
+| `approved_by` | uuid | 审批人（T6） |
 | `expected_arrival_at` | timestamptz | 预计到货 |
+| `ordered_at` | timestamptz | 下单时间（T6） |
+| `actual_arrival_date` | date | 实际到货日期（T6） |
+| `received_at` | timestamptz | 入库确认时间（T6） |
+| `received_by` | uuid | 入库确认人（T6） |
 | `total_amount` | bigint | 预估金额，单位：分 |
-| `status` | varchar | 与采购周期状态对齐（§4.3） |
+| `status` | varchar | 采购状态机 `submitted/approved/rejected/ordered/expected/arrived/received`（§4.3，CHECK 与之对应；以 r5-spec-T6 为准） |
 
 > 修订说明（2026-06-07 收口）：补 `project_id`（综合体归属，建索引 `idx_purchase_requests_project_id`）。依据 finding critic-2、foundation-database §1。平台统一采购可空，门店/商户自采必填；与地基 `complex_projects` 对齐。
 
@@ -407,18 +438,19 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `unit_price` | bigint | 单价，单位：分 |
 | `amount` | bigint | 小计，单位：分 |
 
-### 6.7 purchase_cycles 采购周期表
+### 6.7 inventory_purchase_request_events 采购流转留痕事件表（T6）
+
+> 采购周期口径以 r5-spec-T6 为准（2026-06-18 业务确认）：**不建独立 `purchase_cycles` 表**。采购从申请到入库的全流转由 §6.5 `inventory_purchase_requests` 状态机承载，每次状态变更写入本表逐步留痕（下单/到货/入库时间等落在 §6.5 对应字段）。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | uuid | 主键 |
-| `request_id` | uuid | 采购申请 |
-| `cycle_no` | varchar | 周期编号 |
-| `ordered_at` | timestamptz | 下单时间 |
-| `expected_arrival_at` | timestamptz | 计划到货 |
-| `actual_inbound_at` | timestamptz | 实际入库时间 |
-| `settled_at` | timestamptz | 结算时间 |
-| `status` | varchar | `draft/pending_approval/approved/ordered/partially_received/received/inbound_confirmed/closed/cancelled`（§4.3） |
+| `request_id` | uuid | 采购申请（外键 `inventory_purchase_requests.id`，ON DELETE CASCADE） |
+| `from_status` | varchar | 变更前状态，可空 |
+| `to_status` | varchar | 变更后状态（§4.3 采购状态枚举） |
+| `operator_user_id` | uuid | 操作人 |
+| `note` | varchar | 备注 |
+| `created_at` | timestamptz | 发生时间 |
 
 ### 6.8 warehouses 库房表
 
@@ -485,7 +517,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `quantity` | numeric | 当前数量 |
 | `cost_price` | bigint | 批次成本，单位：分 |
 | `supplier_id` | uuid | 供应商，可空 |
-| `purchase_cycle_id` | uuid | 来源采购周期，可空 |
+| `purchase_request_id` | uuid | 来源采购申请（T6 收口：原 `purchase_cycle_id`，采购周期改由 `inventory_purchase_requests` 状态机承载），可空 |
 | `production_date` | date | 生产日期 |
 | `expire_at` | date | 保质期 |
 | `status` | varchar | `active/depleted/expired/locked`（§4.4） |
@@ -556,7 +588,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `project_id` | uuid | 归属综合体项目，nullable；随入库批次/采购周期所属项目（见修订说明） |
 | `batch_id` | uuid | 绑定的入库批次 |
 | `supplier_id` | uuid | 供货方 |
-| `purchase_cycle_id` | uuid | 来源采购周期 |
+| `purchase_request_id` | uuid | 来源采购申请（T6 收口：原 `purchase_cycle_id`） |
 | `supplier_qualification_refs` | jsonb | 供货方资质引用（经营许可/食品经营许可，引用 §6.3 资质有效性结论） |
 | `invoice_refs` | jsonb | 票据索引（进货发票/送货单影像） |
 | `quality_cert_refs` | jsonb | 批次/合格证明（检验合格证、检疫证明影像） |
@@ -584,6 +616,24 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 唯一约束：`uq_redemption_deductions_idem`（`idempotency_key`）保证幂等。
 
+### 6.17 inventory_high_value_reviews 库存域内高价值复核表（T6）
+
+> 高价值复核口径以 r5-spec-T6 为准（2026-06-18 业务确认）：高价值报损/盘点差异/存酒作废复核**为库存域内自建**，不走 governance `supervisor_review`。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | uuid | 主键 |
+| `subject_type` | varchar | `damage_report/stock_variance/saved_bottle_void`（报损/盘点差异/存酒作废，CHECK 三取值） |
+| `subject_id` | uuid | 关联对象（stock_movement / 盘点差异 / saved_bottle） |
+| `photo_attachment_ids` | jsonb | 照片证据索引（双证据必填，supply-3） |
+| `video_attachment_ids` | jsonb | 视频证据索引（双证据必填，supply-3） |
+| `review_status` | varchar | `pending/approved/rejected`（CHECK 与之对应） |
+| `reviewer_user_id` | uuid | 复核人，可空 |
+| `reason` | varchar | 复核原因/备注 |
+| `reviewed_at` | timestamptz | 复核时间，可空 |
+
+> 设计说明（T6）：由 `InventoryHighValueReviewService` 在库存域内闭环（建 pending → 主管 approve/reject）；approve 后动作（出库扣减/作废落账）生效，reject 回滚。不接入 governance 统一复核队列，与二轮裁决（2026-06-18）一致。
+
 ## 7. API 接口设计
 
 内部接口统一放在 `/api/v1/inventory/**`。对外（第三方/会员积分系统）经开放平台动态业务路径 `/api/open/d/{endpoint_key}/inventory/...`（D3，不另定义鉴权端点）。权限编码统一 dot 风格 `domain.resource.action`（D3）。
@@ -607,9 +657,8 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `GET` | `/api/v1/inventory/contracts` | 查询供应合同 | `supply.contract.read` |
 | `POST` | `/api/v1/inventory/contracts` | 新建供应合同 | `supply.contract.create` |
 | `PUT` | `/api/v1/inventory/contracts/{id}` | 修改供应合同 | `supply.contract.update` |
-| `POST` | `/api/v1/inventory/contracts/{id}/submit` | 提交审批 | `supply.contract.submit` |
-| `POST` | `/api/v1/inventory/contracts/{id}/approve` | 审批通过 | `supply.contract.approve` |
-| `POST` | `/api/v1/inventory/contracts/{id}/terminate` | 终止合同 | `supply.contract.terminate` |
+| `POST` | `/api/v1/inventory/contracts/{id}/approve` | 审批（`approved/rejected`，T6 审批三态） | `supply.contract.approve` |
+| `POST` | `/api/v1/inventory/contracts/{id}/suspend` | 暂停合同（生命周期 `status=suspended`，T6） | `supply.contract.update` |
 
 ### 7.3 采购
 
@@ -617,9 +666,11 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 |---|---|---|---|
 | `GET` | `/api/v1/inventory/purchase-requests` | 查询采购申请 | `supply.purchase.read` |
 | `POST` | `/api/v1/inventory/purchase-requests` | 创建采购申请 | `supply.purchase.create` |
-| `POST` | `/api/v1/inventory/purchase-requests/{id}/approve` | 审批采购申请 | `supply.purchase.approve` |
-| `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | 下单 | `supply.purchase.order` |
-| `GET` | `/api/v1/inventory/purchase-cycles` | 查询采购周期 | `supply.purchase.read` |
+| `POST` | `/api/v1/inventory/purchase-requests/{id}/approve` | 审批采购申请（`approved/rejected`） | `supply.purchase.approve` |
+| `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | 下单（→`ordered`） | `supply.purchase.order` |
+| `POST` | `/api/v1/inventory/purchase-requests/{id}/arrive` | 登记到货（→`arrived`，T6） | `supply.purchase.order` |
+| `POST` | `/api/v1/inventory/purchase-requests/{id}/receive` | 入库确认（→`received`，生成入库流水，T6） | `supply.stock.inbound` |
+| `GET` | `/api/v1/inventory/purchase-requests/{id}/events` | 查询采购流转事件（T6，取代采购周期查询） | `supply.purchase.read` |
 
 ### 7.4 库房与物品
 
@@ -656,6 +707,15 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 请求须带 `idempotencyKey`；`reserve` 在可用量不足时返回库存不足错误码（如 `SUPPLY_STOCK_INSUFFICIENT`），调用方据此拒绝兑换。
 
+### 7.7 库存域内高价值复核（T6，不走 governance supervisor_review）
+
+| 方法 | 路径 | 说明 | 权限 |
+|---|---|---|---|
+| `GET` | `/api/v1/inventory/high-value-reviews` | 查询库存域内高价值复核单 | `supply.high_value.read` |
+| `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | 主管复核（`approved/rejected`），approve 后动作生效 | `supply.high_value.review` |
+
+> 复核为库存域内闭环（`inventory_high_value_reviews`），不接入 governance 统一复核队列（2026-06-18 业务确认）。
+
 ## 8. 权限边界
 
 | 角色 | 可做事项 | 不可做事项 |
@@ -682,7 +742,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 |---|---|---|
 | `supplier.blacklisted` | 供应商拉黑 | 供应商、原因、操作人 |
 | `supply_contract.approved` | 供应合同审批通过 | 合同、模式、供货范围、有效期 |
-| `purchase.ordered` | 采购下单 | 采购周期、供应商、合同、金额 |
+| `purchase.ordered` | 采购下单 | 采购申请、供应商、合同、金额 |
 | `inventory.inbound_confirmed` | 入库确认 | 物品、批次、数量、成本、进货查验记录 |
 | `inventory.inspection_recorded` | 进货查验登记 | 批次、供货方资质、票据、合格证明（C9） |
 | `inventory.transferred` | 调拨 | 来源库、目标库、数量 |
@@ -697,7 +757,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 ```text
 merchant_id, warehouse_id, item_id, batch_id, stock_movement_id, supplier_id, contract_id,
-purchase_cycle_id, redemption_ref, operator_id, device_id,
+purchase_request_id, redemption_ref, operator_id, device_id,
 source_system, result, risk_level, evidence_ref, trace_id, idempotency_key
 ```
 
@@ -726,6 +786,7 @@ com.complex.supply
   stock          // batch, movement, balance
   inspection     // 进货查验 C9
   redemption     // 兑换扣减 pass-2
+  review         // 域内高价值复核 T6（inventory_high_value_reviews）
   event
   policy         // 高价值判定 supply-4
 ```
@@ -733,30 +794,31 @@ com.complex.supply
 服务拆分原则：
 
 - `SupplierService` 负责供应商档案与黑名单。
-- `SupplyContractService` 负责三种供货模式合同与审批。
-- `PurchaseService` 负责采购申请与周期。
+- `SupplyContractService` 负责三种供货模式合同与审批（审批 `draft/approved/rejected`、生命周期 `active/suspended/expired`，按 `purchasable_scope` 卡控可采购范围，T6）。
+- `PurchaseService`/`PurchaseRequestService` 负责采购申请与状态机全流转（提交→审批→下单→到货→入库 + 写 `inventory_purchase_request_events`，T6；不建独立采购周期表）。
 - `StockService` 负责批次、流水、余额，统一写流水。
 - `PurchaseInspectionService` 负责进货查验绑定批次（C9）。
 - `RedemptionStockService` 负责兑换预占/实扣/释放，幂等（pass-2）。
 - `HighValuePolicy` 负责高价值判定（生效阈值 = 物品阈值优先；未配置物品阈值时使用平台默认阈值，supply-4）。
+- `InventoryHighValueReviewService` 负责库存域内高价值复核（建 pending → 主管 approve/reject），不接入 governance `SupervisorReviewService`（T6，2026-06-18 业务确认）。
 - `SupplyEventPublisher` 统一写事件中心（D4 命名）。
 
 ## 12. P0 开发顺序与编码任务建议
 
 ### 12.1 P0：可编码的供应链台账闭环
 
-1. **DB-S1** suppliers（含黑名单 5 态）、supplier_contacts、supplier_qualifications 表与 Flyway 迁移。
-2. **DB-S2** supply_contracts（contract_mode 三模式枚举、供货范围、价格口径、payment_terms、有效期、审批状态）表。
-3. **DB-S3** purchase_requests、purchase_request_items、purchase_cycles 表。
+1. **DB-S1** inventory_suppliers（含黑名单 5 态）、supplier_contacts、supplier_qualifications 表与 Flyway 迁移。
+2. **DB-S2** supply_contracts（contract_mode 三模式枚举 `platform_self_use/merchant_self_purchase/platform_purchase_distribution`、供货范围、`purchasable_scope`、价格口径、payment_terms、有效期、审批状态 `draft/approved/rejected` 与生命周期 `status` `active/suspended/expired` 分列，T6）表。
+3. **DB-S3** inventory_purchase_requests（扩 T6 采购状态机 `submitted/approved/rejected/ordered/expected/arrived/received` + 下单/到货/入库流转字段）、purchase_request_items、inventory_purchase_request_events 流转留痕表（T6：不建独立 purchase_cycles 表）。
 4. **DB-S4** warehouses（含 gift 礼品库类型）、warehouse_locations、item_categories、items（含 is_high_value/high_value_threshold）表。
 5. **DB-S5** stock_batches、stock_movements（含 redeem_consume/gift_claim_consume/surplus 类型、photo_refs/video_refs 分列）、stock_balances 表。
 6. **DB-S6** purchase_inspections 进货查验表，绑定 stock_batches（C9）。
 7. **DB-S7** redemption_stock_deductions 兑换扣减表，唯一幂等键（pass-2）。
 8. **BE-S1** 供应商 CRUD 与黑名单/恢复，黑名单不可被合同/采购引用校验。
-9. **BE-S2** 供应合同 CRUD + 提交/审批/终止；三模式约束（merchant_self 须 merchant_id）。
-10. **BE-S3** 采购申请/审批/下单/采购周期推进。
+9. **BE-S2** 供应合同 CRUD + 提交/审批（`draft→approved/rejected`）；生命周期 `active/suspended/expired` 维护；三模式约束（merchant_self_purchase 须 merchant_id）；按 `purchasable_scope` 卡控可采购范围（T6）。
+10. **BE-S3** 采购申请/审批/下单/到货/入库全流转（`submitted→approved/rejected→ordered→expected→arrived→received`），每步写 `inventory_purchase_request_events`，非法跳步拒绝（T6）。
 11. **BE-S4** 入库（强制进货查验记录绑批次，C9）+ 调拨 + 余额更新。
-12. **BE-S5** 报损/报溢/盘点：HighValuePolicy 自动判定 + 高价值强制双证据 + 主管复核（supply-3/4/5）。
+12. **BE-S5** 报损/报溢/盘点：HighValuePolicy 自动判定 + 高价值强制双证据 + 库存域内 `inventory_high_value_reviews` 主管复核（`InventoryHighValueReviewService`，不走 governance `supervisor_review`，T6）（supply-3/4/5）。
 13. **BE-S6** 兑换预占/领取/释放接口，库存不足拒绝、幂等、领取回写（pass-2），与一体机领取流程对齐。
 14. **BE-S7** 库存事件统一发布（§9，D4 命名）。
 15. **CFG-S1** 平台治理增全局 `inventory.high_value_threshold` 配置项（单位：分），商户可申请调整（supply-4）。
@@ -771,14 +833,39 @@ com.complex.supply
 P0 完成时必须能演示：
 
 1. 新建供应商并拉黑，黑名单供应商不能被新建合同/采购引用。
-2. 新建三种模式（platform_self/merchant_self/platform_unified_distribute）供应合同并审批生效。
-3. 发起采购申请→审批→下单→到货，**登记进货查验记录（供货方资质、票据、合格证明）并绑定入库批次**，缺查验记录不能确认入库（C9）。
+2. 新建三种模式（platform_self_use/merchant_self_purchase/platform_purchase_distribution）供应合同并审批（`draft→approved`）生效，超 `purchasable_scope` 采购被卡（T6）。
+3. 发起采购申请→审批→下单→到货→入库（`submitted→approved→ordered→expected→arrived→received`，每步留 `inventory_purchase_request_events`），**登记进货查验记录（供货方资质、票据、合格证明）并绑定入库批次**，缺查验记录不能确认入库（C9）。
 4. 生成入库批次与 inbound 流水，库存余额增加。
 5. 总库调拨到礼品库/消耗品库，两侧流水与余额正确。
-6. 对高价值物品报损时，系统自动判定高价值并强制要求同时上传照片和视频、主管复核后才扣减（supply-3/4）。
+6. 对高价值物品报损时，系统自动判定高价值并强制要求同时上传照片和视频，建库存域内 `inventory_high_value_reviews(pending)`、主管在库存域内 approve 后才扣减（不走 governance supervisor_review，T6/supply-3/4）。
 7. 报溢用独立 surplus 流水并走审批（supply-5）。
 8. 会员/票务调用兑换预占：库存充足则预占礼品库、库存不足则拒绝兑换；领取确认后生成 redeem_consume/gift_claim_consume 流水并扣减余额，重复请求幂等（pass-2）。
 9. 全流程写入事件中心，事件命名符合 D4。
+
+## 13A. 成熟酒水/餐饮供应链深度能力规划（P1/P2 规划级，非本期 P0）
+
+> 定位：本节对标成熟进销存/WMS（如典型酒水餐饮 ERP 的库存模块）补齐能力地图，逐条标优先级、业务链价值与市场参考理由。**P1/P2 为规划级，非本期 P0**；本期 P0 范围仍以 §12.1、§13 与 r5-spec-T6/T17 为准，本节不进入本期验收。
+
+### 13A.1 P1（优先补强，紧贴已落地台账）
+
+| 能力 | 业务链价值 | 市场参考理由 | 验收口径（粗） |
+|---|---|---|---|
+| 批次效期 FIFO 出库 | 出库自动按"先到期先出"挑批次，降低过期损耗，与酒类/食品保质期强相关 | 成熟进销存/WMS 出库策略标配（FIFO/FEFO） | 出库按 `expire_at` 升序自动占用批次，可演示同物品多批次按效期顺序扣减 |
+| 保质期/到期预警 | 临期/已过期批次主动提醒，驱动促销或报损，减少呆滞 | WMS 效期管理标配，食品酒水尤甚 | 按可配置提前天数生成临期清单与预警事件，过期批次自动置 `expired` |
+| 供应商对账/应付账款（桥接 finance AP） | 采购入库—合同账期—应付对账闭环，与财务结算口径一致 | 进销存与财务一体化标配（采购对账/AP） | 按供应商/合同/账期生成应付对账单，金额=分，与 finance 应付科目对账一致 |
+| 安全库存/补货点 | 低于补货点自动提示或触发采购申请，避免缺货断供 | 进销存基础补货模型（ROP/安全库存）标配 | 物品可配安全库存/补货点，余额低于阈值生成缺货提示或采购建议 |
+| 单位换算（瓶↔杯，基于标准容量） | 整瓶入库、按杯出品/售卖时口径统一，避免库存与售卖单位脱节 | 酒水餐饮库存标配（采购单位↔销售单位换算） | 物品配标准容量与换算系数，出品按杯扣减可正确折算瓶库存 |
+
+### 13A.2 P2（进阶能力，依赖前序数据沉淀）
+
+| 能力 | 业务链价值 | 市场参考理由 | 验收口径（粗） |
+|---|---|---|---|
+| 配方 BOM 消耗（套餐/调酒） | 售出套餐/调酒按配方自动扣减多原料，精确核算成本与损耗 | 餐饮 ERP 标配（BOM/配方反扣料） | 物品可配 BOM，出品一份自动按配方扣减各原料并归集成本 |
+| 采购退货流程 | 不合格/多到货可退供应商并冲减入库与应付，闭合采购异常 | 进销存采购退货（采购退单）标配 | 入库批次可发起退货，生成反向流水并冲减应付，状态可追 |
+| 供应商评分/招采比价 | 按到货及时率、质量、价格评分，多供应商比价择优 | 成熟采购/SRM 标配（供应商绩效与比价） | 按履约数据生成供应商评分，同物品多供应商报价可比价排序 |
+| 自动补货预测 | 按历史消耗与季节性预测需求，自动生成补货建议 | 进阶 WMS/供应链预测能力 | 基于消耗历史输出补货建议量，可人工确认转采购申请 |
+
+> 说明：13A.1 的 FIFO/效期/单位换算与已落地的 `stock_batches`（`expire_at`/`cost_price`）、`items`（`unit`）字段衔接成本最低，建议 P1 优先；对账/应付需与 finance 域桥接，安全库存需补物品级阈值字段。13A.2 的 BOM/退货/评分/预测依赖前序台账与履约数据沉淀，列 P2。**以上均为规划级，本期不实现、不进 P0 验收。**
 
 ## 14. 变更日志
 
@@ -797,3 +884,7 @@ P0 完成时必须能演示：
 | 2026-06-07 | 改 | §9 标题 + 修订说明 | 事件留痕点标注从「遵循 D4 不另起命名」改为「新增 12 个供应链域事件，已登记入 operation-traceability §4.1 权威字典」（须同步 java-backend §14/foundation-database 事件清单） | finding broken-ref-4、基准 D4 |
 | 2026-06-07 | 改 | §6.13 设计说明 | surplus 注解改为「两系统均已落地（bar §6.16 本轮同步新增，依据 supply-5），口径一致」，避免误导读者以为 bar 侧无 surplus | finding newdocs-4、supply-5 |
 | 2026-06-11 | 改 | §11 服务分层 | 修复 `HighValuePolicy` 高价值阈值说明乱码，明确“物品阈值优先，未配置时使用平台默认阈值” | 对抗式审计发现原文问号乱码会造成规则歧义 |
+| 2026-06-18 | 改（D5） | §1.1/§1.2/§4.1/§6 默认字段说明/§6.1/§6.2/§6.3/§6.4/§12/§13 | 表名/枚举统一为真实迁移 + r5-spec-T6 口径：供应商表名 `suppliers`→`inventory_suppliers`（含索引/外键引用/修订说明就地更正），供应合同三模式枚举 `platform_self/merchant_self/platform_unified_distribute`→`platform_self_use/merchant_self_purchase/platform_purchase_distribution`，多处加“表名与枚举以真实迁移 + r5-spec-T6 为准”。API 资源路径 `/inventory/suppliers`（REST 复数惯例）与变更日志历史记录保持原貌不改 | R5 收口 D5：本设计旧表名/旧枚举与真实迁移(`inventory_suppliers`)及 r5-spec-T6 枚举不符，统一到真实迁移/规格口径 |
+| 2026-06-18 | 增（D11） | R5 横幅 | 现状标注补“唯一码主数据”缺口：`items.is_traceable` 仅标记位，平台物品唯一二维码主数据本身无独立表/无生成绑定流程，码—批次—物品溯源链未建模；交接条补指向 r5-spec-T17 | R5 收口 D11：横幅原缺“唯一码主数据写死/未建”一条 |
+| 2026-06-18 | 增（D14） | §13A（新增） | 新增“成熟酒水/餐饮供应链深度能力规划”章：P1（批次效期 FIFO、效期预警、供应商对账/AP 桥接 finance、安全库存/补货点、单位换算瓶↔杯）/P2（配方 BOM、采购退货、供应商评分/比价、自动补货预测），逐条标能力/业务链价值/市场参考/验收口径，注明 P1/P2 规划级、非本期 P0 | R5 收口 D14：补市场深度规划补章，对标成熟进销存/WMS 标配 |
+| 2026-06-18 | 改（D5 终稿） | §3.1/§3.2/§4.2/§4.3/§5.4/§6.4/§6.5/§6.7/§6.12/§6.17（新增）/§7.2/§7.3/§7.7（新增）/§11/§12/§13 | 供应链三处粒度分歧统一收口为 r5-spec-T6 权威口径（业务确认）：①供应合同审批由 6 态收口为审批三态 `draft/approved/rejected` + 合同生命周期 `status` 三态 `active/suspended/expired` 分列；②采购周期由独立 `purchase_cycles` 表收口为「扩 `inventory_purchase_requests` 状态机 `submitted/approved/rejected/ordered/expected/arrived/received` + `inventory_purchase_request_events` 留痕表」，stock_batches `purchase_cycle_id`→`purchase_request_id`；③高价值复核收口为库存域内自建 `inventory_high_value_reviews`（subject_type `damage_report/stock_variance/saved_bottle_void`、review_status `pending/approved/rejected`）+ `InventoryHighValueReviewService`，不走 governance supervisor_review | R5 收口 D5 终稿：三处分歧 2026-06-18 业务确认统一以 r5-spec-T6 为权威 |

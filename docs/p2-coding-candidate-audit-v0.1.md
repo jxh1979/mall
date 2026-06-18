@@ -99,7 +99,7 @@ P0/P1 当前可编码范围已经收口。下一阶段不应直接把所有 P2 �
 - `docs/p2-ticket-dynamic-pricing-api-contract-v0.1.md`
 - `docs/p2-ticket-dynamic-pricing-completion-audit-v0.1.md`
 
-审计结论：P2-C 只覆盖动态规则容器和价格模拟，不自动影响正式下单价格。
+审计结论：P2-C 已升级为动态规则容器、价格模拟和“已发布规则影响正式订单金额”的闭环；草稿规则仍只参与模拟。
 
 ### P2-D 经营分析/预测看板指标沉淀
 

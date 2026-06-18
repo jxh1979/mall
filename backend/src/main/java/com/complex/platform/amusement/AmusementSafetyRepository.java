@@ -7,6 +7,8 @@ public interface AmusementSafetyRepository {
 
     List<AmusementSafetyNoticeRecord> findAllSafetyNotices();
 
+    List<AmusementSafetyNoticeRecord> findSafetyNoticesByMerchant(String merchantId);
+
     Optional<AmusementSafetyNoticeRecord> findSafetyNoticeById(String id);
 
     AmusementSafetyNoticeRecord saveSafetyNotice(AmusementSafetyNoticeRecord record);
@@ -14,6 +16,8 @@ public interface AmusementSafetyRepository {
     AmusementWaiverAcknowledgementRecord saveWaiverAcknowledgement(AmusementWaiverAcknowledgementRecord record);
 
     List<AmusementIncidentRecord> findAllIncidents();
+
+    List<AmusementIncidentRecord> findIncidentsByMerchant(String merchantId);
 
     Optional<AmusementIncidentRecord> findIncidentById(String id);
 

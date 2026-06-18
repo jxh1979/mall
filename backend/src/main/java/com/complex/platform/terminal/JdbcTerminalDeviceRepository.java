@@ -1,13 +1,12 @@
 package com.complex.platform.terminal;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -151,6 +150,7 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                        reason, created_at, updated_at
                   FROM terminal_capability_switches
                  ORDER BY updated_at DESC, id
+                 LIMIT 1000
                 """, this::mapCapabilitySwitch);
     }
 
@@ -401,14 +401,7 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
         );
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
-    private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
 
     private String writeJson(Object value) {
         try {

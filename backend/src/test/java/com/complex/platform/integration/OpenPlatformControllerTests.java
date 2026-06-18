@@ -125,10 +125,10 @@ class OpenPlatformControllerTests {
                 .thenReturn(new OpenEventResultResponse("evt-controller", "accepted", Map.of("normalized_status", "paid")));
 
         mockMvc.perform(get("/api/open/d/p0-default/events/evt-controller")
-                        .queryParam("app_key", "p0-open-app")
-                        .queryParam("timestamp", "1781424000000")
-                        .queryParam("nonce", "nonce-query")
-                        .queryParam("signature", "signature"))
+                        .header("X-Open-App-Key", "p0-open-app")
+                        .header("X-Open-Timestamp", "1781424000000")
+                        .header("X-Open-Nonce", "nonce-query")
+                        .header("X-Open-Signature", "signature"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.event_id").value("evt-controller"))
                 .andExpect(jsonPath("$.data.event_status").value("accepted"))

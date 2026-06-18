@@ -257,17 +257,17 @@ class BarControllerTests {
 
     private BarTableRecord table() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarTableRecord("table_1", "bar_1", "T-bar_once", "A1", "card_seat", 2, 2, 50000L, "CNY", "active", now, now);
+        return new BarTableRecord("table_1", "bar_1", null, "T-bar_once", "A1", "card_seat", 2, 2, 50000L, "CNY", "active", now, now);
     }
 
     private BarTableRecord openedTable() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarTableRecord("table_1", "bar_1", "T-bar_once", "A1", "card_seat", 2, 2, 50000L, "CNY", "opened", now, now);
+        return new BarTableRecord("table_1", "bar_1", null, "T-bar_once", "A1", "card_seat", 2, 2, 50000L, "CNY", "opened", now, now);
     }
 
     private BarReservationRecord reservation() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarReservationRecord("reservation_1", "bar_1", "table_1", "customer_1", now, 2, 2, 0L, "not_required", "staff", "staff_sales", "reserved", "web", null, List.of(), now, now);
+        return new BarReservationRecord("reservation_1", "bar_1", null, "table_1", "customer_1", now, 2, 2, 0L, "not_required", "staff", "staff_sales", "reserved", "web", null, List.of(), now, now, null);
     }
 
     private BarTableGuestCheckinRecord checkin() {
@@ -280,32 +280,32 @@ class BarControllerTests {
 
     private BarProductRecord product(boolean stockManaged) {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarProductRecord("product_1", "bar_1", "Whisky", "spirit", 128800L, "CNY", stockManaged ? "inventory_1" : null, stockManaged ? "bar_1" : null, stockManaged, "active", now, now);
+        return new BarProductRecord("product_1", "bar_1", null, "Whisky", "spirit", 128800L, "CNY", stockManaged ? "inventory_1" : null, stockManaged ? "bar_1" : null, stockManaged, "active", now, now, null, null, null);
     }
 
     private BarOrderRecord order() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarOrderRecord("order_1", "bar_1", "table_1", "reservation_1", null, "staff", "created", 128800L, "CNY", "web", null, "staff_sales", now, now);
+        return new BarOrderRecord("order_1", "bar_1", null, "table_1", "reservation_1", null, "staff", "created", 128800L, "CNY", "web", null, "staff_sales", now, now);
     }
 
     private BarOrderRecord orderDelivered() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarOrderRecord("order_1", "bar_1", "table_1", "reservation_1", null, "staff", "delivered", 128800L, "CNY", "web", null, "staff_sales", now, now);
+        return new BarOrderRecord("order_1", "bar_1", null, "table_1", "reservation_1", null, "staff", "delivered", 128800L, "CNY", "web", null, "staff_sales", now, now);
     }
 
     private BarOrderItemRecord orderItem() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarOrderItemRecord("item_1", "order_1", "product_1", "Whisky", 1, 128800L, 128800L, "pending", now, now);
+        return new BarOrderItemRecord("item_1", "order_1", "product_1", "Whisky", 1, 128800L, 128800L, "pending", now, now, null, 0L);
     }
 
     private BarProductionTicketRecord ticket() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarProductionTicketRecord("ticket_1", "order_1", "bar_1", "created", now, now);
+        return new BarProductionTicketRecord("ticket_1", "order_1", "bar_1", null, "created", now, now);
     }
 
     private BarProductionTicketRecord ticketReady() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarProductionTicketRecord("ticket_1", "order_1", "bar_1", "ready", now, now);
+        return new BarProductionTicketRecord("ticket_1", "order_1", "bar_1", null, "ready", now, now);
     }
 
     private BarProductionTicketEventRecord ticketEvent() {
@@ -329,12 +329,12 @@ class BarControllerTests {
 
     private BarBillRecord bill() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarBillRecord("bill_1", "BILL202606140001", "order_1", "bar_1", "table_1", "reservation_1", 128800L, 0L, 10000L, 118800L, 0L, "CNY", "unpaid", "unsettled", "staff_sales", "sales", now, now);
+        return new BarBillRecord("bill_1", "BILL202606140001", "order_1", "bar_1", null, "table_1", "reservation_1", 128800L, 0L, 10000L, 118800L, 0L, "CNY", "unpaid", "unsettled", "staff_sales", "sales", now, now);
     }
 
     private BarBillRecord settledBill() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new BarBillRecord("bill_1", "BILL202606140001", "order_1", "bar_1", "table_1", "reservation_1", 128800L, 0L, 10000L, 118800L, 118800L, "CNY", "paid", "settled", "staff_sales", "sales", now, now);
+        return new BarBillRecord("bill_1", "BILL202606140001", "order_1", "bar_1", null, "table_1", "reservation_1", 128800L, 0L, 10000L, 118800L, 118800L, "CNY", "paid", "settled", "staff_sales", "sales", now, now);
     }
 
     private BarCommissionCalculationRecord commission(int rateBp, long amountCent) {

@@ -8,11 +8,15 @@ public interface AmusementRepository {
 
     List<AmusementSafetyTemplateRecord> listSafetyTemplates();
 
+    List<AmusementSafetyTemplateRecord> listSafetyTemplatesByMerchant(String merchantId);
+
     Optional<AmusementSafetyTemplateRecord> findSafetyTemplateById(String id);
 
     AmusementProjectRecord saveProject(AmusementProjectRecord project);
 
     List<AmusementProjectRecord> listProjects();
+
+    List<AmusementProjectRecord> listProjectsByMerchant(String merchantId);
 
     Optional<AmusementProjectRecord> findProjectById(String id);
 
@@ -23,6 +27,8 @@ public interface AmusementRepository {
     AmusementSessionRecord saveSession(AmusementSessionRecord session);
 
     List<AmusementSessionRecord> listSessions();
+
+    List<AmusementSessionRecord> listSessionsByMerchant(String merchantId);
 
     Optional<AmusementSessionRecord> findSessionById(String id);
 
@@ -35,6 +41,8 @@ public interface AmusementRepository {
     AmusementGroupBookingRecord saveGroupBooking(AmusementGroupBookingRecord booking);
 
     List<AmusementGroupBookingRecord> listGroupBookings();
+
+    List<AmusementGroupBookingRecord> listGroupBookingsByMerchant(String merchantId);
 
     Optional<AmusementGroupBookingRecord> findGroupBookingById(String id);
 
@@ -56,6 +64,8 @@ public interface AmusementRepository {
 
     List<AmusementSafetyInspectionRecord> listSafetyInspections();
 
+    List<AmusementSafetyInspectionRecord> listSafetyInspectionsByMerchant(String merchantId);
+
     Optional<AmusementSafetyInspectionRecord> findSafetyInspectionById(String id);
 
     Optional<AmusementSafetyInspectionRecord> latestSafetyInspectionForProject(String projectId);
@@ -66,23 +76,33 @@ public interface AmusementRepository {
 
     List<AmusementVerificationRecord> listVerifications();
 
+    List<AmusementVerificationRecord> listVerificationsByMerchant(String merchantId);
+
     AmusementManualOverrideRecord saveManualOverride(AmusementManualOverrideRecord override);
 
     List<AmusementManualOverrideRecord> listManualOverrides();
+
+    List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId);
 
     AmusementDeviceStatusRecord saveDeviceStatus(AmusementDeviceStatusRecord status);
 
     List<AmusementDeviceStatusRecord> listDeviceStatuses();
 
+    List<AmusementDeviceStatusRecord> listDeviceStatusesByMerchant(String merchantId);
+
     AmusementQueueEntryRecord saveQueueEntry(AmusementQueueEntryRecord entry);
 
     List<AmusementQueueEntryRecord> listQueueEntries();
+
+    List<AmusementQueueEntryRecord> listQueueEntriesByMerchant(String merchantId);
 
     Optional<AmusementQueueEntryRecord> findQueueEntryById(String id);
 
     AmusementReservationRecord saveReservation(AmusementReservationRecord reservation);
 
     List<AmusementReservationRecord> listReservations();
+
+    List<AmusementReservationRecord> listReservationsByMerchant(String merchantId);
 
     Optional<AmusementReservationRecord> findReservationById(String id);
 }

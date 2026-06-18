@@ -1,0 +1,9 @@
+{
+  "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-results.json",
+  "generated_at": "2026-06-16T17:12:20.803951+00:00",
+  "exit_code": 0,
+  "exists": true,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1191
+}

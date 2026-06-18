@@ -10,6 +10,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
@@ -18,6 +19,7 @@ import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,10 +39,15 @@ class PlatformServiceTests {
     void setUp() {
         platformRepository = new InMemoryPlatformRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                auditEventService
+        );
         service = new PlatformService(
                 platformRepository,
-                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                operations,
+                auditEventService
         );
     }
 
@@ -57,6 +64,13 @@ class PlatformServiceTests {
                 null,
                 "Jane",
                 "18800000011",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 "active"
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
@@ -127,11 +141,25 @@ class PlatformServiceTests {
                 "be_settlement",
                 "Jane Contact",
                 "18800000012",
+                "1F-A",
+                BigDecimal.valueOf(128.50),
+                BigDecimal.valueOf(120.00),
+                "Jack Contact",
+                "18800000013",
+                BigDecimal.valueOf(12.30),
+                "fixed_rent_plus_commission",
                 "active"
         ));
 
         assertThat(updated.id()).isEqualTo("mch_existing");
         assertThat(updated.merchantName()).isEqualTo("P0 Merchant");
+        assertThat(updated.mallBlockCode()).isEqualTo("1F-A");
+        assertThat(updated.areaSquareMeter()).isEqualByComparingTo("128.50");
+        assertThat(updated.leasedAreaSquareMeter()).isEqualByComparingTo("120.00");
+        assertThat(updated.secondaryContactName()).isEqualTo("Jack Contact");
+        assertThat(updated.secondaryContactPhone()).isEqualTo("18800000013");
+        assertThat(updated.rentPerSquareMeter()).isEqualByComparingTo("12.30");
+        assertThat(updated.cooperationForm()).isEqualTo("fixed_rent_plus_commission");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("merchant.updated");
@@ -234,6 +262,83 @@ class PlatformServiceTests {
         assertThat(replacement.status()).isEqualTo("active");
         assertThat(platformRepository.businessEntityBindingStatusHistory)
                 .containsExactly("active", "inactive", "active");
+    }
+
+    // P1-3 red→green: 已 approved 合同不得再次审批
+    @Test
+    void approveContractRejectsNonDraftStatus() {
+        ContractRecord draft = service.createContractDraft(new ContractDraftRequest(
+                "contract-state-draft",
+                "draft",
+                List.of(),
+                "mch_state",
+                "be_contract",
+                "be_operation",
+                "be_settlement",
+                LocalDate.parse("2026-07-01"),
+                LocalDate.parse("2027-06-30"),
+                Map.of(),
+                null,
+                List.of()
+        ));
+        service.approveContract(draft.id(), new ApprovalRequest("contract-state-approve1", "approve", List.of(), "approve", "legal ok", "ops"));
+
+        assertThatThrownBy(() -> service.approveContract(draft.id(),
+                new ApprovalRequest("contract-state-approve2", "reject", List.of(), "reject", "changed mind", "ops")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("INVALID_STATUS_TRANSITION"));
+    }
+
+    // P1-4 red→green: action 字段拒绝非法枚举值
+    @Test
+    void changeBusinessEntityBindingRejectsInvalidAction() {
+        BusinessEntityBindingRecord created = service.createBusinessEntityBinding(new BusinessEntityBindingRequest(
+                "binding-enum-create",
+                "create",
+                List.of(),
+                "mch_enum",
+                "be_op",
+                "be_ctr",
+                "be_stl",
+                LocalDate.parse("2026-07-01"),
+                "initial"
+        ));
+
+        assertThatThrownBy(() -> service.changeBusinessEntityBinding(created.id(),
+                new StatusChangeRequest("binding-enum-bad", "active_bypass", "reason", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    // P1-5 red→green: slug 碰撞幂等键不产生相同 ID
+    @Test
+    void createBusinessEntityWithSlashCollidingKeysGetDistinctIds() {
+        BusinessEntityRecord e1 = service.createBusinessEntity(new BusinessEntityRequest(
+                "corp-A",
+                "entity corp-A",
+                List.of(),
+                "Corp A",
+                "operation",
+                null,
+                null,
+                null,
+                "active"
+        ));
+        BusinessEntityRecord e2 = service.createBusinessEntity(new BusinessEntityRequest(
+                "corp_A",
+                "entity corp_A",
+                List.of(),
+                "Corp B",
+                "operation",
+                null,
+                null,
+                null,
+                "active"
+        ));
+
+        assertThat(e1.id()).isNotEqualTo(e2.id());
+        assertThat(e1.entityName()).isEqualTo("Corp A"); // 第一条未被覆盖
+        assertThat(e2.entityName()).isEqualTo("Corp B");
     }
 
     @Test

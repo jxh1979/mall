@@ -1,0 +1,3430 @@
+{
+  "manifest_version": "v0.1",
+  "generated_at": "generated-from-current-git-index",
+  "git_head": "d80f502",
+  "branch": "master",
+  "markers": [
+    "STAGED_HANDOFF_MANIFEST_READY",
+    "NO_UNTRACKED_CORE_FILES",
+    "NO_MIXED_STAGED_WORKTREE",
+    "CRITICAL_SPLIT_SERVICES_INCLUDED",
+    "PATCH_PACKAGE_INPUTS_TRACEABLE"
+  ],
+  "policy": {
+    "all_formal_code_changes_are_on_160": true,
+    "untracked_files_block_handoff": true,
+    "unstaged_worktree_changes_block_handoff": true,
+    "critical_split_services_must_be_in_index": true,
+    "this_manifest_does_not_claim_production_ready": true
+  },
+  "status": "ready_for_commit_or_patch_package",
+  "counts": {
+    "staged_files": 657,
+    "staged_added": 570,
+    "staged_modified": 87,
+    "staged_deleted": 0,
+    "untracked_files": 0,
+    "unstaged_or_mixed_entries": 0,
+    "missing_critical_files": 0
+  },
+  "staged_status_counts": {
+    "A": 570,
+    "M": 87
+  },
+  "top_level_counts": {
+    "security-scans": 373,
+    "apps": 85,
+    "docs": 70,
+    "backend": 61,
+    "tools": 46,
+    "tests": 12,
+    "ops": 5,
+    ".gitignore": 1,
+    "package-lock.json": 1,
+    "package.json": 1,
+    "playwright.config.ts": 1,
+    "playwright.real-backend.config.ts": 1
+  },
+  "staged_name_status_sha256": "df2b97f9d880cca952ab0c8e39361cc6e4100dbbe652231b269186e4b2e0231a",
+  "critical_files": [
+    {
+      "file": "backend/src/main/java/com/complex/platform/bar/BarEntryService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/java/com/complex/platform/bar/BarOrderService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/java/com/complex/platform/bar/BarBillingService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/java/com/complex/platform/ticketing/TicketPricingService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/java/com/complex/platform/ticketing/TicketOrderService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/java/com/complex/platform/ticketing/TicketVerificationService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/java/com/complex/platform/ticketing/TicketCatalogService.java",
+      "staged": true
+    },
+    {
+      "file": "backend/src/main/resources/db/migration/V041__ticket_order_dynamic_pricing_trace.sql",
+      "staged": true
+    },
+    {
+      "file": "apps/web/src/admin/AdminApp.tsx",
+      "staged": true
+    },
+    {
+      "file": "apps/web/src/admin/security/PermissionGate.test.ts",
+      "staged": true
+    },
+    {
+      "file": "tests/e2e/full-admin-mvp.spec.ts",
+      "staged": true
+    },
+    {
+      "file": "tests/e2e/full-admin-remaining.spec.ts",
+      "staged": true
+    },
+    {
+      "file": "tests/e2e/web-ui-acceptance.spec.ts",
+      "staged": true
+    },
+    {
+      "file": "tests/e2e/web-ui-real-backend.spec.ts",
+      "staged": true
+    },
+    {
+      "file": "playwright.real-backend.config.ts",
+      "staged": true
+    },
+    {
+      "file": "tools/run-real-backend-ui-e2e.mjs",
+      "staged": true
+    },
+    {
+      "file": "tools/generate-production-closure-gap-report.mjs",
+      "staged": true
+    },
+    {
+      "file": "security-scans/semgrep-latest-summary.json",
+      "staged": true
+    },
+    {
+      "file": "docs/runtime-acceptance-evidence-latest.json",
+      "staged": true
+    },
+    {
+      "file": "docs/closed-loop-current-state-snapshot-latest.json",
+      "staged": true
+    },
+    {
+      "file": "docs/production-evidence-closure-gap-report-v0.1.md",
+      "staged": true
+    }
+  ],
+  "missing_critical_files": [],
+  "untracked": [],
+  "unstaged_or_mixed": [],
+  "staged_files": [
+    {
+      "status": "M",
+      "path": ".gitignore",
+      "raw": "M\t.gitignore"
+    },
+    {
+      "status": "M",
+      "path": "apps/android-terminal/README.md",
+      "raw": "M\tapps/android-terminal/README.md"
+    },
+    {
+      "status": "M",
+      "path": "apps/android-terminal/android-app/app/build.gradle.kts",
+      "raw": "M\tapps/android-terminal/android-app/app/build.gradle.kts"
+    },
+    {
+      "status": "M",
+      "path": "apps/android-terminal/android-app/app/src/main/AndroidManifest.xml",
+      "raw": "M\tapps/android-terminal/android-app/app/src/main/AndroidManifest.xml"
+    },
+    {
+      "status": "M",
+      "path": "apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt",
+      "raw": "M\tapps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt"
+    },
+    {
+      "status": "M",
+      "path": "apps/web/index.html",
+      "raw": "M\tapps/web/index.html"
+    },
+    {
+      "status": "M",
+      "path": "apps/web/package.json",
+      "raw": "M\tapps/web/package.json"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/AdminApp.tsx",
+      "raw": "A\tapps/web/src/admin/AdminApp.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/adminPageConfigs.ts",
+      "raw": "A\tapps/web/src/admin/adminPageConfigs.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/adminRoutes.ts",
+      "raw": "A\tapps/web/src/admin/adminRoutes.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/client/adminClient.test.ts",
+      "raw": "A\tapps/web/src/admin/client/adminClient.test.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/client/adminClient.ts",
+      "raw": "A\tapps/web/src/admin/client/adminClient.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/components/AdminDataState.test.tsx",
+      "raw": "A\tapps/web/src/admin/components/AdminDataState.test.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/components/AdminDataState.tsx",
+      "raw": "A\tapps/web/src/admin/components/AdminDataState.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/components/AdminPageHeader.tsx",
+      "raw": "A\tapps/web/src/admin/components/AdminPageHeader.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/components/AuditTrailHint.tsx",
+      "raw": "A\tapps/web/src/admin/components/AuditTrailHint.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/components/HighRiskConfirm.tsx",
+      "raw": "A\tapps/web/src/admin/components/HighRiskConfirm.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/AccessUsersPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/AccessUsersPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/AdmissionAuditsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/AdmissionAuditsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/AmusementGroupBookingsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/AmusementGroupBookingsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/AmusementSafetyPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/AmusementSafetyPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/AmusementSessionsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/AmusementSessionsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/AuditEventsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/AuditEventsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/BarCommissionsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/BarCommissionsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/BarOrdersPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/BarOrdersPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/BarTableSessionsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/BarTableSessionsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/BusinessAnalyticsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/BusinessAnalyticsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/ContractApprovalPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/ContractApprovalPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/DynamicPricingPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/DynamicPricingPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/FinanceArApLedgerPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/FinanceArApLedgerPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/GenericAdminPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/GenericAdminPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/GovernanceTopologyPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/GovernanceTopologyPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/IntegrationAdaptersPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/IntegrationAdaptersPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/IntegrationEventsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/IntegrationEventsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/InventoryLedgerPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/InventoryLedgerPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/MerchantScopePage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/MerchantScopePage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/MerchantWorkOrdersPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/MerchantWorkOrdersPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/OpsReadinessPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/OpsReadinessPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/OrganizationMerchantPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/OrganizationMerchantPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/OverviewPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/OverviewPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/PermissionTemplatesPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/PermissionTemplatesPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/ReconciliationPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/ReconciliationPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/RiskAlertsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/RiskAlertsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/StoredWinePage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/StoredWinePage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/SubjectBindingsPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/SubjectBindingsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/SupervisorReviewPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/SupervisorReviewPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/TicketOrdersPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/TicketOrdersPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/pages/TicketingPoliciesPage.tsx",
+      "raw": "A\tapps/web/src/admin/pages/TicketingPoliciesPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/security/PermissionGate.test.ts",
+      "raw": "A\tapps/web/src/admin/security/PermissionGate.test.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/security/PermissionGate.tsx",
+      "raw": "A\tapps/web/src/admin/security/PermissionGate.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/admin/types.ts",
+      "raw": "A\tapps/web/src/admin/types.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/AuthShell.tsx",
+      "raw": "A\tapps/web/src/legacy-console/AuthShell.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/LegacyAppShell.tsx",
+      "raw": "A\tapps/web/src/legacy-console/LegacyAppShell.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/LegacyConsoleApp.tsx",
+      "raw": "A\tapps/web/src/legacy-console/LegacyConsoleApp.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/LegacyConsoleContent.tsx",
+      "raw": "A\tapps/web/src/legacy-console/LegacyConsoleContent.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/amusementActions.ts",
+      "raw": "A\tapps/web/src/legacy-console/amusementActions.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/apiClient.test.ts",
+      "raw": "A\tapps/web/src/legacy-console/apiClient.test.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/apiClient.ts",
+      "raw": "A\tapps/web/src/legacy-console/apiClient.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/barActions.ts",
+      "raw": "A\tapps/web/src/legacy-console/barActions.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/floorPlanActions.ts",
+      "raw": "A\tapps/web/src/legacy-console/floorPlanActions.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/formatters.test.ts",
+      "raw": "A\tapps/web/src/legacy-console/formatters.test.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/formatters.ts",
+      "raw": "A\tapps/web/src/legacy-console/formatters.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/foundationActions.ts",
+      "raw": "A\tapps/web/src/legacy-console/foundationActions.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/AmusementPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/AmusementPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/AnalyticsReadOnlyPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/AnalyticsReadOnlyPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/BarPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/BarPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/EventsPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/EventsPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/FloorPlanPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/FloorPlanPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/FoundationPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/FoundationPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/InterfacesPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/InterfacesPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/SecurityPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/SecurityPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/pages/TicketingPage.tsx",
+      "raw": "A\tapps/web/src/legacy-console/pages/TicketingPage.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/riskAndIntegrationActions.ts",
+      "raw": "A\tapps/web/src/legacy-console/riskAndIntegrationActions.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/shell.tsx",
+      "raw": "A\tapps/web/src/legacy-console/shell.tsx"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/snapshotClient.ts",
+      "raw": "A\tapps/web/src/legacy-console/snapshotClient.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/stockMovementRequest.test.ts",
+      "raw": "A\tapps/web/src/legacy-console/stockMovementRequest.test.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/stockMovementRequest.ts",
+      "raw": "A\tapps/web/src/legacy-console/stockMovementRequest.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/ticketingActions.ts",
+      "raw": "A\tapps/web/src/legacy-console/ticketingActions.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/types.ts",
+      "raw": "A\tapps/web/src/legacy-console/types.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/legacy-console/ui.tsx",
+      "raw": "A\tapps/web/src/legacy-console/ui.tsx"
+    },
+    {
+      "status": "M",
+      "path": "apps/web/src/main.tsx",
+      "raw": "M\tapps/web/src/main.tsx"
+    },
+    {
+      "status": "M",
+      "path": "apps/web/src/styles.css",
+      "raw": "M\tapps/web/src/styles.css"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/src/test/setup.ts",
+      "raw": "A\tapps/web/src/test/setup.ts"
+    },
+    {
+      "status": "M",
+      "path": "apps/web/tsconfig.tsbuildinfo",
+      "raw": "M\tapps/web/tsconfig.tsbuildinfo"
+    },
+    {
+      "status": "M",
+      "path": "apps/web/vite.config.ts",
+      "raw": "M\tapps/web/vite.config.ts"
+    },
+    {
+      "status": "A",
+      "path": "apps/web/vitest.config.ts",
+      "raw": "A\tapps/web/vitest.config.ts"
+    },
+    {
+      "status": "M",
+      "path": "backend/pom.xml",
+      "raw": "M\tbackend/pom.xml"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarAgeVerificationService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarBillRecords.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarBillRecords.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarBillingService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarBillingService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarEntryService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarEntryService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarOperationExecutor.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarOperationExecutor.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarOrderService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarOrderService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarReadOperation.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarReadOperation.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarService.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/bar/BarService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarTableSessionService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarValidation.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarValidation.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/bar/BarWriteOperation.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/bar/BarWriteOperation.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/evidence/AuditedOperation.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/evidence/AuditedOperation.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/evidence/AuditedOperationExecutor.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/evidence/AuditedOperationExecutor.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/governance/MerchantRecord.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/governance/MerchantRecord.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/governance/PlatformService.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/governance/PlatformService.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/governance/dto/MerchantProfileRequest.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/governance/dto/MerchantProfileRequest.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewApprovalRequest.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/governance/review/SupervisorReviewApprovalRequest.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewController.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/governance/review/SupervisorReviewController.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewDecisionRecord.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/governance/review/SupervisorReviewDecisionRecord.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewEvaluateRequest.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/governance/review/SupervisorReviewEvaluateRequest.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewPolicyRecord.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/governance/review/SupervisorReviewPolicyRecord.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/governance/review/SupervisorReviewService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/DynamicPriceResult.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/DynamicPriceResult.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/JdbcTicketingRepository.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/ticketing/JdbcTicketingRepository.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketCatalogService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketCatalogService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketCredentialService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketCredentialService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketEntitlementMapper.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketEntitlementMapper.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketOfflinePackageService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketOfflinePackageService.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketOrderRecord.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/ticketing/TicketOrderRecord.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketOrderService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketOrderService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketPricingService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketPricingService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketRefundService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketRefundService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketVerificationService.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketVerificationService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketingOperationExecutor.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketingOperationExecutor.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketingReadOperation.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketingReadOperation.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/ticketing/TicketingService.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/TicketingWriteOperation.java",
+      "raw": "A\tbackend/src/main/java/com/complex/platform/ticketing/TicketingWriteOperation.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/main/java/com/complex/platform/ticketing/dto/TicketOrderRequest.java",
+      "raw": "M\tbackend/src/main/java/com/complex/platform/ticketing/dto/TicketOrderRequest.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/resources/db/migration/V041__ticket_order_dynamic_pricing_trace.sql",
+      "raw": "A\tbackend/src/main/resources/db/migration/V041__ticket_order_dynamic_pricing_trace.sql"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/resources/db/migration/V042__merchant_profile_extended_fields.sql",
+      "raw": "A\tbackend/src/main/resources/db/migration/V042__merchant_profile_extended_fields.sql"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/main/resources/db/migration/V043__supervisor_review_permissions.sql",
+      "raw": "A\tbackend/src/main/resources/db/migration/V043__supervisor_review_permissions.sql"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/amusement/AmusementJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/amusement/AmusementJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/amusement/AmusementSafetyJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/amusement/AmusementSafetyJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/analytics/AnalyticsJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/analytics/AnalyticsJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/bar/BarJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/bar/BarJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/bar/BarServiceTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/compliance/ComplianceJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/compliance/ComplianceJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/customer/CustomerJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/customer/CustomerJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/floorplan/FloorPlanJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/floorplan/FloorPlanJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/governance/PlatformControllerTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/governance/PlatformControllerTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/governance/PlatformJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/governance/PlatformJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/governance/PlatformServiceTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/governance/PlatformServiceTests.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/test/java/com/complex/platform/governance/review/SupervisorReviewControllerTests.java",
+      "raw": "A\tbackend/src/test/java/com/complex/platform/governance/review/SupervisorReviewControllerTests.java"
+    },
+    {
+      "status": "A",
+      "path": "backend/src/test/java/com/complex/platform/governance/review/SupervisorReviewServiceTests.java",
+      "raw": "A\tbackend/src/test/java/com/complex/platform/governance/review/SupervisorReviewServiceTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/integration/IntegrationJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/integration/IntegrationJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/inventory/InventoryJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/inventory/InventoryJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/merchantbilling/MerchantBillingJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/merchantbilling/MerchantBillingJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/merchantservice/MerchantServiceJdbcIntegrationTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/merchantservice/MerchantServiceJdbcIntegrationTests.java"
+    },
+    {
+      "status": "M",
+      "path": "backend/src/test/java/com/complex/platform/ticketing/TicketingServiceTests.java",
+      "raw": "M\tbackend/src/test/java/com/complex/platform/ticketing/TicketingServiceTests.java"
+    },
+    {
+      "status": "M",
+      "path": "docs/00-current-effective-document-entry-v0.1.md",
+      "raw": "M\tdocs/00-current-effective-document-entry-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/closed-loop-current-state-snapshot-latest.json",
+      "raw": "A\tdocs/closed-loop-current-state-snapshot-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/closed-loop-current-state-snapshot-v0.1.md",
+      "raw": "A\tdocs/closed-loop-current-state-snapshot-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/closed-loop-implementation-ui-acceptance-report-v0.1.md",
+      "raw": "A\tdocs/closed-loop-implementation-ui-acceptance-report-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/code-implementation-acceptance-audit-v0.1.md",
+      "raw": "A\tdocs/code-implementation-acceptance-audit-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/codebase-architecture-zoom-out-audit-v0.1.md",
+      "raw": "A\tdocs/codebase-architecture-zoom-out-audit-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/current-staged-handoff-manifest-latest.json",
+      "raw": "A\tdocs/current-staged-handoff-manifest-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/current-staged-handoff-manifest-v0.1.md",
+      "raw": "A\tdocs/current-staged-handoff-manifest-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/delivery-package-manifest-v0.1.md",
+      "raw": "M\tdocs/delivery-package-manifest-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/delivery-readiness-gates-v0.1.md",
+      "raw": "M\tdocs/delivery-readiness-gates-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/development-documentation-adversarial-audit-v0.1.md",
+      "raw": "A\tdocs/development-documentation-adversarial-audit-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/development-documentation-audit-map-v0.1.csv",
+      "raw": "A\tdocs/development-documentation-audit-map-v0.1.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/development-ready-spec-draft-v0.1.md",
+      "raw": "A\tdocs/development-ready-spec-draft-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/domain-ownership-scope-audit-v0.1.csv",
+      "raw": "A\tdocs/domain-ownership-scope-audit-v0.1.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/external-evidence-requirement-traceability-v0.1.md",
+      "raw": "A\tdocs/external-evidence-requirement-traceability-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/final-closed-loop-acceptance-audit-v0.1.md",
+      "raw": "A\tdocs/final-closed-loop-acceptance-audit-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-mvp-code-implementation-audit-v0.1.md",
+      "raw": "A\tdocs/full-admin-mvp-code-implementation-audit-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-mvp-coding-package-v0.1.md",
+      "raw": "A\tdocs/full-admin-mvp-coding-package-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-mvp-coding-task-breakdown-v0.1.csv",
+      "raw": "A\tdocs/full-admin-mvp-coding-task-breakdown-v0.1.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-mvp-requirements-code-matrix-v0.1.csv",
+      "raw": "A\tdocs/full-admin-mvp-requirements-code-matrix-v0.1.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-page-permission-field-matrix-v0.1.csv",
+      "raw": "A\tdocs/full-admin-page-permission-field-matrix-v0.1.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-remaining-code-implementation-audit-v0.1.md",
+      "raw": "A\tdocs/full-admin-remaining-code-implementation-audit-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-remaining-requirements-code-matrix-v0.1.csv",
+      "raw": "A\tdocs/full-admin-remaining-requirements-code-matrix-v0.1.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-srs-v0.1.md",
+      "raw": "A\tdocs/full-admin-srs-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/full-admin-ui-acceptance-matrix-v0.1.md",
+      "raw": "A\tdocs/full-admin-ui-acceptance-matrix-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/gstack-acceptance-ship-audit-v0.1.md",
+      "raw": "A\tdocs/gstack-acceptance-ship-audit-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/nas-backup-and-restore-runbook-v0.1.md",
+      "raw": "M\tdocs/nas-backup-and-restore-runbook-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/nas-current-state-drift-report-v0.1.md",
+      "raw": "A\tdocs/nas-current-state-drift-report-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/nas-diagnostic-report-v0.1.md",
+      "raw": "A\tdocs/nas-diagnostic-report-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/nas-it-controlled-mount-handoff-v0.1.md",
+      "raw": "A\tdocs/nas-it-controlled-mount-handoff-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/openapi/openapi-p0.json",
+      "raw": "M\tdocs/openapi/openapi-p0.json"
+    },
+    {
+      "status": "M",
+      "path": "docs/openapi/openapi-p0.yaml",
+      "raw": "M\tdocs/openapi/openapi-p0.yaml"
+    },
+    {
+      "status": "M",
+      "path": "docs/p0-openapi-contract-closure-appendix-v0.1.md",
+      "raw": "M\tdocs/p0-openapi-contract-closure-appendix-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/p0-openapi-operation-acceptance-matrix-v0.1.md",
+      "raw": "M\tdocs/p0-openapi-operation-acceptance-matrix-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/p1-coding-completion-audit-v0.1.md",
+      "raw": "M\tdocs/p1-coding-completion-audit-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/p2-coding-candidate-audit-v0.1.md",
+      "raw": "M\tdocs/p2-coding-candidate-audit-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/p2-current-diff-adversarial-review-v0.1.md",
+      "raw": "M\tdocs/p2-current-diff-adversarial-review-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/p2-full-completion-audit-v0.1.md",
+      "raw": "M\tdocs/p2-full-completion-audit-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/p2-ticket-dynamic-pricing-api-contract-v0.1.md",
+      "raw": "M\tdocs/p2-ticket-dynamic-pricing-api-contract-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/p2-ticket-dynamic-pricing-completion-audit-v0.1.md",
+      "raw": "M\tdocs/p2-ticket-dynamic-pricing-completion-audit-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/partial-requirement-mock-coverage-latest.json",
+      "raw": "A\tdocs/partial-requirement-mock-coverage-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/partial-requirement-mock-coverage-v0.1.md",
+      "raw": "A\tdocs/partial-requirement-mock-coverage-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-evidence-closure-gap-report-v0.1.md",
+      "raw": "A\tdocs/production-evidence-closure-gap-report-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-evidence-owner-execution-packets-v0.1.md",
+      "raw": "A\tdocs/production-evidence-owner-execution-packets-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-evidence-p0-quickstart-v0.1.md",
+      "raw": "A\tdocs/production-evidence-p0-quickstart-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-existing-evidence-to-manifest-gap-audit-v0.1.md",
+      "raw": "A\tdocs/production-existing-evidence-to-manifest-gap-audit-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/production-owner-action-packs-v0.1.md",
+      "raw": "M\tdocs/production-owner-action-packs-v0.1.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.csv",
+      "raw": "A\tdocs/production-readiness-evidence/external-evidence-requirement-traceability-latest.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json",
+      "raw": "A\tdocs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/nas-current-state-drift-latest.json",
+      "raw": "A\tdocs/production-readiness-evidence/nas-current-state-drift-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/nas-diagnostic-latest.json",
+      "raw": "A\tdocs/production-readiness-evidence/nas-diagnostic-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/owner-execution-packets/finance.md",
+      "raw": "A\tdocs/production-readiness-evidence/owner-execution-packets/finance.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/owner-execution-packets/it-ops-security.md",
+      "raw": "A\tdocs/production-readiness-evidence/owner-execution-packets/it-ops-security.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/owner-execution-packets/operations-legal.md",
+      "raw": "A\tdocs/production-readiness-evidence/owner-execution-packets/operations-legal.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/owner-execution-packets/procurement-supplier.md",
+      "raw": "A\tdocs/production-readiness-evidence/owner-execution-packets/procurement-supplier.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/owner-execution-packets/technical-owner.md",
+      "raw": "A\tdocs/production-readiness-evidence/owner-execution-packets/technical-owner.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/production-evidence-owner-execution-packets-latest.json",
+      "raw": "A\tdocs/production-readiness-evidence/production-evidence-owner-execution-packets-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.csv",
+      "raw": "A\tdocs/production-readiness-evidence/production-evidence-p0-quickstart-latest.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.json",
+      "raw": "A\tdocs/production-readiness-evidence/production-evidence-p0-quickstart-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/production-no-go-resolution-command-center-latest.csv",
+      "raw": "A\tdocs/production-readiness-evidence/production-no-go-resolution-command-center-latest.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/production-no-go-resolution-command-center-latest.json",
+      "raw": "A\tdocs/production-readiness-evidence/production-no-go-resolution-command-center-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/production-readiness-evidence/production-no-go-resolution-command-center-v0.1.md",
+      "raw": "A\tdocs/production-readiness-evidence/production-no-go-resolution-command-center-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/production-readiness-evidence/production-owner-action-packs-latest.json",
+      "raw": "M\tdocs/production-readiness-evidence/production-owner-action-packs-latest.json"
+    },
+    {
+      "status": "M",
+      "path": "docs/production-readiness-evidence/security-baseline-latest.json",
+      "raw": "M\tdocs/production-readiness-evidence/security-baseline-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/requirements-code-implementation-matrix-v0.1.csv",
+      "raw": "A\tdocs/requirements-code-implementation-matrix-v0.1.csv"
+    },
+    {
+      "status": "A",
+      "path": "docs/runtime-acceptance-evidence-latest.json",
+      "raw": "A\tdocs/runtime-acceptance-evidence-latest.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/runtime-acceptance-evidence-v0.1.md",
+      "raw": "A\tdocs/runtime-acceptance-evidence-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/superpowers/plans/2026-06-15-p2-baseline-protection-and-web-entry.md",
+      "raw": "M\tdocs/superpowers/plans/2026-06-15-p2-baseline-protection-and-web-entry.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/superpowers/plans/2026-06-15-p2-ticket-dynamic-pricing.md",
+      "raw": "M\tdocs/superpowers/plans/2026-06-15-p2-ticket-dynamic-pricing.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/ui-automation-acceptance-report-v0.1.md",
+      "raw": "M\tdocs/ui-automation-acceptance-report-v0.1.md"
+    },
+    {
+      "status": "M",
+      "path": "ops/160/complex-backup.sh",
+      "raw": "M\tops/160/complex-backup.sh"
+    },
+    {
+      "status": "M",
+      "path": "ops/160/complex-nas-preflight.sh",
+      "raw": "M\tops/160/complex-nas-preflight.sh"
+    },
+    {
+      "status": "A",
+      "path": "ops/160/complex-nas-system-mount.example.sh",
+      "raw": "A\tops/160/complex-nas-system-mount.example.sh"
+    },
+    {
+      "status": "M",
+      "path": "ops/160/complex-restore-drill.sh",
+      "raw": "M\tops/160/complex-restore-drill.sh"
+    },
+    {
+      "status": "M",
+      "path": "ops/160/complex-runtime-config-check.sh",
+      "raw": "M\tops/160/complex-runtime-config-check.sh"
+    },
+    {
+      "status": "M",
+      "path": "package-lock.json",
+      "raw": "M\tpackage-lock.json"
+    },
+    {
+      "status": "M",
+      "path": "package.json",
+      "raw": "M\tpackage.json"
+    },
+    {
+      "status": "M",
+      "path": "playwright.config.ts",
+      "raw": "M\tplaywright.config.ts"
+    },
+    {
+      "status": "A",
+      "path": "playwright.real-backend.config.ts",
+      "raw": "A\tplaywright.real-backend.config.ts"
+    },
+    {
+      "status": "M",
+      "path": "security-scans/findings-register-v1.md",
+      "raw": "M\tsecurity-scans/findings-register-v1.md"
+    },
+    {
+      "status": "M",
+      "path": "security-scans/formal-security-baseline-v1.md",
+      "raw": "M\tsecurity-scans/formal-security-baseline-v1.md"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-130010-full-manual-clean/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-130010-full-manual-clean/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-130010-full-manual-clean/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-130010-full-manual-clean/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-130010-full-manual-clean/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-130010-full-manual-clean/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/context.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/context.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/apiiro-validate.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/apiiro-validate.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/atlassian-validate.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/atlassian-validate.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/elttam-validate.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/elttam-validate.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/federicodotta-validate.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/federicodotta-validate.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/kondukto-validate.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/kondukto-validate.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/official-json.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/official-json.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/official-sarif.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/official-sarif.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/third-party-skipped.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/third-party-skipped.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/thirdparty-atlassian-json.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/thirdparty-atlassian-json.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/thirdparty-atlassian-sarif.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/thirdparty-atlassian-sarif.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/thirdparty-federicodotta-json.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/thirdparty-federicodotta-json.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/thirdparty-federicodotta-sarif.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/thirdparty-federicodotta-sarif.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/trailofbits-clone.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/trailofbits-clone.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/logs/trailofbits-validate.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/logs/trailofbits-validate.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/official-json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/official-json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/official-sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/official-sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/official.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/official.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/official.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/official.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-atlassian-json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-atlassian-json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-atlassian-sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-atlassian-sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-atlassian.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-atlassian.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-atlassian.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-atlassian.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta-json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta-json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta-sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta-sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/raw/thirdparty-federicodotta.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/results/findings.deduped.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/results/findings.deduped.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/results/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/results/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/results/sarif-parse-errors.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/results/sarif-parse-errors.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/results/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/results/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/rulesets.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/rulesets.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-153210/third-party-repos.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260616-153210/third-party-repos.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-162156-post-remaining-actions/semgrep-sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-162156-post-remaining-actions/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-162156-post-remaining-actions/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-163046-manual.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-163046-manual.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-163046-manual.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-163046-manual.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-163948-post-adm-mer-001.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-163948-post-adm-mer-001.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-163948-post-adm-mer-001.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-163948-post-adm-mer-001.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-164602-post-bar-refactor.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-164602-post-bar-refactor.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-164602-post-bar-refactor.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-164602-post-bar-refactor.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/semgrep-sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-171214-post-bar-delivery-photo-evidence/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/semgrep-sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-174702-current-excluding-bash-parser-warnings/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/semgrep-sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-175823-current-excluding-bash-parser-warnings/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-181006-current/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-181006-current/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-181006-current/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-181006-current/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-181006-current/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-181006-current/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-181006-current/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-181006-current/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-181006-current/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-181006-current/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-181006-current/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-181006-current/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-181006-current/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-181006-current/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/excluded-bash-syntax.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/excluded-bash-syntax.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/excluded-bash-syntax.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/excluded-bash-syntax.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-184539-current-excluding-bash-parser-warnings/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/excluded-bash-syntax.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/excluded-bash-syntax.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/excluded-bash-syntax.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/excluded-bash-syntax.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-190557-current-excluding-bash-parser-warnings/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/excluded-bash-syntax.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/excluded-bash-syntax.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/excluded-bash-syntax.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/excluded-bash-syntax.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-191751-post-bar-billing-records-split/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-191751-post-bar-billing-records-split/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192222-post-bash-parser-closure/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192222-post-bash-parser-closure/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192222-post-bash-parser-closure/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192810-manual/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192810-manual/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-192810-manual/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-192810-manual/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-194030-post-bar-orders-page/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-194030-post-bar-orders-page/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-194030-post-bar-orders-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-194030-post-bar-orders-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-194830-post-dynamic-pricing-page/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-194830-post-dynamic-pricing-page/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-194830-post-dynamic-pricing-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-194830-post-dynamic-pricing-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-195553-post-ticket-orders-page/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-195553-post-ticket-orders-page/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-195553-post-ticket-orders-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-195553-post-ticket-orders-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-201500-post-doc-sync/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-201500-post-doc-sync/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-201500-post-doc-sync/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-201500-post-doc-sync/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-201500-post-doc-sync/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-201500-post-doc-sync/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-203000-post-stored-wine-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-203000-post-stored-wine-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-203000-post-stored-wine-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-203000-post-stored-wine-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-203000-post-stored-wine-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-203000-post-stored-wine-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-204500-post-bar-commissions-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-204500-post-bar-commissions-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-204500-post-bar-commissions-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-204500-post-bar-commissions-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-204500-post-bar-commissions-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-204500-post-bar-commissions-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-205500-post-inventory-ledger-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-205500-post-inventory-ledger-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-205500-post-inventory-ledger-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-205500-post-inventory-ledger-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-205500-post-inventory-ledger-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-205500-post-inventory-ledger-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211000-post-reconciliation-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211000-post-reconciliation-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211000-post-reconciliation-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211000-post-reconciliation-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-211102-manual/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-211102-manual/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213000-post-merchant-work-orders-page/json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213000-post-merchant-work-orders-page/json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213000-post-merchant-work-orders-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213000-post-merchant-work-orders-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213000-post-merchant-work-orders-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213000-post-merchant-work-orders-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213000-post-merchant-work-orders-page/sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213000-post-merchant-work-orders-page/sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-213257-post-supervisor-review-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-213257-post-supervisor-review-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-214707-post-contract-approval-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-214707-post-contract-approval-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220005-post-risk-alerts-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220005-post-risk-alerts-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220746-manual-request/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220746-manual-request/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220746-manual-request/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220746-manual-request/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220746-manual-request/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220746-manual-request/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220746-manual-request/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220746-manual-request/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220746-manual-request/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220746-manual-request/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220746-manual-request/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220746-manual-request/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-220746-manual-request/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-220746-manual-request/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-222155-post-integration-events-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-222155-post-integration-events-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-222155-post-integration-events-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-222155-post-integration-events-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-222155-post-integration-events-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-222155-post-integration-events-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-222155-post-integration-events-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-222155-post-integration-events-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-222155-post-integration-events-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-222155-post-integration-events-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-222155-post-integration-events-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-222155-post-integration-events-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-222155-post-integration-events-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-222155-post-integration-events-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-224210-post-audit-events-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-224210-post-audit-events-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-224210-post-audit-events-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-224210-post-audit-events-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-224210-post-audit-events-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-224210-post-audit-events-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-224210-post-audit-events-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-224210-post-audit-events-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-224210-post-audit-events-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-224210-post-audit-events-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-224210-post-audit-events-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-224210-post-audit-events-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-224210-post-audit-events-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-224210-post-audit-events-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-230352-post-business-analytics-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-230352-post-business-analytics-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-230352-post-business-analytics-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-230352-post-business-analytics-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-230352-post-business-analytics-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-230352-post-business-analytics-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-230352-post-business-analytics-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-230352-post-business-analytics-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-230352-post-business-analytics-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-230352-post-business-analytics-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-230352-post-business-analytics-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-230352-post-business-analytics-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-230352-post-business-analytics-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-230352-post-business-analytics-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-232044-post-merchant-scope-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-232044-post-merchant-scope-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-232044-post-merchant-scope-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-232044-post-merchant-scope-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-232044-post-merchant-scope-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-232044-post-merchant-scope-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-232044-post-merchant-scope-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-232044-post-merchant-scope-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-232044-post-merchant-scope-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-232044-post-merchant-scope-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-232044-post-merchant-scope-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-232044-post-merchant-scope-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-232044-post-merchant-scope-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-232044-post-merchant-scope-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233450-post-subject-bindings-page/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233450-post-subject-bindings-page/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233450-post-subject-bindings-page/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233450-post-subject-bindings-page/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233450-post-subject-bindings-page/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233450-post-subject-bindings-page/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233450-post-subject-bindings-page/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233450-post-subject-bindings-page/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233450-post-subject-bindings-page/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233450-post-subject-bindings-page/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233450-post-subject-bindings-page/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233450-post-subject-bindings-page/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233450-post-subject-bindings-page/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233450-post-subject-bindings-page/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260616-233901-manual-request/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260616-233901-manual-request/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/json.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/json.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/json.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/json.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/json.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/json.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/sarif.exitcode",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/sarif.exitcode"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/sarif.stderr",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/sarif.stderr"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/sarif.stdout",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/sarif.stdout"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-001615-post-full-admin-generic-closure/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-002925/json.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-002925/json.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-002925/json.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-002925/json.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-002925/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-002925/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-002925/results.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-002925/results.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-002925/sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-002925/sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-002925/sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-002925/sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-002925/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-002925/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-011354/metadata.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-011354/metadata.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-011354/results.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-011354/results.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-011354/stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-011354/stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-011354/stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-011354/stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-011354/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-011354/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-025838-manual-request/exit-code.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-025838-manual-request/exit-code.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-025838-manual-request/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-025838-manual-request/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-025838-manual-request/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-025838-manual-request/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-025838-manual-request/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-025838-manual-request/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-025838-manual-request/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-025838-manual-request/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-031933-post-mockito-agent/exit-code.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-031933-post-mockito-agent/exit-code.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-031933-post-mockito-agent/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-031933-post-mockito-agent/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-031933-post-mockito-agent/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-031933-post-mockito-agent/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-031933-post-mockito-agent/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-031933-post-mockito-agent/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-031933-post-mockito-agent/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-031933-post-mockito-agent/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033605-post-runtime-evidence/exit-code.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033605-post-runtime-evidence/exit-code.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033605-post-runtime-evidence/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033605-post-runtime-evidence/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033605-post-runtime-evidence/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033605-post-runtime-evidence/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033605-post-runtime-evidence/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033605-post-runtime-evidence/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033605-post-runtime-evidence/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033605-post-runtime-evidence/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033923-manual-request/exit-code.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033923-manual-request/exit-code.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033923-manual-request/scan-id.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033923-manual-request/scan-id.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033923-manual-request/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033923-manual-request/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033923-manual-request/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033923-manual-request/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033923-manual-request/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033923-manual-request/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-033923-manual-request/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-033923-manual-request/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-034542-post-nas-drift-gate/exit-code.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-034542-post-nas-drift-gate/exit-code.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-034542-post-nas-drift-gate/scan-id.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-034542-post-nas-drift-gate/scan-id.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-034542-post-nas-drift-gate/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-034542-post-nas-drift-gate/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-034542-post-nas-drift-gate/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-034542-post-nas-drift-gate/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-034542-post-nas-drift-gate/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-034542-post-nas-drift-gate/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-034542-post-nas-drift-gate/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-034542-post-nas-drift-gate/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035346-post-rbac-matrix/exit-code.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035346-post-rbac-matrix/exit-code.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035346-post-rbac-matrix/scan-id.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035346-post-rbac-matrix/scan-id.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035346-post-rbac-matrix/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035346-post-rbac-matrix/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035346-post-rbac-matrix/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035346-post-rbac-matrix/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035346-post-rbac-matrix/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035346-post-rbac-matrix/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035346-post-rbac-matrix/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035346-post-rbac-matrix/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035906-post-doc-consistency-gate/exit-code.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035906-post-doc-consistency-gate/exit-code.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035906-post-doc-consistency-gate/scan-id.txt",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035906-post-doc-consistency-gate/scan-id.txt"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035906-post-doc-consistency-gate/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035906-post-doc-consistency-gate/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035906-post-doc-consistency-gate/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035906-post-doc-consistency-gate/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035906-post-doc-consistency-gate/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035906-post-doc-consistency-gate/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-035906-post-doc-consistency-gate/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-035906-post-doc-consistency-gate/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-040136-manual-p-default-clean/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-040136-manual-p-default-clean/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-040136-manual-p-default-clean/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-040136-manual-p-default-clean/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-040136-manual-p-default-clean/summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-040136-manual-p-default-clean/summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-042739-p-default-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-042739-p-default-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-042739-p-default.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-042739-p-default.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-044736-p-default-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-044736-p-default-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-044736-p-default.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-044736-p-default.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-051035-p-default.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-051035-p-default.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-054351-manual-request/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-054351-manual-request/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-054351-manual-request/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-054351-manual-request/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-054351-manual-request/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-054351-manual-request/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-054351-manual-request/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-054351-manual-request/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-054351-manual-request/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-054351-manual-request/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-054351-manual-request/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-054351-manual-request/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-054351-manual-request/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-054351-manual-request/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-055741-post-current-state-actions/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-055741-post-current-state-actions/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-055741-post-current-state-actions/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060226-post-nas-handoff-verifier/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060749-manual-run/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060749-manual-run/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060749-manual-run/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060749-manual-run/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060749-manual-run/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060749-manual-run/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060749-manual-run/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060749-manual-run/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060749-manual-run/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060749-manual-run/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060749-manual-run/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060749-manual-run/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-060749-manual-run/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-060749-manual-run/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-061130-post-crosslinks-fix/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-062651-post-partial-mock-coverage/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064031-post-owner-action-manifest-links/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064554-post-current-state-owner-links/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064855-manual-request/semgrep-sarif.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064855-manual-request/semgrep-sarif.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064855-manual-request/semgrep-sarif.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064855-manual-request/semgrep-sarif.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064855-manual-request/semgrep-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064855-manual-request/semgrep-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064855-manual-request/semgrep.json",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064855-manual-request/semgrep.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064855-manual-request/semgrep.sarif",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064855-manual-request/semgrep.sarif"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064855-manual-request/semgrep.stderr.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064855-manual-request/semgrep.stderr.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-20260617-064855-manual-request/semgrep.stdout.log",
+      "raw": "A\tsecurity-scans/semgrep-20260617-064855-manual-request/semgrep.stdout.log"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-latest-manual-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-latest-manual-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-latest-summary.json",
+      "raw": "A\tsecurity-scans/semgrep-latest-summary.json"
+    },
+    {
+      "status": "A",
+      "path": "security-scans/semgrep-triage-20260616-v1.md",
+      "raw": "A\tsecurity-scans/semgrep-triage-20260616-v1.md"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/full-admin-mvp.spec.ts",
+      "raw": "A\ttests/e2e/full-admin-mvp.spec.ts"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/full-admin-remaining.spec.ts",
+      "raw": "A\ttests/e2e/full-admin-remaining.spec.ts"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/full-admin-visual.spec.ts",
+      "raw": "A\ttests/e2e/full-admin-visual.spec.ts"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-bar-orders-mobile-chromium-linux.png",
+      "raw": "A\ttests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-bar-orders-mobile-chromium-linux.png"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-dynamic-pricing-mobile-chromium-linux.png",
+      "raw": "A\ttests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-dynamic-pricing-mobile-chromium-linux.png"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-ops-readiness-desktop-chromium-linux.png",
+      "raw": "A\ttests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-ops-readiness-desktop-chromium-linux.png"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-overview-desktop-chromium-linux.png",
+      "raw": "A\ttests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-overview-desktop-chromium-linux.png"
+    },
+    {
+      "status": "M",
+      "path": "tests/e2e/support/mock-api.ts",
+      "raw": "M\ttests/e2e/support/mock-api.ts"
+    },
+    {
+      "status": "M",
+      "path": "tests/e2e/web-ui-acceptance.spec.ts",
+      "raw": "M\ttests/e2e/web-ui-acceptance.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "tests/e2e/web-ui-acceptance.spec.ts-snapshots/dashboard-shell-chromium-linux.png",
+      "raw": "M\ttests/e2e/web-ui-acceptance.spec.ts-snapshots/dashboard-shell-chromium-linux.png"
+    },
+    {
+      "status": "M",
+      "path": "tests/e2e/web-ui-acceptance.spec.ts-snapshots/mobile-dashboard-chromium-linux.png",
+      "raw": "M\ttests/e2e/web-ui-acceptance.spec.ts-snapshots/mobile-dashboard-chromium-linux.png"
+    },
+    {
+      "status": "A",
+      "path": "tests/e2e/web-ui-real-backend.spec.ts",
+      "raw": "A\ttests/e2e/web-ui-real-backend.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "tools/audit-client-openapi-coverage.mjs",
+      "raw": "M\ttools/audit-client-openapi-coverage.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-closed-loop-current-state.mjs",
+      "raw": "A\ttools/generate-closed-loop-current-state.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-domain-ownership-scope-audit.mjs",
+      "raw": "A\ttools/generate-domain-ownership-scope-audit.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-external-evidence-requirement-traceability.mjs",
+      "raw": "A\ttools/generate-external-evidence-requirement-traceability.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-nas-current-state-drift-report.mjs",
+      "raw": "A\ttools/generate-nas-current-state-drift-report.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-nas-diagnostic-report.mjs",
+      "raw": "A\ttools/generate-nas-diagnostic-report.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-partial-requirement-mock-coverage.mjs",
+      "raw": "A\ttools/generate-partial-requirement-mock-coverage.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-production-closure-gap-report.mjs",
+      "raw": "A\ttools/generate-production-closure-gap-report.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/generate-production-evidence-backfill-execution-ledger.mjs",
+      "raw": "M\ttools/generate-production-evidence-backfill-execution-ledger.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/generate-production-evidence-backfill-priority.mjs",
+      "raw": "M\ttools/generate-production-evidence-backfill-priority.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/generate-production-evidence-manifest-templates.mjs",
+      "raw": "M\ttools/generate-production-evidence-manifest-templates.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-production-evidence-owner-execution-packets.mjs",
+      "raw": "A\ttools/generate-production-evidence-owner-execution-packets.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/generate-production-evidence-owner-guides.mjs",
+      "raw": "M\ttools/generate-production-evidence-owner-guides.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-production-evidence-p0-quickstart.mjs",
+      "raw": "A\ttools/generate-production-evidence-p0-quickstart.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/generate-production-evidence-submission-kit.mjs",
+      "raw": "M\ttools/generate-production-evidence-submission-kit.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/generate-production-evidence-submission-status.mjs",
+      "raw": "M\ttools/generate-production-evidence-submission-status.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-production-no-go-resolution-command-center.mjs",
+      "raw": "A\ttools/generate-production-no-go-resolution-command-center.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/generate-production-owner-action-packs.mjs",
+      "raw": "M\ttools/generate-production-owner-action-packs.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-runtime-acceptance-evidence.mjs",
+      "raw": "A\ttools/generate-runtime-acceptance-evidence.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-staged-handoff-manifest.mjs",
+      "raw": "A\ttools/generate-staged-handoff-manifest.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/generate-ui-experience-acceptance-report.mjs",
+      "raw": "A\ttools/generate-ui-experience-acceptance-report.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/prepare-production-evidence-manifest-drafts.mjs",
+      "raw": "A\ttools/prepare-production-evidence-manifest-drafts.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/run-android-p0-smoke.mjs",
+      "raw": "A\ttools/run-android-p0-smoke.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/run-real-backend-ui-e2e.mjs",
+      "raw": "A\ttools/run-real-backend-ui-e2e.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-android-p0-smoke-wrapper.mjs",
+      "raw": "A\ttools/verify-android-p0-smoke-wrapper.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-client-payload-policy.mjs",
+      "raw": "M\ttools/verify-client-payload-policy.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-delivery-gates.mjs",
+      "raw": "M\ttools/verify-delivery-gates.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-final-closed-loop-audit.mjs",
+      "raw": "A\ttools/verify-final-closed-loop-audit.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-full-admin-page-matrix.mjs",
+      "raw": "A\ttools/verify-full-admin-page-matrix.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-nas-it-handoff.mjs",
+      "raw": "A\ttools/verify-nas-it-handoff.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-nas-smb-mount-evidence.mjs",
+      "raw": "M\ttools/verify-nas-smb-mount-evidence.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-p0a-ops-hardening.mjs",
+      "raw": "M\ttools/verify-p0a-ops-hardening.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-blocker-register-no-go-fixtures.mjs",
+      "raw": "A\ttools/verify-production-blocker-register-no-go-fixtures.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-closure-gap-reports.mjs",
+      "raw": "A\ttools/verify-production-closure-gap-reports.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-production-credential-rotation-ledger.mjs",
+      "raw": "M\ttools/verify-production-credential-rotation-ledger.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-evidence-crosslinks.mjs",
+      "raw": "A\ttools/verify-production-evidence-crosslinks.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-evidence-draft-prep-fixtures.mjs",
+      "raw": "A\ttools/verify-production-evidence-draft-prep-fixtures.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-production-evidence-intake-templates.mjs",
+      "raw": "M\ttools/verify-production-evidence-intake-templates.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-evidence-negative-fixtures.mjs",
+      "raw": "A\ttools/verify-production-evidence-negative-fixtures.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-evidence-positive-fixtures.mjs",
+      "raw": "A\ttools/verify-production-evidence-positive-fixtures.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-evidence-positive-propagation-fixtures.mjs",
+      "raw": "A\ttools/verify-production-evidence-positive-propagation-fixtures.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-production-evidence-submissions-guard.mjs",
+      "raw": "M\ttools/verify-production-evidence-submissions-guard.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-production-readiness-evidence.mjs",
+      "raw": "M\ttools/verify-production-readiness-evidence.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-ready-no-go-fixtures.mjs",
+      "raw": "A\ttools/verify-production-ready-no-go-fixtures.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/verify-production-ready-positive-fixtures.mjs",
+      "raw": "A\ttools/verify-production-ready-positive-fixtures.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/verify-t3b-supplier-mock-kit.mjs",
+      "raw": "M\ttools/verify-t3b-supplier-mock-kit.mjs"
+    }
+  ],
+  "diff_stat": " .gitignore                                         |    1 +\n apps/android-terminal/README.md                    |   14 +-\n .../android-app/app/build.gradle.kts               |    1 +\n .../android-app/app/src/main/AndroidManifest.xml   |    1 +\n .../kotlin/com/complex/terminal/MainActivity.kt    |   33 +-\n apps/web/index.html                                |    1 +\n apps/web/package.json                              |   11 +-\n apps/web/src/admin/AdminApp.tsx                    |  221 +\n apps/web/src/admin/adminPageConfigs.ts             |  166 +\n apps/web/src/admin/adminRoutes.ts                  |   38 +\n apps/web/src/admin/client/adminClient.test.ts      |   44 +\n apps/web/src/admin/client/adminClient.ts           |   89 +\n .../src/admin/components/AdminDataState.test.tsx   |   26 +\n apps/web/src/admin/components/AdminDataState.tsx   |   10 +\n apps/web/src/admin/components/AdminPageHeader.tsx  |   12 +\n apps/web/src/admin/components/AuditTrailHint.tsx   |    3 +\n apps/web/src/admin/components/HighRiskConfirm.tsx  |    5 +\n apps/web/src/admin/pages/AccessUsersPage.tsx       |   59 +\n apps/web/src/admin/pages/AdmissionAuditsPage.tsx   |  173 +\n .../src/admin/pages/AmusementGroupBookingsPage.tsx |   86 +\n apps/web/src/admin/pages/AmusementSafetyPage.tsx   |  243 +\n apps/web/src/admin/pages/AmusementSessionsPage.tsx |  105 +\n apps/web/src/admin/pages/AuditEventsPage.tsx       |  194 +\n apps/web/src/admin/pages/BarCommissionsPage.tsx    |  173 +\n apps/web/src/admin/pages/BarOrdersPage.tsx         |  216 +\n apps/web/src/admin/pages/BarTableSessionsPage.tsx  |   61 +\n apps/web/src/admin/pages/BusinessAnalyticsPage.tsx |  173 +\n apps/web/src/admin/pages/ContractApprovalPage.tsx  |  203 +\n apps/web/src/admin/pages/DynamicPricingPage.tsx    |  201 +\n apps/web/src/admin/pages/FinanceArApLedgerPage.tsx |   56 +\n apps/web/src/admin/pages/GenericAdminPage.tsx      |  121 +\n .../web/src/admin/pages/GovernanceTopologyPage.tsx |  118 +\n .../src/admin/pages/IntegrationAdaptersPage.tsx    |   62 +\n apps/web/src/admin/pages/IntegrationEventsPage.tsx |  214 +\n apps/web/src/admin/pages/InventoryLedgerPage.tsx   |  180 +\n apps/web/src/admin/pages/MerchantScopePage.tsx     |  113 +\n .../web/src/admin/pages/MerchantWorkOrdersPage.tsx |  265 +\n apps/web/src/admin/pages/OpsReadinessPage.tsx      |   57 +\n .../src/admin/pages/OrganizationMerchantPage.tsx   |  143 +\n apps/web/src/admin/pages/OverviewPage.tsx          |   43 +\n .../src/admin/pages/PermissionTemplatesPage.tsx    |   51 +\n apps/web/src/admin/pages/ReconciliationPage.tsx    |  149 +\n apps/web/src/admin/pages/RiskAlertsPage.tsx        |  197 +\n apps/web/src/admin/pages/StoredWinePage.tsx        |  172 +\n apps/web/src/admin/pages/SubjectBindingsPage.tsx   |  108 +\n apps/web/src/admin/pages/SupervisorReviewPage.tsx  |  189 +\n apps/web/src/admin/pages/TicketOrdersPage.tsx      |  181 +\n apps/web/src/admin/pages/TicketingPoliciesPage.tsx |   43 +\n apps/web/src/admin/security/PermissionGate.test.ts |   67 +\n apps/web/src/admin/security/PermissionGate.tsx     |   45 +\n apps/web/src/admin/types.ts                        |  559 ++\n apps/web/src/legacy-console/AuthShell.tsx          |   47 +\n apps/web/src/legacy-console/LegacyAppShell.tsx     |  147 +\n apps/web/src/legacy-console/LegacyConsoleApp.tsx   |  313 +\n .../src/legacy-console/LegacyConsoleContent.tsx    |  210 +\n apps/web/src/legacy-console/amusementActions.ts    |   90 +\n apps/web/src/legacy-console/apiClient.test.ts      |   56 +\n apps/web/src/legacy-console/apiClient.ts           |  128 +\n apps/web/src/legacy-console/barActions.ts          |  119 +\n apps/web/src/legacy-console/floorPlanActions.ts    |   83 +\n apps/web/src/legacy-console/formatters.test.ts     |   41 +\n apps/web/src/legacy-console/formatters.ts          |   71 +\n apps/web/src/legacy-console/foundationActions.ts   |   83 +\n .../web/src/legacy-console/pages/AmusementPage.tsx |  134 +\n .../legacy-console/pages/AnalyticsReadOnlyPage.tsx |  116 +\n apps/web/src/legacy-console/pages/BarPage.tsx      |  192 +\n apps/web/src/legacy-console/pages/EventsPage.tsx   |   34 +\n .../web/src/legacy-console/pages/FloorPlanPage.tsx |  204 +\n .../src/legacy-console/pages/FoundationPage.tsx    |  195 +\n .../src/legacy-console/pages/InterfacesPage.tsx    |  176 +\n apps/web/src/legacy-console/pages/SecurityPage.tsx |   63 +\n .../web/src/legacy-console/pages/TicketingPage.tsx |  184 +\n .../legacy-console/riskAndIntegrationActions.ts    |   58 +\n apps/web/src/legacy-console/shell.tsx              |  448 ++\n apps/web/src/legacy-console/snapshotClient.ts      |  365 +\n .../legacy-console/stockMovementRequest.test.ts    |   54 +\n .../web/src/legacy-console/stockMovementRequest.ts |   66 +\n apps/web/src/legacy-console/ticketingActions.ts    |  144 +\n apps/web/src/legacy-console/types.ts               |  411 +\n apps/web/src/legacy-console/ui.tsx                 |   27 +\n apps/web/src/main.tsx                              | 2841 +------\n apps/web/src/styles.css                            |  529 +-\n apps/web/src/test/setup.ts                         |    7 +\n apps/web/tsconfig.tsbuildinfo                      |    2 +-\n apps/web/vite.config.ts                            |    7 +-\n apps/web/vitest.config.ts                          |   13 +\n backend/pom.xml                                    |    7 +\n .../platform/bar/BarAgeVerificationService.java    |   53 +\n .../com/complex/platform/bar/BarBillRecords.java   |  107 +\n .../complex/platform/bar/BarBillingService.java    |  323 +\n .../com/complex/platform/bar/BarEntryService.java  |  142 +\n .../complex/platform/bar/BarOperationExecutor.java |   66 +\n .../com/complex/platform/bar/BarOrderService.java  |  383 +\n .../com/complex/platform/bar/BarReadOperation.java |   42 +\n .../java/com/complex/platform/bar/BarService.java  | 1847 +----\n .../platform/bar/BarTableSessionService.java       |  387 +\n .../com/complex/platform/bar/BarValidation.java    |  132 +\n .../complex/platform/bar/BarWriteOperation.java    |   54 +\n .../platform/evidence/AuditedOperation.java        |   11 +\n .../evidence/AuditedOperationExecutor.java         |  116 +\n .../governance/JdbcPlatformRepository.java         |   33 +-\n .../platform/governance/MerchantRecord.java        |    8 +\n .../platform/governance/PlatformService.java       |    7 +\n .../governance/dto/MerchantProfileRequest.java     |    8 +\n .../review/SupervisorReviewApprovalRequest.java    |   13 +\n .../review/SupervisorReviewController.java         |   54 +\n .../review/SupervisorReviewDecisionRecord.java     |   21 +\n .../review/SupervisorReviewEvaluateRequest.java    |   15 +\n .../review/SupervisorReviewPolicyRecord.java       |   14 +\n .../governance/review/SupervisorReviewService.java |  160 +\n .../platform/ticketing/DynamicPriceResult.java     |    4 +\n .../ticketing/JdbcTicketingRepository.java         |   25 +-\n .../platform/ticketing/TicketCatalogService.java   |  209 +\n .../ticketing/TicketCredentialService.java         |   56 +\n .../ticketing/TicketEntitlementMapper.java         |   25 +\n .../ticketing/TicketOfflinePackageService.java     |   48 +\n .../platform/ticketing/TicketOrderRecord.java      |   43 +\n .../platform/ticketing/TicketOrderService.java     |  260 +\n .../platform/ticketing/TicketPricingService.java   |  316 +\n .../platform/ticketing/TicketRefundService.java    |  144 +\n .../ticketing/TicketVerificationService.java       |  295 +\n .../ticketing/TicketingOperationExecutor.java      |   64 +\n .../platform/ticketing/TicketingReadOperation.java |   41 +\n .../platform/ticketing/TicketingService.java       | 1421 +---\n .../ticketing/TicketingWriteOperation.java         |   51 +\n .../platform/ticketing/dto/TicketOrderRequest.java |   30 +-\n .../V041__ticket_order_dynamic_pricing_trace.sql   |   11 +\n .../V042__merchant_profile_extended_fields.sql     |   11 +\n .../V043__supervisor_review_permissions.sql        |   21 +\n .../amusement/AmusementJdbcIntegrationTests.java   |    2 +-\n .../AmusementSafetyJdbcIntegrationTests.java       |    2 +-\n .../analytics/AnalyticsJdbcIntegrationTests.java   |    2 +-\n .../platform/bar/BarJdbcIntegrationTests.java      |    2 +-\n .../com/complex/platform/bar/BarServiceTests.java  |  314 +-\n .../compliance/ComplianceJdbcIntegrationTests.java |    2 +-\n .../customer/CustomerJdbcIntegrationTests.java     |    2 +-\n .../floorplan/FloorPlanJdbcIntegrationTests.java   |    2 +-\n .../governance/PlatformControllerTests.java        |   15 +\n .../governance/PlatformJdbcIntegrationTests.java   |   35 +-\n .../platform/governance/PlatformServiceTests.java  |   22 +\n .../review/SupervisorReviewControllerTests.java    |  208 +\n .../review/SupervisorReviewServiceTests.java       |  191 +\n .../IntegrationJdbcIntegrationTests.java           |    2 +-\n .../inventory/InventoryJdbcIntegrationTests.java   |    2 +-\n .../MerchantBillingJdbcIntegrationTests.java       |    2 +-\n .../MerchantServiceJdbcIntegrationTests.java       |    2 +-\n .../platform/ticketing/TicketingServiceTests.java  |  233 +-\n docs/00-current-effective-document-entry-v0.1.md   |   55 +-\n .../closed-loop-current-state-snapshot-latest.json |  484 ++\n docs/closed-loop-current-state-snapshot-v0.1.md    |  147 +\n ...oop-implementation-ui-acceptance-report-v0.1.md |  126 +\n docs/code-implementation-acceptance-audit-v0.1.md  |   87 +\n docs/codebase-architecture-zoom-out-audit-v0.1.md  |   57 +\n docs/delivery-package-manifest-v0.1.md             |   71 +-\n docs/delivery-readiness-gates-v0.1.md              |   86 +-\n ...lopment-documentation-adversarial-audit-v0.1.md |  154 +\n docs/development-documentation-audit-map-v0.1.csv  |  298 +\n docs/development-ready-spec-draft-v0.1.md          |   94 +\n docs/domain-ownership-scope-audit-v0.1.csv         |  151 +\n ...ernal-evidence-requirement-traceability-v0.1.md |  131 +\n docs/final-closed-loop-acceptance-audit-v0.1.md    |  124 +\n ...ull-admin-mvp-code-implementation-audit-v0.1.md |   48 +\n docs/full-admin-mvp-coding-package-v0.1.md         |  332 +\n docs/full-admin-mvp-coding-task-breakdown-v0.1.csv |   10 +\n ...ull-admin-mvp-requirements-code-matrix-v0.1.csv |   10 +\n ...ull-admin-page-permission-field-matrix-v0.1.csv |   31 +\n ...min-remaining-code-implementation-audit-v0.1.md |   72 +\n ...min-remaining-requirements-code-matrix-v0.1.csv |   23 +\n docs/full-admin-srs-v0.1.md                        |  191 +\n docs/full-admin-ui-acceptance-matrix-v0.1.md       |   87 +\n docs/gstack-acceptance-ship-audit-v0.1.md          |   67 +\n docs/nas-backup-and-restore-runbook-v0.1.md        |   33 +-\n docs/nas-current-state-drift-report-v0.1.md        |   55 +\n docs/nas-diagnostic-report-v0.1.md                 |   58 +\n docs/nas-it-controlled-mount-handoff-v0.1.md       |   96 +\n docs/openapi/openapi-p0.json                       | 4582 +++++++-----\n docs/openapi/openapi-p0.yaml                       | 7906 +++++++++++---------\n docs/p0-openapi-contract-closure-appendix-v0.1.md  |   50 +-\n .../p0-openapi-operation-acceptance-matrix-v0.1.md |   53 +-\n docs/p1-coding-completion-audit-v0.1.md            |    2 +-\n docs/p2-coding-candidate-audit-v0.1.md             |    2 +-\n docs/p2-current-diff-adversarial-review-v0.1.md    |    9 +-\n docs/p2-full-completion-audit-v0.1.md              |    2 +-\n .../p2-ticket-dynamic-pricing-api-contract-v0.1.md |    6 +-\n ...ticket-dynamic-pricing-completion-audit-v0.1.md |    6 +-\n docs/partial-requirement-mock-coverage-latest.json |  640 ++\n docs/partial-requirement-mock-coverage-v0.1.md     |  151 +\n .../production-evidence-closure-gap-report-v0.1.md |  217 +\n ...uction-evidence-owner-execution-packets-v0.1.md |   62 +\n docs/production-evidence-p0-quickstart-v0.1.md     |  105 +\n ...existing-evidence-to-manifest-gap-audit-v0.1.md |   73 +\n docs/production-owner-action-packs-v0.1.md         |  105 +-\n ...al-evidence-requirement-traceability-latest.csv |   71 +\n ...l-evidence-requirement-traceability-latest.json | 2404 ++++++\n .../nas-current-state-drift-latest.json            |   53 +\n .../nas-diagnostic-latest.json                     |  113 +\n .../owner-execution-packets/finance.md             |   88 +\n .../owner-execution-packets/it-ops-security.md     |  126 +\n .../owner-execution-packets/operations-legal.md    |   83 +\n .../procurement-supplier.md                        |   90 +\n .../owner-execution-packets/technical-owner.md     |   84 +\n ...on-evidence-owner-execution-packets-latest.json | 1996 +++++\n .../production-evidence-p0-quickstart-latest.csv   |   32 +\n .../production-evidence-p0-quickstart-latest.json  |  974 +++\n ...tion-no-go-resolution-command-center-latest.csv |    1 +\n ...ion-no-go-resolution-command-center-latest.json |  411 +\n ...duction-no-go-resolution-command-center-v0.1.md |  129 +\n .../production-owner-action-packs-latest.json      | 2448 +++++-\n .../security-baseline-latest.json                  |    4 +-\n ...equirements-code-implementation-matrix-v0.1.csv |   97 +\n docs/runtime-acceptance-evidence-latest.json       |  123 +\n docs/runtime-acceptance-evidence-v0.1.md           |   70 +\n ...6-06-15-p2-baseline-protection-and-web-entry.md |    4 +-\n .../plans/2026-06-15-p2-ticket-dynamic-pricing.md  |    4 +-\n docs/ui-automation-acceptance-report-v0.1.md       |   89 +-\n ops/160/complex-backup.sh                          |   11 +-\n ops/160/complex-nas-preflight.sh                   |   15 +-\n ops/160/complex-nas-system-mount.example.sh        |  167 +\n ops/160/complex-restore-drill.sh                   |   18 +-\n ops/160/complex-runtime-config-check.sh            |    6 +-\n package-lock.json                                  | 1401 +++-\n package.json                                       |   53 +-\n playwright.config.ts                               |    1 +\n playwright.real-backend.config.ts                  |   32 +\n security-scans/findings-register-v1.md             |    4 +-\n security-scans/formal-security-baseline-v1.md      |   16 +-\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../summary.json                                   |   14 +\n security-scans/semgrep-20260616-153210/context.txt |    7 +\n .../logs/apiiro-validate.log                       |   31 +\n .../logs/atlassian-validate.log                    |    3 +\n .../logs/elttam-validate.log                       |  111 +\n .../logs/federicodotta-validate.log                |    3 +\n .../logs/kondukto-validate.log                     |    5 +\n .../semgrep-20260616-153210/logs/official-json.log |   35 +\n .../logs/official-sarif.log                        |   35 +\n .../logs/third-party-skipped.log                   |    4 +\n .../logs/thirdparty-atlassian-json.log             |   30 +\n .../logs/thirdparty-atlassian-sarif.log            |   30 +\n .../logs/thirdparty-federicodotta-json.log         |   30 +\n .../logs/thirdparty-federicodotta-sarif.log        |   30 +\n .../logs/trailofbits-clone.log                     |    1 +\n .../logs/trailofbits-validate.log                  |    9 +\n .../raw/official-json.exitcode                     |    1 +\n .../raw/official-sarif.exitcode                    |    1 +\n .../semgrep-20260616-153210/raw/official.json      |    1 +\n .../semgrep-20260616-153210/raw/official.sarif     |    1 +\n .../raw/thirdparty-atlassian-json.exitcode         |    1 +\n .../raw/thirdparty-atlassian-sarif.exitcode        |    1 +\n .../raw/thirdparty-atlassian.json                  |    1 +\n .../raw/thirdparty-atlassian.sarif                 |    1 +\n .../raw/thirdparty-federicodotta-json.exitcode     |    1 +\n .../raw/thirdparty-federicodotta-sarif.exitcode    |    1 +\n .../raw/thirdparty-federicodotta.json              |    1 +\n .../raw/thirdparty-federicodotta.sarif             |    1 +\n .../results/findings.deduped.json                  |  187 +\n .../semgrep-20260616-153210/results/results.sarif  |    1 +\n .../results/sarif-parse-errors.json                |    1 +\n .../semgrep-20260616-153210/results/summary.json   |  242 +\n .../semgrep-20260616-153210/rulesets.txt           |   32 +\n .../semgrep-20260616-153210/third-party-repos.txt  |    6 +\n .../semgrep-json.stderr                            |   39 +\n .../semgrep-json.stdout                            |    0\n .../semgrep-results.json                           |    1 +\n .../semgrep-results.sarif                          |    1 +\n .../semgrep-sarif.stderr                           |   36 +\n .../semgrep-sarif.stdout                           |    0\n .../summary.json                                   |   20 +\n security-scans/semgrep-20260616-163046-manual.json |    1 +\n security-scans/semgrep-20260616-163046-manual.log  |   39 +\n .../semgrep-20260616-163948-post-adm-mer-001.json  |    1 +\n .../semgrep-20260616-163948-post-adm-mer-001.log   |   39 +\n .../semgrep-20260616-164602-post-bar-refactor.json |    1 +\n .../semgrep-20260616-164602-post-bar-refactor.log  |   39 +\n .../semgrep-json.stderr                            |   37 +\n .../semgrep-json.stdout                            |    0\n .../semgrep-results.json                           |    1 +\n .../semgrep-results.sarif                          |    1 +\n .../semgrep-sarif.stderr                           |   37 +\n .../semgrep-sarif.stdout                           |    0\n .../summary.json                                   |    9 +\n .../semgrep-json.stderr                            |   37 +\n .../semgrep-json.stdout                            |    0\n .../semgrep-results.json                           |    1 +\n .../semgrep-results.sarif                          |    1 +\n .../semgrep-sarif.stderr                           |   37 +\n .../semgrep-sarif.stdout                           |    0\n .../summary.json                                   |    9 +\n .../semgrep-json.stderr                            |   40 +\n .../semgrep-json.stdout                            |    0\n .../semgrep-results.json                           |    1 +\n .../semgrep-results.sarif                          |    1 +\n .../semgrep-sarif.stderr                           |   37 +\n .../semgrep-sarif.stdout                           |    0\n .../summary.json                                   |   24 +\n .../semgrep-json.stderr                            |   40 +\n .../semgrep-json.stdout                            |    0\n .../semgrep-results.json                           |    1 +\n .../semgrep-results.sarif                          |    1 +\n .../semgrep-sarif.stderr                           |   37 +\n .../semgrep-sarif.stdout                           |    0\n .../summary.json                                   |   24 +\n .../semgrep-json.stderr                            |   40 +\n .../semgrep-json.stdout                            |    0\n .../semgrep-results.json                           |    1 +\n .../semgrep-results.sarif                          |    1 +\n .../semgrep-sarif.stderr                           |   37 +\n .../semgrep-sarif.stdout                           |    0\n .../summary.json                                   |   24 +\n .../semgrep-sarif.stderr.log                       |   37 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-20260616-181006-current/semgrep.json   |    1 +\n .../semgrep-20260616-181006-current/semgrep.sarif  |    1 +\n .../semgrep.stderr.log                             |   40 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-20260616-181006-current/summary.json   |    8 +\n .../excluded-bash-syntax.stderr.log                |    0\n .../excluded-bash-syntax.stdout.log                |    0\n .../semgrep-sarif.stderr.log                       |   37 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   37 +\n .../semgrep.stdout.log                             |    0\n .../excluded-bash-syntax.stderr.log                |    0\n .../excluded-bash-syntax.stdout.log                |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   13 +\n .../excluded-bash-syntax.stderr.log                |    0\n .../excluded-bash-syntax.stdout.log                |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   13 +\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   10 +\n .../semgrep-20260616-192810-manual/semgrep.json    |    1 +\n .../semgrep-20260616-192810-manual/summary.json    |   11 +\n .../semgrep.json                                   |    1 +\n .../summary.json                                   |   12 +\n .../semgrep.json                                   |    1 +\n .../summary.json                                   |   12 +\n .../semgrep.json                                   |    1 +\n .../summary.json                                   |   12 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../summary.json                                   |   14 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../summary.json                                   |   14 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../summary.json                                   |   14 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../summary.json                                   |   14 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../semgrep-20260616-211102-manual/json.exitcode   |    1 +\n .../semgrep-20260616-211102-manual/json.stderr     |   39 +\n .../semgrep-20260616-211102-manual/json.stdout     |    0\n .../semgrep-20260616-211102-manual/results.json    |    1 +\n .../semgrep-20260616-211102-manual/results.sarif   |    1 +\n .../semgrep-20260616-211102-manual/sarif.exitcode  |    1 +\n .../semgrep-20260616-211102-manual/sarif.stderr    |   36 +\n .../semgrep-20260616-211102-manual/sarif.stdout    |    0\n .../semgrep-20260616-211102-manual/summary.json    |   16 +\n .../json.exitcode                                  |    1 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.exitcode                                 |    1 +\n .../json.exitcode                                  |    1 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    0\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.exitcode                                 |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    0\n .../summary.json                                   |   16 +\n .../json.exitcode                                  |    1 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    0\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.exitcode                                 |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    0\n .../summary.json                                   |   16 +\n .../json.exitcode                                  |    1 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    0\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.exitcode                                 |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    0\n .../summary.json                                   |   16 +\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   17 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    0\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    0\n .../summary.json                                   |   17 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    0\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    0\n .../summary.json                                   |   17 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    1 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    1 +\n .../summary.json                                   |   17 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    1 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    1 +\n .../summary.json                                   |   17 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    1 +\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    1 +\n .../summary.json                                   |   17 +\n .../json.exitcode                                  |    1 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    0\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.exitcode                                 |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    0\n .../summary.json                                   |   14 +\n .../json.exitcode                                  |    1 +\n .../json.stderr                                    |   39 +\n .../json.stdout                                    |    0\n .../results.json                                   |    1 +\n .../results.sarif                                  |    1 +\n .../sarif.exitcode                                 |    1 +\n .../sarif.stderr                                   |   36 +\n .../sarif.stdout                                   |    0\n .../summary.json                                   |   18 +\n .../semgrep-20260617-002925/json.stderr.log        |   39 +\n .../semgrep-20260617-002925/json.stdout.log        |    0\n .../semgrep-20260617-002925/results.json           |    1 +\n .../semgrep-20260617-002925/results.sarif          |    1 +\n .../semgrep-20260617-002925/sarif.stderr.log       |   36 +\n .../semgrep-20260617-002925/sarif.stdout.log       |    0\n .../semgrep-20260617-002925/summary.json           |   15 +\n .../semgrep-20260617-011354/metadata.txt           |    7 +\n .../semgrep-20260617-011354/results.json           |    1 +\n security-scans/semgrep-20260617-011354/stderr.log  |   39 +\n security-scans/semgrep-20260617-011354/stdout.log  |    0\n .../semgrep-20260617-011354/summary.json           |   12 +\n .../exit-code.txt                                  |    1 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   12 +\n .../exit-code.txt                                  |    1 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   12 +\n .../exit-code.txt                                  |    1 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   12 +\n .../exit-code.txt                                  |    1 +\n .../scan-id.txt                                    |    1 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   13 +\n .../exit-code.txt                                  |    1 +\n .../scan-id.txt                                    |    1 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   13 +\n .../exit-code.txt                                  |    1 +\n .../scan-id.txt                                    |    1 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   13 +\n .../exit-code.txt                                  |    1 +\n .../scan-id.txt                                    |    1 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../summary.json                                   |   13 +\n .../semgrep.json                                   |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../summary.json                                   |   15 +\n .../semgrep-20260617-042739-p-default-summary.json |   13 +\n .../semgrep-20260617-042739-p-default.json         |    1 +\n .../semgrep-20260617-044736-p-default-summary.json |   13 +\n .../semgrep-20260617-044736-p-default.json         |    1 +\n .../semgrep-20260617-051035-p-default.json         |    1 +\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           |   14 +\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           |   14 +\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           |   14 +\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           |    9 +\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           |    9 +\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           | 1539 ++++\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           | 1545 ++++\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           | 1551 ++++\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n .../semgrep-sarif.stderr.log                       |   36 +\n .../semgrep-sarif.stdout.log                       |    0\n .../semgrep-summary.json                           | 1567 ++++\n .../semgrep.json                                   |    1 +\n .../semgrep.sarif                                  |    1 +\n .../semgrep.stderr.log                             |   39 +\n .../semgrep.stdout.log                             |    0\n security-scans/semgrep-latest-manual-summary.json  |   15 +\n security-scans/semgrep-latest-summary.json         | 1567 ++++\n security-scans/semgrep-triage-20260616-v1.md       |   39 +\n tests/e2e/full-admin-mvp.spec.ts                   |  138 +\n tests/e2e/full-admin-remaining.spec.ts             |  529 ++\n tests/e2e/full-admin-visual.spec.ts                |   71 +\n ...full-admin-bar-orders-mobile-chromium-linux.png |  Bin 0 -> 108985 bytes\n ...admin-dynamic-pricing-mobile-chromium-linux.png |  Bin 0 -> 111444 bytes\n ...-admin-ops-readiness-desktop-chromium-linux.png |  Bin 0 -> 137846 bytes\n .../full-admin-overview-desktop-chromium-linux.png |  Bin 0 -> 140061 bytes\n tests/e2e/support/mock-api.ts                      |  492 +-\n tests/e2e/web-ui-acceptance.spec.ts                |  107 +-\n .../dashboard-shell-chromium-linux.png             |  Bin 73705 -> 172555 bytes\n .../mobile-dashboard-chromium-linux.png            |  Bin 71334 -> 168544 bytes\n tests/e2e/web-ui-real-backend.spec.ts              |   83 +\n tools/audit-client-openapi-coverage.mjs            |    4 +\n tools/generate-closed-loop-current-state.mjs       |  464 ++\n tools/generate-domain-ownership-scope-audit.mjs    |  174 +\n ...-external-evidence-requirement-traceability.mjs |  417 ++\n tools/generate-nas-current-state-drift-report.mjs  |  250 +\n tools/generate-nas-diagnostic-report.mjs           |  345 +\n .../generate-partial-requirement-mock-coverage.mjs |  234 +\n tools/generate-production-closure-gap-report.mjs   |  348 +\n ...oduction-evidence-backfill-execution-ledger.mjs |    6 +-\n ...erate-production-evidence-backfill-priority.mjs |    6 +-\n ...rate-production-evidence-manifest-templates.mjs |    6 +-\n ...production-evidence-owner-execution-packets.mjs |  417 ++\n .../generate-production-evidence-owner-guides.mjs  |    4 +-\n .../generate-production-evidence-p0-quickstart.mjs |  276 +\n ...generate-production-evidence-submission-kit.mjs |    4 +-\n ...erate-production-evidence-submission-status.mjs |    4 +-\n ...-production-no-go-resolution-command-center.mjs |  356 +\n tools/generate-production-owner-action-packs.mjs   |   70 +-\n tools/generate-runtime-acceptance-evidence.mjs     |  358 +\n tools/generate-staged-handoff-manifest.mjs         |  260 +\n tools/generate-ui-experience-acceptance-report.mjs |  255 +\n ...prepare-production-evidence-manifest-drafts.mjs |  235 +\n tools/run-android-p0-smoke.mjs                     |  134 +\n tools/run-real-backend-ui-e2e.mjs                  |  124 +\n tools/verify-android-p0-smoke-wrapper.mjs          |   41 +\n tools/verify-client-payload-policy.mjs             |   22 +-\n tools/verify-delivery-gates.mjs                    |  158 +-\n tools/verify-final-closed-loop-audit.mjs           |  267 +\n tools/verify-full-admin-page-matrix.mjs            |  160 +\n tools/verify-nas-it-handoff.mjs                    |  190 +\n tools/verify-nas-smb-mount-evidence.mjs            |    6 +-\n tools/verify-p0a-ops-hardening.mjs                 |    2 +-\n ...-production-blocker-register-no-go-fixtures.mjs |  182 +\n tools/verify-production-closure-gap-reports.mjs    |  145 +\n ...erify-production-credential-rotation-ledger.mjs |    2 +-\n tools/verify-production-evidence-crosslinks.mjs    |  232 +\n ...ify-production-evidence-draft-prep-fixtures.mjs |   96 +\n ...verify-production-evidence-intake-templates.mjs |    6 +-\n ...erify-production-evidence-negative-fixtures.mjs |  183 +\n ...erify-production-evidence-positive-fixtures.mjs |   97 +\n ...tion-evidence-positive-propagation-fixtures.mjs |  145 +\n ...erify-production-evidence-submissions-guard.mjs |    8 +-\n tools/verify-production-readiness-evidence.mjs     |    4 +-\n tools/verify-production-ready-no-go-fixtures.mjs   |  153 +\n .../verify-production-ready-positive-fixtures.mjs  |  193 +\n tools/verify-t3b-supplier-mock-kit.mjs             |    5 +-\n 655 files changed, 59145 insertions(+), 11600 deletions(-)"
+}

@@ -1,0 +1,15 @@
+{
+  "scan_dir": "security-scans/semgrep-20260617-002925",
+  "json_exit_code": 0,
+  "json_exitcode": 0,
+  "sarif_exit_code": 0,
+  "sarif_exitcode": 0,
+  "generated_at": "2026-06-17T00:29:39+00:00",
+  "results": 0,
+  "findings": 0,
+  "results_count": 0,
+  "errors": 0,
+  "errors_count": 0,
+  "paths_scanned": 1401,
+  "scanned_count": 1401
+}

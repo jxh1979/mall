@@ -1,5 +1,6 @@
 package com.complex.platform.governance.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public record MerchantProfileRequest(
@@ -13,6 +14,13 @@ public record MerchantProfileRequest(
         String settlementEntityId,
         String contactName,
         String contactPhone,
+        String mallBlockCode,
+        BigDecimal areaSquareMeter,
+        BigDecimal leasedAreaSquareMeter,
+        String secondaryContactName,
+        String secondaryContactPhone,
+        BigDecimal rentPerSquareMeter,
+        String cooperationForm,
         String status
 ) {
 }

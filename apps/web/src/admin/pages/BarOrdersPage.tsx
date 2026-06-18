@@ -1,0 +1,218 @@
+import React from "react";
+import { AdminDataState } from "../components/AdminDataState";
+import { AdminPageHeader } from "../components/AdminPageHeader";
+import { AuditTrailHint } from "../components/AuditTrailHint";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import { useAdminResource } from "../hooks/useAdminResource";
+import { useSelectedRow } from "../hooks/useSelectedRow";
+import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
+
+const TEXT = {
+  ordered: "\u5df2\u70b9\u5355",
+  billed: "\u5df2\u51fa\u8d26",
+  delivered: "\u5df2\u51fa\u54c1",
+  paid: "\u5df2\u652f\u4ed8",
+  open: "\u8fdb\u884c\u4e2d",
+  unset: "\u672a\u6807\u8bb0",
+  loadFailed: "\u9152\u5427\u8ba2\u5355\u6570\u636e\u8bfb\u53d6\u5931\u8d25",
+  noOrder: "\u5f53\u524d\u6ca1\u6709\u53ef\u64cd\u4f5c\u8ba2\u5355\u3002",
+  actionFailed: "\u9152\u5427\u8ba2\u5355\u64cd\u4f5c\u5931\u8d25",
+  billRequired: "\u9700\u5148\u751f\u6210\u8d26\u5355\u540e\u624d\u80fd\u7ed3\u7b97\u3002",
+  title: "\u8ba2\u5355/\u51fa\u54c1/\u8d26\u5355",
+  description: "\u628a\u9152\u5427\u70b9\u5355\u3001\u51fa\u54c1\u3001\u8d26\u5355\u3001\u7ed3\u7b97\u548c\u9500\u552e\u63d0\u6210\u53e3\u5f84\u653e\u5728\u540c\u4e00\u64cd\u4f5c\u9762\uff1b\u62c6\u5355\u3001\u5408\u5355\u3001\u6302\u8d26\u7ee7\u7eed\u6309\u589e\u5f3a POS \u80fd\u529b\u6269\u5c55\u3002",
+  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/bar/orders\uff1b\u751f\u6210\u8d26\u5355 POST /api/v1/bar/orders/{order_id}/bill\uff1b\u51fa\u54c1 POST /api/v1/bar/orders/{order_id}/deliver\uff1b\u7ed3\u7b97 POST /api/v1/bar/bills/{bill_id}/settle\u3002",
+  orderCount: "\u8ba2\u5355\u6570",
+  currentRows: "\u5f53\u524d\u5217\u8868\u8bb0\u5f55",
+  openOrders: "\u672a\u5b8c\u7ed3",
+  openOrdersHelp: "\u672a\u652f\u4ed8\u6216\u672a\u53d6\u6d88",
+  bill: "\u8d26\u5355",
+  billHelp: "\u5df2\u6709\u5173\u8054\u8d26\u5355",
+  commission: "\u9500\u552e\u63d0\u6210",
+  commissionHelp: "\u9500\u552e\u4eba\u5458\u6309 15%",
+  amount: "\u8ba2\u5355\u91d1\u989d",
+  amountHelp: "\u4e0d\u542b\u901a\u7968\u6743\u76ca\u62b5\u6263",
+  selectedOrder: "\u9009\u4e2d\u8ba2\u5355",
+  noTable: "\u672a\u9009\u62e9\u5361\u5ea7",
+  createBill: "\u751f\u6210\u8d26\u5355",
+  deliver: "\u6807\u8bb0\u51fa\u54c1",
+  settle: "\u7ed3\u7b97\u8d26\u5355",
+  posBoundary: "\u62c6\u5355 / \u5408\u5355 / \u6302\u8d26 / \u4f4e\u6d88\u8865\u9f50\uff1aP1 \u589e\u5f3a POS\uff0c\u5f53\u524d\u9875\u4fdd\u7559\u8d26\u5355\u95ed\u73af\u5165\u53e3",
+  select: "\u9009\u62e9",
+  orderNo: "\u8ba2\u5355\u53f7",
+  table: "\u5361\u5ea7",
+  orderStatus: "\u8ba2\u5355\u72b6\u6001",
+  billStatus: "\u8d26\u5355",
+  commissionBasis: "\u63d0\u6210\u53e3\u5f84",
+  time: "\u65f6\u95f4",
+  noBill: "\u672a\u751f\u6210",
+  sales15: "\u9500\u552e\u4eba\u5458 15%",
+  nonSales: "\u975e\u9500\u552e",
+  billNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u8d26\u5355",
+  deliverNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u54c1",
+  settleNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u7ed3\u7b97",
+};
+
+const ORDER_STATUS_LABEL: Record<string, string> = {
+  ordered: TEXT.ordered,
+  billed: TEXT.billed,
+  delivered: TEXT.delivered,
+  paid: TEXT.paid,
+  open: TEXT.open,
+};
+
+function displayStatus(value: string | undefined) {
+  if (!value) return TEXT.unset;
+  return ORDER_STATUS_LABEL[value] ?? value;
+}
+
+function formatAmount(amountCent: number | undefined) {
+  const amount = Number(amountCent ?? 0) / 100;
+  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount);
+}
+
+function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
+  return order?.bills?.[0] ?? (order?.billId ? { id: order.billId, status: "created" } : undefined);
+}
+
+function firstBillId(order: BarOrderRow | undefined) {
+  return firstBill(order)?.id ?? order?.billId ?? "";
+}
+
+export function BarOrdersPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+  const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
+  const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
+  const [formError, setFormError] = React.useState("");
+  const [busyAction, setBusyAction] = React.useState("");
+
+  const { loading, error, reload } = useAdminResource(
+    async () => {
+      const rows = await api.get<BarOrderRow[]>("/api/v1/bar/orders");
+      setOrders(rows);
+    },
+    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
+  );
+
+
+  const openOrders = orders.filter((order) => !["paid", "cancelled"].includes(order.status ?? "")).length;
+  const billCount = orders.filter((order) => firstBill(order)).length;
+  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0);
+  const salesCommissionOrders = orders.filter((order) => order.sellerRole === "sales" || order.commissionRate === "15%").length;
+
+  async function runOrderAction(action: string, request: () => Promise<unknown>) {
+    if (!selectedOrder) {
+      setFormError(TEXT.noOrder);
+      return;
+    }
+    setBusyAction(action);
+    setFormError("");
+    setGlobalError(null);
+    try {
+      const result = await request();
+      setActionResult({ action, orderId: selectedOrder.id, result });
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : TEXT.actionFailed;
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action, orderId: selectedOrder.id, status: "failed", message });
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function createBill() {
+    await runOrderAction("bar_bill_created", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/bill`, { operatorNote: TEXT.billNote }));
+  }
+
+  async function markDelivered() {
+    await runOrderAction("bar_order_delivered", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/deliver`, {
+      operatorNote: TEXT.deliverNote,
+      deliveryPhotoAttachmentIds: ["att-admin-delivery-1"],
+    }));
+  }
+
+  function validateSettle() {
+    if (!selectedOrder) {
+      setFormError(TEXT.noOrder);
+      return false;
+    }
+    if (!firstBillId(selectedOrder)) {
+      setFormError(TEXT.billRequired);
+      return false;
+    }
+    return true;
+  }
+
+  async function settleBill() {
+    const billId = firstBillId(selectedOrder);
+    if (!billId) {
+      setFormError(TEXT.billRequired);
+      return;
+    }
+    await runOrderAction("bar_bill_settled", () => api.post(`/api/v1/bar/bills/${billId}/settle`, {
+      paymentId: "payment-admin-web",
+      settlementAmountCent: selectedOrder?.totalAmount ?? 0,
+      operatorNote: TEXT.settleNote,
+    }));
+  }
+
+  return (
+    <section data-testid="bar-orders-page">
+      <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      <div className="admin-generic-evidence" data-testid="bar-orders-evidence">{TEXT.evidence}</div>
+      <AuditTrailHint event="bar.order.read / bar.order.bill / bar.order.deliver / bar.bill.settle" />
+      <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
+        <div className="admin-kpi-grid" data-testid="bar-orders-summary">
+          <div className="admin-kpi-card"><span>{TEXT.orderCount}</span><strong>{orders.length}</strong><small>{TEXT.currentRows}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.openOrders}</span><strong>{openOrders}</strong><small>{TEXT.openOrdersHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.bill}</span><strong>{billCount}</strong><small>{TEXT.billHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.commission}</span><strong>{salesCommissionOrders}</strong><small>{TEXT.commissionHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong>{formatAmount(totalAmount)}</strong><small>{TEXT.amountHelp}</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong>{selectedOrder?.orderNo ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
+        </div>
+
+        <div className="admin-form-row" data-testid="bar-order-actions">
+          <button type="button" data-testid="bar-order-create-bill" disabled={busyAction !== ""} onClick={() => void createBill()}>{TEXT.createBill}</button>
+          <button type="button" data-testid="bar-order-deliver" disabled={busyAction !== ""} onClick={() => void markDelivered()}>{TEXT.deliver}</button>
+          <HighRiskConfirm
+            label={TEXT.settle}
+            impact="将对选中账单发起资金结算并写入支付/结算留痕，结算后不可撤销。"
+            disabled={busyAction !== ""}
+            precheck={validateSettle}
+            onConfirm={() => void settleBill()}
+            data-testid="bar-order-settle"
+          />
+          <span className="admin-muted-action" data-testid="bar-order-pos-boundary">{TEXT.posBoundary}</span>
+        </div>
+        {formError ? <div data-testid="bar-orders-error" className="admin-inline-error">{formError}</div> : null}
+
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="bar-orders-table">
+            <thead>
+              <tr>
+                <th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.orderStatus}</th><th>{TEXT.billStatus}</th><th>{TEXT.amount}</th><th>{TEXT.commissionBasis}</th><th>{TEXT.time}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => {
+                const bill = firstBill(order);
+                return (
+                  <tr key={order.id}>
+                    <td><input type="radio" data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
+                    <td>{order.orderNo ?? order.id}</td>
+                    <td>{order.tableId ?? "-"}</td>
+                    <td>{displayStatus(order.status)}</td>
+                    <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
+                    <td>{formatAmount(order.totalAmount)}</td>
+                    <td>{order.sellerRole === "sales" ? TEXT.sales15 : `${TEXT.nonSales} ${order.commissionRate ?? "10%"}`}</td>
+                    <td>{order.createdAt ?? "-"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </AdminDataState>
+    </section>
+  );
+}

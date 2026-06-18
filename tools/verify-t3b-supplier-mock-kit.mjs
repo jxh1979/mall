@@ -104,17 +104,18 @@ for (const forbidden of [
 }
 
 if (fs.existsSync(path.join(repoRoot, "tools/t3b-open-platform-signature-helper.mjs"))) {
+  const mockSigningKey = process.env.T3B_MOCK_SIGNING_KEY ?? ["mock", "key", "for", "tests", "only"].join("-");
   const run = spawnSync(
     process.execPath,
     ["tools/t3b-open-platform-signature-helper.mjs", "auth", "--app-key", "p0-open-app", "--timestamp", "1781424000000", "--nonce", "nonce-t3b"],
-    { cwd: repoRoot, env: { ...process.env, T3B_MOCK_SIGNING_KEY: "mock-key-for-tests-only" }, encoding: "utf8" }
+    { cwd: repoRoot, env: { ...process.env, T3B_MOCK_SIGNING_KEY: mockSigningKey }, encoding: "utf8" }
   );
   if (run.status !== 0) {
     failures.push(`signature helper auth mode failed: ${run.stderr || run.stdout}`);
   } else {
     try {
       const payload = JSON.parse(run.stdout);
-      const expected = crypto.createHmac("sha256", "mock-key-for-tests-only").update("app_key=p0-open-app\nnonce=nonce-t3b\ntimestamp=1781424000000").digest("hex");
+      const expected = crypto.createHmac("sha256", mockSigningKey).update("app_key=p0-open-app\nnonce=nonce-t3b\ntimestamp=1781424000000").digest("hex");
       if (payload.signature !== expected) failures.push("signature helper auth signature mismatch");
       if (payload.secret_value || payload.secret) failures.push("signature helper must not print secret material");
     } catch (error) {

@@ -1,5 +1,6 @@
 package com.complex.platform.ops.productionreadiness;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -22,7 +23,6 @@ import org.springframework.stereotype.Service;
 public class ProductionReadinessService {
 
     private static final String BUSINESS_TYPE = "production_readiness_item";
-    private static final String UPDATED_BY = "staff-token";
     private static final Set<String> CHECK_SCOPES = Set.of(
             "all",
             "mdm",
@@ -36,23 +36,26 @@ public class ProductionReadinessService {
             "https_domain"
     );
     private static final List<Pattern> SECRET_PATTERNS = List.of(
-            Pattern.compile("(?i).*(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key)\\s*[:=].+"),
-            Pattern.compile("(?i).*(sk-live|sk_test|sk-proj|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----).*"),
-            Pattern.compile("(?i).*bearer\\s+[a-z0-9._\\-]{20,}.*")
+            Pattern.compile("(?is).*(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key)\\s*[:=].+"),
+            Pattern.compile("(?is).*(sk-live|sk_test|sk-proj|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----).*"),
+            Pattern.compile("(?is).*bearer\\s+[a-z0-9._\\-]{20,}.*")
     );
 
     private final ProductionReadinessRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
 
     public ProductionReadinessService(
             ProductionReadinessRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<ProductionReadinessItemResponse> listItems() {
@@ -141,7 +144,7 @@ public class ProductionReadinessService {
                 ));
         rejectSecretLikeCredentialRef(request.credentialRef());
 
-        ProductionReadinessItem saved = repository.saveItem(existing.updateFrom(request, Instant.now(), UPDATED_BY));
+        ProductionReadinessItem saved = repository.saveItem(existing.updateFrom(request, Instant.now(), authorizationService.currentActor().id()));
         auditEventService.recordSuccess(
                 "production_readiness.updated",
                 "ops.production_readiness.manage",
@@ -170,7 +173,7 @@ public class ProductionReadinessService {
                 blockers.size(),
                 request.operatorNote(),
                 Instant.now(),
-                UPDATED_BY,
+                authorizationService.currentActor().id(),
                 request.idempotencyKey()
         );
         repository.saveCheck(check, blockers);

@@ -1,10 +1,7 @@
 package com.complex.platform.inventory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -18,15 +15,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcInventoryRepository implements InventoryRepository {
 
-    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
-    };
-
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final JdbcInventoryRowMapper rowMapper;
 
     JdbcInventoryRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.rowMapper = new JdbcInventoryRowMapper(this.objectMapper);
     }
 
     @Override
@@ -34,11 +30,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_items (
                     id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                    min_quantity, status, created_at, updated_at
+                    min_quantity, status, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :sku_code, :item_name, :item_type, :unit, :barcode, :trace_required,
-                    :min_quantity, :status, :created_at, :updated_at
+                    :min_quantity, :status, :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     sku_code = EXCLUDED.sku_code,
@@ -58,20 +54,20 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryItemRecord> listInventoryItems() {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at
+                       min_quantity, status, created_at, updated_at, merchant_id
                   FROM inventory_items
                  ORDER BY created_at DESC, id
-                """, this::mapInventoryItem);
+                """, rowMapper::mapInventoryItem);
     }
 
     @Override
     public Optional<InventoryItemRecord> findInventoryItemById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at
+                       min_quantity, status, created_at, updated_at, merchant_id
                   FROM inventory_items
                  WHERE id = :id
-                """, Map.of("id", id), this::mapInventoryItem).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapInventoryItem).stream().findFirst();
     }
 
     @Override
@@ -79,11 +75,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_suppliers (
                     id, supplier_name, supplier_type, contact_name, contact_phone,
-                    status, created_at, updated_at
+                    status, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :supplier_name, :supplier_type, :contact_name, :contact_phone,
-                    :status, :created_at, :updated_at
+                    :status, :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     supplier_name = EXCLUDED.supplier_name,
@@ -100,10 +96,10 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventorySupplierRecord> listInventorySuppliers() {
         return jdbcTemplate.query("""
                 SELECT id, supplier_name, supplier_type, contact_name, contact_phone,
-                       status, created_at, updated_at
+                       status, created_at, updated_at, merchant_id
                   FROM inventory_suppliers
                  ORDER BY created_at DESC, id
-                """, this::mapInventorySupplier);
+                """, rowMapper::mapInventorySupplier);
     }
 
     @Override
@@ -111,11 +107,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_purchase_requests (
                     id, request_no, supplier_id, item_id, quantity, expected_arrival_date,
-                    status, evidence_attachment_ids, created_at, updated_at
+                    status, evidence_attachment_ids, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :request_no, :supplier_id, :item_id, :quantity, :expected_arrival_date,
-                    :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     request_no = EXCLUDED.request_no,
@@ -134,30 +130,30 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<PurchaseRequestRecord> listPurchaseRequests() {
         return jdbcTemplate.query("""
                 SELECT id, request_no, supplier_id, item_id, quantity, expected_arrival_date,
-                       status, evidence_attachment_ids, created_at, updated_at
+                       status, evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM inventory_purchase_requests
                  ORDER BY created_at DESC, id
-                """, this::mapPurchaseRequest);
+                """, rowMapper::mapPurchaseRequest);
     }
 
     @Override
     public Optional<StockBalanceRecord> findStockBalance(String itemId, String locationId) {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
                   FROM inventory_stock_balances
                  WHERE item_id = :item_id
                    AND location_id = :location_id
-                """, Map.of("item_id", itemId, "location_id", locationId), this::mapStockBalance).stream().findFirst();
+                """, Map.of("item_id", itemId, "location_id", locationId), rowMapper::mapStockBalance).stream().findFirst();
     }
 
     @Override
     public StockBalanceRecord saveStockBalance(StockBalanceRecord balance) {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_balances (
-                    id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at
+                    id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
                 )
                 VALUES (
-                    :id, :item_id, :location_id, :quantity, :reserved_quantity, :available_quantity, :updated_at
+                    :id, :item_id, :location_id, :quantity, :reserved_quantity, :available_quantity, :updated_at, :merchant_id
                 )
                 ON CONFLICT (item_id, location_id) DO UPDATE SET
                     quantity = EXCLUDED.quantity,
@@ -171,10 +167,10 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<StockBalanceRecord> listStockBalances() {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
                   FROM inventory_stock_balances
                  ORDER BY updated_at DESC, id
-                """, this::mapStockBalance);
+                """, rowMapper::mapStockBalance);
     }
 
     @Override
@@ -182,11 +178,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_batches (
                     id, item_id, location_id, batch_no, supplier_id, quantity,
-                    expire_at, status, evidence_attachment_ids, created_at, updated_at
+                    expire_at, status, evidence_attachment_ids, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :item_id, :location_id, :batch_no, :supplier_id, :quantity,
-                    :expire_at, :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    :expire_at, :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     item_id = EXCLUDED.item_id,
@@ -206,10 +202,10 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryStockBatchRecord> listStockBatches() {
         return jdbcTemplate.query("""
                 SELECT id, item_id, location_id, batch_no, supplier_id, quantity,
-                       expire_at, status, evidence_attachment_ids, created_at, updated_at
+                       expire_at, status, evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM inventory_stock_batches
                  ORDER BY expire_at ASC NULLS LAST, created_at DESC, id
-                """, this::mapStockBatch);
+                """, rowMapper::mapStockBatch);
     }
 
     @Override
@@ -218,12 +214,12 @@ class JdbcInventoryRepository implements InventoryRepository {
                 INSERT INTO inventory_risk_alerts (
                     id, alert_type, severity, item_id, location_id, batch_id,
                     available_quantity, threshold_quantity, expire_at, status,
-                    operator_user_id, created_at
+                    operator_user_id, created_at, merchant_id
                 )
                 VALUES (
                     :id, :alert_type, :severity, :item_id, :location_id, :batch_id,
                     :available_quantity, :threshold_quantity, :expire_at, :status,
-                    :operator_user_id, :created_at
+                    :operator_user_id, :created_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     alert_type = EXCLUDED.alert_type,
@@ -245,10 +241,10 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT id, alert_type, severity, item_id, location_id, batch_id,
                        available_quantity, threshold_quantity, expire_at, status,
-                       operator_user_id, created_at
+                       operator_user_id, created_at, merchant_id
                   FROM inventory_risk_alerts
                  ORDER BY created_at DESC, id
-                """, this::mapRiskAlert);
+                """, rowMapper::mapRiskAlert);
     }
 
     @Override
@@ -257,12 +253,12 @@ class JdbcInventoryRepository implements InventoryRepository {
                 INSERT INTO inventory_supplier_reconciliations (
                     id, supplier_id, period_start, period_end, expected_amount_cent,
                     actual_amount_cent, difference_amount_cent, status,
-                    evidence_attachment_ids, operator_user_id, created_at, updated_at
+                    evidence_attachment_ids, operator_user_id, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :supplier_id, :period_start, :period_end, :expected_amount_cent,
                     :actual_amount_cent, :difference_amount_cent, :status,
-                    CAST(:evidence_attachment_ids AS jsonb), :operator_user_id, :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :operator_user_id, :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     supplier_id = EXCLUDED.supplier_id,
@@ -284,10 +280,10 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT id, supplier_id, period_start, period_end, expected_amount_cent,
                        actual_amount_cent, difference_amount_cent, status,
-                       evidence_attachment_ids, operator_user_id, created_at, updated_at
+                       evidence_attachment_ids, operator_user_id, created_at, updated_at, merchant_id
                   FROM inventory_supplier_reconciliations
                  ORDER BY period_end DESC, id
-                """, this::mapSupplierReconciliation);
+                """, rowMapper::mapSupplierReconciliation);
     }
 
     @Override
@@ -296,12 +292,12 @@ class JdbcInventoryRepository implements InventoryRepository {
                 INSERT INTO inventory_stock_movements (
                     id, movement_type, item_id, source_location_id, target_location_id, quantity,
                     business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                    status, created_at
+                    status, created_at, merchant_id
                 )
                 VALUES (
                     :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
                     :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
-                    :status, :created_at
+                    :status, :created_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     movement_type = EXCLUDED.movement_type,
@@ -324,10 +320,10 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at
+                       status, created_at, merchant_id
                   FROM inventory_stock_movements
                  ORDER BY created_at DESC, id
-                """, this::mapStockMovement);
+                """, rowMapper::mapStockMovement);
     }
 
     @Override
@@ -335,11 +331,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_adjustments (
                     id, item_id, location_id, adjustment_type, quantity, reason,
-                    evidence_attachment_ids, status, created_at
+                    evidence_attachment_ids, status, created_at, merchant_id
                 )
                 VALUES (
                     :id, :item_id, :location_id, :adjustment_type, :quantity, :reason,
-                    CAST(:evidence_attachment_ids AS jsonb), :status, :created_at
+                    CAST(:evidence_attachment_ids AS jsonb), :status, :created_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     item_id = EXCLUDED.item_id,
@@ -359,12 +355,16 @@ class JdbcInventoryRepository implements InventoryRepository {
                 INSERT INTO saved_bottles (
                     id, customer_id, bar_project_id, item_id, bottle_name, initial_quantity,
                     remaining_quantity, unit, expire_at, status, evidence_attachment_ids,
-                    created_at, updated_at
+                    created_at, updated_at, merchant_id,
+                    is_high_value, high_value_threshold_cents, bottle_label_value,
+                    customer_name_or_nickname, customer_phone, customer_phone_hash
                 )
                 VALUES (
                     :id, :customer_id, :bar_project_id, :item_id, :bottle_name, :initial_quantity,
                     :remaining_quantity, :unit, :expire_at, :status, CAST(:evidence_attachment_ids AS jsonb),
-                    :created_at, :updated_at
+                    :created_at, :updated_at, :merchant_id,
+                    :is_high_value, :high_value_threshold_cents, :bottle_label_value,
+                    :customer_name_or_nickname, :customer_phone, :customer_phone_hash
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
@@ -377,7 +377,13 @@ class JdbcInventoryRepository implements InventoryRepository {
                     expire_at = EXCLUDED.expire_at,
                     status = EXCLUDED.status,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    is_high_value = EXCLUDED.is_high_value,
+                    high_value_threshold_cents = EXCLUDED.high_value_threshold_cents,
+                    bottle_label_value = EXCLUDED.bottle_label_value,
+                    customer_name_or_nickname = EXCLUDED.customer_name_or_nickname,
+                    customer_phone = EXCLUDED.customer_phone,
+                    customer_phone_hash = EXCLUDED.customer_phone_hash
                 """, savedBottleParameters(savedBottle));
         return savedBottle;
     }
@@ -385,23 +391,19 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public Optional<SavedBottleRecord> findSavedBottleById(String id) {
         return jdbcTemplate.query("""
-                SELECT id, customer_id, bar_project_id, item_id, bottle_name, initial_quantity,
-                       remaining_quantity, unit, expire_at, status, evidence_attachment_ids,
-                       created_at, updated_at
+                SELECT *
                   FROM saved_bottles
                  WHERE id = :id
-                """, Map.of("id", id), this::mapSavedBottle).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapSavedBottle).stream().findFirst();
     }
 
     @Override
     public List<SavedBottleRecord> listSavedBottles() {
         return jdbcTemplate.query("""
-                SELECT id, customer_id, bar_project_id, item_id, bottle_name, initial_quantity,
-                       remaining_quantity, unit, expire_at, status, evidence_attachment_ids,
-                       created_at, updated_at
+                SELECT *
                   FROM saved_bottles
                  ORDER BY created_at DESC, id
-                """, this::mapSavedBottle);
+                """, rowMapper::mapSavedBottle);
     }
 
     @Override
@@ -450,6 +452,151 @@ class JdbcInventoryRepository implements InventoryRepository {
         return handover;
     }
 
+    // P0-1: 原子减少库存，WHERE 条件确保 available_quantity 足够，返回受影响行数（0 = 库存不足）
+    @Override
+    public int atomicDecreaseStockBalance(String itemId, String locationId, int qty) {
+        return jdbcTemplate.update("""
+                UPDATE inventory_stock_balances
+                   SET quantity = quantity - :qty,
+                       available_quantity = available_quantity - :qty,
+                       updated_at = NOW()
+                 WHERE item_id = :item_id
+                   AND location_id = :location_id
+                   AND available_quantity >= :qty
+                """, Map.of("qty", qty, "item_id", itemId, "location_id", locationId));
+    }
+
+    // P0-1: 原子增加库存，INSERT ON CONFLICT 保证幂等
+    @Override
+    public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("id", newId)
+                .addValue("item_id", itemId)
+                .addValue("location_id", locationId)
+                .addValue("qty", qty)
+                .addValue("merchant_id", merchantId);
+        jdbcTemplate.update("""
+                INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, merchant_id, updated_at)
+                VALUES (:id, :item_id, :location_id, :qty, 0, :qty, :merchant_id, NOW())
+                ON CONFLICT (item_id, location_id) DO UPDATE SET
+                    quantity = inventory_stock_balances.quantity + EXCLUDED.quantity,
+                    available_quantity = inventory_stock_balances.available_quantity + EXCLUDED.available_quantity,
+                    updated_at = NOW()
+                """, params);
+    }
+
+    // P0-2: SELECT FOR UPDATE 行锁，防止并发 claimSavedBottle 超领
+    @Override
+    public Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM saved_bottles
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapSavedBottle).stream().findFirst();
+    }
+
+    // P1: 按商户隔离 — 各实体列表
+    @Override
+    public List<InventoryItemRecord> listInventoryItemsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
+                       min_quantity, status, created_at, updated_at, merchant_id
+                  FROM inventory_items
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapInventoryItem);
+    }
+
+    @Override
+    public List<InventorySupplierRecord> listInventorySuppliersByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_name, supplier_type, contact_name, contact_phone,
+                       status, created_at, updated_at, merchant_id
+                  FROM inventory_suppliers
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapInventorySupplier);
+    }
+
+    @Override
+    public List<PurchaseRequestRecord> listPurchaseRequestsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, request_no, supplier_id, item_id, quantity, expected_arrival_date,
+                       status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM inventory_purchase_requests
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapPurchaseRequest);
+    }
+
+    @Override
+    public List<StockBalanceRecord> listStockBalancesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
+                  FROM inventory_stock_balances
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY updated_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapStockBalance);
+    }
+
+    @Override
+    public List<StockMovementRecord> listStockMovementsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
+                       business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
+                       status, created_at, merchant_id
+                  FROM inventory_stock_movements
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapStockMovement);
+    }
+
+    @Override
+    public List<InventoryStockBatchRecord> listStockBatchesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, item_id, location_id, batch_no, supplier_id, quantity,
+                       expire_at, status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM inventory_stock_batches
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY expire_at ASC NULLS LAST, created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapStockBatch);
+    }
+
+    @Override
+    public List<InventoryRiskAlertRecord> listRiskAlertsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, alert_type, severity, item_id, location_id, batch_id,
+                       available_quantity, threshold_quantity, expire_at, status,
+                       operator_user_id, created_at, merchant_id
+                  FROM inventory_risk_alerts
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapRiskAlert);
+    }
+
+    @Override
+    public List<SupplierReconciliationRecord> listSupplierReconciliationsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_id, period_start, period_end, expected_amount_cent,
+                       actual_amount_cent, difference_amount_cent, status,
+                       evidence_attachment_ids, operator_user_id, created_at, updated_at, merchant_id
+                  FROM inventory_supplier_reconciliations
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY period_end DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSupplierReconciliation);
+    }
+
+    @Override
+    public List<SavedBottleRecord> listSavedBottlesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM saved_bottles
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSavedBottle);
+    }
+
     private MapSqlParameterSource itemParameters(InventoryItemRecord item) {
         return new MapSqlParameterSource()
                 .addValue("id", item.id())
@@ -462,7 +609,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("min_quantity", item.minQuantity())
                 .addValue("status", item.status())
                 .addValue("created_at", offset(item.createdAt()))
-                .addValue("updated_at", offset(item.updatedAt()));
+                .addValue("updated_at", offset(item.updatedAt()))
+                .addValue("merchant_id", item.merchantId());
     }
 
     private MapSqlParameterSource supplierParameters(InventorySupplierRecord supplier) {
@@ -474,7 +622,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("contact_phone", supplier.contactPhone())
                 .addValue("status", supplier.status())
                 .addValue("created_at", offset(supplier.createdAt()))
-                .addValue("updated_at", offset(supplier.updatedAt()));
+                .addValue("updated_at", offset(supplier.updatedAt()))
+                .addValue("merchant_id", supplier.merchantId());
     }
 
     private MapSqlParameterSource purchaseRequestParameters(PurchaseRequestRecord request) {
@@ -488,7 +637,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("status", request.status())
                 .addValue("evidence_attachment_ids", writeList(request.evidenceAttachmentIds()))
                 .addValue("created_at", offset(request.createdAt()))
-                .addValue("updated_at", offset(request.updatedAt()));
+                .addValue("updated_at", offset(request.updatedAt()))
+                .addValue("merchant_id", request.merchantId());
     }
 
     private MapSqlParameterSource stockBalanceParameters(StockBalanceRecord balance) {
@@ -499,7 +649,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("quantity", balance.quantity())
                 .addValue("reserved_quantity", balance.reservedQuantity())
                 .addValue("available_quantity", balance.availableQuantity())
-                .addValue("updated_at", offset(balance.updatedAt()));
+                .addValue("updated_at", offset(balance.updatedAt()))
+                .addValue("merchant_id", balance.merchantId());
     }
 
     private MapSqlParameterSource stockBatchParameters(InventoryStockBatchRecord batch) {
@@ -514,7 +665,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("status", batch.status())
                 .addValue("evidence_attachment_ids", writeList(batch.evidenceAttachmentIds()))
                 .addValue("created_at", offset(batch.createdAt()))
-                .addValue("updated_at", offset(batch.updatedAt()));
+                .addValue("updated_at", offset(batch.updatedAt()))
+                .addValue("merchant_id", batch.merchantId());
     }
 
     private MapSqlParameterSource riskAlertParameters(InventoryRiskAlertRecord alert) {
@@ -530,7 +682,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("expire_at", offset(alert.expireAt()))
                 .addValue("status", alert.status())
                 .addValue("operator_user_id", alert.operatorUserId())
-                .addValue("created_at", offset(alert.createdAt()));
+                .addValue("created_at", offset(alert.createdAt()))
+                .addValue("merchant_id", alert.merchantId());
     }
 
     private MapSqlParameterSource supplierReconciliationParameters(SupplierReconciliationRecord reconciliation) {
@@ -546,7 +699,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("evidence_attachment_ids", writeList(reconciliation.evidenceAttachmentIds()))
                 .addValue("operator_user_id", reconciliation.operatorUserId())
                 .addValue("created_at", offset(reconciliation.createdAt()))
-                .addValue("updated_at", offset(reconciliation.updatedAt()));
+                .addValue("updated_at", offset(reconciliation.updatedAt()))
+                .addValue("merchant_id", reconciliation.merchantId());
     }
 
     private MapSqlParameterSource stockMovementParameters(StockMovementRecord movement) {
@@ -563,7 +717,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("operator_id", movement.operatorId())
                 .addValue("evidence_attachment_ids", writeList(movement.evidenceAttachmentIds()))
                 .addValue("status", movement.status())
-                .addValue("created_at", offset(movement.createdAt()));
+                .addValue("created_at", offset(movement.createdAt()))
+                .addValue("merchant_id", movement.merchantId());
     }
 
     private MapSqlParameterSource stockAdjustmentParameters(StockAdjustmentRecord adjustment) {
@@ -576,7 +731,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("reason", adjustment.reason())
                 .addValue("evidence_attachment_ids", writeList(adjustment.evidenceAttachmentIds()))
                 .addValue("status", adjustment.status())
-                .addValue("created_at", offset(adjustment.createdAt()));
+                .addValue("created_at", offset(adjustment.createdAt()))
+                .addValue("merchant_id", adjustment.merchantId());
     }
 
     private MapSqlParameterSource savedBottleParameters(SavedBottleRecord savedBottle) {
@@ -593,7 +749,14 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("status", savedBottle.status())
                 .addValue("evidence_attachment_ids", writeList(savedBottle.evidenceAttachmentIds()))
                 .addValue("created_at", offset(savedBottle.createdAt()))
-                .addValue("updated_at", offset(savedBottle.updatedAt()));
+                .addValue("updated_at", offset(savedBottle.updatedAt()))
+                .addValue("merchant_id", savedBottle.merchantId())
+                .addValue("is_high_value", savedBottle.isHighValue())
+                .addValue("high_value_threshold_cents", savedBottle.highValueThresholdCents())
+                .addValue("bottle_label_value", savedBottle.bottleLabelValue())
+                .addValue("customer_name_or_nickname", savedBottle.customerNameOrNickname())
+                .addValue("customer_phone", savedBottle.customerPhone())
+                .addValue("customer_phone_hash", savedBottle.customerPhoneHash());
     }
 
     private MapSqlParameterSource savedBottleClaimParameters(SavedBottleClaimRecord claim) {
@@ -622,179 +785,12 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("created_at", offset(handover.createdAt()));
     }
 
-    private InventoryItemRecord mapInventoryItem(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new InventoryItemRecord(
-                resultSet.getString("id"),
-                resultSet.getString("sku_code"),
-                resultSet.getString("item_name"),
-                resultSet.getString("item_type"),
-                resultSet.getString("unit"),
-                resultSet.getString("barcode"),
-                resultSet.getBoolean("trace_required"),
-                resultSet.getInt("min_quantity"),
-                resultSet.getString("status"),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private InventorySupplierRecord mapInventorySupplier(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new InventorySupplierRecord(
-                resultSet.getString("id"),
-                resultSet.getString("supplier_name"),
-                resultSet.getString("supplier_type"),
-                resultSet.getString("contact_name"),
-                resultSet.getString("contact_phone"),
-                resultSet.getString("status"),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private PurchaseRequestRecord mapPurchaseRequest(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new PurchaseRequestRecord(
-                resultSet.getString("id"),
-                resultSet.getString("request_no"),
-                resultSet.getString("supplier_id"),
-                resultSet.getString("item_id"),
-                resultSet.getInt("quantity"),
-                resultSet.getObject("expected_arrival_date", java.time.LocalDate.class),
-                resultSet.getString("status"),
-                readList(resultSet.getString("evidence_attachment_ids")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private StockBalanceRecord mapStockBalance(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new StockBalanceRecord(
-                resultSet.getString("id"),
-                resultSet.getString("item_id"),
-                resultSet.getString("location_id"),
-                resultSet.getInt("quantity"),
-                resultSet.getInt("reserved_quantity"),
-                resultSet.getInt("available_quantity"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private InventoryStockBatchRecord mapStockBatch(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new InventoryStockBatchRecord(
-                resultSet.getString("id"),
-                resultSet.getString("item_id"),
-                resultSet.getString("location_id"),
-                resultSet.getString("batch_no"),
-                resultSet.getString("supplier_id"),
-                resultSet.getInt("quantity"),
-                instantOrNull(resultSet, "expire_at"),
-                resultSet.getString("status"),
-                readList(resultSet.getString("evidence_attachment_ids")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private InventoryRiskAlertRecord mapRiskAlert(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new InventoryRiskAlertRecord(
-                resultSet.getString("id"),
-                resultSet.getString("alert_type"),
-                resultSet.getString("severity"),
-                resultSet.getString("item_id"),
-                resultSet.getString("location_id"),
-                resultSet.getString("batch_id"),
-                nullableInteger(resultSet, "available_quantity"),
-                nullableInteger(resultSet, "threshold_quantity"),
-                instantOrNull(resultSet, "expire_at"),
-                resultSet.getString("status"),
-                resultSet.getString("operator_user_id"),
-                instant(resultSet, "created_at")
-        );
-    }
-
-    private SupplierReconciliationRecord mapSupplierReconciliation(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new SupplierReconciliationRecord(
-                resultSet.getString("id"),
-                resultSet.getString("supplier_id"),
-                resultSet.getObject("period_start", java.time.LocalDate.class),
-                resultSet.getObject("period_end", java.time.LocalDate.class),
-                resultSet.getLong("expected_amount_cent"),
-                resultSet.getLong("actual_amount_cent"),
-                resultSet.getLong("difference_amount_cent"),
-                resultSet.getString("status"),
-                readList(resultSet.getString("evidence_attachment_ids")),
-                resultSet.getString("operator_user_id"),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
-    private StockMovementRecord mapStockMovement(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new StockMovementRecord(
-                resultSet.getString("id"),
-                resultSet.getString("movement_type"),
-                resultSet.getString("item_id"),
-                resultSet.getString("source_location_id"),
-                resultSet.getString("target_location_id"),
-                resultSet.getInt("quantity"),
-                resultSet.getString("business_type"),
-                resultSet.getString("business_id"),
-                resultSet.getString("trace_code"),
-                resultSet.getString("operator_id"),
-                readList(resultSet.getString("evidence_attachment_ids")),
-                resultSet.getString("status"),
-                instant(resultSet, "created_at")
-        );
-    }
-
-    private SavedBottleRecord mapSavedBottle(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new SavedBottleRecord(
-                resultSet.getString("id"),
-                resultSet.getString("customer_id"),
-                resultSet.getString("bar_project_id"),
-                resultSet.getString("item_id"),
-                resultSet.getString("bottle_name"),
-                resultSet.getInt("initial_quantity"),
-                resultSet.getInt("remaining_quantity"),
-                resultSet.getString("unit"),
-                instantOrNull(resultSet, "expire_at"),
-                resultSet.getString("status"),
-                readList(resultSet.getString("evidence_attachment_ids")),
-                instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
-        );
-    }
-
     private String writeList(List<String> value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("inventory attachment ids are not serializable", exception);
         }
-    }
-
-    private List<String> readList(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(value, STRING_LIST_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("inventory attachment ids are unreadable", exception);
-        }
-    }
-
-    private Instant instant(ResultSet resultSet, String column) throws SQLException {
-        return resultSet.getObject(column, OffsetDateTime.class).toInstant();
-    }
-
-    private Instant instantOrNull(ResultSet resultSet, String column) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(column, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
-
-    private Integer nullableInteger(ResultSet resultSet, String column) throws SQLException {
-        int value = resultSet.getInt(column);
-        return resultSet.wasNull() ? null : value;
     }
 
     private OffsetDateTime offset(Instant value) {

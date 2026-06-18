@@ -23,6 +23,7 @@ import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.util.List;
@@ -122,6 +123,13 @@ class PlatformControllerTests {
                         null,
                         "Jane",
                         "18800000011",
+                        "1F-A",
+                        BigDecimal.valueOf(128.50),
+                        BigDecimal.valueOf(120.00),
+                        "Jack",
+                        "18800000013",
+                        BigDecimal.valueOf(12.30),
+                        "fixed_rent_plus_commission",
                         "active",
                         Instant.parse("2026-06-14T00:00:00Z"),
                         Instant.parse("2026-06-14T00:00:00Z")
@@ -137,6 +145,13 @@ class PlatformControllerTests {
                 .andExpect(jsonPath("$.code").value("OK"))
                 .andExpect(jsonPath("$.data.items[0].id").value("mch_1"))
                 .andExpect(jsonPath("$.data.items[0].merchant_name").value("P0 Merchant"))
+                .andExpect(jsonPath("$.data.items[0].mall_block_code").value("1F-A"))
+                .andExpect(jsonPath("$.data.items[0].area_square_meter").value(128.50))
+                .andExpect(jsonPath("$.data.items[0].leased_area_square_meter").value(120.00))
+                .andExpect(jsonPath("$.data.items[0].secondary_contact_name").value("Jack"))
+                .andExpect(jsonPath("$.data.items[0].secondary_contact_phone").value("18800000013"))
+                .andExpect(jsonPath("$.data.items[0].rent_per_square_meter").value(12.30))
+                .andExpect(jsonPath("$.data.items[0].cooperation_form").value("fixed_rent_plus_commission"))
                 .andExpect(jsonPath("$.data.total").value(1));
     }
 

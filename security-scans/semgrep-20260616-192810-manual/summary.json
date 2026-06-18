@@ -1,0 +1,11 @@
+{
+  "scan_dir": "security-scans/semgrep-20260616-192810-manual",
+  "semgrep_exit_status": 0,
+  "results": 0,
+  "errors": 0,
+  "scanned_paths": 1267,
+  "skipped_paths": 0,
+  "clean": true,
+  "top_findings": [],
+  "errors_detail": []
+}

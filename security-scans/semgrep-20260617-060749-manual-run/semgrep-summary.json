@@ -1,0 +1,9 @@
+{
+  "scan_dir": "security-scans/semgrep-20260617-060749-manual-run",
+  "results_count": 0,
+  "errors_count": 0,
+  "paths_scanned_count": 1510,
+  "paths_skipped_count": 0,
+  "first_results": [],
+  "first_errors": []
+}

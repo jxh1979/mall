@@ -99,20 +99,35 @@ SMB 密码不得写入本文。推荐由 IT 在 160 写入仅当前运维用户�
 | 恢复证据 | `complex-restore-drill.sh latest` 输出 `restore.drill_completed`，临时库恢复后被删除 |
 | 台账证据 | 生产前置台账记录责任人、credential_ref、到期提醒、演练报告链接和失败补偿动作 |
 
-## 6.3 最新真实 NAS 验证证据（2026-06-15）
+## 6.3 历史 NAS 验证证据与当前漂移状态
 
-| 证据项 | 结果 |
+### 6.3.1 历史一次性验证证据（2026-06-15）
+
+| 证据项 | 历史结果 |
 |---|---|
-| 160 挂载 | `//192.168.88.113/bn` 已挂载到 `/mnt/complex-nas-backup`，`findmnt` 显示 `cifs`、`rw`、`vers=3.0`、`username=jxh1` |
-| 读写状态 | `/mnt/complex-nas-backup` 当前对 160 用户可写，恢复演练前置检查通过 |
-| 当前版本真实 NAS 备份 | `complex-backup.sh` 在 `NAS_BACKUP_TARGET_DIR=/mnt/complex-nas-backup`、`REQUIRE_NAS_BACKUP_SYNC=true`、`ALLOW_UNENCRYPTED_BACKUPS=true` 下生成 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` |
-| 校验文件 | `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz.sha256` 校验通过，恢复演练输出 `checksum=verified` |
+| 160 挂载 | `//192.168.88.113/bn` 曾挂载到 `/mnt/complex-nas-backup`，当时 `findmnt` 显示 `cifs`、`rw`、`vers=3.0`、`username=jxh1` |
+| 读写状态 | 当时 `/mnt/complex-nas-backup` 对 160 用户可写，恢复演练前置检查通过 |
+| 历史 NAS 备份 | `complex-backup.sh` 在 `NAS_BACKUP_TARGET_DIR=/mnt/complex-nas-backup`、`REQUIRE_NAS_BACKUP_SYNC=true`、`ALLOW_UNENCRYPTED_BACKUPS=true` 下生成 `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz` |
+| 校验文件 | `/mnt/complex-nas-backup/manual/20260615-112721.tar.gz.sha256` 当时校验通过，恢复演练输出 `checksum=verified` |
 | 从 NAS 恢复 | `complex-restore-drill.sh /mnt/complex-nas-backup/manual/20260615-112721.tar.gz` 输出 `restore.drill_completed` |
 | 恢复结果 | 临时库 `complex_restore_drill_20260615_112734` 恢复成功并自动删除；Flyway 版本 `039`；验证表 `auth_credentials,auth_sessions,flyway_schema_history,platform_migration_baseline` |
-| 最新挂载 evidence | `docs/production-readiness-evidence/nas-smb-mount-latest.json`，可用 `npm run verify:nas-smb-mount-evidence` 复核 live mount 和临时读写删除测试 |
-| 最新恢复 evidence | `docs/production-readiness-evidence/nas-restore-drill-latest.json` |
+| 历史挂载 evidence | `docs/production-readiness-evidence/nas-smb-mount-latest.json` |
+| 历史恢复 evidence | `docs/production-readiness-evidence/nas-restore-drill-latest.json` |
 
-当前一次性真实 NAS 同步和恢复演练已按最新 Flyway 039 版本通过。生产前仍需把挂载写入受控的开机自动挂载方案，补定时备份、容量告警、失败告警和周期性恢复演练计划；这些属于 `PRD-NAS-AUTOMOUNT-001`、`PRD-NAS-SCHEDULE-001`、`PRD-NAS-ALERT-001`、`PRD-NAS-DRILL-CADENCE-001` 和 `PRD-CRED-001` 的运维生产化工作，不再反向阻塞 P0 编码完成。
+以上只证明 2026-06-15 做过一次真实 NAS 同步和恢复演练，不能证明当前仍挂载、开机自动挂载已固化、定时备份已安装、容量/失败告警已接通或生产 manifest 已审批。
+
+### 6.3.2 当前 live 状态
+
+当前 live 状态以 `docs/nas-current-state-drift-report-v0.1.md` 和 `docs/production-readiness-evidence/nas-current-state-drift-latest.json` 为准；生成/校验命令：
+
+```bash
+npm run docs:nas-current-state-drift
+npm run verify:nas-current-state-drift
+```
+
+截至最新漂移报告，当前 NAS live check 为 `failed`：`findmnt /mnt/complex-nas-backup` 未返回有效 CIFS 挂载，当前用户对 `/mnt/complex-nas-backup` 的写入测试失败，且当前用户不能读取 `/etc/complex/secrets/nas-smb.credentials`。因此不得把历史 `passed` evidence 作为当前生产闭环完成证明。
+
+生产前仍需把挂载写入受控的开机自动挂载方案，补定时备份、容量告警、失败告警和周期性恢复演练计划；这些属于 `PRD-NAS-AUTOMOUNT-001`、`PRD-NAS-SCHEDULE-001`、`PRD-NAS-ALERT-001`、`PRD-NAS-DRILL-CADENCE-001` 和 `SEC-P0-OPS-RECOVERY-001` 的运维生产化工作，不再反向阻塞编码完成，但继续阻塞真实生产可恢复结论。
 
 ## 6.4 P0-A no-system-write boundary
 

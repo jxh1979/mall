@@ -3,8 +3,8 @@
 > 本清单由 `tools/generate-formal-security-baseline.mjs` 生成。P0 未修复或未正式豁免前，不允许进入公开生产安全准入。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 198
-- OpenAPI SHA-256: `b48837a00292ed78b4e02eb5dfe70a42fd37c61f1f4306e0e0c8b9ed64b1da7b`
+- OpenAPI operation count: 207
+- OpenAPI SHA-256: `4d510fb82cab592aca9b96994db74a67139563708065904585e3a281d9da3012`
 
 ## status-policy
 
@@ -29,6 +29,26 @@
 | P2 | `SEC-P2-SMOKE-HASH-001` | dev smoke AuthService 使用 SHA-256 密码摘要，不可迁移到生产认证 | accepted_for_dev_smoke | 仅允许 local/dev/test；公开生产必须替换为正式身份源或强密码哈希方案 | 后端/安全 | `AuthService` 使用 `MessageDigest.getInstance("SHA-256")`，且类上存在 local/dev/test profile | 生产认证不得复用该 smoke 账号存储；若自建密码，采用 Argon2id/bcrypt/PBKDF2 并补 MFA/锁定策略 |
 | P2 | `SEC-P2-CSRF-API-001` | 当前 API 关闭 CSRF，需在最终认证形态中复核 Web Cookie 场景 | open_for_prod_review | 不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产 | 后端/前端/安全 | `SecurityConfig` 调用 `csrf.disable()` | 正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核 |
 | P3 | `SEC-P3-BASELINE-AUTOMATION-001` | 安全基线已脚本化，后续需接入发布闸口 | resolved | 已纳入完整 P0 验证链 | 技术负责人 | `verify:p0` 已包含 `verify:security-baseline`，安全基线验证会随完整 P0 验证执行 | 后续发布前继续执行 `npm run verify:p0`，不要绕过安全基线闸口 |
+
+## manual-tenant-isolation-findings (手工补登 2026-06-18)
+
+> 以下跨租户越权 finding 系列为**手工补登**（本文件主表由 `tools/generate-formal-security-baseline.mjs` 生成，本小节待生成器纳管）。对应数据隔离规格 `docs/data-isolation-and-tenant-scope-security-spec-v0.1.md` 的 ISO-GAP-01。
+> 隔离约定：隔离列（`merchant_id`/`organization_id`/`project_id`）的值在写入时由 `AuthorizationService` 的安全 token 注入，**绝不取请求体/查询参数**；读取按 token 的 scope 强制追加过滤。
+> 状态语义：`mitigated_by_migration` = 对应迁移已落隔离列/索引，行级隔离风险由迁移 + Service scope 过滤缓解，仍待 `verify:tenant-isolation` 闸口（ISO-GAP-02）做契约级回归；`open_for_test` = 隔离列已落但缺自动化越权回归用例，待 TDD 回归 plan（ISO-GAP-04）。
+
+| severity | id | title | status | migration | scope_key | next_action |
+|---|---|---|---|---|---|---|
+| P1 | `SEC-P1-TENANT-ISOLATION-FINANCE-001` | finance（ar_ap_items / finance_daily_closes）跨商户越权读写 | mitigated_by_migration | V044 | merchant_id (direct) + daily_close scope 唯一约束 | 待 `verify:tenant-isolation`（ISO-GAP-02）+ AC-ISO-1/2 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-INVENTORY-001` | inventory 10 表跨商户越权 | mitigated_by_migration | V046 | merchant_id (direct) | VALIDATE `chk_stock_adjustment_type`（NOT VALID）+ AC-ISO 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-BAR-001` | bar（tables/reservations/products/orders/production_tickets/bills）跨商户越权 | mitigated_by_migration | V047 | merchant_id (direct) | AC-ISO-1/2 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-GOVERNANCE-001` | governance（roles 组织级 + supervisor_review_decisions 无 scope 列）越权 | open_for_test | V048 / V050 / V057 | organization_id (direct) / supervisor_review_decisions 无 scope 列（V057 approval_level/required_approver_rank 仅留痕） | 裁决复核记录是否需 org/merchant 隔离 + AC-ISO 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-AMUSEMENT-001` | amusement 4 表跨商户越权（且 merchant_id 无索引） | open_for_test | V049 | merchant_id (direct，无索引 ISO-GAP-03) | 补部分索引 + AC-ISO-1/2 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-COMPLIANCE-001` | compliance_reminders 跨商户越权 | mitigated_by_migration | V051 | merchant_id (direct) | AC-ISO-1/2 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-FLOORPLAN-001` | mall_floor_plans 跨商户越权 | mitigated_by_migration | V052 | merchant_id (direct) | AC-ISO-1/2 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-CUSTOMER-POINTS-001` | customer_points_rules 跨综合体越权 | mitigated_by_migration | V060 | project_id (direct，综合体级) | AC-ISO-1/2 回归 |
+| P1 | `SEC-P1-TENANT-ISOLATION-TRACEABILITY-001` | 业务流程/服务责任留痕（business_process_instances / business_process_step_records / service_responsibility_records）跨租户越权 | mitigated_by_migration | V059 | merchant_id+project_id (direct) / 经 process_instance_id inherited / merchant_id (direct) | AC-ISO-1/2 回归（含 inherited join 过滤） |
+
+> 共性 next_action：`verify:tenant-isolation` 自动闸口待建（ISO-GAP-02）；V044–V061 TDD 风格越权回归 plan 待补（ISO-GAP-04）。`saved_bottles`（V046 merchant_id / V061 新增 customer_phone 等）敏感字段 at-rest 加密为 ISO-GAP-06。
 
 ## production-blocking-summary
 

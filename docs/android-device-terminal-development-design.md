@@ -5,7 +5,7 @@
 > - **员工设备凭证零落地**：`staff_device_credentials`（Keystore 设备公钥/不可逆指纹）后端无表、无 API；现存 `terminal_device_credentials`(V011) 是 **kiosk 一体机随机 token 的 SHA-256**，与员工私人手机指纹是不同实体——不可当作"员工设备凭证已覆盖"。
 > - **Android 端**：`apps/android-terminal/.../MainActivity.kt` 仅一个健康检查 Activity，**无注册/Keystore 指纹/Root 检测/换机解绑重绑**；换机无 supersedes/"换机待审"中间态，状态机不闭环。
 > - **MDM 阻断**：依赖外部商业 MDM + Android Enterprise/AMAPI，属外部依赖占位（不计闭环）；自有侧 `management_status`/`policy_status`/`last_policy_sync_at`/`device_credential_hash` 字段亦缺失。
-> - **业务裁决（2026-06-18）**：员工三表 + Android 端凭证（注册/Keystore 指纹/Root 检测/换机解绑重绑）本期 P0；MDM 阻断按"凡第三方一律预留接口+后台开关"处理，不阻塞其它功能。**二轮裁决（2026-06-18）**：MDM 自有侧字段本期**暂缓**（仅保留接口 + 开关占位，不落 management_status 等字段）；仍待业务确认：MDM 缺供应商时验收降级签字责任人。
+> - **业务裁决（2026-06-18）**：员工三表 + Android 端凭证（注册/Keystore 指纹/Root 检测/换机解绑重绑）本期 P0；MDM 阻断按"凡第三方一律预留接口+后台开关"处理，不阻塞其它功能。**二轮裁决（2026-06-18）**：MDM 自有侧字段本期**暂缓**（仅保留接口 + 开关占位，不落 management_status 等字段）；MDM 缺供应商时验收降级签字责任人 = IT 安全负责人（2026-06-18 业务确认定稿）。
 > - **候选验收口径**：换机走"解绑旧→绑新（待审）→生效"，Root/调试设备绑定失效并进复核；员工凭证与 kiosk 凭证两套互不串用。
 
 本文档用于指导【移动端设备：员工工作手机、酒吧点酒平板、触摸屏一体机】进入 Kotlin Android 开发。当前阶段只写设计，不写代码。
@@ -930,6 +930,16 @@ P0 网站白名单默认包括：平台后台/API 域名、企业微信相关域
 
 **实施边界：** 自研 DPC、仅 App 内检测、未配置商业 MDM 的设备均不作为正式 P0 强管控方案，只能用于开发/试点。正式验收以商业 MDM 策略实际下发、设备合规状态回传和后台审计记录为准。
 
+**D10 "未纳管禁用" 收口口径（与 `p0-action-event-evidence-matrix-v0.1.md` §3.1 同一口径，2026-06-18 业务定稿）：** 本文"MDM 自有侧本期暂缓"与 `p0-action-event-evidence-matrix` 的 `mdm.policy_checked`"未纳管设备不得生产使用"存在矛盾，两文件统一收口如下（2026-06-18 业务定稿）：
+
+- **本期 MDM 自有侧暂缓**：仅保留外部 MDM/Android Enterprise/AMAPI 接口与后台开关占位，不落 `management_status`/`policy_status`/`last_policy_sync_at`/`device_credential_hash` 等自有侧字段。
+- **"未纳管设备禁用高风险动作"由终端开关 + 人工准入代偿**：纳管未就绪期间通过终端能力开关关闭未纳管设备的高风险动作（核销、点单、放行、结算、调账等），并以人工准入审核设备发放，达到等效"未纳管禁用"。
+- **验收降级，由 IT 安全负责人签字（2026-06-18 业务确认）**：MDM 强管控验收降级为"终端开关 + 人工准入"代偿验收，由 IT 安全负责人作为签字责任人对降级口径负责留痕。
+- **`mdm.policy_checked` 事件标注**："依赖外部 MDM，本期以终端开关代偿，纳管后恢复硬禁用"；外部 MDM 纳管就绪后恢复对未纳管设备的硬禁用。
+- **MDM 白名单 / 预装清单 / AMAPI 拦截留痕字段为 P1**：在外部 MDM 纳管落地阶段（P1）补齐，不计入本期 P0 闭环。
+
+验收降级签字责任人 = IT 安全负责人（2026-06-18 业务确认定稿）。
+
 员工私人手机 App 安全要求：
 
 > 修订说明（2026-06-07，phone-3 / D8）：原文以"手机 NFC 唯一标识"为身份依据，技术不可行（见 §3.1 修订说明），整体改写为"设备公钥/不可逆设备指纹"凭证；并补 PIPL 告知同意/最小化/解绑删除（C4）。
@@ -1400,3 +1410,5 @@ Android P0 启动前，后端至少需要提供：
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §10/§14 | 端侧能力必须同时进入 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md`，并通过 `verify:openapi-closure` 后才能开发 SDK/mock、接口自动化或 Controller | 防止 `/api/mobile/*` 能力名被误读为正式接口，补齐权限、事件、终端和样例准入追溯 |
 | 2026-06-13 Android smoke 账号闸口 | 改 | §18 | 明确 160 承担 P0 总验收时，`android:p0:smoke` 除 Android SDK/Gradle 外还必须配置专用种子测试管理员账号和可访问的 P0 鉴权/业务接口 | 防止把 Android 环境通过误判为完整 smoke 通过，也防止用生产管理员账号做自动化测试 |
 | 2026-06-13 160 完整 P0 smoke 通过 | 改 | §18 | 160 已通过完整 `complex-verify-p0.sh`，覆盖 Android 构建、smoke、APK 和整体健康检查；当前后端业务接口为 dev smoke 切片 | 防止把自动化 smoke 通过误读为生产级业务实现完成 |
+| 2026-06-18 D10 MDM 收口【待业务最终确认】 | 增 | §13.1.1 | 新增 D10 "未纳管禁用" 收口口径：本期 MDM 自有侧暂缓，"未纳管设备禁用高风险动作"由终端开关+人工准入代偿，验收降级须签字责任人；`mdm.policy_checked` 标注"依赖外部 MDM，本期以终端开关代偿，纳管后恢复硬禁用"；MDM 白名单/预装清单/AMAPI 拦截留痕字段 P1。与 `p0-action-event-evidence-matrix §3.1` 同一口径 | 消解与 p0-action-event-evidence-matrix `mdm.policy_checked` 的矛盾 |
+| 2026-06-18 D10 MDM 收口定稿 | 改 | §8 业务裁决、§13.1.1 | 验收降级签字责任人由【待业务最终确认】定稿为"IT 安全负责人（2026-06-18 业务确认）"；其余 MDM 代偿口径（终端开关+人工准入代偿、白名单/预装清单/AMAPI 留痕字段 P1）不变，与 `p0-action-event-evidence-matrix §3.1` 同一口径 | 业务已拍板，去除待确认标记 |

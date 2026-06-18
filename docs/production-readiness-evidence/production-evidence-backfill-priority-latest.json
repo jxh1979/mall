@@ -13,69 +13,47 @@
     "credential_ref_only_no_plaintext_secret": true
   },
   "counts": {
-    "expected_submissions": 40,
-    "p0_expected": 31,
-    "p0_awaiting": 31,
+    "expected_submissions": 15,
+    "p0_expected": 13,
+    "p0_awaiting": 13,
     "p0_valid": 0,
     "p0_invalid": 0,
-    "awaiting_submission": 40,
+    "awaiting_submission": 15,
     "valid_submission": 0,
     "invalid_submission": 0,
-    "open_batches": 21
+    "open_batches": 7
   },
   "owner_summaries": [
     {
       "owner_group": "IT/运维/安全",
-      "expected_submissions": 23,
-      "p0_expected": 19,
-      "p0_awaiting": 19,
+      "expected_submissions": 12,
+      "p0_expected": 11,
+      "p0_awaiting": 11,
       "p0_valid": 0,
       "p0_invalid": 0,
-      "awaiting_total": 23,
-      "valid_total": 0,
-      "invalid_total": 0
-    },
-    {
-      "owner_group": "采购/供应商联调",
-      "expected_submissions": 6,
-      "p0_expected": 4,
-      "p0_awaiting": 4,
-      "p0_valid": 0,
-      "p0_invalid": 0,
-      "awaiting_total": 6,
-      "valid_total": 0,
-      "invalid_total": 0
-    },
-    {
-      "owner_group": "财务",
-      "expected_submissions": 4,
-      "p0_expected": 4,
-      "p0_awaiting": 4,
-      "p0_valid": 0,
-      "p0_invalid": 0,
-      "awaiting_total": 4,
+      "awaiting_total": 12,
       "valid_total": 0,
       "invalid_total": 0
     },
     {
       "owner_group": "技术实现负责人",
-      "expected_submissions": 4,
-      "p0_expected": 2,
-      "p0_awaiting": 2,
+      "expected_submissions": 2,
+      "p0_expected": 1,
+      "p0_awaiting": 1,
       "p0_valid": 0,
       "p0_invalid": 0,
-      "awaiting_total": 4,
+      "awaiting_total": 2,
       "valid_total": 0,
       "invalid_total": 0
     },
     {
-      "owner_group": "运营/法务",
-      "expected_submissions": 3,
-      "p0_expected": 2,
-      "p0_awaiting": 2,
+      "owner_group": "财务",
+      "expected_submissions": 1,
+      "p0_expected": 1,
+      "p0_awaiting": 1,
       "p0_valid": 0,
       "p0_invalid": 0,
-      "awaiting_total": 3,
+      "awaiting_total": 1,
       "valid_total": 0,
       "invalid_total": 0
     }
@@ -84,39 +62,47 @@
     {
       "batch_id": "BATCH-01",
       "rank": 1,
-      "owner_group": "采购/供应商联调",
+      "owner_group": "IT/运维/安全",
       "priority": "P0",
-      "category": "MDM",
-      "awaiting_submission": 2,
+      "category": "credential",
+      "awaiting_submission": 5,
       "invalid_submission": 0,
       "valid_submission": 0,
       "item_ids": [
-        "PRD-MDM-001",
-        "SEC-P0-MDM-DEVICE-001"
+        "PRD-CRED-001",
+        "PRD-CRED-DB-001",
+        "PRD-CRED-JWT-001",
+        "PRD-CRED-NAS-001",
+        "PRD-CRED-OPS-001"
       ],
       "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-MDM-001/manifest-PRD-MDM-001.json",
-        "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json"
+        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json",
+        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-DB-001/manifest-PRD-CRED-DB-001.json",
+        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
+        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-NAS-001/manifest-PRD-CRED-NAS-001.json",
+        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/manifest-PRD-CRED-OPS-001.json"
       ],
       "blocking_scopes": [
-        "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
-        "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作"
+        "阻塞生产可恢复结论",
+        "阻塞生产数据库接入",
+        "阻塞生产登录和开放接口签发",
+        "阻塞长期预生产和生产"
       ],
       "required_evidence_summary": [
-        "MDM/Android Enterprise 选型或 Android Management API 项目资料",
-        "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
-        "平台设备绑定记录和责任人",
-        "策略模板截图或导出",
-        "远程锁定、擦除、丢失模式演练记录"
+        "credential_ref、owner_person、owner_department",
+        "不得出现明文密钥、token 或密码",
+        "到期日、提醒策略和轮换窗口",
+        "最近一次轮换或首次发放证据",
+        "轮换步骤、回滚步骤和验证步骤"
       ],
       "accepted_evidence_types": [
-        "console_export",
-        "device_enroll_screenshot",
-        "platform_device_binding_record",
-        "policy_export",
-        "remote_lock_wipe_test_report"
+        "credential_ref_record",
+        "expiry_reminder_record",
+        "rollback_test_record",
+        "rotation_or_issuance_evidence",
+        "rotation_runbook"
       ],
-      "recommended_action": "先完成 MDM/Android Enterprise 选型、设备 enroll、策略下发和丢失/擦除演练证据。",
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
       "verification_commands": [
         "npm run verify:production-evidence-submissions-guard",
         "npm run docs:production-evidence-submission-status",
@@ -129,39 +115,36 @@
     {
       "batch_id": "BATCH-02",
       "rank": 2,
-      "owner_group": "IT/运维/安全",
+      "owner_group": "财务",
       "priority": "P0",
-      "category": "MDM",
-      "awaiting_submission": 2,
+      "category": "credential",
+      "awaiting_submission": 1,
       "invalid_submission": 0,
       "valid_submission": 0,
       "item_ids": [
-        "PRD-MDM-001",
-        "SEC-P0-MDM-DEVICE-001"
+        "PRD-CRED-001"
       ],
       "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-MDM-001/manifest-PRD-MDM-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json"
+        "docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/manifest-PRD-CRED-001.json"
       ],
       "blocking_scopes": [
-        "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
-        "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作"
+        "阻塞长期预生产和生产"
       ],
       "required_evidence_summary": [
-        "MDM/Android Enterprise 选型或 Android Management API 项目资料",
-        "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
-        "平台设备绑定记录和责任人",
-        "策略模板截图或导出",
-        "远程锁定、擦除、丢失模式演练记录"
+        "credential_ref、owner_person、owner_department",
+        "不得出现明文密钥、token 或密码",
+        "到期日、提醒策略和轮换窗口",
+        "最近一次轮换或首次发放证据",
+        "轮换步骤、回滚步骤和验证步骤"
       ],
       "accepted_evidence_types": [
-        "console_export",
-        "device_enroll_screenshot",
-        "platform_device_binding_record",
-        "policy_export",
-        "remote_lock_wipe_test_report"
+        "credential_ref_record",
+        "expiry_reminder_record",
+        "rollback_test_record",
+        "rotation_or_issuance_evidence",
+        "rotation_runbook"
       ],
-      "recommended_action": "先完成 MDM/Android Enterprise 选型、设备 enroll、策略下发和丢失/擦除演练证据。",
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
       "verification_commands": [
         "npm run verify:production-evidence-submissions-guard",
         "npm run docs:production-evidence-submission-status",
@@ -174,39 +157,36 @@
     {
       "batch_id": "BATCH-03",
       "rank": 3,
-      "owner_group": "财务",
+      "owner_group": "技术实现负责人",
       "priority": "P0",
-      "category": "payment",
-      "awaiting_submission": 2,
+      "category": "credential",
+      "awaiting_submission": 1,
       "invalid_submission": 0,
       "valid_submission": 0,
       "item_ids": [
-        "PRD-PAY-001",
-        "PRD-PAY-002"
+        "PRD-CRED-JWT-001"
       ],
       "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/finance/PRD-PAY-001/manifest-PRD-PAY-001.json",
-        "docs/production-readiness-evidence/submissions/finance/PRD-PAY-002/manifest-PRD-PAY-002.json"
+        "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json"
       ],
       "blocking_scopes": [
-        "阻塞生产收款、退款和日结",
-        "阻塞真实收款测试；不阻塞支付 mock"
+        "阻塞生产登录和开放接口签发"
       ],
       "required_evidence_summary": [
-        "回调地址、验签资料和对账文件样例",
-        "密钥仅填写 credential_ref，不写明文",
-        "聚合支付测试或生产商户资料",
-        "财务责任人确认",
-        "退款权限、退款审批和日结口径"
+        "credential_ref、owner_person、owner_department",
+        "不得出现明文密钥、token 或密码",
+        "到期日、提醒策略和轮换窗口",
+        "最近一次轮换或首次发放证据",
+        "轮换步骤、回滚步骤和验证步骤"
       ],
       "accepted_evidence_types": [
-        "callback_signature_doc",
-        "finance_approval_record",
-        "merchant_opening_record",
-        "reconciliation_sample",
-        "refund_test_report"
+        "credential_ref_record",
+        "expiry_reminder_record",
+        "rollback_test_record",
+        "rotation_or_issuance_evidence",
+        "rotation_runbook"
       ],
-      "recommended_action": "先补聚合支付商户、回调验签、退款、对账和财务确认材料。",
+      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
       "verification_commands": [
         "npm run verify:production-evidence-submissions-guard",
         "npm run docs:production-evidence-submission-status",
@@ -219,287 +199,6 @@
     {
       "batch_id": "BATCH-04",
       "rank": 4,
-      "owner_group": "IT/运维/安全",
-      "priority": "P0",
-      "category": "payment",
-      "awaiting_submission": 2,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-PAY-001",
-        "PRD-PAY-002"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-001/manifest-PRD-PAY-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-002/manifest-PRD-PAY-002.json"
-      ],
-      "blocking_scopes": [
-        "阻塞生产收款、退款和日结",
-        "阻塞真实收款测试；不阻塞支付 mock"
-      ],
-      "required_evidence_summary": [
-        "回调地址、验签资料和对账文件样例",
-        "密钥仅填写 credential_ref，不写明文",
-        "聚合支付测试或生产商户资料",
-        "财务责任人确认",
-        "退款权限、退款审批和日结口径"
-      ],
-      "accepted_evidence_types": [
-        "callback_signature_doc",
-        "finance_approval_record",
-        "merchant_opening_record",
-        "reconciliation_sample",
-        "refund_test_report"
-      ],
-      "recommended_action": "先补聚合支付商户、回调验签、退款、对账和财务确认材料。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-05",
-      "rank": 5,
-      "owner_group": "IT/运维/安全",
-      "priority": "P0",
-      "category": "credential",
-      "awaiting_submission": 8,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-CRED-001",
-        "PRD-CRED-3P-001",
-        "PRD-CRED-DB-001",
-        "PRD-CRED-JWT-001",
-        "PRD-CRED-NAS-001",
-        "PRD-CRED-OBJ-001",
-        "PRD-CRED-OPEN-001",
-        "PRD-CRED-OPS-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-DB-001/manifest-PRD-CRED-DB-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-NAS-001/manifest-PRD-CRED-NAS-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OBJ-001/manifest-PRD-CRED-OBJ-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/manifest-PRD-CRED-OPS-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞生产可恢复结论",
-        "阻塞生产数据库接入",
-        "阻塞生产登录和开放接口签发",
-        "阻塞生产附件、证据包、对象备份接入",
-        "阻塞真实供应商联调或生产通过",
-        "阻塞第三方双向开放生产接入",
-        "阻塞长期预生产和生产"
-      ],
-      "required_evidence_summary": [
-        "credential_ref、owner_person、owner_department",
-        "不得出现明文密钥、token 或密码",
-        "到期日、提醒策略和轮换窗口",
-        "最近一次轮换或首次发放证据",
-        "轮换步骤、回滚步骤和验证步骤"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "expiry_reminder_record",
-        "rollback_test_record",
-        "rotation_or_issuance_evidence",
-        "rotation_runbook"
-      ],
-      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-06",
-      "rank": 6,
-      "owner_group": "财务",
-      "priority": "P0",
-      "category": "credential",
-      "awaiting_submission": 2,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-CRED-001",
-        "PRD-CRED-3P-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/manifest-PRD-CRED-001.json",
-        "docs/production-readiness-evidence/submissions/finance/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞真实供应商联调或生产通过",
-        "阻塞长期预生产和生产"
-      ],
-      "required_evidence_summary": [
-        "credential_ref、owner_person、owner_department",
-        "不得出现明文密钥、token 或密码",
-        "到期日、提醒策略和轮换窗口",
-        "最近一次轮换或首次发放证据",
-        "轮换步骤、回滚步骤和验证步骤"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "expiry_reminder_record",
-        "rollback_test_record",
-        "rotation_or_issuance_evidence",
-        "rotation_runbook"
-      ],
-      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-07",
-      "rank": 7,
-      "owner_group": "技术实现负责人",
-      "priority": "P0",
-      "category": "credential",
-      "awaiting_submission": 2,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-CRED-JWT-001",
-        "PRD-CRED-OPEN-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
-        "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞生产登录和开放接口签发",
-        "阻塞第三方双向开放生产接入"
-      ],
-      "required_evidence_summary": [
-        "credential_ref、owner_person、owner_department",
-        "不得出现明文密钥、token 或密码",
-        "到期日、提醒策略和轮换窗口",
-        "最近一次轮换或首次发放证据",
-        "轮换步骤、回滚步骤和验证步骤"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "expiry_reminder_record",
-        "rollback_test_record",
-        "rotation_or_issuance_evidence",
-        "rotation_runbook"
-      ],
-      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-08",
-      "rank": 8,
-      "owner_group": "采购/供应商联调",
-      "priority": "P0",
-      "category": "credential",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-CRED-3P-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞真实供应商联调或生产通过"
-      ],
-      "required_evidence_summary": [
-        "credential_ref、owner_person、owner_department",
-        "不得出现明文密钥、token 或密码",
-        "到期日、提醒策略和轮换窗口",
-        "最近一次轮换或首次发放证据",
-        "轮换步骤、回滚步骤和验证步骤"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "expiry_reminder_record",
-        "rollback_test_record",
-        "rotation_or_issuance_evidence",
-        "rotation_runbook"
-      ],
-      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-09",
-      "rank": 9,
-      "owner_group": "运营/法务",
-      "priority": "P0",
-      "category": "credential",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-CRED-3P-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/operations-legal/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞真实供应商联调或生产通过"
-      ],
-      "required_evidence_summary": [
-        "credential_ref、owner_person、owner_department",
-        "不得出现明文密钥、token 或密码",
-        "到期日、提醒策略和轮换窗口",
-        "最近一次轮换或首次发放证据",
-        "轮换步骤、回滚步骤和验证步骤"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "expiry_reminder_record",
-        "rollback_test_record",
-        "rotation_or_issuance_evidence",
-        "rotation_runbook"
-      ],
-      "recommended_action": "先补生产账号、数据库、对象存储、JWT/第三方密钥的 credential_ref、到期提醒和轮换证据。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-10",
-      "rank": 10,
       "owner_group": "IT/运维/安全",
       "priority": "P0",
       "category": "nas",
@@ -549,8 +248,8 @@
       ]
     },
     {
-      "batch_id": "BATCH-11",
-      "rank": 11,
+      "batch_id": "BATCH-05",
+      "rank": 5,
       "owner_group": "IT/运维/安全",
       "priority": "P0",
       "category": "ops160",
@@ -594,353 +293,8 @@
       ]
     },
     {
-      "batch_id": "BATCH-12",
-      "rank": 12,
-      "owner_group": "采购/供应商联调",
-      "priority": "P0",
-      "category": "face_age",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-FACE-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-FACE-001/manifest-PRD-FACE-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞酒吧生产年龄核验通过"
-      ],
-      "required_evidence_summary": [
-        "合规材料与采购确认",
-        "年龄/人脸供应商 SDK 或 API 文档",
-        "测试账号、错误码、成功和失败样例",
-        "生产 credential_ref",
-        "运营验收记录"
-      ],
-      "accepted_evidence_types": [
-        "compliance_material",
-        "operation_acceptance_record",
-        "procurement_approval_record",
-        "success_failure_case_report",
-        "supplier_sdk_or_api_doc"
-      ],
-      "recommended_action": "先补人脸/年龄核验供应商 SDK/API、测试账号、合规和成功/失败样例。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-13",
-      "rank": 13,
-      "owner_group": "运营/法务",
-      "priority": "P0",
-      "category": "face_age",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-FACE-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/operations-legal/PRD-FACE-001/manifest-PRD-FACE-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞酒吧生产年龄核验通过"
-      ],
-      "required_evidence_summary": [
-        "合规材料与采购确认",
-        "年龄/人脸供应商 SDK 或 API 文档",
-        "测试账号、错误码、成功和失败样例",
-        "生产 credential_ref",
-        "运营验收记录"
-      ],
-      "accepted_evidence_types": [
-        "compliance_material",
-        "operation_acceptance_record",
-        "procurement_approval_record",
-        "success_failure_case_report",
-        "supplier_sdk_or_api_doc"
-      ],
-      "recommended_action": "先补人脸/年龄核验供应商 SDK/API、测试账号、合规和成功/失败样例。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-14",
-      "rank": 14,
-      "owner_group": "IT/运维/安全",
-      "priority": "P0",
-      "category": "face_age",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-FACE-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-FACE-001/manifest-PRD-FACE-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞酒吧生产年龄核验通过"
-      ],
-      "required_evidence_summary": [
-        "合规材料与采购确认",
-        "年龄/人脸供应商 SDK 或 API 文档",
-        "测试账号、错误码、成功和失败样例",
-        "生产 credential_ref",
-        "运营验收记录"
-      ],
-      "accepted_evidence_types": [
-        "compliance_material",
-        "operation_acceptance_record",
-        "procurement_approval_record",
-        "success_failure_case_report",
-        "supplier_sdk_or_api_doc"
-      ],
-      "recommended_action": "先补人脸/年龄核验供应商 SDK/API、测试账号、合规和成功/失败样例。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-15",
-      "rank": 15,
-      "owner_group": "运营/法务",
-      "priority": "P1",
-      "category": "wecom",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-WECOM-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/operations-legal/PRD-WECOM-001/manifest-PRD-WECOM-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞企业微信 P0 同步能力"
-      ],
-      "required_evidence_summary": [
-        "一次增量同步验收记录",
-        "企业微信应用和通讯录权限配置",
-        "会话存档或适用范围确认",
-        "回调配置、同步任务配置和失败告警",
-        "生产 credential_ref"
-      ],
-      "accepted_evidence_types": [
-        "callback_config_export",
-        "credential_ref_record",
-        "directory_sync_report",
-        "failure_alert_test",
-        "wecom_app_config_export"
-      ],
-      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-16",
-      "rank": 16,
-      "owner_group": "IT/运维/安全",
-      "priority": "P1",
-      "category": "wecom",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-WECOM-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-WECOM-001/manifest-PRD-WECOM-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞企业微信 P0 同步能力"
-      ],
-      "required_evidence_summary": [
-        "一次增量同步验收记录",
-        "企业微信应用和通讯录权限配置",
-        "会话存档或适用范围确认",
-        "回调配置、同步任务配置和失败告警",
-        "生产 credential_ref"
-      ],
-      "accepted_evidence_types": [
-        "callback_config_export",
-        "credential_ref_record",
-        "directory_sync_report",
-        "failure_alert_test",
-        "wecom_app_config_export"
-      ],
-      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-17",
-      "rank": 17,
-      "owner_group": "采购/供应商联调",
-      "priority": "P1",
-      "category": "third_party",
-      "awaiting_submission": 2,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-3P-001",
-        "SEC-P1-WEBHOOK-REPLAY-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-3P-001/manifest-PRD-3P-001.json",
-        "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json"
-      ],
-      "blocking_scopes": [
-        "不阻塞 P0 主闭环；阻塞真实厂商联调",
-        "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter"
-      ],
-      "required_evidence_summary": [
-        "Webhook nonce/timestamp/幂等验证",
-        "供应商 SDK/API、签名算法和回调样例",
-        "字段映射、错误码、补偿和对账口径",
-        "沙箱账号和生产 credential_ref",
-        "轮询校验策略和失败重试策略"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "field_mapping_sheet",
-        "sandbox_test_report",
-        "signature_sample",
-        "supplier_api_doc",
-        "webhook_sample"
-      ],
-      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-18",
-      "rank": 18,
-      "owner_group": "IT/运维/安全",
-      "priority": "P1",
-      "category": "third_party",
-      "awaiting_submission": 2,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "PRD-3P-001",
-        "SEC-P1-WEBHOOK-REPLAY-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/it-ops-security/PRD-3P-001/manifest-PRD-3P-001.json",
-        "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json"
-      ],
-      "blocking_scopes": [
-        "不阻塞 P0 主闭环；阻塞真实厂商联调",
-        "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter"
-      ],
-      "required_evidence_summary": [
-        "Webhook nonce/timestamp/幂等验证",
-        "供应商 SDK/API、签名算法和回调样例",
-        "字段映射、错误码、补偿和对账口径",
-        "沙箱账号和生产 credential_ref",
-        "轮询校验策略和失败重试策略"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "field_mapping_sheet",
-        "sandbox_test_report",
-        "signature_sample",
-        "supplier_api_doc",
-        "webhook_sample"
-      ],
-      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-19",
-      "rank": 19,
-      "owner_group": "技术实现负责人",
-      "priority": "P1",
-      "category": "third_party",
-      "awaiting_submission": 1,
-      "invalid_submission": 0,
-      "valid_submission": 0,
-      "item_ids": [
-        "SEC-P1-WEBHOOK-REPLAY-001"
-      ],
-      "manifest_paths": [
-        "docs/production-readiness-evidence/submissions/technical-owner/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json"
-      ],
-      "blocking_scopes": [
-        "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter"
-      ],
-      "required_evidence_summary": [
-        "Webhook nonce/timestamp/幂等验证",
-        "供应商 SDK/API、签名算法和回调样例",
-        "字段映射、错误码、补偿和对账口径",
-        "沙箱账号和生产 credential_ref",
-        "轮询校验策略和失败重试策略"
-      ],
-      "accepted_evidence_types": [
-        "credential_ref_record",
-        "field_mapping_sheet",
-        "sandbox_test_report",
-        "signature_sample",
-        "supplier_api_doc",
-        "webhook_sample"
-      ],
-      "recommended_action": "按 manifest 模板补齐外部可追溯证据链接、复核人、测试时间和 credential_ref。",
-      "verification_commands": [
-        "npm run verify:production-evidence-submissions-guard",
-        "npm run docs:production-evidence-submission-status",
-        "npm run verify:production-evidence-submission-status",
-        "npm run docs:production-evidence-backfill-priority",
-        "npm run verify:production-evidence-backfill-priority",
-        "npm run verify:delivery-gates"
-      ]
-    },
-    {
-      "batch_id": "BATCH-20",
-      "rank": 20,
+      "batch_id": "BATCH-06",
+      "rank": 6,
       "owner_group": "技术实现负责人",
       "priority": "P2",
       "category": "security",
@@ -979,8 +333,8 @@
       ]
     },
     {
-      "batch_id": "BATCH-21",
-      "rank": 21,
+      "batch_id": "BATCH-07",
+      "rank": 7,
       "owner_group": "IT/运维/安全",
       "priority": "P2",
       "category": "security",

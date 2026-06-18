@@ -1,4 +1,5 @@
 package com.complex.platform.ops.productionreadiness;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -54,11 +55,5 @@ public class ProductionReadinessController {
         authorizationService.requirePermission("ops.production_readiness.check");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createCheck(request));
-    }
-
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
     }
 }

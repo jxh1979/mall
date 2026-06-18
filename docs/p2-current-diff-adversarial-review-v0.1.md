@@ -11,7 +11,7 @@
 | 分组 | 文件范围 | 审计结论 |
 |---|---|---|
 | P2-B 游乐团体/包场 | `backend/src/main/java/com/complex/platform/amusement/*GroupBooking*`、`AmusementService`、`JdbcAmusementRepository`、`V035__p2_amusement_group_private_bookings.sql`、相关测试和契约文档 | 可进入保护性基线。容量锁定使用数据库条件更新和约束，控制了超卖风险 |
-| P2-C 票务动态定价 | `backend/src/main/java/com/complex/platform/ticketing/*DynamicPricing*`、`TicketingService`、`JdbcTicketingRepository`、`V036__p2_ticket_dynamic_pricing_rules.sql`、相关测试和契约文档 | 可进入保护性基线。当前仅做规则容器和模拟，不改变 P0/P1 订单实收价格 |
+| P2-C 票务动态定价 | `backend/src/main/java/com/complex/platform/ticketing/*DynamicPricing*`、`TicketingService`、`JdbcTicketingRepository`、`V036__p2_ticket_dynamic_pricing_rules.sql`、相关测试和契约文档 | 可进入保护性基线。当前已升级为规则容器、模拟和已发布规则影响正式订单实收价格的闭环；草稿规则不影响订单 |
 | P2-D 经营指标快照 | `backend/src/main/java/com/complex/platform/analytics/*`、`V037__p2_business_metric_snapshots.sql`、相关测试和契约文档 | 可进入保护性基线。当前是快照读取和种子数据，不涉及实时财务结算改写 |
 | P2-E/F 边界文档 | 第三方深度集成边界、独立 Python AI 服务边界文档 | 可进入保护性基线。边界明确为接口/资料/后续实现占位，未伪装为真实接入完成 |
 | 当前有效入口 | `docs/00-current-effective-document-entry-v0.1.md` | 本次补齐 P2-B/C/D/E/F 和 P2 全量审计入口，避免 P2 完成材料无法被后续开发找到 |
@@ -34,14 +34,13 @@
 
 **剩余注意：**Web 端只能展示和发起审批，不能在前端自行判断“必定可锁定”；最终结果必须以后端审批返回为准。
 
-### F3. P2-C 动态定价不得悄悄影响当前售票实收
+### F3. P2-C 动态定价生效边界必须写清楚
 
 **风险等级：P1**
 
-动态定价如果直接接入下单价格，会改变 P0 已收口的平日/周末/节假日、多种派生票价规则。当前测试明确验证动态定价模拟不改变订单价格，符合 P2 规则容器定位。
+动态定价已经从“规则容器/模拟”升级为“已发布且匹配的规则会影响正式售票订单实收价格”。当前正确口径是：草稿规则只用于模拟，不影响订单；发布规则命中正式订单时，订单必须记录基础金额、动态调整金额、最终金额和命中规则。
 
-**剩余注意：**未来若进入真实动态定价生效，必须新开决策和迁移任务，不能复用本 P2-C 完成结论。
-
+**剩余注意：**后续不得再引用“动态定价不影响正式订单”作为验收口径；若要改变优先级、叠加算法、渠道例外或自动化调价策略，必须另开规则治理和验收任务。
 ### F4. P2-D 经营指标快照不能被误解为财务主账
 
 **风险等级：P1**

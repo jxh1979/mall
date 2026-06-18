@@ -1,4 +1,5 @@
 package com.complex.platform.integration;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -240,11 +241,5 @@ public class IntegrationController {
     private ApiResponse<PageResponse<IntegrationLedgerRecord>> listLedger(String ledgerType, String successEvent, String failureEvent) {
         authorizationService.requirePermission(VIEW_PERMISSION);
         return ApiResponse.ok(service.listLedger(ledgerType, successEvent, failureEvent));
-    }
-
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
     }
 }

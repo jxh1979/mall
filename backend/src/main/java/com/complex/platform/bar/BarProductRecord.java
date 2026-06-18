@@ -5,6 +5,7 @@ import java.time.Instant;
 public record BarProductRecord(
         String id,
         String barId,
+        String merchantId,
         String productName,
         String productType,
         long priceCent,
@@ -14,6 +15,9 @@ public record BarProductRecord(
         boolean stockDeductionRequired,
         String status,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Integer standardPourVolume,
+        String pourVolumeUnit,
+        Integer lossThreshold
 ) {
 }

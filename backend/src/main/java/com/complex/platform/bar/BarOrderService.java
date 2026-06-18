@@ -4,6 +4,9 @@ import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.TraceabilityResponsibilityRecord;
+import com.complex.platform.evidence.TraceabilityService;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -20,10 +23,15 @@ public class BarOrderService {
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
+    private final AuditEventService auditEventService;
+    private final TraceabilityService traceabilityService;
 
-    public BarOrderService(BarRepository repository, AuthorizationService authorizationService) {
+    public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
+            AuditEventService auditEventService, TraceabilityService traceabilityService) {
         this.repository = repository;
         this.authorizationService = authorizationService;
+        this.auditEventService = auditEventService;
+        this.traceabilityService = traceabilityService;
     }
 
     BarProductRecord createProduct(BarProductRequest request) {
@@ -44,7 +52,10 @@ public class BarOrderService {
                 stockManaged,
                 trimToDefault(actual.status(), "active"),
                 now,
-                now
+                now,
+                actual.standardPourVolume(),
+                trimToNull(actual.pourVolumeUnit()),
+                actual.lossThreshold()
         ));
     }
 
@@ -86,7 +97,9 @@ public class BarOrderService {
                     amount,
                     "pending",
                     now,
-                    now
+                    now,
+                    null,
+                    0L
             ));
         }
         BarOrderRecord order = repository.saveOrder(new BarOrderRecord(
@@ -144,7 +157,9 @@ public class BarOrderService {
                     amount,
                     "pending",
                     now,
-                    now
+                    now,
+                    null,
+                    0L
             ));
         }
         repository.saveOrder(new BarOrderRecord(
@@ -194,6 +209,28 @@ public class BarOrderService {
                         deliveryEvidenceAttachmentIds
                 );
             }
+            // REQ-22 按杯出酒量/损耗：出品时记录实际出酒量，超标准量记损耗；超阈值触发 inventory.loss_exception 核查留痕。
+            Integer actualPourVolume = optionalPourVolume(delivered);
+            long lossVolume = 0L;
+            if (actualPourVolume != null && product.standardPourVolume() != null) {
+                lossVolume = BarPourLoss.lossVolume(product.standardPourVolume(), quantity, actualPourVolume);
+                if (BarPourLoss.exceedsThreshold(lossVolume, product.lossThreshold())) {
+                    auditEventService.recordSuccess(
+                            "inventory.loss_exception",
+                            "bar.order.deliver",
+                            "bar_order_item",
+                            item.id(),
+                            null,
+                            actual.idempotencyKey(),
+                            Map.of(
+                                    "product_id", product.id(),
+                                    "actual_pour_volume", actualPourVolume,
+                                    "loss_volume", lossVolume,
+                                    "loss_threshold", product.lossThreshold()
+                            )
+                    );
+                }
+            }
             repository.saveOrderItem(new BarOrderItemRecord(
                     item.id(),
                     item.orderId(),
@@ -204,7 +241,9 @@ public class BarOrderService {
                     item.amountCent(),
                     "delivered",
                     item.createdAt(),
-                    now
+                    now,
+                    actualPourVolume,
+                    lossVolume
             ));
         }
         BarOrderRecord deliveredOrder = repository.saveOrder(new BarOrderRecord(
@@ -225,7 +264,30 @@ public class BarOrderService {
                 now
         ));
         markProductionTicketDelivered(order.id(), actual, actorId, deliveryEvidenceAttachmentIds, now);
+        // B1 留痕接线（REQ-34/37）：出品送达写服务责任链记录（merchant 由 token 注入）。
+        traceabilityService.recordResponsibility(new TraceabilityResponsibilityRecord(
+                null, order.id(), order.tableId(), order.customerId(), null,
+                actorId, List.of(), order.salesStaffId(), null, null, null, null,
+                actorId, null, null, null, null, null, "completed"));
         return deliveredOrder;
+    }
+
+    private Integer optionalPourVolume(Map<String, Object> item) {
+        Object value = item.get("actual_pour_volume");
+        if (value == null) {
+            value = item.get("actualPourVolume");
+        }
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString().trim());
+        } catch (NumberFormatException exception) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "actual_pour_volume must be an integer");
+        }
     }
 
     BarProductionTicketRecord transitionProductionTicket(String ticketId, BarProductionTicketTransitionRequest request) {

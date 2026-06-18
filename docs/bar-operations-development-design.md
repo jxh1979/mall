@@ -9,6 +9,19 @@
 > - **业务裁决（2026-06-18 二轮）**：订台定金后台可配——固定额与按最低消费比例两种都支持，退/没收时限后台可配。仍待开发期决定：赠饮触发方式（建议票务核销事件推送 → bar 生成 0 元点单扣库存）。
 > - **候选验收口径**：订台付定金可回查、到店抵扣、取消按规则退/没收；赠饮权益核销后吧台库存相应减少且可对账。
 
+#### R5-D11 订台定金现状与收口（2026-06-18 回填，未改代码）
+
+R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"现状→目标→验收"三段式收敛，供开发期落地参照（设计目标仍以 §5.1.2、§6.3 订金规则为准，本小节不新增字段，仅明确收口口径与待补验收用例）。
+
+| 维度 | 内容 |
+|---|---|
+| 现状（代码实况） | `createReservation` 硬编码 `deposit_amount_cent=0` / `deposit_status=not_required`，**定金金额不入库**；§6.3 设计的 `deposit_amount`/`deposit_rule`/`deposit_status` 字段后端未真实写值；§13.1 第 11 项、§5.1.2 的到店抵扣与取消退/没收逻辑因定金恒为 0 **形同空转**，前端订台页即便展示定金也无后端承接。 |
+| 目标（P0） | **真实记录定金 + 到店抵扣 + 取消退/没收**：①创建订台时按 `deposit_rule`（固定额 / 按最低消费比例，二者后台可配）计算并落 `deposit_amount`，支付后 `deposit_status=paid`；②到店开台时订金转入账单抵扣项，`deposit_status=deducted`，写 `reservation.deposit_settled`；③主动取消按后台可配时限退（`refunded`）或没收（`forfeited`），写 `reservation.deposit_settled`（含原因/审批人）。退/没收时限作为后台可配项（2026-06-18 二轮业务裁决）。 |
+| 候选验收（粗） | 创建订台可付定金且 `deposit_amount`>0 可回查；到店开台定金按抵扣项进账单、`deposit_status=deducted` 可查；规则时限内取消可退、超时限/爽约没收，退没收均有 `reservation.deposit_settled` 事件可对账。 |
+| UI 验收用例需补 | 订台页定金展示与支付入口、到店抵扣在账单上的可视呈现、取消时退/没收提示与时限提示、定金状态（待付/已付/已抵扣/已退/已没收）在订台详情的可视回查——上述前端/一体机 UI 验收用例当前未编写，需在开发期补齐 UI 验收脚本。 |
+
+> 说明：本小节只收敛 R5 审计裁决与验收口径，不修改 §5.1.2/§6.3 既有设计；若与 §6.3 订金规则文字有出入，以 §6.3 字段定义 + 本小节"目标/验收"为准。
+
 本文档用于指导【酒吧经营：桌台、点单、库存、存酒】子系统进入后端、前端、安卓端和数据分析开发。
 
 关联文档：
@@ -1402,3 +1415,4 @@ P0 完成时必须能演示：
 | 2026-06-07 收口 | 改 | §5.2/§9.2 事件 | `bar.order.created`→`bar.order_created`，其余 bar.order.*/bar.bill.* 统一点+下划线并对齐权威字典（submitted 并入 created、paid→bill_settled、item_gifted→gift_redeemed、calculated 取消） | finding baseline-conf-5、基准 D4 |
 | 2026-06-08 三轮收口 | 改 | §9.1 桌台事件 | `bar.reservation.created`（三段）改为权威名 `reservation.created`（§4.1.2 已登记替代三段写法），并在 §9 命名统一说明补登该改名 | finding event-consumers-6、基准 D4 |
 | 2026-06-08 三轮收口 | 改 | §6.3/§6.4/§6.11 `customer_id` | 补"外键指向 foundation `customers.id`（散客无会员时可空，核身用 `customer_phone`/`customer_name_or_nickname`）"注释，显式声明 FK 目标 | finding newtable-fk-5 |
+| 2026-06-18 R5 回填 | 增 | R5 横幅后「R5-D11 订台定金现状与收口」 | 把订台定金按"现状（createReservation 硬编码 deposit=0/not_required，到店抵扣/退没收空转）→目标（P0 真实记录定金+到店抵扣+取消退没收，退没收时限后台可配）→候选验收"三段式收敛，并标注订台/定金 UI 验收用例需补 | R5-D11、2026-06-18 二轮业务裁决 |

@@ -40,9 +40,10 @@ class CustomerJdbcIntegrationTests {
         assertThat(regclass("customer_points_ledger")).isEqualTo("customer_points_ledger");
         assertThat(regclass("customer_redemption_catalog_items")).isEqualTo("customer_redemption_catalog_items");
         assertThat(regclass("customer_points_redemptions")).isEqualTo("customer_points_redemptions");
+        assertThat(regclass("customer_points_rules")).isEqualTo("customer_points_rules");
         assertThat(regclass("bar_tables")).isEqualTo("bar_tables");
         assertThat(regclass("bar_reservations")).isEqualTo("bar_reservations");
-        assertThat(currentFlywayVersion()).isEqualTo("054");
+        assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
     }
 
     @Test
@@ -54,6 +55,31 @@ class CustomerJdbcIntegrationTests {
         // The V054 CHECK backstop must reject a negative balance even if a writer bypasses the service guard.
         assertThatThrownBy(() -> repository.savePoints(new CustomerPointsAccountRecord(
                 "points_neg", "customer_neg", -100L, "base", Map.of(), now, now)))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    }
+
+    @Test
+    void customerPointsRulePersistsAndReadsBack() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.savePointsRule(new CustomerPointsRuleRecord(
+                "rule_1", "prj_1", "消费积分", "consume_amount", 1L, "{\"silver\":1000}",
+                "fixed_days", 365, "fifo_batch", null, "active", now, now));
+
+        assertThat(repository.findPointsRuleById("rule_1")).get()
+                .extracting(CustomerPointsRuleRecord::earnMethod, CustomerPointsRuleRecord::validityType,
+                        CustomerPointsRuleRecord::status)
+                .containsExactly("consume_amount", "fixed_days", "active");
+        assertThat(repository.listPointsRules())
+                .extracting(CustomerPointsRuleRecord::id)
+                .contains("rule_1");
+    }
+
+    @Test
+    void customerPointsRuleRejectsInvalidValidityTypeAtDatabaseLevel() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        assertThatThrownBy(() -> repository.savePointsRule(new CustomerPointsRuleRecord(
+                "rule_bad", null, "bad", "consume_amount", 1L, "{}", "calendar_year", null,
+                "fifo_batch", null, "draft", now, now)))
                 .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
@@ -156,7 +182,8 @@ class CustomerJdbcIntegrationTests {
                 null,
                 java.util.List.of(),
                 now,
-                now
+                now,
+                null
         ));
 
         assertThat(repository.listBarReservationOptions())

@@ -6,6 +6,7 @@ set -euo pipefail
 # timers, services, or credentials.
 
 MOUNT_PATH="${MOUNT_PATH:-/mnt/complex-nas-backup}"
+NAS_UNC="${NAS_UNC:-//192.168.88.113/bn}"
 NAS_BACKUP_TARGET_DIR="${NAS_BACKUP_TARGET_DIR:-$MOUNT_PATH}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 CAPACITY_LIMIT_BYTES="${CAPACITY_LIMIT_BYTES:-1099511627776}"
@@ -23,8 +24,17 @@ command -v df >/dev/null 2>&1 || fail "df is required"
 [ -d "$MOUNT_PATH" ] || fail "mount path does not exist: $MOUNT_PATH"
 [ -d "$NAS_BACKUP_TARGET_DIR" ] || fail "NAS backup target does not exist: $NAS_BACKUP_TARGET_DIR"
 
-mount_info="$(findmnt -n -T "$MOUNT_PATH" -o SOURCE,FSTYPE,OPTIONS || true)"
-[ -n "$mount_info" ] || fail "mount path is not mounted: $MOUNT_PATH"
+mount_info="$(findmnt -n "$MOUNT_PATH" -o TARGET,SOURCE,FSTYPE,OPTIONS || true)"
+[ -n "$mount_info" ] || fail "mount path is not an active mount point: $MOUNT_PATH"
+mount_target="$(printf '%s
+' "$mount_info" | awk '{print $1}')"
+mount_source="$(printf '%s
+' "$mount_info" | awk '{print $2}')"
+mount_fstype="$(printf '%s
+' "$mount_info" | awk '{print $3}')"
+[ "$mount_target" = "$MOUNT_PATH" ] || fail "unexpected mount target: $mount_target"
+[ "$mount_source" = "$NAS_UNC" ] || fail "unexpected NAS source: $mount_source"
+[ "$mount_fstype" = "cifs" ] || fail "unexpected mount fstype: $mount_fstype"
 
 free_kb="$(df -P "$NAS_BACKUP_TARGET_DIR" | awk 'NR==2 {print $4}')"
 [ -n "$free_kb" ] || fail "cannot read free capacity from $NAS_BACKUP_TARGET_DIR"
@@ -42,4 +52,5 @@ echo "nas_backup_target_dir=$NAS_BACKUP_TARGET_DIR"
 echo "retention_days=$RETENTION_DAYS"
 echo "capacity_limit_bytes=$CAPACITY_LIMIT_BYTES"
 echo "free_bytes=$free_bytes"
+echo "nas_unc=$NAS_UNC"
 echo "mount_info=$mount_info"

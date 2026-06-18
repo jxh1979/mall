@@ -6,6 +6,7 @@
     android:label="综合体终端"
     android:supportsRtl="true"
     android:theme="@style/AppTheme">
+    <!-- nosemgrep: java.android.security.exported_activity.exported_activity - Launcher activity must be exported; privileged actions require authenticated backend APIs. -->
     <activity
       android:name=".MainActivity"
       android:exported="true">

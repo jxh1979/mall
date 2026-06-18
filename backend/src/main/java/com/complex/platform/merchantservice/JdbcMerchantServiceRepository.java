@@ -1,4 +1,5 @@
 package com.complex.platform.merchantservice;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -6,8 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,7 +29,19 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
     }
 
     @Override
-    public List<MerchantWorkOrderRecord> findAllWorkOrders() {
+    public List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, int limit) {
+        if (merchantScope.isPresent()) {
+            return jdbcTemplate.query("""
+                    SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
+                           title, description, reported_by_user_id, reported_channel, owner_department,
+                           owner_user_id, due_at, closed_at, resolution, satisfaction_score,
+                           evidence_attachment_ids, created_at, updated_at
+                      FROM merchant_service_work_orders
+                     WHERE merchant_id = :merchant_id
+                     ORDER BY created_at DESC, id
+                     LIMIT :limit
+                    """, Map.of("merchant_id", merchantScope.get(), "limit", limit), this::mapWorkOrder);
+        }
         return jdbcTemplate.query("""
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
@@ -38,7 +49,8 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                        evidence_attachment_ids, created_at, updated_at
                   FROM merchant_service_work_orders
                  ORDER BY created_at DESC, id
-                """, this::mapWorkOrder);
+                 LIMIT :limit
+                """, Map.of("limit", limit), this::mapWorkOrder);
     }
 
     @Override
@@ -189,9 +201,6 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
         );
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
         var timestamp = resultSet.getTimestamp(columnName);

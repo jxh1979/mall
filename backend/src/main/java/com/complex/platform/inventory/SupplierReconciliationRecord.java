@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,6 +17,7 @@ public record SupplierReconciliationRecord(
         List<String> evidenceAttachmentIds,
         String operatorUserId,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore String merchantId
 ) {
 }

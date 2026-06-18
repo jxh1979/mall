@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { defaultSwitchState, disabledItemIds, disabledFindingIds, switchReasonsByItemId, switchReasonsByFindingId } from "./integration-capability-switches.mjs";
 
 const repoRoot = process.cwd();
 const checkMode = process.argv.includes("--check");
@@ -87,20 +88,64 @@ const mainRows = parseTableAfterHeading(ledger, "## 4. 默认台账模板");
 const credentialRows = parseTableAfterHeading(ledger, "## 4.1 生产凭证明细台账模板");
 const findingRows = parseTableAfterHeading(findings, "## findings");
 
+const switchState = defaultSwitchState();
+const disabledEvidenceItemIds = disabledItemIds(switchState);
+const disabledSecurityFindingIds = disabledFindingIds(switchState);
+const disabledItemReasons = switchReasonsByItemId(switchState);
+const disabledFindingReasons = switchReasonsByFindingId(switchState);
+
+function isDisabledBySwitch(row) {
+  return disabledEvidenceItemIds.has(row.id);
+}
+
+function isFindingDisabledBySwitch(row) {
+  return disabledSecurityFindingIds.has(row.id);
+}
+
+function withSwitchReason(row) {
+  const reason = (disabledItemReasons.get(row.id) ?? []).join("；");
+  return {
+    ...row,
+    status: "switch_disabled",
+    blocking_scope: "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+    next_action: reason || row.next_action,
+  };
+}
+
+function withFindingSwitchReason(row) {
+  const reason = (disabledFindingReasons.get(row.id) ?? []).join("；");
+  return {
+    ...row,
+    status: "switch_disabled",
+    blocking_scope: "对应集成能力开关关闭；不阻塞当前生产闭口，但开启能力前必须复核",
+    next_action: reason || row.next_action,
+  };
+}
+
 const ledgerBlockerStatuses = new Set(["pending_info", "blocked", "failed"]);
 const ledgerDeferredStatuses = new Set(["not_started", "ready_for_test", "in_progress"]);
-const ledgerBlockers = mainRows
+const allLedgerBlockers = mainRows
   .filter((row) => ledgerBlockerStatuses.has(stripMarkdown(row.status)))
   .map((row) => toLedgerBlocker(row, "default_readiness"));
-const credentialBlockers = credentialRows
+const allCredentialBlockers = credentialRows
   .filter((row) => ledgerBlockerStatuses.has(stripMarkdown(row.rotation_status)))
   .map((row) => toLedgerBlocker(row, "credential_rotation"));
-const deferredItems = mainRows
-  .filter((row) => ledgerDeferredStatuses.has(stripMarkdown(row.status)))
-  .map((row) => toLedgerBlocker(row, "default_readiness"));
-const findingBlockers = findingRows
+const allFindingBlockers = findingRows
   .filter((row) => ["open", "open_for_prod_review"].includes(stripMarkdown(row.status)))
   .map(toFindingBlocker);
+const switchDisabledLedgerItems = allLedgerBlockers.filter(isDisabledBySwitch).map(withSwitchReason);
+const switchDisabledCredentialItems = allCredentialBlockers.filter(isDisabledBySwitch).map(withSwitchReason);
+const switchDisabledFindingItems = allFindingBlockers.filter(isFindingDisabledBySwitch).map(withFindingSwitchReason);
+const ledgerBlockers = allLedgerBlockers.filter((row) => !isDisabledBySwitch(row));
+const credentialBlockers = allCredentialBlockers.filter((row) => !isDisabledBySwitch(row));
+const deferredItems = [
+  ...mainRows
+    .filter((row) => ledgerDeferredStatuses.has(stripMarkdown(row.status)))
+    .map((row) => toLedgerBlocker(row, "default_readiness")),
+  ...switchDisabledLedgerItems,
+  ...switchDisabledCredentialItems,
+];
+const findingBlockers = allFindingBlockers.filter((row) => !isFindingDisabledBySwitch(row));
 const acceptedDevSmokeFindings = findingRows
   .filter((row) => stripMarkdown(row.status) === "accepted_for_dev_smoke")
   .map(toFindingBlocker);
@@ -117,6 +162,7 @@ const register = {
     no_plaintext_secrets: true,
     no_supplier_mock_as_production_evidence: true,
     current_domain_https_binding_deferred: true,
+    integration_capability_switches_applied: true,
   },
   counts: {
     readiness_blockers: ledgerBlockers.length,
@@ -124,12 +170,14 @@ const register = {
     finding_blockers: findingBlockers.length,
     deferred_items: deferredItems.length,
     accepted_dev_smoke_findings: acceptedDevSmokeFindings.length,
+    switch_disabled_items: switchDisabledLedgerItems.length + switchDisabledCredentialItems.length + switchDisabledFindingItems.length,
   },
   readiness_blockers: ledgerBlockers,
   credential_blockers: credentialBlockers,
   finding_blockers: findingBlockers,
   deferred_items: deferredItems,
   accepted_dev_smoke_findings: acceptedDevSmokeFindings,
+  switch_disabled_items: [...switchDisabledLedgerItems, ...switchDisabledCredentialItems, ...switchDisabledFindingItems],
 };
 
 function mdTable(rows, columns) {
@@ -149,10 +197,11 @@ const md = normalize(`# 生产阻断清单 V0.1
 - NO_FAKE_PRODUCTION_EVIDENCE_CLOSURE
 - NO_SUPPLIER_MOCK_AS_PRODUCTION_EVIDENCE
 - VERIFY_PRODUCTION_BLOCKERS_READY
+- INTEGRATION_CAPABILITY_SWITCHES_APPLIED
 
 ## 2. 结论
 
-当前仍存在必须由 IT、采购、财务、运营、安全或供应商回填的生产阻断项。本文不重新打开业务决策，不允许把 mock、口头确认、截图占位或未纳管设备当作生产证据。
+当前仍存在必须由 IT、采购、财务、运营、安全或供应商回填的生产阻断项。本文已应用 docs/integration-capability-switches-latest.json：开关关闭的外部集成不再要求真实接口或生产证据，但对应自动能力不得启用。本文不重新打开业务决策，不允许把 mock、口头确认、截图占位或未纳管设备当作生产证据。
 
 | 指标 | 数量 |
 |---|---:|
@@ -191,7 +240,7 @@ ${mdTable(register.finding_blockers, [
   { key: "owner", label: "owner" },
   { key: "next_action", label: "next_action" },
 ])}
-## 6. 暂缓或生产方案定稿复核项
+## 6. 暂缓、开关关闭或生产方案定稿复核项
 
 ${mdTable([...register.deferred_items, ...register.accepted_dev_smoke_findings], [
   { key: "id", label: "id" },

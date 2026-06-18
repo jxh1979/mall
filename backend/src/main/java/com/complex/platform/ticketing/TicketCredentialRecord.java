@@ -15,6 +15,7 @@ public record TicketCredentialRecord(
         String status,
         int refreshedCount,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        int refreshIntervalSeconds
 ) {
 }

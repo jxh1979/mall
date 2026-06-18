@@ -1,0 +1,14 @@
+{
+  "scan_dir": "security-scans/semgrep-20260616-233901-manual-request",
+  "json_exitcode": 0,
+  "sarif_exitcode": 0,
+  "findings": 0,
+  "errors": 0,
+  "scanned_count": 1000,
+  "paths": {
+    "json": "security-scans/semgrep-20260616-233901-manual-request/results.json",
+    "sarif": "security-scans/semgrep-20260616-233901-manual-request/results.sarif",
+    "summary": "security-scans/semgrep-20260616-233901-manual-request/summary.json"
+  },
+  "top_rules": []
+}

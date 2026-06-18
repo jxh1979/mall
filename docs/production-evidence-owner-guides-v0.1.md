@@ -16,20 +16,18 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 责任组说明 | 5 |
-| 回填项 | 40 |
-| P0 回填项 | 31 |
+| 责任组说明 | 3 |
+| 回填项 | 15 |
+| P0 回填项 | 13 |
 | 无效提交 | 0 |
 
 ## 4. 责任组说明清单
 
 | owner_group | guide_path | items | p0_items | awaiting_submission | valid_submission | invalid_submission |
 | --- | --- | --- | --- | --- | --- | --- |
-| 财务 | docs/production-readiness-evidence/owner-guides/finance.md | 4 | 4 | 4 | 0 | 0 |
-| IT/运维/安全 | docs/production-readiness-evidence/owner-guides/it-ops-security.md | 23 | 19 | 23 | 0 | 0 |
-| 运营/法务 | docs/production-readiness-evidence/owner-guides/operations-legal.md | 3 | 2 | 3 | 0 | 0 |
-| 采购/供应商联调 | docs/production-readiness-evidence/owner-guides/procurement-supplier.md | 6 | 4 | 6 | 0 | 0 |
-| 技术实现负责人 | docs/production-readiness-evidence/owner-guides/technical-owner.md | 4 | 2 | 4 | 0 | 0 |
+| 财务 | docs/production-readiness-evidence/owner-guides/finance.md | 1 | 1 | 1 | 0 | 0 |
+| IT/运维/安全 | docs/production-readiness-evidence/owner-guides/it-ops-security.md | 12 | 11 | 12 | 0 | 0 |
+| 技术实现负责人 | docs/production-readiness-evidence/owner-guides/technical-owner.md | 2 | 1 | 2 | 0 | 0 |
 
 ## 5. 使用规则
 

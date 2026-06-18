@@ -2,8 +2,9 @@ package com.complex.platform.governance;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
@@ -18,6 +19,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
@@ -29,16 +31,16 @@ public class PlatformService {
     private static final int DEFAULT_PAGE_SIZE = 50;
 
     private final PlatformRepository repository;
-    private final IdempotencyService idempotencyService;
+    private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
 
     public PlatformService(
             PlatformRepository repository,
-            IdempotencyService idempotencyService,
+            AuditedOperationExecutor operations,
             AuditEventService auditEventService
     ) {
         this.repository = repository;
-        this.idempotencyService = idempotencyService;
+        this.operations = operations;
         this.auditEventService = auditEventService;
     }
 
@@ -71,7 +73,7 @@ public class PlatformService {
                     String entityRole = requireText(request == null ? null : request.entityRole(), "entity_role");
                     Instant now = Instant.now();
                     return repository.saveBusinessEntity(new BusinessEntityRecord(
-                            "be_" + slug(request.idempotencyKey()),
+                            "be_" + UUID.randomUUID(),
                             entityName,
                             entityRole,
                             trimToNull(request.unifiedSocialCreditCode()),
@@ -102,7 +104,7 @@ public class PlatformService {
     public MerchantRecord createMerchant(MerchantProfileRequest request) {
         return saveMerchant(
                 "createMerchant",
-                "mch_" + slug(idempotencyKey(request)),
+                "mch_" + UUID.randomUUID(),
                 request
         );
     }
@@ -144,7 +146,7 @@ public class PlatformService {
                     String venueType = requireText(request == null ? null : request.venueType(), "venue_type");
                     Instant now = Instant.now();
                     return repository.saveProject(new ProjectRecord(
-                            "prj_" + slug(request.idempotencyKey()),
+                            "prj_" + UUID.randomUUID(),
                             trimToNull(request.merchantId()),
                             venueType,
                             name,
@@ -188,7 +190,7 @@ public class PlatformService {
                     String spaceType = requireText(request == null ? null : request.spaceType(), "space_type");
                     Instant now = Instant.now();
                     return repository.saveSpace(new SpaceRecord(
-                            "sp_" + slug(request.idempotencyKey()),
+                            "sp_" + UUID.randomUUID(),
                             trimToNull(request.projectId()),
                             trimToNull(request.merchantId()),
                             trimToNull(request.parentSpaceId()),
@@ -284,6 +286,9 @@ public class PlatformService {
                 () -> {
                     StatusChangeRequest actual = requireRequest(request);
                     String status = requireText(actual.action(), "action");
+                    if (!Set.of("active", "inactive", "suspended").contains(status)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "action must be active, inactive, or suspended");
+                    }
                     String reason = requireText(actual.reason(), "reason");
                     BusinessEntityBindingRecord existing = repository.findBusinessEntityBindingById(bindingId)
                             .orElseThrow(() -> ApiException.notFound("BINDING_NOT_FOUND", "business entity binding not found"));
@@ -359,7 +364,7 @@ public class PlatformService {
                             ? List.of()
                             : List.copyOf(actual.attachmentIds());
                     return repository.saveContract(new ContractRecord(
-                            "ctr_" + slug(actual.idempotencyKey()),
+                            "ctr_" + UUID.randomUUID(),
                             requireText(actual.merchantId(), "merchant_id"),
                             requireText(actual.contractSubjectId(), "contract_subject_id"),
                             trimToNull(actual.operationSubjectId()),
@@ -398,6 +403,9 @@ public class PlatformService {
                     };
                     ContractRecord existing = repository.findContractById(id)
                             .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                    if (!"draft".equals(existing.lifecycleStatus())) {
+                        throw ApiException.conflict("INVALID_STATUS_TRANSITION", "contract is not in draft state");
+                    }
                     return repository.saveContract(new ContractRecord(
                             existing.id(),
                             existing.merchantId(),
@@ -444,6 +452,13 @@ public class PlatformService {
                             trimToNull(request.settlementEntityId()),
                             trimToNull(request.contactName()),
                             trimToNull(request.contactPhone()),
+                            trimToNull(request.mallBlockCode()),
+                            request.areaSquareMeter(),
+                            request.leasedAreaSquareMeter(),
+                            trimToNull(request.secondaryContactName()),
+                            trimToNull(request.secondaryContactPhone()),
+                            request.rentPerSquareMeter(),
+                            trimToNull(request.cooperationForm()),
                             trimToDefault(request.status(), "active"),
                             now,
                             now
@@ -463,38 +478,16 @@ public class PlatformService {
             String businessType,
             Supplier<T> action
     ) {
-        try {
-            return idempotencyService.execute(
-                    operationId,
-                    idempotencyKey,
-                    request,
-                    () -> {
-                        T saved = action.get();
-                        auditEventService.recordSuccess(
-                                successEvent,
-                                permissionCode,
-                                businessType,
-                                businessId(saved),
-                                null,
-                                idempotencyKey,
-                                Map.of()
-                        );
-                        return saved;
-                    },
-                    responseType
-            );
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    failureEvent,
-                    permissionCode,
-                    businessType,
-                    null,
-                    null,
-                    idempotencyKey,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
+        return operations.executeWrite(
+                operationId,
+                idempotencyKey,
+                request,
+                responseType,
+                AuditedOperation.of(successEvent, failureEvent, permissionCode, businessType),
+                action,
+                this::businessId,
+                Map.of()
+        );
     }
 
     private <T> PageResponse<T> page(List<T> items) {

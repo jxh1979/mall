@@ -42,4 +42,25 @@ public record MerchantBillRecord(
                 updatedAt
         );
     }
+
+    public MerchantBillRecord withLines(List<MerchantBillLineRecord> lines) {
+        return new MerchantBillRecord(
+                id,
+                merchantId,
+                arApItemId,
+                billNo,
+                billPeriodStart,
+                billPeriodEnd,
+                dueDate,
+                totalAmountCent,
+                currency,
+                status,
+                agingDays,
+                sourceType,
+                sourceId,
+                lines,
+                createdAt,
+                updatedAt
+        );
+    }
 }

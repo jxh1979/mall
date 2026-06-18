@@ -1,0 +1,7 @@
+semgrep_version=1.166.0
+engine=OSS
+java_files=496
+ts_files=28
+tsx_files=28
+yaml_files=7
+sql_files=87

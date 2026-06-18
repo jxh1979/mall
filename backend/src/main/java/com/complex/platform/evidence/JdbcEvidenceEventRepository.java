@@ -1,13 +1,12 @@
 package com.complex.platform.evidence;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -38,25 +37,35 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
         jdbcTemplate.batchUpdate("""
                 INSERT INTO evidence_events (
                     id, device_code, staff_id, event_type, event_category, result,
-                    summary, payload, occurred_at, received_at
+                    summary, payload, occurred_at, received_at, merchant_id
                 )
                 VALUES (
                     :id, :device_code, :staff_id, :event_type, :event_category, :result,
-                    :summary, CAST(:payload AS jsonb), :occurred_at, :received_at
+                    :summary, CAST(:payload AS jsonb), :occurred_at, :received_at, :merchant_id
                 )
                 """, parameters);
         return records;
     }
 
     @Override
-    public List<EvidenceEventRecord> listLatest(int limit) {
+    public List<EvidenceEventRecord> listLatest(int limit, String merchantId) {
+        if (merchantId == null) {
+            return jdbcTemplate.query("""
+                    SELECT id, device_code, staff_id, event_type, event_category, result,
+                           summary, payload::text AS payload, occurred_at, received_at, merchant_id
+                      FROM evidence_events
+                     ORDER BY received_at DESC, id DESC
+                     LIMIT :limit
+                    """, Map.of("limit", limit), this::mapEvent);
+        }
         return jdbcTemplate.query("""
                 SELECT id, device_code, staff_id, event_type, event_category, result,
-                       summary, payload::text AS payload, occurred_at, received_at
+                       summary, payload::text AS payload, occurred_at, received_at, merchant_id
                   FROM evidence_events
+                 WHERE merchant_id = :merchant_id
                  ORDER BY received_at DESC, id DESC
                  LIMIT :limit
-                """, Map.of("limit", limit), this::mapEvent);
+                """, Map.of("limit", limit, "merchant_id", merchantId), this::mapEvent);
     }
 
     @Override
@@ -64,11 +73,13 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
         jdbcTemplate.update("""
                 INSERT INTO evidence_attachments (
                     id, file_name, content_type, file_size, business_type, business_id,
-                    attachment_role, object_key, upload_url, status, checksum, created_at, updated_at
+                    attachment_role, object_key, upload_url, status, checksum, created_at, updated_at,
+                    merchant_id
                 )
                 VALUES (
                     :id, :file_name, :content_type, :file_size, :business_type, :business_id,
-                    :attachment_role, :object_key, :upload_url, :status, :checksum, :created_at, :updated_at
+                    :attachment_role, :object_key, :upload_url, :status, :checksum, :created_at, :updated_at,
+                    :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     file_name = EXCLUDED.file_name,
@@ -90,7 +101,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
     public java.util.Optional<EvidenceAttachmentRecord> findAttachmentById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, file_name, content_type, file_size, business_type, business_id,
-                       attachment_role, object_key, upload_url, status, checksum, created_at, updated_at
+                       attachment_role, object_key, upload_url, status, checksum, created_at, updated_at,
+                       merchant_id
                   FROM evidence_attachments
                  WHERE id = :id
                 """, Map.of("id", id), this::mapAttachment).stream().findFirst();
@@ -101,11 +113,11 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
         jdbcTemplate.update("""
                 INSERT INTO evidence_reviews (
                     id, business_type, business_id, risk_level, decision, comment,
-                    evidence_attachment_ids, status, created_at, updated_at
+                    evidence_attachment_ids, status, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :business_type, :business_id, :risk_level, :decision, :comment,
-                    CAST(:evidence_attachment_ids AS jsonb), :status, :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :status, :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     business_type = EXCLUDED.business_type,
@@ -121,8 +133,9 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
     }
 
     @Override
-    public List<EvidenceTimelineItem> listTimeline(String objectType, String objectId) {
-        return jdbcTemplate.query("""
+    public List<EvidenceTimelineItem> listTimeline(String objectType, String objectId, String merchantId) {
+        String merchantFilter = merchantId != null ? " AND merchant_id = :merchant_id" : "";
+        String sql = """
                 SELECT item_type, reference_id, event_name, result, summary, occurred_at
                   FROM (
                         SELECT 'audit' AS item_type,
@@ -134,6 +147,7 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                           FROM audit_events
                          WHERE business_type = :object_type
                            AND business_id = :object_id
+                """ + merchantFilter + """
                         UNION ALL
                         SELECT 'evidence_event' AS item_type,
                                id AS reference_id,
@@ -144,6 +158,7 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                           FROM evidence_events
                          WHERE payload->>'business_type' = :object_type
                            AND payload->>'business_id' = :object_id
+                """ + merchantFilter + """
                         UNION ALL
                         SELECT 'attachment' AS item_type,
                                id AS reference_id,
@@ -154,6 +169,7 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                           FROM evidence_attachments
                          WHERE business_type = :object_type
                            AND business_id = :object_id
+                """ + merchantFilter + """
                         UNION ALL
                         SELECT 'review' AS item_type,
                                id AS reference_id,
@@ -164,9 +180,17 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                           FROM evidence_reviews
                          WHERE business_type = :object_type
                            AND business_id = :object_id
+                """ + merchantFilter + """
                   ) timeline
                  ORDER BY occurred_at, item_type, reference_id
-                """, Map.of("object_type", objectType, "object_id", objectId), this::mapTimelineItem);
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("object_type", objectType)
+                .addValue("object_id", objectId);
+        if (merchantId != null) {
+            params.addValue("merchant_id", merchantId);
+        }
+        return jdbcTemplate.query(sql, params, this::mapTimelineItem);
     }
 
     private MapSqlParameterSource eventParameters(EvidenceEventRecord event) {
@@ -180,7 +204,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                 .addValue("summary", event.summary())
                 .addValue("payload", writeJson(event.payload()))
                 .addValue("occurred_at", timestampWithTimeZone(event.occurredAt()))
-                .addValue("received_at", timestampWithTimeZone(event.receivedAt()));
+                .addValue("received_at", timestampWithTimeZone(event.receivedAt()))
+                .addValue("merchant_id", event.merchantId());
     }
 
     private MapSqlParameterSource attachmentParameters(EvidenceAttachmentRecord attachment) {
@@ -197,7 +222,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                 .addValue("status", attachment.status())
                 .addValue("checksum", attachment.checksum())
                 .addValue("created_at", timestampWithTimeZone(attachment.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(attachment.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(attachment.updatedAt()))
+                .addValue("merchant_id", attachment.merchantId());
     }
 
     private MapSqlParameterSource reviewParameters(EvidenceReviewRecord review) {
@@ -211,7 +237,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                 .addValue("evidence_attachment_ids", writeJson(review.evidenceAttachmentIds() == null ? List.of() : review.evidenceAttachmentIds()))
                 .addValue("status", review.status())
                 .addValue("created_at", timestampWithTimeZone(review.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(review.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(review.updatedAt()))
+                .addValue("merchant_id", review.merchantId());
     }
 
     private EvidenceEventRecord mapEvent(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -225,7 +252,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                 resultSet.getString("summary"),
                 readPayload(resultSet.getString("payload")),
                 nullableInstant(resultSet, "occurred_at"),
-                nullableInstant(resultSet, "received_at")
+                nullableInstant(resultSet, "received_at"),
+                resultSet.getString("merchant_id")
         );
     }
 
@@ -243,7 +271,8 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                 resultSet.getString("status"),
                 resultSet.getString("checksum"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("merchant_id")
         );
     }
 
@@ -258,14 +287,7 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
         );
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
-    private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
 
     private Long nullableLong(ResultSet resultSet, String columnName) throws SQLException {
         long value = resultSet.getLong(columnName);

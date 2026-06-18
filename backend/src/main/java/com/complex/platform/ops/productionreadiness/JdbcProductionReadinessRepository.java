@@ -1,17 +1,17 @@
 package com.complex.platform.ops.productionreadiness;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 class JdbcProductionReadinessRepository implements ProductionReadinessRepository {
@@ -110,6 +110,7 @@ class JdbcProductionReadinessRepository implements ProductionReadinessRepository
     }
 
     @Override
+    @Transactional
     public ProductionReadinessCheck saveCheck(ProductionReadinessCheck check, List<ProductionReadinessItem> blockers) {
         jdbcTemplate.update("""
                 INSERT INTO production_readiness_checks (
@@ -169,9 +170,6 @@ class JdbcProductionReadinessRepository implements ProductionReadinessRepository
                 .addValue("updated_by", item.updatedBy());
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private ProductionReadinessItem mapItem(ResultSet resultSet, int rowNumber) throws SQLException {
         return new ProductionReadinessItem(

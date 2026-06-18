@@ -1,5 +1,7 @@
 # P0 编码完成与交接报告 V0.1
 
+> ⚠️ 历史快照。本文 operation/测试计数（如 198 ops、557 后端测试）为历史快照，已过期。当前以 `p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准（当前 209 ops / 729 测试 / Flyway V060）；另见 `closed-loop-live-acceptance-audit-20260618.md`。下文历史结论保留作追溯。
+
 ## 1. 文档定位
 
 本文档用于记录综合体管理系统 P0 首批编码包在 192.168.88.160 机器上的正式编码完成状态、验证证据、质量结论和后续交接边界。

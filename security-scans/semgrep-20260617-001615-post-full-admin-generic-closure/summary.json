@@ -1,0 +1,18 @@
+{
+  "scan_dir": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure",
+  "json_exitcode": 0,
+  "sarif_exitcode": 0,
+  "findings": 0,
+  "results": 0,
+  "results_count": 0,
+  "errors": 0,
+  "errors_count": 0,
+  "scanned_count": 1005,
+  "paths_scanned": 1005,
+  "paths": {
+    "json": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/results.json",
+    "sarif": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/results.sarif",
+    "summary": "security-scans/semgrep-20260617-001615-post-full-admin-generic-closure/summary.json"
+  },
+  "top_rules": []
+}

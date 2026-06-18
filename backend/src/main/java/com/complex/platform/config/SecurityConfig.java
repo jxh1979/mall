@@ -63,6 +63,7 @@ public class SecurityConfig {
     private String[] publicApiPaths() {
         return new String[]{
                 "/api/v1/auth/login",
+                "/api/v1/auth/refresh",
                 "/api/v1/customer/**",
                 "/api/open/**",
                 "/api/v1/terminals/kiosks/*/config",

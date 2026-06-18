@@ -1,0 +1,10 @@
+{
+  "scan_dir": "security-scans/semgrep-20260616-192222-post-bash-parser-closure",
+  "json_exit_code": 0,
+  "sarif_exit_code": 0,
+  "bash_syntax_exit_code_for_excluded_parser_warning_scripts": 0,
+  "excluded_from_semgrep_due_to_bash_parser_warnings": [],
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 983
+}

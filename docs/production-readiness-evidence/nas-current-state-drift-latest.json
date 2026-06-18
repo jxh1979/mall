@@ -1,0 +1,52 @@
+{
+  "status_version": "v0.1",
+  "generated_at": "2026-06-17T11:31:47.827Z",
+  "report_policy": {
+    "does_not_close_manifest": true,
+    "historical_passed_evidence_is_not_current_production_closure": true,
+    "current_live_failure_keeps_nas_manifest_awaiting": true,
+    "no_plaintext_secret_collection": true
+  },
+  "expected": {
+    "mount_path": "/mnt/complex-nas-backup",
+    "nas_unc": "//192.168.88.113/bn",
+    "smb_username": "jxh1",
+    "credential_file": "/etc/complex/secrets/nas-smb.credentials",
+    "credential_ref": "cred://prod/nas/smb/complex-backup-rw"
+  },
+  "historical_evidence": {
+    "mount_evidence_path": "docs/production-readiness-evidence/nas-smb-mount-latest.json",
+    "restore_evidence_path": "docs/production-readiness-evidence/nas-restore-drill-latest.json",
+    "mount_status": "passed",
+    "mount_verified_at": "2026-06-15T19:56:41Z",
+    "restore_status": "passed",
+    "restore_finished_at": "2026-06-15T11:27:37+00:00"
+  },
+  "current_state": {
+    "live_status": "passed",
+    "findmnt": {
+      "exit_code": 0,
+      "stdout": "/mnt/complex-nas-backup //192.168.88.113/bn cifs   rw,relatime,vers=3.0,sec=ntlmssp,cache=strict,upcall_target=app,username=jxh1,uid=1000,forceuid,gid=1000,forcegid,addr=192.168.88.113,file_mode=0600,dir_mode=0700,iocharset=utf8,soft,nounix,serverino,mapposix,noperm,rsize=4194304,wsize=4194304,bsize=1048576,retrans=1,echo_interval=60,actimeo=1,closetimeo=1",
+      "stderr": ""
+    },
+    "mount_path_state": {
+      "exists": true,
+      "mode": "700",
+      "uid": 1000,
+      "gid": 1000,
+      "is_directory": true
+    },
+    "write_read_delete_check": {
+      "status": "passed"
+    },
+    "credential_file_readable_by_current_user": false
+  },
+  "production_closure_assessment": {
+    "can_close_prd_nas_automount": false,
+    "can_close_prd_nas_schedule": false,
+    "can_close_prd_nas_alert": false,
+    "can_close_prd_nas_drill_cadence": false,
+    "can_close_sec_p0_ops_recovery": false,
+    "reason": "current live mount is usable, but production manifest still needs IT owner, reviewer, approval, scheduled backup, alert and cadence evidence"
+  }
+}

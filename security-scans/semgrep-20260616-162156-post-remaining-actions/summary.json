@@ -1,0 +1,20 @@
+{
+  "scan_id": "semgrep-20260616-162156-post-remaining-actions",
+  "scan_dir": "security-scans/semgrep-20260616-162156-post-remaining-actions",
+  "rulesets": [
+    "p/default",
+    "p/secrets"
+  ],
+  "metrics": "off",
+  "json_exit_code": 0,
+  "sarif_exit_code": 0,
+  "finding_count": 0,
+  "by_severity": {},
+  "top_checks": [],
+  "samples": [],
+  "parse_errors": 2,
+  "parse_error_files": [
+    "ops/160/complex-backup.sh",
+    "ops/160/complex-restore-drill.sh"
+  ]
+}

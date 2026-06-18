@@ -13,7 +13,7 @@ import com.complex.platform.customer.dto.CustomerPointsRedemptionRequest;
 import com.complex.platform.customer.dto.CustomerTicketOrderRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.inventory.InventoryService;
-import com.complex.platform.inventory.dto.StockAdjustmentRequest;
+import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.ticketing.TicketCredentialResponse;
 import com.complex.platform.ticketing.TicketOrderRecord;
 import com.complex.platform.ticketing.TicketTypeRecord;
@@ -328,14 +328,16 @@ public class CustomerService {
                         throw ApiException.conflict("POINTS_INSUFFICIENT", "points balance is insufficient");
                     }
                     String redemptionId = "redemption_" + slug(key);
-                    inventoryService.createStockAdjustment(new StockAdjustmentRequest(
+                    // R3 P0-7：兑换扣库存使用 redeem_consume 类型移动（替代此前误用的 "loss" 调整），
+                    // 从礼物绑定的库位扣减；语义正确、可与损耗/报废区分对账。
+                    inventoryService.createTypedStockMovement("redeem_consume", new StockMovementRequest(
                             "points-redemption-" + key,
                             "customer points redemption " + redemptionId,
                             List.of(),
-                            "loss",
+                            item.stockLocationId(),
+                            null,
                             List.of(Map.of(
                                     "item_id", item.inventoryItemId(),
-                                    "location_id", item.stockLocationId(),
                                     "quantity", item.stockQuantity() * quantity
                             )),
                             "points_redemption:" + redemptionId
@@ -469,7 +471,8 @@ public class CustomerService {
                             null,
                             List.of(),
                             now,
-                            now
+                            now,
+                            null
                     ));
                 }
         );

@@ -234,7 +234,7 @@ class AmusementControllerTests {
 
     private AmusementProjectRecord project() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementProjectRecord("project_1", "Roller Coaster", 2, "open", "template_1", Map.of("min_age", 12), now, now);
+        return new AmusementProjectRecord("project_1", "Roller Coaster", 2, "open", "template_1", Map.of("min_age", 12), now, now, null);
     }
 
     private AmusementSessionRecord session() {
@@ -244,7 +244,7 @@ class AmusementControllerTests {
 
     private AmusementSafetyTemplateRecord template() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementSafetyTemplateRecord("template_1", "Daily Opening", List.of(Map.of("name", "restraint")), LocalDate.parse("2026-06-14"), "active", List.of("att_1"), now, now);
+        return new AmusementSafetyTemplateRecord("template_1", "Daily Opening", List.of(Map.of("name", "restraint")), LocalDate.parse("2026-06-14"), "active", List.of("att_1"), now, now, null);
     }
 
     private AmusementSafetyInspectionRecord inspection() {

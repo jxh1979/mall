@@ -127,7 +127,9 @@ class SupervisorReviewControllerTests {
                 "contract mismatch",
                 List.of("att_1"),
                 Instant.parse("2026-06-16T00:00:00Z"),
-                "usr_operator"
+                "usr_operator",
+                "two_levels_up",
+                null
         ));
 
         mockMvc.perform(post("/api/v1/platform/supervisor-review/evaluate")
@@ -167,7 +169,9 @@ class SupervisorReviewControllerTests {
                 "checked",
                 List.of("att_2"),
                 Instant.parse("2026-06-16T00:00:00Z"),
-                "usr_operator"
+                "usr_operator",
+                "two_levels_up",
+                null
         ));
 
         mockMvc.perform(post("/api/v1/platform/supervisor-review/review_1/approve")

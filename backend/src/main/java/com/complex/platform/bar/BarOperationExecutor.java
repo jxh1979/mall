@@ -1,0 +1,66 @@
+package com.complex.platform.bar;
+
+import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
+import com.complex.platform.finance.PaymentIntentRecord;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+import org.springframework.stereotype.Service;
+
+@Service
+public class BarOperationExecutor {
+
+    private final AuditedOperationExecutor operations;
+
+    public BarOperationExecutor(AuditedOperationExecutor operations) {
+        this.operations = operations;
+    }
+
+    <T> PageResponse<T> readPage(BarReadOperation operation, Supplier<List<T>> action) {
+        return operations.readPage(operation, action);
+    }
+
+    <T> T executeWrite(
+            String operationId,
+            String idempotencyKey,
+            Object request,
+            Class<T> responseType,
+            BarWriteOperation operation,
+            Supplier<T> action
+    ) {
+        return operations.executeWrite(
+                operationId,
+                idempotencyKey,
+                request,
+                responseType,
+                operation,
+                action,
+                this::businessId,
+                Map.of("operation_id", operationId)
+        );
+    }
+
+    String requireText(String value, String fieldName) {
+        return operations.requireText(value, fieldName);
+    }
+
+    private String businessId(Object value) {
+        if (value instanceof BarTableRecord record) return record.id();
+        if (value instanceof BarTableSessionRecord record) return record.id();
+        if (value instanceof BarTableSessionAdjustmentRecord record) return record.id();
+        if (value instanceof BarReservationRecord record) return record.id();
+        if (value instanceof BarTableGuestCheckinRecord record) return record.id();
+        if (value instanceof BarProductRecord record) return record.id();
+        if (value instanceof BarOrderRecord record) return record.id();
+        if (value instanceof BarOrderItemRecord record) return record.id();
+        if (value instanceof BarProductionTicketRecord record) return record.id();
+        if (value instanceof BarProductionTicketEventRecord record) return record.id();
+        if (value instanceof BarBillRecord record) return record.id();
+        if (value instanceof BarBillAdjustmentRecord record) return record.id();
+        if (value instanceof BarBillOperationRecord record) return record.id();
+        if (value instanceof BarCommissionCalculationRecord record) return record.id();
+        if (value instanceof PaymentIntentRecord record) return record.id();
+        return null;
+    }
+}

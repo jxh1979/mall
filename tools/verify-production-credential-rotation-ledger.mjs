@@ -108,7 +108,7 @@ const forbiddenSecretPatterns = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/,
   /\bAKIA[0-9A-Z]{16}\b/,
-  /\b(?:password|secret|token)\s*[:=]\s*["'][^"'<\n]{12,}["']/i,
+  /\b(?:password|secret|token)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{12,}\\*["']|[A-Za-z0-9_./+=-]{16,})/i,
 ];
 
 for (const [index, pattern] of forbiddenSecretPatterns.entries()) {

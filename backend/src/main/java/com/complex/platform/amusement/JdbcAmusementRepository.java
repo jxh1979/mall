@@ -1,14 +1,9 @@
 package com.complex.platform.amusement;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,19 +14,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcAmusementRepository implements AmusementRepository {
 
-    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<List<Map<String, Object>>> ITEM_LIST_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
-
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final JdbcAmusementRowMapper rowMapper;
 
     JdbcAmusementRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.rowMapper = new JdbcAmusementRowMapper(this.objectMapper);
     }
 
     @Override
@@ -39,11 +29,11 @@ class JdbcAmusementRepository implements AmusementRepository {
         jdbcTemplate.update("""
                 INSERT INTO amusement_safety_templates (
                     id, template_name, items_json, effective_from, status,
-                    evidence_attachment_ids, created_at, updated_at
+                    evidence_attachment_ids, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :template_name, CAST(:items_json AS jsonb), :effective_from, :status,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     template_name = EXCLUDED.template_name,
@@ -60,20 +50,31 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementSafetyTemplateRecord> listSafetyTemplates() {
         return jdbcTemplate.query("""
                 SELECT id, template_name, items_json, effective_from, status,
-                       evidence_attachment_ids, created_at, updated_at
+                       evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_safety_templates
                  ORDER BY created_at DESC, id
-                """, this::mapSafetyTemplate);
+                """, rowMapper::mapSafetyTemplate);
+    }
+
+    @Override
+    public List<AmusementSafetyTemplateRecord> listSafetyTemplatesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, template_name, items_json, effective_from, status,
+                       evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM amusement_safety_templates
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSafetyTemplate);
     }
 
     @Override
     public Optional<AmusementSafetyTemplateRecord> findSafetyTemplateById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, template_name, items_json, effective_from, status,
-                       evidence_attachment_ids, created_at, updated_at
+                       evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_safety_templates
                  WHERE id = :id
-                """, Map.of("id", id), this::mapSafetyTemplate).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapSafetyTemplate).stream().findFirst();
     }
 
     @Override
@@ -81,11 +82,11 @@ class JdbcAmusementRepository implements AmusementRepository {
         jdbcTemplate.update("""
                 INSERT INTO amusement_projects (
                     id, project_name, capacity, open_status, safety_template_id,
-                    eligibility_rule_json, created_at, updated_at
+                    eligibility_rule_json, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :project_name, :capacity, :open_status, :safety_template_id,
-                    CAST(:eligibility_rule_json AS jsonb), :created_at, :updated_at
+                    CAST(:eligibility_rule_json AS jsonb), :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_name = EXCLUDED.project_name,
@@ -102,20 +103,31 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementProjectRecord> listProjects() {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, created_at, updated_at
+                       eligibility_rule_json, created_at, updated_at, merchant_id
                   FROM amusement_projects
                  ORDER BY created_at DESC, id
-                """, this::mapProject);
+                """, rowMapper::mapProject);
+    }
+
+    @Override
+    public List<AmusementProjectRecord> listProjectsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_name, capacity, open_status, safety_template_id,
+                       eligibility_rule_json, created_at, updated_at, merchant_id
+                  FROM amusement_projects
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapProject);
     }
 
     @Override
     public Optional<AmusementProjectRecord> findProjectById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, created_at, updated_at
+                       eligibility_rule_json, created_at, updated_at, merchant_id
                   FROM amusement_projects
                  WHERE id = :id
-                """, Map.of("id", id), this::mapProject).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapProject).stream().findFirst();
     }
 
     @Override
@@ -152,7 +164,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                    AND blocking = TRUE
                    AND status = 'active'
                  ORDER BY created_at DESC, id
-                """, Map.of("project_id", projectId), this::mapProjectRule);
+                """, Map.of("project_id", projectId), rowMapper::mapProjectRule);
     }
 
     @Override
@@ -187,7 +199,18 @@ class JdbcAmusementRepository implements AmusementRepository {
                        status, evidence_attachment_ids, created_at, updated_at
                   FROM amusement_sessions
                  ORDER BY start_time DESC, id
-                """, this::mapSession);
+                """, rowMapper::mapSession);
+    }
+
+    @Override
+    public List<AmusementSessionRecord> listSessionsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, start_time, end_time, capacity, used_capacity, locked_capacity,
+                       status, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_sessions
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY start_time DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSession);
     }
 
     @Override
@@ -197,7 +220,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                        status, evidence_attachment_ids, created_at, updated_at
                   FROM amusement_sessions
                  WHERE id = :id
-                """, Map.of("id", id), this::mapSession).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapSession).stream().findFirst();
     }
 
     @Override
@@ -282,7 +305,19 @@ class JdbcAmusementRepository implements AmusementRepository {
                        approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
                   FROM amusement_safety_inspections
                  ORDER BY created_at DESC, id
-                """, this::mapSafetyInspection);
+                """, rowMapper::mapSafetyInspection);
+    }
+
+    @Override
+    public List<AmusementSafetyInspectionRecord> listSafetyInspectionsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
+                       rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                  FROM amusement_safety_inspections
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSafetyInspection);
     }
 
     @Override
@@ -293,7 +328,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                        approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
                   FROM amusement_safety_inspections
                  WHERE id = :id
-                """, Map.of("id", id), this::mapSafetyInspection).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapSafetyInspection).stream().findFirst();
     }
 
     @Override
@@ -306,7 +341,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                  WHERE project_id = :project_id
                  ORDER BY inspected_at DESC, created_at DESC, id
                  LIMIT 1
-                """, Map.of("project_id", projectId), this::mapSafetyInspection).stream().findFirst();
+                """, Map.of("project_id", projectId), rowMapper::mapSafetyInspection).stream().findFirst();
     }
 
     @Override
@@ -353,7 +388,18 @@ class JdbcAmusementRepository implements AmusementRepository {
                        verification_result, failure_reason, evidence_attachment_ids, created_at
                   FROM amusement_verifications
                  ORDER BY created_at DESC, id
-                """, this::mapVerification);
+                """, rowMapper::mapVerification);
+    }
+
+    @Override
+    public List<AmusementVerificationRecord> listVerificationsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, credential_payload, device_id, staff_id,
+                       verification_result, failure_reason, evidence_attachment_ids, created_at
+                  FROM amusement_verifications
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapVerification);
     }
 
     @Override
@@ -384,7 +430,18 @@ class JdbcAmusementRepository implements AmusementRepository {
                        operator_note, evidence_attachment_ids, created_at
                   FROM amusement_manual_overrides
                  ORDER BY created_at DESC, id
-                """, this::mapManualOverride);
+                """, rowMapper::mapManualOverride);
+    }
+
+    @Override
+    public List<AmusementManualOverrideRecord> listManualOverridesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, override_type, reason, status,
+                       operator_note, evidence_attachment_ids, created_at
+                  FROM amusement_manual_overrides
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapManualOverride);
     }
 
     @Override
@@ -415,7 +472,18 @@ class JdbcAmusementRepository implements AmusementRepository {
                        raw_status_json, created_at, updated_at
                   FROM amusement_device_statuses
                  ORDER BY last_seen_at DESC, id
-                """, this::mapDeviceStatus);
+                """, rowMapper::mapDeviceStatus);
+    }
+
+    @Override
+    public List<AmusementDeviceStatusRecord> listDeviceStatusesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, device_id, provider_code, status, last_seen_at,
+                       raw_status_json, created_at, updated_at
+                  FROM amusement_device_statuses
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY last_seen_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapDeviceStatus);
     }
 
     @Override
@@ -440,7 +508,17 @@ class JdbcAmusementRepository implements AmusementRepository {
                 SELECT id, project_id, session_id, customer_id, queue_no, status, created_at, updated_at
                   FROM amusement_queue_entries
                  ORDER BY created_at DESC, id
-                """, this::mapQueueEntry);
+                """, rowMapper::mapQueueEntry);
+    }
+
+    @Override
+    public List<AmusementQueueEntryRecord> listQueueEntriesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, queue_no, status, created_at, updated_at
+                  FROM amusement_queue_entries
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapQueueEntry);
     }
 
     @Override
@@ -449,7 +527,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 SELECT id, project_id, session_id, customer_id, queue_no, status, created_at, updated_at
                   FROM amusement_queue_entries
                  WHERE id = :id
-                """, Map.of("id", id), this::mapQueueEntry).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapQueueEntry).stream().findFirst();
     }
 
     @Override
@@ -474,7 +552,17 @@ class JdbcAmusementRepository implements AmusementRepository {
                 SELECT id, project_id, session_id, customer_id, reservation_status, created_at, updated_at
                   FROM amusement_reservations
                  ORDER BY created_at DESC, id
-                """, this::mapReservation);
+                """, rowMapper::mapReservation);
+    }
+
+    @Override
+    public List<AmusementReservationRecord> listReservationsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, customer_id, reservation_status, created_at, updated_at
+                  FROM amusement_reservations
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapReservation);
     }
 
     @Override
@@ -483,7 +571,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 SELECT id, project_id, session_id, customer_id, reservation_status, created_at, updated_at
                   FROM amusement_reservations
                  WHERE id = :id
-                """, Map.of("id", id), this::mapReservation).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapReservation).stream().findFirst();
     }
 
     @Override
@@ -519,7 +607,19 @@ class JdbcAmusementRepository implements AmusementRepository {
                        evidence_attachment_ids, approved_at, released_at, created_at, updated_at
                   FROM amusement_group_bookings
                  ORDER BY created_at DESC, id
-                """, this::mapGroupBooking);
+                """, rowMapper::mapGroupBooking);
+    }
+
+    @Override
+    public List<AmusementGroupBookingRecord> listGroupBookingsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, session_id, booking_type, customer_name, contact_phone,
+                       party_size, reserved_capacity, booking_status, approval_note, operator_note,
+                       evidence_attachment_ids, approved_at, released_at, created_at, updated_at
+                  FROM amusement_group_bookings
+                 WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapGroupBooking);
     }
 
     @Override
@@ -530,7 +630,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                        evidence_attachment_ids, approved_at, released_at, created_at, updated_at
                   FROM amusement_group_bookings
                  WHERE id = :id
-                """, Map.of("id", id), this::mapGroupBooking).stream().findFirst();
+                """, Map.of("id", id), rowMapper::mapGroupBooking).stream().findFirst();
     }
 
     @Override
@@ -577,7 +677,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("approval_note", approvalNote)
                 .addValue("evidence_attachment_ids", writeJson(evidenceAttachmentIds))
                 .addValue("approved_at", timestampWithTimeZone(approvedAt))
-                .addValue("updated_at", timestampWithTimeZone(approvedAt)), this::mapGroupBooking).stream().findFirst();
+                .addValue("updated_at", timestampWithTimeZone(approvedAt)), rowMapper::mapGroupBooking).stream().findFirst();
     }
 
     @Override
@@ -622,7 +722,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("operator_note", operatorNote)
                 .addValue("evidence_attachment_ids", writeJson(evidenceAttachmentIds))
                 .addValue("released_at", timestampWithTimeZone(releasedAt))
-                .addValue("updated_at", timestampWithTimeZone(releasedAt)), this::mapGroupBooking).stream().findFirst();
+                .addValue("updated_at", timestampWithTimeZone(releasedAt)), rowMapper::mapGroupBooking).stream().findFirst();
     }
 
     private MapSqlParameterSource safetyTemplateParameters(AmusementSafetyTemplateRecord template) {
@@ -634,7 +734,8 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("status", template.status())
                 .addValue("evidence_attachment_ids", writeJson(template.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(template.updatedAt()))
+                .addValue("merchant_id", template.merchantId());
     }
 
     private MapSqlParameterSource projectParameters(AmusementProjectRecord project) {
@@ -646,7 +747,8 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("safety_template_id", project.safetyTemplateId())
                 .addValue("eligibility_rule_json", writeJson(project.eligibilityRule()))
                 .addValue("created_at", timestampWithTimeZone(project.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(project.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(project.updatedAt()))
+                .addValue("merchant_id", project.merchantId());
     }
 
     private MapSqlParameterSource projectRuleParameters(AmusementProjectRuleRecord rule) {
@@ -793,182 +895,6 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("updated_at", timestampWithTimeZone(booking.updatedAt()));
     }
 
-    private AmusementSafetyTemplateRecord mapSafetyTemplate(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementSafetyTemplateRecord(
-                rs.getString("id"),
-                rs.getString("template_name"),
-                readJson(rs.getString("items_json"), ITEM_LIST_TYPE),
-                rs.getObject("effective_from", LocalDate.class),
-                rs.getString("status"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementProjectRecord mapProject(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementProjectRecord(
-                rs.getString("id"),
-                rs.getString("project_name"),
-                rs.getInt("capacity"),
-                rs.getString("open_status"),
-                rs.getString("safety_template_id"),
-                readJson(rs.getString("eligibility_rule_json"), MAP_TYPE),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementProjectRuleRecord mapProjectRule(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementProjectRuleRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("rule_type"),
-                rs.getString("rule_value"),
-                rs.getString("effective_from"),
-                rs.getString("effective_to"),
-                rs.getBoolean("blocking"),
-                rs.getString("status"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementSessionRecord mapSession(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementSessionRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                instant(rs, "start_time"),
-                instant(rs, "end_time"),
-                rs.getInt("capacity"),
-                rs.getInt("used_capacity"),
-                rs.getInt("locked_capacity"),
-                rs.getString("status"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementSafetyInspectionRecord mapSafetyInspection(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementSafetyInspectionRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("template_id"),
-                readJson(rs.getString("items_json"), ITEM_LIST_TYPE),
-                rs.getString("overall_result"),
-                rs.getString("inspection_status"),
-                rs.getString("rectification_status"),
-                rs.getString("reopen_status"),
-                instant(rs, "inspected_at"),
-                instant(rs, "submitted_at"),
-                instant(rs, "rechecked_at"),
-                instant(rs, "approved_at"),
-                rs.getString("operator_note"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementVerificationRecord mapVerification(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementVerificationRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("session_id"),
-                rs.getString("credential_payload"),
-                rs.getString("device_id"),
-                rs.getString("staff_id"),
-                rs.getString("verification_result"),
-                rs.getString("failure_reason"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at")
-        );
-    }
-
-    private AmusementManualOverrideRecord mapManualOverride(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementManualOverrideRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("session_id"),
-                rs.getString("override_type"),
-                rs.getString("reason"),
-                rs.getString("status"),
-                rs.getString("operator_note"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at")
-        );
-    }
-
-    private AmusementDeviceStatusRecord mapDeviceStatus(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementDeviceStatusRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("device_id"),
-                rs.getString("provider_code"),
-                rs.getString("status"),
-                instant(rs, "last_seen_at"),
-                readJson(rs.getString("raw_status_json"), MAP_TYPE),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementQueueEntryRecord mapQueueEntry(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementQueueEntryRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("session_id"),
-                rs.getString("customer_id"),
-                rs.getString("queue_no"),
-                rs.getString("status"),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementReservationRecord mapReservation(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementReservationRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("session_id"),
-                rs.getString("customer_id"),
-                rs.getString("reservation_status"),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private AmusementGroupBookingRecord mapGroupBooking(ResultSet rs, int rowNum) throws SQLException {
-        return new AmusementGroupBookingRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getString("session_id"),
-                rs.getString("booking_type"),
-                rs.getString("customer_name"),
-                rs.getString("contact_phone"),
-                rs.getInt("party_size"),
-                rs.getInt("reserved_capacity"),
-                rs.getString("booking_status"),
-                rs.getString("approval_note"),
-                rs.getString("operator_note"),
-                readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "approved_at"),
-                instant(rs, "released_at"),
-                instant(rs, "created_at"),
-                instant(rs, "updated_at")
-        );
-    }
-
-    private Instant instant(ResultSet rs, String column) throws SQLException {
-        OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
-
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private String writeJson(Object value) {
         try {
@@ -978,11 +904,4 @@ class JdbcAmusementRepository implements AmusementRepository {
         }
     }
 
-    private <T> T readJson(String value, TypeReference<T> type) {
-        try {
-            return objectMapper.readValue(value, type);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("stored json payload is unreadable", exception);
-        }
-    }
 }

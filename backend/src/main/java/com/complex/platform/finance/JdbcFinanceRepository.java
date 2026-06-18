@@ -1,13 +1,13 @@
 package com.complex.platform.finance;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,12 +35,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                 INSERT INTO ar_ap_items (
                     id, item_no, direction, counterparty_id, source_type, source_id,
                     amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                    accounting_period, status, created_at, updated_at
+                    accounting_period, status, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :item_no, :direction, :counterparty_id, :source_type, :source_id,
                     :amount_cent, :paid_amount_cent, :unpaid_amount_cent, :currency, :due_date,
-                    :accounting_period, :status, :created_at, :updated_at
+                    :accounting_period, :status, :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     item_no = EXCLUDED.item_no,
@@ -83,10 +83,22 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at
+                       accounting_period, status, created_at, updated_at, merchant_id
                   FROM ar_ap_items
                  ORDER BY created_at DESC, id
                 """, this::mapArApItem);
+    }
+
+    @Override
+    public List<ArApItemRecord> listArApItemsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
+                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                       accounting_period, status, created_at, updated_at, merchant_id
+                  FROM ar_ap_items
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), this::mapArApItem);
     }
 
     @Override
@@ -94,9 +106,21 @@ class JdbcFinanceRepository implements FinanceRepository {
         return jdbcTemplate.query("""
                 SELECT id, item_no, direction, counterparty_id, source_type, source_id,
                        amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
-                       accounting_period, status, created_at, updated_at
+                       accounting_period, status, created_at, updated_at, merchant_id
                   FROM ar_ap_items
                  WHERE id = :id
+                """, Map.of("id", id), this::mapArApItem).stream().findFirst();
+    }
+
+    @Override
+    public Optional<ArApItemRecord> findArApItemByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, item_no, direction, counterparty_id, source_type, source_id,
+                       amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date,
+                       accounting_period, status, created_at, updated_at, merchant_id
+                  FROM ar_ap_items
+                 WHERE id = :id
+                   FOR UPDATE
                 """, Map.of("id", id), this::mapArApItem).stream().findFirst();
     }
 
@@ -115,6 +139,9 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment) {
+        // DO NOTHING on conflict: idempotency is enforced at the service layer via IdempotencyService.
+        // The payment ID includes the ar_ap_item_id in its slug (fixed P0 collision), so a genuine
+        // duplicate ID can only arise from an exact idempotent retry that is already handled upstream.
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_payments (
                     id, ar_ap_item_id, amount_cent, payment_method, payment_time,
@@ -124,14 +151,29 @@ class JdbcFinanceRepository implements FinanceRepository {
                     :id, :ar_ap_item_id, :amount_cent, :payment_method, :payment_time,
                     :bank_flow_ref, :created_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    ar_ap_item_id = EXCLUDED.ar_ap_item_id,
-                    amount_cent = EXCLUDED.amount_cent,
-                    payment_method = EXCLUDED.payment_method,
-                    payment_time = EXCLUDED.payment_time,
-                    bank_flow_ref = EXCLUDED.bank_flow_ref
+                ON CONFLICT (id) DO NOTHING
                 """, arApPaymentParameters(payment));
         return payment;
+    }
+
+    @Override
+    public Optional<ArApPaymentRecord> findArApPaymentById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, ar_ap_item_id, amount_cent, payment_method, payment_time,
+                       bank_flow_ref, created_at
+                  FROM ar_ap_payments
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapArApPayment).stream().findFirst();
+    }
+
+    @Override
+    public long sumRefundedAmountByTargetId(String targetId) {
+        Long result = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(refund_amount_cent), 0)
+                  FROM finance_refunds
+                 WHERE target_id = :target_id
+                """, Map.of("target_id", targetId), Long.class);
+        return result == null ? 0L : result;
     }
 
     @Override
@@ -152,6 +194,22 @@ class JdbcFinanceRepository implements FinanceRepository {
                     locked_at = EXCLUDED.locked_at
                 """, dailyCloseParameters(dailyClose));
         return dailyClose;
+    }
+
+    @Override
+    public boolean dailyCloseExists(LocalDate businessDate, String scopeType, String scopeId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM finance_daily_closes
+                 WHERE business_date = :business_date
+                   AND scope_type = :scope_type
+                   AND scope_id = :scope_id
+                """, new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("scope_type", scopeType)
+                .addValue("scope_id", scopeId),
+                Integer.class);
+        return count != null && count > 0;
     }
 
     @Override
@@ -290,7 +348,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("accounting_period", item.accountingPeriod())
                 .addValue("status", item.status())
                 .addValue("created_at", timestampWithTimeZone(item.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(item.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(item.updatedAt()))
+                .addValue("merchant_id", item.merchantId());
     }
 
     private MapSqlParameterSource arApItemSourceParameters(ArApItemSourceRecord source) {
@@ -400,7 +459,20 @@ class JdbcFinanceRepository implements FinanceRepository {
                 resultSet.getString("accounting_period"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("merchant_id")
+        );
+    }
+
+    private ArApPaymentRecord mapArApPayment(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new ArApPaymentRecord(
+                resultSet.getString("id"),
+                resultSet.getString("ar_ap_item_id"),
+                resultSet.getLong("amount_cent"),
+                resultSet.getString("payment_method"),
+                nullableInstant(resultSet, "payment_time"),
+                resultSet.getString("bank_flow_ref"),
+                nullableInstant(resultSet, "created_at")
         );
     }
 
@@ -428,14 +500,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         );
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
-    private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
 
     private String writeJson(Object value) {
         try {

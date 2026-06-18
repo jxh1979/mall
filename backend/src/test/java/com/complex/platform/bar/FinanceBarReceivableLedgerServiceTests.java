@@ -1,13 +1,17 @@
 package com.complex.platform.bar;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.ArApItemSourceRecord;
 import com.complex.platform.finance.ArApPaymentRecord;
@@ -21,6 +25,7 @@ import com.complex.platform.finance.ReconciliationBatchRecord;
 import com.complex.platform.finance.ReconciliationDifferenceRecord;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,10 +42,18 @@ class FinanceBarReceivableLedgerServiceTests {
     @BeforeEach
     void setUp() {
         financeRepository = new InMemoryFinanceRepository();
+        AuthorizationService authorizationService = mock(AuthorizationService.class);
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        AuditEventService auditEventService = new AuditEventService(new InMemoryAuditEventRepository());
+        AuditedOperationExecutor operations = new AuditedOperationExecutor(
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                auditEventService
+        );
         FinanceService financeService = new FinanceService(
                 financeRepository,
-                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(new InMemoryAuditEventRepository())
+                operations,
+                auditEventService,
+                authorizationService
         );
         service = new FinanceBarReceivableLedgerService(financeService);
     }
@@ -79,6 +92,7 @@ class FinanceBarReceivableLedgerServiceTests {
                 "BILL-BRIDGE",
                 "order_receivable_bridge",
                 "bar_1",
+                null,
                 "table_1",
                 "reservation_1",
                 128800L,
@@ -101,6 +115,7 @@ class FinanceBarReceivableLedgerServiceTests {
         return new BarOrderRecord(
                 "order_receivable_bridge",
                 "bar_1",
+                null,
                 "table_1",
                 "reservation_1",
                 "customer_1",
@@ -119,6 +134,9 @@ class FinanceBarReceivableLedgerServiceTests {
     private static final class InMemoryFinanceRepository implements FinanceRepository {
         private final Map<String, ArApItemRecord> arApItems = new LinkedHashMap<>();
         private final Map<String, ArApItemSourceRecord> arApItemSources = new LinkedHashMap<>();
+        private final Map<String, ArApPaymentRecord> arApPayments = new LinkedHashMap<>();
+        private final Map<String, DailyCloseRecord> dailyCloses = new LinkedHashMap<>();
+        private final Map<String, FinanceRefundRecord> refunds = new LinkedHashMap<>();
         private int itemSaveCount;
 
         @Override
@@ -140,7 +158,19 @@ class FinanceBarReceivableLedgerServiceTests {
         }
 
         @Override
+        public List<ArApItemRecord> listArApItemsByMerchant(String merchantId) {
+            return arApItems.values().stream()
+                    .filter(item -> merchantId.equals(item.merchantId()))
+                    .toList();
+        }
+
+        @Override
         public Optional<ArApItemRecord> findArApItemById(String id) {
+            return Optional.ofNullable(arApItems.get(id));
+        }
+
+        @Override
+        public Optional<ArApItemRecord> findArApItemByIdForUpdate(String id) {
             return Optional.ofNullable(arApItems.get(id));
         }
 
@@ -152,12 +182,35 @@ class FinanceBarReceivableLedgerServiceTests {
 
         @Override
         public ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment) {
-            return payment;
+            arApPayments.putIfAbsent(payment.id(), payment);
+            return arApPayments.get(payment.id());
+        }
+
+        @Override
+        public Optional<ArApPaymentRecord> findArApPaymentById(String id) {
+            return Optional.ofNullable(arApPayments.get(id));
+        }
+
+        @Override
+        public long sumRefundedAmountByTargetId(String targetId) {
+            return refunds.values().stream()
+                    .filter(r -> targetId.equals(r.targetId()))
+                    .mapToLong(FinanceRefundRecord::refundAmountCent)
+                    .sum();
         }
 
         @Override
         public DailyCloseRecord saveDailyClose(DailyCloseRecord dailyClose) {
+            dailyCloses.put(dailyClose.id(), dailyClose);
             return dailyClose;
+        }
+
+        @Override
+        public boolean dailyCloseExists(LocalDate businessDate, String scopeType, String scopeId) {
+            return dailyCloses.values().stream().anyMatch(dc ->
+                    businessDate.equals(dc.businessDate())
+                            && scopeType.equals(dc.scopeType())
+                            && scopeId.equals(dc.scopeId()));
         }
 
         @Override
@@ -172,6 +225,7 @@ class FinanceBarReceivableLedgerServiceTests {
 
         @Override
         public FinanceRefundRecord saveRefund(FinanceRefundRecord refund) {
+            refunds.put(refund.id(), refund);
             return refund;
         }
 

@@ -18,6 +18,7 @@ public record AuditEvent(
         String businessId,
         String requestId,
         String idempotencyKey,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        String merchantId
 ) {
 }

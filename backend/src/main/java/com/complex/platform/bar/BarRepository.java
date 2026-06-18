@@ -7,13 +7,13 @@ import java.util.Optional;
 public interface BarRepository {
     BarTableRecord saveTable(BarTableRecord table);
 
-    List<BarTableRecord> listTables();
+    List<BarTableRecord> listTables(Optional<String> merchantScope);
 
     Optional<BarTableRecord> findTableById(String id);
 
     BarReservationRecord saveReservation(BarReservationRecord reservation);
 
-    List<BarReservationRecord> listReservations();
+    List<BarReservationRecord> listReservations(Optional<String> merchantScope);
 
     Optional<BarReservationRecord> findReservationById(String id);
 
@@ -25,13 +25,13 @@ public interface BarRepository {
 
     BarProductRecord saveProduct(BarProductRecord product);
 
-    List<BarProductRecord> listProducts();
+    List<BarProductRecord> listProducts(Optional<String> merchantScope);
 
     Optional<BarProductRecord> findProductById(String id);
 
     BarOrderRecord saveOrder(BarOrderRecord order);
 
-    List<BarOrderRecord> listOrders();
+    List<BarOrderRecord> listOrders(Optional<String> merchantScope);
 
     Optional<BarOrderRecord> findOrderById(String id);
 
@@ -43,7 +43,7 @@ public interface BarRepository {
 
     BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket);
 
-    List<BarProductionTicketRecord> listProductionTickets();
+    List<BarProductionTicketRecord> listProductionTickets(Optional<String> merchantScope);
 
     Optional<BarProductionTicketRecord> findProductionTicketById(String id);
 
@@ -69,7 +69,7 @@ public interface BarRepository {
 
     BarTableSessionRecord saveTableSession(BarTableSessionRecord session);
 
-    List<BarTableSessionRecord> listTableSessions();
+    List<BarTableSessionRecord> listTableSessions(Optional<String> merchantScope);
 
     Optional<BarTableSessionRecord> findTableSessionById(String id);
 
@@ -79,11 +79,22 @@ public interface BarRepository {
 
     Optional<StockBalanceSnapshot> findStockBalance(String itemId, String locationId);
 
+    boolean atomicDecreaseStock(String itemId, String locationId, int quantity);
+
     StockBalanceSnapshot saveStockBalance(StockBalanceSnapshot balance);
 
     StockMovementSnapshot saveStockMovement(StockMovementSnapshot movement);
 
     default PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent) {
         return paymentIntent;
+    }
+
+    /** A2/A3：账单结算流水（现金/POS 收款留痕 + channel）。默认 no-op/空，JdbcBarRepository 覆盖。 */
+    default BarBillSettlementRecord saveBillSettlement(BarBillSettlementRecord settlement) {
+        return settlement;
+    }
+
+    default List<BarBillSettlementRecord> listBillSettlements(String billId) {
+        return List.of();
     }
 }

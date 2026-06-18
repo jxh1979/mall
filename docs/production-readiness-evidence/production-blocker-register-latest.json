@@ -9,68 +9,18 @@
     "no_fake_closure": true,
     "no_plaintext_secrets": true,
     "no_supplier_mock_as_production_evidence": true,
-    "current_domain_https_binding_deferred": true
+    "current_domain_https_binding_deferred": true,
+    "integration_capability_switches_applied": true
   },
   "counts": {
-    "readiness_blockers": 12,
-    "credential_blockers": 7,
-    "finding_blockers": 4,
-    "deferred_items": 1,
-    "accepted_dev_smoke_findings": 1
+    "readiness_blockers": 6,
+    "credential_blockers": 4,
+    "finding_blockers": 2,
+    "deferred_items": 10,
+    "accepted_dev_smoke_findings": 1,
+    "switch_disabled_items": 11
   },
   "readiness_blockers": [
-    {
-      "id": "PRD-MDM-001",
-      "category": "MDM",
-      "name": "Android 设备纳管",
-      "status": "pending_info",
-      "owner_department": "IT/采购",
-      "supplier_name": "TBD",
-      "blocking_scope": "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
-      "runbook_ref": "mdm-android-enterprise-implementation-plan-v0.1.md",
-      "next_action": "IT 选型、设备 enroll、策略下发和截图归档",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "default_readiness"
-    },
-    {
-      "id": "PRD-PAY-001",
-      "category": "payment",
-      "name": "聚合支付测试商户",
-      "status": "pending_info",
-      "owner_department": "财务/IT",
-      "supplier_name": "TBD",
-      "blocking_scope": "阻塞真实收款测试；不阻塞支付 mock",
-      "runbook_ref": "p0-api-contract-pack-v0.1.md",
-      "next_action": "获取测试商户号、回调地址、对账文件样例",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "default_readiness"
-    },
-    {
-      "id": "PRD-PAY-002",
-      "category": "payment",
-      "name": "生产商户与退款权限",
-      "status": "pending_info",
-      "owner_department": "财务/IT",
-      "supplier_name": "TBD",
-      "blocking_scope": "阻塞生产收款、退款和日结",
-      "runbook_ref": "finance-ar-ap-ledger-development-design-v0.1.md",
-      "next_action": "建立商户资料、密钥引用、退款审批和对账口径",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "default_readiness"
-    },
-    {
-      "id": "PRD-FACE-001",
-      "category": "face_age",
-      "name": "酒吧年龄/人脸核验",
-      "status": "pending_info",
-      "owner_department": "采购/IT/运营",
-      "supplier_name": "TBD",
-      "blocking_scope": "阻塞酒吧生产年龄核验通过",
-      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
-      "next_action": "获取 SDK/API、错误码、测试账号、合规材料",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "default_readiness"
-    },
     {
       "id": "PRD-NAS-AUTOMOUNT-001",
       "category": "nas",
@@ -137,32 +87,6 @@
       "source_table": "default_readiness"
     },
     {
-      "id": "PRD-WECOM-001",
-      "category": "wecom",
-      "name": "企业微信配置",
-      "status": "pending_info",
-      "owner_department": "IT/运营",
-      "supplier_name": "企业微信",
-      "blocking_scope": "阻塞企业微信 P0 同步能力",
-      "runbook_ref": "third-party-integration-development-design.md",
-      "next_action": "配置应用、通讯录、会话存档、回调和同步任务",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "default_readiness"
-    },
-    {
-      "id": "PRD-3P-001",
-      "category": "third_party",
-      "name": "机器人/视频/设备厂商接入资料",
-      "status": "pending_info",
-      "owner_department": "采购/IT",
-      "supplier_name": "TBD",
-      "blocking_scope": "不阻塞 P0 主闭环；阻塞真实厂商联调",
-      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
-      "next_action": "收集 SDK/API、签名、回调、字段映射和测试账号",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "default_readiness"
-    },
-    {
       "id": "PRD-160-001",
       "category": "ops160",
       "name": "160 运行配置生产化",
@@ -204,19 +128,6 @@
       "source_table": "credential_rotation"
     },
     {
-      "id": "PRD-CRED-OBJ-001",
-      "category": "credential",
-      "name": "对象存储",
-      "status": "pending_info",
-      "owner_department": "IT/运维/安全",
-      "supplier_name": "MinIO 或等效厂商",
-      "blocking_scope": "阻塞生产附件、证据包、对象备份接入",
-      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#73-对象存储-access-keysecret-key-轮换",
-      "next_action": "确认桶范围、权限、Access Key 引用和停用方式",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "credential_rotation"
-    },
-    {
       "id": "PRD-CRED-JWT-001",
       "category": "credential",
       "name": "JWT/Token 签名密钥",
@@ -226,32 +137,6 @@
       "blocking_scope": "阻塞生产登录和开放接口签发",
       "runbook_ref": "production-credential-rotation-runbook-v0.1.md#74-jwttoken-签名密钥轮换",
       "next_action": "设计签名版本、双验窗口、旧 token 失效计划",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "credential_rotation"
-    },
-    {
-      "id": "PRD-CRED-3P-001",
-      "category": "credential",
-      "name": "第三方供应商 API 密钥 / 聚合支付凭证 / 企业微信凭证",
-      "status": "pending_info",
-      "owner_department": "IT/采购/财务/运营/安全",
-      "supplier_name": "TBD",
-      "blocking_scope": "阻塞真实供应商联调或生产通过",
-      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
-      "next_action": "收集 SDK/API、签名算法、回调地址、测试账号和证据",
-      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-      "source_table": "credential_rotation"
-    },
-    {
-      "id": "PRD-CRED-OPEN-001",
-      "category": "credential",
-      "name": "开放平台应用/回调签名密钥",
-      "status": "pending_info",
-      "owner_department": "IT/安全/集成开发",
-      "supplier_name": "外部应用方/TBD",
-      "blocking_scope": "阻塞第三方双向开放生产接入",
-      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
-      "next_action": "建立应用、endpoint、allowed scopes、密钥引用和轮换窗口",
       "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
       "source_table": "credential_rotation"
     },
@@ -272,32 +157,12 @@
   "finding_blockers": [
     {
       "severity": "P0",
-      "id": "SEC-P0-MDM-DEVICE-001",
-      "title": "MDM/Android Enterprise 生产纳管仍处 pending_info",
-      "status": "open",
-      "owner": "IT/采购/运维",
-      "blocking_scope": "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作",
-      "next_action": "完成 MDM 选型、enroll、策略下发、设备绑定截图和生产准入记录",
-      "source": "security-scans/findings-register-v1.md"
-    },
-    {
-      "severity": "P0",
       "id": "SEC-P0-OPS-RECOVERY-001",
       "title": "NAS 挂载、真实同步和从 NAS 恢复证据已完成，生产凭证发放证据仍需补齐",
       "status": "open",
       "owner": "IT/安全/运维",
       "blocking_scope": "阻塞公开生产安全准入；不阻塞开发联调",
       "next_action": "P0-A no-system-write boundary：Codex 不安装系统级配置；后续由 IT 固化 160 开机自动挂载、定时备份、容量告警、失败告警和周期性恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据",
-      "source": "security-scans/findings-register-v1.md"
-    },
-    {
-      "severity": "P1",
-      "id": "SEC-P1-WEBHOOK-REPLAY-001",
-      "title": "真实供应商 Webhook 签名、防重放和轮询校验需在供应商资料到位后补实",
-      "status": "open",
-      "owner": "后端/IT/供应商联调负责人",
-      "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
-      "next_action": "按供应商 SDK/API 补字段映射、nonce、timestamp、签名验签、幂等、补偿和对账测试",
       "source": "security-scans/findings-register-v1.md"
     },
     {
@@ -324,6 +189,123 @@
       "next_action": "等总控启动公开访问后再配置",
       "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
       "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-MDM-001",
+      "category": "MDM",
+      "name": "Android 设备纳管",
+      "status": "switch_disabled",
+      "owner_department": "IT/采购",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "mdm-android-enterprise-implementation-plan-v0.1.md",
+      "next_action": "工作手机/平板/一体机 MDM 纳管 关闭：关闭后不允许工作手机、平板、一体机执行高风险核销、出酒、支付相关动作；相关操作只能在受控后台或人工流程内完成。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-PAY-001",
+      "category": "payment",
+      "name": "聚合支付测试商户",
+      "status": "switch_disabled",
+      "owner_department": "财务/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "p0-api-contract-pack-v0.1.md",
+      "next_action": "聚合支付 关闭：关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-PAY-002",
+      "category": "payment",
+      "name": "生产商户与退款权限",
+      "status": "switch_disabled",
+      "owner_department": "财务/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "finance-ar-ap-ledger-development-design-v0.1.md",
+      "next_action": "聚合支付 关闭：关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-FACE-001",
+      "category": "face_age",
+      "name": "酒吧年龄/人脸核验",
+      "status": "switch_disabled",
+      "owner_department": "采购/IT/运营",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
+      "next_action": "酒吧人脸/年龄核验 关闭：关闭后不调用第三方人脸/年龄接口；酒吧入场必须走人工证件核验、人工复核和审计留痕，不能宣称已完成自动人脸核验。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-WECOM-001",
+      "category": "wecom",
+      "name": "企业微信配置",
+      "status": "switch_disabled",
+      "owner_department": "IT/运营",
+      "supplier_name": "企业微信",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "third-party-integration-development-design.md",
+      "next_action": "企业微信 关闭：关闭后不读取企业微信通讯录、会话存档、客户联系或回调；员工账号由后台手动录入，质检仅使用平台内数据。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-3P-001",
+      "category": "third_party",
+      "name": "机器人/视频/设备厂商接入资料",
+      "status": "switch_disabled",
+      "owner_department": "采购/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
+      "next_action": "团购/渠道售票 关闭：关闭后不接美团/大众点评/抖音等渠道订单、票码、退款和对账接口；仅支持平台自出票和后台手动补录渠道信息。；开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。；餐饮 POS 关闭：关闭后不接餐饮 POS 点单、收银、券核销、退款、订单回流或对账接口；餐饮相关数据只支持后台手工登记或不启用。；零售 POS 关闭：关闭后不接零售 POS 商品/SKU、收银、券核销、退款、订单回流或对账接口；零售相关数据只支持后台手工登记或不启用。；机器人平台 关闭：关闭后不下发机器人任务、不接机器人状态、不要求机器人 API；配送和交接按人工流程留痕。；视频监控平台 关闭：关闭后不读取摄像头、录像、截图、片段链接或播放 token；系统只记录人工 evidence_link，不做视频内嵌播放或自动关联。；闸机/NFC/扫码设备 关闭：关闭后不接闸机、NFC 读卡器、扫码枪或设备网关接口；票务/权益核销只能走后台或人工扫码录入。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-CRED-OBJ-001",
+      "category": "credential",
+      "name": "对象存储",
+      "status": "switch_disabled",
+      "owner_department": "IT/运维/安全",
+      "supplier_name": "MinIO 或等效厂商",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#73-对象存储-access-keysecret-key-轮换",
+      "next_action": "对象存储/附件证据桶 关闭：关闭后不要求 MinIO/S3 等对象存储接口；附件和证据只允许记录外部受控证据编号或手工 evidence_link，不提供平台内文件上传/签名 URL 能力。；对象存储/附件证据桶 关闭：关闭后不要求 MinIO/S3 等对象存储接口；附件和证据只允许记录外部受控证据编号或手工 evidence_link，不提供平台内文件上传/签名 URL 能力。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-3P-001",
+      "category": "credential",
+      "name": "第三方供应商 API 密钥 / 聚合支付凭证 / 企业微信凭证",
+      "status": "switch_disabled",
+      "owner_department": "IT/采购/财务/运营/安全",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
+      "next_action": "聚合支付 关闭：关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。；团购/渠道售票 关闭：关闭后不接美团/大众点评/抖音等渠道订单、票码、退款和对账接口；仅支持平台自出票和后台手动补录渠道信息。；企业微信 关闭：关闭后不读取企业微信通讯录、会话存档、客户联系或回调；员工账号由后台手动录入，质检仅使用平台内数据。；酒吧人脸/年龄核验 关闭：关闭后不调用第三方人脸/年龄接口；酒吧入场必须走人工证件核验、人工复核和审计留痕，不能宣称已完成自动人脸核验。；开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。；餐饮 POS 关闭：关闭后不接餐饮 POS 点单、收银、券核销、退款、订单回流或对账接口；餐饮相关数据只支持后台手工登记或不启用。；零售 POS 关闭：关闭后不接零售 POS 商品/SKU、收银、券核销、退款、订单回流或对账接口；零售相关数据只支持后台手工登记或不启用。；机器人平台 关闭：关闭后不下发机器人任务、不接机器人状态、不要求机器人 API；配送和交接按人工流程留痕。；视频监控平台 关闭：关闭后不读取摄像头、录像、截图、片段链接或播放 token；系统只记录人工 evidence_link，不做视频内嵌播放或自动关联。；闸机/NFC/扫码设备 关闭：关闭后不接闸机、NFC 读卡器、扫码枪或设备网关接口；票务/权益核销只能走后台或人工扫码录入。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-OPEN-001",
+      "category": "credential",
+      "name": "开放平台应用/回调签名密钥",
+      "status": "switch_disabled",
+      "owner_department": "IT/安全/集成开发",
+      "supplier_name": "外部应用方/TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
+      "next_action": "开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。；开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
     }
   ],
   "accepted_dev_smoke_findings": [
@@ -335,6 +317,145 @@
       "owner": "后端/安全",
       "blocking_scope": "仅允许 local/dev/test；公开生产必须替换为正式身份源或强密码哈希方案",
       "next_action": "生产认证不得复用该 smoke 账号存储；若自建密码，采用 Argon2id/bcrypt/PBKDF2 并补 MFA/锁定策略",
+      "source": "security-scans/findings-register-v1.md"
+    }
+  ],
+  "switch_disabled_items": [
+    {
+      "id": "PRD-MDM-001",
+      "category": "MDM",
+      "name": "Android 设备纳管",
+      "status": "switch_disabled",
+      "owner_department": "IT/采购",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "mdm-android-enterprise-implementation-plan-v0.1.md",
+      "next_action": "工作手机/平板/一体机 MDM 纳管 关闭：关闭后不允许工作手机、平板、一体机执行高风险核销、出酒、支付相关动作；相关操作只能在受控后台或人工流程内完成。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-PAY-001",
+      "category": "payment",
+      "name": "聚合支付测试商户",
+      "status": "switch_disabled",
+      "owner_department": "财务/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "p0-api-contract-pack-v0.1.md",
+      "next_action": "聚合支付 关闭：关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-PAY-002",
+      "category": "payment",
+      "name": "生产商户与退款权限",
+      "status": "switch_disabled",
+      "owner_department": "财务/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "finance-ar-ap-ledger-development-design-v0.1.md",
+      "next_action": "聚合支付 关闭：关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-FACE-001",
+      "category": "face_age",
+      "name": "酒吧年龄/人脸核验",
+      "status": "switch_disabled",
+      "owner_department": "采购/IT/运营",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
+      "next_action": "酒吧人脸/年龄核验 关闭：关闭后不调用第三方人脸/年龄接口；酒吧入场必须走人工证件核验、人工复核和审计留痕，不能宣称已完成自动人脸核验。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-WECOM-001",
+      "category": "wecom",
+      "name": "企业微信配置",
+      "status": "switch_disabled",
+      "owner_department": "IT/运营",
+      "supplier_name": "企业微信",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "third-party-integration-development-design.md",
+      "next_action": "企业微信 关闭：关闭后不读取企业微信通讯录、会话存档、客户联系或回调；员工账号由后台手动录入，质检仅使用平台内数据。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-3P-001",
+      "category": "third_party",
+      "name": "机器人/视频/设备厂商接入资料",
+      "status": "switch_disabled",
+      "owner_department": "采购/IT",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "third-party-supplier-integration-kit-v0.1.md",
+      "next_action": "团购/渠道售票 关闭：关闭后不接美团/大众点评/抖音等渠道订单、票码、退款和对账接口；仅支持平台自出票和后台手动补录渠道信息。；开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。；餐饮 POS 关闭：关闭后不接餐饮 POS 点单、收银、券核销、退款、订单回流或对账接口；餐饮相关数据只支持后台手工登记或不启用。；零售 POS 关闭：关闭后不接零售 POS 商品/SKU、收银、券核销、退款、订单回流或对账接口；零售相关数据只支持后台手工登记或不启用。；机器人平台 关闭：关闭后不下发机器人任务、不接机器人状态、不要求机器人 API；配送和交接按人工流程留痕。；视频监控平台 关闭：关闭后不读取摄像头、录像、截图、片段链接或播放 token；系统只记录人工 evidence_link，不做视频内嵌播放或自动关联。；闸机/NFC/扫码设备 关闭：关闭后不接闸机、NFC 读卡器、扫码枪或设备网关接口；票务/权益核销只能走后台或人工扫码录入。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "default_readiness"
+    },
+    {
+      "id": "PRD-CRED-OBJ-001",
+      "category": "credential",
+      "name": "对象存储",
+      "status": "switch_disabled",
+      "owner_department": "IT/运维/安全",
+      "supplier_name": "MinIO 或等效厂商",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#73-对象存储-access-keysecret-key-轮换",
+      "next_action": "对象存储/附件证据桶 关闭：关闭后不要求 MinIO/S3 等对象存储接口；附件和证据只允许记录外部受控证据编号或手工 evidence_link，不提供平台内文件上传/签名 URL 能力。；对象存储/附件证据桶 关闭：关闭后不要求 MinIO/S3 等对象存储接口；附件和证据只允许记录外部受控证据编号或手工 evidence_link，不提供平台内文件上传/签名 URL 能力。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-3P-001",
+      "category": "credential",
+      "name": "第三方供应商 API 密钥 / 聚合支付凭证 / 企业微信凭证",
+      "status": "switch_disabled",
+      "owner_department": "IT/采购/财务/运营/安全",
+      "supplier_name": "TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
+      "next_action": "聚合支付 关闭：关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。；团购/渠道售票 关闭：关闭后不接美团/大众点评/抖音等渠道订单、票码、退款和对账接口；仅支持平台自出票和后台手动补录渠道信息。；企业微信 关闭：关闭后不读取企业微信通讯录、会话存档、客户联系或回调；员工账号由后台手动录入，质检仅使用平台内数据。；酒吧人脸/年龄核验 关闭：关闭后不调用第三方人脸/年龄接口；酒吧入场必须走人工证件核验、人工复核和审计留痕，不能宣称已完成自动人脸核验。；开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。；餐饮 POS 关闭：关闭后不接餐饮 POS 点单、收银、券核销、退款、订单回流或对账接口；餐饮相关数据只支持后台手工登记或不启用。；零售 POS 关闭：关闭后不接零售 POS 商品/SKU、收银、券核销、退款、订单回流或对账接口；零售相关数据只支持后台手工登记或不启用。；机器人平台 关闭：关闭后不下发机器人任务、不接机器人状态、不要求机器人 API；配送和交接按人工流程留痕。；视频监控平台 关闭：关闭后不读取摄像头、录像、截图、片段链接或播放 token；系统只记录人工 evidence_link，不做视频内嵌播放或自动关联。；闸机/NFC/扫码设备 关闭：关闭后不接闸机、NFC 读卡器、扫码枪或设备网关接口；票务/权益核销只能走后台或人工扫码录入。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "id": "PRD-CRED-OPEN-001",
+      "category": "credential",
+      "name": "开放平台应用/回调签名密钥",
+      "status": "switch_disabled",
+      "owner_department": "IT/安全/集成开发",
+      "supplier_name": "外部应用方/TBD",
+      "blocking_scope": "对应集成能力开关关闭；不要求真实外部接口或生产证据，但对应自动能力不得启用",
+      "runbook_ref": "production-credential-rotation-runbook-v0.1.md#75-第三方支付企业微信和开放平台密钥轮换",
+      "next_action": "开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。；开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。",
+      "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
+      "source_table": "credential_rotation"
+    },
+    {
+      "severity": "P0",
+      "id": "SEC-P0-MDM-DEVICE-001",
+      "title": "MDM/Android Enterprise 生产纳管仍处 pending_info",
+      "status": "switch_disabled",
+      "owner": "IT/采购/运维",
+      "blocking_scope": "对应集成能力开关关闭；不阻塞当前生产闭口，但开启能力前必须复核",
+      "next_action": "工作手机/平板/一体机 MDM 纳管 关闭：关闭后不允许工作手机、平板、一体机执行高风险核销、出酒、支付相关动作；相关操作只能在受控后台或人工流程内完成。",
+      "source": "security-scans/findings-register-v1.md"
+    },
+    {
+      "severity": "P1",
+      "id": "SEC-P1-WEBHOOK-REPLAY-001",
+      "title": "真实供应商 Webhook 签名、防重放和轮询校验需在供应商资料到位后补实",
+      "status": "switch_disabled",
+      "owner": "后端/IT/供应商联调负责人",
+      "blocking_scope": "对应集成能力开关关闭；不阻塞当前生产闭口，但开启能力前必须复核",
+      "next_action": "聚合支付 关闭：关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。；团购/渠道售票 关闭：关闭后不接美团/大众点评/抖音等渠道订单、票码、退款和对账接口；仅支持平台自出票和后台手动补录渠道信息。；企业微信 关闭：关闭后不读取企业微信通讯录、会话存档、客户联系或回调；员工账号由后台手动录入，质检仅使用平台内数据。；酒吧人脸/年龄核验 关闭：关闭后不调用第三方人脸/年龄接口；酒吧入场必须走人工证件核验、人工复核和审计留痕，不能宣称已完成自动人脸核验。；开放平台/第三方应用接入 关闭：关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。；餐饮 POS 关闭：关闭后不接餐饮 POS 点单、收银、券核销、退款、订单回流或对账接口；餐饮相关数据只支持后台手工登记或不启用。；零售 POS 关闭：关闭后不接零售 POS 商品/SKU、收银、券核销、退款、订单回流或对账接口；零售相关数据只支持后台手工登记或不启用。；机器人平台 关闭：关闭后不下发机器人任务、不接机器人状态、不要求机器人 API；配送和交接按人工流程留痕。；视频监控平台 关闭：关闭后不读取摄像头、录像、截图、片段链接或播放 token；系统只记录人工 evidence_link，不做视频内嵌播放或自动关联。；闸机/NFC/扫码设备 关闭：关闭后不接闸机、NFC 读卡器、扫码枪或设备网关接口；票务/权益核销只能走后台或人工扫码录入。",
       "source": "security-scans/findings-register-v1.md"
     }
   ]

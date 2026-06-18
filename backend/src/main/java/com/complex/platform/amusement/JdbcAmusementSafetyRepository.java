@@ -1,4 +1,5 @@
 package com.complex.platform.amusement;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -6,8 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,10 +33,22 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, amusement_project_id, notice_type, title, content_version,
                        content_text, status, effective_from, effective_to, created_by_user_id,
-                       evidence_attachment_ids, created_at, updated_at
+                       evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_safety_notices
                  ORDER BY project_id, title, id
                 """, this::mapNotice);
+    }
+
+    @Override
+    public List<AmusementSafetyNoticeRecord> findSafetyNoticesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, amusement_project_id, notice_type, title, content_version,
+                       content_text, status, effective_from, effective_to, created_by_user_id,
+                       evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM amusement_safety_notices
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY project_id, title, id
+                """, Map.of("merchant_id", merchantId), this::mapNotice);
     }
 
     @Override
@@ -45,7 +56,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, amusement_project_id, notice_type, title, content_version,
                        content_text, status, effective_from, effective_to, created_by_user_id,
-                       evidence_attachment_ids, created_at, updated_at
+                       evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_safety_notices
                  WHERE id = :id
                 """, Map.of("id", id), this::mapNotice).stream().findFirst();
@@ -57,25 +68,14 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 INSERT INTO amusement_safety_notices (
                     id, project_id, amusement_project_id, notice_type, title, content_version,
                     content_text, status, effective_from, effective_to, created_by_user_id,
-                    evidence_attachment_ids, created_at, updated_at
+                    evidence_attachment_ids, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :project_id, :amusement_project_id, :notice_type, :title, :content_version,
                     :content_text, :status, :effective_from, :effective_to, :created_by_user_id,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    project_id = EXCLUDED.project_id,
-                    amusement_project_id = EXCLUDED.amusement_project_id,
-                    notice_type = EXCLUDED.notice_type,
-                    title = EXCLUDED.title,
-                    content_version = EXCLUDED.content_version,
-                    content_text = EXCLUDED.content_text,
-                    status = EXCLUDED.status,
-                    effective_from = EXCLUDED.effective_from,
-                    effective_to = EXCLUDED.effective_to,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
+                ON CONFLICT (id) DO NOTHING
                 """, noticeParameters(record));
         return record;
     }
@@ -93,20 +93,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                     :visitor_name, :signer_name, :acknowledgement_method, :content_version, :content_hash,
                     :acknowledged_at, :operator_user_id, CAST(:evidence_attachment_ids AS jsonb), :created_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    notice_id = EXCLUDED.notice_id,
-                    project_id = EXCLUDED.project_id,
-                    amusement_project_id = EXCLUDED.amusement_project_id,
-                    session_id = EXCLUDED.session_id,
-                    customer_id = EXCLUDED.customer_id,
-                    visitor_name = EXCLUDED.visitor_name,
-                    signer_name = EXCLUDED.signer_name,
-                    acknowledgement_method = EXCLUDED.acknowledgement_method,
-                    content_version = EXCLUDED.content_version,
-                    content_hash = EXCLUDED.content_hash,
-                    acknowledged_at = EXCLUDED.acknowledged_at,
-                    operator_user_id = EXCLUDED.operator_user_id,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
+                ON CONFLICT (id) DO NOTHING
                 """, acknowledgementParameters(record));
         return record;
     }
@@ -116,10 +103,22 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, amusement_project_id, session_id, device_id, customer_id,
                        severity, status, title, description, reported_by_user_id, reported_channel,
-                       occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at
+                       occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_incidents
                  ORDER BY occurred_at DESC, id
                 """, this::mapIncident);
+    }
+
+    @Override
+    public List<AmusementIncidentRecord> findIncidentsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, amusement_project_id, session_id, device_id, customer_id,
+                       severity, status, title, description, reported_by_user_id, reported_channel,
+                       occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM amusement_incidents
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY occurred_at DESC, id
+                """, Map.of("merchant_id", merchantId), this::mapIncident);
     }
 
     @Override
@@ -127,7 +126,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, amusement_project_id, session_id, device_id, customer_id,
                        severity, status, title, description, reported_by_user_id, reported_channel,
-                       occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at
+                       occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_incidents
                  WHERE id = :id
                 """, Map.of("id", id), this::mapIncident).stream().findFirst();
@@ -139,26 +138,15 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 INSERT INTO amusement_incidents (
                     id, project_id, amusement_project_id, session_id, device_id, customer_id,
                     severity, status, title, description, reported_by_user_id, reported_channel,
-                    occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at
+                    occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :project_id, :amusement_project_id, :session_id, :device_id, :customer_id,
                     :severity, :status, :title, :description, :reported_by_user_id, :reported_channel,
-                    :occurred_at, :resolution, :closed_at, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    :occurred_at, :resolution, :closed_at, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
-                    project_id = EXCLUDED.project_id,
-                    amusement_project_id = EXCLUDED.amusement_project_id,
-                    session_id = EXCLUDED.session_id,
-                    device_id = EXCLUDED.device_id,
-                    customer_id = EXCLUDED.customer_id,
-                    severity = EXCLUDED.severity,
                     status = EXCLUDED.status,
-                    title = EXCLUDED.title,
-                    description = EXCLUDED.description,
-                    reported_by_user_id = EXCLUDED.reported_by_user_id,
-                    reported_channel = EXCLUDED.reported_channel,
-                    occurred_at = EXCLUDED.occurred_at,
                     resolution = EXCLUDED.resolution,
                     closed_at = EXCLUDED.closed_at,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
@@ -216,7 +204,8 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 .addValue("created_by_user_id", record.createdByUserId())
                 .addValue("evidence_attachment_ids", writeJson(record.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(record.updatedAt()))
+                .addValue("merchant_id", record.merchantId());
     }
 
     private MapSqlParameterSource acknowledgementParameters(AmusementWaiverAcknowledgementRecord record) {
@@ -257,7 +246,8 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 .addValue("closed_at", timestampWithTimeZone(record.closedAt()))
                 .addValue("evidence_attachment_ids", writeJson(record.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(record.updatedAt()))
+                .addValue("merchant_id", record.merchantId());
     }
 
     private MapSqlParameterSource actionParameters(AmusementIncidentActionRecord record) {
@@ -288,7 +278,8 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 resultSet.getString("created_by_user_id"),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
                 resultSet.getTimestamp("created_at").toInstant(),
-                resultSet.getTimestamp("updated_at").toInstant()
+                resultSet.getTimestamp("updated_at").toInstant(),
+                resultSet.getString("merchant_id")
         );
     }
 
@@ -331,7 +322,8 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 instant(resultSet, "closed_at"),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
                 resultSet.getTimestamp("created_at").toInstant(),
-                resultSet.getTimestamp("updated_at").toInstant()
+                resultSet.getTimestamp("updated_at").toInstant(),
+                resultSet.getString("merchant_id")
         );
     }
 
@@ -353,9 +345,6 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
         return resultSet.getTimestamp(columnName) == null ? null : resultSet.getTimestamp(columnName).toInstant();
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private String writeJson(Object value) {
         try {

@@ -248,22 +248,22 @@ class InventoryControllerTests {
 
     private InventoryItemRecord item() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new InventoryItemRecord("item_1", null, "Vodka", "spirit", "bottle", null, false, 2, "active", now, now);
+        return new InventoryItemRecord("item_1", null, "Vodka", "spirit", "bottle", null, false, 2, "active", now, now, null);
     }
 
     private InventorySupplierRecord supplier() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new InventorySupplierRecord("supplier_1", "Supplier", "general", null, null, "active", now, now);
+        return new InventorySupplierRecord("supplier_1", "Supplier", "general", null, null, "active", now, now, null);
     }
 
     private PurchaseRequestRecord purchaseRequest() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new PurchaseRequestRecord("purchase_1", "PR202606140001", "supplier_1", "item_1", 2, LocalDate.parse("2026-06-20"), "created", List.of(), now, now);
+        return new PurchaseRequestRecord("purchase_1", "PR202606140001", "supplier_1", "item_1", 2, LocalDate.parse("2026-06-20"), "created", List.of(), now, now, null);
     }
 
     private SavedBottleRecord savedBottle() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new SavedBottleRecord("saved_1", "cust_1", "bar_1", "item_1", "Vodka", 2, 2, "bottle", null, "stored", List.of(), now, now);
+        return new SavedBottleRecord("saved_1", "cust_1", "bar_1", "item_1", "Vodka", 2, 2, "bottle", null, "stored", List.of(), now, now, null, false, null, null, null, null, null);
     }
 
     private SavedBottleClaimRecord savedBottleClaim() {
@@ -273,22 +273,22 @@ class InventoryControllerTests {
 
     private StockMovementRecord stockMovement(String movementType) {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new StockMovementRecord("movement_1", movementType, "item_1", "wh_1", "bar_1", 1, "manual", null, null, null, List.of(), "completed", now);
+        return new StockMovementRecord("movement_1", movementType, "item_1", "wh_1", "bar_1", 1, "manual", null, null, null, List.of(), "completed", now, null);
     }
 
     private StockAdjustmentRecord stockAdjustment() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new StockAdjustmentRecord("adjust_1", "item_1", "wh_1", "loss", 1, "broken", List.of(), "completed", now);
+        return new StockAdjustmentRecord("adjust_1", "item_1", "wh_1", "loss", 1, "broken", List.of(), "completed", now, null);
     }
 
     private InventoryStockBatchRecord stockBatch() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new InventoryStockBatchRecord("batch_1", "item_1", "wh_1", "BATCH-1", "supplier_1", 2, Instant.parse("2026-06-20T00:00:00Z"), "active", List.of(), now, now);
+        return new InventoryStockBatchRecord("batch_1", "item_1", "wh_1", "BATCH-1", "supplier_1", 2, Instant.parse("2026-06-20T00:00:00Z"), "active", List.of(), now, now, null);
     }
 
     private InventoryRiskAlertRecord riskAlert() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new InventoryRiskAlertRecord("risk_1", "safety_stock_low", "medium", "item_1", "wh_1", null, 2, 5, null, "open", "staff_ops", now);
+        return new InventoryRiskAlertRecord("risk_1", "safety_stock_low", "medium", "item_1", "wh_1", null, 2, 5, null, "open", "staff_ops", now, null);
     }
 
     private InventoryRiskScanResult riskScanResult() {
@@ -297,7 +297,7 @@ class InventoryControllerTests {
 
     private SupplierReconciliationRecord supplierReconciliation() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new SupplierReconciliationRecord("supplier_recon_1", "supplier_1", LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-30"), 100000L, 88000L, -12000L, "difference_found", List.of("att_invoice"), "staff_finance", now, now);
+        return new SupplierReconciliationRecord("supplier_recon_1", "supplier_1", LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-30"), 100000L, 88000L, -12000L, "difference_found", List.of("att_invoice"), "staff_finance", now, now, null);
     }
 
     private TraceHandoverRecord traceHandover() {

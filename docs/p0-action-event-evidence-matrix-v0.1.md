@@ -85,12 +85,24 @@
 | 生产前置状态查询 | `production_readiness.viewed` / `production_readiness.view_failed` | 查询人、数据范围、筛选条件、失败原因 | 总控/IT/运维 | 敏感证据链接按权限脱敏 |
 | 生产前置状态更新 | `production_readiness.updated` / `production_readiness.update_failed` | 前后状态、责任人、计划日期、证据链接、阻断范围、降级方式 | IT/运维 | 高风险，需复核 |
 | 生产准入检查 | `production_readiness.checked` / `production_readiness.check_failed` | 检查范围、阻断项、通过项、执行人、检查时间 | 总控/IT/运维 | 任一阻断项未通过不得标记真实生产就绪 |
-| MDM 策略检查 | `mdm.policy_checked` | MDM 状态、策略状态、设备清单、失败设备 | IT/运维 | 未纳管设备不得生产使用 |
+| MDM 策略检查 | `mdm.policy_checked` | MDM 状态、策略状态、设备清单、失败设备；MDM 白名单/预装清单/AMAPI 拦截留痕字段（P1） | IT/运维 | **依赖外部 MDM，本期以终端开关代偿，纳管后恢复硬禁用**：本期 MDM 自有侧暂缓，"未纳管设备禁用高风险动作"由**终端开关 + 人工准入**代偿，验收降级，由 IT 安全负责人签字（2026-06-18 业务确认）（见下方 D10 收口口径） |
 | 凭证轮换检查 | `credential.rotation_checked` | 凭证台账、到期项、轮换记录、异常项 | IT/运维 | 长期无责任凭证阻断生产 |
 | 恢复演练检查 | `restore.drill_checked` | 最近演练时间、结果、失败原因、补救计划 | IT/运维 | 未演练不得判定生产可恢复 |
 | QA 用例执行 | `qa.test_executed` | 用例编号、环境、输入摘要、执行结果、缺陷链接 | 测试负责人 | P0 失败项必须闭环 |
 | 敏感证据查看 | `sensitive.viewed` | 查看原因、审批单、查看范围 | 法务/风控 | 必须审批 |
 | 证据导出 | `evidence.exported` | 导出原因、水印、文件摘要 | 法务/风控 | 必须审批 |
+
+### 3.1 MDM "未纳管禁用" 收口口径（D10，与 `android-device-terminal-development-design` 同一口径，2026-06-18 业务定稿）
+
+本文 `mdm.policy_checked` 原复核规则"未纳管设备不得生产使用"与 `android-device-terminal-development-design`"MDM 自有侧本期暂缓"存在矛盾。两文件统一收口口径如下（2026-06-18 业务定稿）：
+
+- **本期 MDM 自有侧暂缓**：仅保留外部 MDM/Android Enterprise/AMAPI 接口与后台开关占位，不落 `management_status`/`policy_status`/`last_policy_sync_at`/`device_credential_hash` 等自有侧字段。
+- **"未纳管设备禁用高风险动作"由终端开关 + 人工准入代偿**：在外部 MDM 纳管未就绪期间，通过终端能力开关关闭未纳管设备的高风险动作（核销、点单、放行、结算、调账等），并以人工准入流程审核设备发放，达到等效"未纳管禁用"效果。
+- **验收降级，由 IT 安全负责人签字（2026-06-18 业务确认）**：MDM 强管控验收降级为"终端开关 + 人工准入"代偿验收，由 IT 安全负责人作为签字责任人对降级口径负责留痕。
+- **`mdm.policy_checked` 事件标注**：标注"依赖外部 MDM，本期以终端开关代偿，纳管后恢复硬禁用"；外部 MDM 纳管能力就绪后恢复对未纳管设备的硬禁用。
+- **MDM 白名单 / 预装清单 / AMAPI 拦截留痕字段为 P1**：相关留痕字段在外部 MDM 纳管落地阶段（P1）补齐，不计入本期 P0 闭环。
+
+验收降级签字责任人 = IT 安全负责人（2026-06-18 业务确认定稿）。
 
 ## 4. 证据保留与访问
 
@@ -135,3 +147,5 @@
 |---|---|---|
 | 2026-06-13 | V0.1 OpenAPI 事件字典收口 | 明确本文负责高风险证据策略，接口级完整成功/失败事件字典以 `p0-openapi-contract-closure-appendix-v0.1.md` 为准；新增 `verify:openapi-closure` 同步闸口 |
 | 2026-06-13 | V0.1 运维/质量事件补强 | 新增 API 契约、数据库迁移、160 发布、NAS 备份、恢复演练、生产前置状态、MDM、凭证轮换和 QA 执行事件 |
+| 2026-06-18 | D10 MDM 收口【待业务最终确认】 | `mdm.policy_checked` 复核规则由"未纳管设备不得生产使用"改为"依赖外部 MDM，本期以终端开关代偿，纳管后恢复硬禁用"；新增 §3.1 收口口径（终端开关+人工准入代偿、验收降级须签字责任人、MDM 白名单/预装清单/AMAPI 拦截留痕字段 P1），与 `android-device-terminal-development-design` 同一口径 |
+| 2026-06-18 | D10 MDM 收口定稿 | §3.1 及 `mdm.policy_checked` 行：验收降级签字责任人由【待业务最终确认】定稿为"IT 安全负责人（2026-06-18 业务确认）"；其余代偿口径（终端开关+人工准入代偿、白名单/预装清单/AMAPI 留痕字段 P1）不变，与 `android-device-terminal-development-design` 同一口径 |

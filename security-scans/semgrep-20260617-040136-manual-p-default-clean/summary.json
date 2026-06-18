@@ -1,0 +1,15 @@
+{
+  "scan_id": "semgrep-20260617-040136-manual-p-default-clean",
+  "created_at": "2026-06-17T04:01:42.253030+00:00",
+  "command": "semgrep scan --config p/default --json --metrics off --timeout 60 --exclude security-scans",
+  "exit_code": 0,
+  "results_count": 0,
+  "errors_count": 0,
+  "paths_scanned": 1020,
+  "paths_skipped": 0,
+  "scan_dir": "security-scans/semgrep-20260617-040136-manual-p-default-clean",
+  "json_path": "security-scans/semgrep-20260617-040136-manual-p-default-clean/semgrep.json",
+  "stderr_path": "security-scans/semgrep-20260617-040136-manual-p-default-clean/semgrep.stderr.log",
+  "top_findings": [],
+  "errors": []
+}

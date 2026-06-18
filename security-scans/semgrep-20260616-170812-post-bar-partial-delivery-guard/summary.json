@@ -1,0 +1,9 @@
+{
+  "path": "security-scans/semgrep-20260616-170812-post-bar-partial-delivery-guard/semgrep-results.json",
+  "generated_at": "2026-06-16T17:08:18.356368+00:00",
+  "exit_code": 0,
+  "exists": true,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1191
+}

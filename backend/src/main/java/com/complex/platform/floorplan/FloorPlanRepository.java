@@ -6,6 +6,8 @@ import java.util.Optional;
 public interface FloorPlanRepository {
     List<FloorPlanRecord> findAllFloorPlans();
 
+    List<FloorPlanRecord> findAllFloorPlansByMerchant(String merchantId);
+
     Optional<FloorPlanRecord> findFloorPlanById(String id);
 
     FloorPlanRecord saveFloorPlan(FloorPlanRecord record);

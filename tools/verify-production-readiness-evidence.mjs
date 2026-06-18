@@ -57,8 +57,8 @@ function forbidPlaintextSecrets(label, text) {
     /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/,
     /\bAKIA[0-9A-Z]{16}\b/,
     /\b(?:P0_ADMIN_PASSWORD|POSTGRES_PASSWORD|MINIO_SECRET_KEY|MINIO_ROOT_PASSWORD|AWS_SECRET_ACCESS_KEY|ALIYUN_ACCESS_KEY_SECRET|API_SECRET|SECRET_KEY)\s*[:=]\s*["']?[A-Za-z0-9_./+=-]{8,}/i,
-    /\b(?:password|token)\s*[:=]\s*["'][^"'<\n]{8,}["']/i,
-    /\b(?:secret|secret_key)\s*[:=]\s*["'][^"'<\n]{8,}["']/i,
+    /\b(?:password|token)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{8,}\\*["']|[A-Za-z0-9_./+=-]{12,})/i,
+    /\b(?:secret_key|secret)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{8,}\\*["']|[A-Za-z0-9_./+=-]{12,})/i,
   ];
   for (const [index, pattern] of patterns.entries()) {
     if (pattern.test(text)) failures.push(`${label} contains apparent plaintext secret pattern #${index + 1}`);

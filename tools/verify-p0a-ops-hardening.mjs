@@ -134,7 +134,7 @@ for (const [label, content] of [
   forbidPattern(content, /\/etc\/fstab/, label, '/etc/fstab write path');
   forbidPattern(content, /\/etc\/systemd\/system/, label, 'systemd system path');
   forbidPattern(content, /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/, label, 'private key');
-  forbidPattern(content, /\b(?:password|secret|token)\s*[:=]\s*["'][^"'<\n]{12,}["']/i, label, 'plaintext secret assignment');
+  forbidPattern(content, /\b(?:password|secret|token)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{12,}\\*["']|[A-Za-z0-9_./+=-]{16,})/i, label, 'plaintext secret assignment');
   forbidPattern(content, /key=[A-Za-z0-9_-]{16,}/, label, 'webhook key');
 }
 

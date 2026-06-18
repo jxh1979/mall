@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 
 public record InventoryRiskAlertRecord(
@@ -14,6 +15,7 @@ public record InventoryRiskAlertRecord(
         Instant expireAt,
         String status,
         String operatorUserId,
-        Instant createdAt
+        Instant createdAt,
+        @JsonIgnore String merchantId
 ) {
 }

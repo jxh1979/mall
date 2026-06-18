@@ -30,7 +30,7 @@ class MerchantServiceJdbcIntegrationTests {
     void migrationCreatesMerchantServiceTablesAndSeedsPermissions() {
         assertThat(regclass("merchant_service_work_orders")).isEqualTo("merchant_service_work_orders");
         assertThat(regclass("merchant_service_work_order_actions")).isEqualTo("merchant_service_work_order_actions");
-        assertThat(currentFlywayVersion()).isEqualTo("054");
+        assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
 
         assertThat(permissionCodes()).contains(
                 "merchant.service_work_order.view",

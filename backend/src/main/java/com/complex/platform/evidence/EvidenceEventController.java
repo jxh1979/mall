@@ -1,4 +1,5 @@
 package com.complex.platform.evidence;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -85,11 +86,5 @@ public class EvidenceEventController {
     ) {
         authorizationService.requirePermission("evidence.timeline.view");
         return ApiResponse.ok(service.getTimeline(objectType, objectId));
-    }
-
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
     }
 }

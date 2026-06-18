@@ -9,6 +9,25 @@
 > - **待业务确认**：检修字段是否结构化+审批是否自动联动 open_status；现场权益校验由 amusement 调 ticketing 还是网关先校验；检修是否必须落一体机入口。
 > - **候选验收口径**：检修主管确认通过后项目 open_status 自动恢复；无有效权益不能核销入场。
 
+> **⚠️ D11 游乐现状标注补强（2026-06-18，只读核验真实代码/迁移后回填，未改代码）**
+> 以下四项把 R5 横幅的现状逐条补全为「现状 → 目标 → 候选验收口径（已升正式验收）」三段式，与真实迁移 V014 一致；本文第 6/7/8/16 节中描述为「现有/已落地」但真实缺失的能力，一律以本节为准视为「目标，尚未实现」。
+> 1. **现场核销未校验票务权益**：
+>    - 现状：`AmusementService` 把 `credential_payload` 原样入库（V014 `amusement_verifications.credential_payload`），amusement 域无任何 ticketing/entitlement 注入或调用，「判该权益是否有效/是否绑定本项目/剩余次数/有效期」全部未实现；§5.5 失败原因 `entitlement_*` 在真实代码无判定路径。
+>    - 目标：核销时在线校验票实例与权益实例（适用项目、有效期、剩余次数），权益不可用即拒绝并回写票务。
+>    - 候选验收口径（已升正式验收）：无有效/未绑定本项目权益时核销必须失败并返回明确 `entitlement_*` 原因；票据被截图/重复使用不得放行。
+> 2. **主管确认检修（approveReopen）不联动项目状态、无项目级 pause/resume 写端点**：
+>    - 现状：`approveReopen` 只把 `amusement_safety_inspections.reopen_status` 改为 approved，**从不写 `amusement_projects.open_status`**；§5.1 的九态项目状态机在真实迁移中只有 `open_status CHECK IN ('open','paused','closed','maintenance')` 四态（无 draft/unopened/preparing/abnormal/archived）；无独立的项目级 pause/resume 写端点。
+>    - 目标：主管确认恢复后由系统联动把项目/设备 `maintenance/abnormal → open`，并提供项目级暂停/恢复写端点；真实状态机至少补齐 PRD 六态。
+>    - 候选验收口径（已升正式验收）：主管确认通过后项目 `open_status` 自动恢复为 `open` 并产生 `amusement.project.resumed` 事件；未确认前任何路径不得把项目流转回 `open`。
+> 3. **`amusement_maintenance_record` 表 / `/maintenance-records` / `/confirm-resume` 端点缺失**：
+>    - 现状：真实迁移 V014 **无** `amusement_maintenance_record`、`amusement_capacity_config`、`amusement_capacity_snapshot` 三表；§7.14a/§8.7.1 描述的「提交检修 / 主管确认恢复营业」端点与 `amusement.maintenance.*` 权限在真实代码中不存在；检修单位/工程师/异常原因只能塞进非结构化 JSON。
+>    - 目标：新增检修记录表与「提交检修 / `confirm-resume`」端点，检修单位复用供应链 `suppliers`，工程师/结果/异常说明/主管确认结构化落地。
+>    - 候选验收口径（已升正式验收）：检修必填项（检修单位、工程师、检修时间、结果、异常说明、来源终端、点位）可结构化留痕；`result=fail` 或未主管确认时 `confirm-resume` 返回 409 并保持检修中。
+> 4. **三维度容量仅场次单维，capacity_config/snapshot 未实现**：
+>    - 现状：真实迁移仅 `amusement_sessions.capacity/used_capacity` 单维度容量（原子扣减为真），无点位/设备维度（`amusement_capacity_config`）也无容量快照表（`amusement_capacity_snapshot`），§6.4 的「三维度取最小值」目前退化为场次单维。
+>    - 目标：补点位/设备维度配置与三维度容量快照，核销按三维度取最小可放行余量判定。
+>    - 候选验收口径（已升正式验收）：任一受控维度（项目安全上限/场次/点位设备）余量为 0 即拒绝并返回 `session_full`；三维度均配置时取最小值放行。
+
 本文档覆盖【游乐设施运营系统：项目、场次、核销、巡检】的开发级设计。目标是让后端、前端、安卓端、数据分析和第三方设备对接可以直接按本文档拆任务和编码。
 
 ## 1. 系统定位
@@ -291,7 +310,7 @@ stateDiagram-v2
 > **三维度容量校验规则（修订说明 2026-06-07，amuse-1 / PRD §11 已确认规则 1）：**
 > 业务拍板"P0 按具体项目 + 具体场次/时段 + 点位/设备控制容量；项目总量只作汇总和安全上限"。核销时按三维度分别计算剩余可放行人数，取 **最小值** 作为本次能否放行的口径，任一维度为 0 即拒绝（失败原因 `session_full`）：
 > 1. **项目维度（安全上限）**：`amusement_project.default_capacity` 仅作上层汇总与安全上限，超过即报警但**不**作为现场放行唯一口径。
-> 2. **场次/时段维度**：`amusement_session.capacity - checked_in_count`。
+> 2. **场次/时段维度**：`amusement_sessions.capacity - used_capacity`（字段口径以真实迁移 V014 为准，已用 `used_capacity`；本文旧称 `checked_in_count` 作废，见 §7.4 标注）。
 > 3. **点位/设备维度**：`amusement_capacity_config.max_concurrent`（或 `amusement_device.max_concurrent`）减去该点位/设备当前在场人数（来自 `amusement_capacity_snapshot`）。
 >
 > 放行余量 = min(场次余量, 点位/设备余量)；项目维度仅做"是否超安全上限"的旁路校验。任一受控维度 ≤ 0 拒绝。三维度均未配置时退化为场次维度。
@@ -417,9 +436,9 @@ stateDiagram-v2
 | checkin_start_at | timestamptz | 检票开始 |
 | checkin_end_at | timestamptz | 检票结束 |
 | capacity | int | 当前场次/时段容量，需结合项目、点位/设备容量控制 |
-| reserved_count | int | 已预约 |
-| checked_in_count | int | 已入场 |
-| status | varchar(32) | 场次状态 |
+| reserved_count | int | 已预约（**目标增补字段（P2，尚未迁移）**：真实迁移 V014 `amusement_sessions` 无此列，预约排队为 P2 预留） |
+| used_capacity | int | 已占用/已入场容量（**真实迁移为准**：V014 `amusement_sessions` 实际列名为 `used_capacity` 且带 CHECK `0 ≤ used_capacity ≤ capacity`；本文旧称 `checked_in_count` 作废，全文容量计数列统一为 `used_capacity`） |
+| status | varchar(32) | 场次状态（真实 CHECK：scheduled/open/closed/cancelled，本文 §5.2 八态多数为目标增补，尚未迁移） |
 
 索引：
 
@@ -535,30 +554,51 @@ stateDiagram-v2
 
 ### 7.12 amusement_safety_template_items
 
+> **整表目标增补（P0，尚未迁移）（D6，2026-06-18）：** 真实迁移 V014 **不存在** `amusement_safety_template_items` 子表，模板巡检项当前内嵌在 `amusement_safety_templates.items_json` 数组中；`amusement-p0-safety-inspection-spec` §4 声称的 `amusement_safety_template_items.severity` 列在真实迁移中**不存在**（severity 仅作为 V024 P1 表 `amusement_incidents.severity` 存在，与巡检项严重度无关）。下表 `severity` 等为目标结构化拆表方案，落地需新迁移。
+
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | uuid | 主键 |
 | template_id | uuid | 模板 ID |
 | item_name | varchar(128) | 巡检项 |
 | item_type | varchar(32) | boolean、number、text、photo |
+| severity | varchar(16) | 严重度 notice/warning/blocking/critical（**目标增补字段（P0，尚未迁移）**） |
 | required | boolean | 是否必填 |
 | sort_order | int | 排序 |
 
 ### 7.13 amusement_safety_inspections
 
+> **字段口径修正（D6，以真实迁移 V014 为准，2026-06-18）：** 真实迁移 `amusement_safety_inspections` 实际列为：`id, project_id, template_id, items_json, overall_result, inspection_status, rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at, approved_at, operator_note, evidence_attachment_ids, created_at, updated_at`。本文与 `amusement-p0-safety-inspection-spec` §4 曾声称的 `session_id/device_id/inspector_id(checker_id)` 在真实迁移中**不存在**，巡检主记录仅挂在 `project_id` 上、单项结果与严重度内嵌在 `items_json` 中、恢复审批用 `reopen_status` 列 + `amusement_safety_actions` 行表达（**无独立 `amusement_reopen_approvals` 表**）。下表「真实列」为现状，「目标增补」为 P0 待迁移项。
+
+真实列（现状，V014）：
+
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | uuid | 主键 |
-| project_id | uuid | 项目 ID |
-| device_id | uuid | 设备 ID，可为空 |
-| template_id | uuid | 模板 ID |
-| status | varchar(32) | 巡检状态 |
-| checker_id | uuid | 巡检人 |
-| submitted_at | timestamptz | 提交时间 |
-| reviewed_by | uuid | 复核人 |
-| reviewed_at | timestamptz | 复核时间 |
+| id | varchar(64) | 主键 |
+| project_id | varchar(64) | 项目 ID（巡检主记录仅挂项目，无场次/设备外键） |
+| template_id | varchar(64) | 模板 ID |
+| items_json | jsonb | 单项结果数组（严重度/通过/证据内嵌于此，非独立子表） |
+| overall_result | varchar(64) | 总体结果，CHECK：pass/fail/pending_rectification |
+| inspection_status | varchar(64) | 巡检状态 |
+| rectification_status | varchar(64) | 整改状态 |
+| reopen_status | varchar(64) | 恢复审批状态（恢复审批以此列 + `amusement_safety_actions` 行表达） |
+| inspected_at / submitted_at / rechecked_at / approved_at | timestamptz | 各阶段时间 |
+| operator_note | text | 操作备注 |
+| evidence_attachment_ids | jsonb | 证据附件 |
+| created_at / updated_at | timestamptz | 审计时间 |
+
+目标增补字段（P0，尚未迁移）：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| session_id | uuid | 场次 ID，可为空（**目标增补字段（P0，尚未迁移）**：真实 V014 无此列，巡检无法按场次维度归集） |
+| device_id | uuid | 设备/点位 ID，可为空（**目标增补字段（P0，尚未迁移）**：真实 V014 无此列，无法按设备点位归集巡检） |
+| inspector_id | uuid | 巡检人（**目标增补字段（P0，尚未迁移）**：真实 V014 无 `inspector_id`/`checker_id` 列，巡检人仅能在 `operator_note`/`items_json` 中非结构化留痕） |
+| reviewed_by / reviewed_at | uuid / timestamptz | 复核人与时间（**目标增补字段（P0，尚未迁移）**：真实 V014 仅有 `approved_at`，无结构化复核人外键） |
 
 ### 7.14 amusement_safety_inspection_items
+
+> **整表目标增补（P0，尚未迁移）（D6，2026-06-18）：** 真实迁移 V014 **不存在** `amusement_safety_inspection_items` 子表，单项巡检结果（结果值/是否通过/严重度/证据）当前内嵌在 `amusement_safety_inspections.items_json` 数组中。下表为目标结构化拆表方案，落地需新迁移。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -1111,3 +1151,5 @@ P0 完成时必须满足：
 | 2026-06-10 审计收口执行 | 改 | §1/§2/§9/§14/§18 | 明确 P0 只做项目、场次、容量、在线核销、人工放行、安全巡检、整改复检和主管恢复；巡检模板/记录改 P0；安全告知/事故工单 P1；游客自助预约排队、团体/包场和集团视图 P2 | 总控确认按推荐执行，修复游乐 P0 安全巡检与旧 P1 页面/排期冲突 |
 | 2026-06-12 默认方案收口 | 改 | §8 | 删除 `/api/amusement` 和相对路径作为当前开发依据，统一改为 `docs/openapi/openapi-p0.yaml` 已定义的 `/api/v1/amusement/*`；预约排队、离线同步、项目状态细分动作和独立规则 CRUD 标为后续扩展 | 执行“OpenAPI 为接口唯一事实源”的默认收口方案，避免游乐域前后端按旧路径开发 |
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §8 | 游乐 P0 接口必须同时对齐 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md`；未进入追溯附录不得生成 Controller、SDK/mock 或接口自动化 | 防止游乐核销、容量、状态、安全巡检和恢复审批遗漏权限、事件、终端或样例准入追溯 |
+| 2026-06-18 D6 字段口径统一 | 改 | §6.4/§7.4/§7.12/§7.13/§7.14 | 以真实迁移 V014 为准：容量计数列统一 `used_capacity`（弃用 `checked_in_count`）；`amusement_safety_inspections` 列出真实列并把 `session_id/device_id/inspector_id/reviewed_by` 标为「目标增补字段（P0，尚未迁移）」；`amusement_safety_inspection_items`、`amusement_safety_template_items`（含 `severity`）标为整表目标增补；与 `amusement-p0-safety-inspection-spec` §4 口径一致 | 消除文档「声称已存在」与真实迁移不符的假象（三方字段口径统一） |
+| 2026-06-18 D11 游乐现状标注 | 增 | 顶部横幅后 | 新增 D11 现状补强：①现场核销未校验票务权益 ②approveReopen 不联动 open_status、无项目级 pause/resume 端点 ③检修表/`/maintenance-records`/`/confirm-resume` 缺失 ④三维度容量仅场次单维（capacity_config/snapshot 未实现），每条写「现状→目标→候选验收口径（已升正式验收）」 | 让 §6/§7/§8/§16 中「声称已落地」但真实缺失的能力对齐真实迁移/代码 |

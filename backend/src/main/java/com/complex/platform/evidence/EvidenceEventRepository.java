@@ -7,7 +7,8 @@ public interface EvidenceEventRepository {
 
     List<EvidenceEventRecord> saveAll(List<EvidenceEventRecord> records);
 
-    List<EvidenceEventRecord> listLatest(int limit);
+    /** merchantId null = no filter (platform admin); non-null = merchant-scoped. */
+    List<EvidenceEventRecord> listLatest(int limit, String merchantId);
 
     EvidenceAttachmentRecord saveAttachment(EvidenceAttachmentRecord attachment);
 
@@ -15,5 +16,6 @@ public interface EvidenceEventRepository {
 
     EvidenceReviewRecord saveReview(EvidenceReviewRecord review);
 
-    List<EvidenceTimelineItem> listTimeline(String objectType, String objectId);
+    /** merchantId null = no filter (platform admin); non-null = merchant-scoped. */
+    List<EvidenceTimelineItem> listTimeline(String objectType, String objectId, String merchantId);
 }

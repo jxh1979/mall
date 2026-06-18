@@ -51,8 +51,8 @@ function forbidPlaintextSecrets(relativePath, text) {
     /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/i,
     /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/,
     /\bAKIA[0-9A-Z]{16}\b/,
-    /\b(?:password|token)\s*[:=]\s*["'][^"'<\n]{8,}["']/i,
-    /\b(?:secret|secret_key)\s*[:=]\s*["'][^"'<\n]{8,}["']/i,
+    /\b(?:password|token)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{8,}\\*["']|[A-Za-z0-9_./+=-]{12,})/i,
+    /\b(?:secret_key|secret)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{8,}\\*["']|[A-Za-z0-9_./+=-]{12,})/i,
   ];
   for (const [index, pattern] of patterns.entries()) {
     if (pattern.test(text)) throw new Error(`${relativePath} contains apparent plaintext secret pattern #${index + 1}`);

@@ -1,4 +1,5 @@
 package com.complex.platform.amusement;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.dto.AmusementIncidentActionRequest;
@@ -89,11 +90,5 @@ public class AmusementSafetyController {
         authorizationService.requirePermission("amusement.incident.close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.closeIncident(incidentId, request));
-    }
-
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
     }
 }

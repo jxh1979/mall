@@ -42,6 +42,23 @@
 | P2-F 独立 Python AI 服务边界完成审计 | `docs/p2-python-ai-service-boundary-completion-audit-v0.1.md` |
 | P2 全量完成审计 | `docs/p2-full-completion-audit-v0.1.md` |
 | P2 当前差异对抗式审计 | `docs/p2-current-diff-adversarial-review-v0.1.md` |
+| 开发文档完整性对抗式审计 | `docs/development-documentation-adversarial-audit-v0.1.md` |
+| 开发文档全量地图 CSV | `docs/development-documentation-audit-map-v0.1.csv` |
+| 可开发规格草案 | `docs/development-ready-spec-draft-v0.1.md` |
+| 完整后台管理端 SRS | `docs/full-admin-srs-v0.1.md` |
+| 完整后台页面权限字段矩阵 | `docs/full-admin-page-permission-field-matrix-v0.1.csv` |
+| 完整后台 UI 自动化验收矩阵 | `docs/full-admin-ui-acceptance-matrix-v0.1.md` |
+| 完整后台首批 MVP 页面开发包 | `docs/full-admin-mvp-coding-package-v0.1.md` |
+| 完整后台首批 MVP 任务拆解 | `docs/full-admin-mvp-coding-task-breakdown-v0.1.csv` |
+| UI 自动化验收报告 | `docs/ui-automation-acceptance-report-v0.1.md` |
+| gstack 需求验收与交付审计 | `docs/gstack-acceptance-ship-audit-v0.1.md` |
+| 代码实现对抗式验收审计 | `docs/code-implementation-acceptance-audit-v0.1.md` |
+| 最终闭环实现验收审计 | `docs/final-closed-loop-acceptance-audit-v0.1.md` |
+| 闭环运行态总验收 | `npm run verify:closed-loop-runtime`，覆盖后端测试、Web typecheck/build、常规 UI 和真实后端 UI 验收 |
+| 闭环运行态验收证据 | `docs/runtime-acceptance-evidence-v0.1.md`、`docs/runtime-acceptance-evidence-latest.json`、`npm run verify:runtime-acceptance-evidence` |
+| 前端体验验收报告 | `docs/closed-loop-implementation-ui-acceptance-report-v0.1.md`、`npm run verify:ui-experience-acceptance` |
+| 闭环当前态快照 | `docs/closed-loop-current-state-snapshot-v0.1.md`、`docs/closed-loop-current-state-snapshot-latest.json`、`npm run verify:closed-loop-current-state` |
+| 需求到代码实现矩阵 CSV | `docs/requirements-code-implementation-matrix-v0.1.csv` |
 | T3-0 编码入口包 | `docs/t3-coding-entry-pack-v0.1.md` |
 | T3 用户故事地图 | `docs/t3-user-story-map-and-sprint-slices-v0.1.md` |
 | T3 安全与供应商就绪闸口 | `docs/t3-security-and-supplier-readiness-gate-v0.1.md` |
@@ -50,6 +67,7 @@
 | T3-D1 本地大模型 AI 质检建议 | `docs/t3d-local-llm-ai-quality-v0.1.md` |
 | T3-D1 本地大模型 AI 质检机器校验 | `npm run verify:t3d-local-llm-ai-quality` |
 | 外部依赖准入闸口 | `docs/external-dependency-gates-v0.1.md` |
+| 外部证据需求追踪报告 | `docs/external-evidence-requirement-traceability-v0.1.md`、`docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json`、`npm run verify:external-evidence-requirement-traceability` |
 | 交付总闸口文档 | `docs/delivery-readiness-gates-v0.1.md` |
 | 交付总闸口机器校验 | `npm run verify:delivery-gates` |
 | 正式安全基线生成与维护任务 | `docs/formal-security-baseline-generation-task-v0.1.md` |
@@ -61,8 +79,23 @@
 | 生产证据责任组回填说明包 | `docs/production-evidence-owner-guides-v0.1.md`、`docs/production-readiness-evidence/production-evidence-owner-guides-latest.json` |
 | 生产证据提交状态看板 | `docs/production-evidence-submission-status-v0.1.md`、`docs/production-readiness-evidence/production-evidence-submission-status-latest.json` |
 | 生产证据提交目录护栏 | `docs/production-readiness-evidence/submissions/README.md`、`docs/production-readiness-evidence/submissions/.gitignore` |
+| 生产证据正向验收样例 | `tools/verify-production-evidence-positive-fixtures.mjs`、`npm run verify:production-evidence-positive-fixtures` |
+| 生产证据正向传播验收样例 | `tools/verify-production-evidence-positive-propagation-fixtures.mjs`、`npm run verify:production-evidence-positive-propagation-fixtures` |
+| 生产 ready no-go 防误判验收 | `tools/verify-production-ready-no-go-fixtures.mjs`、`npm run verify:production-ready-no-go-fixtures` |
+| 生产 blocker register no-go 防误判验收 | `tools/verify-production-blocker-register-no-go-fixtures.mjs`、`npm run verify:production-blocker-register-no-go-fixtures` |
+| 生产 ready 正向可关闭验收 | `tools/verify-production-ready-positive-fixtures.mjs`、`npm run verify:production-ready-positive-fixtures` |
 | 生产证据回填优先级看板 | `docs/production-evidence-backfill-priority-v0.1.md`、`docs/production-readiness-evidence/production-evidence-backfill-priority-latest.json` |
 | 生产证据回填执行台账 | `docs/production-evidence-backfill-execution-ledger-v0.1.md`、`docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.json`、`docs/production-readiness-evidence/production-evidence-backfill-execution-ledger-latest.csv` |
+| 生产证据 P0 快速回填快照 | `docs/production-evidence-p0-quickstart-v0.1.md`、`docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.json`、`docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.csv`、`npm run verify:production-evidence-p0-quickstart` |
+| 生产证据责任组执行包 | `docs/production-evidence-owner-execution-packets-v0.1.md`、`docs/production-readiness-evidence/production-evidence-owner-execution-packets-latest.json`、`docs/production-readiness-evidence/owner-execution-packets/*.md`、`npm run verify:production-evidence-owner-execution-packets
+npm run verify:production-evidence-crosslinks` |
+| 生产证据 manifest 草稿准备工具 | `tools/prepare-production-evidence-manifest-drafts.mjs`、`tools/verify-production-evidence-draft-prep-fixtures.mjs`、`npm run prepare:production-evidence-drafts`、`npm run verify:production-evidence-draft-prep`、`npm run verify:production-evidence-draft-prep-fixtures` |
+| 生产闭环缺口总报告 | `docs/production-evidence-closure-gap-report-v0.1.md`、`npm run docs:production-closure-gap-reports`、`npm run verify:production-closure-gap-reports` |
+| 当前暂存交接清单 | `docs/current-staged-handoff-manifest-v0.1.md`、`docs/current-staged-handoff-manifest-latest.json`、`npm run verify:staged-handoff-manifest` |
+| NAS IT 受控挂载交接包 | `docs/nas-it-controlled-mount-handoff-v0.1.md`、`ops/160/complex-nas-system-mount.example.sh`、`npm run verify:nas-it-handoff` |
+| 已有生产证据到 Manifest 差距审计 | `docs/production-existing-evidence-to-manifest-gap-audit-v0.1.md` |
+| NAS 当前状态漂移报告 | `docs/nas-current-state-drift-report-v0.1.md`、`docs/production-readiness-evidence/nas-current-state-drift-latest.json`、`npm run verify:nas-current-state-drift` |
+| NAS 只读诊断报告 | `docs/nas-diagnostic-report-v0.1.md`、`docs/production-readiness-evidence/nas-diagnostic-latest.json`、`npm run verify:nas-diagnostics` |
 | 生产前置证据回填模板 | `docs/production-readiness-evidence-intake-template-v0.1.md` |
 | 160 编码保护基线 | `docs/coding-host-protection-baseline-v0.1.md` |
 | 代码契约迁移闸口 | `docs/code-contract-difference-and-migration-audit-v0.1.md` |
@@ -74,7 +107,7 @@
 | 第三方接入 | 双向开放：平台提供统一 OpenAPI/Webhook，同时通过供应商 SDK/API 适配器接入外部成熟服务 |
 | Webhook/轮询 | P0 使用 Webhook + 定时轮询校验 |
 | 设备管控 | Android Enterprise / Android Management API + 商业 MDM 作为 P0 上线前置 |
-| 备份 | NAS 备份方案，NAS 服务器 `192.168.88.113`，共享 `bn`，UNC `//192.168.88.113/bn`，160 挂载 `/mnt/complex-nas-backup`，当前不启用备份归档加密；2026-06-14 已完成一次真实 NAS 同步和从 NAS 恢复演练，生产前仍需固化开机自动挂载、定时备份、容量告警和周期性恢复演练 |
+| 备份 | NAS 备份方案，NAS 服务器 `192.168.88.113`，共享 `bn`，UNC `//192.168.88.113/bn`，160 挂载 `/mnt/complex-nas-backup`，当前不启用备份归档加密；历史上已完成一次真实 NAS 同步和从 NAS 恢复演练；当前状态以 `docs/nas-current-state-drift-report-v0.1.md` 和 `docs/nas-diagnostic-report-v0.1.md` 为准，生产前仍需固化开机自动挂载、定时备份、容量告警和周期性恢复演练 |
 | 生产凭证轮换 | 生产账号、PostgreSQL、对象存储、JWT/Token、第三方/支付/企微/开放平台密钥采用人工台账 + 到期提醒 + Runbook；`npm run verify:ops160-recovery` 必须通过 |
 | AI/规则处理 | P0 使用 Java 内置规则处理器；T3-D1 可使用 160 本地大模型提供脱敏后的只读质检建议，必须人工复核且不得自动决策；独立 Python AI 服务仍后置，未进入当前生产路径 |
 | 构建工具 | Maven 为唯一 P0 构建工具 |
@@ -83,6 +116,24 @@
 | 售票型一体机 | 承担官方自助购票、取票、订单查询职责 |
 | 卡座提成 | 新增销售人员岗位；销售人员售卖卡座按可计提消费额 15%，非销售人员按 10%；不含通票和票务权益 |
 | 卡座转卡/合并/续卡 | 已纳入 P1 酒吧 SaaS/POS 增强：同酒吧、同商户、同营业日受控操作；保留账单、低消、入场名额、销售归属、服务责任链和事件留痕；不作为当前 P0 阻断 |
+
+### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
+
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 729 测试 / OpenAPI 209 operations / Flyway 最新 V060 / P0 全部完成 + P1 在进行）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。
+
+| 交付物 | 入口 |
+|---|---|
+| R1 需求文档审计报告 | `docs/r1-requirements-documentation-audit-report-20260618.md` |
+| R1 文档地图 | `docs/r1-documentation-map-20260618.md` |
+| R1 需求-API-页面-表-测试 映射矩阵 | `docs/r1-requirement-api-page-table-test-mapping-matrix-20260618.md` |
+| R1 第三方能力开关与 mock 策略 | `docs/r1-third-party-capability-switch-and-mock-strategy-20260618.md` |
+| R1 待回填供应商信息清单 | `docs/r1-pending-supplier-information-backfill-checklist-20260618.md` |
+| R2 代码审计（REQ26b/REQ21/REQ30） | `docs/r2-code-audit-req26b-req21-req30-20260618.md` |
+| R3 迁移层漂移审计 | `docs/r3-migration-level-drift-audit-20260618.md` |
+| R3 确认缺口优先级与修复 backlog | `docs/r3-confirmed-gap-priorities-and-fix-backlog-20260618.md` |
+| R4 剩余工作 backlog | `docs/r4-remaining-work-backlog-20260618.md` |
+| 数据隔离与租户范围安全规格 | `docs/data-isolation-and-tenant-scope-security-spec-v0.1.md` |
+| 第三方短信通知与供应商字段映射占位 | `docs/third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md` |
 
 ## 3. 当前有效文档阅读顺序
 
@@ -110,7 +161,7 @@
 | 18 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成条件、输入、输出和阻断项 |
 | 19 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看 P0 接口契约基线和机器可读契约 |
 | 19A | `external-dependency-gates-v0.1.md`、`delivery-readiness-gates-v0.1.md` | 查看外部依赖阻断、交付总闸口和 `npm run verify:delivery-gates` 准入口径 |
-| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 181 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径 |
+| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 207 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径（operation 数以本矩阵与 OpenAPI 实时为准；下文历史变更记录里的 181/191/198 为旧快照）|
 | 21 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 OpenAPI 反向生成的权限、事件、任务追溯和样例准入口径 |
 | 22 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 查看 P0 用户故事地图和迭代切片 |
 | 23 | `requirement-traceability-matrix-v0.1.md` | 查看需求到设计、任务、验收的追踪关系 |
@@ -208,7 +259,7 @@
 | `p2-amusement-group-private-booking-completion-audit-v0.1.md` | P2-B 游乐团体/包场完成审计 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-B 完成结论和验证证据入口 | 160 测试结果、容量锁测试、权限测试 |
 | `superpowers/plans/2026-06-15-p2-ticket-dynamic-pricing.md` | P2-C 票务动态定价开发计划 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-C TDD 编码执行清单 | P2 候选审计、票务业务设计、Ticketing 后端模块 |
 | `p2-ticket-dynamic-pricing-api-contract-v0.1.md` | P2-C 票务动态定价接口契约 | S1 | 产品、开发、测试、运营 | 是，作为动态定价规则、发布、模拟、权限和事件依据 | P2-C 开发计划、V036 迁移、后端实现 |
-| `p2-ticket-dynamic-pricing-completion-audit-v0.1.md` | P2-C 票务动态定价完成审计 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-C 完成结论和验证证据入口 | 160 测试结果、订单价格不受影响测试、权限测试 |
+| `p2-ticket-dynamic-pricing-completion-audit-v0.1.md` | P2-C 票务动态定价完成审计 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-C 完成结论和验证证据入口 | 160 测试结果、已发布动态定价影响正式订单测试、草稿规则仅模拟测试、权限测试 |
 | `superpowers/plans/2026-06-15-p2-business-metric-snapshots.md` | P2-D 经营指标快照开发计划 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-D TDD 编码执行清单 | P2 候选审计、数据分析设计、Analytics 后端模块 |
 | `p2-business-metric-snapshots-api-contract-v0.1.md` | P2-D 经营指标快照接口契约 | S1 | 产品、开发、测试、运营 | 是，作为经营指标快照读取、权限和验收依据 | P2-D 开发计划、V037 迁移、后端实现 |
 | `p2-business-metric-snapshots-completion-audit-v0.1.md` | P2-D 经营指标快照完成审计 | S1 | 总控、产品、开发、测试、运营 | 是，作为 P2-D 完成结论和验证证据入口 | 160 测试结果、种子数据和读取测试 |
@@ -218,6 +269,14 @@
 | `p2-python-ai-service-boundary-completion-audit-v0.1.md` | P2-F 独立 Python AI 服务边界完成审计 | S1 | 总控、产品、开发、算法/AI、测试 | 是，作为“边界已收口、正式服务后置”的验收入口 | 边界契约、模型和部署资料到位情况 |
 | `p2-full-completion-audit-v0.1.md` | P2 全量完成审计 | S1 | 总控、产品、开发、测试、运营、供应商 | 是，作为 P2-A 至 P2-F 当前完成和暂缓边界总入口 | 各 P2 子项完成审计、160 验证结果 |
 | `p2-current-diff-adversarial-review-v0.1.md` | P2 当前差异对抗式审计 | S1 | 总控、产品、开发、测试、安全、运维 | 是，作为 160 未提交 P2 差异的质量、安全和回滚判断入口 | 当前 git diff、测试结果、Semgrep 扫描 |
+| `development-documentation-adversarial-audit-v0.1.md` | 开发文档完整性、业务逻辑可用性和验收可执行性对抗式审计 | S1 | 总控、产品、开发、测试、运营、供应商、交付负责人 | 是，作为当前全量开发文档审计入口 | 文档地图、业务拆解、P0/P1/P2/P3 风险、可开发/不可上线结论 |
+| `development-documentation-audit-map-v0.1.csv` | 全量开发相关文档地图 CSV | S1 | 产品、开发、测试、交付、外部智能体 | 是，作为 297 份开发相关文档的盘点索引 | 文档路径、标题、桶、状态、引用和风险标记 |
+| `development-ready-spec-draft-v0.1.md` | 完整后台管理端和真实外部依赖联调的可开发规格草案 | S1 | 产品、开发、测试、供应商、交付负责人 | 是，作为文档不足以直接编码时的下一版 SRS 草案 | 后台页面矩阵、供应商接入模板、UI 验收矩阵、开发前置闸口 |
+| `full-admin-srs-v0.1.md` | 完整后台管理端正式 SRS，定义范围、角色、功能、非功能、验收底线 | S1 | 产品、开发、测试、运营、财务、IT | 是，作为完整后台页面开发的需求基线 | 页面权限字段矩阵、UI 验收矩阵、OpenAPI、实现矩阵 |
+| `full-admin-page-permission-field-matrix-v0.1.csv` | 完整后台逐页页面、权限、字段、接口、状态、审计事件矩阵 | S1 | 产品、开发、测试、权限/审计负责人 | 是，作为后台页面拆分和验收引用表 | 完整后台 SRS、UI 验收矩阵、RBAC、接口契约 |
+| `full-admin-ui-acceptance-matrix-v0.1.md` | 完整后台 UI 自动化验收路径、异常流、权限流、窄屏标准 | S1 | 前端、测试、产品、验收负责人 | 是，作为 Playwright 补测和页面验收依据 | 页面权限字段矩阵、现有 UI 验收报告、E2E 测试 |
+| `full-admin-mvp-coding-package-v0.1.md` | 完整后台首批 MVP 页面开发包，拆分总控、账号权限、票务、卡座、财务、供应商、生产证据 | S1 | 前端、后端、测试、产品、交付负责人 | 是，作为首批后台页面正式编码任务包 | 完整后台 SRS、页面权限字段矩阵、UI 验收矩阵、OpenAPI、E2E 测试 |
+| `full-admin-mvp-coding-task-breakdown-v0.1.csv` | 完整后台首批 MVP 页面任务拆解表，列出切片、文件、接口、测试和风险 | S1 | 前端、测试、项目负责人 | 是，作为任务派发和回归检查清单 | 开发包、页面矩阵、UI 验收矩阵 |
 | `t3d-local-llm-ai-quality-v0.1.md` | T3-D1 本地大模型 AI 质检建议 | S1 | 总控、产品、开发、测试、安全、运营 | 是，作为本地大模型辅助建议、loopback-only 适配、脱敏、人审兜底和机器验证入口 | T3 安全闸口、T3-D1 设计文档、后端实现和 `verify:t3d-local-llm-ai-quality` |
 | `production-readiness-implementation-ledger-template-v0.1.md` | 生产前置实施台账模板 | S1 | 运维、IT、采购、财务、测试、项目管理 | 是，作为生产准入资料管理入口 | 本文档、各 Runbook、OpenAPI |
 | `formal-security-baseline-generation-task-v0.1.md` | 正式安全基线生成任务 | S1 | 技术负责人、安全、测试、运维 | 是，作为正式安全基线生成和安全准入入口 | 本文档、OpenAPI、运行时安全报告 |
@@ -249,7 +308,7 @@
 | 测试/审计 | `p0-first-coding-package-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md`、`p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-operation-permission-matrix-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`t3d-local-llm-ai-quality-v0.1.md` | 按业务闭环、首批编码包、operation、权限、事件、证据、安全基线、AI 脱敏、人审兜底和异常场景编写验收用例 | 不得只按页面路径或模块标题验收；不得把 AI 建议当成自动处罚、退款、核销、调价、绩效或合同状态依据 |
 | 运营/财务/门店管理 | `product-requirements-v0.1.md`、`bar-operations-development-design.md`、`ticketing-pass-entitlement-development-design.md`、`finance-ar-ap-ledger-development-design-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` | 验证通票、权益、酒水领取、存酒、卡座、最低消费、扫码支付、核销、应收应付和日结对账闭环 | 不得用口头流程替代系统留痕和财务主口径 |
 | 第三方供应商/集成开发 | `third-party-supplier-integration-kit-v0.1.md`、`open-platform-security-auth-development-design.md`、`third-party-integration-development-design.md`、`openapi/openapi-p0.yaml/json`、`p0-openapi-contract-closure-appendix-v0.1.md` | 明确平台调用供应商、供应商调用平台、签名、Webhook、轮询校验、字段映射和异常补偿边界 | 不得引用旧 `/api/integration/*` 作为正式联调路径 |
-| 运维/IT/采购 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`production-readiness-implementation-ledger-template-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`server-160-runbook-v0.2.md`、`backend/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md`、`nas-backup-and-restore-runbook-v0.1.md` | 完成首批编码环境配套、160 部署、回滚、健康检查、MDM/Android Enterprise、账号密钥轮换、NAS 备份恢复、安全基线输入和生产前置台账 | 不得把本地原型、未纳管设备、无安全基线或未演练备份视为生产就绪 |
+| 运维/IT/采购 | `p0-coding-entry-pack-v0.1.md`、`p0-first-coding-package-v0.1.md`、`production-readiness-implementation-ledger-template-v0.1.md`、`formal-security-baseline-generation-task-v0.1.md`、`server-160-runbook-v0.2.md`、`backend/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md`、`nas-backup-and-restore-runbook-v0.1.md`、`nas-it-controlled-mount-handoff-v0.1.md`、`nas-diagnostic-report-v0.1.md` | 完成首批编码环境配套、160 部署、回滚、健康检查、MDM/Android Enterprise、账号密钥轮换、NAS 备份恢复、NAS 受控挂载交接、NAS 当前诊断、安全基线输入和生产前置台账 | 不得把本地原型、未纳管设备、无安全基线或未演练备份视为生产就绪 |
 
 ## 4. 已归档、废止或不得作为执行入口的内容
 
@@ -278,7 +337,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 验证层 | 命令 | 通过后代表什么 | 不代表什么 |
 |---|---|---|---|
-| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、181 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合 | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |
+| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、207 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合 | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |
 | Web 层 | `npm run verify:p0-web` | 契约层通过，且 Web 可构建 | 不代表后端和 Android 环境已就绪 |
 | 环境层 | `npm run verify:p0-env` | 后端 Java/Maven 与 Android Java/Gradle/SDK 前置环境满足验收条件 | 本机缺 Java 21 时不得判定代码失败；Java/后端测试和完整 P0 默认在 160 或等效 Java 21 环境执行 |
 | 完整 P0 | `npm run verify:p0` | 契约、后端测试、Web 构建、Android 环境、Android 构建、smoke 和 APK 验证均通过 | 这是完整验收口径，不能用单项通过替代；当前协作中以后端/Java 测试在 `192.168.88.160` 执行为准 |
@@ -310,7 +369,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 优先级 | 文档 | 目的 |
 |---|---|---|
 | P0 | `p0-api-contract-pack-v0.1.md` + `openapi/openapi-p0.yaml` + `openapi/openapi-p0.json` | 已新增并落地机器可读契约。固化正式 OpenAPI 基线、错误码、幂等、签名、分页、Webhook、回调和接口目录 |
-| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把 181 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵 |
+| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把 207 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵 |
 | P0 | `p0-openapi-contract-closure-appendix-v0.1.md` | 已新增。由 OpenAPI 反向生成权限、事件、任务追溯和样例准入附录，补齐人工矩阵未逐 operation 展开的缺口 |
 | P0 | `code-contract-difference-and-migration-audit-v0.1.md` | 已新增。明确旧 TypeScript/Fastify/SQLite API、旧 Web/Android 路径和正式 Java/OpenAPI 契约的迁移闸口 |
 | P0 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 已新增。按角色和业务闭环拆用户故事，避免只按模块开发 |
@@ -321,6 +380,10 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | P0 | `production-readiness-implementation-ledger-template-v0.1.md` | 已新增。把 MDM、支付、NAS、密钥、人脸年龄核验、企业微信、第三方供应商、160、安全基线等生产前置资料做成实施台账模板 |
 | P0 | `formal-security-baseline-generation-task-v0.1.md` | 已新增。定义正式安全基线的触发条件、输入、输出、阻断规则和验收标准 |
 | P0 | `amusement-p0-safety-inspection-spec-v0.1.md` | 已新增。固化游乐开放前阻断式巡检和恢复闭环 |
+| P0 | `data-isolation-and-tenant-scope-security-spec-v0.1.md` | 2026-06-18 新增。多租户/商户数据隔离与越权防护权威规格：scope 注入只来自 token、逐表（V044–V052）隔离列、Given/When/Then 越权验收、V050 复核持久化表字段级文档；正式承接 `domain-ownership-scope-audit-v0.1.csv` |
+| P0 | `p0-first-coding-package-v0.1.md` | 2026-06-18 补齐缺失文件（此前入口引用但文件不存在）。首批可编码/可验收工作包入口与索引 |
+| P1 | `third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md` | 2026-06-18 新增。短信/通知能力开关+字段映射+失败场景+mock；对象存储/MDM/视频字段映射占位；占位错误码命名空间 |
+| 审计 | `development-documentation-audit-v0.2.md` | 2026-06-18 新增。对当前代码态（207 ops/52 迁移/673 测试）刷新文档审计，取代 `development-documentation-adversarial-audit-v0.1.md`；含文档地图、需求-接口-页面-数据表-测试矩阵之矩阵、P0/P1/P2/P3 问题清单 |
 
 ## 7. AI-ready 实现文档强制规则
 
@@ -343,6 +406,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-06-16 | V0.1 开发文档审计 | 新增开发文档完整性对抗式审计、全量文档地图 CSV、可开发规格草案，并补入口 UI 自动化和 gstack 交付审计；同步修正 P2 动态定价旧口径残留 |
 | 2026-06-10 | V0.1 | 新增当前有效文档入口、正式口径、阅读顺序、废止内容和 P0 开发准入条件 |
 | 2026-06-10 | V0.1 补充 | 标记 P0 任务映射表和游乐安全巡检规格已新增；审计结论改为第一批硬缺口已收口 |
 | 2026-06-11 | V0.1 编码准入补强 | 新增 operation 级验收矩阵和代码契约迁移审计入口；明确旧 Web/Android 路径不得反向约束正式 Java/OpenAPI 后端 |
@@ -382,6 +446,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 2026-06-15 | V0.1 P2-A 开发计划 | 新增 `superpowers/plans/2026-06-15-p2-floor-plan-svg-json-import.md`，把平面图 SVG/标准 JSON 导入拆为可 TDD 执行的开发计划 |
 | 2026-06-15 | V0.1 P2-A 接口契约 | 新增 `p2-floor-plan-import-api-contract-v0.1.md`，固化平面图导入接口、权限、事件、解析规则和验收标准 |
 | 2026-06-15 | V0.1 P2-A 完成审计 | 新增 `p2-floor-plan-import-completion-audit-v0.1.md`，记录 P2-A 平面图导入完成范围、验证证据和未纳入范围 |
+| 2026-06-18 | V0.1 文档审计刷新与缺口补齐 | 刷新文档审计到当前代码态（207 ops/52 迁移/673 测试），新增 `development-documentation-audit-v0.2.md`（取代 adversarial-audit-v0.1）、`data-isolation-and-tenant-scope-security-spec-v0.1.md`、`third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md`；**补齐此前被记录为"已新增"但文件实际缺失的 `p0-first-coding-package-v0.1.md`**；修正本入口 operation 数 181→207（历史变更记录里的 181/191/198 为旧快照，operation 数以 `p0-openapi-operation-acceptance-matrix-v0.1.md` 与 OpenAPI 实时为准）|
 
 | T3-B SDK/mock 套件 | 已新增 | `docs/t3b-supplier-sdk-mock-kit-v0.1.md` |
 | T3-B SDK/mock 套件计划 | 已新增 | `docs/superpowers/plans/2026-06-15-t3b-supplier-mock-kit.md` |
@@ -389,3 +454,10 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | T3-B SDK/mock 套件验收 | 已新增 | `npm run verify:t3b-supplier-mock-kit` |
 | T3-D1 本地大模型 AI 质检建议 | 已新增 | `docs/t3d-local-llm-ai-quality-v0.1.md` |
 | T3-D1 本地大模型 AI 质检验收 | 已新增 | `npm run verify:t3d-local-llm-ai-quality` |
+
+### Partial 需求 Mock/沙箱验收覆盖报告 V0.1
+
+- `docs/partial-requirement-mock-coverage-v0.1.md`: 本文由 `tools/generate-partial-requirement-mock-coverage.mjs` 从 `docs/requirements-code-implementation-matrix-v0.1.csv` 和 `docs/production-readiness-evidence/external-evidence-requirement-traceability-latest.json` 生成，用于证明 8 条 partial 需求虽然不能宣称生产闭环，但已有 mock、adapter、页面、后端测试或 E2E 验收替身，可以支撑联调和业务验收。
+- `docs/partial-requirement-mock-coverage-latest.json`: machine-readable snapshot for partial requirement count, mock/sandbox acceptance readiness, production blockers and linked files.
+- Verify: `npm run verify:partial-requirement-mock-coverage`.
+- Boundary: MOCK_IS_NOT_PRODUCTION_EVIDENCE. Mock, adapter, page, backend test and E2E evidence can support integration/business acceptance, but cannot replace production evidence manifest.

@@ -1,0 +1,14 @@
+{
+  "scan_dir": "security-scans/semgrep-20260616-204500-post-bar-commissions-page",
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 988,
+  "scanned_paths": 988,
+  "skipped_paths": 0,
+  "json_exit_code": 0,
+  "sarif_exit_code": 0,
+  "clean": true,
+  "excluded_from_semgrep_due_to_bash_parser_warnings": [],
+  "top_findings": [],
+  "errors_detail": []
+}

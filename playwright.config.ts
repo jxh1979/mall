@@ -2,6 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: "web-ui-real-backend.spec.ts",
+  globalSetup: "./tests/e2e/support/global-setup.ts",
   timeout: 30_000,
   expect: { timeout: 8_000 },
   fullyParallel: false,

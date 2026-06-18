@@ -17,6 +17,8 @@ public record SupervisorReviewDecisionRecord(
         String reason,
         List<String> evidenceAttachmentIds,
         Instant evaluatedAt,
-        String initiatedBy
+        String initiatedBy,
+        String approvalLevel,
+        Integer requiredApproverRank
 ) {
 }

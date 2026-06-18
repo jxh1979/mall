@@ -1,0 +1,12 @@
+{
+  "scan_id": "semgrep-20260617-011354",
+  "semgrep_exit_code": 0,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1413,
+  "paths_skipped": 0,
+  "by_severity": {},
+  "top_checks": [],
+  "findings_preview": [],
+  "errors_preview": []
+}

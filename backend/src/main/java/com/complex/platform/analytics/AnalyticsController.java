@@ -1,4 +1,5 @@
 package com.complex.platform.analytics;
+import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
@@ -139,11 +140,5 @@ public class AnalyticsController {
     public ApiResponse<PageResponse<StaffServiceScoreRecord>> listStaffServiceScores() {
         authorizationService.requirePermission("analytics.risk_alert.view");
         return ApiResponse.ok(service.listStaffServiceScores());
-    }
-
-    private void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
-        }
     }
 }

@@ -21,7 +21,7 @@
 
 > 说明：交付包根目录为 `complex-management-system/docs/`。当前活跃交付包共 **81 个文件 = 77 个 Markdown + 2 个交付 HTML + 1 个 OpenAPI YAML + 1 个 OpenAPI JSON**；其中主目录活跃入口为 **79 个文件 = 77 个 Markdown + 2 个 HTML**。已丢弃不再使用的旧技术路线快照、旧进度快照和相关历史审计材料；保留的归档文件只作为历史证据，不作为当前产品、开发或验收入口。
 >
-> 可编码交付口径：上面的 81 个文件是“文档包”计数，不包含根脚本、OpenAPI 生成/校验工具、160 运维脚本、Android/后端运行器和 `backend/` 正式后端骨架。外部智能体或开发团队接手编码时，必须同时读取 `package.json`、`tools/run-backend-maven.mjs`、`tools/run-android-gradle.mjs`、`tools/apply-openapi-p0-examples.mjs`、`tools/verify-openapi-p0-examples.mjs`、`tools/generate-openapi-operation-matrix.mjs`、`tools/generate-openapi-contract-closure-appendix.mjs`、`tools/verify-openapi-contract.mjs`、`ops/160/*.sh`、`backend/README.md`、`apps/android-terminal/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md`、`nas-backup-and-restore-runbook-v0.1.md`、`external-dependency-gates-v0.1.md` 和 `delivery-readiness-gates-v0.1.md`；交付前必须运行 `npm run verify:delivery-gates`。否则会漏掉后端/Android 环境前置校验、契约闸口、示例闸口、OpenAPI 权限/事件/任务追溯闸口、外部依赖阻断、BE-000 环境准入、MDM、密钥轮换、NAS 备份恢复和 160 部署口径。
+> 可编码交付口径：上面的 81 个文件是“文档包”计数，不包含根脚本、OpenAPI 生成/校验工具、160 运维脚本、Android/后端运行器和 `backend/` 正式后端骨架。外部智能体或开发团队接手编码时，必须同时读取 `package.json`、`tools/run-backend-maven.mjs`、`tools/run-android-gradle.mjs`、`tools/apply-openapi-p0-examples.mjs`、`tools/verify-openapi-p0-examples.mjs`、`tools/generate-openapi-operation-matrix.mjs`、`tools/generate-openapi-contract-closure-appendix.mjs`、`tools/verify-openapi-contract.mjs`、`ops/160/*.sh`、`backend/README.md`、`apps/android-terminal/README.md`、`mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md`、`nas-backup-and-restore-runbook-v0.1.md`、`nas-it-controlled-mount-handoff-v0.1.md`、`nas-diagnostic-report-v0.1.md`、`external-dependency-gates-v0.1.md`、`external-evidence-requirement-traceability-v0.1.md` 和 `delivery-readiness-gates-v0.1.md`；交付前必须运行 `npm run verify:delivery-gates`。否则会漏掉后端/Android 环境前置校验、契约闸口、示例闸口、OpenAPI 权限/事件/任务追溯闸口、外部依赖阻断、BE-000 环境准入、MDM、密钥轮换、NAS 备份恢复和 160 部署口径。
 >
 > 计数口径提示：下方多条“修订说明”保留的是当时阶段的历史文件数，用于追溯文档演进；当前交付数量一律以上一段“当前活跃交付包共 81 个文件”和最后一条 2026-06-13 生产前置薄 Runbook 收口说明为准。
 >
@@ -89,6 +89,27 @@
 
 > 修订说明（2026-06-13 生产前置薄 Runbook 收口）：当前活跃交付包为 81 个文件（77 Markdown + 2 HTML + 1 YAML + 1 JSON），主目录活跃入口为 79 个文件（77 Markdown + 2 HTML）。新增 `mdm-android-enterprise-implementation-plan-v0.1.md`、`production-credential-rotation-runbook-v0.1.md` 和 `nas-backup-and-restore-runbook-v0.1.md`，用于把 MDM/Android Enterprise、生产凭证轮换和 NAS 备份恢复从大文档说明收口为可执行运维入口。
 
+> 修订说明（2026-06-16 开发文档完整性审计）：新增 `development-documentation-adversarial-audit-v0.1.md`、`development-documentation-audit-map-v0.1.csv` 与 `development-ready-spec-draft-v0.1.md`。当前完整开发文档审计以 160 仓库全量地图的 297 份开发相关文档为准；本清单中的早期文件数量保留为历史阶段计数，不再反向限定当前仓库文档总量。
+
+> 修订说明（2026-06-16 代码实现验收审计）：新增 `code-implementation-acceptance-audit-v0.1.md` 与 `requirements-code-implementation-matrix-v0.1.csv`，用于把需求、页面/API/数据表/代码/测试/证据逐项映射，并记录当前核心业务可运行验收结论。
+
+> 修订说明（2026-06-16 架构 Zoom-out 与完整后台闸口）：新增并修复 `codebase-architecture-zoom-out-audit-v0.1.md`，同步 `tools/verify-full-admin-page-matrix.mjs`，完整后台页面矩阵校验已纳入 `verify:delivery-gates`。
+> 修订说明（2026-06-16 闭环当前态快照）：新增 `closed-loop-current-state-snapshot-v0.1.md`、`closed-loop-current-state-snapshot-latest.json` 与 `tools/generate-closed-loop-current-state.mjs`，并将 `verify:closed-loop-current-state` 接入 `verify:delivery-gates`，用于机器校验需求矩阵、代码行数、安全扫描、NAS 漂移和生产证据缺口的当前态。
+>
+> 修订说明（2026-06-16 NAS IT 受控挂载交接）：新增 `nas-it-controlled-mount-handoff-v0.1.md`、`ops/160/complex-nas-system-mount.example.sh` 与 `tools/verify-nas-it-handoff.mjs`，并将 `verify:nas-it-handoff` 接入 `verify:delivery-gates`；该脚本默认 dry-run，不写系统状态，真实挂载只能由 IT 在维护窗口用 `EXECUTE_MOUNT=true` 执行。
+> 修订说明（2026-06-17 NAS 只读诊断）：新增 `docs/nas-diagnostic-report-v0.1.md`、`docs/production-readiness-evidence/nas-diagnostic-latest.json` 与 `tools/generate-nas-diagnostic-report.mjs`，并将 `verify:nas-diagnostics` 接入 `verify:delivery-gates`；该报告只做网络、SMB 端口、CIFS 挂载和 preflight 根因诊断，不读取密钥、不尝试挂载、不关闭生产 manifest。
+> 修订说明（2026-06-17 运行时验收证据）：新增 `docs/runtime-acceptance-evidence-v0.1.md`、`docs/runtime-acceptance-evidence-latest.json` 与 `tools/generate-runtime-acceptance-evidence.mjs`，并将 `verify:runtime-acceptance-evidence` 接入 `verify:delivery-gates`；该快照只记录后端测试、Web 构建、UI、真实后端 UI 和生产边界证据，不关闭生产阻断。
+> 修订说明（2026-06-17 前端体验验收）：`docs/closed-loop-implementation-ui-acceptance-report-v0.1.md` 改为由 `tools/generate-ui-experience-acceptance-report.mjs` 生成，并通过 `verify:ui-experience-acceptance` 防止 UI、Semgrep 和运行态数字漂移。
+> 修订说明（2026-06-17 P0 生产证据快速回填）：新增 `docs/production-evidence-p0-quickstart-v0.1.md`、`docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.json`、`docs/production-readiness-evidence/production-evidence-p0-quickstart-latest.csv` 与 `tools/generate-production-evidence-p0-quickstart.mjs`，并将 `verify:production-evidence-p0-quickstart` 接入 `verify:delivery-gates`；该快照只做 P0 责任组派发表，不关闭生产阻断。
+> 修订说明（2026-06-17 生产证据责任组执行包）：新增 `tools/generate-production-evidence-owner-execution-packets.mjs`、`docs/production-evidence-owner-execution-packets-v0.1.md`、`docs/production-readiness-evidence/production-evidence-owner-execution-packets-latest.json` 与 `docs/production-readiness-evidence/owner-execution-packets/*.md`，并将 `verify:production-evidence-owner-execution-packets` 接入 `verify:delivery-gates`；该执行包只做责任组派发和模板复制提示，不关闭生产阻断。
+> 修订说明（2026-06-17 生产证据草稿准备器）：新增 `tools/prepare-production-evidence-manifest-drafts.mjs`、`prepare:production-evidence-drafts` 与 `verify:production-evidence-draft-prep`；该工具默认 dry-run，只有显式 `--execute` 才复制模板到 submissions manifest 目录，且拒绝覆盖已有 manifest，不关闭生产阻断。
+> 修订说明（2026-06-17 生产证据草稿准备器执行态验证）：新增 `tools/verify-production-evidence-draft-prep-fixtures.mjs` 与 `verify:production-evidence-draft-prep-fixtures`；该验证在临时目录实测 dry-run、execute、no-overwrite 和 broad execute 拒绝，不写真实 submissions。
+> 修订说明（2026-06-17 生产证据正向验收样例）：新增 `tools/verify-production-evidence-positive-fixtures.mjs` 与 `verify:production-evidence-positive-fixtures`；该验证在临时目录写入一个合规 manifest，证明状态看板能接受 valid_submission，同时不污染真实 submissions。
+> 修订说明（2026-06-17 生产证据正向传播验收）：新增 `tools/verify-production-evidence-positive-propagation-fixtures.mjs` 与 `verify:production-evidence-positive-propagation-fixtures`；该验证在临时目录确认一个合规 manifest 能从提交状态传播到生产闭环缺口报告和闭环当前态，同时不会误宣称生产上线就绪。
+> 修订说明（2026-06-17 生产 ready no-go 防误判验收）：新增 `tools/verify-production-ready-no-go-fixtures.mjs` 与 `verify:production-ready-no-go-fixtures`；该验证在 40 份生产 manifest 全有效且 NAS 模拟 ready 时，确认 8 条外部证据 partial 需求仍会阻断生产上线 ready 声明。
+> 修订说明（2026-06-17 生产 blocker register no-go 防误判验收）：新增 `tools/verify-production-blocker-register-no-go-fixtures.mjs` 与 `verify:production-blocker-register-no-go-fixtures`；该验证在 manifest、NAS 和外部证据都模拟满足时，确认生产 blocker register 未清零仍会阻断生产上线 ready 声明。
+> 修订说明（2026-06-17 生产 ready 正向验收）：新增 `tools/verify-production-ready-positive-fixtures.mjs` 与 `verify:production-ready-positive-fixtures`；临时目录模拟全部硬门满足时，校验 production ready=true。
+
 ## 2. 给外部机器智能体的引导（如何在不了解历史会话的情况下理解本项目）
 
 如果你是接手本项目的外部智能体，请按以下顺序建立理解，不要从随机文件开始：
@@ -128,6 +149,11 @@
    - `mdm-android-enterprise-implementation-plan-v0.1.md` —— MDM / Android Enterprise 设备纳管和生产前置验收 Runbook。
    - `production-credential-rotation-runbook-v0.1.md` —— 生产账号、密钥和密码轮换 Runbook。
    - `nas-backup-and-restore-runbook-v0.1.md` —— NAS 备份、恢复演练和可恢复验收 Runbook。
+   - `production-evidence-closure-gap-report-v0.1.md` —— 生产闭环缺口总报告，由 `npm run docs:production-closure-gap-reports` 从当前运行态、Semgrep、NAS 当前状态和生产证据 JSON 生成，汇总待补 manifest、P0 优先级、责任组、阻断项和复测命令。
+   - `production-existing-evidence-to-manifest-gap-audit-v0.1.md` —— 已有 NAS/160 机器证据到生产 manifest 的差距审计，防止误把部分证据伪关闭为 passed。
+   - `current-staged-handoff-manifest-v0.1.md`、`current-staged-handoff-manifest-latest.json` —— 当前暂存交接清单，由 `npm run docs:staged-handoff-manifest` 从 160 Git 索引生成，防止提交或补丁包漏掉新增核心文件。
+   - `docs/nas-current-state-drift-report-v0.1.md`、`npm run verify:nas-current-state-drift` —— NAS 历史通过证据与当前 live check 漂移报告，防止把旧 passed evidence 当作当前生产闭环。
+   - `nas-diagnostic-report-v0.1.md` —— NAS 只读诊断报告，汇总网络、SMB 端口、CIFS 挂载和 preflight 根因；不读取密钥、不尝试挂载、不关闭生产 manifest。
 3. **再读各层 PRD、合并规格、字段章节和验收章节**（按需进入对应能力层）。
 4. **最后看两个业务人员 HTML 地图**：
    - `business-system-map-for-operations-v0.1.html`
@@ -143,6 +169,22 @@
 | 文件 | 作用 |
 |---|---|
 | `00-current-effective-document-entry-v0.1.md` | 当前第一阅读入口、正式口径、废止内容和 P0 开发准入清单 |
+| `development-documentation-adversarial-audit-v0.1.md` | 当前开发文档完整性、业务逻辑可用性和验收可执行性对抗式审计 |
+| `development-documentation-audit-map-v0.1.csv` | 全量开发相关文档地图，覆盖 297 份文档 |
+| `development-ready-spec-draft-v0.1.md` | 完整后台管理端和真实外部依赖联调的可开发规格草案 |
+| `full-admin-srs-v0.1.md` | 完整后台管理端正式 SRS，用于页面开发拆分和跨角色验收 |
+| `full-admin-page-permission-field-matrix-v0.1.csv` | 完整后台页面、权限、字段、接口、状态、审计事件矩阵 |
+| `full-admin-ui-acceptance-matrix-v0.1.md` | 完整后台 UI 自动化验收矩阵和边界场景 |
+| `full-admin-mvp-coding-package-v0.1.md` | 完整后台首批 MVP 页面开发包，包含文件、接口、测试、验收、风险和回滚 |
+| `full-admin-mvp-coding-task-breakdown-v0.1.csv` | 完整后台首批 MVP 页面任务拆解表 |
+| `code-implementation-acceptance-audit-v0.1.md` | 当前代码实现对抗式验收审计、验证证据和联调/上线结论 |
+| `final-closed-loop-acceptance-audit-v0.1.md` | 最终闭环实现验收审计，汇总需求、代码、页面、测试、安全和交付闸口证据 |
+| `closed-loop-current-state-snapshot-v0.1.md` / `closed-loop-current-state-snapshot-latest.json` | 机器生成的闭环当前态快照，汇总需求矩阵、架构行数、安全扫描、生产证据和 NAS 当前漂移状态 |
+| `runtime-acceptance-evidence-v0.1.md` / `runtime-acceptance-evidence-latest.json` | 机器生成的运行时验收证据，汇总后端测试、Web 构建、常规 UI、真实后端 UI、Semgrep 和生产边界；校验命令 `npm run verify:runtime-acceptance-evidence` |
+| `closed-loop-implementation-ui-acceptance-report-v0.1.md` | 机器生成的前端体验验收报告，汇总 Playwright 路径、真实后端 UI、视觉基线、包体和 Semgrep 数字；校验命令 `npm run verify:ui-experience-acceptance` |
+| `codebase-architecture-zoom-out-audit-v0.1.md` | 代码库架构 Zoom-out 审计、模块边界、剩余架构风险和分步改善计划 |
+| `requirements-code-implementation-matrix-v0.1.csv` | 需求到代码实现矩阵，映射需求、页面/API、数据表、代码文件、测试和缺口 |
+| `external-evidence-requirement-traceability-v0.1.md` / `production-readiness-evidence/external-evidence-requirement-traceability-latest.json` | 外部证据需求追踪报告，把 8 条 partial 需求绑定到责任组、证据 item_id、模板和目标 manifest 路径 |
 | `prototype-deprecation-and-technology-baseline-v0.1.md` | 原型废止与正式技术栈基线，明确旧后端原型可参考但不得支配正式设计 |
 | `p0-coding-entry-pack-v0.1.md` | P0 编码、联调、测试和供应商 mock 的统一入口包 |
 | `p0-api-contract-pack-v0.1.md` | P0 API 契约基线，覆盖统一路径、鉴权、响应、错误码、幂等、Webhook 和接口目录 |
@@ -175,6 +217,20 @@
 | `mdm-android-enterprise-implementation-plan-v0.1.md` | MDM / Android Enterprise 设备纳管、策略状态、终端拦截和生产前置验收 Runbook |
 | `production-credential-rotation-runbook-v0.1.md` | 生产账号、密钥、数据库密码、对象存储密码和第三方凭证轮换 Runbook |
 | `nas-backup-and-restore-runbook-v0.1.md` | NAS 备份范围、策略、恢复演练和可恢复验收 Runbook |
+| `nas-it-controlled-mount-handoff-v0.1.md` | NAS IT 受控挂载交接包，绑定 dry-run 脚本、维护窗口命令、manifest 回填和验收闸口 |
+| `production-evidence-p0-quickstart-v0.1.md` | P0 生产证据快速回填快照，只列 31 个 P0 manifest、责任组、第一动作和目标路径 |
+| `production-evidence-owner-execution-packets-v0.1.md` / `production-readiness-evidence/production-evidence-owner-execution-packets-latest.json` / `production-readiness-evidence/owner-execution-packets/*.md` | 按责任组生成的一站式生产证据执行包，绑定模板复制命令、第一动作和 P0 优先级；校验命令 `npm run verify:production-evidence-owner-execution-packets
+npm run verify:production-evidence-crosslinks` |
+| `tools/prepare-production-evidence-manifest-drafts.mjs` / `tools/verify-production-evidence-draft-prep-fixtures.mjs` | 生产证据 manifest 草稿准备器；`npm run prepare:production-evidence-drafts` 默认只预览，显式 `--execute` 才复制模板；校验命令 `npm run verify:production-evidence-draft-prep` 和 `npm run verify:production-evidence-draft-prep-fixtures` |
+| `tools/verify-production-evidence-positive-fixtures.mjs` | 生产证据正向验收样例，在临时目录验证一个合规 manifest 会被识别为 `valid_submission`；校验命令 `npm run verify:production-evidence-positive-fixtures` |
+| `tools/verify-production-evidence-positive-propagation-fixtures.mjs` | 生产证据正向传播验收样例，在临时目录验证 valid_submission 会同步反映到生产闭环缺口报告和闭环当前态，且不误判生产 ready；校验命令 `npm run verify:production-evidence-positive-propagation-fixtures` |
+| `tools/verify-production-ready-no-go-fixtures.mjs` | 生产 ready no-go 防误判验收样例，在临时目录验证当生产 manifest 全有效且 NAS ready 时，外部证据 partial 需求仍阻断生产上线 ready；校验命令 `npm run verify:production-ready-no-go-fixtures` |
+| `tools/verify-production-blocker-register-no-go-fixtures.mjs` | 生产 blocker register no-go 防误判验收样例，在临时目录验证当 manifest、NAS 和外部证据都 ready 时，生产 blocker register 未清零仍阻断生产上线 ready；校验命令 `npm run verify:production-blocker-register-no-go-fixtures` |
+| `tools/verify-production-ready-positive-fixtures.mjs` | 生产 ready 正向验收样例，校验全部硬门满足时 production ready=true；命令 `npm run verify:production-ready-positive-fixtures` |
+| `nas-diagnostic-report-v0.1.md` | NAS 只读诊断报告，汇总网络、SMB 端口、CIFS 挂载和 preflight 根因；不读取密钥、不尝试挂载、不关闭生产 manifest |
+| `production-evidence-closure-gap-report-v0.1.md` | 自动生成的生产闭环缺口总报告，汇总当前运行态、Semgrep、NAS 状态、待补 manifest、P0 优先级、责任组、阻断项和复测命令 |
+| `current-staged-handoff-manifest-v0.1.md` / `current-staged-handoff-manifest-latest.json` | 当前暂存交接清单，汇总 staged 文件数、状态、关键服务/迁移/测试是否进入索引和 name-status 指纹 |
+| `production-existing-evidence-to-manifest-gap-audit-v0.1.md` | 已有 NAS/160 机器证据到生产 manifest 的差距审计，防止误把部分证据伪关闭为 passed |
 | `system-development-spec.md` | 开发规格总入口（编码总入口） |
 | `system-breakdown.md` / `business-systems-breakdown.md` / `foundation-systems-breakdown.md` | 系统/业务/地基总拆分 |
 | `master-roadmap.md` | 项目总路线图 |
@@ -315,3 +371,16 @@ sha256sum complex-management-system-docs-v0.1-20260607.zip > complex-management-
 | 2026-06-13 Android 环境前置校验补强 | 增/改 | 根 `package.json`、`tools/*.mjs`、`apps/android-terminal/README.md`、`android-device-terminal-development-design.md`、`p0-coding-entry-pack-v0.1.md`、`ops/160/*.sh` | 文件计数不变；新增 `tools/run-android-gradle.mjs` 和 `verify:android-env`，Android 构建、smoke、APK 和 160 P0 验收优先检查 Java 21+、Gradle/Wrapper 与 Android SDK | 防止 P0 验收在 Android 构建环境缺失时静默跳过，避免终端交付风险被文档收口掩盖 |
 | 2026-06-13 P0 验证链分层 | 增/改 | 根 `package.json`、`p0-coding-entry-pack-v0.1.md`、`server-160-runbook-v0.2.md`、`project-progress-dashboard.md`、`ops/160/complex-verify-p0.sh` | 文件计数不变；新增 `verify:p0-contract`、`verify:p0-web`、`verify:p0-env`，160 P0 验收复用 `verify:p0-contract` | 防止缺 Java/Android 环境时掩盖文档契约已可先验，也防止把契约通过误判为完整 P0 上线通过 |
 | 2026-06-13 生产前置薄 Runbook 收口 | 增/改 | §1、§2、§3.0、§3.10、当前入口 | 交付包计数更新为 81（77 Markdown + 2 HTML + 1 YAML + 1 JSON）；新增 MDM、生产凭证轮换和 NAS 备份恢复三份薄 Runbook | 防止入口文档引用生产前置项但没有独立执行入口，降低 IT/采购/运维交接成本 |
+- `docs/full-admin-mvp-code-implementation-audit-v0.1.md`：完整后台 MVP 需求到代码审计。
+- `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv`：完整后台 MVP 需求-页面-接口-代码-测试矩阵。
+
+- `docs/full-admin-remaining-code-implementation-audit-v0.1.md`：完整后台非首批页面实现审计与剩余缺口。
+- `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv`：完整后台非首批页面需求到代码实现矩阵。
+
+### Partial 需求 Mock/沙箱验收覆盖报告 V0.1
+
+- `docs/partial-requirement-mock-coverage-v0.1.md`
+- `docs/partial-requirement-mock-coverage-latest.json`
+- `tools/generate-partial-requirement-mock-coverage.mjs`
+- Verify: `npm run verify:partial-requirement-mock-coverage`
+- Boundary: MOCK_IS_NOT_PRODUCTION_EVIDENCE. The 8 partial requirements have mock/sandbox acceptance paths, but still require real external/vendor/production evidence before production blockers can close.

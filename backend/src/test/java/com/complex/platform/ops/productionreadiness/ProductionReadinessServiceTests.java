@@ -2,7 +2,10 @@ package com.complex.platform.ops.productionreadiness;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -13,6 +16,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.ops.productionreadiness.dto.ProductionReadinessCheckRequest;
 import com.complex.platform.ops.productionreadiness.dto.ProductionReadinessItemResponse;
 import com.complex.platform.ops.productionreadiness.dto.ProductionReadinessItemUpdateRequest;
+import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,11 +40,19 @@ class ProductionReadinessServiceTests {
         readinessRepository = new InMemoryProductionReadinessRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
+        AuthorizationService authorizationService = new AuthorizationService(mock(AccessRepository.class));
         service = new ProductionReadinessService(
                 readinessRepository,
                 idempotencyService,
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository),
+                authorizationService
         );
+        TestSecurityActors.asPlatformAdmin();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TestSecurityActors.clear();
     }
 
     @Test
@@ -128,6 +141,27 @@ class ProductionReadinessServiceTests {
         assertThatThrownBy(() -> service.updateItem(item.id(), updateRequest("conflict-key", ProductionReadinessStatus.FAILED, null)))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+    }
+
+    @Test
+    void updateItemRecordsActualActorAsUpdatedBy() {
+        ProductionReadinessItemResponse item = service.listItems().items().getFirst();
+        ProductionReadinessItemResponse updated = service.updateItem(item.id(),
+                updateRequest("actor-test-key", ProductionReadinessStatus.PASSED, null));
+
+        assertThat(updated.updatedBy()).isNotEqualTo("staff-token");
+        assertThat(updated.updatedBy()).isEqualTo("usr_admin");
+    }
+
+    @Test
+    void rejectSecretLikeCredentialRefWithEmbeddedNewline() {
+        service.listItems();
+        ProductionReadinessItemResponse item = service.listItems().items().getFirst();
+
+        assertThatThrownBy(() -> service.updateItem(item.id(),
+                updateRequest("newline-secret-key", ProductionReadinessStatus.PASSED, "password=\nsecret123")))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("SECRET_VALUE_REJECTED"));
     }
 
     private ProductionReadinessItemUpdateRequest updateRequest(

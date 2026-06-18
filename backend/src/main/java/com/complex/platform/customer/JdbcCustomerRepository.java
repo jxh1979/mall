@@ -1,4 +1,6 @@
 package com.complex.platform.customer;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
@@ -10,8 +12,6 @@ import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +121,16 @@ class JdbcCustomerRepository implements CustomerRepository {
                 SELECT id, customer_id, balance, level, recent_summary::text AS recent_summary, created_at, updated_at
                   FROM customer_points_accounts
                  WHERE customer_id = :customer_id
+                """, Map.of("customer_id", customerId), this::mapPoints).stream().findFirst();
+    }
+
+    @Override
+    public Optional<CustomerPointsAccountRecord> findPointsByCustomerIdForUpdate(String customerId) {
+        return jdbcTemplate.query("""
+                SELECT id, customer_id, balance, level, recent_summary::text AS recent_summary, created_at, updated_at
+                  FROM customer_points_accounts
+                 WHERE customer_id = :customer_id
+                   FOR UPDATE
                 """, Map.of("customer_id", customerId), this::mapPoints).stream().findFirst();
     }
 
@@ -321,6 +331,76 @@ class JdbcCustomerRepository implements CustomerRepository {
                     updated_at = EXCLUDED.updated_at
                 """, barReservationParameters(reservation));
         return reservation;
+    }
+
+    @Override
+    public CustomerPointsRuleRecord savePointsRule(CustomerPointsRuleRecord rule) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_points_rules (
+                    id, project_id, rule_name, earn_method, earn_ratio, level_threshold, validity_type,
+                    validity_days, expire_mode, clear_day, status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :rule_name, :earn_method, :earn_ratio, CAST(:level_threshold AS jsonb), :validity_type,
+                    :validity_days, :expire_mode, :clear_day, :status, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    project_id = EXCLUDED.project_id,
+                    rule_name = EXCLUDED.rule_name,
+                    earn_method = EXCLUDED.earn_method,
+                    earn_ratio = EXCLUDED.earn_ratio,
+                    level_threshold = EXCLUDED.level_threshold,
+                    validity_type = EXCLUDED.validity_type,
+                    validity_days = EXCLUDED.validity_days,
+                    expire_mode = EXCLUDED.expire_mode,
+                    clear_day = EXCLUDED.clear_day,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", rule.id())
+                .addValue("project_id", rule.projectId())
+                .addValue("rule_name", rule.ruleName())
+                .addValue("earn_method", rule.earnMethod())
+                .addValue("earn_ratio", rule.earnRatio())
+                .addValue("level_threshold", rule.levelThreshold() == null ? "{}" : rule.levelThreshold())
+                .addValue("validity_type", rule.validityType())
+                .addValue("validity_days", rule.validityDays())
+                .addValue("expire_mode", rule.expireMode())
+                .addValue("clear_day", rule.clearDay())
+                .addValue("status", rule.status())
+                .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt())));
+        return rule;
+    }
+
+    @Override
+    public List<CustomerPointsRuleRecord> listPointsRules() {
+        return jdbcTemplate.query("SELECT * FROM customer_points_rules ORDER BY created_at DESC, id",
+                this::mapPointsRule);
+    }
+
+    @Override
+    public Optional<CustomerPointsRuleRecord> findPointsRuleById(String id) {
+        List<CustomerPointsRuleRecord> result = jdbcTemplate.query(
+                "SELECT * FROM customer_points_rules WHERE id = :id", Map.of("id", id), this::mapPointsRule);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    private CustomerPointsRuleRecord mapPointsRule(ResultSet rs, int rowNumber) throws SQLException {
+        return new CustomerPointsRuleRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("rule_name"),
+                rs.getString("earn_method"),
+                rs.getLong("earn_ratio"),
+                rs.getString("level_threshold"),
+                rs.getString("validity_type"),
+                rs.getObject("validity_days", Integer.class),
+                rs.getString("expire_mode"),
+                rs.getString("clear_day"),
+                rs.getString("status"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
     }
 
     private MapSqlParameterSource customerParameters(CustomerRecord customer) {
@@ -541,6 +621,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return new BarTableRecord(
                 resultSet.getString("id"),
                 resultSet.getString("bar_id"),
+                null,
                 resultSet.getString("table_code"),
                 resultSet.getString("table_name"),
                 resultSet.getString("table_type"),
@@ -554,14 +635,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         );
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
-    private Instant nullableInstant(ResultSet resultSet, String columnName) throws SQLException {
-        OffsetDateTime value = resultSet.getObject(columnName, OffsetDateTime.class);
-        return value == null ? null : value.toInstant();
-    }
 
     private String sha256(String value) {
         try {

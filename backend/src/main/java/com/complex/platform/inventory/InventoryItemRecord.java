@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 
 public record InventoryItemRecord(
@@ -13,6 +14,7 @@ public record InventoryItemRecord(
         int minQuantity,
         String status,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore String merchantId
 ) {
 }

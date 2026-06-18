@@ -221,6 +221,8 @@ POST /api/open/auth/token
 }
 ```
 
+> D8 字段名收口（鉴权请求标识字段）：鉴权请求标识字段统一为 **`login_account`**（请求体 JSON 字段名 `loginAccount`，DB 列名 `open_app_credentials.login_account`）。`java-backend §8.6/§13.2` 原用的 `credential_id` 已废止为鉴权请求标识字段，两文件以本字段名为准。`credential_id` 仅保留为失败计数/锁定的内部凭证维度键（见 §6.5）。
+
 成功响应：
 
 ```json
@@ -338,7 +340,7 @@ hex 或 base64
 
 锁定策略：
 
-- 同一 `open_app_id + credential_id` 连续失败 3 次，锁定凭证和开放应用。
+- 同一 `open_app_id + credential_id` 连续失败 3 次，锁定凭证和开放应用。（D8 锁定维度收口：以本"应用+凭证"维度为跨文档唯一权威；`java-backend §13.2` 原"同一应用连续三次失败"已按本口径改为 `open_app_id + credential_id`。）
 - 连续失败计数优先存 Redis，锁定结果落 PostgreSQL。
 - 鉴权成功后清零连续失败计数。
 - 锁定后不允许继续获取 Token。
@@ -563,6 +565,8 @@ P1 阶段可引入令牌桶和更细策略。
 | `audit_events` | 统一事件 |
 
 ### 12.2 P1 表
+
+> D8 Webhook 表优先级收口：`webhook_subscriptions`、`webhook_delivery_logs` 以本表 **P1** 归属为跨文档唯一权威；`java-backend` 原 §6.3 V003（P0）误列这两张表已移除，统一为 P1（与本文 §18.2 Webhook P1 任务一致）。
 
 | 表名 | 说明 |
 |---|---|
@@ -912,9 +916,11 @@ POST /api/open/d/7f9c.../verification/verify
 
 ### 16.2 事件字段映射
 
+> D8 `event_category` 落列收口（2026-06-18 技术定稿）：本节将 `event_category` 列为事件字段，与 `java-backend §14` 事件字段最小集统一。**定稿口径：`audit_events` 表落独立数据库列 `event_category`**（值域以 `operation-traceability-and-terminal-switch-prd §4.1` 事件域分类为准，开放平台域取 `third_party`/`permission`）。本口径与 `java-backend §14` 同一裁定，二者保持一致。
+
 | 字段 | 值 |
 |---|---|
-| `event_category` | `third_party` 或 `permission` |
+| `event_category` 【定稿：`audit_events` 落独立数据库列；值域对齐 operation-traceability §4.1 事件域】 | `third_party` 或 `permission` |
 | `source_type` | `internal`、`third_party`、`system` |
 | `actor_type` | `staff`、`open_app`、`system` |
 | `actor_id` | 员工 ID 或开放应用 ID |
@@ -1094,3 +1100,9 @@ P0 验收必须满足：
 | 2026-06-07 | 注 | 本文无金额字段（仅 P2 `api_usage_billing_records` 表名占位，无字段类型定义），D1 整数分口径暂无落点，待 P2 设计计费字段时按 D1 执行 | 统一口径基准 D1 |
 | 2026-06-10 P0 执行矩阵补齐 | 增/改 | §1 / §2 / §21 | 补开放平台与供应商适配器的双向开放边界：本文负责安全入口和审计，供应商 SDK/API 字段映射、状态标准化、轮询和补偿由第三方集成适配器承接 | 用户要求第三方供应商未确定时留接口，资料到位后再补字段 |
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §14.5 / §22 | Webhook 后台管理路径降级为能力说明；正式接口、SDK/mock、自动化和供应商联调必须以 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md` 为准 | 防止旧 `/api/admin/*` 开放平台管理路径绕过权限、事件、终端/调用方和样例准入 |
+| 2026-06-18 D8 收口 | 注 | §6.2 | 鉴权请求标识字段统一为 `login_account`（JSON `loginAccount`）；`java-backend` 原 `credential_id` 废止为请求标识字段，仅留作内部凭证维度键 | 与 java-backend §8.6/§13.2 两文件同字段名 |
+| 2026-06-18 D8 收口 | 注 | §6.5 | 登录失败锁定维度以"应用+凭证 `open_app_id + credential_id`"为跨文档唯一权威，java-backend 已对齐 | 取更严口径 |
+| 2026-06-18 D8 收口 | 注 | §12.2 | Webhook 表以本文 P1 归属为权威，java-backend V003（P0）误列已移除 | 优先级统一为 P1 |
+| 2026-06-18 D8 收口 | 注 | §16.2 | `event_category`【待技术确认，推荐落列，值域对齐 operation-traceability §4.1】，与 java-backend §14 同一裁定 | 消除"落/不落"不一致 |
+| 2026-06-18 D8 定稿 | 改 | §16.2 | `event_category` 由【待技术确认/是否落列】定稿为"`audit_events` 落独立数据库列"，值域对齐 operation-traceability §4.1 事件域，与 java-backend §14 同一裁定 | 技术已拍板，去除两可表述 |
+| 2026-06-18 D8 收口 | 注 | §9.1/§21 | SDK 首批语言口径（P0=Java+JavaScript(Node.js)、P1=Python/PHP、P2=完整 SDK）保持不变，确认为权威，java-backend §18 已对齐 | 两文件 SDK 语言一致 |

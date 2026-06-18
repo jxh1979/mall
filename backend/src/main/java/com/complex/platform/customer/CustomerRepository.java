@@ -21,6 +21,8 @@ public interface CustomerRepository {
 
     Optional<CustomerPointsAccountRecord> findPointsByCustomerId(String customerId);
 
+    Optional<CustomerPointsAccountRecord> findPointsByCustomerIdForUpdate(String customerId);
+
     CustomerPointsAccountRecord savePoints(CustomerPointsAccountRecord account);
 
     CustomerPointsLedgerRecord savePointsLedger(CustomerPointsLedgerRecord ledger);
@@ -36,6 +38,19 @@ public interface CustomerRepository {
     CustomerPointsRedemptionRecord savePointsRedemption(CustomerPointsRedemptionRecord redemption);
 
     List<CustomerPointsRedemptionRecord> listPointsRedemptionsByCustomerId(String customerId);
+
+    /** 积分规则引擎（REQ-12, P0-6）。默认空/抛出，JdbcCustomerRepository 覆盖。 */
+    default CustomerPointsRuleRecord savePointsRule(CustomerPointsRuleRecord rule) {
+        throw new UnsupportedOperationException("savePointsRule not supported by this repository");
+    }
+
+    default List<CustomerPointsRuleRecord> listPointsRules() {
+        return List.of();
+    }
+
+    default Optional<CustomerPointsRuleRecord> findPointsRuleById(String id) {
+        return Optional.empty();
+    }
 
     List<CustomerBarReservationOptionResponse> listBarReservationOptions();
 

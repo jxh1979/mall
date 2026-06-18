@@ -113,6 +113,72 @@ class AuthorizationServiceTests {
                         assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
     }
 
+    @Test
+    void singleUsePermissionConcurrentConsumerIsDeniedWhenAtomicUpdateReturnsZeroRows() {
+        authenticate("usr_staff", "staff", "staff");
+        repository.addEffect(new AccessRepository.PermissionEffect(
+                "usr_staff",
+                "ops.production_readiness.manage",
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPLATE_APPLICATION,
+                "application_toctou",
+                null,
+                null,
+                true,
+                false
+        ));
+        // Simulate: another concurrent thread already consumed this grant at DB level
+        // (AND consumed=FALSE guard would return 0 rows for the second caller)
+        repository.simulateAlreadyConsumedAtDb("application_toctou");
+
+        // Second caller sees unconsumed (stale read), but atomic update returns false
+        assertThatThrownBy(() -> service.requirePermission("ops.production_readiness.manage"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void isPlatformAdminReturnsTrueForPlatformAdminActor() {
+        authenticate("usr_admin", "seed-admin", "platform_admin");
+        assertThat(service.isPlatformAdmin(service.currentActor())).isTrue();
+    }
+
+    @Test
+    void isPlatformAdminReturnsFalseForStaffActor() {
+        authenticate("usr_staff", "ordinary-staff", "staff");
+        assertThat(service.isPlatformAdmin(service.currentActor())).isFalse();
+    }
+
+    @Test
+    void currentMerchantScopeReturnsEmptyForPlatformAdmin() {
+        authenticate("usr_admin", "seed-admin", "platform_admin");
+        assertThat(service.currentMerchantScope()).isEmpty();
+    }
+
+    @Test
+    void currentMerchantScopeReturnsMerchantIdForMerchantUser() {
+        // The authenticate helper sets merchantId = "merchant" in UserRecord
+        authenticate("usr_staff", "ordinary-staff", "staff");
+        assertThat(service.currentMerchantScope()).contains("merchant");
+    }
+
+    @Test
+    void currentMerchantScopeThrowsForbiddenWhenMerchantIdIsAbsent() {
+        AuthService.UserRecord user = new AuthService.UserRecord(
+                "usr_no_merchant", "no-merchant", "hash", "staff", "org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                user, "token", List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
+        ));
+
+        assertThatThrownBy(() -> service.currentMerchantScope())
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status().value()).isEqualTo(403);
+                    assertThat(exception.code()).isEqualTo("MERCHANT_SCOPE_REQUIRED");
+                });
+    }
+
     private AccessRepository.PermissionEffect effect(
             String userId,
             String permissionCode,
@@ -152,7 +218,9 @@ class AuthorizationServiceTests {
     private static final class InMemoryAccessRepository implements AccessRepository {
         private final Set<String> knownPermissions = new LinkedHashSet<>();
         private final List<PermissionEffect> effects = new ArrayList<>();
-        private final List<String> consumedSourceIds = new ArrayList<>();
+        final List<String> consumedSourceIds = new ArrayList<>();
+        // Tracks grants that were already consumed at the "DB level" (simulates AND consumed=FALSE returning 0 rows)
+        private final Set<String> alreadyConsumedAtDb = new java.util.LinkedHashSet<>();
 
         void addKnownPermission(String permissionCode) {
             knownPermissions.add(permissionCode);
@@ -293,14 +361,23 @@ class AuthorizationServiceTests {
                     .toList();
         }
 
+        void simulateAlreadyConsumedAtDb(String sourceId) {
+            alreadyConsumedAtDb.add(sourceId);
+        }
+
         @Override
-        public void markSingleUsePermissionConsumed(
+        public boolean markSingleUsePermissionConsumed(
                 String sourceId,
                 String permissionCode,
                 String userId,
                 Instant consumedAt
         ) {
+            if (alreadyConsumedAtDb.contains(sourceId)) {
+                return false;
+            }
             consumedSourceIds.add(sourceId);
+            alreadyConsumedAtDb.add(sourceId);
+            return true;
         }
     }
 }

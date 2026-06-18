@@ -7,6 +7,7 @@ public record BarBillRecord(
         String billNo,
         String orderId,
         String barId,
+        String merchantId,
         String tableId,
         String reservationId,
         long subtotalAmountCent,

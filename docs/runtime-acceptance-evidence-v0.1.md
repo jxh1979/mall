@@ -1,0 +1,70 @@
+# 运行时验收证据快照 V0.1
+
+> 本文由 `tools/generate-runtime-acceptance-evidence.mjs` 生成，用于把后端测试、Web 构建、Playwright UI、真实后端 UI、Semgrep 和生产边界汇总成可追溯证据。它不替代 `npm run verify:closed-loop-runtime`，也不关闭任何生产 manifest。
+
+机器识别标记：
+
+- RUNTIME_ACCEPTANCE_EVIDENCE_READY
+- RUNTIME_EVIDENCE_FROM_SUREFIRE_REPORTS
+- RUNTIME_EVIDENCE_FROM_PLAYWRIGHT_REPORTS
+- RUNTIME_EVIDENCE_FROM_WEB_DIST
+- RUNTIME_EVIDENCE_FROM_SEMGREP_LATEST_SUMMARY
+- RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST
+
+## 1. 结论
+
+| 判断项 | 当前值 |
+|---|---|
+| 运行时证据支持进入联调/业务验收 | 是 |
+| 可以宣称生产上线就绪 | 否 |
+| 结论说明 | Runtime evidence supports integration and business acceptance; production readiness remains blocked by external production evidence and NAS current mount state. |
+
+刷新规则：After backend, web, Playwright, OpenAPI, or runtime script changes, rerun npm run verify:closed-loop-runtime, then npm run docs:runtime-acceptance-evidence.
+
+## 2. 必须能复跑的命令
+
+| 命令 | 当前脚本 |
+|---|---|
+| 闭环运行态总验收 | `npm run test:backend && npm run typecheck --workspace apps/web && npm run build --workspace apps/web && npm run verify:ui && npm run verify:ui:real-backend:seeded` |
+| 后端测试 | `node tools/run-backend-maven.mjs test` |
+| Web 构建 | `npm run build --workspace apps/web` |
+| 常规 UI 验收 | `playwright test` |
+| 真实后端 UI 验收 | `node tools/run-real-backend-ui-e2e.mjs` |
+| 本证据校验 | `node tools/generate-runtime-acceptance-evidence.mjs --check` |
+
+## 3. 后端测试证据
+
+| 指标 | 当前值 |
+|---|---:|
+| Surefire suites | 69 |
+| tests | 579 |
+| failures | 0 |
+| errors | 0 |
+| skipped | 0 |
+| latest_mtime | 2026-06-17T11:09:36.737Z |
+
+## 4. Web 与 UI 验收证据
+
+| 证据 | 当前值 |
+|---|---|
+| Web dist index | 存在 |
+| Web main JS | `apps/web/dist/assets/main-CPI08bw-.js` 108017 bytes |
+| 最大静态资源 | `apps/web/dist/assets/vendor-antd-Brb5i53G.js` 452697 bytes |
+| 主包过大 warning 预期 | 无 |
+| 前端单元测试源文件 | 6 个文件，16 条测试定义 |
+| Playwright 常规 UI | 报告存在，28 条测试定义 |
+| Playwright 真实后端 UI | 报告存在，2 条测试定义 |
+| Playwright last-run | passed |
+
+## 5. 安全扫描与生产边界
+
+| 证据 | 当前值 |
+|---|---|
+| Semgrep | scan=semgrep-20260617-064855-manual-request，results=0，errors=0，paths_scanned=1543 |
+| 生产证据 | awaiting=15，P0 awaiting=13 |
+| NAS 当前状态 | failed |
+| 本报告是否关闭生产 manifest | 否 |
+
+## 6. 机器可读证据
+
+对应 JSON：`docs/runtime-acceptance-evidence-latest.json`。

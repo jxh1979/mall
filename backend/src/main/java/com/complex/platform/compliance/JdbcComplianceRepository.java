@@ -1,13 +1,11 @@
 package com.complex.platform.compliance;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,6 +41,18 @@ class JdbcComplianceRepository implements ComplianceRepository {
     }
 
     @Override
+    public List<ContractKeyDateRecord> findContractKeyDatesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, contract_id, merchant_id, date_type, title, due_date, reminder_days,
+                       status, owner_user_id, source_type, human_confirmed, evidence_attachment_ids,
+                       created_at, updated_at
+                  FROM contract_key_dates
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY due_date ASC, id
+                """, Map.of("merchant_id", merchantId), this::mapContractKeyDate);
+    }
+
+    @Override
     public Optional<ContractKeyDateRecord> findContractKeyDateById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, contract_id, merchant_id, date_type, title, due_date, reminder_days,
@@ -66,19 +76,7 @@ class JdbcComplianceRepository implements ComplianceRepository {
                     :status, :owner_user_id, :source_type, :human_confirmed, CAST(:evidence_attachment_ids AS jsonb),
                     :created_at, :updated_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    contract_id = EXCLUDED.contract_id,
-                    merchant_id = EXCLUDED.merchant_id,
-                    date_type = EXCLUDED.date_type,
-                    title = EXCLUDED.title,
-                    due_date = EXCLUDED.due_date,
-                    reminder_days = EXCLUDED.reminder_days,
-                    status = EXCLUDED.status,
-                    owner_user_id = EXCLUDED.owner_user_id,
-                    source_type = EXCLUDED.source_type,
-                    human_confirmed = EXCLUDED.human_confirmed,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
+                ON CONFLICT (id) DO NOTHING
                 """, contractKeyDateParameters(record));
         return record;
     }
@@ -92,6 +90,18 @@ class JdbcComplianceRepository implements ComplianceRepository {
                   FROM compliance_expiry_items
                  ORDER BY valid_to ASC, id
                 """, this::mapExpiryItem);
+    }
+
+    @Override
+    public List<ComplianceExpiryItemRecord> findExpiryItemsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, subject_type, subject_id, merchant_id, item_type, item_name, document_no,
+                       issuing_authority, valid_from, valid_to, reminder_days, expiry_action, status,
+                       owner_user_id, source_type, human_confirmed, evidence_attachment_ids, created_at, updated_at
+                  FROM compliance_expiry_items
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY valid_to ASC, id
+                """, Map.of("merchant_id", merchantId), this::mapExpiryItem);
     }
 
     @Override
@@ -119,24 +129,7 @@ class JdbcComplianceRepository implements ComplianceRepository {
                     :owner_user_id, :source_type, :human_confirmed, CAST(:evidence_attachment_ids AS jsonb),
                     :created_at, :updated_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    subject_type = EXCLUDED.subject_type,
-                    subject_id = EXCLUDED.subject_id,
-                    merchant_id = EXCLUDED.merchant_id,
-                    item_type = EXCLUDED.item_type,
-                    item_name = EXCLUDED.item_name,
-                    document_no = EXCLUDED.document_no,
-                    issuing_authority = EXCLUDED.issuing_authority,
-                    valid_from = EXCLUDED.valid_from,
-                    valid_to = EXCLUDED.valid_to,
-                    reminder_days = EXCLUDED.reminder_days,
-                    expiry_action = EXCLUDED.expiry_action,
-                    status = EXCLUDED.status,
-                    owner_user_id = EXCLUDED.owner_user_id,
-                    source_type = EXCLUDED.source_type,
-                    human_confirmed = EXCLUDED.human_confirmed,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
+                ON CONFLICT (id) DO NOTHING
                 """, expiryItemParameters(record));
         return record;
     }
@@ -144,7 +137,7 @@ class JdbcComplianceRepository implements ComplianceRepository {
     @Override
     public List<ComplianceReminderRecord> findAllReminders() {
         return jdbcTemplate.query("""
-                SELECT id, source_type, source_id, reminder_type, due_date, reminder_at, severity,
+                SELECT id, merchant_id, source_type, source_id, reminder_type, due_date, reminder_at, severity,
                        status, blocking_suggested, message, generated_at
                   FROM compliance_reminders
                  ORDER BY due_date ASC, generated_at DESC, id
@@ -152,17 +145,31 @@ class JdbcComplianceRepository implements ComplianceRepository {
     }
 
     @Override
+    public List<ComplianceReminderRecord> findRemindersByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, source_type, source_id, reminder_type, due_date, reminder_at, severity,
+                       status, blocking_suggested, message, generated_at
+                  FROM compliance_reminders
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY due_date ASC, generated_at DESC, id
+                """, Map.of("merchant_id", merchantId), this::mapReminder);
+    }
+
+    @Override
     public ComplianceReminderRecord saveReminder(ComplianceReminderRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO compliance_reminders (
-                    id, source_type, source_id, reminder_type, due_date, reminder_at, severity,
+                    id, merchant_id, source_type, source_id, reminder_type, due_date, reminder_at, severity,
                     status, blocking_suggested, message, generated_at
                 )
                 VALUES (
-                    :id, :source_type, :source_id, :reminder_type, :due_date, :reminder_at, :severity,
+                    :id, :merchant_id, :source_type, :source_id, :reminder_type, :due_date, :reminder_at, :severity,
                     :status, :blocking_suggested, :message, :generated_at
                 )
-                ON CONFLICT (id) DO UPDATE SET
+                ON CONFLICT (source_type, source_id, reminder_type, due_date) DO UPDATE SET
+                    id = EXCLUDED.id,
+                    merchant_id = EXCLUDED.merchant_id,
+                    severity = EXCLUDED.severity,
                     status = EXCLUDED.status,
                     blocking_suggested = EXCLUDED.blocking_suggested,
                     message = EXCLUDED.message,
@@ -215,6 +222,7 @@ class JdbcComplianceRepository implements ComplianceRepository {
     private MapSqlParameterSource reminderParameters(ComplianceReminderRecord record) {
         return new MapSqlParameterSource()
                 .addValue("id", record.id())
+                .addValue("merchant_id", record.merchantId())
                 .addValue("source_type", record.sourceType())
                 .addValue("source_id", record.sourceId())
                 .addValue("reminder_type", record.reminderType())
@@ -273,6 +281,7 @@ class JdbcComplianceRepository implements ComplianceRepository {
     private ComplianceReminderRecord mapReminder(ResultSet resultSet, int rowNumber) throws SQLException {
         return new ComplianceReminderRecord(
                 resultSet.getString("id"),
+                resultSet.getString("merchant_id"),
                 resultSet.getString("source_type"),
                 resultSet.getString("source_id"),
                 resultSet.getString("reminder_type"),
@@ -286,9 +295,6 @@ class JdbcComplianceRepository implements ComplianceRepository {
         );
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private String writeJson(Object value) {
         try {

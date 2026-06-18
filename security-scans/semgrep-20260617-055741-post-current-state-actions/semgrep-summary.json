@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-06-17T05:57:57.648598+00:00",
+  "scan_dir": "security-scans/semgrep-20260617-055741-post-current-state-actions",
+  "raw_result_file": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.json",
+  "sarif_file": "security-scans/semgrep-20260617-055741-post-current-state-actions/semgrep.sarif",
+  "config": "p/default",
+  "exit_code_json": 0,
+  "exit_code_sarif": 0,
+  "results_count": 0,
+  "errors_count": 0,
+  "paths_scanned_count": 1497,
+  "findings": [],
+  "errors": []
+}

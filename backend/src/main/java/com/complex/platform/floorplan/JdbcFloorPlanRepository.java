@@ -1,13 +1,11 @@
 package com.complex.platform.floorplan;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,17 +31,28 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
     public List<FloorPlanRecord> findAllFloorPlans() {
         return jdbcTemplate.query("""
                 SELECT id, project_id, building_code, floor_no, plan_name, image_url, image_width,
-                       image_height, version_no, status, created_at, updated_at
+                       image_height, version_no, status, created_at, updated_at, merchant_id
                   FROM mall_floor_plans
                  ORDER BY floor_no, version_no, id
                 """, this::mapFloorPlan);
     }
 
     @Override
+    public List<FloorPlanRecord> findAllFloorPlansByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, building_code, floor_no, plan_name, image_url, image_width,
+                       image_height, version_no, status, created_at, updated_at, merchant_id
+                  FROM mall_floor_plans
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY floor_no, version_no, id
+                """, Map.of("merchant_id", merchantId), this::mapFloorPlan);
+    }
+
+    @Override
     public Optional<FloorPlanRecord> findFloorPlanById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, building_code, floor_no, plan_name, image_url, image_width,
-                       image_height, version_no, status, created_at, updated_at
+                       image_height, version_no, status, created_at, updated_at, merchant_id
                   FROM mall_floor_plans
                  WHERE id = :id
                 """, Map.of("id", id), this::mapFloorPlan).stream().findFirst();
@@ -54,11 +63,11 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
         jdbcTemplate.update("""
                 INSERT INTO mall_floor_plans (
                     id, project_id, building_code, floor_no, plan_name, image_url, image_width,
-                    image_height, version_no, status, created_at, updated_at
+                    image_height, version_no, status, merchant_id, created_at, updated_at
                 )
                 VALUES (
                     :id, :project_id, :building_code, :floor_no, :plan_name, :image_url, :image_width,
-                    :image_height, :version_no, :status, :created_at, :updated_at
+                    :image_height, :version_no, :status, :merchant_id, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
@@ -254,6 +263,7 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
                 .addValue("image_height", record.imageHeight())
                 .addValue("version_no", record.versionNo())
                 .addValue("status", record.status())
+                .addValue("merchant_id", record.merchantId())
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
     }
@@ -329,7 +339,8 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
                 resultSet.getString("version_no"),
                 resultSet.getString("status"),
                 resultSet.getTimestamp("created_at").toInstant(),
-                resultSet.getTimestamp("updated_at").toInstant()
+                resultSet.getTimestamp("updated_at").toInstant(),
+                resultSet.getString("merchant_id")
         );
     }
 
@@ -395,9 +406,6 @@ class JdbcFloorPlanRepository implements FloorPlanRepository {
         );
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private String writeJson(Object value) {
         try {

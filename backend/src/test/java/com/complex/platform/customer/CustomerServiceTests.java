@@ -3,6 +3,7 @@ package com.complex.platform.customer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,8 +25,8 @@ import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.inventory.InventoryService;
-import com.complex.platform.inventory.StockAdjustmentRecord;
-import com.complex.platform.inventory.dto.StockAdjustmentRequest;
+import com.complex.platform.inventory.StockMovementRecord;
+import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.ticketing.TicketCredentialResponse;
 import com.complex.platform.ticketing.TicketOrderRecord;
 import com.complex.platform.ticketing.TicketTypeRecord;
@@ -405,18 +406,23 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        when(inventoryService.createStockAdjustment(any(StockAdjustmentRequest.class))).thenReturn(new StockAdjustmentRecord(
-                "adjust_redeem",
-                "item_gift",
-                "gift_shelf",
-                "loss",
-                2,
-                "points_redemption",
-                List.of(),
-                "completed",
-                Instant.parse("2026-06-14T00:00:00Z"),
-                null
-        ));
+        when(inventoryService.createTypedStockMovement(eq("redeem_consume"), any(StockMovementRequest.class)))
+                .thenReturn(new StockMovementRecord(
+                        "movement_redeem",
+                        "redeem_consume",
+                        "item_gift",
+                        "gift_shelf",
+                        null,
+                        2,
+                        "manual",
+                        null,
+                        "points_redemption:redemption_redeem-once",
+                        "system",
+                        List.of(),
+                        "completed",
+                        Instant.parse("2026-06-14T00:00:00Z"),
+                        null
+                ));
 
         CustomerPointsRedemptionRecord redemption = service.redeemPoints(
                 login.customerToken(),
@@ -436,13 +442,12 @@ class CustomerServiceTests {
         assertThat(customerRepository.pointsLedger)
                 .extracting(CustomerPointsLedgerRecord::pointsDelta, CustomerPointsLedgerRecord::balanceAfter, CustomerPointsLedgerRecord::sourceType)
                 .contains(org.assertj.core.groups.Tuple.tuple(-120L, 380L, "points_redemption"));
-        ArgumentCaptor<StockAdjustmentRequest> stockRequest = ArgumentCaptor.forClass(StockAdjustmentRequest.class);
-        verify(inventoryService).createStockAdjustment(stockRequest.capture());
-        assertThat(stockRequest.getValue().adjustmentType()).isEqualTo("loss");
-        assertThat(stockRequest.getValue().reason()).contains("points_redemption");
+        ArgumentCaptor<StockMovementRequest> stockRequest = ArgumentCaptor.forClass(StockMovementRequest.class);
+        verify(inventoryService).createTypedStockMovement(eq("redeem_consume"), stockRequest.capture());
+        assertThat(stockRequest.getValue().fromLocationId()).isEqualTo("gift_shelf");
+        assertThat(stockRequest.getValue().traceCode()).contains("points_redemption");
         assertThat(stockRequest.getValue().items().getFirst())
                 .containsEntry("item_id", "item_gift")
-                .containsEntry("location_id", "gift_shelf")
                 .containsEntry("quantity", 2);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
@@ -485,7 +490,7 @@ class CustomerServiceTests {
                 .hasMessageContaining("points balance is insufficient");
 
         assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(50L);
-        verify(inventoryService, never()).createStockAdjustment(any(StockAdjustmentRequest.class));
+        verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
     }
 
     @Test
@@ -514,7 +519,7 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
-        when(inventoryService.createStockAdjustment(any(StockAdjustmentRequest.class)))
+        when(inventoryService.createTypedStockMovement(eq("redeem_consume"), any(StockMovementRequest.class)))
                 .thenThrow(ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient"));
 
         assertThatThrownBy(() -> service.redeemPoints(

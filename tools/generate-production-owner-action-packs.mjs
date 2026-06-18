@@ -4,6 +4,7 @@ import path from "node:path";
 const repoRoot = process.cwd();
 const checkMode = process.argv.includes("--check");
 const sourcePath = "docs/production-readiness-evidence/production-blocker-register-latest.json";
+const submissionKitPath = "docs/production-readiness-evidence/production-evidence-submission-kit-latest.json";
 const jsonPath = "docs/production-readiness-evidence/production-owner-action-packs-latest.json";
 const mdPath = "docs/production-owner-action-packs-v0.1.md";
 
@@ -13,6 +14,12 @@ function readText(relativePath) {
 
 function readJson(relativePath) {
   return JSON.parse(readText(relativePath));
+}
+
+function readOptionalJson(relativePath) {
+  const fullPath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(fullPath)) return null;
+  return JSON.parse(fs.readFileSync(fullPath, "utf8"));
 }
 
 function normalize(content) {
@@ -93,7 +100,8 @@ function actionsFor(item) {
   return ["补齐来源证据", "更新来源台账或 findings", "生成阻断清单和动作包", "复跑交付闸口"];
 }
 
-function itemSummary(item) {
+function itemSummary(item, ownerGroup, submissionRowsByItem) {
+  const relatedSubmissionRows = relatedSubmissionsFor(item, ownerGroup, submissionRowsByItem);
   return {
     id: item.id,
     priority: inferPriority(item),
@@ -105,6 +113,10 @@ function itemSummary(item) {
     next_action: item.next_action,
     required_evidence: evidenceFor(item),
     owner_actions: actionsFor(item),
+    related_submissions: relatedSubmissionRows,
+    manifest_paths: unique(relatedSubmissionRows.map((row) => row.manifest_path)),
+    accepted_evidence_types: unique(relatedSubmissionRows.flatMap((row) => row.accepted_evidence_types)),
+    verification_commands: unique(relatedSubmissionRows.flatMap((row) => row.verification_commands_after_backfill)),
   };
 }
 
@@ -121,7 +133,40 @@ function mdTable(rows, columns) {
   return [header, separator, ...body].join("\n") + "\n";
 }
 
+function buildSubmissionRowsByItem(submissionKit) {
+  const map = new Map();
+  for (const row of submissionKit?.submissions ?? []) {
+    const itemId = row.item_id;
+    if (!itemId) continue;
+    const manifestPath = `${row.packet_folder ?? ""}${row.manifest_file_name ?? ""}`;
+    const normalized = {
+      submission_id: row.submission_id,
+      owner_group: row.owner_group,
+      item_id: itemId,
+      priority: row.priority,
+      category: row.category,
+      submission_status: row.submission_status,
+      manifest_path: manifestPath,
+      accepted_evidence_types: row.accepted_evidence_types ?? [],
+      required_evidence_summary: row.required_evidence_summary ?? [],
+      not_accepted_evidence: row.not_accepted_evidence ?? [],
+      verification_commands_after_backfill: row.verification_commands_after_backfill ?? [],
+    };
+    if (!map.has(itemId)) map.set(itemId, []);
+    map.get(itemId).push(normalized);
+  }
+  return map;
+}
+
+function relatedSubmissionsFor(item, ownerGroup, submissionRowsByItem) {
+  const rows = submissionRowsByItem.get(item.id) ?? [];
+  const exactOwnerRows = rows.filter((row) => row.owner_group === ownerGroup);
+  return exactOwnerRows.length > 0 ? exactOwnerRows : rows;
+}
+
 const source = readJson(sourcePath);
+const submissionKit = readOptionalJson(submissionKitPath);
+const submissionRowsByItem = buildSubmissionRowsByItem(submissionKit);
 const unresolvedItems = [
   ...(source.readiness_blockers ?? []),
   ...(source.credential_blockers ?? []),
@@ -155,7 +200,7 @@ for (const item of unresolvedItems) {
       });
     }
     const pack = packMap.get(ownerGroup);
-    pack.items.push(itemSummary(item));
+    pack.items.push(itemSummary(item, ownerGroup, submissionRowsByItem));
   }
 }
 
@@ -169,7 +214,8 @@ const output = {
   register_version: "v0.1",
   status: packs.length > 0 ? "open_actions_present" : "no_open_actions",
   source_register_path: sourcePath,
-  generated_from: [sourcePath],
+  source_submission_kit_path: submissionKitPath,
+  generated_from: [sourcePath, submissionKitPath],
   policy: {
     no_fake_closure: true,
     source_of_truth_is_blocker_register: true,
@@ -180,6 +226,8 @@ const output = {
     unique_unresolved_items: unresolvedItems.length,
     owner_action_packs: packs.length,
     duplicated_owner_action_rows: packs.reduce((sum, pack) => sum + pack.items.length, 0),
+    related_submission_rows: packs.reduce((sum, pack) => sum + pack.items.reduce((itemSum, item) => itemSum + item.related_submissions.length, 0), 0),
+    items_without_manifest: packs.reduce((sum, pack) => sum + pack.items.filter((item) => item.manifest_paths.length === 0).length, 0),
   },
   owner_action_packs: packs,
 };
@@ -201,6 +249,9 @@ const detailSections = packs.map((pack) => {
     blocking_scope: item.blocking_scope,
     next_action: item.next_action,
     required_evidence: item.required_evidence.join("；"),
+    manifest_paths: item.manifest_paths.join("\uFF1B") || "missing: check production-evidence-submission-kit",
+    accepted_evidence_types: item.accepted_evidence_types.join("\uFF1B") || "missing",
+    verification_commands: item.verification_commands.join("\uFF1B") || "npm run verify:delivery-gates",
   }));
   return `### ${pack.owner_group}\n\n${mdTable(rows, [
     { key: "id", label: "id" },
@@ -210,10 +261,13 @@ const detailSections = packs.map((pack) => {
     { key: "blocking_scope", label: "blocking_scope" },
     { key: "next_action", label: "next_action" },
     { key: "required_evidence", label: "required_evidence" },
+    { key: "manifest_paths", label: "manifest_paths" },
+    { key: "accepted_evidence_types", label: "accepted_evidence_types" },
+    { key: "verification_commands", label: "verification_commands" },
   ])}`;
 }).join("\n");
 
-const md = normalize(`# 生产责任人动作包 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_OWNER_ACTION_PACKS_READY\n- OWNER_ACTIONS_FROM_PRODUCTION_BLOCKERS\n- NO_OWNER_ACTION_CAN_CLOSE_WITHOUT_SOURCE_LEDGER\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- VERIFY_PRODUCTION_OWNER_ACTIONS_READY\n\n## 2. 定位\n\n本文从 \`${sourcePath}\` 自动生成，把仍未关闭的生产阻断项按责任人拆成可执行动作包。本文不改变来源台账状态，不允许用本文手工删项来关闭阻断。\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 未关闭唯一阻断项 | ${output.counts.unique_unresolved_items} |\n| 责任人动作包 | ${output.counts.owner_action_packs} |\n| 按责任人展开后的动作行 | ${output.counts.duplicated_owner_action_rows} |\n\n## 4. 责任人动作包总表\n\n${mdTable(summaryRows, [
+const md = normalize(`# 生产责任人动作包 V0.1\n\n## 1. 机器标记\n\n- PRODUCTION_OWNER_ACTION_PACKS_READY\n- OWNER_ACTIONS_FROM_PRODUCTION_BLOCKERS\n- OWNER_ACTIONS_LINKED_TO_EVIDENCE_MANIFESTS\n- NO_OWNER_ACTION_CAN_CLOSE_WITHOUT_SOURCE_LEDGER\n- CREDENTIAL_REF_ONLY_NO_PLAINTEXT_SECRET\n- VERIFY_PRODUCTION_OWNER_ACTIONS_READY\n\n## 2. 定位\n\n本文从 \`${sourcePath}\` 自动生成，把仍未关闭的生产阻断项按责任人拆成可执行动作包。本文不改变来源台账状态，不允许用本文手工删项来关闭阻断。\n\nEvidence manifest source: \`${submissionKitPath}\`. Every owner action item must link to at least one manifest path; verification fails when items_without_manifest is not 0.\n\n## 3. 总览\n\n| 指标 | 数量 |\n|---|---:|\n| 未关闭唯一阻断项 | ${output.counts.unique_unresolved_items} |\n| 责任人动作包 | ${output.counts.owner_action_packs} |\n| 按责任人展开后的动作行 | ${output.counts.duplicated_owner_action_rows} |\n| \u5df2\u5173\u8054\u8bc1\u636e\u63d0\u4ea4\u884c | ${output.counts.related_submission_rows} |\n| \u672a\u5339\u914d manifest \u7684\u52a8\u4f5c\u884c | ${output.counts.items_without_manifest} |\n\n## 4. 责任人动作包总表\n\n${mdTable(summaryRows, [
   { key: "owner_group", label: "owner_group" },
   { key: "status", label: "status" },
   { key: "blocker_count", label: "blocker_count" },
@@ -228,8 +282,8 @@ function forbidPlaintextSecrets(relativePath, text) {
     /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/i,
     /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/,
     /\bAKIA[0-9A-Z]{16}\b/,
-    /\b(?:password|token)\s*[:=]\s*["'][^"'<\n]{8,}["']/i,
-    /\b(?:secret|secret_key)\s*[:=]\s*["'][^"'<\n]{8,}["']/i,
+    /\b(?:password|token)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{8,}\\*["']|[A-Za-z0-9_./+=-]{12,})/i,
+    /\b(?:secret_key|secret)\s*[:=]\s*(?:\\*["'][^"'<\n\\]{8,}\\*["']|[A-Za-z0-9_./+=-]{12,})/i,
   ];
   for (const [index, pattern] of patterns.entries()) {
     if (pattern.test(text)) throw new Error(`${relativePath} contains apparent plaintext secret pattern #${index + 1}`);
@@ -252,6 +306,8 @@ if (checkMode) {
   if (currentJson !== json) failures.push(`${jsonPath} is not in sync`);
   if (currentMd !== md) failures.push(`${mdPath} is not in sync`);
   if (output.status !== "open_actions_present") failures.push("owner action packs must keep open actions visible while blockers exist");
+  if (output.counts.items_without_manifest !== 0) failures.push("every owner action item must link to at least one evidence manifest");
+  if (output.counts.related_submission_rows <= 0) failures.push("owner action packs must expose related evidence submission rows");
   if (failures.length > 0) {
     console.error("PRODUCTION_OWNER_ACTIONS_FAIL");
     for (const failure of failures) console.error(`- ${failure}`);

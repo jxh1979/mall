@@ -6,6 +6,7 @@ import java.util.List;
 public record BarReservationRecord(
         String id,
         String barId,
+        String merchantId,
         String tableId,
         String customerId,
         Instant reservedAt,
@@ -20,6 +21,7 @@ public record BarReservationRecord(
         String deviceId,
         List<String> evidenceAttachmentIds,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String depositRule
 ) {
 }

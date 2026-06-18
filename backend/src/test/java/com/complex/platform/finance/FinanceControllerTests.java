@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.util.Optional;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -60,6 +61,9 @@ class FinanceControllerTests {
     @BeforeEach
     void resetMocks() {
         Mockito.reset(service, authorizationService);
+        // Default: platform admin scope (FinanceService mock doesn't call this, but
+        // stub it so any unexpected real call doesn't blow up with an unstubbed mock error)
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
     }
 
     @Test
@@ -125,7 +129,8 @@ class FinanceControllerTests {
                                 "2026-06",
                                 "partial_paid",
                                 Instant.parse("2026-06-14T00:00:00Z"),
-                                Instant.parse("2026-06-14T01:00:01Z")
+                                Instant.parse("2026-06-14T01:00:01Z"),
+                                null
                         )
                 ));
 
@@ -310,7 +315,8 @@ class FinanceControllerTests {
                 "2026-06",
                 "pending_collection",
                 now,
-                now
+                now,
+                null
         );
     }
 

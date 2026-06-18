@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 
 public record StockBalanceRecord(
@@ -9,6 +10,7 @@ public record StockBalanceRecord(
         int quantity,
         int reservedQuantity,
         int availableQuantity,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore String merchantId
 ) {
 }

@@ -138,6 +138,7 @@ class ComplianceControllerTests {
                 1,
                 List.of(new ComplianceReminderRecord(
                         "cr_1",
+                        "merchant_1",
                         "compliance_expiry_item",
                         "cei_1",
                         "expired",

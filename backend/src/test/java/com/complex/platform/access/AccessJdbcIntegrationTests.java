@@ -46,6 +46,38 @@ class AccessJdbcIntegrationTests {
     }
 
     @Test
+    void migrationCreatesStaffLevelTablesAndSeedsThirtyContiguousRanks() {
+        assertThat(regclass("staff_levels")).isEqualTo("staff_levels");
+        assertThat(regclass("staff_level_assignments")).isEqualTo("staff_level_assignments");
+
+        List<StaffLevelRecord> levels = repository.listStaffLevels();
+        assertThat(levels).hasSize(30);
+        assertThat(levels).extracting(StaffLevelRecord::levelRank)
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 30).boxed().toList());
+        assertThat(repository.findStaffLevelById("lvl_m1_lower")).get()
+                .extracting(StaffLevelRecord::mainLevel, StaffLevelRecord::subLevel, StaffLevelRecord::levelRank)
+                .containsExactly("M1", "lower", 1);
+        assertThat(repository.findStaffLevelById("lvl_m10_upper")).get()
+                .extracting(StaffLevelRecord::levelRank)
+                .isEqualTo(30);
+    }
+
+    @Test
+    void staffLevelAssignmentPersistsLevelAndSalary() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_level", "jdbc-level-user", "staff", "org", "merchant", "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        repository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                "usr_jdbc_level", "lvl_m5_middle", 800_000L, "CNY", "月薪 8000", "org", "merchant",
+                "access-api", Instant.parse("2026-06-14T00:00:00Z")));
+
+        assertThat(repository.findStaffLevelAssignment("usr_jdbc_level")).get()
+                .extracting(StaffLevelAssignment::staffLevelId, StaffLevelAssignment::baseSalaryAmountCent,
+                        StaffLevelAssignment::salaryCurrency)
+                .containsExactly("lvl_m5_middle", 800_000L, "CNY");
+    }
+
+    @Test
     void saveTemplatePersistsGrantAndDenyItems() {
         PermissionTemplate template = repository.saveTemplate(
                 template("tpl_jdbc_items", "jdbc-items", "source"),

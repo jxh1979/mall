@@ -26,12 +26,12 @@ public class SupervisorReviewService {
     private final AuditEventService auditEventService;
 
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
-            new SupervisorReviewPolicyRecord("manual_release_l2", "manual_release", 0, 2, true, List.of("operator_note", "evidence_attachment"), "active"),
-            new SupervisorReviewPolicyRecord("bill_waiver_l3", "bill_waiver", 1, 3, true, List.of("reason", "evidence_attachment"), "active"),
-            new SupervisorReviewPolicyRecord("refund_l2", "refund", 1, 2, true, List.of("reason"), "active"),
-            new SupervisorReviewPolicyRecord("ar_ap_adjustment_l3", "ar_ap_adjustment", 1, 3, true, List.of("reason", "before_after"), "active"),
-            new SupervisorReviewPolicyRecord("contract_violation_l3", "contract_violation", 0, 3, true, List.of("violation_summary", "contract_snapshot"), "active"),
-            new SupervisorReviewPolicyRecord("base_definition_violation_l3", "base_definition_violation", 0, 3, true, List.of("violation_summary", "definition_snapshot"), "active")
+            new SupervisorReviewPolicyRecord("manual_release_l2", "manual_release", 0, 2, true, List.of("operator_note", "evidence_attachment"), "active", "specific_role"),
+            new SupervisorReviewPolicyRecord("bill_waiver_l3", "bill_waiver", 1, 3, true, List.of("reason", "evidence_attachment"), "active", "specific_role"),
+            new SupervisorReviewPolicyRecord("refund_l2", "refund", 1, 2, true, List.of("reason"), "active", "specific_role"),
+            new SupervisorReviewPolicyRecord("ar_ap_adjustment_l3", "ar_ap_adjustment", 1, 3, true, List.of("reason", "before_after"), "active", "specific_role"),
+            new SupervisorReviewPolicyRecord("contract_violation_l3", "contract_violation", 0, 3, true, List.of("violation_summary", "contract_snapshot"), "active", "two_levels_up"),
+            new SupervisorReviewPolicyRecord("base_definition_violation_l3", "base_definition_violation", 0, 3, true, List.of("violation_summary", "definition_snapshot"), "active", "top_authority")
     );
 
     public SupervisorReviewService(
@@ -76,6 +76,13 @@ public class SupervisorReviewService {
                     // The operator who triggered the reviewed action is recorded so the approver
                     // can never be the same person (segregation of duties / no self-approval).
                     String initiatedBy = authorizationService.currentActor().id();
+                    // REQ-69 逐级上提：按发起人 level_rank 与策略升级类型计算所需审批人 rank。
+                    // 仅当升级类型按 rank 且发起人职级已知（rank>0）时生效；否则回退既有 required_level（主管级）。
+                    ApprovalLevel approvalLevel = ApprovalLevel.fromCode(policy.approvalLevel());
+                    int initiatorRank = authorizationService.currentActorLevelRank();
+                    Integer requiredApproverRank = (approvalLevel.rankBased() && initiatorRank > 0)
+                            ? approvalLevel.requiredApproverRank(initiatorRank)
+                            : null;
                     SupervisorReviewDecisionRecord decision = new SupervisorReviewDecisionRecord(
                             "review_" + UUID.randomUUID(),
                             policy.policyCode(),
@@ -90,7 +97,9 @@ public class SupervisorReviewService {
                             request.violationSummary(),
                             request.evidenceAttachmentIds() == null ? List.of() : List.copyOf(request.evidenceAttachmentIds()),
                             Instant.now(),
-                            initiatedBy
+                            initiatedBy,
+                            policy.approvalLevel(),
+                            requiredApproverRank
                     );
                     if (blocked) {
                         supervisorReviewRepository.saveSupervisorReview(decision);
@@ -102,7 +111,8 @@ public class SupervisorReviewService {
                             decision.reviewId(),
                             null,
                             request.idempotencyKey(),
-                            Map.of("action_type", actionType, "blocked", blocked, "required_level", policy.requiredLevel())
+                            Map.of("action_type", actionType, "blocked", blocked, "required_level", policy.requiredLevel(),
+                                    "approval_level", policy.approvalLevel())
                     );
                     return decision;
                 },
@@ -137,6 +147,16 @@ public class SupervisorReviewService {
                         throw ApiException.forbidden(
                                 "SUPERVISOR_SELF_REVIEW_FORBIDDEN", "the initiator of an action cannot approve its own review");
                     }
+                    // REQ-69 逐级上提：当本次复核记录有按 rank 计算的所需审批人 rank 时，
+                    // 审批人的 level_rank 必须不低于该 rank（在主管级校验之上的管理职级门槛）。
+                    if (pending.requiredApproverRank() != null) {
+                        int reviewerRank = authorizationService.levelRankOf(reviewerId);
+                        if (reviewerRank < pending.requiredApproverRank()) {
+                            throw ApiException.forbidden(
+                                    "SUPERVISOR_RANK_TOO_LOW",
+                                    "reviewer management level rank is lower than the required approver rank");
+                        }
+                    }
                     SupervisorReviewDecisionRecord result = new SupervisorReviewDecisionRecord(
                             id,
                             pending.policyCode(),
@@ -151,7 +171,9 @@ public class SupervisorReviewService {
                             request.comment(),
                             request.evidenceAttachmentIds() == null ? List.of() : List.copyOf(request.evidenceAttachmentIds()),
                             Instant.now(),
-                            pending.initiatedBy()
+                            pending.initiatedBy(),
+                            pending.approvalLevel(),
+                            pending.requiredApproverRank()
                     );
                     supervisorReviewRepository.saveSupervisorReview(result);
                     auditEventService.recordSuccess(

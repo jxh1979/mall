@@ -14,9 +14,9 @@
     "real_submission_must_go_to_submissions_directory": true
   },
   "counts": {
-    "owner_guides": 5,
-    "items": 40,
-    "p0_items": 31,
+    "owner_guides": 3,
+    "items": 15,
+    "p0_items": 13,
     "invalid_submission": 0
   },
   "owner_guides": [
@@ -26,9 +26,9 @@
       "guide_path": "docs/production-readiness-evidence/owner-guides/finance.md",
       "status": "awaiting_real_evidence",
       "counts": {
-        "items": 4,
-        "p0_items": 4,
-        "awaiting_submission": 4,
+        "items": 1,
+        "p0_items": 1,
+        "awaiting_submission": 1,
         "valid_submission": 0,
         "invalid_submission": 0
       },
@@ -41,33 +41,6 @@
           "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-CRED-001.json",
           "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/manifest-PRD-CRED-001.json",
           "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-finance-PRD-CRED-3P-001",
-          "item_id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-CRED-3P-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-finance-PRD-PAY-001",
-          "item_id": "PRD-PAY-001",
-          "priority": "P0",
-          "category": "payment",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-PAY-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-001/manifest-PRD-PAY-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-finance-PRD-PAY-002",
-          "item_id": "PRD-PAY-002",
-          "priority": "P0",
-          "category": "payment",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/finance/template-PRD-PAY-002.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-002/manifest-PRD-PAY-002.json",
-          "current_status": "awaiting_submission"
         }
       ]
     },
@@ -77,9 +50,9 @@
       "guide_path": "docs/production-readiness-evidence/owner-guides/it-ops-security.md",
       "status": "awaiting_real_evidence",
       "counts": {
-        "items": 23,
-        "p0_items": 19,
-        "awaiting_submission": 23,
+        "items": 12,
+        "p0_items": 11,
+        "awaiting_submission": 12,
         "valid_submission": 0,
         "invalid_submission": 0
       },
@@ -100,15 +73,6 @@
           "category": "credential",
           "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-001.json",
           "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-PRD-CRED-3P-001",
-          "item_id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-3P-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
           "current_status": "awaiting_submission"
         },
         {
@@ -139,48 +103,12 @@
           "current_status": "awaiting_submission"
         },
         {
-          "submission_id": "SUB-it-ops-security-PRD-CRED-OBJ-001",
-          "item_id": "PRD-CRED-OBJ-001",
-          "priority": "P0",
-          "category": "credential",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-OBJ-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OBJ-001/manifest-PRD-CRED-OBJ-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-PRD-CRED-OPEN-001",
-          "item_id": "PRD-CRED-OPEN-001",
-          "priority": "P0",
-          "category": "credential",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-OPEN-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
           "submission_id": "SUB-it-ops-security-PRD-CRED-OPS-001",
           "item_id": "PRD-CRED-OPS-001",
           "priority": "P0",
           "category": "credential",
           "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-CRED-OPS-001.json",
           "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/manifest-PRD-CRED-OPS-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-PRD-FACE-001",
-          "item_id": "PRD-FACE-001",
-          "priority": "P0",
-          "category": "face_age",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-FACE-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-FACE-001/manifest-PRD-FACE-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-PRD-MDM-001",
-          "item_id": "PRD-MDM-001",
-          "priority": "P0",
-          "category": "MDM",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-MDM-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-MDM-001/manifest-PRD-MDM-001.json",
           "current_status": "awaiting_submission"
         },
         {
@@ -220,66 +148,12 @@
           "current_status": "awaiting_submission"
         },
         {
-          "submission_id": "SUB-it-ops-security-PRD-PAY-001",
-          "item_id": "PRD-PAY-001",
-          "priority": "P0",
-          "category": "payment",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-PAY-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-001/manifest-PRD-PAY-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-PRD-PAY-002",
-          "item_id": "PRD-PAY-002",
-          "priority": "P0",
-          "category": "payment",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-PAY-002.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-002/manifest-PRD-PAY-002.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-SEC-P0-MDM-DEVICE-001",
-          "item_id": "SEC-P0-MDM-DEVICE-001",
-          "priority": "P0",
-          "category": "MDM",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-SEC-P0-MDM-DEVICE-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
           "submission_id": "SUB-it-ops-security-SEC-P0-OPS-RECOVERY-001",
           "item_id": "SEC-P0-OPS-RECOVERY-001",
           "priority": "P0",
           "category": "ops160",
           "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-SEC-P0-OPS-RECOVERY-001.json",
           "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-OPS-RECOVERY-001/manifest-SEC-P0-OPS-RECOVERY-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-PRD-3P-001",
-          "item_id": "PRD-3P-001",
-          "priority": "P1",
-          "category": "third_party",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-3P-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-3P-001/manifest-PRD-3P-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-PRD-WECOM-001",
-          "item_id": "PRD-WECOM-001",
-          "priority": "P1",
-          "category": "wecom",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-PRD-WECOM-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-WECOM-001/manifest-PRD-WECOM-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-it-ops-security-SEC-P1-WEBHOOK-REPLAY-001",
-          "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
-          "priority": "P1",
-          "category": "third_party",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/it-ops-security/template-SEC-P1-WEBHOOK-REPLAY-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
           "current_status": "awaiting_submission"
         },
         {
@@ -294,125 +168,14 @@
       ]
     },
     {
-      "owner_slug": "operations-legal",
-      "owner_group": "运营/法务",
-      "guide_path": "docs/production-readiness-evidence/owner-guides/operations-legal.md",
-      "status": "awaiting_real_evidence",
-      "counts": {
-        "items": 3,
-        "p0_items": 2,
-        "awaiting_submission": 3,
-        "valid_submission": 0,
-        "invalid_submission": 0
-      },
-      "items": [
-        {
-          "submission_id": "SUB-operations-legal-PRD-CRED-3P-001",
-          "item_id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/operations-legal/template-PRD-CRED-3P-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-operations-legal-PRD-FACE-001",
-          "item_id": "PRD-FACE-001",
-          "priority": "P0",
-          "category": "face_age",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/operations-legal/template-PRD-FACE-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-FACE-001/manifest-PRD-FACE-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-operations-legal-PRD-WECOM-001",
-          "item_id": "PRD-WECOM-001",
-          "priority": "P1",
-          "category": "wecom",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/operations-legal/template-PRD-WECOM-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-WECOM-001/manifest-PRD-WECOM-001.json",
-          "current_status": "awaiting_submission"
-        }
-      ]
-    },
-    {
-      "owner_slug": "procurement-supplier",
-      "owner_group": "采购/供应商联调",
-      "guide_path": "docs/production-readiness-evidence/owner-guides/procurement-supplier.md",
-      "status": "awaiting_real_evidence",
-      "counts": {
-        "items": 6,
-        "p0_items": 4,
-        "awaiting_submission": 6,
-        "valid_submission": 0,
-        "invalid_submission": 0
-      },
-      "items": [
-        {
-          "submission_id": "SUB-procurement-supplier-PRD-CRED-3P-001",
-          "item_id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-CRED-3P-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-procurement-supplier-PRD-FACE-001",
-          "item_id": "PRD-FACE-001",
-          "priority": "P0",
-          "category": "face_age",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-FACE-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-FACE-001/manifest-PRD-FACE-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-procurement-supplier-PRD-MDM-001",
-          "item_id": "PRD-MDM-001",
-          "priority": "P0",
-          "category": "MDM",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-MDM-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-MDM-001/manifest-PRD-MDM-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-procurement-supplier-SEC-P0-MDM-DEVICE-001",
-          "item_id": "SEC-P0-MDM-DEVICE-001",
-          "priority": "P0",
-          "category": "MDM",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-SEC-P0-MDM-DEVICE-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-procurement-supplier-PRD-3P-001",
-          "item_id": "PRD-3P-001",
-          "priority": "P1",
-          "category": "third_party",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-PRD-3P-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-3P-001/manifest-PRD-3P-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-procurement-supplier-SEC-P1-WEBHOOK-REPLAY-001",
-          "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
-          "priority": "P1",
-          "category": "third_party",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/procurement-supplier/template-SEC-P1-WEBHOOK-REPLAY-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
-          "current_status": "awaiting_submission"
-        }
-      ]
-    },
-    {
       "owner_slug": "technical-owner",
       "owner_group": "技术实现负责人",
       "guide_path": "docs/production-readiness-evidence/owner-guides/technical-owner.md",
       "status": "awaiting_real_evidence",
       "counts": {
-        "items": 4,
-        "p0_items": 2,
-        "awaiting_submission": 4,
+        "items": 2,
+        "p0_items": 1,
+        "awaiting_submission": 2,
         "valid_submission": 0,
         "invalid_submission": 0
       },
@@ -424,24 +187,6 @@
           "category": "credential",
           "template_path": "docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-PRD-CRED-JWT-001.json",
           "target_manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-technical-owner-PRD-CRED-OPEN-001",
-          "item_id": "PRD-CRED-OPEN-001",
-          "priority": "P0",
-          "category": "credential",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-PRD-CRED-OPEN-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json",
-          "current_status": "awaiting_submission"
-        },
-        {
-          "submission_id": "SUB-technical-owner-SEC-P1-WEBHOOK-REPLAY-001",
-          "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
-          "priority": "P1",
-          "category": "third_party",
-          "template_path": "docs/production-readiness-evidence/submission-manifest-templates/technical-owner/template-SEC-P1-WEBHOOK-REPLAY-001.json",
-          "target_manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
           "current_status": "awaiting_submission"
         },
         {

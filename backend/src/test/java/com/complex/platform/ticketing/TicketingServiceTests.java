@@ -163,6 +163,19 @@ class TicketingServiceTests {
                 .isEqualTo(0);
     }
 
+    // C1/REQ-05: 人工放行留痕 manual_overridden
+    @Test
+    void manualOverrideRecordsManualOverriddenVerification() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("override");
+        VerificationResponse resp = service.manualOverrideVerification(new VerificationRequest(
+                "override-1", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()),
+                "supervisor release");
+        assertThat(resp.status()).isEqualTo("manual_overridden");
+        assertThat(ticketingRepository.verifications.values())
+                .filteredOn(v -> "manual_overridden".equals(v.status()))
+                .hasSize(1);
+    }
+
     @Test
     void verificationConsumesExactlyOneRemainingTimeAndIsIdempotent() {
         IssuedEntitlementRecord entitlement = issueSingleEntitlement("verify");

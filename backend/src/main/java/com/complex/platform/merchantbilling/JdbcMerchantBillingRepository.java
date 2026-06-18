@@ -1,13 +1,13 @@
 package com.complex.platform.merchantbilling;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,13 +31,27 @@ class JdbcMerchantBillingRepository implements MerchantBillingRepository {
 
     @Override
     public List<MerchantBillRecord> findAllBills() {
-        return jdbcTemplate.query("""
+        return queryBillsWithLines("""
                 SELECT id, merchant_id, ar_ap_item_id, bill_no, bill_period_start, bill_period_end,
                        due_date, total_amount_cent, currency, status, aging_days, source_type,
                        source_id, created_at, updated_at
                   FROM merchant_bills
                  ORDER BY created_at DESC, id
-                """, this::mapBill);
+                 LIMIT 200
+                """, new MapSqlParameterSource());
+    }
+
+    @Override
+    public List<MerchantBillRecord> findBillsByMerchantId(String merchantId) {
+        return queryBillsWithLines("""
+                SELECT id, merchant_id, ar_ap_item_id, bill_no, bill_period_start, bill_period_end,
+                       due_date, total_amount_cent, currency, status, aging_days, source_type,
+                       source_id, created_at, updated_at
+                  FROM merchant_bills
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                 LIMIT 200
+                """, new MapSqlParameterSource("merchant_id", merchantId));
     }
 
     @Override
@@ -307,9 +321,6 @@ class JdbcMerchantBillingRepository implements MerchantBillingRepository {
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()));
     }
 
-    private OffsetDateTime timestampWithTimeZone(Instant instant) {
-        return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
-    }
 
     private String writeJson(Object value) {
         try {
@@ -325,5 +336,63 @@ class JdbcMerchantBillingRepository implements MerchantBillingRepository {
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("json field is not readable", exception);
         }
+    }
+
+    private List<MerchantBillRecord> queryBillsWithLines(String sql, MapSqlParameterSource params) {
+        List<MerchantBillRecord> headers = jdbcTemplate.query(sql, params, this::mapBillHeader);
+        if (headers.isEmpty()) {
+            return headers;
+        }
+        List<String> billIds = headers.stream().map(MerchantBillRecord::id).toList();
+        Map<String, List<MerchantBillLineRecord>> linesMap = findLinesByBillIds(billIds);
+        return headers.stream()
+                .map(bill -> bill.withLines(linesMap.getOrDefault(bill.id(), List.of())))
+                .toList();
+    }
+
+    private MerchantBillRecord mapBillHeader(ResultSet rs, int rowNum) throws SQLException {
+        return new MerchantBillRecord(
+                rs.getString("id"),
+                rs.getString("merchant_id"),
+                rs.getString("ar_ap_item_id"),
+                rs.getString("bill_no"),
+                rs.getDate("bill_period_start").toLocalDate(),
+                rs.getDate("bill_period_end").toLocalDate(),
+                rs.getDate("due_date").toLocalDate(),
+                rs.getLong("total_amount_cent"),
+                rs.getString("currency"),
+                rs.getString("status"),
+                rs.getInt("aging_days"),
+                rs.getString("source_type"),
+                rs.getString("source_id"),
+                List.of(),
+                rs.getTimestamp("created_at").toInstant(),
+                rs.getTimestamp("updated_at").toInstant()
+        );
+    }
+
+    private Map<String, List<MerchantBillLineRecord>> findLinesByBillIds(List<String> billIds) {
+        List<MerchantBillLineRecord> allLines = jdbcTemplate.query("""
+                SELECT id, bill_id, fee_type, description, amount_cent, currency, created_at
+                  FROM merchant_bill_lines
+                 WHERE bill_id IN (:bill_ids)
+                 ORDER BY bill_id,
+                          CASE fee_type
+                              WHEN 'rent' THEN 1
+                              WHEN 'property_fee' THEN 2
+                              WHEN 'energy_fee' THEN 3
+                              WHEN 'cam' THEN 4
+                              WHEN 'deposit' THEN 5
+                              ELSE 6
+                          END,
+                          created_at ASC, id
+                """,
+                new MapSqlParameterSource("bill_ids", billIds),
+                this::mapLine);
+        Map<String, List<MerchantBillLineRecord>> linesByBillId = new LinkedHashMap<>();
+        for (MerchantBillLineRecord line : allLines) {
+            linesByBillId.computeIfAbsent(line.billId(), k -> new ArrayList<>()).add(line);
+        }
+        return linesByBillId;
     }
 }

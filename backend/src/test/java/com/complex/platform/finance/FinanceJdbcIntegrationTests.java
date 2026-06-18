@@ -75,7 +75,8 @@ class FinanceJdbcIntegrationTests {
                 "2026-06",
                 "pending_collection",
                 now,
-                now
+                now,
+                "merchant_jdbc"
         ));
         repository.saveArApItemSource(new ArApItemSourceRecord(
                 "arap_src_jdbc",
@@ -116,7 +117,8 @@ class FinanceJdbcIntegrationTests {
                 "2026-06",
                 "pending_collection",
                 now,
-                now
+                now,
+                "merchant_jdbc"
         ));
         repository.saveArApPayment(new ArApPaymentRecord(
                 "arap_pay_jdbc",
@@ -142,7 +144,8 @@ class FinanceJdbcIntegrationTests {
                 "2026-06",
                 "partial_paid",
                 now,
-                Instant.parse("2026-06-14T01:00:01Z")
+                Instant.parse("2026-06-14T01:00:01Z"),
+                "merchant_jdbc"
         ));
 
         assertThat(repository.findArApItemById("arap_jdbc_payment"))

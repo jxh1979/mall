@@ -1,0 +1,24 @@
+{
+  "path": "security-scans/semgrep-20260616-180508-current-excluding-bash-parser-warnings/semgrep-results.json",
+  "generated_at": "2026-06-16T18:05:23.083243+00:00",
+  "exit_code": 0,
+  "sarif_exit_code": 0,
+  "exists": true,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1216,
+  "excluded_due_to_semgrep_bash_parser_warnings": [
+    "ops/160/complex-backup.sh",
+    "ops/160/complex-restore-drill.sh"
+  ],
+  "supplemental_bash_syntax_checks": {
+    "ops/160/complex-backup.sh": {
+      "exit_code": 0,
+      "stderr": ""
+    },
+    "ops/160/complex-restore-drill.sh": {
+      "exit_code": 0,
+      "stderr": ""
+    }
+  }
+}

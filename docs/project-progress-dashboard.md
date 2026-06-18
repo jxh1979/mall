@@ -1,6 +1,19 @@
 # 项目进度总控看板
 
-更新时间：2026-06-15（T3-D1 本地大模型 AI 质检建议切片完成复核）
+> ✅ 本看板已于 2026-06-18 按当前实测态重写。当前事实基线：后端 729 测试通过 / OpenAPI 209 operations / Flyway 最新 V060 / 全部 P0 缺口已实现（职级薪资 V055、审批层级 V057、按杯损耗 V058、留痕三层模型 V059、积分规则/礼物 V060）/ P1 在进行中；动态版本断言、`verify:matrix-vs-migration` 两护栏已生效。当前态以 `p0-openapi-operation-acceptance-matrix-v0.1.md`、`closed-loop-live-acceptance-audit-20260618.md`、`r4-remaining-work-backlog-20260618.md` 与 `npm run verify:*` 实时输出为准。
+
+更新时间：2026-06-18（按当前实测态重写：729 测试 / 209 ops / V060 / P0 全部完成 + P1 在进行）
+
+## 修订说明（2026-06-18）
+
+本看板原停在 2026-06-15 的 P0-only 视角（旧口径：360 测试 / 181 operations / 仅 P0 完成 / 旧 Flyway 版本）。本次按已实测的当前态重写关键计数与完成范围，并保留原有文档结构与历史结论：
+
+- 后端测试：360 → **729 通过**。
+- OpenAPI：181 / 191 / 207 → **209 operations**。
+- Flyway：旧版本 → **最新 V060**（含 V055 职级薪资、V057 审批层级、V058 按杯损耗、V059 留痕三层模型、V060 积分规则/礼物）。
+- 完成范围：从“仅 P0” → **全部 P0 缺口已实现，P1 在进行中**。
+- 护栏：新增动态版本断言与 `verify:matrix-vs-migration` 两条护栏并已生效。
+- 历史阶段性条目（BE-000 准入、T3 切片、各日 release 复核等）作为历史快照保留在下文与变更日志中，不再代表最新计数；最新计数以 `p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。
 
 本文档记录“综合体管理系统”的正式实施状态。所有后续编码、验收、运维和外部交接均以 **Java 21 + Spring Boot 4.x + PostgreSQL + Flyway + Maven** 为唯一技术栈口径。
 
@@ -8,7 +21,19 @@
 
 目标已经从“生成可编码系统文档”推进到“按正式技术栈执行 P0/P1/P2/P3 实施与验收”。
 
-当前总控判定：
+### 1.0 当前态总览（2026-06-18 实测）
+
+| 指标 | 当前值 | 旧看板值（已废弃） |
+|---|---|---|
+| 后端测试 | **729 通过** | 360 |
+| OpenAPI operations | **209** | 181 |
+| Flyway 最新版本 | **V060** | 旧版本 |
+| 完成范围 | **P0 全部完成 + P1 在进行** | 仅 P0 |
+| 护栏 | 动态版本断言 + `verify:matrix-vs-migration` 已生效 | 无 |
+
+全部 P0 缺口已实现：职级薪资（V055）、审批层级（V057）、按杯损耗（V058）、留痕三层模型（V059）、积分规则/礼物（V060）。下文 1.1 起的判定条目中，凡历史阶段性计数（如 360 测试 / 181 operations）均为历史快照，最新口径以本节与 `npm run verify:*` 实时输出为准。
+
+### 1.1 当前总控判定（含历史快照）：
 
 - 文档：主线产品、开发设计、字段、流程、验收、运维和 PM Critic 审查文档已收口；“已收口”仅代表产品和开发口径已固定，不代表正式代码已经完成。
 - P0 编码：2026-06-14 已在 192.168.88.160 的 `/home/james/complex-management` 完成首批 P0 正式编码验收。OpenAPI 181 个 P0 operation 与 Java Controller 181 个映射一致，缺失 0，多余 0；后端 360 个测试通过；Web、Android、APK、API/Web 健康检查和 PostgreSQL/Redis/NATS/MinIO 状态均通过；`/opt/complex/scripts/complex-verify-p0.sh` 最终输出 `P0 verification PASS`；根目录 `npm run verify:p0` 也已可直接加载 160 用户级运行配置并通过完整验证。交接入口见 `p0-coding-completion-and-handoff-report-v0.1.md`。
@@ -156,3 +181,4 @@
 | 2026-06-14 | 改/验证 | 清理权限仓储和审计仓储中的残留未实现抛错痕迹；补齐 `tools/run-android-gradle.mjs` 对 160 配置文件的加载能力；160 上 `npm run verify:p0` 已直接通过完整验证。 |
 | 2026-06-14 | 改 | NAS 参数补齐为 `//192.168.88.113/bn`、账号 `jxh1`、160 挂载 `/mnt/complex-nas-backup`、30 天保留、1TB 容量上限；当前不启用备份归档加密，脚本和恢复演练改为支持 `.tar.gz` + `.sha256`。 |
 | 2026-06-14 | 验证 | 160 已完成真实 NAS 挂载、读写删除测试、备份同步、NAS 归档校验和从 NAS 恢复演练；恢复报告已回填 `docs/production-readiness-evidence/nas-restore-drill-latest.json`。 |
+| 2026-06-18 | 改 | 按当前实测态重写看板：后端测试 360→729、OpenAPI 181→209、Flyway 升至最新 V060、完成范围由“仅 P0”更新为“全部 P0 缺口已实现 + P1 在进行”；新增动态版本断言与 `verify:matrix-vs-migration` 两护栏说明、修订说明（2026-06-18）与当前态总览（1.0）。历史阶段性计数作为快照保留。 |

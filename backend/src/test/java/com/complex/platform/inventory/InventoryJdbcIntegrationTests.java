@@ -40,7 +40,7 @@ class InventoryJdbcIntegrationTests {
         assertThat(regclass("inventory_stock_batches")).isEqualTo("inventory_stock_batches");
         assertThat(regclass("inventory_risk_alerts")).isEqualTo("inventory_risk_alerts");
         assertThat(regclass("inventory_supplier_reconciliations")).isEqualTo("inventory_supplier_reconciliations");
-        assertThat(currentFlywayVersion()).isEqualTo("054");
+        assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
 
         assertThat(permissionCodes()).contains(
                 "inventory.stock.view",

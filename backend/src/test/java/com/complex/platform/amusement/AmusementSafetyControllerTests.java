@@ -261,7 +261,8 @@ class AmusementSafetyControllerTests {
                 "staff_ops",
                 List.of("att-notice"),
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
         );
     }
 
@@ -304,7 +305,8 @@ class AmusementSafetyControllerTests {
                 null,
                 List.of("att-photo"),
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
         );
     }
 

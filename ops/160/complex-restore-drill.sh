@@ -88,10 +88,13 @@ find_passphrase_file() {
 
   local mode
   mode="$(stat -c '%a' "$passphrase_file")"
-  if (( (8#$mode & 077) != 0 )); then
-    echo "restore drill FAIL: backup passphrase file must not be group/world readable: $passphrase_file" >&2
-    exit 1
-  fi
+  case "$mode" in
+    *00) ;;
+    *)
+      echo "restore drill FAIL: backup passphrase file must not be group/world readable: $passphrase_file" >&2
+      exit 1
+      ;;
+  esac
 
   echo "$passphrase_file"
 }
@@ -178,6 +181,11 @@ write_report() {
   local verified_tables="$6"
 
   mkdir -p "$REPORT_DIR"
+  local restore_database_dropped
+  restore_database_dropped="true"
+  if [[ "${KEEP_RESTORE_DB:-false}" == "true" ]]; then
+    restore_database_dropped="false"
+  fi
   cat > "$REPORT_FILE" <<EOF
 {
   "event": "restore.drill_completed",
@@ -185,7 +193,7 @@ write_report() {
   "backup_path": "$backup_path",
   "backup_sha256": "$backup_sha",
   "restore_target": "$RESTORE_DB",
-  "restore_database_dropped": $([[ "${KEEP_RESTORE_DB:-false}" == "true" ]] && echo "false" || echo "true"),
+  "restore_database_dropped": $restore_database_dropped,
   "started_at": "$started_at",
   "finished_at": "$finished_at",
   "operator": "${USER:-unknown}",

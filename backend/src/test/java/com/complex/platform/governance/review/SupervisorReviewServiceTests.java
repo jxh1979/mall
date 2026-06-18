@@ -265,6 +265,77 @@ class SupervisorReviewServiceTests {
         assertThat(approved.reviewStatus()).isEqualTo("approved");
     }
 
+    // ── R3 修复 P0-2: 审批层级逐级上提 REQ-69 ──────────────────────────────
+
+    @Test
+    void evaluateRecordsEscalationApprovalLevelOnDecision() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var contract = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-approval-level-contract", "v", List.of(),
+                "contract_violation", "contract", "c1", 0L, "violation"));
+        assertThat(contract.approvalLevel()).isEqualTo("two_levels_up");
+        // 发起人无职级（AuthorizationService(null) → rank 0）时不按 rank 计算，回退既有 required_level。
+        assertThat(contract.requiredApproverRank()).isNull();
+
+        var baseDef = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-approval-level-base", "v", List.of(),
+                "base_definition_violation", "definition", "d1", 0L, "violation"));
+        assertThat(baseDef.approvalLevel()).isEqualTo("top_authority");
+    }
+
+    @Test
+    void approveRejectsReviewerWhoseLevelRankIsBelowRequiredApproverRank() {
+        SupervisorReviewService rankService = rankAwareService(Map.of("usr_init", 19, "usr_low", 4));
+        TestSecurityActors.asSupervisor("usr_init", 3);
+        var pending = rankService.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-rank-reject", "v", List.of(),
+                "contract_violation", "contract", "c_rank", 0L, "violation"));
+        assertThat(pending.requiredApproverRank()).isEqualTo(25); // two_levels_up from rank 19
+
+        TestSecurityActors.asSupervisor("usr_low", 3); // 主管级 3>=3 通过，但管理职级 rank 4 < 25
+        assertThatThrownBy(() -> rankService.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-rank-reject-approve", "approve", List.of(), 3, "approved", "low rank")))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("SUPERVISOR_RANK_TOO_LOW"));
+    }
+
+    @Test
+    void approveAllowsReviewerWhoseLevelRankMeetsRequiredApproverRank() {
+        SupervisorReviewService rankService = rankAwareService(Map.of("usr_init", 19, "usr_high", 28));
+        TestSecurityActors.asSupervisor("usr_init", 3);
+        var pending = rankService.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-rank-allow", "v", List.of(),
+                "contract_violation", "contract", "c_rank2", 0L, "violation"));
+
+        TestSecurityActors.asSupervisor("usr_high", 3); // rank 28 >= 25
+        var approved = rankService.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-rank-allow-approve", "approve", List.of(), 3, "approved", "high rank"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
+        assertThat(approved.requiredApproverRank()).isEqualTo(25);
+    }
+
+    /** 构造一个 AuthorizationService 由 mock AccessRepository 提供指定用户的 level_rank 的 service。 */
+    private SupervisorReviewService rankAwareService(Map<String, Integer> userRanks) {
+        com.complex.platform.access.AccessRepository repo =
+                org.mockito.Mockito.mock(com.complex.platform.access.AccessRepository.class);
+        userRanks.forEach((userId, rank) -> {
+            String levelId = "lvl_" + userId;
+            org.mockito.Mockito.when(repo.findStaffLevelAssignment(userId)).thenReturn(java.util.Optional.of(
+                    new com.complex.platform.access.StaffLevelAssignment(
+                            userId, levelId, null, "CNY", null, null, null, "x",
+                            java.time.Instant.parse("2026-06-14T00:00:00Z"))));
+            org.mockito.Mockito.when(repo.findStaffLevelById(levelId)).thenReturn(java.util.Optional.of(
+                    new com.complex.platform.access.StaffLevelRecord(
+                            levelId, "M", "lower", rank, null, "active",
+                            java.time.Instant.parse("2026-06-14T00:00:00Z"))));
+        });
+        return new SupervisorReviewService(
+                new AuthorizationService(repo),
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository));
+    }
+
     // P1-1 red→green: 新服务实例（模拟重启）能从持久化存储中读取已提交的待审记录
     @Test
     void pendingReviewSurvivesServiceRestart() {

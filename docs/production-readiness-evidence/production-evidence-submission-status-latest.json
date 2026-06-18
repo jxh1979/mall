@@ -14,47 +14,33 @@
     "raw_evidence_stays_external_not_in_repo": true
   },
   "counts": {
-    "expected_submissions": 40,
-    "awaiting_submission": 40,
+    "expected_submissions": 15,
+    "awaiting_submission": 15,
     "valid_submission": 0,
     "invalid_submission": 0,
-    "p0_awaiting_submission": 31,
+    "p0_awaiting_submission": 13,
     "p0_valid_submission": 0,
     "p0_invalid_submission": 0
   },
   "owner_summaries": [
     {
       "owner_group": "IT/运维/安全",
-      "expected_submissions": 23,
-      "awaiting_submission": 23,
+      "expected_submissions": 12,
+      "awaiting_submission": 12,
       "valid_submission": 0,
       "invalid_submission": 0
     },
     {
       "owner_group": "技术实现负责人",
-      "expected_submissions": 4,
-      "awaiting_submission": 4,
+      "expected_submissions": 2,
+      "awaiting_submission": 2,
       "valid_submission": 0,
       "invalid_submission": 0
     },
     {
       "owner_group": "财务",
-      "expected_submissions": 4,
-      "awaiting_submission": 4,
-      "valid_submission": 0,
-      "invalid_submission": 0
-    },
-    {
-      "owner_group": "运营/法务",
-      "expected_submissions": 3,
-      "awaiting_submission": 3,
-      "valid_submission": 0,
-      "invalid_submission": 0
-    },
-    {
-      "owner_group": "采购/供应商联调",
-      "expected_submissions": 6,
-      "awaiting_submission": 6,
+      "expected_submissions": 1,
+      "awaiting_submission": 1,
       "valid_submission": 0,
       "invalid_submission": 0
     }
@@ -74,38 +60,12 @@
       "accepted_evidence_types_count": 5
     },
     {
-      "submission_id": "SUB-it-ops-security-PRD-3P-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-3P-001",
-      "priority": "P1",
-      "category": "third_party",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-3P-001/manifest-PRD-3P-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 6
-    },
-    {
       "submission_id": "SUB-it-ops-security-PRD-CRED-001",
       "owner_group": "IT/运维/安全",
       "item_id": "PRD-CRED-001",
       "priority": "P0",
       "category": "credential",
       "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-PRD-CRED-3P-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-CRED-3P-001",
-      "priority": "P0",
-      "category": "credential",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
       "status": "awaiting_submission",
       "failures": [],
       "warnings": [],
@@ -152,32 +112,6 @@
       "accepted_evidence_types_count": 5
     },
     {
-      "submission_id": "SUB-it-ops-security-PRD-CRED-OBJ-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-CRED-OBJ-001",
-      "priority": "P0",
-      "category": "credential",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OBJ-001/manifest-PRD-CRED-OBJ-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-PRD-CRED-OPEN-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-CRED-OPEN-001",
-      "priority": "P0",
-      "category": "credential",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
       "submission_id": "SUB-it-ops-security-PRD-CRED-OPS-001",
       "owner_group": "IT/运维/安全",
       "item_id": "PRD-CRED-OPS-001",
@@ -188,32 +122,6 @@
       "failures": [],
       "warnings": [],
       "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-PRD-FACE-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-FACE-001",
-      "priority": "P0",
-      "category": "face_age",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-FACE-001/manifest-PRD-FACE-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 14,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-PRD-MDM-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-MDM-001",
-      "priority": "P0",
-      "category": "MDM",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-MDM-001/manifest-PRD-MDM-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
       "accepted_evidence_types_count": 5
     },
     {
@@ -269,58 +177,6 @@
       "accepted_evidence_types_count": 5
     },
     {
-      "submission_id": "SUB-it-ops-security-PRD-PAY-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-PAY-001",
-      "priority": "P0",
-      "category": "payment",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-001/manifest-PRD-PAY-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-PRD-PAY-002",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-PAY-002",
-      "priority": "P0",
-      "category": "payment",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-PAY-002/manifest-PRD-PAY-002.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-PRD-WECOM-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "PRD-WECOM-001",
-      "priority": "P1",
-      "category": "wecom",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-WECOM-001/manifest-PRD-WECOM-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 12,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-SEC-P0-MDM-DEVICE-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "SEC-P0-MDM-DEVICE-001",
-      "priority": "P0",
-      "category": "MDM",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 5
-    },
-    {
       "submission_id": "SUB-it-ops-security-SEC-P0-OPS-RECOVERY-001",
       "owner_group": "IT/运维/安全",
       "item_id": "SEC-P0-OPS-RECOVERY-001",
@@ -332,19 +188,6 @@
       "warnings": [],
       "required_fields_count": 16,
       "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-it-ops-security-SEC-P1-WEBHOOK-REPLAY-001",
-      "owner_group": "IT/运维/安全",
-      "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
-      "priority": "P1",
-      "category": "third_party",
-      "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 6
     },
     {
       "submission_id": "SUB-it-ops-security-SEC-P2-CSRF-API-001",
@@ -373,32 +216,6 @@
       "accepted_evidence_types_count": 5
     },
     {
-      "submission_id": "SUB-technical-owner-PRD-CRED-OPEN-001",
-      "owner_group": "技术实现负责人",
-      "item_id": "PRD-CRED-OPEN-001",
-      "priority": "P0",
-      "category": "credential",
-      "manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-OPEN-001/manifest-PRD-CRED-OPEN-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-technical-owner-SEC-P1-WEBHOOK-REPLAY-001",
-      "owner_group": "技术实现负责人",
-      "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
-      "priority": "P1",
-      "category": "third_party",
-      "manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 6
-    },
-    {
       "submission_id": "SUB-technical-owner-SEC-P2-CSRF-API-001",
       "owner_group": "技术实现负责人",
       "item_id": "SEC-P2-CSRF-API-001",
@@ -423,162 +240,6 @@
       "warnings": [],
       "required_fields_count": 16,
       "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-finance-PRD-CRED-3P-001",
-      "owner_group": "财务",
-      "item_id": "PRD-CRED-3P-001",
-      "priority": "P0",
-      "category": "credential",
-      "manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-finance-PRD-PAY-001",
-      "owner_group": "财务",
-      "item_id": "PRD-PAY-001",
-      "priority": "P0",
-      "category": "payment",
-      "manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-001/manifest-PRD-PAY-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-finance-PRD-PAY-002",
-      "owner_group": "财务",
-      "item_id": "PRD-PAY-002",
-      "priority": "P0",
-      "category": "payment",
-      "manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-PAY-002/manifest-PRD-PAY-002.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-operations-legal-PRD-CRED-3P-001",
-      "owner_group": "运营/法务",
-      "item_id": "PRD-CRED-3P-001",
-      "priority": "P0",
-      "category": "credential",
-      "manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-operations-legal-PRD-FACE-001",
-      "owner_group": "运营/法务",
-      "item_id": "PRD-FACE-001",
-      "priority": "P0",
-      "category": "face_age",
-      "manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-FACE-001/manifest-PRD-FACE-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 14,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-operations-legal-PRD-WECOM-001",
-      "owner_group": "运营/法务",
-      "item_id": "PRD-WECOM-001",
-      "priority": "P1",
-      "category": "wecom",
-      "manifest_path": "docs/production-readiness-evidence/submissions/operations-legal/PRD-WECOM-001/manifest-PRD-WECOM-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 12,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-procurement-supplier-PRD-3P-001",
-      "owner_group": "采购/供应商联调",
-      "item_id": "PRD-3P-001",
-      "priority": "P1",
-      "category": "third_party",
-      "manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-3P-001/manifest-PRD-3P-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 6
-    },
-    {
-      "submission_id": "SUB-procurement-supplier-PRD-CRED-3P-001",
-      "owner_group": "采购/供应商联调",
-      "item_id": "PRD-CRED-3P-001",
-      "priority": "P0",
-      "category": "credential",
-      "manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-CRED-3P-001/manifest-PRD-CRED-3P-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 16,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-procurement-supplier-PRD-FACE-001",
-      "owner_group": "采购/供应商联调",
-      "item_id": "PRD-FACE-001",
-      "priority": "P0",
-      "category": "face_age",
-      "manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-FACE-001/manifest-PRD-FACE-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 14,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-procurement-supplier-PRD-MDM-001",
-      "owner_group": "采购/供应商联调",
-      "item_id": "PRD-MDM-001",
-      "priority": "P0",
-      "category": "MDM",
-      "manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/PRD-MDM-001/manifest-PRD-MDM-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-procurement-supplier-SEC-P0-MDM-DEVICE-001",
-      "owner_group": "采购/供应商联调",
-      "item_id": "SEC-P0-MDM-DEVICE-001",
-      "priority": "P0",
-      "category": "MDM",
-      "manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P0-MDM-DEVICE-001/manifest-SEC-P0-MDM-DEVICE-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 5
-    },
-    {
-      "submission_id": "SUB-procurement-supplier-SEC-P1-WEBHOOK-REPLAY-001",
-      "owner_group": "采购/供应商联调",
-      "item_id": "SEC-P1-WEBHOOK-REPLAY-001",
-      "priority": "P1",
-      "category": "third_party",
-      "manifest_path": "docs/production-readiness-evidence/submissions/procurement-supplier/SEC-P1-WEBHOOK-REPLAY-001/manifest-SEC-P1-WEBHOOK-REPLAY-001.json",
-      "status": "awaiting_submission",
-      "failures": [],
-      "warnings": [],
-      "required_fields_count": 15,
-      "accepted_evidence_types_count": 6
     }
   ]
 }

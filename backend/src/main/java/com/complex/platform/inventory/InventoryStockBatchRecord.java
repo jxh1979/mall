@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 import java.util.List;
 
@@ -14,6 +15,7 @@ public record InventoryStockBatchRecord(
         String status,
         List<String> evidenceAttachmentIds,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore String merchantId
 ) {
 }

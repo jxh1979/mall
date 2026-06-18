@@ -1,0 +1,32 @@
+# Semgrep Scan - Approved by user command: ? semgrep
+# Generated: 2026-06-16T15:32:10+00:00
+# Target: /home/james/complex-management
+# Engine: Semgrep OSS
+# Scan mode: run-all
+# Metrics: off
+
+## Official rulesets validated on this Semgrep version
+p/security-audit
+p/secrets
+p/owasp-top-ten
+p/cwe-top-25
+p/sql-injection
+p/java
+p/findsecbugs
+p/typescript
+p/javascript
+p/react
+p/dockerfile
+p/ci
+
+## Official rulesets skipped because registry validation failed
+p/spring # registry 404 on 2026-06-16
+p/yaml # registry 404 on 2026-06-16
+
+## Third-party rulesets attempted
+https://github.com/trailofbits/semgrep-rules
+https://github.com/elttam/semgrep-rules
+https://github.com/kondukto-io/semgrep-rules
+https://github.com/federicodotta/semgrep-rules
+https://github.com/atlassian-labs/atlassian-sast-ruleset
+https://github.com/apiiro/malicious-code-ruleset

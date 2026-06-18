@@ -2,8 +2,10 @@
   "register_version": "v0.1",
   "status": "open_actions_present",
   "source_register_path": "docs/production-readiness-evidence/production-blocker-register-latest.json",
+  "source_submission_kit_path": "docs/production-readiness-evidence/production-evidence-submission-kit-latest.json",
   "generated_from": [
-    "docs/production-readiness-evidence/production-blocker-register-latest.json"
+    "docs/production-readiness-evidence/production-blocker-register-latest.json",
+    "docs/production-readiness-evidence/production-evidence-submission-kit-latest.json"
   ],
   "policy": {
     "no_fake_closure": true,
@@ -12,113 +14,22 @@
     "mock_is_not_production_evidence": true
   },
   "counts": {
-    "unique_unresolved_items": 23,
-    "owner_action_packs": 5,
-    "duplicated_owner_action_rows": 40
+    "unique_unresolved_items": 12,
+    "owner_action_packs": 3,
+    "duplicated_owner_action_rows": 15,
+    "related_submission_rows": 15,
+    "items_without_manifest": 0
   },
   "owner_action_packs": [
     {
       "owner_group": "IT/运维/安全",
       "status": "open_actions_present",
-      "blocker_count": 23,
+      "blocker_count": 12,
       "priority_summary": [
         "P0",
-        "P1",
         "P2"
       ],
       "items": [
-        {
-          "id": "PRD-MDM-001",
-          "priority": "P0",
-          "category": "MDM",
-          "status": "pending_info",
-          "blocking_scope": "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "IT 选型、设备 enroll、策略下发和截图归档",
-          "required_evidence": [
-            "MDM/Android Enterprise 选型或 Android Management API 项目资料",
-            "策略模板截图或导出",
-            "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
-            "远程锁定、擦除、丢失模式演练记录",
-            "平台设备绑定记录和责任人"
-          ],
-          "owner_actions": [
-            "完成选型/采购/控制台配置",
-            "纳管最小设备矩阵",
-            "回填 enroll、策略和丢失处置证据",
-            "复跑生产阻断清单和交付闸口"
-          ]
-        },
-        {
-          "id": "PRD-PAY-001",
-          "priority": "P0",
-          "category": "payment",
-          "status": "pending_info",
-          "blocking_scope": "阻塞真实收款测试；不阻塞支付 mock",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "获取测试商户号、回调地址、对账文件样例",
-          "required_evidence": [
-            "聚合支付测试或生产商户资料",
-            "回调地址、验签资料和对账文件样例",
-            "退款权限、退款审批和日结口径",
-            "财务责任人确认",
-            "密钥仅填写 credential_ref，不写明文"
-          ],
-          "owner_actions": [
-            "开通聚合支付资料",
-            "配置回调和验签",
-            "完成退款与对账样例",
-            "财务确认日结和异常处理口径"
-          ]
-        },
-        {
-          "id": "PRD-PAY-002",
-          "priority": "P0",
-          "category": "payment",
-          "status": "pending_info",
-          "blocking_scope": "阻塞生产收款、退款和日结",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "建立商户资料、密钥引用、退款审批和对账口径",
-          "required_evidence": [
-            "聚合支付测试或生产商户资料",
-            "回调地址、验签资料和对账文件样例",
-            "退款权限、退款审批和日结口径",
-            "财务责任人确认",
-            "密钥仅填写 credential_ref，不写明文"
-          ],
-          "owner_actions": [
-            "开通聚合支付资料",
-            "配置回调和验签",
-            "完成退款与对账样例",
-            "财务确认日结和异常处理口径"
-          ]
-        },
-        {
-          "id": "PRD-FACE-001",
-          "priority": "P0",
-          "category": "face_age",
-          "status": "pending_info",
-          "blocking_scope": "阻塞酒吧生产年龄核验通过",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "获取 SDK/API、错误码、测试账号、合规材料",
-          "required_evidence": [
-            "年龄/人脸供应商 SDK 或 API 文档",
-            "测试账号、错误码、成功和失败样例",
-            "合规材料与采购确认",
-            "生产 credential_ref",
-            "运营验收记录"
-          ],
-          "owner_actions": [
-            "完成供应商资料收集",
-            "确认年龄核验合规材料",
-            "联调成功/失败样例",
-            "运营验收后再关闭阻断"
-          ]
-        },
         {
           "id": "PRD-NAS-AUTOMOUNT-001",
           "priority": "P0",
@@ -140,6 +51,67 @@
             "配置定时备份和校验",
             "配置容量/失败告警",
             "完成周期性恢复演练"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-NAS-AUTOMOUNT-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-NAS-AUTOMOUNT-001",
+              "priority": "P0",
+              "category": "nas",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-AUTOMOUNT-001/manifest-PRD-NAS-AUTOMOUNT-001.json",
+              "accepted_evidence_types": [
+                "automount_export",
+                "scheduled_backup_log",
+                "sha256_file",
+                "restore_drill_report",
+                "alert_delivery_record"
+              ],
+              "required_evidence_summary": [
+                "重启后自动挂载证据",
+                "读写删除测试证据",
+                "定时备份归档和 sha256",
+                "从定时归档恢复演练报告",
+                "容量告警和失败告警送达记录"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-AUTOMOUNT-001/manifest-PRD-NAS-AUTOMOUNT-001.json"
+          ],
+          "accepted_evidence_types": [
+            "automount_export",
+            "scheduled_backup_log",
+            "sha256_file",
+            "restore_drill_report",
+            "alert_delivery_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -163,6 +135,67 @@
             "配置定时备份和校验",
             "配置容量/失败告警",
             "完成周期性恢复演练"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-NAS-SCHEDULE-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-NAS-SCHEDULE-001",
+              "priority": "P0",
+              "category": "nas",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-SCHEDULE-001/manifest-PRD-NAS-SCHEDULE-001.json",
+              "accepted_evidence_types": [
+                "automount_export",
+                "scheduled_backup_log",
+                "sha256_file",
+                "restore_drill_report",
+                "alert_delivery_record"
+              ],
+              "required_evidence_summary": [
+                "重启后自动挂载证据",
+                "读写删除测试证据",
+                "定时备份归档和 sha256",
+                "从定时归档恢复演练报告",
+                "容量告警和失败告警送达记录"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-SCHEDULE-001/manifest-PRD-NAS-SCHEDULE-001.json"
+          ],
+          "accepted_evidence_types": [
+            "automount_export",
+            "scheduled_backup_log",
+            "sha256_file",
+            "restore_drill_report",
+            "alert_delivery_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -186,6 +219,67 @@
             "配置定时备份和校验",
             "配置容量/失败告警",
             "完成周期性恢复演练"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-NAS-ALERT-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-NAS-ALERT-001",
+              "priority": "P0",
+              "category": "nas",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-ALERT-001/manifest-PRD-NAS-ALERT-001.json",
+              "accepted_evidence_types": [
+                "automount_export",
+                "scheduled_backup_log",
+                "sha256_file",
+                "restore_drill_report",
+                "alert_delivery_record"
+              ],
+              "required_evidence_summary": [
+                "重启后自动挂载证据",
+                "读写删除测试证据",
+                "定时备份归档和 sha256",
+                "从定时归档恢复演练报告",
+                "容量告警和失败告警送达记录"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-ALERT-001/manifest-PRD-NAS-ALERT-001.json"
+          ],
+          "accepted_evidence_types": [
+            "automount_export",
+            "scheduled_backup_log",
+            "sha256_file",
+            "restore_drill_report",
+            "alert_delivery_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -209,6 +303,67 @@
             "配置定时备份和校验",
             "配置容量/失败告警",
             "完成周期性恢复演练"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-NAS-DRILL-CADENCE-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-NAS-DRILL-CADENCE-001",
+              "priority": "P0",
+              "category": "nas",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-DRILL-CADENCE-001/manifest-PRD-NAS-DRILL-CADENCE-001.json",
+              "accepted_evidence_types": [
+                "automount_export",
+                "scheduled_backup_log",
+                "sha256_file",
+                "restore_drill_report",
+                "alert_delivery_record"
+              ],
+              "required_evidence_summary": [
+                "重启后自动挂载证据",
+                "读写删除测试证据",
+                "定时备份归档和 sha256",
+                "从定时归档恢复演练报告",
+                "容量告警和失败告警送达记录"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-NAS-DRILL-CADENCE-001/manifest-PRD-NAS-DRILL-CADENCE-001.json"
+          ],
+          "accepted_evidence_types": [
+            "automount_export",
+            "scheduled_backup_log",
+            "sha256_file",
+            "restore_drill_report",
+            "alert_delivery_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -232,52 +387,67 @@
             "设置到期提醒",
             "执行首次发放或轮换演练",
             "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "PRD-WECOM-001",
-          "priority": "P1",
-          "category": "wecom",
-          "status": "pending_info",
-          "blocking_scope": "阻塞企业微信 P0 同步能力",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "配置应用、通讯录、会话存档、回调和同步任务",
-          "required_evidence": [
-            "企业微信应用和通讯录权限配置",
-            "回调配置、同步任务配置和失败告警",
-            "一次增量同步验收记录",
-            "会话存档或适用范围确认",
-            "生产 credential_ref"
           ],
-          "owner_actions": [
-            "配置企业微信应用和权限",
-            "完成通讯录/回调同步",
-            "演练失败告警",
-            "运营验收同步结果"
-          ]
-        },
-        {
-          "id": "PRD-3P-001",
-          "priority": "P1",
-          "category": "third_party",
-          "status": "pending_info",
-          "blocking_scope": "不阻塞 P0 主闭环；阻塞真实厂商联调",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "收集 SDK/API、签名、回调、字段映射和测试账号",
-          "required_evidence": [
-            "供应商 SDK/API、签名算法和回调样例",
-            "字段映射、错误码、补偿和对账口径",
-            "沙箱账号和生产 credential_ref",
-            "Webhook nonce/timestamp/幂等验证",
-            "轮询校验策略和失败重试策略"
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-CRED-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-CRED-001",
+              "priority": "P0",
+              "category": "credential",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json",
+              "accepted_evidence_types": [
+                "credential_ref_record",
+                "rotation_runbook",
+                "expiry_reminder_record",
+                "rotation_or_issuance_evidence",
+                "rollback_test_record"
+              ],
+              "required_evidence_summary": [
+                "credential_ref、owner_person、owner_department",
+                "到期日、提醒策略和轮换窗口",
+                "轮换步骤、回滚步骤和验证步骤",
+                "最近一次轮换或首次发放证据",
+                "不得出现明文密钥、token 或密码"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
           ],
-          "owner_actions": [
-            "收集 SDK/API 和沙箱",
-            "确认签名、回调和字段映射",
-            "完成 mock 到真实适配器切换计划",
-            "补充异常补偿和对账验证"
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-001/manifest-PRD-CRED-001.json"
+          ],
+          "accepted_evidence_types": [
+            "credential_ref_record",
+            "rotation_runbook",
+            "expiry_reminder_record",
+            "rotation_or_issuance_evidence",
+            "rollback_test_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -301,6 +471,67 @@
             "接入 systemd 和日志",
             "接入健康检查和告警",
             "保留用户级覆盖仅作为开发兜底"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-160-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-160-001",
+              "priority": "P0",
+              "category": "ops160",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-160-001/manifest-PRD-160-001.json",
+              "accepted_evidence_types": [
+                "system_config_redacted_export",
+                "systemd_status_export",
+                "health_check_log",
+                "rollback_drill_report",
+                "alert_delivery_record"
+              ],
+              "required_evidence_summary": [
+                "/etc/complex/complex.env 或受控配置等效证据",
+                "systemd 服务、日志路径和健康检查",
+                "备份、恢复、告警和容量监控证据",
+                "运维 Runbook 和回滚步骤",
+                "不得由 Codex 写入系统级生产 secret"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-160-001/manifest-PRD-160-001.json"
+          ],
+          "accepted_evidence_types": [
+            "system_config_redacted_export",
+            "systemd_status_export",
+            "health_check_log",
+            "rollback_drill_report",
+            "alert_delivery_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -324,6 +555,67 @@
             "设置到期提醒",
             "执行首次发放或轮换演练",
             "记录 credential_ref 和回滚步骤"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-CRED-OPS-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-CRED-OPS-001",
+              "priority": "P0",
+              "category": "credential",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/manifest-PRD-CRED-OPS-001.json",
+              "accepted_evidence_types": [
+                "credential_ref_record",
+                "rotation_runbook",
+                "expiry_reminder_record",
+                "rotation_or_issuance_evidence",
+                "rollback_test_record"
+              ],
+              "required_evidence_summary": [
+                "credential_ref、owner_person、owner_department",
+                "到期日、提醒策略和轮换窗口",
+                "轮换步骤、回滚步骤和验证步骤",
+                "最近一次轮换或首次发放证据",
+                "不得出现明文密钥、token 或密码"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-OPS-001/manifest-PRD-CRED-OPS-001.json"
+          ],
+          "accepted_evidence_types": [
+            "credential_ref_record",
+            "rotation_runbook",
+            "expiry_reminder_record",
+            "rotation_or_issuance_evidence",
+            "rollback_test_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -347,29 +639,67 @@
             "设置到期提醒",
             "执行首次发放或轮换演练",
             "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "PRD-CRED-OBJ-001",
-          "priority": "P0",
-          "category": "credential",
-          "status": "pending_info",
-          "blocking_scope": "阻塞生产附件、证据包、对象备份接入",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "credential_rotation",
-          "next_action": "确认桶范围、权限、Access Key 引用和停用方式",
-          "required_evidence": [
-            "credential_ref、owner_person、owner_department",
-            "到期日、提醒策略和轮换窗口",
-            "轮换步骤、回滚步骤和验证步骤",
-            "最近一次轮换或首次发放证据",
-            "不得出现明文密钥、token 或密码"
           ],
-          "owner_actions": [
-            "建立人工台账",
-            "设置到期提醒",
-            "执行首次发放或轮换演练",
-            "记录 credential_ref 和回滚步骤"
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-CRED-DB-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-CRED-DB-001",
+              "priority": "P0",
+              "category": "credential",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-DB-001/manifest-PRD-CRED-DB-001.json",
+              "accepted_evidence_types": [
+                "credential_ref_record",
+                "rotation_runbook",
+                "expiry_reminder_record",
+                "rotation_or_issuance_evidence",
+                "rollback_test_record"
+              ],
+              "required_evidence_summary": [
+                "credential_ref、owner_person、owner_department",
+                "到期日、提醒策略和轮换窗口",
+                "轮换步骤、回滚步骤和验证步骤",
+                "最近一次轮换或首次发放证据",
+                "不得出现明文密钥、token 或密码"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-DB-001/manifest-PRD-CRED-DB-001.json"
+          ],
+          "accepted_evidence_types": [
+            "credential_ref_record",
+            "rotation_runbook",
+            "expiry_reminder_record",
+            "rotation_or_issuance_evidence",
+            "rollback_test_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -393,52 +723,67 @@
             "设置到期提醒",
             "执行首次发放或轮换演练",
             "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "status": "pending_info",
-          "blocking_scope": "阻塞真实供应商联调或生产通过",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "credential_rotation",
-          "next_action": "收集 SDK/API、签名算法、回调地址、测试账号和证据",
-          "required_evidence": [
-            "credential_ref、owner_person、owner_department",
-            "到期日、提醒策略和轮换窗口",
-            "轮换步骤、回滚步骤和验证步骤",
-            "最近一次轮换或首次发放证据",
-            "不得出现明文密钥、token 或密码"
           ],
-          "owner_actions": [
-            "建立人工台账",
-            "设置到期提醒",
-            "执行首次发放或轮换演练",
-            "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "PRD-CRED-OPEN-001",
-          "priority": "P0",
-          "category": "credential",
-          "status": "pending_info",
-          "blocking_scope": "阻塞第三方双向开放生产接入",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "credential_rotation",
-          "next_action": "建立应用、endpoint、allowed scopes、密钥引用和轮换窗口",
-          "required_evidence": [
-            "credential_ref、owner_person、owner_department",
-            "到期日、提醒策略和轮换窗口",
-            "轮换步骤、回滚步骤和验证步骤",
-            "最近一次轮换或首次发放证据",
-            "不得出现明文密钥、token 或密码"
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-CRED-JWT-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-CRED-JWT-001",
+              "priority": "P0",
+              "category": "credential",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
+              "accepted_evidence_types": [
+                "credential_ref_record",
+                "rotation_runbook",
+                "expiry_reminder_record",
+                "rotation_or_issuance_evidence",
+                "rollback_test_record"
+              ],
+              "required_evidence_summary": [
+                "credential_ref、owner_person、owner_department",
+                "到期日、提醒策略和轮换窗口",
+                "轮换步骤、回滚步骤和验证步骤",
+                "最近一次轮换或首次发放证据",
+                "不得出现明文密钥、token 或密码"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
           ],
-          "owner_actions": [
-            "建立人工台账",
-            "设置到期提醒",
-            "执行首次发放或轮换演练",
-            "记录 credential_ref 和回滚步骤"
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json"
+          ],
+          "accepted_evidence_types": [
+            "credential_ref_record",
+            "rotation_runbook",
+            "expiry_reminder_record",
+            "rotation_or_issuance_evidence",
+            "rollback_test_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -462,29 +807,67 @@
             "设置到期提醒",
             "执行首次发放或轮换演练",
             "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "SEC-P0-MDM-DEVICE-001",
-          "priority": "P0",
-          "category": "MDM",
-          "status": "open",
-          "blocking_scope": "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作",
-          "source": "security-scans/findings-register-v1.md",
-          "source_table": "findings_register",
-          "next_action": "完成 MDM 选型、enroll、策略下发、设备绑定截图和生产准入记录",
-          "required_evidence": [
-            "MDM/Android Enterprise 选型或 Android Management API 项目资料",
-            "策略模板截图或导出",
-            "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
-            "远程锁定、擦除、丢失模式演练记录",
-            "平台设备绑定记录和责任人"
           ],
-          "owner_actions": [
-            "完成选型/采购/控制台配置",
-            "纳管最小设备矩阵",
-            "回填 enroll、策略和丢失处置证据",
-            "复跑生产阻断清单和交付闸口"
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-PRD-CRED-NAS-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "PRD-CRED-NAS-001",
+              "priority": "P0",
+              "category": "credential",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-NAS-001/manifest-PRD-CRED-NAS-001.json",
+              "accepted_evidence_types": [
+                "credential_ref_record",
+                "rotation_runbook",
+                "expiry_reminder_record",
+                "rotation_or_issuance_evidence",
+                "rollback_test_record"
+              ],
+              "required_evidence_summary": [
+                "credential_ref、owner_person、owner_department",
+                "到期日、提醒策略和轮换窗口",
+                "轮换步骤、回滚步骤和验证步骤",
+                "最近一次轮换或首次发放证据",
+                "不得出现明文密钥、token 或密码"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/PRD-CRED-NAS-001/manifest-PRD-CRED-NAS-001.json"
+          ],
+          "accepted_evidence_types": [
+            "credential_ref_record",
+            "rotation_runbook",
+            "expiry_reminder_record",
+            "rotation_or_issuance_evidence",
+            "rollback_test_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -508,29 +891,67 @@
             "接入 systemd 和日志",
             "接入健康检查和告警",
             "保留用户级覆盖仅作为开发兜底"
-          ]
-        },
-        {
-          "id": "SEC-P1-WEBHOOK-REPLAY-001",
-          "priority": "P1",
-          "category": "third_party",
-          "status": "open",
-          "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
-          "source": "security-scans/findings-register-v1.md",
-          "source_table": "findings_register",
-          "next_action": "按供应商 SDK/API 补字段映射、nonce、timestamp、签名验签、幂等、补偿和对账测试",
-          "required_evidence": [
-            "供应商 SDK/API、签名算法和回调样例",
-            "字段映射、错误码、补偿和对账口径",
-            "沙箱账号和生产 credential_ref",
-            "Webhook nonce/timestamp/幂等验证",
-            "轮询校验策略和失败重试策略"
           ],
-          "owner_actions": [
-            "收集 SDK/API 和沙箱",
-            "确认签名、回调和字段映射",
-            "完成 mock 到真实适配器切换计划",
-            "补充异常补偿和对账验证"
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-SEC-P0-OPS-RECOVERY-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "SEC-P0-OPS-RECOVERY-001",
+              "priority": "P0",
+              "category": "ops160",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-OPS-RECOVERY-001/manifest-SEC-P0-OPS-RECOVERY-001.json",
+              "accepted_evidence_types": [
+                "system_config_redacted_export",
+                "systemd_status_export",
+                "health_check_log",
+                "rollback_drill_report",
+                "alert_delivery_record"
+              ],
+              "required_evidence_summary": [
+                "/etc/complex/complex.env 或受控配置等效证据",
+                "systemd 服务、日志路径和健康检查",
+                "备份、恢复、告警和容量监控证据",
+                "运维 Runbook 和回滚步骤",
+                "不得由 Codex 写入系统级生产 secret"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P0-OPS-RECOVERY-001/manifest-SEC-P0-OPS-RECOVERY-001.json"
+          ],
+          "accepted_evidence_types": [
+            "system_config_redacted_export",
+            "systemd_status_export",
+            "health_check_log",
+            "rollback_drill_report",
+            "alert_delivery_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -553,6 +974,63 @@
             "更新来源台账或 findings",
             "生成阻断清单和动作包",
             "复跑交付闸口"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-it-ops-security-SEC-P2-CSRF-API-001",
+              "owner_group": "IT/运维/安全",
+              "item_id": "SEC-P2-CSRF-API-001",
+              "priority": "P2",
+              "category": "security",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P2-CSRF-API-001/manifest-SEC-P2-CSRF-API-001.json",
+              "accepted_evidence_types": [
+                "security_review_record",
+                "auth_scheme_decision",
+                "test_output",
+                "approval_record"
+              ],
+              "required_evidence_summary": [
+                "认证方案分支说明",
+                "CSRF 或 Bearer Token 安全复核记录",
+                "安全负责人签收",
+                "生产前复测命令输出"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/it-ops-security/SEC-P2-CSRF-API-001/manifest-SEC-P2-CSRF-API-001.json"
+          ],
+          "accepted_evidence_types": [
+            "security_review_record",
+            "auth_scheme_decision",
+            "test_output",
+            "approval_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         }
       ],
@@ -574,57 +1052,11 @@
     {
       "owner_group": "财务",
       "status": "open_actions_present",
-      "blocker_count": 4,
+      "blocker_count": 1,
       "priority_summary": [
         "P0"
       ],
       "items": [
-        {
-          "id": "PRD-PAY-001",
-          "priority": "P0",
-          "category": "payment",
-          "status": "pending_info",
-          "blocking_scope": "阻塞真实收款测试；不阻塞支付 mock",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "获取测试商户号、回调地址、对账文件样例",
-          "required_evidence": [
-            "聚合支付测试或生产商户资料",
-            "回调地址、验签资料和对账文件样例",
-            "退款权限、退款审批和日结口径",
-            "财务责任人确认",
-            "密钥仅填写 credential_ref，不写明文"
-          ],
-          "owner_actions": [
-            "开通聚合支付资料",
-            "配置回调和验签",
-            "完成退款与对账样例",
-            "财务确认日结和异常处理口径"
-          ]
-        },
-        {
-          "id": "PRD-PAY-002",
-          "priority": "P0",
-          "category": "payment",
-          "status": "pending_info",
-          "blocking_scope": "阻塞生产收款、退款和日结",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "建立商户资料、密钥引用、退款审批和对账口径",
-          "required_evidence": [
-            "聚合支付测试或生产商户资料",
-            "回调地址、验签资料和对账文件样例",
-            "退款权限、退款审批和日结口径",
-            "财务责任人确认",
-            "密钥仅填写 credential_ref，不写明文"
-          ],
-          "owner_actions": [
-            "开通聚合支付资料",
-            "配置回调和验签",
-            "完成退款与对账样例",
-            "财务确认日结和异常处理口径"
-          ]
-        },
         {
           "id": "PRD-CRED-001",
           "priority": "P0",
@@ -646,286 +1078,67 @@
             "设置到期提醒",
             "执行首次发放或轮换演练",
             "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "status": "pending_info",
-          "blocking_scope": "阻塞真实供应商联调或生产通过",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "credential_rotation",
-          "next_action": "收集 SDK/API、签名算法、回调地址、测试账号和证据",
-          "required_evidence": [
-            "credential_ref、owner_person、owner_department",
-            "到期日、提醒策略和轮换窗口",
-            "轮换步骤、回滚步骤和验证步骤",
-            "最近一次轮换或首次发放证据",
-            "不得出现明文密钥、token 或密码"
           ],
-          "owner_actions": [
-            "建立人工台账",
-            "设置到期提醒",
-            "执行首次发放或轮换演练",
-            "记录 credential_ref 和回滚步骤"
-          ]
-        }
-      ],
-      "commands_after_evidence_update": [
-        "npm run docs:production-blockers",
-        "npm run docs:production-owner-actions",
-        "npm run verify:production-owner-actions",
-        "npm run verify:production-readiness-evidence",
-        "npm run verify:delivery-gates"
-      ],
-      "not_accepted_evidence": [
-        "口头确认",
-        "mock 截图",
-        "未纳管设备截图",
-        "无 credential_ref 的明文密钥记录",
-        "无法追溯来源台账或 findings 的手工删项"
-      ]
-    },
-    {
-      "owner_group": "采购/供应商联调",
-      "status": "open_actions_present",
-      "blocker_count": 6,
-      "priority_summary": [
-        "P0",
-        "P1"
-      ],
-      "items": [
-        {
-          "id": "PRD-MDM-001",
-          "priority": "P0",
-          "category": "MDM",
-          "status": "pending_info",
-          "blocking_scope": "阻塞生产工作手机、平板、一体机使用；不阻塞开发 mock",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "IT 选型、设备 enroll、策略下发和截图归档",
-          "required_evidence": [
-            "MDM/Android Enterprise 选型或 Android Management API 项目资料",
-            "策略模板截图或导出",
-            "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
-            "远程锁定、擦除、丢失模式演练记录",
-            "平台设备绑定记录和责任人"
+          "related_submissions": [
+            {
+              "submission_id": "SUB-finance-PRD-CRED-001",
+              "owner_group": "财务",
+              "item_id": "PRD-CRED-001",
+              "priority": "P0",
+              "category": "credential",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/manifest-PRD-CRED-001.json",
+              "accepted_evidence_types": [
+                "credential_ref_record",
+                "rotation_runbook",
+                "expiry_reminder_record",
+                "rotation_or_issuance_evidence",
+                "rollback_test_record"
+              ],
+              "required_evidence_summary": [
+                "credential_ref、owner_person、owner_department",
+                "到期日、提醒策略和轮换窗口",
+                "轮换步骤、回滚步骤和验证步骤",
+                "最近一次轮换或首次发放证据",
+                "不得出现明文密钥、token 或密码"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
           ],
-          "owner_actions": [
-            "完成选型/采购/控制台配置",
-            "纳管最小设备矩阵",
-            "回填 enroll、策略和丢失处置证据",
-            "复跑生产阻断清单和交付闸口"
-          ]
-        },
-        {
-          "id": "PRD-FACE-001",
-          "priority": "P0",
-          "category": "face_age",
-          "status": "pending_info",
-          "blocking_scope": "阻塞酒吧生产年龄核验通过",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "获取 SDK/API、错误码、测试账号、合规材料",
-          "required_evidence": [
-            "年龄/人脸供应商 SDK 或 API 文档",
-            "测试账号、错误码、成功和失败样例",
-            "合规材料与采购确认",
-            "生产 credential_ref",
-            "运营验收记录"
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/finance/PRD-CRED-001/manifest-PRD-CRED-001.json"
           ],
-          "owner_actions": [
-            "完成供应商资料收集",
-            "确认年龄核验合规材料",
-            "联调成功/失败样例",
-            "运营验收后再关闭阻断"
-          ]
-        },
-        {
-          "id": "PRD-3P-001",
-          "priority": "P1",
-          "category": "third_party",
-          "status": "pending_info",
-          "blocking_scope": "不阻塞 P0 主闭环；阻塞真实厂商联调",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "收集 SDK/API、签名、回调、字段映射和测试账号",
-          "required_evidence": [
-            "供应商 SDK/API、签名算法和回调样例",
-            "字段映射、错误码、补偿和对账口径",
-            "沙箱账号和生产 credential_ref",
-            "Webhook nonce/timestamp/幂等验证",
-            "轮询校验策略和失败重试策略"
+          "accepted_evidence_types": [
+            "credential_ref_record",
+            "rotation_runbook",
+            "expiry_reminder_record",
+            "rotation_or_issuance_evidence",
+            "rollback_test_record"
           ],
-          "owner_actions": [
-            "收集 SDK/API 和沙箱",
-            "确认签名、回调和字段映射",
-            "完成 mock 到真实适配器切换计划",
-            "补充异常补偿和对账验证"
-          ]
-        },
-        {
-          "id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "status": "pending_info",
-          "blocking_scope": "阻塞真实供应商联调或生产通过",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "credential_rotation",
-          "next_action": "收集 SDK/API、签名算法、回调地址、测试账号和证据",
-          "required_evidence": [
-            "credential_ref、owner_person、owner_department",
-            "到期日、提醒策略和轮换窗口",
-            "轮换步骤、回滚步骤和验证步骤",
-            "最近一次轮换或首次发放证据",
-            "不得出现明文密钥、token 或密码"
-          ],
-          "owner_actions": [
-            "建立人工台账",
-            "设置到期提醒",
-            "执行首次发放或轮换演练",
-            "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "SEC-P0-MDM-DEVICE-001",
-          "priority": "P0",
-          "category": "MDM",
-          "status": "open",
-          "blocking_scope": "阻塞生产工作手机、平板、一体机执行高风险核销/出酒/支付相关动作",
-          "source": "security-scans/findings-register-v1.md",
-          "source_table": "findings_register",
-          "next_action": "完成 MDM 选型、enroll、策略下发、设备绑定截图和生产准入记录",
-          "required_evidence": [
-            "MDM/Android Enterprise 选型或 Android Management API 项目资料",
-            "策略模板截图或导出",
-            "工作手机、平板、售票型一体机、非售票型一体机 enroll 证据",
-            "远程锁定、擦除、丢失模式演练记录",
-            "平台设备绑定记录和责任人"
-          ],
-          "owner_actions": [
-            "完成选型/采购/控制台配置",
-            "纳管最小设备矩阵",
-            "回填 enroll、策略和丢失处置证据",
-            "复跑生产阻断清单和交付闸口"
-          ]
-        },
-        {
-          "id": "SEC-P1-WEBHOOK-REPLAY-001",
-          "priority": "P1",
-          "category": "third_party",
-          "status": "open",
-          "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
-          "source": "security-scans/findings-register-v1.md",
-          "source_table": "findings_register",
-          "next_action": "按供应商 SDK/API 补字段映射、nonce、timestamp、签名验签、幂等、补偿和对账测试",
-          "required_evidence": [
-            "供应商 SDK/API、签名算法和回调样例",
-            "字段映射、错误码、补偿和对账口径",
-            "沙箱账号和生产 credential_ref",
-            "Webhook nonce/timestamp/幂等验证",
-            "轮询校验策略和失败重试策略"
-          ],
-          "owner_actions": [
-            "收集 SDK/API 和沙箱",
-            "确认签名、回调和字段映射",
-            "完成 mock 到真实适配器切换计划",
-            "补充异常补偿和对账验证"
-          ]
-        }
-      ],
-      "commands_after_evidence_update": [
-        "npm run docs:production-blockers",
-        "npm run docs:production-owner-actions",
-        "npm run verify:production-owner-actions",
-        "npm run verify:production-readiness-evidence",
-        "npm run verify:delivery-gates"
-      ],
-      "not_accepted_evidence": [
-        "口头确认",
-        "mock 截图",
-        "未纳管设备截图",
-        "无 credential_ref 的明文密钥记录",
-        "无法追溯来源台账或 findings 的手工删项"
-      ]
-    },
-    {
-      "owner_group": "运营/法务",
-      "status": "open_actions_present",
-      "blocker_count": 3,
-      "priority_summary": [
-        "P0",
-        "P1"
-      ],
-      "items": [
-        {
-          "id": "PRD-FACE-001",
-          "priority": "P0",
-          "category": "face_age",
-          "status": "pending_info",
-          "blocking_scope": "阻塞酒吧生产年龄核验通过",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "获取 SDK/API、错误码、测试账号、合规材料",
-          "required_evidence": [
-            "年龄/人脸供应商 SDK 或 API 文档",
-            "测试账号、错误码、成功和失败样例",
-            "合规材料与采购确认",
-            "生产 credential_ref",
-            "运营验收记录"
-          ],
-          "owner_actions": [
-            "完成供应商资料收集",
-            "确认年龄核验合规材料",
-            "联调成功/失败样例",
-            "运营验收后再关闭阻断"
-          ]
-        },
-        {
-          "id": "PRD-WECOM-001",
-          "priority": "P1",
-          "category": "wecom",
-          "status": "pending_info",
-          "blocking_scope": "阻塞企业微信 P0 同步能力",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "default_readiness",
-          "next_action": "配置应用、通讯录、会话存档、回调和同步任务",
-          "required_evidence": [
-            "企业微信应用和通讯录权限配置",
-            "回调配置、同步任务配置和失败告警",
-            "一次增量同步验收记录",
-            "会话存档或适用范围确认",
-            "生产 credential_ref"
-          ],
-          "owner_actions": [
-            "配置企业微信应用和权限",
-            "完成通讯录/回调同步",
-            "演练失败告警",
-            "运营验收同步结果"
-          ]
-        },
-        {
-          "id": "PRD-CRED-3P-001",
-          "priority": "P0",
-          "category": "credential",
-          "status": "pending_info",
-          "blocking_scope": "阻塞真实供应商联调或生产通过",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "credential_rotation",
-          "next_action": "收集 SDK/API、签名算法、回调地址、测试账号和证据",
-          "required_evidence": [
-            "credential_ref、owner_person、owner_department",
-            "到期日、提醒策略和轮换窗口",
-            "轮换步骤、回滚步骤和验证步骤",
-            "最近一次轮换或首次发放证据",
-            "不得出现明文密钥、token 或密码"
-          ],
-          "owner_actions": [
-            "建立人工台账",
-            "设置到期提醒",
-            "执行首次发放或轮换演练",
-            "记录 credential_ref 和回滚步骤"
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         }
       ],
@@ -947,10 +1160,9 @@
     {
       "owner_group": "技术实现负责人",
       "status": "open_actions_present",
-      "blocker_count": 4,
+      "blocker_count": 2,
       "priority_summary": [
         "P0",
-        "P1",
         "P2"
       ],
       "items": [
@@ -975,52 +1187,67 @@
             "设置到期提醒",
             "执行首次发放或轮换演练",
             "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "PRD-CRED-OPEN-001",
-          "priority": "P0",
-          "category": "credential",
-          "status": "pending_info",
-          "blocking_scope": "阻塞第三方双向开放生产接入",
-          "source": "docs/production-readiness-implementation-ledger-template-v0.1.md",
-          "source_table": "credential_rotation",
-          "next_action": "建立应用、endpoint、allowed scopes、密钥引用和轮换窗口",
-          "required_evidence": [
-            "credential_ref、owner_person、owner_department",
-            "到期日、提醒策略和轮换窗口",
-            "轮换步骤、回滚步骤和验证步骤",
-            "最近一次轮换或首次发放证据",
-            "不得出现明文密钥、token 或密码"
           ],
-          "owner_actions": [
-            "建立人工台账",
-            "设置到期提醒",
-            "执行首次发放或轮换演练",
-            "记录 credential_ref 和回滚步骤"
-          ]
-        },
-        {
-          "id": "SEC-P1-WEBHOOK-REPLAY-001",
-          "priority": "P1",
-          "category": "third_party",
-          "status": "open",
-          "blocking_scope": "阻塞真实支付/人脸/设备/开放平台供应商联调上线；不阻塞 mock adapter",
-          "source": "security-scans/findings-register-v1.md",
-          "source_table": "findings_register",
-          "next_action": "按供应商 SDK/API 补字段映射、nonce、timestamp、签名验签、幂等、补偿和对账测试",
-          "required_evidence": [
-            "供应商 SDK/API、签名算法和回调样例",
-            "字段映射、错误码、补偿和对账口径",
-            "沙箱账号和生产 credential_ref",
-            "Webhook nonce/timestamp/幂等验证",
-            "轮询校验策略和失败重试策略"
+          "related_submissions": [
+            {
+              "submission_id": "SUB-technical-owner-PRD-CRED-JWT-001",
+              "owner_group": "技术实现负责人",
+              "item_id": "PRD-CRED-JWT-001",
+              "priority": "P0",
+              "category": "credential",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json",
+              "accepted_evidence_types": [
+                "credential_ref_record",
+                "rotation_runbook",
+                "expiry_reminder_record",
+                "rotation_or_issuance_evidence",
+                "rollback_test_record"
+              ],
+              "required_evidence_summary": [
+                "credential_ref、owner_person、owner_department",
+                "到期日、提醒策略和轮换窗口",
+                "轮换步骤、回滚步骤和验证步骤",
+                "最近一次轮换或首次发放证据",
+                "不得出现明文密钥、token 或密码"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot",
+                "screenshot_only_without_export_or_test_report"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
           ],
-          "owner_actions": [
-            "收集 SDK/API 和沙箱",
-            "确认签名、回调和字段映射",
-            "完成 mock 到真实适配器切换计划",
-            "补充异常补偿和对账验证"
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/technical-owner/PRD-CRED-JWT-001/manifest-PRD-CRED-JWT-001.json"
+          ],
+          "accepted_evidence_types": [
+            "credential_ref_record",
+            "rotation_runbook",
+            "expiry_reminder_record",
+            "rotation_or_issuance_evidence",
+            "rollback_test_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         },
         {
@@ -1043,6 +1270,63 @@
             "更新来源台账或 findings",
             "生成阻断清单和动作包",
             "复跑交付闸口"
+          ],
+          "related_submissions": [
+            {
+              "submission_id": "SUB-technical-owner-SEC-P2-CSRF-API-001",
+              "owner_group": "技术实现负责人",
+              "item_id": "SEC-P2-CSRF-API-001",
+              "priority": "P2",
+              "category": "security",
+              "submission_status": "awaiting_real_evidence",
+              "manifest_path": "docs/production-readiness-evidence/submissions/technical-owner/SEC-P2-CSRF-API-001/manifest-SEC-P2-CSRF-API-001.json",
+              "accepted_evidence_types": [
+                "security_review_record",
+                "auth_scheme_decision",
+                "test_output",
+                "approval_record"
+              ],
+              "required_evidence_summary": [
+                "认证方案分支说明",
+                "CSRF 或 Bearer Token 安全复核记录",
+                "安全负责人签收",
+                "生产前复测命令输出"
+              ],
+              "not_accepted_evidence": [
+                "oral_confirmation",
+                "mock_screenshot",
+                "placeholder_file",
+                "plaintext_secret",
+                "unowned_screenshot"
+              ],
+              "verification_commands_after_backfill": [
+                "npm run docs:production-blockers",
+                "npm run docs:production-owner-actions",
+                "npm run docs:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submission-kit",
+                "npm run verify:production-evidence-submissions-guard",
+                "npm run verify:production-readiness-evidence",
+                "npm run verify:delivery-gates"
+              ]
+            }
+          ],
+          "manifest_paths": [
+            "docs/production-readiness-evidence/submissions/technical-owner/SEC-P2-CSRF-API-001/manifest-SEC-P2-CSRF-API-001.json"
+          ],
+          "accepted_evidence_types": [
+            "security_review_record",
+            "auth_scheme_decision",
+            "test_output",
+            "approval_record"
+          ],
+          "verification_commands": [
+            "npm run docs:production-blockers",
+            "npm run docs:production-owner-actions",
+            "npm run docs:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submission-kit",
+            "npm run verify:production-evidence-submissions-guard",
+            "npm run verify:production-readiness-evidence",
+            "npm run verify:delivery-gates"
           ]
         }
       ],

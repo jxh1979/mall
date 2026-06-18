@@ -2,10 +2,12 @@ package com.complex.platform.access;
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.idempotency.CallerScopeResolver;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,7 +16,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @ConditionalOnBean(AccessRepository.class)
-public class AuthorizationService {
+public class AuthorizationService implements CallerScopeResolver {
 
     private final AccessRepository accessRepository;
 
@@ -50,7 +52,12 @@ public class AuthorizationService {
         }
 
         if (grant.singleUse()) {
-            accessRepository.markSingleUsePermissionConsumed(grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt);
+            boolean consumed = accessRepository.markSingleUsePermissionConsumed(
+                    grant.sourceId(), grant.permissionCode(), actor.id(), checkedAt);
+            if (!consumed) {
+                // Another concurrent request already consumed this single-use grant.
+                deny(permissionCode);
+            }
         }
     }
 
@@ -79,12 +86,109 @@ public class AuthorizationService {
         return new AccessActor(authentication.getName(), authentication.getName(), "staff", null, null, "active");
     }
 
+    /**
+     * Returns the caller scope token for idempotency key isolation.
+     * "m:{merchantId}" for merchant users, "p" for platform admins/staff.
+     * Returns "" on any error so IdempotencyService falls back to unscoped (safe degradation).
+     */
+    @Override
+    public String resolve() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                return "";
+            }
+            Object principal = auth.getPrincipal();
+            String merchantId = null;
+            if (principal instanceof AccessActor actor) {
+                merchantId = actor.merchantId();
+            } else if (principal instanceof AuthService.UserRecord user) {
+                merchantId = user.merchantId();
+            }
+            if (merchantId != null && !merchantId.isBlank()) {
+                return "m:" + merchantId;
+            }
+            return "p";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     private boolean knownPermission(String permissionCode) {
         try {
             return accessRepository.permissionExists(permissionCode);
         } catch (RuntimeException exception) {
             return false;
         }
+    }
+
+    public boolean isPlatformAdmin(AccessActor actor) {
+        return isPlatformAdminBridge(actor);
+    }
+
+    /**
+     * Returns the verified supervisor level of the current caller from their account type.
+     * Platform admins always get level 3. Staff accounts with accountType "supervisor_lN" get level N.
+     * All other accounts return 0, which is insufficient for any supervisor review policy.
+     */
+    public int currentSupervisorLevel() {
+        AccessActor actor = currentActor();
+        if (isPlatformAdmin(actor)) {
+            return 3;
+        }
+        String accountType = actor.accountType() == null ? "" : actor.accountType();
+        if (accountType.startsWith("supervisor_l")) {
+            try {
+                return Integer.parseInt(accountType.substring("supervisor_l".length()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Returns the current caller's management level_rank (1..30, see staff_levels), or 0 if unknown.
+     * Degrades to 0 on null repository or any lookup error so callers can fall back to level-based checks.
+     */
+    public int currentActorLevelRank() {
+        try {
+            return levelRankOf(currentActor().id());
+        } catch (RuntimeException exception) {
+            return 0;
+        }
+    }
+
+    /** Returns the management level_rank (1..30) of the given user, or 0 if no staff level is assigned/unknown. */
+    public int levelRankOf(String userId) {
+        if (userId == null || accessRepository == null) {
+            return 0;
+        }
+        try {
+            return accessRepository.findStaffLevelAssignment(userId)
+                    .flatMap(assignment -> accessRepository.findStaffLevelById(assignment.staffLevelId()))
+                    .map(StaffLevelRecord::levelRank)
+                    .orElse(0);
+        } catch (RuntimeException exception) {
+            return 0;
+        }
+    }
+
+    /**
+     * Returns the merchant scope of the current caller.
+     * Platform admins get Optional.empty() (no filter, sees everything).
+     * Merchant users get Optional.of(merchantId).
+     * Staff without a merchantId throw MERCHANT_SCOPE_REQUIRED.
+     */
+    public Optional<String> currentMerchantScope() {
+        AccessActor actor = currentActor();
+        if (isPlatformAdminBridge(actor)) {
+            return Optional.empty();
+        }
+        String merchantId = actor.merchantId();
+        if (merchantId != null && !merchantId.isBlank()) {
+            return Optional.of(merchantId);
+        }
+        throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "a merchant scope is required for this operation");
     }
 
     private boolean isPlatformAdminBridge(AccessActor actor) {

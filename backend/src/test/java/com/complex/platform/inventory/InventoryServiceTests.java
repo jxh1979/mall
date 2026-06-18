@@ -2,7 +2,11 @@ package com.complex.platform.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -15,8 +19,10 @@ import com.complex.platform.inventory.dto.InventorySupplierRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
+import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
+import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.inventory.dto.SupplierReconciliationRequest;
@@ -29,24 +35,45 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.assertj.core.groups.Tuple;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 class InventoryServiceTests {
 
     private InMemoryInventoryRepository inventoryRepository;
     private InMemoryAuditEventRepository auditEventRepository;
+    private AuthorizationService authorizationService;
     private InventoryService service;
+
+    private static final AccessActor ADMIN_ACTOR =
+            new AccessActor("usr_admin", "admin", "platform_admin", "org_platform", null, "active");
+    private static final AccessActor MERCHANT_A_ACTOR =
+            new AccessActor("usr_staff_a", "staff_a", "staff", "org_a", "m_a", "active");
+    private static final AccessActor MERCHANT_B_ACTOR =
+            new AccessActor("usr_staff_b", "staff_b", "staff", "org_b", "m_b", "active");
 
     @BeforeEach
     void setUp() {
         inventoryRepository = new InMemoryInventoryRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        authorizationService = mock(AuthorizationService.class);
+        // 默认：平台管理员视角——看全部，写入时 merchantId = null
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
         service = new InventoryService(
                 inventoryRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                new AuditEventService(auditEventRepository),
+                authorizationService
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -281,7 +308,8 @@ class InventoryServiceTests {
                 2,
                 0,
                 2,
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
         ));
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
                 "balance_out",
@@ -290,7 +318,8 @@ class InventoryServiceTests {
                 0,
                 0,
                 0,
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
         ));
         service.createStockBatch(new InventoryStockBatchRequest(
                 "batch-expiring",
@@ -319,9 +348,9 @@ class InventoryServiceTests {
         assertThat(first.alerts())
                 .extracting(InventoryRiskAlertRecord::alertType, InventoryRiskAlertRecord::severity, InventoryRiskAlertRecord::itemId)
                 .contains(
-                        org.assertj.core.groups.Tuple.tuple("safety_stock_low", "medium", lowStockItem.id()),
-                        org.assertj.core.groups.Tuple.tuple("out_of_stock", "high", outOfStockItem.id()),
-                        org.assertj.core.groups.Tuple.tuple("expiry_warning", "high", lowStockItem.id())
+                        Tuple.tuple("safety_stock_low", "medium", lowStockItem.id()),
+                        Tuple.tuple("out_of_stock", "high", outOfStockItem.id()),
+                        Tuple.tuple("expiry_warning", "high", lowStockItem.id())
                 );
         assertThat(inventoryRepository.riskAlerts).hasSize(3);
         assertThat(service.listRiskAlerts().total()).isEqualTo(3);
@@ -372,6 +401,288 @@ class InventoryServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("inventory.supplier_reconciliation.created", "inventory.supplier_reconciliation.viewed");
+    }
+
+    // A1(REQ-30): 登记瓶底标签后，取酒 verificationCode 不一致进入人工复核且不出酒
+    @Test
+    void claimWithMismatchedLabelEntersIdentityReviewWithoutDispensing() {
+        InventoryItemRecord item = createItem("identity-item");
+        SavedBottleRecord savedBottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-identity", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Whisky", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LABEL-XYZ", "张三", "13800138000", true, 100000L));
+
+        SavedBottleClaimRecord review = service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
+                "claim-mismatch", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "WRONG-LABEL"));
+
+        assertThat(review.status()).isEqualTo("pending_identity_review");
+        assertThat(inventoryRepository.findSavedBottleById(savedBottle.id()))
+                .get()
+                .extracting(SavedBottleRecord::status, SavedBottleRecord::remainingQuantity)
+                .containsExactly("pending_identity_review", 2);
+    }
+
+    // A1/REQ-32: 高价值存酒作废必须照片+视频双证据
+    @Test
+    void highValueSavedBottleCancelRequiresDoubleEvidence() {
+        InventoryItemRecord item = createItem("hv-cancel");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+
+        assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-1", null, List.of("att_photo"), "broken")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("HIGH_VALUE_EVIDENCE_REQUIRED"));
+
+        SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-2", null, List.of("att_photo", "att_video"), "broken"));
+        assertThat(cancelled.status()).isEqualTo("cancelled");
+    }
+
+    // P1-3: verificationCode 不可缺失
+    @Test
+    void claimSavedBottleRequiresVerificationCode() {
+        InventoryItemRecord item = createItem("verify-item");
+        SavedBottleRecord savedBottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-verify",
+                null,
+                List.of(),
+                "customer_1",
+                "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
+                Instant.now().plusSeconds(3600)
+        ));
+
+        assertThatThrownBy(() -> service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
+                "claim-no-code",
+                null,
+                List.of(),
+                List.of(Map.of("quantity", 1)),
+                "13800138000",
+                null  // P1-3: verificationCode 缺失
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+
+        assertThatThrownBy(() -> service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
+                "claim-blank-code",
+                null,
+                List.of(),
+                List.of(Map.of("quantity", 1)),
+                "13800138000",
+                "   "  // P1-3: verificationCode 空白
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    // P0-2: 跨商户越权访问寄存酒瓶必须被拒绝
+    @Test
+    void claimSavedBottleRejectsCrossMerchantAccess() {
+        // 商户 B 创建的寄存记录
+        inventoryRepository.saveSavedBottle(new SavedBottleRecord(
+                "victim_bottle",
+                "cust_b",
+                "bar_b",
+                "item_b",
+                "Whiskey",
+                1,
+                1,
+                "bottle",
+                Instant.now().plusSeconds(3600),
+                "stored",
+                List.of(),
+                Instant.now(),
+                Instant.now(),
+                "m_b",
+                false,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        // 商户 A 的用户尝试领取商户 B 的寄存酒瓶
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
+
+        assertThatThrownBy(() -> service.claimSavedBottle("victim_bottle", new SavedBottleClaimRequest(
+                "claim-cross-merchant",
+                null,
+                List.of(),
+                List.of(Map.of("quantity", 1)),
+                "13800138000",
+                "VERIFY-XYZ"
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    // P1-2: 通过 typed 端点注入 inbound 类型必须被拒绝
+    @Test
+    void createTypedStockMovementRejectsInboundType() {
+        InventoryItemRecord item = createItem("typed-item");
+        service.createStockIn(new StockInRequest(
+                "typed-stock-in",
+                null,
+                List.of(),
+                "initial",
+                null,
+                "warehouse_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 10))
+        ));
+
+        assertThatThrownBy(() -> service.createTypedStockMovement("inbound", new StockMovementRequest(
+                "typed-inbound-inject",
+                null,
+                List.of(),
+                null,
+                "warehouse_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 100)),
+                null
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_MOVEMENT_TYPE");
+    }
+
+    // P1-4: adjustmentType 白名单校验
+    @Test
+    void createStockAdjustmentRejectsInvalidAdjustmentType() {
+        InventoryItemRecord item = createItem("adjust-item");
+        service.createStockIn(new StockInRequest(
+                "adjust-stock-in",
+                null,
+                List.of(),
+                "initial",
+                null,
+                "warehouse_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 10))
+        ));
+
+        assertThatThrownBy(() -> service.createStockAdjustment(new StockAdjustmentRequest(
+                "adjust-invalid-type",
+                null,
+                List.of(),
+                "credit_in",  // P1-4: 非法类型，不在白名单
+                List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
+                "inject via adjustment"
+        )))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_ADJUSTMENT_TYPE");
+    }
+
+    // P1-5: operatorUserId 必须来自认证上下文，请求体中的值必须被忽略
+    @Test
+    void scanInventoryRisksIgnoresRequestBodyOperatorUserId() {
+        InventoryItemRecord item = service.createInventoryItem(new InventoryItemRequest(
+                "p15-risk-item",
+                null,
+                List.of(),
+                null,
+                null,
+                "P15 Vodka",
+                "spirit",
+                "bottle",
+                0,
+                "active"
+        ));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "p15-bal",
+                item.id(),
+                "warehouse_1",
+                0,
+                0,
+                0,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
+        ));
+        // 请求体包含伪造的 operatorUserId
+        InventoryRiskScanRequest request = new InventoryRiskScanRequest(
+                "p15-risk-scan",
+                "scan",
+                7,
+                "forged_operator_id"
+        );
+
+        InventoryRiskScanResult result = service.runInventoryRiskScan(request);
+
+        // operatorUserId 必须是 "usr_admin"（来自 authorizationService.currentActor().id()），而非 "forged_operator_id"
+        assertThat(result.alerts())
+                .extracting(InventoryRiskAlertRecord::operatorUserId)
+                .containsOnly(ADMIN_ACTOR.id());
+    }
+
+    // P1-5: 供应商对账 operatorUserId 必须来自认证上下文
+    @Test
+    void createSupplierReconciliationIgnoresRequestBodyOperatorUserId() {
+        InventorySupplierRecord supplier = service.createInventorySupplier(new InventorySupplierRequest(
+                "supplier-p15",
+                null,
+                List.of(),
+                "P15 Supplier",
+                "Eve",
+                "13700137000",
+                "active"
+        ));
+        SupplierReconciliationRequest request = new SupplierReconciliationRequest(
+                "recon-p15",
+                null,
+                List.of(),
+                supplier.id(),
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                50000L,
+                50000L,
+                "matched",
+                "forged_operator_id"  // P1-5: 请求体中的 operatorUserId 必须被忽略
+        );
+
+        SupplierReconciliationRecord result = service.createSupplierReconciliation(request);
+
+        // operatorUserId 必须是 "usr_admin"（来自认证上下文），而非 "forged_operator_id"
+        assertThat(result.operatorUserId()).isEqualTo(ADMIN_ACTOR.id());
+    }
+
+    // P1-1: 商户用户只能看到本商户数据
+    @Test
+    void listMethodsRespectMerchantScope() {
+        // 商户 A 的数据
+        inventoryRepository.saveInventoryItem(new InventoryItemRecord(
+                "item_a", null, "Item A", "spirit", "bottle", null, false, 0, "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a"
+        ));
+        // 商户 B 的数据
+        inventoryRepository.saveInventoryItem(new InventoryItemRecord(
+                "item_b", null, "Item B", "spirit", "bottle", null, false, 0, "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_b"
+        ));
+
+        // 平台管理员看全部
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        assertThat(service.listInventoryItems().items()).hasSize(2);
+
+        // 商户 A 只看到商户 A 的数据
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        assertThat(service.listInventoryItems().items())
+                .hasSize(1)
+                .extracting(InventoryItemRecord::id)
+                .containsExactly("item_a");
+
+        // 商户 B 只看到商户 B 的数据
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        assertThat(service.listInventoryItems().items())
+                .hasSize(1)
+                .extracting(InventoryItemRecord::id)
+                .containsExactly("item_b");
     }
 
     private InventoryItemRecord createItem(String idempotencyKey) {
@@ -430,12 +741,12 @@ class InventoryServiceTests {
         private final Map<String, StockBalanceRecord> balances = new LinkedHashMap<>();
         private final Map<String, SavedBottleRecord> savedBottles = new LinkedHashMap<>();
         private final Map<String, InventoryStockBatchRecord> stockBatches = new LinkedHashMap<>();
-        private final List<InventoryRiskAlertRecord> riskAlerts = new ArrayList<>();
+        final List<InventoryRiskAlertRecord> riskAlerts = new ArrayList<>();
         private final Map<String, SupplierReconciliationRecord> supplierReconciliations = new LinkedHashMap<>();
         private final List<PurchaseRequestRecord> purchaseRequests = new ArrayList<>();
-        private final List<StockMovementRecord> stockMovements = new ArrayList<>();
+        final List<StockMovementRecord> stockMovements = new ArrayList<>();
         private final List<StockAdjustmentRecord> stockAdjustments = new ArrayList<>();
-        private final List<SavedBottleClaimRecord> savedBottleClaims = new ArrayList<>();
+        final List<SavedBottleClaimRecord> savedBottleClaims = new ArrayList<>();
         private final List<TraceHandoverRecord> traceHandovers = new ArrayList<>();
 
         @Override
@@ -447,6 +758,13 @@ class InventoryServiceTests {
         @Override
         public List<InventoryItemRecord> listInventoryItems() {
             return new ArrayList<>(inventoryItems.values());
+        }
+
+        @Override
+        public List<InventoryItemRecord> listInventoryItemsByMerchant(String merchantId) {
+            return inventoryItems.values().stream()
+                    .filter(item -> merchantId.equals(item.merchantId()))
+                    .toList();
         }
 
         @Override
@@ -466,6 +784,13 @@ class InventoryServiceTests {
         }
 
         @Override
+        public List<InventorySupplierRecord> listInventorySuppliersByMerchant(String merchantId) {
+            return suppliers.values().stream()
+                    .filter(s -> merchantId.equals(s.merchantId()))
+                    .toList();
+        }
+
+        @Override
         public PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord request) {
             purchaseRequests.add(request);
             return request;
@@ -474,6 +799,13 @@ class InventoryServiceTests {
         @Override
         public List<PurchaseRequestRecord> listPurchaseRequests() {
             return new ArrayList<>(purchaseRequests);
+        }
+
+        @Override
+        public List<PurchaseRequestRecord> listPurchaseRequestsByMerchant(String merchantId) {
+            return purchaseRequests.stream()
+                    .filter(r -> merchantId.equals(r.merchantId()))
+                    .toList();
         }
 
         @Override
@@ -493,6 +825,56 @@ class InventoryServiceTests {
         }
 
         @Override
+        public List<StockBalanceRecord> listStockBalancesByMerchant(String merchantId) {
+            return balances.values().stream()
+                    .filter(b -> merchantId.equals(b.merchantId()))
+                    .toList();
+        }
+
+        // P0-1: 原子减少库存余额（available_quantity >= qty 检查）
+        @Override
+        public int atomicDecreaseStockBalance(String itemId, String locationId, int qty) {
+            String key = balanceKey(itemId, locationId);
+            StockBalanceRecord existing = balances.get(key);
+            if (existing == null || existing.availableQuantity() < qty) {
+                return 0;
+            }
+            balances.put(key, new StockBalanceRecord(
+                    existing.id(),
+                    itemId,
+                    locationId,
+                    existing.quantity() - qty,
+                    existing.reservedQuantity(),
+                    existing.availableQuantity() - qty,
+                    Instant.now(),
+                    existing.merchantId()
+            ));
+            return 1;
+        }
+
+        // P0-1: 原子增加库存余额（INSERT ON CONFLICT DO UPDATE 语义）
+        @Override
+        public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId) {
+            String key = balanceKey(itemId, locationId);
+            StockBalanceRecord existing = balances.get(key);
+            if (existing == null) {
+                balances.put(key, new StockBalanceRecord(
+                        newId, itemId, locationId, qty, 0, qty, Instant.now(), merchantId));
+            } else {
+                balances.put(key, new StockBalanceRecord(
+                        existing.id(),
+                        itemId,
+                        locationId,
+                        existing.quantity() + qty,
+                        existing.reservedQuantity(),
+                        existing.availableQuantity() + qty,
+                        Instant.now(),
+                        existing.merchantId()
+                ));
+            }
+        }
+
+        @Override
         public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch) {
             stockBatches.put(batch.id(), batch);
             return batch;
@@ -501,6 +883,13 @@ class InventoryServiceTests {
         @Override
         public List<InventoryStockBatchRecord> listStockBatches() {
             return new ArrayList<>(stockBatches.values());
+        }
+
+        @Override
+        public List<InventoryStockBatchRecord> listStockBatchesByMerchant(String merchantId) {
+            return stockBatches.values().stream()
+                    .filter(b -> merchantId.equals(b.merchantId()))
+                    .toList();
         }
 
         @Override
@@ -515,6 +904,13 @@ class InventoryServiceTests {
         }
 
         @Override
+        public List<InventoryRiskAlertRecord> listRiskAlertsByMerchant(String merchantId) {
+            return riskAlerts.stream()
+                    .filter(a -> merchantId.equals(a.merchantId()))
+                    .toList();
+        }
+
+        @Override
         public SupplierReconciliationRecord saveSupplierReconciliation(SupplierReconciliationRecord reconciliation) {
             supplierReconciliations.put(reconciliation.id(), reconciliation);
             return reconciliation;
@@ -526,6 +922,13 @@ class InventoryServiceTests {
         }
 
         @Override
+        public List<SupplierReconciliationRecord> listSupplierReconciliationsByMerchant(String merchantId) {
+            return supplierReconciliations.values().stream()
+                    .filter(r -> merchantId.equals(r.merchantId()))
+                    .toList();
+        }
+
+        @Override
         public StockMovementRecord saveStockMovement(StockMovementRecord movement) {
             stockMovements.add(movement);
             return movement;
@@ -534,6 +937,13 @@ class InventoryServiceTests {
         @Override
         public List<StockMovementRecord> listStockMovements() {
             return new ArrayList<>(stockMovements);
+        }
+
+        @Override
+        public List<StockMovementRecord> listStockMovementsByMerchant(String merchantId) {
+            return stockMovements.stream()
+                    .filter(m -> merchantId.equals(m.merchantId()))
+                    .toList();
         }
 
         @Override
@@ -553,9 +963,22 @@ class InventoryServiceTests {
             return Optional.ofNullable(savedBottles.get(id));
         }
 
+        // P0-2: 行锁读取（内存实现等价于普通读取）
+        @Override
+        public Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id) {
+            return Optional.ofNullable(savedBottles.get(id));
+        }
+
         @Override
         public List<SavedBottleRecord> listSavedBottles() {
             return new ArrayList<>(savedBottles.values());
+        }
+
+        @Override
+        public List<SavedBottleRecord> listSavedBottlesByMerchant(String merchantId) {
+            return savedBottles.values().stream()
+                    .filter(b -> merchantId.equals(b.merchantId()))
+                    .toList();
         }
 
         @Override

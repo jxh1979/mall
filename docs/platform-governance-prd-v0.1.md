@@ -402,8 +402,12 @@
 5. 私人手机寄存柜不固定，流动使用，先到先选，离开时全部拿走。
 6. 职级可按 M1-M10，并可分上、中、下；职级只绑定薪资大范围，具体薪资单独填写。
 7. 工作手机预装软件清单和网站白名单由后台维护，通过 Android Enterprise / Android Management API + 商业 MDM 阻止违规访问并留痕。
-8. 合同或基础定义违规时，所有流程必须先卡住，但允许按后台配置的更高级审核层级放行。
-9. 升级放行层级可配置为上一级、上两级、最高权限或指定角色，放行原因、审批人、审批层级和证据必须留痕。> 修订说明（2026-06-07，govern-2/staff-2）：相对层级以员工职级序列 level_rank（M1上…M10下，30 档）为基准做相对计算，枚举与计算口径见字段字典 §8.1；合同准入审计/放行记录 admission_audits 须补 approval_level 字段承接该取值并与放行证据一并留痕。
+8. 合同或基础定义违规时，所有流程必须先卡住，但允许按后台配置的更高级审核层级放行。> 现状/目标（2026-06-18 收口，R5，本期 P0）：准入闸口（超范围→卡住→升级→放行）须在票务/酒吧/游乐/结算业务动作前内嵌校验；当前 `SupervisorReviewService.evaluate` 为孤立评估接口，业务域动作前尚未调用——目标为动作前强制校验。> 准入校验逐域切入点（2026-06-18 D2 逐域细化，本期 P0）：在上述总述基础上逐域明确强制校验插入位置，业务系统执行关键动作前必须先调用准入闸口（统一走 `supervisor_review`，不再引入 `admission_audits`/`contract_admission_rules` 旧表）；任一域校验不通过→阻断动作并写留痕→按 `staff_levels.level_rank` 升级审批→放行落 `supervisor_review_decisions`：
+>   - 票务：下单前 + 出票前两处内嵌校验（超合同、超经营范围、资质过期则卡住，升级审批通过后放行）；校验不通过→阻断并写留痕→按 `staff_levels.level_rank` 升级审批→放行落 `supervisor_review_decisions`。
+>   - 酒吧：开台前 + 点酒/结算前两处内嵌校验（超合同、超经营范围、资质过期则卡住，升级审批通过后放行）；校验不通过→阻断并写留痕→按 `staff_levels.level_rank` 升级审批→放行落 `supervisor_review_decisions`。
+>   - 游乐：入场核销前内嵌校验（超合同、超经营范围、资质过期则卡住，升级审批通过后放行）；校验不通过→阻断并写留痕→按 `staff_levels.level_rank` 升级审批→放行落 `supervisor_review_decisions`。
+>   - 结算：日结/结算依据生成前内嵌校验（超合同、超经营范围、资质过期则卡住，升级审批通过后放行）；校验不通过→阻断并写留痕→按 `staff_levels.level_rank` 升级审批→放行落 `supervisor_review_decisions`。
+9. 升级放行层级可配置为上一级、上两级、最高权限或指定角色，放行原因、审批人、审批层级和证据必须留痕。> 修订说明（2026-06-07，govern-2/staff-2）：相对层级以员工职级序列 level_rank（M1上…M10下，30 档）为基准做相对计算，枚举与计算口径见字段字典 §8.1。> 修订说明（2026-06-18 收口，R5）：准入审计/放行统一落 `supervisor_review`（`supervisor_review_decisions`，V057），作废 `admission_audits` / `contract_admission_rules` 两表；审批层级不再以 `admission_audits.approval_level` 字段承接，改为以 `staff_levels.level_rank` 为基准计算后落 `supervisor_review_decisions`，与放行原因、审批人、证据一并留痕，口径以 `platform-governance-product-spec-v0.2.md` 顶部 R5 标注与 2026-06-18 业务裁决为准。
 10. 权限按单一功能最小颗粒度配置，一个单一功能对应一个权限点，例如票务核销、查看卡座预定状态。
 11. 权限必须支持角色级和员工级完全自定义配置，职级只影响默认权限模板和审批层级建议，不能替代单一功能权限点，也不能让员工绕过具体功能授权。
 12. 权限点首批由平台统一预置，实施阶段允许边配置边补充。
@@ -488,3 +492,5 @@ P0 阶段的重点是把“谁、在哪、凭什么、谁能操作、谁负责�
 | 2026-06-07 | 改 | §14→§16 | 因新增 §15，原"14. 变更日志"顺延为"16. 变更日志" | 章节插入顺延 |
 | 2026-06-08 | 改 | §7.6 关键字段/验收标准、§9 员工注册审批页 | 明确 staff_profiles 同意凭据以 `employee_notice_id` 指向 foundation §6B.3 employee_notices，consent_version/time/scope 为冗余摘要；注册审批环节按 flow-diagrams §8.4 新增的"告知→签署→写 employee_notices"节点写入回填，使 employee_notices 表有写入方 | 三轮收口 finding compliance-wired-6、合规 C4/C10 |
 | 2026-06-10 | 增/改 | §6.10 / §7.8 / §12 | 补权限模板机制：基础模板、临时模板、复制模板、有效期、单次有效、最终权限计算和显式拒绝优先 | 用户确认权限模板颗粒度方案；对齐 `p0-operation-permission-matrix-v0.1.md` |
+| 2026-06-18 | 改 | §12 第 8、9 条 | 准入审计/放行落点由 `admission_audits`/`contract_admission_rules` 收口为 `supervisor_review`（`supervisor_review_decisions`，V057）；删去"admission_audits 须补 approval_level 字段"滞后表述，改为审批层级以 `staff_levels.level_rank` 为基准、落 `supervisor_review_decisions`；补"准入闸口须在票务/酒吧/游乐/结算业务动作前内嵌校验（本期 P0）"现状/目标 | R5、2026-06-18 业务裁决、对齐 `platform-governance-product-spec-v0.2.md` 顶部 R5 标注 |
+| 2026-06-18 | 增 | §12 第 8 条 | D2 逐域细化：补"准入校验逐域切入点（P0）"，逐域写明强制校验插入位置——票务下单前+出票前、酒吧开台前+点酒/结算前、游乐入场核销前、结算日结/结算依据生成前；统一"校验不通过→阻断并写留痕→按 `staff_levels.level_rank` 升级审批→放行落 `supervisor_review_decisions`"，与 D2 收口（统一走 supervisor_review、作废 admission_audits/contract_admission_rules）一致，不重新引入旧表 | 2026-06-18 业务确认（准入业务动作前内嵌校验需逐域细化）、D2 收口 |

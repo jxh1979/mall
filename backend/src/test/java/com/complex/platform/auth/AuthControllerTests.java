@@ -110,6 +110,31 @@ class AuthControllerTests {
     }
 
     @Test
+    void refreshEndpointIsReachableWithoutAccessTokenSimulatingExpiredTokenScenario() throws Exception {
+        // Login to get a valid refresh token
+        JsonNode login = login();
+        String refreshToken = login.at("/data/refresh_token").asText();
+
+        // Simulate the prod expired-access-token scenario: send a valid refresh_token but omit
+        // the Authorization header (as happens when the access token expires and the bearer filter
+        // does not populate the security context).
+        // BEFORE FIX: Spring Security returns 401 because /api/v1/auth/refresh was not in
+        //             publicApiPaths() — the refresh token is never even read.
+        // AFTER FIX:  The request reaches AuthService.refresh(), which finds the session, then
+        //             rejects with 400 VALIDATION_FAILED (access_token is required) — proving
+        //             Spring Security no longer blocks the endpoint.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "refresh_token": "%s"
+                                }
+                                """.formatted(refreshToken)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
     void refreshAndLogoutRequireBearerTokenInsteadOfPermitAll() throws Exception {
         int refreshStatus = mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -204,6 +229,8 @@ class AuthControllerTests {
                 .getStatus();
         assertThat(authenticatedStatus).isIn(401, 403);
 
+        // After adding /api/v1/auth/refresh to publicApiPaths (auth-001 fix), the request
+        // now reaches the controller; the service layer rejects the revoked refresh token.
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -213,7 +240,8 @@ class AuthControllerTests {
                                   "device_id": "web-1"
                                 }
                                 """.formatted(refreshToken)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("REFRESH_TOKEN_INVALID"));
     }
 
     private JsonNode login() throws Exception {

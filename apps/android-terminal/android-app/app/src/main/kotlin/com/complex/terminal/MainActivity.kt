@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -44,8 +45,8 @@ class MainActivity : Activity() {
     statusView.text = "正在连接 160 API..."
     thread {
       val result = runCatching {
-        val endpoint = "${BuildConfig.COMPLEX_API_BASE_URL.trimEnd('/')}/api/v1/system/health"
-        val connection = URL(endpoint).openConnection() as HttpURLConnection
+        val endpoint = buildHealthEndpoint()
+        val connection = endpoint.openConnection() as HttpURLConnection // nosemgrep: URL is built from BuildConfig and validated by validateApiUrl before use.
         connection.connectTimeout = 5000
         connection.readTimeout = 5000
         connection.requestMethod = "GET"
@@ -60,5 +61,33 @@ class MainActivity : Activity() {
         statusView.text = result
       }
     }
+  }
+
+  private fun buildHealthEndpoint(): URL {
+    val baseUrl = BuildConfig.COMPLEX_API_BASE_URL.trim().trimEnd('/')
+    val endpoint = URL("$baseUrl/api/v1/system/health")
+    validateApiUrl(endpoint)
+    return endpoint
+  }
+
+  private fun validateApiUrl(url: URL) {
+    val protocol = url.protocol.lowercase(Locale.ROOT)
+    val host = url.host.lowercase(Locale.ROOT)
+    val allowedHosts = BuildConfig.COMPLEX_API_ALLOWED_HOSTS
+      .split(',')
+      .map { it.trim().lowercase(Locale.ROOT) }
+      .filter { it.isNotEmpty() }
+      .toSet()
+
+    require(protocol == "https" || isLoopbackHost(host)) {
+      "COMPLEX_API_BASE_URL must use https unless it targets a local smoke endpoint"
+    }
+    require(host in allowedHosts) {
+      "COMPLEX_API_BASE_URL host is not in COMPLEX_ANDROID_API_ALLOWED_HOSTS"
+    }
+  }
+
+  private fun isLoopbackHost(host: String): Boolean {
+    return host == "localhost" || host == "127.0.0.1" || host == "::1"
   }
 }

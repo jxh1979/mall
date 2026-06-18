@@ -1,0 +1,123 @@
+{
+  "markers": [
+    "RUNTIME_ACCEPTANCE_EVIDENCE_READY",
+    "RUNTIME_EVIDENCE_FROM_SUREFIRE_REPORTS",
+    "RUNTIME_EVIDENCE_FROM_PLAYWRIGHT_REPORTS",
+    "RUNTIME_EVIDENCE_FROM_WEB_DIST",
+    "RUNTIME_EVIDENCE_FROM_SEMGREP_LATEST_SUMMARY",
+    "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
+  ],
+  "generated_at": "2026-06-17T11:11:41.161Z",
+  "captured_command": "npm run verify:closed-loop-runtime",
+  "required_refresh_rule": "After backend, web, Playwright, OpenAPI, or runtime script changes, rerun npm run verify:closed-loop-runtime, then npm run docs:runtime-acceptance-evidence.",
+  "scripts": {
+    "test_backend": "node tools/run-backend-maven.mjs test",
+    "web_typecheck": "npm run typecheck --workspace apps/web",
+    "web_build": "npm run build --workspace apps/web",
+    "verify_ui": "playwright test",
+    "verify_ui_real_backend_seeded": "node tools/run-real-backend-ui-e2e.mjs",
+    "verify_closed_loop_runtime": "npm run test:backend && npm run typecheck --workspace apps/web && npm run build --workspace apps/web && npm run verify:ui && npm run verify:ui:real-backend:seeded",
+    "verify_runtime_acceptance_evidence": "node tools/generate-runtime-acceptance-evidence.mjs --check",
+    "docs_runtime_acceptance_evidence": "node tools/generate-runtime-acceptance-evidence.mjs",
+    "closed_loop_runtime_contains_expected_steps": true
+  },
+  "backend_surefire": {
+    "path": "backend/target/surefire-reports",
+    "suites": 69,
+    "tests": 579,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "latest_mtime": "2026-06-17T11:09:36.737Z",
+    "passed": true
+  },
+  "web_unit_source": {
+    "files": [
+      "apps/web/src/admin/client/adminClient.test.ts",
+      "apps/web/src/admin/components/AdminDataState.test.tsx",
+      "apps/web/src/admin/security/PermissionGate.test.ts",
+      "apps/web/src/legacy-console/apiClient.test.ts",
+      "apps/web/src/legacy-console/formatters.test.ts",
+      "apps/web/src/legacy-console/stockMovementRequest.test.ts"
+    ],
+    "file_count": 6,
+    "test_count_from_source": 16
+  },
+  "web_build": {
+    "dist_index_exists": true,
+    "route_indexes": [
+      {
+        "path": "apps/web/dist/ticketing/index.html",
+        "exists": true
+      },
+      {
+        "path": "apps/web/dist/bar/index.html",
+        "exists": true
+      },
+      {
+        "path": "apps/web/dist/amusement/index.html",
+        "exists": true
+      }
+    ],
+    "asset_count": 9,
+    "main_js_assets": [
+      {
+        "path": "apps/web/dist/assets/main-CPI08bw-.js",
+        "size_bytes": 108017,
+        "mtime": "2026-06-17T11:09:41.721Z"
+      }
+    ],
+    "largest_asset": {
+      "path": "apps/web/dist/assets/vendor-antd-Brb5i53G.js",
+      "size_bytes": 452697,
+      "mtime": "2026-06-17T11:09:41.721Z"
+    },
+    "no_main_bundle_warning_expected": true
+  },
+  "playwright": {
+    "normal": {
+      "report_path": "playwright-report/index.html",
+      "report_exists": true,
+      "spec_files": [
+        "tests/e2e/full-admin-mvp.spec.ts",
+        "tests/e2e/full-admin-remaining.spec.ts",
+        "tests/e2e/full-admin-visual.spec.ts",
+        "tests/e2e/web-ui-acceptance.spec.ts"
+      ],
+      "test_count_from_source": 28
+    },
+    "real_backend": {
+      "report_path": "playwright-report-real-backend/index.html",
+      "report_exists": true,
+      "spec_files": [
+        "tests/e2e/web-ui-real-backend.spec.ts"
+      ],
+      "test_count_from_source": 2
+    },
+    "last_run": {
+      "status": "passed",
+      "failedTests": []
+    },
+    "last_run_passed": true
+  },
+  "semgrep": {
+    "scan_id": "semgrep-20260617-064855-manual-request",
+    "exit_code": 0,
+    "results": 0,
+    "errors": 0,
+    "paths_scanned": 1543,
+    "clean": true
+  },
+  "production_boundaries": {
+    "production_evidence_complete": false,
+    "production_evidence_awaiting": 15,
+    "p0_production_evidence_awaiting": 13,
+    "nas_live_status": "failed",
+    "can_claim_production_ready": false
+  },
+  "conclusion": {
+    "runtime_ready_for_integration_and_business_acceptance": true,
+    "can_claim_production_ready": false,
+    "reason": "Runtime evidence supports integration and business acceptance; production readiness remains blocked by external production evidence and NAS current mount state."
+  }
+}

@@ -258,3 +258,12 @@
 - `p0-operation-permission-matrix-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` 与 `third-party-supplier-integration-kit-v0.1.md` 已作为本轮执行缺口补齐入口，分别承接权限模板、操作留痕、端到端验收和供应商接口占位。
 - `document-retention-merge-audit-20260610.md` 已作为文档治理入口，列出可归档、可合并和不再作为当前口径入口的文档。
 - `server-160-runbook-v0.2.md` 已作为 160 运维合并后的新入口；进度统一查看 `project-progress-dashboard.md`。
+
+> 修订说明（2026-06-18 第一轮需求文档审计补登）：新增第一轮审计 5 份交付物，作为既有审计（`development-documentation-audit-v0.2.md`）的对抗式验证与业务闭环下钻补充，互补并存、不取代：
+> - `r1-requirements-documentation-audit-report-20260618.md`（第一轮需求文档审计报告，含独立验证、14 条业务闭环矛盾、9 份可开发规格草案、第二轮代码审计清单）
+> - `r1-documentation-map-20260618.md`（当前态文档地图与裁决标记）
+> - `r1-requirement-api-page-table-test-mapping-matrix-20260618.md`（需求-接口-页面-数据表-测试映射矩阵）
+> - `r1-third-party-capability-switch-and-mock-strategy-20260618.md`（第三方能力开关与 mock 策略，15 项能力开关）
+> - `r1-pending-supplier-information-backfill-checklist-20260618.md`（待后续供应商资料补齐清单）
+>
+> 本轮发现并登记的待处理项：迁移已到 V054 而 v0.2 审计/数据隔离规格仍停在 V052（计数漂移复发，R1-FINDING-A）；`sms_notification` 能力开关未并入主开关矩阵（S12，登录链路硬依赖）；安全 finding 台账仍缺跨租户越权系列（ISO-GAP-01）。

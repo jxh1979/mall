@@ -1,5 +1,6 @@
 package com.complex.platform.evidence;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 import java.util.List;
 
@@ -13,6 +14,7 @@ public record EvidenceReviewRecord(
         List<String> evidenceAttachmentIds,
         String status,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore String merchantId
 ) {
 }

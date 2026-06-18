@@ -31,7 +31,7 @@ class AmusementSafetyJdbcIntegrationTests {
         assertThat(regclass("amusement_waiver_acknowledgements")).isEqualTo("amusement_waiver_acknowledgements");
         assertThat(regclass("amusement_incidents")).isEqualTo("amusement_incidents");
         assertThat(regclass("amusement_incident_actions")).isEqualTo("amusement_incident_actions");
-        assertThat(currentFlywayVersion()).isEqualTo("054");
+        assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
 
         assertThat(permissionCodes()).contains(
                 "amusement.safety_notice.view",

@@ -76,5 +76,11 @@ public interface TicketingRepository {
 
     List<TicketRefundLineRecord> listTicketRefundLines(String refundId);
 
+    long sumPendingRefundAmountByOrderId(String orderId);
+
+    Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt);
+
+    boolean tryLockOrderForIssuance(String orderId);
+
     String findLatestFlywayVersion();
 }

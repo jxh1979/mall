@@ -228,7 +228,7 @@ class PlatformJdbcIntegrationTests {
     void residualMigrationCreatesBindingContractTablesAndSeedsPermissions() {
         assertThat(regclass("business_entity_bindings")).isEqualTo("business_entity_bindings");
         assertThat(regclass("contracts")).isEqualTo("contracts");
-        assertThat(currentFlywayVersion()).isEqualTo("054");
+        assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
         assertThat(permissionCodes()).contains(
                 "contract.view",
                 "contract.draft.manage",

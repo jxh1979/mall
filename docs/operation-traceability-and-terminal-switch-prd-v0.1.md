@@ -378,6 +378,8 @@ flowchart TD
 
 > 修订说明（2026-06-07）：所有关闭场景**不得只靠前端隐藏/置灰**。前端隐藏只是体验层；任何被开关关闭的终端、商户、业务系统、模块、设备或版本，**后端接口都必须独立校验开关状态并拒绝请求**（返回明确的"已关闭/未开放"错误码），并写入 `terminal.access_rejected` 事件留痕（记录 scope_type、scope_id、terminal_type、business_system、module_code、actor、device、occurred_at、reject_reason），以便审计"谁在已关闭的端/模块上尝试了什么操作"。依据 finding switch-4。
 
+> 修订说明（2026-06-18，E2）：业务已确认 `apps/web/src/legacy-console` 为**正式 Web 前端**（terminal_type=`web`，见 §5.2）。Web 端写动作边界与本节"终端开关后端拒绝铁律"一致：按终端铁律，Web 前端 P0 只承载轻量业务确认 + 跳转，**不在 Web 直接执行门票/权益核销、人工放行、结账支付、存酒/取酒**等改变核销结果/资金/库存的现场作业动作，这些动作改为跳转到管理后台/现场端执行。Web 模块开关关闭后，**后端对应业务接口仍须独立校验并拒绝请求并写 `terminal.access_rejected`**（scope_type 含模块级），前端隐藏仅作辅助，不得因前端已隐藏而免除后端校验。Web 端动作边界、允许/禁止动作清单详见 `frontend-admin-development-design.md` §13A。
+
 | 场景 | 关闭表现 | 后端处置与留痕 |
 |---|---|---|
 | 终端整体关闭（整端） | 启动页提示暂未开放，不能进入业务 | `/api/terminal/bootstrap-capabilities` 返回该端不可用；该端所有业务接口拒绝并写 `terminal.access_rejected` |
@@ -563,6 +565,8 @@ flowchart TD
 >
 > 下表路径只保留为历史能力名称和迁移参考，不得生成正式接口、mock、自动化用例或供应商联调文档。P0/P1/P2 开发只看正式 OpenAPI、operation 验收矩阵、OpenAPI 追溯附录、权限矩阵、事件矩阵和任务映射表。
 
+> 收口说明（2026-06-18 D7 异常接口口径统一）：旧 `/exceptions/*`、历史 `/api/mobile/*` 以及本表 `/api/admin/exceptions/{id}/first-handle` 等异常相关历史路径**一律 deprecated，不作为 P0 正式契约**，不得直接生成 Controller、mock、自动化用例或供应商联调文档。本节"历史能力路径"与 §8 "P0 异常责任链 P0 必做"**不互斥**：能力上 P0 必须落地异常责任链（发现→第一处理→转派/升级→关闭），但**必须改用正式 OpenAPI operationId**承载，并登记到 `p0-openapi-operation-acceptance-matrix-v0.1.md`、`p0-openapi-contract-closure-appendix-v0.1.md`，通过 `npm run verify:openapi-closure`。即"旧路径作废"管的是路径与契约形态，"责任链 P0 必做"管的是能力范围，两者各管一层、不冲突。
+
 | 方法 | 历史能力路径 | 用途 |
 |---|---|---|
 | GET | `/api/terminal/bootstrap-capabilities` | 终端启动时获取可用能力 |
@@ -585,9 +589,20 @@ flowchart TD
 
 | 阶段 | 能力 |
 |---|---|
-| P0 | 统一事件中心、业务过程实例、订单获取和销售归属留痕、卡座服务责任留痕、异常第一处理人留痕、物品追踪码、入库贴码或出库打印码、扫码出库、扫码交接、后厨扫码收货、服务员扫码送达、终端开关表和启动查询接口 |
+| P0 | 统一事件中心、业务过程实例、订单获取和销售归属留痕、卡座服务责任留痕、**异常责任链（发现→第一处理→转派→升级→关闭）全链 P0 必做**、物品追踪码、入库贴码或出库打印码、扫码出库、扫码交接、后厨扫码收货、服务员扫码送达、终端开关表和启动查询接口 |
 | P1 | 机器人真实状态回调、摄像头事件自动关联、服务质量复盘、端版本灰度、商户级 SaaS 套餐开关、更多物料类型追踪 |
 | P2 | IoT 自动感知、无感交接辅助校验、智能异常判断、跨综合体集团级终端策略、酒吧/乐园独立 SaaS 计费开关 |
+
+> 收口说明（2026-06-18 D7）：P0 异常责任链不是只读留痕，而是含写动作的完整责任链：**发现/上报、第一处理（接单）、转派、升级、关闭**。各写动作必须走正式 OpenAPI operationId（不得用 §7 历史 `/api/admin/exceptions/*`、`/exceptions/*`、`/api/mobile/*` 旧路径），并登记到 `p0-openapi-operation-acceptance-matrix-v0.1.md` 完成验收，对应留痕事件为 §4.1 `exception.reported`/`exception.first_handled`/`exception.escalated`/`exception.resolved`/`exception.reviewed`。各写动作建议 operationId（按现有 OpenAPI 命名约定推导，若与 `openapi-p0.yaml` 既有命名不一致以 OpenAPI 为准）：
+>
+> | 责任链动作 | 留痕事件 | 建议 operationId |
+> |---|---|---|
+> | 第一处理（接单） | `exception.first_handled` | `firstHandleException`【待业务/技术确认:operationId 命名】 |
+> | 转派 | （转派语义，载于 `assigned_to`） | `transferException`【待业务/技术确认:operationId 命名】 |
+> | 升级 | `exception.escalated` | `escalateException`【待业务/技术确认:operationId 命名】 |
+> | 关闭 | `exception.resolved` / `exception.reviewed` | `closeException`【待业务/技术确认:operationId 命名】 |
+>
+> 上述 operationId 须经 OpenAPI 与验收矩阵登记后定稿；未登记前不得据旧路径生成接口或用例。
 
 ## 9. 已确认规则
 
@@ -628,3 +643,5 @@ flowchart TD
 | 2026-06-08 | 增 | §4.1.4 会员/合规/容量域事件 | 登记 `personal_data.purged`/`personal_data.anonymized`（域=合规）承载 C5 留存销毁/匿名化作业留痕，载荷 data_category/target_table/affected_count/disposal_action/job_log_id；event_category 扩列 compliance | R6 / compliance-wired-5、struct-annot-7 |
 | 2026-06-12 可编码收口 | 改 | §7 | 将 API 清单改为能力清单与正式 OpenAPI 补契约要求，路径列标注为历史能力路径 | 防止留痕/终端开关旧 `/api/admin/*` 和 `/api/terminal/*` 路径被误作 P0 Controller |
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §7 | 留痕、终端开关、责任链和视频证据能力必须能在 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md` 中追溯；未通过 `verify:openapi-closure` 不得生成接口、mock 或自动化用例 | 防止历史能力清单绕过权限、事件、任务和样例准入 |
+| 2026-06-18 E2 | 增 | §5.4 关闭后的表现 | 补同口径修订说明：确认 `legacy-console` 为正式 Web 前端，Web 端写动作边界（不直接核销/人工放行/结账支付/存取酒，只跳转）与"终端开关后端拒绝铁律"一致；Web 模块开关关闭后后端仍须独立校验拒绝并写 `terminal.access_rejected` | 业务已确认（2026-06-18）legacy-console 为正式 Web 前端，须按终端铁律约束 Web 端写动作边界 |
+| 2026-06-18 D7 收口 | 改 | §7/§8 | 收口 §7 与 §8 自相矛盾：§7 明确旧 `/exceptions/*`、`/api/mobile/*` 及 `/api/admin/exceptions/*` 历史路径 deprecated、不作正式契约；§8 明确异常责任链（发现→第一处理→转派→升级→关闭）P0 必做，须改用正式 OpenAPI operationId 并登记到 operation 验收矩阵，含 first-handle/transfer/escalate/close 写动作及验收。两节各管路径形态与能力范围、不再互斥；operationId 待 OpenAPI 与验收矩阵登记后定稿 | D7 异常接口 §7/§8 自相矛盾收口 |

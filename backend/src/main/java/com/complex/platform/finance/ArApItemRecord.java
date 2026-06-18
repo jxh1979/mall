@@ -1,5 +1,6 @@
 package com.complex.platform.finance;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 import java.time.LocalDate;
 
@@ -18,6 +19,7 @@ public record ArApItemRecord(
         String accountingPeriod,
         String status,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        @JsonIgnore String merchantId
 ) {
 }

@@ -1,0 +1,54 @@
+package com.complex.platform.bar;
+
+import com.complex.platform.evidence.AuditedOperation;
+
+enum BarWriteOperation implements AuditedOperation {
+    CREATE_ORDER("bar.order_created", "bar.order_create_failed", "bar.order.create", "bar_order"),
+    CREATE_ORDER_BILL("bar.bill.created", "bar.bill.created_failed", "bar.order.create", "bar_bill"),
+    DELIVER_ORDER("bar.order_delivered", "bar.order_deliver_failed", "bar.order.create", "bar_order"),
+    ADD_ORDER_ITEM("bar.order_item.created", "bar.order_item.created_failed", "bar.order.create", "bar_order_item"),
+    TRANSITION_PRODUCTION_TICKET("bar.production_ticket.transitioned", "bar.production_ticket.transition_failed", "bar.production_ticket.manage", "bar_production_ticket"),
+    CREATE_PRODUCT("bar.product.created", "bar.product.create_failed", "bar.order.create", "bar_product"),
+    CREATE_RESERVATION("bar.reservation.created", "bar.reservation.create_failed", "bar.reservation.create", "bar_reservation"),
+    CHECK_IN_RESERVATION_GUEST("bar.table_guest.checked_in", "bar.table_guest.rejected", "bar.table.guest_checkin", "bar_table_guest_checkin"),
+    CREATE_TABLE("bar.table.changed", "bar.table.change_failed", "bar.table.manage", "bar_table"),
+    OPEN_TABLE("bar.table.opened", "bar.table.open_failed", "bar.table.open_close", "bar_table"),
+    CREATE_TABLE_SESSION("bar.table_session.created", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
+    TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
+    MERGE_TABLE_SESSIONS("bar.table.merged", "bar.table.merge_failed", "bar.table_session.merge", "bar_table_session_adjustment"),
+    RENEW_TABLE_SESSION("bar.table.renewed", "bar.table.renew_failed", "bar.table_session.renew", "bar_table_session_adjustment"),
+    CREATE_BILL_PAY_INTENT("payment.intent_created", "payment.intent_failed", "finance.payment_intent.create", "finance_payment_intent"),
+    SETTLE_BILL("bar.bill.settled", "bar.bill.settle_failed", "finance.payment.register", "bar_bill"),
+    APPLY_BILL_ADJUSTMENT("bar.bill.adjusted", "bar.bill.adjust_failed", "bar.bill.adjust", "bar_bill_adjustment"),
+    SPLIT_BILL("bar.bill.split", "bar.bill.split_failed", "bar.bill.split_merge", "bar_bill_operation"),
+    MERGE_BILLS("bar.bill.merged", "bar.bill.merge_failed", "bar.bill.split_merge", "bar_bill_operation"),
+    CALCULATE_COMMISSION("bar.table_commission.calculated", "bar.table_commission.calculate_failed", "bar.table_commission.calculate", "bar_commission_calculation");
+
+    private final String successEvent;
+    private final String failureEvent;
+    private final String permissionCode;
+    private final String businessType;
+
+    BarWriteOperation(String successEvent, String failureEvent, String permissionCode, String businessType) {
+        this.successEvent = successEvent;
+        this.failureEvent = failureEvent;
+        this.permissionCode = permissionCode;
+        this.businessType = businessType;
+    }
+
+    public String successEvent() {
+        return successEvent;
+    }
+
+    public String failureEvent() {
+        return failureEvent;
+    }
+
+    public String permissionCode() {
+        return permissionCode;
+    }
+
+    public String businessType() {
+        return businessType;
+    }
+}
