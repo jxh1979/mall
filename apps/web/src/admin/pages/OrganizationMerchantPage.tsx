@@ -1,0 +1,148 @@
+import React from "react";
+import { AdminDataState } from "../components/AdminDataState";
+import { AdminPageHeader } from "../components/AdminPageHeader";
+import { AuditTrailHint } from "../components/AuditTrailHint";
+import { useAdminResource } from "../hooks/useAdminResource";
+import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
+
+const TEXT = {
+  title: "组织与商户档案",
+  description: "维护经营主体、商户和项目档案，确保运营主体、合同主体和结算主体后续可以唯一绑定、可追溯。",
+  evidence: "接口证据：读取 /api/v1/platform/business-entities、/api/v1/platform/merchants、/api/v1/platform/projects；创建商户调用 /api/v1/platform/merchants。",
+  boundary: "组织与商户档案只维护基础档案，不在本页替代四类主体绑定；运营主体、合同主体和结算主体必须在绑定和合同流程中统一留痕。",
+  loadFailed: "组织与商户档案读取失败",
+  merchantNameRequired: "商户名称不能为空。",
+  contactPhoneInvalid: "联系电话必须是 11 位中国大陆手机号。",
+};
+
+const MERCHANT_TYPES = ["tenant", "retail", "catering", "entertainment", "service"];
+const COOPERATION_FORMS = ["fixed_rent_plus_commission", "revenue_share", "fixed_rent"];
+
+function display(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "number" || typeof value === "string") return String(value);
+  if (Array.isArray(value)) return value.length ? value.join(" / ") : "-";
+  return JSON.stringify(value);
+}
+
+export function OrganizationMerchantPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+  const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
+  const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
+  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
+  const [merchantName, setMerchantName] = React.useState("二期测试商户");
+  const [merchantType, setMerchantType] = React.useState("tenant");
+  const [contactName, setContactName] = React.useState("运营联系人");
+  const [contactPhone, setContactPhone] = React.useState("13800000000");
+  const [cooperationForm, setCooperationForm] = React.useState("fixed_rent_plus_commission");
+  const [formError, setFormError] = React.useState("");
+
+  const { loading, error, reload } = useAdminResource(
+    async () => {
+      const [nextEntities, nextMerchants, nextProjects] = await Promise.all([
+        api.get<BusinessEntityRow[]>("/api/v1/platform/business-entities"),
+        api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
+        api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"),
+      ]);
+      setEntities(nextEntities);
+      setMerchants(nextMerchants);
+      setProjects(nextProjects);
+    },
+    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
+  );
+
+  async function createMerchant() {
+    if (!merchantName.trim()) {
+      setFormError(TEXT.merchantNameRequired);
+      return;
+    }
+    if (!/^1[3-9]\d{9}$/.test(contactPhone.trim())) {
+      setFormError(TEXT.contactPhoneInvalid);
+      return;
+    }
+    setFormError("");
+    setGlobalError(null);
+    const request = {
+      idempotencyKey: `merchant-profile-create-${Date.now()}`,
+      operatorNote: "完整后台组织与商户档案验收创建",
+      evidenceAttachmentIds: ["att-merchant-profile-create"],
+      merchantName,
+      merchantType,
+      businessEntityId: entities[0]?.id ?? "org-1",
+      contractEntityId: "contract-subject-1",
+      settlementEntityId: "settlement-subject-1",
+      contactName,
+      contactPhone: contactPhone.trim(),
+      mallBlockCode: "1F-A",
+      areaSquareMeter: 128.5,
+      leasedAreaSquareMeter: 120,
+      secondaryContactName: "备用联系人",
+      secondaryContactPhone: "13900000000",
+      rentPerSquareMeter: 12.3,
+      cooperationForm,
+      status: "active",
+    };
+    const result = await api.post<unknown>("/api/v1/platform/merchants", request);
+    setActionResult({ action: "merchant_profile_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+    await reload();
+  }
+
+  return (
+    <section data-testid="organization-merchant-page">
+      <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      <div className="admin-generic-evidence" data-testid="organization-merchant-evidence">{TEXT.evidence}</div>
+      <AuditTrailHint event="organization.viewed / merchant_profile.created" />
+      {formError ? <div className="admin-inline-error" data-testid="organization-merchant-form-error">{formError}</div> : null}
+      <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        {entities.length === 0 && merchants.length === 0 && projects.length === 0 ? (
+          <div className="admin-state admin-empty" data-testid="organization-merchant-empty">暂无组织与商户档案</div>
+        ) : (
+          <>
+            <div className="admin-kpi-grid" data-testid="organization-merchant-summary">
+              <div className="admin-kpi-card"><span>经营主体</span><strong>{entities.length}</strong><small>组织档案</small></div>
+              <div className="admin-kpi-card"><span>商户档案</span><strong>{merchants.length}</strong><small>merchant profiles</small></div>
+              <div className="admin-kpi-card"><span>项目档案</span><strong>{projects.length}</strong><small>projects</small></div>
+              <div className="admin-kpi-card"><span>正常商户</span><strong>{merchants.filter((row) => row.status === "active").length}</strong><small>active</small></div>
+            </div>
+
+            <div className="admin-form-grid">
+              <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
+              <label>商户类型<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+              <label>联系人<input data-testid="organization-merchant-contact-name" value={contactName} onChange={(event) => setContactName(event.target.value)} /></label>
+              <label>联系电话<input data-testid="organization-merchant-contact-phone" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></label>
+              <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}>{COOPERATION_FORMS.map((form) => <option key={form} value={form}>{form}</option>)}</select></label>
+            </div>
+            <div className="admin-form-row">
+              <button type="button" data-testid="organization-merchant-create" onClick={() => void createMerchant()}>创建商户档案</button>
+              <span className="admin-muted-action" data-testid="organization-merchant-boundary">{TEXT.boundary}</span>
+            </div>
+
+            <div className="admin-section-title">经营主体</div>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="organization-entities-table">
+                <thead><tr><th>主体</th><th>编码</th><th>类型</th><th>状态</th></tr></thead>
+                <tbody>{entities.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.orgType)}</td><td>{display(row.status)}</td></tr>)}</tbody>
+              </table>
+            </div>
+
+            <div className="admin-section-title">商户档案</div>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="organization-merchants-table">
+                <thead><tr><th>商户</th><th>公司名</th><th>区块</th><th>面积</th><th>合作形式</th><th>风险</th><th>状态</th><th>留痕证据</th></tr></thead>
+                <tbody>{merchants.map((row) => <tr key={row.id}><td>{display(row.displayName)}</td><td>{display(row.companyName)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{display(row.cooperationForm)}</td><td>{display(row.riskLevel)}</td><td>{display(row.status)}</td><td>{display(row.auditEvidenceRef)}</td></tr>)}</tbody>
+              </table>
+            </div>
+
+            <div className="admin-section-title">项目档案</div>
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="organization-projects-table">
+                <thead><tr><th>项目</th><th>编码</th><th>商户</th><th>业态</th><th>状态</th></tr></thead>
+                <tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.name)}</td><td>{display(row.code)}</td><td>{display(row.merchantId)}</td><td>{display(row.venueType)}</td><td>{display(row.status)}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </AdminDataState>
+    </section>
+  );
+}
