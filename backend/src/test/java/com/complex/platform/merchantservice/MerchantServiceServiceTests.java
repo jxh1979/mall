@@ -121,6 +121,10 @@ class MerchantServiceServiceTests {
     @Test
     void addActionRejectsClosedWorkOrder() {
         MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-closed-create"));
+        service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
+                "wo-closed-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+        service.addAction(created.id(), new MerchantWorkOrderActionRequest(
+                "wo-closed-resolve", "resolve", List.of(), "resolved", "staff_ops"));
         service.closeWorkOrder(created.id(), closeRequest("wo-close"));
 
         assertThatThrownBy(() -> service.addAction(created.id(), new MerchantWorkOrderActionRequest(
@@ -210,6 +214,10 @@ class MerchantServiceServiceTests {
     @Test
     void closeWorkOrderMovesToClosedAndRecordsResolution() {
         MerchantWorkOrderRecord created = service.createWorkOrder(createRequest("wo-close-create"));
+        service.assignWorkOrder(created.id(), new MerchantWorkOrderAssignRequest(
+                "wo-close-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+        service.addAction(created.id(), new MerchantWorkOrderActionRequest(
+                "wo-close-resolve", "resolve", List.of(), "resolved", "staff_ops"));
 
         MerchantWorkOrderRecord closed = service.closeWorkOrder(created.id(), closeRequest("wo-close-success"));
 
@@ -220,43 +228,36 @@ class MerchantServiceServiceTests {
         assertThat(repository.actions.getLast().actionType()).isEqualTo("closed");
     }
 
-    // ── §1.2 用例1：从非 resolved 态直接 close ──────────────────────────────────
+    // ── §1.2 用例1：从非 resolved 态直接 close → INVALID_STATE ─────────────────────
     //
-    // 规格 §1.2 验收口径 1（closeWorkOrderFromNonResolvedStatusThrowsInvalidState）期望
-    // created/assigned 态直接 close → INVALID_STATE 冲突。
-    //
-    // 据真实代码核验（MerchantServiceService.closeWorkOrderOnce 第 264-293 行 +
-    // MerchantWorkOrderRecord.close 第 82-105 行）：closeWorkOrder 当前仅 rejectTerminal
-    // （拒绝 closed/cancelled 终态），并不校验当前状态是否为 resolved。因此 created/assigned
-    // 态直接 close 在现实现下会成功落 closed，不会抛 INVALID_STATE（唯一的 INVALID_STATE
-    // 守卫位于 assignWorkOrderOnce 第 200-202 行）。
-    //
-    // 按任务护栏（只改测试、不改业务代码、以真实代码为准、不臆造断言），此用例据实断言
-    // 真实行为，并显式记录与规格预期的"文档-代码漂移"：业务侧缺少 close 前的 resolved 前置守卫。
+    // 工单只能从 resolved 态收口关闭（closeWorkOrderOnce 的 resolved 前置守卫，镜像
+    // assignWorkOrderOnce 的 created 守卫）。created/assigned/processing/pending_merchant
+    // 直接 close 均为非法跳步，抛 INVALID_STATE；唯有 resolved → close 放行。
     @Test
     void closeWorkOrderFromNonResolvedStatusThrowsInvalidState() {
-        // created 态直接 close：现实现下会成功（缺 resolved 前置守卫）
+        // created 态直接 close → INVALID_STATE
         MerchantWorkOrderRecord createdOrder = service.createWorkOrder(createRequest("wo-close-from-created"));
         assertThat(createdOrder.status()).isEqualTo("created");
+        assertThatThrownBy(() ->
+                service.closeWorkOrder(createdOrder.id(), closeRequest("wo-close-from-created-key")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("INVALID_STATE"));
 
-        MerchantWorkOrderRecord closedFromCreated =
-                service.closeWorkOrder(createdOrder.id(), closeRequest("wo-close-from-created-key"));
-
-        // 真实行为：直接 closed，无 INVALID_STATE
-        assertThat(closedFromCreated.status()).isEqualTo("closed");
-        assertThat(closedFromCreated.resolution()).isEqualTo("Fixed and merchant confirmed");
-
-        // assigned 态直接 close：同样会成功
+        // assigned 态直接 close → INVALID_STATE
         MerchantWorkOrderRecord assignedBase = service.createWorkOrder(createRequest("wo-close-from-assigned"));
         service.assignWorkOrder(assignedBase.id(), new MerchantWorkOrderAssignRequest(
                 "wo-close-from-assigned-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+        assertThatThrownBy(() ->
+                service.closeWorkOrder(assignedBase.id(), closeRequest("wo-close-from-assigned-key")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("INVALID_STATE"));
 
-        MerchantWorkOrderRecord closedFromAssigned =
-                service.closeWorkOrder(assignedBase.id(), closeRequest("wo-close-from-assigned-key"));
-
-        assertThat(closedFromAssigned.status()).isEqualTo("closed");
-
-        // 注：若业务后续补 close 前的 resolved 前置守卫，应改为断言 INVALID_STATE（对齐规格 §1.2 用例1）。
+        // resolved 态 close → 成功（前置守卫放行）
+        service.addAction(assignedBase.id(), new MerchantWorkOrderActionRequest(
+                "wo-close-from-assigned-resolve", "resolve", List.of(), "resolved", "staff_ops"));
+        MerchantWorkOrderRecord closed =
+                service.closeWorkOrder(assignedBase.id(), closeRequest("wo-close-from-assigned-key2"));
+        assertThat(closed.status()).isEqualTo("closed");
     }
 
     // ── §1.2 用例2：comment 类 action 在任意非终态允许且不推进状态 ────────────────
@@ -312,6 +313,8 @@ class MerchantServiceServiceTests {
                 "wo-audit-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
         service.addAction(base.id(), new MerchantWorkOrderActionRequest(
                 "wo-audit-action", "start processing", List.of(), "processing", "staff_ops"));
+        service.addAction(base.id(), new MerchantWorkOrderActionRequest(
+                "wo-audit-resolve", "resolve", List.of(), "resolved", "staff_ops"));
         service.closeWorkOrder(base.id(), closeRequest("wo-audit-close"));
         service.listWorkOrders();
 

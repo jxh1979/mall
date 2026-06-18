@@ -264,6 +264,12 @@ public class MerchantServiceService {
     private MerchantWorkOrderRecord closeWorkOrderOnce(String id, MerchantWorkOrderCloseRequest request) {
         MerchantWorkOrderRecord existing = findWorkOrder(id);
         rejectTerminal(existing);
+        // 工单只能从 resolved 态收口关闭：resolved 是唯一"已处理待关闭"前置态
+        // （ALLOWED_ACTION_TRANSITIONS 中 resolved 的后继为空集，唯一出口即 close）。
+        // 禁止 created/assigned/processing/pending_merchant 直接 close 跳步。
+        if (!"resolved".equals(existing.status())) {
+            throw ApiException.conflict("INVALID_STATE", "can only close a work order in resolved status");
+        }
         String resolution = requireText(request.resolution(), "resolution");
         validateSatisfactionScore(request.satisfactionScore());
         MerchantWorkOrderRecord closed = repository.saveWorkOrder(existing.close(
