@@ -1,5 +1,13 @@
 # Android 设备端开发设计：员工工作手机、酒吧点酒平板、触摸屏一体机
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图 #staff/#device 为基准核验真实代码：
+> - **员工设备凭证零落地**：`staff_device_credentials`（Keystore 设备公钥/不可逆指纹）后端无表、无 API；现存 `terminal_device_credentials`(V011) 是 **kiosk 一体机随机 token 的 SHA-256**，与员工私人手机指纹是不同实体——不可当作"员工设备凭证已覆盖"。
+> - **Android 端**：`apps/android-terminal/.../MainActivity.kt` 仅一个健康检查 Activity，**无注册/Keystore 指纹/Root 检测/换机解绑重绑**；换机无 supersedes/"换机待审"中间态，状态机不闭环。
+> - **MDM 阻断**：依赖外部商业 MDM + Android Enterprise/AMAPI，属外部依赖占位（不计闭环）；自有侧 `management_status`/`policy_status`/`last_policy_sync_at`/`device_credential_hash` 字段亦缺失。
+> - **业务裁决（2026-06-18）**：员工三表 + Android 端凭证（注册/Keystore 指纹/Root 检测/换机解绑重绑）本期 P0；MDM 阻断按"凡第三方一律预留接口+后台开关"处理，不阻塞其它功能。**二轮裁决（2026-06-18）**：MDM 自有侧字段本期**暂缓**（仅保留接口 + 开关占位，不落 management_status 等字段）；仍待业务确认：MDM 缺供应商时验收降级签字责任人。
+> - **候选验收口径**：换机走"解绑旧→绑新（待审）→生效"，Root/调试设备绑定失效并进复核；员工凭证与 kiosk 凭证两套互不串用。
+
 本文档用于指导【移动端设备：员工工作手机、酒吧点酒平板、触摸屏一体机】进入 Kotlin Android 开发。当前阶段只写设计，不写代码。
 
 关联文档：

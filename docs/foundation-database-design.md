@@ -1,5 +1,13 @@
 # 地基系统数据库设计第一版
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 本设计多处表/字段为"有设计无迁移"，以真实 Flyway V001–V065 为准收口：
+> - **准入两表**：`contract_admission_rules`(§238)、`admission_audits`(§259) 迁移**零命中**；审批层级实际落 `supervisor_review_decisions`(V057)。§449"admission_audits.approval_level"为过期落点。
+> - **空间四级模型**：设计的 `complex_projects/venues/areas/location_points` 四级表代码零落地，真实迁移是扁平单表 `spaces`(V005，`space_type` 自由文本无枚举)。该四级模型已过期，需作废或重写。
+> - **员工三表**：`staff_profiles`/`staff_device_credentials`/`employee_notices` **零落地**；`staff_device_credentials`（员工 Keystore 公钥/不可逆指纹）与 `terminal_device_credentials`(V011，kiosk 随机 token) 是**两套不同实体**，不可混用；`employee_notices` 无写入方，合规同意凭据未落地。
+> - **综合体归属**：仅 `spaces` 有 `project_id`；`projects` 表含 `merchant_id`（project 归属 merchant），与"综合体顶级、商户归属综合体"方向相反。
+> - **业务裁决（2026-06-18）**：准入统一走 supervisor_review，**不建 admission_audits/contract_admission_rules**；员工三表 staff_profiles/staff_device_credentials/employee_notices 本期 P0 建表。**二轮裁决（2026-06-18）**：空间=保留扁平 spaces（**四级模型作废**），P0 全部核心对象补 project_id + 查询隔离并修正 projects 归属方向（综合体顶级、商户/对象归属综合体）。
+
 本文档面向第一阶段开发，覆盖四个地基系统：
 
 1. 多商户与组织管理系统
@@ -26,6 +34,8 @@
 |---|---|---|
 | id | string/uuid | 主键 |
 | project_id | string/uuid nullable | 归属综合体项目；全局配置表可为空，经营对象建议必填 |
+<!-- F5/ISO-GAP-05：本表将 id 及各 *_id 外键（含本文档后续各表的 merchant_id）建议为 string/uuid，但实际迁移已 retrofit 为 VARCHAR(64)（非数据库原生 uuid 类型）。以正式 Flyway 迁移与 data-isolation-and-tenant-scope-security-spec-v0.1.md 为准。此处仅加注释，不改原文。 -->
+
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
 | deleted_at | datetime nullable | 软删除时间 |
@@ -118,6 +128,8 @@
 ### 2.4 brands 品牌表
 
 一个商户可以经营多个品牌。
+
+<!-- F5/ISO-GAP-05：本文各表的 merchant_id 沿用 §1 通用字段规范的 string/uuid 建议，但实际迁移为 VARCHAR(64) retrofit（非原生 uuid 类型）。以正式 Flyway 迁移与 data-isolation-and-tenant-scope-security-spec-v0.1.md 为准。仅加注释，不改原文。 -->
 
 | 字段 | 说明 |
 |---|---|

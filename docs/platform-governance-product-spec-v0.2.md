@@ -1,5 +1,12 @@
 ﻿# 平台治理产品规格 V0.2
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图为基准核验真实迁移(V001–V065)+代码，本规格涉及的两条治理链与文档声称不符：
+> - **合同准入卡控+分级放行（HTML #contract/#flow 核心链）**：`SupervisorReviewService.evaluate` 是孤立 HTTP 评估接口，票务/酒吧/游乐/结算等业务域**在动作前零调用**它，"超范围→卡住→升级→放行"闸口**不触发**；`AdmissionAuditsPage` 仅聚合 merchants/bindings/contracts 三列表做伪闭环。`contract_admission_rules`/`admission_audits` 两表**从未建**，审批层级实际落 `supervisor_review_decisions`(V057)——本规格 §9.6"合同准入规则页"与"admission_audits.approval_level"表述需收口。
+> - **终端开关后端拒绝**：见 `operation-traceability-and-terminal-switch-prd-v0.1.md` R5 标注，后端业务接口未独立校验开关。
+> - **业务裁决（2026-06-18）**：①准入统一走 supervisor_review，作废 admission_audits/contract_admission_rules 相关表述；票务/酒吧/游乐/结算业务动作前内嵌准入校验调用，本期 P0。②权限点首批=**全业务域最小颗粒度预置、实施阶段边配边补**（二轮裁决，与治理 HTML 拍板一致）。
+> - **候选验收口径**：超合同/超空间动作在票务/酒吧/游乐/结算任一业务接口被阻断，并可经配置层级审批放行、留原因+责任人。
+
 > 合并说明：本文按 2026-06-10 全量文档收口与合并归档审计执行，用于替代下列分散源文件。源文件已移入 `_archive/20260610-retention-audit/merged-layer-spec-sources/`，后续开发、审计和交接以本文为入口。
 
 | 原文件 | 归档位置 |

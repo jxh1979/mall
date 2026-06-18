@@ -1,5 +1,13 @@
 ﻿# 证据留痕与风控层产品规格 V0.2
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图 #risk + 治理 #audit 为基准核验真实代码：
+> - **通用异常处理人链路未承接（HTML 关键链）**：`risk_alerts`/`risk_alert_actions` 状态机（发现→第一处理→转派→升级→关闭）**从未建表**；唯一真实状态机是游乐域 `amusement_incidents`(V024)，仅 reported_by/closed_by，**无 first_handler/转派/升级动作 API**。全平台异常责任链=仅设计稿。
+> - **三层过程留痕建表未接线**：V059 三层模型表已建，但 `TraceabilityService` **无 Controller/REST 端点**，`recordProcessInstance`/`recordStep` 全仓零调用，唯一业务调用点是 `BarOrderService`(仅 recordResponsibility)。酒水全链/核销/卡座过程自动留痕未串联。
+> - **企微违规检测空壳**：仅 V015 mock 种子 + 只读 listLedger，`analytics_risk_rules` 无任何企微违规规则码，AI 质检不主动采集会话。
+> - **待业务确认**：通用异常责任链（非仅游乐）是否本期；过程留痕串联范围与查询/管理入口由谁承接。
+> - **候选验收口径**：任意异常可查"发现→第一处理→转派→升级→关闭"全责任链；关键动作自动写过程留痕。
+
 ## 1. 文档定位
 
 本文由归档前的同层 PRD/页面清单/字段字典/流程图/低保真说明/验收清单机械合并而来，作为该能力层后续开发、业务审计和验收的统一入口。原拆分文件已移入 `_archive/20260610-retention-audit/merged-layer-spec-sources/`，仅作历史追溯。

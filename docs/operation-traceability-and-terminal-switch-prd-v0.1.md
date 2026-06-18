@@ -1,5 +1,13 @@
 # 全链路操作留痕与终端开关 PRD V0.1
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图（治理 #terminal-switch、business #risk）为基准核验真实代码：
+> - **终端开关后端拒绝铁律（§5.4）未实现**：除 kiosk 售票配置一处外，finance/bar/ticketing/amusement/inventory 业务接口前**无任何开关校验**，无拦截器/AOP/Filter，可被直接绕过；`terminal.access_rejected` 仅在 kiosk 设备凭证失败时触发，场景错位。`findCapabilitySwitch` 全后端唯一业务调用点是 kiosk。
+> - **scope 维度收窄**：文档要求 7 维（全局/项目/商户/业务系统/模块/设备/版本），代码只产出 `global`/`device` 两值。
+> - **留痕自动生成/异常责任链**：见 `evidence-risk-layer-spec-v0.2.md` R5（通用 `risk_alerts` 状态机未建、三层过程留痕未接线、销售归属/服务责任事件名 order.acquired/sales_attributed 零命中）。
+> - **业务裁决（2026-06-18）**：§5.4 后端拒绝铁律本期 P0 必做（关闭后端业务接口独立校验并拒绝+写 terminal.access_rejected）；scope 扩到 7 维（全局/项目/商户/业务系统/模块/设备/版本）含模块级，不接受收窄到 global/device。
+> - **候选验收口径**：关闭某端/模块后调用其业务接口被后端拒绝并写 `terminal.access_rejected`，前端隐藏仅作辅助。
+
 ## 1. 文档定位
 
 本文档定义综合体管理系统的两个底层规则：

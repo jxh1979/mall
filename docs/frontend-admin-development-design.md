@@ -1,5 +1,13 @@
 # 前端后台开发设计：平台端、商户端、运营看板
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图（治理 #permission、business #analytics）为基准核验 `apps/web`：
+> - **权限 DENY 优先语义缺失**：后端 `AuthorizationService` 已实现 DENY 优先四源计算（D11），但前端 `PermissionGate.tsx` 无 DENY 语义，与后端口径漂移；前端无拉取后端 effective-permissions 的渲染机制。
+> - **总览看板 KPI 全渲染 0**：前端 `OverviewPage.tsx`/`types.ts` 期望字段（barOrders/issuedTickets/verifications…）与后端 `DashboardSnapshotRecord`（revenueAmountCents/orderCount/riskAlertCount…）**字段名零交集**，6 个 KPI 卡片全走 `?? 0`（legacy-console 同 bug）。
+> - **准入页伪闭环**：`AdmissionAuditsPage` 仅聚合 merchants/bindings/contracts 列表，不读任何 admission 审计/阻断/放行证据（后端准入卡控本身未触发，见治理规格 R5）。
+> - **业务裁决（2026-06-18）**：前端按后端 effective-permissions 渲染（新增拉取接口），与后端 DENY 优先口径一致，本期 P0；不采用"仅前端粗隐藏"。
+> - **候选验收口径**：前后端 KPI DTO 字段对齐且有值；前端权限渲染与后端 DENY 优先一致。
+
 本文档是【前端后台：平台端、商户端、运营看板】专项开发设计文档，用于指导 `apps/web` 后续编码。
 
 参考文档：

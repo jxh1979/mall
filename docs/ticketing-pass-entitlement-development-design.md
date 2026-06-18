@@ -1,5 +1,14 @@
 # 票务通票、权益、核销与结算开发设计
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图 #ticketing 为基准核验生效迁移(V006/V009/V064)+代码：
+> - **二维码签名（§6.2.3）名存实缺**：生效迁移仅 `credential_hash`(SHA-256)+`nonce`+`expires_at`；`anti_fake_code_hash`/`signature_version`/签名版本字段**零命中**，`TicketVerificationService` **无 HMAC/数字签名**，核销端只校验 token 存在+status+过期，**不校验签名/nonce/刷新窗口**。30/60s 刷新硬编码为 300s 过期且与票种级 `refresh_interval_seconds`(V064) 未联动，"截图无效"在窗口内不成立。
+> - **联合通票跨商户归属**：`issueEntitlements` 把所有权益 `merchant_id` 设为出票方，`valid_to` 硬编码 +1 天，忽略票种有效期与"各商户只看自己结算"。
+> - **第三方团购回流**：无 `channel_ticket_mappings`/`external_order_no`/导入端点，"两类订单"只承接自营单。
+> - **多人票/核销冲正**：`num_people`/`verifiedPeople` 无字段无校验；无 reverse 冲正端点。
+> - **业务裁决（2026-06-18）**：P0 防伪=折中（哈希 + 核销端强制 30/60s 刷新窗口校验 + nonce 防重放，截图窗口内失效），HMAC 签名版本化降 P1；多人票核销=P0、核销冲正(reverse)=P0；第三方团购回流按"凡第三方一律预留接口+后台开关、不阻塞"处理。下方候选验收口径升为正式验收口径。
+> - **候选验收口径**：篡改/过刷新窗口/重放的二维码核销被拒；权益按模板各自 merchant 归属与票种有效期。
+
 本文档用于指导【票务通票：权益、核销、结算】子系统进入 Java Spring Boot 后端开发。
 
 关联文档：

@@ -1,5 +1,13 @@
 ﻿# 数据分析层产品规格 V0.2
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图 #analytics 为基准核验真实代码：
+> - **看板=种子空壳**：analytics 包全部直读 `analytics_*` 快照表，指标值来自迁移手写 INSERT 种子（V017/V037，自标 "manual baseline only"），**无 ETL/聚合/JOIN 业务表**；客流/核销率/会员/供应链等指标后端完全未承接。
+> - **前端契约 bug**：前端 `OverviewPage.tsx`/`types.ts` 期望 `barOrders/issuedTickets/verifications…`，后端 `DashboardSnapshotRecord` 只有 `revenueAmountCents/orderCount/riskAlertCount…`，**字段名零交集，6 个 KPI 卡片全渲染 0**（legacy-console 同 bug）。
+> - **无商户行级隔离**：analytics 包 **0 处** `currentMerchantScope`（其余 19 个 Service 都用），任何持 `dashboard.view` 者可拿全量商户数据，违反"商户只看自己范围"。
+> - **业务裁决（2026-06-18）**：看板真实聚合（替换种子 ETL）+ 商户行级隔离 currentMerchantScope + 前后端 DTO 字段对齐，三项本期 P0，不接受演示空壳。**二轮裁决（2026-06-18）**：聚合指标口径由本审计先起草默认草案，待财务/运营复核修正后定稿。
+> - **候选验收口径**：KPI 来自真实业务表聚合且前端有值；商户登录只见自身授权范围数据；支持总览下钻到各域明细。
+
 ## 1. 文档定位
 
 本文由归档前的同层 PRD/页面清单/字段字典/流程图/低保真说明/验收清单机械合并而来，作为该能力层后续开发、业务审计和验收的统一入口。原拆分文件已移入 `_archive/20260610-retention-audit/merged-layer-spec-sources/`，仅作历史追溯。

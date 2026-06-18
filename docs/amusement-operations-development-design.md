@@ -1,5 +1,14 @@
 # 游乐设施运营系统开发设计文档
 
+> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
+> 以业务说明地图 #amusement 为基准核验真实代码（正面：容量原子扣减、检修状态机校验为真）：
+> - **检修恢复不联动项目状态**：`approveReopen` 只改 inspection 行 `reopen_status=approved`，**从不写 `amusement_projects.open_status`**，且无 pause/resume/maintenance 项目状态写端点。
+> - **现场核销不校验票务权益**：`AmusementService` 把 credential 原样入库，amusement 域无任何 ticketing/entitlement 调用，"判权益是否可用/绑定该项目"未实现。
+> - **检修单字段缺**：缺"检修单位(供应商)/检修人员/异常原因"结构化字段（只能塞非结构化 JSON）；`amusement-p0-safety-inspection-spec` 声称的 `session_id/device_id/inspector_id` 与 `amusement_reopen_approvals` 表真实不存在。
+> - **一体机入口未实现**：整条检修链仅在 admin Web/legacy-console，`apps/android-terminal/` 无 amusement/safety 集成；device_status 无写端点。
+> - **待业务确认**：检修字段是否结构化+审批是否自动联动 open_status；现场权益校验由 amusement 调 ticketing 还是网关先校验；检修是否必须落一体机入口。
+> - **候选验收口径**：检修主管确认通过后项目 open_status 自动恢复；无有效权益不能核销入场。
+
 本文档覆盖【游乐设施运营系统：项目、场次、核销、巡检】的开发级设计。目标是让后端、前端、安卓端、数据分析和第三方设备对接可以直接按本文档拆任务和编码。
 
 ## 1. 系统定位
