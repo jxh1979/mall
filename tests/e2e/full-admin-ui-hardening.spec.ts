@@ -98,4 +98,34 @@ test.describe("full admin UI hardening acceptance", () => {
     await page.getByTestId("finance-payment-submit").click();
     await expect(page.getByTestId("finance-ledger-error")).toContainText("大于 0");
   });
+
+  test("ADM-UI-HARDEN-05 high-volume log pages support client-side search filter", async ({ page }) => {
+    await installMockApi(page);
+    await adminLogin(page, "/admin/risk/alerts");
+
+    // Risk alerts: non-matching keyword hides the table and shows a distinct filter-empty state
+    await openNav(page, "ADM-RISK-001");
+    await expect(page.getByTestId("risk-alerts-table")).toBeVisible();
+    await page.getByTestId("risk-alerts-search").fill("zzz-no-such-row");
+    await expect(page.getByTestId("risk-alerts-filter-empty")).toBeVisible();
+    await expect(page.getByTestId("risk-alerts-table")).toHaveCount(0);
+    await page.getByTestId("risk-alerts-search").fill("staff_behavior");
+    await expect(page.getByTestId("risk-alerts-table")).toContainText("Mock risk");
+
+    // Integration events: same filter contract
+    await openNav(page, "ADM-INT-002");
+    await expect(page.getByTestId("integration-events-table")).toBeVisible();
+    await page.getByTestId("integration-events-search").fill("zzz-no-such-row");
+    await expect(page.getByTestId("integration-events-filter-empty")).toBeVisible();
+    await page.getByTestId("integration-events-search").fill("mock");
+    await expect(page.getByTestId("integration-events-table")).toBeVisible();
+
+    // Ticket orders: filter narrows to the matching order
+    await openNav(page, "ADM-TKT-003");
+    await expect(page.getByTestId("ticket-orders-table")).toBeVisible();
+    await page.getByTestId("ticket-orders-search").fill("zzz-no-such-row");
+    await expect(page.getByTestId("ticket-orders-filter-empty")).toBeVisible();
+    await page.getByTestId("ticket-orders-search").fill("TO-MOCK");
+    await expect(page.getByTestId("ticket-orders-table")).toContainText("TO-MOCK-1");
+  });
 });
