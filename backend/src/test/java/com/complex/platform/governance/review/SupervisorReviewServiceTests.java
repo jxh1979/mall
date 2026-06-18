@@ -393,6 +393,174 @@ class SupervisorReviewServiceTests {
         assertThat(reviewRepository.saveCount).isEqualTo(1); // 只保存一次
     }
 
+    // ── R6 §1.3 督导复核补强：命中/未命中两分支 + 字段断言 ──────────────────
+
+    // §1.3-1 未命中分支：blocksByDefault 策略但金额未达阈值、无 violation、非 always-blocked，
+    // 决策为 allowed、不落待审记录。bill_waiver(minAmount=1) 传 amount=0 即落入未命中。
+    @Test
+    void evaluateReturnsAutoPassWhenNoPolicyMatches() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var decision = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-autopass-1",
+                null,
+                List.of(),
+                "bill_waiver",
+                "bill",
+                "bill_autopass",
+                0L,    // < minAmount(1) → amountHit=false
+                null   // 无 violationSummary → violationHit=false；bill_waiver 非 always-blocked
+        ));
+
+        assertThat(decision.blocked()).isFalse();
+        assertThat(decision.reviewStatus()).isEqualTo("allowed");
+        assertThat(decision.decision()).isEqualTo("allowed");
+        assertThat(decision.policyCode()).isEqualTo("bill_waiver_l3");
+        assertThat(decision.actionType()).isEqualTo("bill_waiver");
+        assertThat(decision.objectType()).isEqualTo("bill");
+        assertThat(decision.objectId()).isEqualTo("bill_autopass");
+        assertThat(decision.reviewId()).startsWith("review_");
+        assertThat(decision.evaluatedAt()).isNotNull();
+        // 未命中不落待审记录
+        assertThat(reviewRepository.saveCount).isEqualTo(0);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("governance.supervisor_review.evaluated");
+    }
+
+    // §1.3-1 命中分支（靠 amountHit 命中，区别于既有 contract_violation 的 always-blocked），
+    // 补全 SupervisorReviewDecisionRecord 字段落库断言。
+    @Test
+    void evaluateReturnsReviewRequiredWhenPolicyMatches() {
+        TestSecurityActors.asSupervisorLevel(1);
+        var decision = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-match-1",
+                null,
+                List.of("att_match"),
+                "bill_waiver",
+                "bill",
+                "bill_match",
+                500L,  // >= minAmount(1) → amountHit=true，命中策略
+                null
+        ));
+
+        assertThat(decision.blocked()).isTrue();
+        assertThat(decision.reviewStatus()).isEqualTo("pending_review");
+        assertThat(decision.decision()).isEqualTo("blocked");
+        assertThat(decision.policyCode()).isEqualTo("bill_waiver_l3");
+        assertThat(decision.requiredLevel()).isEqualTo(3);
+        assertThat(decision.actionType()).isEqualTo("bill_waiver");
+        assertThat(decision.objectType()).isEqualTo("bill");
+        assertThat(decision.objectId()).isEqualTo("bill_match");
+        assertThat(decision.evidenceAttachmentIds()).containsExactly("att_match");
+        assertThat(decision.approvalLevel()).isEqualTo("specific_role");
+        // 命中落待审记录
+        assertThat(reviewRepository.saveCount).isEqualTo(1);
+    }
+
+    // ── R6 §1.3 督导复核补强：approve 幂等 / 重复审批拒绝 / 越权 ───────────────
+
+    // §1.3-2 approve 幂等：相同幂等键的第二次审批返回首次结果，且只持久化一次决策。
+    @Test
+    void approveIsIdempotentForSameIdempotencyKey() {
+        TestSecurityActors.asSupervisorLevel(3);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-idem-approve-eval",
+                "contract violation",
+                List.of(),
+                "contract_violation",
+                "contract",
+                "contract_idem_approve",
+                0L,
+                "violation"
+        ));
+        int saveCountAfterEvaluate = reviewRepository.saveCount;
+
+        TestSecurityActors.asSupervisor("usr_reviewer_idem", 3);
+        var approval = new SupervisorReviewApprovalRequest(
+                "approve-idem-key",
+                "approve",
+                List.of(),
+                3,
+                "approved",
+                "first decision"
+        );
+        var first = service.approve(pending.reviewId(), approval);
+        var second = service.approve(pending.reviewId(), approval);
+
+        assertThat(second.reviewId()).isEqualTo(first.reviewId());
+        assertThat(second.reviewStatus()).isEqualTo("approved");
+        assertThat(second.decision()).isEqualTo("approved");
+        // 幂等命中：只有第一次真正写入决策（evaluate 落待审 + 第一次 approve 落决策 = +1）
+        assertThat(reviewRepository.saveCount).isEqualTo(saveCountAfterEvaluate + 1);
+    }
+
+    // §1.3-2 对已决策项的重复审批（不同幂等键）被拒：记录已非 pending_review，
+    // findPendingSupervisorReviewById 过滤后抛 SUPERVISOR_REVIEW_NOT_FOUND（真实错误码）。
+    @Test
+    void approveSecondTimeOnDecidedReviewThrowsConflict() {
+        TestSecurityActors.asSupervisorLevel(3);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-decided-eval",
+                "contract violation",
+                List.of(),
+                "contract_violation",
+                "contract",
+                "contract_decided",
+                0L,
+                "violation"
+        ));
+
+        TestSecurityActors.asSupervisor("usr_reviewer_decided", 3);
+        service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-decided-1",
+                "approve",
+                List.of(),
+                3,
+                "approved",
+                "first and final decision"
+        ));
+
+        // 第二次用不同幂等键审批同一已决策记录 → 拒绝
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-decided-2",
+                "approve again",
+                List.of(),
+                3,
+                "rejected",
+                "attempt to re-decide")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SUPERVISOR_REVIEW_NOT_FOUND"));
+    }
+
+    // §1.3-3 越权审批被拒：非主管体系账户（supervisor level=0，如普通商户用户）
+    // 不得审批主管复核记录，被 SUPERVISOR_LEVEL_TOO_LOW (403 forbidden) 拒绝。
+    @Test
+    void approveCrossTenantReviewThrowsForbidden() {
+        TestSecurityActors.asSupervisorLevel(3);
+        var pending = service.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-crosstenant-eval",
+                "contract violation",
+                List.of(),
+                "contract_violation",
+                "contract",
+                "contract_crosstenant",
+                0L,
+                "violation"
+        ));
+
+        // 一个职权范围之外的账户（非 supervisor_lN → currentSupervisorLevel()=0）尝试审批
+        TestSecurityActors.asMerchantUser("m_outsider");
+        assertThatThrownBy(() -> service.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "approve-crosstenant",
+                "approve",
+                List.of(),
+                3,
+                "approved",
+                "out-of-scope approval attempt")))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("SUPERVISOR_LEVEL_TOO_LOW"));
+    }
+
     private static final class InMemorySupervisorReviewRepository implements SupervisorReviewRepository {
         private final Map<String, SupervisorReviewDecisionRecord> reviews = new LinkedHashMap<>();
         int saveCount = 0;

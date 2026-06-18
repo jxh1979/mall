@@ -206,6 +206,120 @@ class MerchantServiceControllerTests {
         verify(authorizationService).requirePermission("merchant.service_work_order.close");
     }
 
+    // ── §1.2 用例4（契约）：5 op 分别要求各自权限点，无权返回 403 ────────────────
+    //
+    // 真实权限码（grep MerchantServiceController）：
+    //   list → merchant.service_work_order.view
+    //   create → merchant.service_work_order.create
+    //   assign → merchant.service_work_order.assign
+    //   addAction(/actions) → merchant.service_work_order.process
+    //   close → merchant.service_work_order.close
+    @Test
+    void workOrderEndpointsRequireServiceWorkOrderPermissions() throws Exception {
+        // list
+        assertEndpointRequiresPermission(
+                "merchant.service_work_order.view",
+                get("/api/v1/merchant-service/work-orders"));
+
+        // create
+        assertEndpointRequiresPermission(
+                "merchant.service_work_order.create",
+                post("/api/v1/merchant-service/work-orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "wo-create",
+                                  "merchant_id": "mch_1",
+                                  "work_order_type": "repair",
+                                  "priority": "high",
+                                  "title": "Water leak",
+                                  "description": "Shop ceiling is leaking",
+                                  "reported_channel": "web"
+                                }
+                                """));
+
+        // assign
+        assertEndpointRequiresPermission(
+                "merchant.service_work_order.assign",
+                post("/api/v1/merchant-service/work-orders/mswo_1/assign")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "wo-assign",
+                                  "operator_note": "assign",
+                                  "owner_department": "property",
+                                  "owner_user_id": "staff_owner",
+                                  "operator_user_id": "staff_manager"
+                                }
+                                """));
+
+        // addAction
+        assertEndpointRequiresPermission(
+                "merchant.service_work_order.process",
+                post("/api/v1/merchant-service/work-orders/mswo_1/actions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "wo-action",
+                                  "operator_note": "process",
+                                  "target_status": "processing"
+                                }
+                                """));
+
+        // close
+        assertEndpointRequiresPermission(
+                "merchant.service_work_order.close",
+                post("/api/v1/merchant-service/work-orders/mswo_1/close")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "wo-close",
+                                  "operator_note": "close",
+                                  "resolution": "Fixed and merchant confirmed",
+                                  "satisfaction_score": 5,
+                                  "operator_user_id": "staff_ops"
+                                }
+                                """));
+    }
+
+    private void assertEndpointRequiresPermission(
+            String permissionCode,
+            org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request
+    ) throws Exception {
+        Mockito.reset(authorizationService);
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission(permissionCode);
+
+        mockMvc.perform(request.with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+
+        verify(authorizationService).requirePermission(permissionCode);
+    }
+
+    // ── §1.2 用例5（契约）：满意度分越界 → 400 VALIDATION_FAILED ──────────────────
+    @Test
+    void closeWorkOrderRejectsInvalidSatisfactionScoreReturns400() throws Exception {
+        when(service.closeWorkOrder(eq("mswo_1"), any(MerchantWorkOrderCloseRequest.class)))
+                .thenThrow(ApiException.badRequest("VALIDATION_FAILED", "satisfaction_score must be between 1 and 5"));
+
+        mockMvc.perform(post("/api/v1/merchant-service/work-orders/mswo_1/close")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "wo-close-bad-score",
+                                  "operator_note": "close",
+                                  "resolution": "Fixed and merchant confirmed",
+                                  "satisfaction_score": 6,
+                                  "operator_user_id": "staff_ops"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
     private MerchantWorkOrderRecord record(String id, String status) {
         return new MerchantWorkOrderRecord(
                 id,

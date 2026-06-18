@@ -194,6 +194,60 @@ class SupervisorReviewControllerTests {
         verify(authorizationService).requirePermission("governance.supervisor_review.approve");
     }
 
+    // R6 §1.3-4 契约：三个 op 各自的权限点缺失时均返回 403 PERMISSION_DENIED。
+    // listPolicies→view、evaluate→manage 已分别在上方有专用用例；此处聚合三 op，
+    // 重点补齐 approve→governance.supervisor_review.approve 的 403 契约缺口。
+    @Test
+    void supervisorReviewEndpointsRequireReviewPermission() throws Exception {
+        // listPolicies 需要 view 权限
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("governance.supervisor_review.view");
+        mockMvc.perform(get("/api/v1/platform/supervisor-review-policies")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+
+        // evaluate 需要 manage 权限
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("governance.supervisor_review.manage");
+        mockMvc.perform(post("/api/v1/platform/supervisor-review/evaluate")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "review-perm-evaluate",
+                                  "action_type": "contract_violation",
+                                  "object_type": "contract",
+                                  "object_id": "contract_1"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+
+        // approve 需要 approve 权限
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("governance.supervisor_review.approve");
+        mockMvc.perform(post("/api/v1/platform/supervisor-review/review_1/approve")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "review-perm-approve",
+                                  "decision": "approved",
+                                  "comment": "checked"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+
+        verify(authorizationService).requirePermission("governance.supervisor_review.view");
+        verify(authorizationService).requirePermission("governance.supervisor_review.manage");
+        verify(authorizationService).requirePermission("governance.supervisor_review.approve");
+    }
+
     @TestConfiguration
     static class TestBeans {
         @Bean

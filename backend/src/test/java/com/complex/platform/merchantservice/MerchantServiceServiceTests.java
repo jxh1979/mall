@@ -220,6 +220,112 @@ class MerchantServiceServiceTests {
         assertThat(repository.actions.getLast().actionType()).isEqualTo("closed");
     }
 
+    // ── §1.2 用例1：从非 resolved 态直接 close ──────────────────────────────────
+    //
+    // 规格 §1.2 验收口径 1（closeWorkOrderFromNonResolvedStatusThrowsInvalidState）期望
+    // created/assigned 态直接 close → INVALID_STATE 冲突。
+    //
+    // 据真实代码核验（MerchantServiceService.closeWorkOrderOnce 第 264-293 行 +
+    // MerchantWorkOrderRecord.close 第 82-105 行）：closeWorkOrder 当前仅 rejectTerminal
+    // （拒绝 closed/cancelled 终态），并不校验当前状态是否为 resolved。因此 created/assigned
+    // 态直接 close 在现实现下会成功落 closed，不会抛 INVALID_STATE（唯一的 INVALID_STATE
+    // 守卫位于 assignWorkOrderOnce 第 200-202 行）。
+    //
+    // 按任务护栏（只改测试、不改业务代码、以真实代码为准、不臆造断言），此用例据实断言
+    // 真实行为，并显式记录与规格预期的"文档-代码漂移"：业务侧缺少 close 前的 resolved 前置守卫。
+    @Test
+    void closeWorkOrderFromNonResolvedStatusThrowsInvalidState() {
+        // created 态直接 close：现实现下会成功（缺 resolved 前置守卫）
+        MerchantWorkOrderRecord createdOrder = service.createWorkOrder(createRequest("wo-close-from-created"));
+        assertThat(createdOrder.status()).isEqualTo("created");
+
+        MerchantWorkOrderRecord closedFromCreated =
+                service.closeWorkOrder(createdOrder.id(), closeRequest("wo-close-from-created-key"));
+
+        // 真实行为：直接 closed，无 INVALID_STATE
+        assertThat(closedFromCreated.status()).isEqualTo("closed");
+        assertThat(closedFromCreated.resolution()).isEqualTo("Fixed and merchant confirmed");
+
+        // assigned 态直接 close：同样会成功
+        MerchantWorkOrderRecord assignedBase = service.createWorkOrder(createRequest("wo-close-from-assigned"));
+        service.assignWorkOrder(assignedBase.id(), new MerchantWorkOrderAssignRequest(
+                "wo-close-from-assigned-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+
+        MerchantWorkOrderRecord closedFromAssigned =
+                service.closeWorkOrder(assignedBase.id(), closeRequest("wo-close-from-assigned-key"));
+
+        assertThat(closedFromAssigned.status()).isEqualTo("closed");
+
+        // 注：若业务后续补 close 前的 resolved 前置守卫，应改为断言 INVALID_STATE（对齐规格 §1.2 用例1）。
+    }
+
+    // ── §1.2 用例2：comment 类 action 在任意非终态允许且不推进状态 ────────────────
+    @Test
+    void addCommentActionAllowedInAnyNonTerminalStatusWithoutStatusChange() {
+        MerchantWorkOrderRecord base = service.createWorkOrder(createRequest("wo-comment-create"));
+        service.assignWorkOrder(base.id(), new MerchantWorkOrderAssignRequest(
+                "wo-comment-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+
+        // assigned 态：comment（无 targetStatus）允许且状态不变
+        MerchantWorkOrderRecord afterAssignedComment = service.addAction(base.id(), new MerchantWorkOrderActionRequest(
+                "wo-comment-on-assigned",
+                "just a comment on assigned",
+                List.of(),
+                null,
+                "staff_ops"
+        ));
+        assertThat(afterAssignedComment.status()).isEqualTo("assigned");
+        assertThat(repository.actions.getLast().actionType()).isEqualTo("commented");
+        assertThat(repository.actions.getLast().fromStatus()).isEqualTo("assigned");
+        assertThat(repository.actions.getLast().toStatus()).isEqualTo("assigned");
+
+        // 推进到 processing
+        service.addAction(base.id(), new MerchantWorkOrderActionRequest(
+                "wo-comment-to-processing", "start", List.of(), "processing", "staff_ops"));
+
+        // processing 态：comment 同样允许且状态不变
+        MerchantWorkOrderRecord afterProcessingComment = service.addAction(base.id(), new MerchantWorkOrderActionRequest(
+                "wo-comment-on-processing",
+                "just a comment on processing",
+                List.of(),
+                null,
+                "staff_ops"
+        ));
+        assertThat(afterProcessingComment.status()).isEqualTo("processing");
+        assertThat(repository.actions.getLast().actionType()).isEqualTo("commented");
+        assertThat(repository.actions.getLast().fromStatus()).isEqualTo("processing");
+        assertThat(repository.actions.getLast().toStatus()).isEqualTo("processing");
+    }
+
+    // ── §1.2 用例3：5 op 成功路径各落预期审计事件名 ──────────────────────────────
+    //
+    // 真实事件名（grep MerchantServiceService）：
+    //   create → merchant_service.work_order.created
+    //   assign → merchant_service.work_order.assigned
+    //   addAction → merchant_service.work_order.action_added
+    //   close → merchant_service.work_order.closed
+    //   list → merchant_service.work_order.viewed
+    @Test
+    void eachWorkOrderOpEmitsSuccessAuditEventWithExpectedEventName() {
+        MerchantWorkOrderRecord base = service.createWorkOrder(createRequest("wo-audit-create"));
+        service.assignWorkOrder(base.id(), new MerchantWorkOrderAssignRequest(
+                "wo-audit-assign", "assign", List.of(), "property", "staff_owner", "staff_manager"));
+        service.addAction(base.id(), new MerchantWorkOrderActionRequest(
+                "wo-audit-action", "start processing", List.of(), "processing", "staff_ops"));
+        service.closeWorkOrder(base.id(), closeRequest("wo-audit-close"));
+        service.listWorkOrders();
+
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains(
+                        "merchant_service.work_order.created",
+                        "merchant_service.work_order.assigned",
+                        "merchant_service.work_order.action_added",
+                        "merchant_service.work_order.closed",
+                        "merchant_service.work_order.viewed"
+                );
+    }
+
     @Test
     void duplicateIdempotencyKeyWithSameRequestReturnsFirstResult() {
         MerchantWorkOrderCreateRequest request = createRequest("wo-once");

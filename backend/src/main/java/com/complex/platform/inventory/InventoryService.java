@@ -311,7 +311,8 @@ public class InventoryService {
         );
     }
 
-    /** A1/REQ-32：存酒作废。高价值存酒必须提供照片+视频双证据（>=2 附件）方可作废（主管复核闭环为后续）。 */
+    /** A1/REQ-32：存酒作废。高价值存酒必须提供照片+视频双证据（>=2 附件）方可作废。
+     * 主管复核由 r5-spec-T6 库存域内自建 inventory_high_value_reviews 承载（最终态）；本处仅校验照片+视频双证据（附件数≥2）。 */
     @Transactional
     public SavedBottleRecord cancelSavedBottle(String savedBottleId, SavedBottleCancelRequest request) {
         String id = requireText(savedBottleId, "saved_bottle_id");
@@ -338,7 +339,7 @@ public class InventoryService {
                     }
                     if (savedBottle.isHighValue() && safeList(actual.evidenceAttachmentIds()).size() < 2) {
                         throw ApiException.badRequest("HIGH_VALUE_EVIDENCE_REQUIRED",
-                                "high value saved bottle void requires photo and video evidence (>=2 attachments) and supervisor review");
+                                "高价值存酒作废需照片+视频双证据（附件数≥2）；主管复核见 T6 库存域内复核（inventory_high_value_reviews）");
                     }
                     return repository.saveSavedBottle(
                             savedBottleWith(savedBottle, "cancelled", savedBottle.remainingQuantity(), Instant.now()));

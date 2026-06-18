@@ -442,6 +442,52 @@ class InventoryServiceTests {
         assertThat(cancelled.status()).isEqualTo("cancelled");
     }
 
+    // C4 §3 路径B: 文案与实现对齐 —— 附件<2 抛错，message 含"附件数≥2"且不含"supervisor review"
+    @Test
+    void highValueVoidWithFewerThanTwoAttachmentsThrowsWithAttachmentWording() {
+        InventoryItemRecord item = createItem("hv-wording");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv-wording", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+
+        assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-wording", null, List.of("att_photo"), "broken")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("HIGH_VALUE_EVIDENCE_REQUIRED");
+                    assertThat(e.getMessage()).contains("附件数≥2");
+                    assertThat(e.getMessage()).doesNotContain("supervisor review");
+                });
+    }
+
+    // C4 §3 路径B: 附件=2 作废成功（行为不变，回归保护）
+    @Test
+    void highValueVoidWithTwoAttachmentsSucceeds() {
+        InventoryItemRecord item = createItem("hv-two");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv-two", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+
+        SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-two", null, List.of("att_photo", "att_video"), "broken"));
+        assertThat(cancelled.status()).isEqualTo("cancelled");
+    }
+
+    // C4 §3 路径B: 非高价值无附件可作废（回归保护）
+    @Test
+    void nonHighValueVoidIgnoresAttachmentRule() {
+        InventoryItemRecord item = createItem("non-hv");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-non-hv", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "House", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), null, null, null, false, 1000L));
+
+        SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-non-hv", null, List.of(), "broken"));
+        assertThat(cancelled.status()).isEqualTo("cancelled");
+    }
+
     // P1-3: verificationCode 不可缺失
     @Test
     void claimSavedBottleRequiresVerificationCode() {

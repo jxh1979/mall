@@ -470,6 +470,72 @@ class TicketingJdbcIntegrationTests {
         assertThat(flywayMigrationSucceeded("036")).isTrue();
     }
 
+    @Test
+    void ticketOrderDynamicTraceColumnsRoundTripThroughJdbc() {
+        Instant now = Instant.parse("2026-06-16T00:00:00Z");
+        repository.saveTicketType(new TicketTypeRecord(
+                "ticket_type_trace_jdbc",
+                "P0 Trace Pass",
+                "weekday_weekend_holiday",
+                9900L,
+                11900L,
+                12900L,
+                false,
+                "published",
+                now,
+                now
+        ));
+        long baseAmountCent = 11900L;
+        long dynamicAdjustmentCent = -2000L;
+        long amountCent = baseAmountCent + dynamicAdjustmentCent;
+        repository.saveTicketOrder(new TicketOrderRecord(
+                "ticket_order_trace_jdbc",
+                "TO20260616000001",
+                "customer_trace_jdbc",
+                "ticket_type_trace_jdbc",
+                null,
+                1,
+                java.time.LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                amountCent,
+                "dynamic_rule_trace_jdbc",
+                baseAmountCent,
+                dynamicAdjustmentCent,
+                "CNY",
+                "unpaid",
+                "not_issued",
+                "created",
+                now,
+                now
+        ));
+
+        assertThat(repository.findTicketOrderById("ticket_order_trace_jdbc"))
+                .get()
+                .extracting(
+                        TicketOrderRecord::dynamicPricingRuleId,
+                        TicketOrderRecord::baseAmountCent,
+                        TicketOrderRecord::dynamicAdjustmentCent,
+                        TicketOrderRecord::amountCent
+                )
+                .containsExactly("dynamic_rule_trace_jdbc", baseAmountCent, dynamicAdjustmentCent, amountCent);
+
+        TicketOrderRecord reloaded = repository.findTicketOrderById("ticket_order_trace_jdbc").orElseThrow();
+        assertThat(reloaded.baseAmountCent() + reloaded.dynamicAdjustmentCent()).isEqualTo(reloaded.amountCent());
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT dynamic_pricing_rule_id FROM ticket_orders WHERE id = 'ticket_order_trace_jdbc'",
+                String.class
+        )).isEqualTo("dynamic_rule_trace_jdbc");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT base_amount_cent FROM ticket_orders WHERE id = 'ticket_order_trace_jdbc'",
+                Long.class
+        )).isEqualTo(baseAmountCent);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT dynamic_adjustment_cent FROM ticket_orders WHERE id = 'ticket_order_trace_jdbc'",
+                Long.class
+        )).isEqualTo(dynamicAdjustmentCent);
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

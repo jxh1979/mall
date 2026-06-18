@@ -162,6 +162,16 @@ public class IntegrationService {
                     .orElseGet(() -> {
                         Instant now = clock.instant();
                         String eventId = eventId(payload);
+                        Map<String, Object> safePayload = payload == null ? Map.of() : Map.copyOf(payload);
+                        WebhookMapping mappingResult = mapPayload(provider, endpoint, safePayload);
+                        Map<String, Object> resultJson = new java.util.LinkedHashMap<>();
+                        resultJson.put("accepted", true);
+                        resultJson.put("payload_hash", payloadHash);
+                        resultJson.put("process_status", mappingResult.processStatus());
+                        resultJson.put("mapped", "mapped".equals(mappingResult.processStatus()));
+                        if (!mappingResult.mapping().isEmpty()) {
+                            resultJson.put("mapping", mappingResult.mapping());
+                        }
                         repository.saveOpenEvent(new OpenApiEventRecord(
                                 eventId,
                                 endpointKey,
@@ -169,10 +179,10 @@ public class IntegrationService {
                                 event,
                                 resolvedIdempotencyKey,
                                 true,
-                                "accepted",
-                                payload == null ? Map.of() : Map.copyOf(payload),
-                                Map.of("accepted", true, "payload_hash", payloadHash),
-                                null,
+                                mappingResult.processStatus(),
+                                safePayload,
+                                Map.copyOf(resultJson),
+                                mappingResult.failureReason(),
                                 now,
                                 now
                         ));
@@ -199,6 +209,100 @@ public class IntegrationService {
                     errorCode(exception)
             );
             throw exception;
+        }
+    }
+
+    /**
+     * webhook 入站字段映射的最小落地（受裁决约束）。
+     *
+     * <p>映射配置来源：本期代码未实现 {@code integration_endpoint_mappings} 表，
+     * 复用既有 {@link ProviderAdapterRecord#fieldMapping()} 作为 request_mapping（源字段→标准字段），
+     * 其内可选子键 {@code status_mapping}（供应商状态码→平台标准状态）；
+     * 开关复用适配器既有 {@link ProviderAdapterRecord#webhookEnabled()}。
+     *
+     * <p>判定：
+     * <ul>
+     *   <li>无匹配适配器 / 开关关闭 / 无 request_mapping 配置 → {@code accepted}（维持现状，仅留信封）；</li>
+     *   <li>映射成功 → {@code mapped}，产出标准事件投影；</li>
+     *   <li>映射异常 → {@code map_failed}，落错误占位，<b>不抛异常中断</b> webhook 接收。</li>
+     * </ul>
+     */
+    private WebhookMapping mapPayload(String provider, OpenEndpointConfigRecord endpoint, Map<String, Object> payload) {
+        Optional<ProviderAdapterRecord> adapterOpt = repository.listProviderAdapters().stream()
+                .filter(adapter -> provider.equals(adapter.providerCode()))
+                .filter(adapter -> !"disabled".equals(adapter.status()))
+                .findFirst();
+        if (adapterOpt.isEmpty()) {
+            return WebhookMapping.accepted();
+        }
+        ProviderAdapterRecord adapter = adapterOpt.get();
+        // 开关兜底：端点或适配器任一未开启 webhook 即维持 accepted（裁决"开关关只留信封"）。
+        if (!endpoint.webhookEnabled() || !adapter.webhookEnabled()) {
+            return WebhookMapping.accepted();
+        }
+        Map<String, Object> fieldMapping = adapter.fieldMapping();
+        if (fieldMapping == null || fieldMapping.isEmpty()) {
+            return WebhookMapping.accepted();
+        }
+        try {
+            Map<String, Object> projection = new java.util.LinkedHashMap<>();
+            Object statusMappingRaw = fieldMapping.get("status_mapping");
+            for (Map.Entry<String, Object> entry : fieldMapping.entrySet()) {
+                String standardField = entry.getKey();
+                if ("status_mapping".equals(standardField)) {
+                    continue;
+                }
+                Object sourcePathValue = entry.getValue();
+                if (!(sourcePathValue instanceof String sourcePath)) {
+                    throw new IllegalArgumentException("invalid request_mapping entry for " + standardField);
+                }
+                Object mapped = resolvePath(payload, sourcePath);
+                if (mapped != null) {
+                    projection.put(standardField, mapped);
+                }
+            }
+            // status_mapping：将投影中标准 status 字段的供应商值翻译为平台标准状态。
+            if (statusMappingRaw instanceof Map<?, ?> statusMapping && projection.get("status") instanceof String providerStatus) {
+                Object platformStatus = statusMapping.get(providerStatus);
+                if (platformStatus != null) {
+                    projection.put("status", platformStatus);
+                }
+            }
+            return WebhookMapping.mapped(projection);
+        } catch (RuntimeException exception) {
+            return WebhookMapping.mapFailed(exception.getClass().getSimpleName() + ": " + exception.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object resolvePath(Map<String, Object> payload, String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        Object current = payload;
+        for (String segment : path.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map)) {
+                return null;
+            }
+            current = ((Map<String, Object>) map).get(segment);
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
+    }
+
+    private record WebhookMapping(String processStatus, Map<String, Object> mapping, String failureReason) {
+        static WebhookMapping accepted() {
+            return new WebhookMapping("accepted", Map.of(), null);
+        }
+
+        static WebhookMapping mapped(Map<String, Object> projection) {
+            return new WebhookMapping("mapped", Map.copyOf(projection), null);
+        }
+
+        static WebhookMapping mapFailed(String reason) {
+            return new WebhookMapping("map_failed", Map.of("reason_code", "WEBHOOK_MAP_FAILURE", "error", reason), reason);
         }
     }
 

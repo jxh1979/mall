@@ -260,14 +260,28 @@ final class ProviderAdapterService {
         if (!adapter.providerCode().equals(request.providerCode()) || "disabled".equals(adapter.status())) {
             throw new ApiException(HttpStatus.FAILED_DEPENDENCY, "PROVIDER_ADAPTER_NOT_TESTABLE", "provider adapter is not testable");
         }
+        Map<String, Object> mockPayload = safeMap(request.mockPayload());
+        String testStatus = resolveMockTestStatus(request.scenario(), mockPayload);
+        Map<String, Object> result;
+        if ("failed".equals(testStatus)) {
+            String mockExpect = mockExpect(mockPayload);
+            result = Map.of(
+                    "scenario", request.scenario(),
+                    "adapter_id", adapter.id(),
+                    "reason_code", "MOCK_SCENARIO_FAILURE",
+                    "mock_expect", mockExpect == null ? "" : mockExpect
+            );
+        } else {
+            result = Map.of("scenario", request.scenario(), "adapter_id", adapter.id());
+        }
         AdapterTestRecord saved = repository.saveAdapterTest(new AdapterTestRecord(
                 "adapter_test_" + UUID.randomUUID(),
                 adapter.id(),
                 adapter.providerCode(),
                 request.scenario(),
-                safeMap(request.mockPayload()),
-                "passed",
-                Map.of("scenario", request.scenario(), "adapter_id", adapter.id()),
+                mockPayload,
+                testStatus,
+                result,
                 clock.instant()
         ));
         support.recordSuccess(
@@ -279,6 +293,50 @@ final class ProviderAdapterService {
                 Map.of("scenario", request.scenario(), "status", saved.testStatus())
         );
         return saved;
+    }
+
+    /**
+     * 纯函数：依据 mockPayload 显式期望与 scenario 语义前缀决定 mock 测试判定结果。
+     * 优先级 1：mockPayload.expect / mockPayload.force_status 显式指定（failed/passed）→ 直接采用。
+     * 优先级 2：scenario 语义前缀——success/paid/ok → passed；failure/failed/error/timeout/reject → failed。
+     * 兜底：未识别 scenario → passed（向后兼容既有联调脚本，避免误判）。
+     */
+    static String resolveMockTestStatus(String scenario, Map<String, Object> mockPayload) {
+        String explicit = mockExpect(mockPayload);
+        if (explicit != null) {
+            return "failed".equals(explicit) ? "failed" : "passed";
+        }
+        String normalized = scenario == null ? "" : scenario.trim().toLowerCase();
+        if (startsWithAny(normalized, "success", "paid", "ok")) {
+            return "passed";
+        }
+        if (startsWithAny(normalized, "failure", "failed", "error", "timeout", "reject")) {
+            return "failed";
+        }
+        return "passed";
+    }
+
+    private static String mockExpect(Map<String, Object> mockPayload) {
+        if (mockPayload == null) {
+            return null;
+        }
+        Object expect = mockPayload.get("expect");
+        if (expect == null) {
+            expect = mockPayload.get("force_status");
+        }
+        if (expect == null) {
+            return null;
+        }
+        return expect.toString().trim().toLowerCase();
+    }
+
+    private static boolean startsWithAny(String value, String... prefixes) {
+        for (String prefix : prefixes) {
+            if (value.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private record UpdateProviderAdapterFingerprint(String id, ProviderAdapterUpdateRequest request) {

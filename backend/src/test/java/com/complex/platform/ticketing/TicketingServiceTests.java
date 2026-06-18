@@ -899,6 +899,120 @@ class TicketingServiceTests {
     }
 
     @Test
+    void createTicketOrderRecordsDynamicPricingTraceWhenRuleApplies() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-trace-applied");
+        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-trace-applied-create",
+                "publish discount",
+                List.of("att_dynamic_trace"),
+                ticketType.id(),
+                "Published discount",
+                100,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "fixed_delta",
+                null,
+                -2000L,
+                null,
+                null,
+                Map.of()
+        ));
+        TicketDynamicPricingRuleRecord published = service.publishDynamicPricingRule(
+                draft.id(),
+                new StatusChangeRequest("dynamic-trace-applied-publish", "publish", "approved discount", List.of())
+        );
+
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-trace-applied-order",
+                "create order with published discount",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_trace"
+        ));
+
+        long unitPrice = 11900L;
+        assertThat(order.baseAmountCent()).isEqualTo(unitPrice * 1);
+        assertThat(order.dynamicAdjustmentCent()).isLessThan(0L);
+        assertThat(order.baseAmountCent() + order.dynamicAdjustmentCent()).isEqualTo(order.amountCent());
+        assertThat(order.dynamicPricingRuleId()).isEqualTo(published.id());
+    }
+
+    @Test
+    void createTicketOrderRecordsZeroTraceWhenNoDynamicRule() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-trace-none");
+
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-trace-none-order",
+                "create order without dynamic rule",
+                List.of(),
+                ticketType.id(),
+                null,
+                1,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_trace_none"
+        ));
+
+        assertThat(order.dynamicAdjustmentCent()).isEqualTo(0L);
+        assertThat(order.baseAmountCent()).isEqualTo(order.amountCent());
+        assertThat(order.dynamicPricingRuleId()).isNull();
+    }
+
+    @Test
+    void dynamicPricingTraceScalesWithQuantity() {
+        TicketTypeRecord ticketType = createTicketType("dynamic-trace-scale");
+        TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-trace-scale-create",
+                "publish discount",
+                List.of("att_dynamic_scale"),
+                ticketType.id(),
+                "Published discount",
+                100,
+                LocalDate.parse("2026-06-01"),
+                LocalDate.parse("2026-06-30"),
+                "web",
+                "fixed_delta",
+                null,
+                -2000L,
+                null,
+                null,
+                Map.of()
+        ));
+        TicketDynamicPricingRuleRecord published = service.publishDynamicPricingRule(
+                draft.id(),
+                new StatusChangeRequest("dynamic-trace-scale-publish", "publish", "approved discount", List.of())
+        );
+
+        int quantity = 3;
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "dynamic-trace-scale-order",
+                "create order with quantity",
+                List.of(),
+                ticketType.id(),
+                null,
+                quantity,
+                LocalDate.parse("2026-06-20"),
+                "web",
+                "13800138000",
+                "customer_dynamic_trace_scale"
+        ));
+
+        long unitPrice = 11900L;
+        long unitAdjustment = -2000L;
+        assertThat(order.dynamicPricingRuleId()).isEqualTo(published.id());
+        assertThat(order.baseAmountCent()).isEqualTo(unitPrice * quantity);
+        assertThat(order.dynamicAdjustmentCent()).isEqualTo(unitAdjustment * quantity);
+        assertThat(order.baseAmountCent() + order.dynamicAdjustmentCent()).isEqualTo(order.amountCent());
+    }
+
+    @Test
     void dynamicPricingNeverProducesNegativeFinalPrice() {
         TicketTypeRecord ticketType = createTicketType("dynamic-non-negative");
         TicketDynamicPricingRuleRecord draft = service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(

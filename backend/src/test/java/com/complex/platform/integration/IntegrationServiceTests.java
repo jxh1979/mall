@@ -259,6 +259,96 @@ class IntegrationServiceTests {
     }
 
     @Test
+    void webhookWithoutMappingConfigStaysAcceptedEnvelopeOnly() {
+        // 未注册任何 mock-provider 适配器 → 无映射配置 → accepted（回归现状）。
+        Map<String, Object> payload = webhookPayload("evt-no-map", "idem-no-map");
+        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-no-map", payload);
+
+        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+
+        OpenApiEventRecord saved = repository.events.getFirst();
+        assertThat(saved.eventStatus()).isEqualTo("accepted");
+        assertThat(saved.resultJson()).doesNotContainKey("mapping");
+        assertThat(saved.failureReason()).isNull();
+    }
+
+    @Test
+    void webhookWithMappingConfigProducesStandardEventProjection() {
+        repository.providerAdapters.put("map-adapter", webhookMappingAdapter(Map.of(
+                "order_no", "payload.order_id",
+                "status", "payload.normalized_status")));
+        Map<String, Object> payload = webhookPayload("evt-map", "idem-map");
+
+        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-map", payload);
+        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+
+        OpenApiEventRecord saved = repository.events.getFirst();
+        assertThat(saved.eventStatus()).isEqualTo("mapped");
+        assertThat(saved.resultJson()).containsEntry("mapped", true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> mapping = (Map<String, Object>) saved.resultJson().get("mapping");
+        assertThat(mapping).containsEntry("order_no", "ord-1").containsEntry("status", "paid");
+    }
+
+    @Test
+    void webhookStatusMappingTranslatesProviderStatusToPlatformStatus() {
+        repository.providerAdapters.put("status-adapter", webhookMappingAdapter(Map.of(
+                "status", "payload.normalized_status",
+                "status_mapping", Map.of("paid", "SETTLED"))));
+        Map<String, Object> payload = webhookPayload("evt-status", "idem-status");
+
+        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-status", payload);
+        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+
+        OpenApiEventRecord saved = repository.events.getFirst();
+        assertThat(saved.eventStatus()).isEqualTo("mapped");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> mapping = (Map<String, Object>) saved.resultJson().get("mapping");
+        assertThat(mapping).containsEntry("status", "SETTLED");
+    }
+
+    @Test
+    void webhookMappingFailureRecordsMapFailedWithoutBreakingIngest() {
+        // request_mapping 值非字符串路径 → mapPayload 抛异常 → map_failed，但事件仍落库、不抛 5xx。
+        repository.providerAdapters.put("bad-adapter", webhookMappingAdapter(Map.of(
+                "order_no", List.of("not", "a", "path"))));
+        Map<String, Object> payload = webhookPayload("evt-bad", "idem-bad");
+
+        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-bad", payload);
+        WebhookAcceptedResponse response =
+                service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+
+        assertThat(response.deduplicated()).isFalse();
+        OpenApiEventRecord saved = repository.events.getFirst();
+        assertThat(saved.eventStatus()).isEqualTo("map_failed");
+        assertThat(saved.failureReason()).isNotBlank();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> failurePlaceholder = (Map<String, Object>) saved.resultJson().get("mapping");
+        assertThat(failurePlaceholder).containsEntry("reason_code", "WEBHOOK_MAP_FAILURE");
+        // 幂等去重仍生效。
+        WebhookAcceptedResponse dup =
+                service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+        assertThat(dup.deduplicated()).isTrue();
+        assertThat(repository.events).hasSize(1);
+    }
+
+    @Test
+    void webhookMappingDisabledBySwitchFallsBackToAccepted() {
+        // 适配器有 fieldMapping，但 webhookEnabled=false（开关关）→ accepted（裁决兜底）。
+        ProviderAdapterRecord disabledSwitch = withFieldMapping(
+                webhookMappingAdapter(Map.of("order_no", "payload.order_id")), Map.of("order_no", "payload.order_id"), false);
+        repository.providerAdapters.put("switch-off-adapter", disabledSwitch);
+        Map<String, Object> payload = webhookPayload("evt-off", "idem-off");
+
+        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-off", payload);
+        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+
+        OpenApiEventRecord saved = repository.events.getFirst();
+        assertThat(saved.eventStatus()).isEqualTo("accepted");
+        assertThat(saved.resultJson()).doesNotContainKey("mapping");
+    }
+
+    @Test
     void providerAdapterProductionReadyRequiresSecretWebhookPollingCapabilitiesAndProductionEnvironment() {
         ProviderAdapterRecord draft = adapter(
                 "adapter-draft",
@@ -325,16 +415,95 @@ class IntegrationServiceTests {
                         "mock-test",
                         "mock-provider",
                         "webhook",
-                        Map.of("provider_status", "SUCCESS"),
+                        // 显式 success 语义（expect=passed），避免依赖"默认 passed"兜底掩盖回归。
+                        Map.of("provider_status", "SUCCESS", "expect", "passed"),
                         "operator note",
                         List.of()
                 )
         );
 
         assertThat(result.testStatus()).isEqualTo("passed");
+        assertThat(result.result()).doesNotContainKey("reason_code");
         assertThat(repository.adapterTests)
                 .extracting(AdapterTestRecord::scenario)
                 .containsExactly("webhook");
+    }
+
+    @Test
+    void mockTestReturnsFailedWhenScenarioIndicatesFailure() {
+        repository.providerAdapters.put("adapter-fail", adapter(
+                "adapter-fail", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                true, true, "manual-ledger:p0-provider", false));
+
+        AdapterTestRecord result = service.testProviderAdapterMock(
+                "adapter-fail",
+                new ProviderAdapterTestRequest(
+                        "mock-fail", "mock-provider", "failure_retry", Map.of(), "note", List.of()));
+
+        assertThat(result.testStatus()).isEqualTo("failed");
+        assertThat(result.result())
+                .containsEntry("reason_code", "MOCK_SCENARIO_FAILURE")
+                .containsEntry("scenario", "failure_retry");
+    }
+
+    @Test
+    void mockTestReturnsPassedWhenScenarioIndicatesSuccess() {
+        repository.providerAdapters.put("adapter-ok", adapter(
+                "adapter-ok", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                true, true, "manual-ledger:p0-provider", false));
+
+        AdapterTestRecord result = service.testProviderAdapterMock(
+                "adapter-ok",
+                new ProviderAdapterTestRequest(
+                        "mock-ok", "mock-provider", "webhook", Map.of(), "note", List.of()));
+
+        assertThat(result.testStatus()).isEqualTo("passed");
+        assertThat(result.result()).doesNotContainKey("reason_code");
+    }
+
+    @Test
+    void mockTestRespectsExplicitMockPayloadForceStatus() {
+        repository.providerAdapters.put("adapter-force", adapter(
+                "adapter-force", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                true, true, "manual-ledger:p0-provider", false));
+
+        // scenario 语义为 passed（webhook 兜底），但 mockPayload.expect=failed 覆盖之。
+        AdapterTestRecord result = service.testProviderAdapterMock(
+                "adapter-force",
+                new ProviderAdapterTestRequest(
+                        "mock-force", "mock-provider", "webhook", Map.of("expect", "failed"), "note", List.of()));
+
+        assertThat(result.testStatus()).isEqualTo("failed");
+        assertThat(result.result()).containsEntry("mock_expect", "failed");
+    }
+
+    @Test
+    void mockTestDefaultsToPassedForUnknownScenario() {
+        repository.providerAdapters.put("adapter-unknown", adapter(
+                "adapter-unknown", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                true, true, "manual-ledger:p0-provider", false));
+
+        // auth 既非 success/failure 前缀，走兜底 passed（向后兼容）。
+        AdapterTestRecord result = service.testProviderAdapterMock(
+                "adapter-unknown",
+                new ProviderAdapterTestRequest(
+                        "mock-unknown", "mock-provider", "auth", Map.of(), "note", List.of()));
+
+        assertThat(result.testStatus()).isEqualTo("passed");
+    }
+
+    @Test
+    void mockTestStillRejectsNonTestableAdapter() {
+        repository.providerAdapters.put("adapter-disabled", adapter(
+                "adapter-disabled", "mock-provider", List.of("webhook"), "mock", "disabled",
+                true, true, "manual-ledger:p0-provider", false));
+
+        assertThatThrownBy(() -> service.testProviderAdapterMock(
+                "adapter-disabled",
+                new ProviderAdapterTestRequest(
+                        "mock-disabled", "mock-provider", "webhook", Map.of(), "note", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PROVIDER_ADAPTER_NOT_TESTABLE"));
     }
 
     @Test
@@ -521,6 +690,31 @@ class IntegrationServiceTests {
                 NOW,
                 NOW
         );
+    }
+
+    private Map<String, Object> webhookPayload(String eventId, String idempotencyKey) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("event_id", eventId);
+        payload.put("idempotency_key", idempotencyKey);
+        payload.put("payload", Map.of("order_id", "ord-1", "normalized_status", "paid"));
+        return payload;
+    }
+
+    private ProviderAdapterRecord webhookMappingAdapter(Map<String, Object> fieldMapping) {
+        return withFieldMapping(
+                adapter("map-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                        true, true, "manual-ledger:p0-provider", true),
+                fieldMapping,
+                true);
+    }
+
+    private ProviderAdapterRecord withFieldMapping(ProviderAdapterRecord base, Map<String, Object> fieldMapping, boolean webhookEnabled) {
+        return new ProviderAdapterRecord(
+                base.id(), base.providerCode(), base.adapterType(), base.mode(), base.capabilities(),
+                base.environment(), base.status(), webhookEnabled, base.pollingCheckEnabled(),
+                fieldMapping, base.webhookConfig(), base.pollingConfig(), base.credentialSecretRef(),
+                base.productionReady(), base.operatorNote(), base.evidenceAttachmentIds(),
+                base.createdAt(), base.updatedAt());
     }
 
     private String authSignature(String appKey, long timestamp, String nonce) {
