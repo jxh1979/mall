@@ -2,9 +2,8 @@ openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
   version: 0.1.0
-  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json
-    保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时
-    OpenAPI，并与本契约比对。
+  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
+    springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
   - url: /
     description: 同域部署或由网关转发
@@ -405,8 +404,7 @@ paths:
         - access
       operationId: listAccessUsers
       summary: 查询权限用户
-      description: 用于查询权限用户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询权限用户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: access.user.view
       x-data-scope: project
       x-terminal-allowed:
@@ -427,8 +425,7 @@ paths:
         - access
       operationId: createAccessUser
       summary: 创建权限用户
-      description: 用于创建权限用户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建权限用户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: access.user.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -456,8 +453,7 @@ paths:
         - amusement
       operationId: listAmusementDeviceStatuses
       summary: 查询游乐设备状态
-      description: 用于查询游乐设备状态。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询游乐设备状态。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: amusement.device_status.view
       x-data-scope: project
       x-terminal-allowed:
@@ -479,9 +475,8 @@ paths:
         - amusement
       operationId: listAmusementGroupBookings
       summary: List P2 amusement group and private bookings
-      description: List P2 amusement group and private bookings. Must follow formal
-        OpenAPI schema, permission, data scope, idempotency and audit event
-        requirements.
+      description: List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: amusement.group_booking.view
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -502,9 +497,8 @@ paths:
         - amusement
       operationId: createAmusementGroupBooking
       summary: Create P2 amusement group or private booking request
-      description: Create P2 amusement group or private booking request. Must follow
-        formal OpenAPI schema, permission, data scope, idempotency and audit
-        event requirements.
+      description: Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data
+        scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -534,9 +528,8 @@ paths:
         - amusement
       operationId: approveAmusementGroupBooking
       summary: Approve P2 amusement group booking and lock capacity
-      description: Approve P2 amusement group booking and lock capacity. Must follow
-        formal OpenAPI schema, permission, data scope, idempotency and audit
-        event requirements.
+      description: Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data
+        scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.approve
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -569,9 +562,8 @@ paths:
         - amusement
       operationId: releaseAmusementGroupBooking
       summary: Release P2 amusement group booking and free locked capacity
-      description: Release P2 amusement group booking and free locked capacity. Must
-        follow formal OpenAPI schema, permission, data scope, idempotency and
-        audit event requirements.
+      description: Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission,
+        data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -644,8 +636,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询游乐人工放行。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询游乐人工放行。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/amusement/maintenance-records:
     get:
       tags:
@@ -669,8 +660,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询游乐定期检修记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询游乐定期检修记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
     post:
       tags:
         - amusement
@@ -840,8 +830,7 @@ paths:
         - amusement
       operationId: createAmusementProjectRule
       summary: 创建游乐项目规则
-      description: 用于创建游乐项目规则。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建游乐项目规则。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: amusement.project.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -872,8 +861,7 @@ paths:
         - amusement
       operationId: listAmusementQueueEntries
       summary: 查询游乐排队记录
-      description: 用于查询游乐排队记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询游乐排队记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: amusement.queue.view
       x-data-scope: project
       x-terminal-allowed:
@@ -895,8 +883,7 @@ paths:
         - amusement
       operationId: listAmusementReservations
       summary: 查询游乐预约
-      description: 用于查询游乐预约。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询游乐预约。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: amusement.reservation.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1223,18 +1210,16 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询游乐核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询游乐核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/analytics/ai-quality/local-llm-suggestions:
     post:
       tags:
         - analytics
       operationId: generateLocalLlmAiQualitySuggestion
       summary: Generate local LLM AI quality suggestion
-      description: T3-D1 uses only a loopback local model service on host 160 to
-        generate AI quality suggestions. The result writes only AI quality task
-        and result records and never changes payment, verification, refund,
-        punishment, commission, contract, inventory, or device state.
+      description: T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result
+        writes only AI quality task and result records and never changes payment, verification, refund, punishment,
+        commission, contract, inventory, or device state.
       x-permission: analytics.risk_alert.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -1262,8 +1247,7 @@ paths:
         - analytics
       operationId: listAiQualityResults
       summary: 查询ai质检结果
-      description: 用于查询ai质检结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询ai质检结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1285,8 +1269,7 @@ paths:
         - analytics
       operationId: listAiQualityTasks
       summary: 查询ai质检任务
-      description: 用于查询ai质检任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询ai质检任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1308,9 +1291,8 @@ paths:
         - analytics
       operationId: listBusinessMetricSnapshots
       summary: List P2 business metric snapshots for operational analytics
-      description: List P2 business metric snapshots for operational analytics. Must
-        follow formal OpenAPI schema, permission, data scope, idempotency and
-        audit event requirements.
+      description: List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission,
+        data scope, idempotency and audit event requirements.
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1332,8 +1314,7 @@ paths:
         - analytics
       operationId: listCustomerIntents
       summary: 查询客户意向
-      description: 用于查询客户意向。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询客户意向。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1384,8 +1365,7 @@ paths:
           schema:
             type: string
             maxLength: 64
-          description: 看板下钻业务域（如
-            finance/bar/ticketing/amusement/inventory/customer/governance）。
+          description: 看板下钻业务域（如 finance/bar/ticketing/amusement/inventory/customer/governance）。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1407,8 +1387,7 @@ paths:
         - analytics
       operationId: listMerchantHealthScores
       summary: 查询商户健康度scores
-      description: 用于查询商户健康度scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询商户健康度scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1430,8 +1409,7 @@ paths:
         - analytics
       operationId: listAnalyticsMerchants
       summary: 查询经营分析商户
-      description: 用于查询经营分析商户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询经营分析商户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1453,8 +1431,7 @@ paths:
         - analytics
       operationId: listMetricAnomalies
       summary: 查询指标异常
-      description: 用于查询指标异常。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询指标异常。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1476,8 +1453,7 @@ paths:
         - analytics
       operationId: listMetricDefinitions
       summary: 查询指标定义
-      description: 用于查询指标定义。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询指标定义。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1538,16 +1514,14 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于创建风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/analytics/risk-alerts/{id}/resolve:
     post:
       tags:
         - analytics
       operationId: resolveRiskAlert
       summary: 处理风险alert
-      description: 用于处理风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于处理风险alert。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -1578,8 +1552,7 @@ paths:
         - analytics
       operationId: listRiskRules
       summary: 查询风险规则
-      description: 用于查询风险规则。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询风险规则。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1601,8 +1574,7 @@ paths:
         - analytics
       operationId: getRobotAnalytics
       summary: 获取机器人经营分析
-      description: 用于获取机器人经营分析。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于获取机器人经营分析。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1624,8 +1596,7 @@ paths:
         - analytics
       operationId: listStaffServiceScores
       summary: 查询员工服务scores
-      description: 用于查询员工服务scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询员工服务scores。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: analytics.risk_alert.view
       x-data-scope: project
       x-terminal-allowed:
@@ -1888,16 +1859,14 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询酒吧订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询酒吧订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/bar/orders/{order_id}/bill:
     post:
       tags:
         - bar
       operationId: createBarOrderBill
       summary: 创建酒吧订单账单
-      description: 用于创建酒吧订单账单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建酒吧订单账单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.order.create
       x-data-scope: project
       x-terminal-allowed:
@@ -1957,8 +1926,7 @@ paths:
         - bar
       operationId: addBarOrderItem
       summary: 新增酒吧订单物品
-      description: 用于新增酒吧订单物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于新增酒吧订单物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.order.create
       x-data-scope: project
       x-terminal-allowed:
@@ -1989,8 +1957,7 @@ paths:
         - bar
       operationId: listBarProductionTickets
       summary: 查询酒吧出品票据
-      description: 用于查询酒吧出品票据。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询酒吧出品票据。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.order.create
       x-data-scope: project
       x-terminal-allowed:
@@ -2012,8 +1979,7 @@ paths:
         - bar
       operationId: listBarProducts
       summary: 查询酒吧商品
-      description: 用于查询酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.order.create
       x-data-scope: project
       x-terminal-allowed:
@@ -2036,8 +2002,7 @@ paths:
         - bar
       operationId: createBarProduct
       summary: 创建酒吧商品
-      description: 用于创建酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.order.create
       x-data-scope: project
       x-terminal-allowed:
@@ -2109,8 +2074,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询酒吧预约。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询酒吧预约。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/bar/reservations/{id}/check-in-guest:
     post:
       tags:
@@ -2581,8 +2545,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于创建证据事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建证据事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/evidence/reviews:
     post:
       tags:
@@ -2797,8 +2760,7 @@ paths:
         - finance
       operationId: listReconciliationBatches
       summary: 查询对账批次
-      description: 用于查询对账批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询对账批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: finance.reconciliation.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3104,8 +3066,7 @@ paths:
         - integration
       operationId: listIntegrationCompensationTasks
       summary: 查询第三方集成补偿任务
-      description: 用于查询第三方集成补偿任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询第三方集成补偿任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3127,8 +3088,7 @@ paths:
         - integration
       operationId: listIntegrationDevices
       summary: 查询第三方集成设备
-      description: 用于查询第三方集成设备。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询第三方集成设备。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3150,8 +3110,7 @@ paths:
         - integration
       operationId: listIntegrationDeviceEvents
       summary: 查询第三方集成设备事件
-      description: 用于查询第三方集成设备事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询第三方集成设备事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3173,8 +3132,7 @@ paths:
         - integration
       operationId: listIntegrationOfflineSyncBatches
       summary: 查询第三方集成离线批次
-      description: 用于查询第三方集成离线批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询第三方集成离线批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3196,8 +3154,7 @@ paths:
         - integration
       operationId: listIntegrationOrderSyncs
       summary: 查询第三方集成订单syncs
-      description: 用于查询第三方集成订单syncs。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询第三方集成订单syncs。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3368,8 +3325,7 @@ paths:
         - integration
       operationId: listIntegrationRetailSkus
       summary: 查询第三方集成零售SKU
-      description: 用于查询第三方集成零售SKU。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询第三方集成零售SKU。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3391,9 +3347,8 @@ paths:
         - integration
       operationId: reportIntegrationRobotTaskEvent
       summary: 机器人任务事件上报（被动留痕）
-      description: R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync
-        编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 +
-        开关开启后交付。
+      description: R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17
+        交接。真实回流闭环待厂商资料 + 开关开启后交付。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -3420,9 +3375,8 @@ paths:
         - integration
       operationId: listIntegrationVideoAnchors
       summary: 调阅视频点位时间锚点（敏感，写调阅审计）
-      description: R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写
-        integration_video_access_audits（viewer + approval_ref）。clip_index_ref
-        留空待厂商监控片段索引接入。
+      description: R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer +
+        approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。
       x-permission: integration.video.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3452,11 +3406,10 @@ paths:
         - integration
       operationId: receiveIntegrationTypedWebhook
       summary: 第三方统一 webhook 入口（开关门控）
-      description: R5
-        T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一
-        webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler
-        内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落
-        open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。
+      description: R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook
+        入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用
+        TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping
+        占位空、process_status=accepted），不伪造对账。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -3501,8 +3454,7 @@ paths:
         - integration
       operationId: listIntegrationRetryTasks
       summary: 查询第三方集成retry任务
-      description: 用于查询第三方集成retry任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询第三方集成retry任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3524,8 +3476,7 @@ paths:
         - integration
       operationId: listRobotTaskEvents
       summary: 查询机器人task事件
-      description: 用于查询机器人task事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询机器人task事件。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3547,8 +3498,7 @@ paths:
         - integration
       operationId: listRobotTasks
       summary: 查询机器人任务
-      description: 用于查询机器人任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询机器人任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3570,8 +3520,7 @@ paths:
         - integration
       operationId: listVideoCameras
       summary: 查询视频摄像头
-      description: 用于查询视频摄像头。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询视频摄像头。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3593,8 +3542,7 @@ paths:
         - integration
       operationId: listVoucherVerifications
       summary: 查询券核销记录
-      description: 用于查询券核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询券核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3616,8 +3564,7 @@ paths:
         - integration
       operationId: listWecomBindings
       summary: 查询企业微信绑定
-      description: 用于查询企业微信绑定。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询企业微信绑定。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3639,8 +3586,7 @@ paths:
         - integration
       operationId: listWecomConversations
       summary: 查询企业微信会话
-      description: 用于查询企业微信会话。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询企业微信会话。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3662,8 +3608,7 @@ paths:
         - integration
       operationId: listWecomMessages
       summary: 查询企业微信消息
-      description: 用于查询企业微信消息。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询企业微信消息。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3685,8 +3630,7 @@ paths:
         - integration
       operationId: listWecomRiskHits
       summary: 查询企业微信风险命中
-      description: 用于查询企业微信风险命中。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询企业微信风险命中。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: integration.provider_adapter.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3708,8 +3652,7 @@ paths:
         - inventory
       operationId: listInventoryItems
       summary: 查询库存明细
-      description: 用于查询库存明细。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询库存明细。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: inventory.stock.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3730,8 +3673,7 @@ paths:
         - inventory
       operationId: createInventoryItem
       summary: 创建库存物品
-      description: 用于创建库存物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建库存物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -4307,8 +4249,7 @@ paths:
         - inventory
       operationId: listStockBalances
       summary: 查询库存余额
-      description: 用于查询库存余额。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询库存余额。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: inventory.stock.view
       x-data-scope: project
       x-terminal-allowed:
@@ -4399,16 +4340,14 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/inventory/stock-movements/transfer:
     post:
       tags:
         - inventory
       operationId: transferStockMovement
       summary: 调拨库存流水
-      description: 用于调拨库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于调拨库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -4436,8 +4375,7 @@ paths:
         - inventory
       operationId: createTypedStockMovement
       summary: 创建typed库存流水
-      description: 用于创建typed库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建typed库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -4692,9 +4630,8 @@ paths:
         - merchant-service
       operationId: listMerchantServiceWorkOrders
       summary: List merchant service work orders
-      description: List merchant service work orders. This P1 merchant service
-        workflow must enforce server-side permissions, idempotent writes, and
-        audit evidence.
+      description: List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -4717,9 +4654,8 @@ paths:
         - merchant-service
       operationId: createMerchantServiceWorkOrder
       summary: Create merchant service work order
-      description: Create merchant service work order. This P1 merchant service
-        workflow must enforce server-side permissions, idempotent writes, and
-        audit evidence.
+      description: Create merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.create
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -4749,9 +4685,8 @@ paths:
         - merchant-service
       operationId: addMerchantServiceWorkOrderAction
       summary: Append merchant service work order action
-      description: Append merchant service work order action. This P1 merchant service
-        workflow must enforce server-side permissions, idempotent writes, and
-        audit evidence.
+      description: Append merchant service work order action. This P1 merchant service workflow must enforce server-side
+        permissions, idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.process
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -4784,17 +4719,15 @@ paths:
           schema:
             type: string
             maxLength: 64
-          description: Merchant service work order id within the current authorized data
-            scope.
+          description: Merchant service work order id within the current authorized data scope.
   /api/v1/merchant-service/work-orders/{id}/assign:
     post:
       tags:
         - merchant-service
       operationId: assignMerchantServiceWorkOrder
       summary: Assign merchant service work order
-      description: Assign merchant service work order. This P1 merchant service
-        workflow must enforce server-side permissions, idempotent writes, and
-        audit evidence.
+      description: Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.assign
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -4827,17 +4760,15 @@ paths:
           schema:
             type: string
             maxLength: 64
-          description: Merchant service work order id within the current authorized data
-            scope.
+          description: Merchant service work order id within the current authorized data scope.
   /api/v1/merchant-service/work-orders/{id}/close:
     post:
       tags:
         - merchant-service
       operationId: closeMerchantServiceWorkOrder
       summary: Close merchant service work order
-      description: Close merchant service work order. This P1 merchant service
-        workflow must enforce server-side permissions, idempotent writes, and
-        audit evidence.
+      description: Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
+        idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.close
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -4870,8 +4801,7 @@ paths:
           schema:
             type: string
             maxLength: 64
-          description: Merchant service work order id within the current authorized data
-            scope.
+          description: Merchant service work order id within the current authorized data scope.
   /api/v1/ops/production-readiness/checks:
     post:
       tags:
@@ -4905,8 +4835,7 @@ paths:
         - ops
       operationId: listProductionReadinessItems
       summary: 查询生产前置责任状态
-      description: 查询 MDM、聚合支付、年龄核验、NAS 备份、密钥轮换、企业微信、第三方联动和 160 环境等生产前置项状态；用于总控和 IT
-        判断真实生产阻断项。
+      description: 查询 MDM、聚合支付、年龄核验、NAS 备份、密钥轮换、企业微信、第三方联动和 160 环境等生产前置项状态；用于总控和 IT 判断真实生产阻断项。
       x-permission: ops.production_readiness.view
       x-data-scope: project
       x-terminal-allowed:
@@ -5464,8 +5393,7 @@ paths:
         - terminals
       operationId: returnTerminalDevice
       summary: 归还终端设备
-      description: 用于归还终端设备。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于归还终端设备。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: terminal.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -5580,8 +5508,7 @@ paths:
         - terminals
       operationId: getTerminalOfflineEntitlements
       summary: 获取终端离线权益
-      description: 用于获取终端离线权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于获取终端离线权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: terminal.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -5605,8 +5532,7 @@ paths:
         - terminals
       operationId: syncTerminalTasks
       summary: 同步终端任务
-      description: 用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: terminal.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -5636,9 +5562,8 @@ paths:
         - ticketing
       operationId: listTicketDynamicPricingRules
       summary: List P2 ticket dynamic pricing rules
-      description: List P2 ticket dynamic pricing rules. Must follow formal OpenAPI
-        schema, permission, data scope, idempotency and audit event
-        requirements.
+      description: List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.view
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -5659,9 +5584,8 @@ paths:
         - ticketing
       operationId: createTicketDynamicPricingRule
       summary: Create P2 ticket dynamic pricing rule draft
-      description: Create P2 ticket dynamic pricing rule draft. Must follow formal
-        OpenAPI schema, permission, data scope, idempotency and audit event
-        requirements.
+      description: Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.manage
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -5689,9 +5613,8 @@ paths:
         - ticketing
       operationId: publishTicketDynamicPricingRule
       summary: Publish P2 ticket dynamic pricing rule
-      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI
-        schema, permission, data scope, idempotency and audit event
-        requirements.
+      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope,
+        idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.publish
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -5724,8 +5647,8 @@ paths:
         - ticketing
       operationId: simulateTicketDynamicPricing
       summary: Simulate P2 ticket dynamic pricing without creating an order
-      description: Simulate P2 ticket dynamic pricing. Simulation may include draft
-        and published rules, but does not create orders or receivables.
+      description: Simulate P2 ticket dynamic pricing. Simulation may include draft and published rules, but does not create
+        orders or receivables.
       x-permission: ticket.dynamic_pricing.simulate
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -5755,8 +5678,7 @@ paths:
         - ticketing
       operationId: listEntitlementTemplates
       summary: 查询权益模板
-      description: 用于查询权益模板。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询权益模板。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: ticket.entitlement.view
       x-data-scope: project
       x-terminal-allowed:
@@ -5777,8 +5699,7 @@ paths:
         - ticketing
       operationId: createEntitlementTemplate
       summary: 创建权益模板
-      description: 用于创建权益模板。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于创建权益模板。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: ticket.entitlement.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -5806,8 +5727,7 @@ paths:
         - ticketing
       operationId: listIssuedEntitlements
       summary: 查询已发放权益
-      description: 用于查询已发放权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询已发放权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: ticket.verify.view
       x-data-scope: project
       x-terminal-allowed:
@@ -5851,10 +5771,9 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: Create a ticket order. If a published dynamic pricing rule matches
-        ticket_type_id, visit_date, sales_channel and dynamic_pricing_context,
-        the order amount is adjusted and price trace fields are persisted. Draft
-        rules only participate in simulation.
+      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date,
+        sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted.
+        Draft rules only participate in simulation.
   /api/v1/ticketing/orders/{order_id}/issue:
     post:
       tags:
@@ -6067,8 +5986,7 @@ paths:
         - ticketing
       operationId: bindTicketTypeEntitlement
       summary: 绑定票类型权益
-      description: 用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: ticket.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -6099,8 +6017,7 @@ paths:
         - ticketing
       operationId: issueTicketTypeDirectly
       summary: 发放票类型directly
-      description: 用于发放票类型directly。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于发放票类型directly。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: ticket.order.create
       x-data-scope: project
       x-terminal-allowed:
@@ -6233,16 +6150,14 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/ticketing/verifications/{id}/reverse:
     post:
       tags:
         - ticketing
       operationId: reverseTicketVerification
       summary: 核销冲正
-      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason
-        必填，权限 ticket.verify.reverse。
+      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。
       x-permission: ticket.verify.reverse
       x-data-scope: project-point
       x-terminal-allowed:
@@ -6304,9 +6219,8 @@ paths:
         - merchant-billing
       operationId: listMerchantBills
       summary: List merchant bills
-      description: List merchant bills for merchant portal and admin read-only scope
-        checks. This P1/P2 merchant billing workflow must enforce server-side
-        permissions, project-merchant data scope, and audit evidence.
+      description: List merchant bills for merchant portal and admin read-only scope checks. This P1/P2 merchant billing
+        workflow must enforce server-side permissions, project-merchant data scope, and audit evidence.
       x-permission: merchant.billing.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -6412,8 +6326,7 @@ paths:
         - access
       operationId: listStaffLevels
       summary: 查询职级目录
-      description: 用于查询职级目录（M1-M10 上中下，level_rank 1..30）。必须按 OpenAPI
-        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询职级目录（M1-M10 上中下，level_rank 1..30）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: access.staff_level.view
       x-data-scope: project
       x-terminal-allowed:
@@ -6435,9 +6348,8 @@ paths:
         - access
       operationId: getEffectivePermissions
       summary: 查询当前账号有效权限集
-      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies
-        单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先 + wildcard + fail-safe
-        渲染入口显隐，与后端 requirePermission 同口径。
+      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先
+        + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
       x-permission: authenticated
       x-data-scope: self
       x-terminal-allowed:
@@ -6487,8 +6399,8 @@ paths:
         - access
       operationId: assignStaffLevel
       summary: 分配员工职级与薪资
-      description: 用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI
-        schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
+        深度能力不得反向扩大 P0 范围。
       x-permission: access.staff_level.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -6955,8 +6867,8 @@ paths:
         - access
       operationId: submitStaffRegistration
       summary: 员工自助注册
-      description: 员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建
-        staff_profiles(submitted)，待后台审批。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      description: 员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建 staff_profiles(submitted)，待后台审批。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现。
       x-permission: staff.profile.submit
       x-data-scope: project
       x-terminal-allowed:
@@ -6987,8 +6899,8 @@ paths:
         - access
       operationId: reviewStaffRegistration
       summary: 审批员工注册
-      description: 后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带
-        reject_reason。仅 submitted 状态可审批；商户角色仅可审批本 merchant 范围。
+      description: 后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带 reject_reason。仅 submitted
+        状态可审批；商户角色仅可审批本 merchant 范围。
       x-permission: staff.profile.review
       x-data-scope: project
       x-terminal-allowed:
@@ -7049,9 +6961,8 @@ paths:
         - access
       operationId: bindStaffDeviceCredential
       summary: 绑定/换机申请员工设备凭证
-      description: 员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证
-        pending_review + supersedes 指向旧 active。与 kiosk 的
-        terminal_device_credentials 两套实体互不串值。
+      description: 员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证 pending_review + supersedes 指向旧
+        active。与 kiosk 的 terminal_device_credentials 两套实体互不串值。
       x-permission: staff.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -7084,8 +6995,8 @@ paths:
         - access
       operationId: approveStaffDeviceRebind
       summary: 审批换机生效
-      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置
-        superseded，保证 uq_staff_device_credentials_one_active 始终成立。
+      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证
+        uq_staff_device_credentials_one_active 始终成立。
       x-permission: staff.device.review
       x-data-scope: project
       x-terminal-allowed:
@@ -7121,8 +7032,7 @@ paths:
         - access
       operationId: reportStaffDeviceIntegrity
       summary: 端侧完整性上报
-      description: 端侧上报 integrity_status；非
-        trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发
+      description: 端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发
         staff_device.integrity_failed + 通知复核。由端侧鉴权调用。
       x-permission: staff.device.bind
       x-data-scope: project
@@ -7218,8 +7128,7 @@ paths:
         - access
       operationId: acknowledgeEmployeeNotice
       summary: 确认/同意员工通知
-      description: 确认或同意通知：consent=true→consented，decline=true→declined，否则
-        acknowledged；consent_required 通知必须显式同意/拒绝。
+      description: 确认或同意通知：consent=true→consented，decline=true→declined，否则 acknowledged；consent_required 通知必须显式同意/拒绝。
       x-permission: staff.notice.view
       x-data-scope: project
       x-terminal-allowed:
@@ -7253,10 +7162,9 @@ paths:
         - compliance
       operationId: syncWecomConversation
       summary: 企微会话同步入站（PIPL 合规，开关门控）
-      description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync
-        编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调 PiiTextRedactor
-        生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写
-        risk_flags 进复核。retention_until 按生效留存策略（默认180天）推算。
+      description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调
+        PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until
+        按生效留存策略（默认180天）推算。
       x-permission: wecom.sync
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -7318,11 +7226,9 @@ paths:
         - compliance
       operationId: viewWecomConversationMessages
       summary: 分级查看企微会话消息（脱敏/原文，原文需审批+审计）
-      description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent
-        为空；mode=raw（需 wecom.view_raw 高敏权限 + approval_ref 审批引用）返回原文引用/密文。调阅即写
-        wecom_access_audits（viewer + view_type + approval_ref）+ 事件
-        wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw
-        无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
+      description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 +
+        approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件
+        wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
       x-permission: wecom.view_raw
       x-data-scope: project
       x-terminal-allowed:
@@ -7369,8 +7275,7 @@ paths:
         - compliance
       operationId: listWecomRetentionPolicies
       summary: 企微留存策略列表
-      description: R5 T8：列出企微会话留存策略（scope/retention_days/expiry_action）。需
-        wecom.retention.manage。
+      description: R5 T8：列出企微会话留存策略（scope/retention_days/expiry_action）。需 wecom.retention.manage。
       x-permission: wecom.retention.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -7391,9 +7296,8 @@ paths:
         - compliance
       operationId: upsertWecomRetentionPolicy
       summary: 配置企微留存策略（默认180天）
-      description: R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈
-        archive/delete/anonymize；按 scope_type+scope_id 唯一 upsert。需
-        wecom.retention.manage（高敏需审批）。
+      description: R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一
+        upsert。需 wecom.retention.manage（高敏需审批）。
       x-permission: wecom.retention.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -7863,7 +7767,7 @@ paths:
       summary: 客人储值充值（绑支付意图）
       x-permission: customer.stored_value.topup
       x-data-scope: customer
-      x-terminal-allowed: &a1
+      x-terminal-allowed:
         - web
         - miniapp
         - app
@@ -7894,7 +7798,10 @@ paths:
       summary: 客人储值充值入账（支付成功后）
       x-permission: customer.stored_value.topup
       x-data-scope: customer
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: customer.stored_value.settle
       x-audit-event-failure: customer.stored_value.settle_failed
@@ -7924,7 +7831,10 @@ paths:
       summary: 客人储值消费（余额扣减）
       x-permission: customer.stored_value.consume
       x-data-scope: customer
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: customer.stored_value.consume
       x-audit-event-failure: customer.stored_value.consume_failed
@@ -7954,11 +7864,14 @@ paths:
       summary: 客人储值账户查询
       x-permission: customer.stored_value.view
       x-data-scope: customer
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: customer.stored_value_account_viewed
       x-audit-event-failure: customer.stored_value_account_viewed_failed
-      parameters: &a2
+      parameters:
         - name: project_id
           in: query
           required: false
@@ -7981,7 +7894,10 @@ paths:
       summary: 客人付费会员开通（绑支付意图）
       x-permission: customer.membership.subscribe
       x-data-scope: customer
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: customer.membership.subscribe
       x-audit-event-failure: customer.membership.subscribe_failed
@@ -8011,7 +7927,10 @@ paths:
       summary: 客人付费会员列表
       x-permission: customer.membership.view
       x-data-scope: customer
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: customer.memberships_viewed
       x-audit-event-failure: customer.memberships_viewed_failed
@@ -8031,11 +7950,20 @@ paths:
       summary: 付费会员档位列表（客人端）
       x-permission: not_applicable
       x-data-scope: project
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: customer.membership_plans_viewed
       x-audit-event-failure: customer.membership_plans_viewed_failed
-      parameters: *a2
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 综合体项目隔离键
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -8050,7 +7978,10 @@ paths:
       summary: 客人当前生效会员权益
       x-permission: customer.membership.view
       x-data-scope: customer
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: customer.membership_benefits_viewed
       x-audit-event-failure: customer.membership_benefits_viewed_failed
@@ -8070,7 +8001,10 @@ paths:
       summary: 客人积分转赠（风控防套现）
       x-permission: customer.points.transfer
       x-data-scope: customer
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
       x-idempotency-required: false
       x-audit-event-success: points.transferred
       x-audit-event-failure: points.transferred_failed
@@ -8100,7 +8034,7 @@ paths:
       summary: 保存付费会员档位（后台）
       x-permission: customer.membership.manage
       x-data-scope: project
-      x-terminal-allowed: &a3
+      x-terminal-allowed:
         - web
       x-idempotency-required: false
       x-audit-event-success: membership.plan_saved
@@ -8126,11 +8060,18 @@ paths:
       summary: 付费会员档位列表（后台）
       x-permission: customer.membership.view
       x-data-scope: project
-      x-terminal-allowed: *a3
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: customer.membership_plans_admin_viewed
       x-audit-event-failure: customer.membership_plans_admin_viewed_failed
-      parameters: *a2
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 综合体项目隔离键
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -8149,11 +8090,12 @@ paths:
       summary: 冻结会员储值账户（后台）
       x-permission: customer.stored_value.freeze
       x-data-scope: project
-      x-terminal-allowed: *a3
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: stored_value.frozen
       x-audit-event-failure: stored_value.frozen_failed
-      parameters: &a4
+      parameters:
         - name: customer_id
           in: path
           required: true
@@ -8184,11 +8126,18 @@ paths:
       summary: 解冻会员储值账户（后台）
       x-permission: customer.stored_value.freeze
       x-data-scope: project
-      x-terminal-allowed: *a3
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: stored_value.unfrozen
       x-audit-event-failure: stored_value.unfrozen_failed
-      parameters: *a4
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 会员ID
       requestBody:
         $ref: "#/components/requestBodies/StoredValueFreezeRequest"
       responses:
@@ -8213,11 +8162,18 @@ paths:
       summary: 会员储值退卡/退余额（后台）
       x-permission: customer.stored_value.refund
       x-data-scope: project
-      x-terminal-allowed: *a3
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: stored_value.refund
       x-audit-event-failure: stored_value.refund_failed
-      parameters: *a4
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 会员ID
       requestBody:
         $ref: "#/components/requestBodies/StoredValueRefundRequest"
       responses:
@@ -8244,7 +8200,8 @@ paths:
       summary: 保存积分转赠风控配置（后台）
       x-permission: customer.points.transfer_limit
       x-data-scope: project
-      x-terminal-allowed: *a3
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: points.transfer_limit_saved
       x-audit-event-failure: points.transfer_limit_saved_failed
@@ -8262,6 +8219,98 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/bar/orders/{order_id}/void-item:
+    post:
+      tags:
+        - bar
+      operationId: voidBarOrderItem
+      summary: 退菜退酒
+      x-permission: bar.order_item.void
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.order_item_voided
+      x-audit-event-failure: bar.order_item_void_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarOrderItemVoidRequest"
+      responses: &a1
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/bills/{bill_id}/reopen:
+    post:
+      tags:
+        - bar
+      operationId: reopenBarBill
+      summary: 账单反结
+      x-permission: bar.bill.reopen
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.bill_reopened
+      x-audit-event-failure: bar.bill_reopen_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/BillId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarBillReopenRequest"
+      responses: *a1
+  /api/v1/bar/bills/{bill_id}/tip:
+    post:
+      tags:
+        - bar
+      operationId: addBarBillTip
+      summary: 账单加小费
+      x-permission: bar.bill.tip
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.bill_tip_added
+      x-audit-event-failure: bar.bill_tip_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/BillId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarBillTipRequest"
+      responses: *a1
+  /api/v1/bar/products/{product_id}/sold-out:
+    post:
+      tags:
+        - bar
+      operationId: markBarProductSoldOut
+      summary: 商品沽清/恢复
+      x-permission: bar.product.sold_out
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.product_sold_out
+      x-audit-event-failure: bar.product_sold_out_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarProductSoldOutRequest"
+      responses: *a1
 components:
   securitySchemes:
     BearerAuth:
@@ -8424,6 +8473,14 @@ components:
       schema:
         type: string
       description: 主管复核记录 ID。
+    ProductId:
+      name: product_id
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 64
+      description: ProductId 路径参数；必须引用当前数据范围内存在且允许访问的记录。
   requestBodies:
     StatusChange:
       required: true
@@ -9363,6 +9420,30 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/PointsTransferLimitRequest"
+    BarOrderItemVoidRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarOrderItemVoidRequest"
+    BarBillReopenRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarBillReopenRequest"
+    BarProductSoldOutRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarProductSoldOutRequest"
+    BarBillTipRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarBillTipRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -9855,8 +9936,7 @@ components:
       properties:
         refresh_token:
           type: string
-          description: RefreshTokenRequest.refresh_token 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: RefreshTokenRequest.refresh_token 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 512
         device_id:
           type: string
@@ -10017,15 +10097,13 @@ components:
           maxLength: 128
         polygon_points:
           type: array
-          description: SpaceRequest.polygon_points 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD
-            规则校验。
+          description: SpaceRequest.polygon_points 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           items:
             type: object
           maxItems: 200
         area_square_meter:
           type: number
-          description: SpaceRequest.area_square_meter 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: SpaceRequest.area_square_meter 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           minimum: 0
           maximum: 999999999999
     ContractDraftRequest:
@@ -10080,8 +10158,7 @@ components:
           format: date
         rent_terms:
           type: object
-          description: ContractDraftRequest.rent_terms 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: ContractDraftRequest.rent_terms 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
         shareholder_ratio_for_report:
           type: number
           description: 比例字段，按百分比数值保存；必须在 0 到 100 范围内。
@@ -10162,8 +10239,7 @@ components:
           maxLength: 120
         entity_role:
           type: string
-          description: BusinessEntityRequest.entity_role 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: BusinessEntityRequest.entity_role 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           enum:
             - operation
             - contract
@@ -10178,8 +10254,7 @@ components:
           maxLength: 128
         legal_representative:
           type: string
-          description: BusinessEntityRequest.legal_representative 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: BusinessEntityRequest.legal_representative 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
         bank_account_ref:
           type: string
@@ -10237,8 +10312,7 @@ components:
           maxLength: 64
         effective_from:
           type: string
-          description: BusinessEntityBindingRequest.effective_from 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: BusinessEntityBindingRequest.effective_from 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           format: date
           maxLength: 255
         change_reason:
@@ -10495,8 +10569,7 @@ components:
           maxLength: 64
         binding_scope:
           type: string
-          description: DeviceBindRequest.binding_scope 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: DeviceBindRequest.binding_scope 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
         bound_space_id:
           type: string
@@ -10504,8 +10577,7 @@ components:
           maxLength: 64
         mdm_device_ref:
           type: string
-          description: DeviceBindRequest.mdm_device_ref 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: DeviceBindRequest.mdm_device_ref 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 2048
         kiosk_mode:
           type: string
@@ -10595,8 +10667,7 @@ components:
         device_token:
           type: string
           nullable: true
-          description: 仅 terminal_type=kiosk 的新建绑定响应返回明文；不得落库明文、不得放入 metadata、不得通过
-            config/heartbeat 回显。
+          description: 仅 terminal_type=kiosk 的新建绑定响应返回明文；不得落库明文、不得放入 metadata、不得通过 config/heartbeat 回显。
           maxLength: 255
     CapabilitySwitchRequest:
       type: object
@@ -10622,16 +10693,14 @@ components:
           maxItems: 50
         enabled:
           type: boolean
-          description: CapabilitySwitchRequest.enabled 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: CapabilitySwitchRequest.enabled 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
         terminal_type:
           type: string
           description: 调用终端类型；只能使用统一口径 D5 的终端码。
           maxLength: 64
         capability_code:
           type: string
-          description: CapabilitySwitchRequest.capability_code 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: CapabilitySwitchRequest.capability_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         scope_id:
           type: string
@@ -10666,21 +10735,18 @@ components:
           maxLength: 64
         app_version:
           type: string
-          description: KioskHeartbeatRequest.app_version 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: KioskHeartbeatRequest.app_version 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
         capabilities:
           type: array
-          description: KioskHeartbeatRequest.capabilities 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: KioskHeartbeatRequest.capabilities 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           items:
             type: string
             maxLength: 64
           maxItems: 200
         last_error_code:
           type: string
-          description: KioskHeartbeatRequest.last_error_code 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: KioskHeartbeatRequest.last_error_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         kiosk_mode:
           type: string
@@ -10945,13 +11011,11 @@ components:
           maxLength: 64
         eligibility_rule:
           type: object
-          description: TicketPriceRuleRequest.eligibility_rule 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: TicketPriceRuleRequest.eligibility_rule 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
     TicketOrderRequest:
       type: object
-      description: Ticket order create request. Published matching dynamic pricing
-        rules may adjust the formal order amount; draft rules remain
-        simulation-only.
+      description: Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount;
+        draft rules remain simulation-only.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -11012,8 +11076,8 @@ components:
           maxLength: 64
         dynamic_pricing_context:
           type: object
-          description: Optional matching context for published dynamic pricing rules.
-            Missing context only matches rules without conditions.
+          description: Optional matching context for published dynamic pricing rules. Missing context only matches rules without
+            conditions.
           additionalProperties: true
     TicketIssueRequest:
       type: object
@@ -11112,13 +11176,11 @@ components:
           pattern: ^\+?[0-9]{6,20}$
         sms_code:
           type: string
-          description: CustomerPhoneLoginRequest.sms_code 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: CustomerPhoneLoginRequest.sms_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         scene:
           type: string
-          description: CustomerPhoneLoginRequest.scene 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: CustomerPhoneLoginRequest.scene 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           enum:
             - miniapp
             - app
@@ -11139,12 +11201,10 @@ components:
           maxLength: 64
         accepted:
           type: boolean
-          description: CustomerConsentRequest.accepted 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: CustomerConsentRequest.accepted 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
         version:
           type: string
-          description: CustomerConsentRequest.version 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: CustomerConsentRequest.version 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
         source_terminal:
           type: string
@@ -11459,8 +11519,7 @@ components:
           maxItems: 50
         delivered_items:
           type: array
-          description: BarOrderDeliveryRequest.delivered_items 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: BarOrderDeliveryRequest.delivered_items 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           items:
             type: object
           maxItems: 200
@@ -11530,8 +11589,7 @@ components:
           description: 是否只计算卡座销售提成；为 true 时排除非卡座或非销售来源消费。
         recalculate:
           type: boolean
-          description: CommissionCalculateRequest.recalculate 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: CommissionCalculateRequest.recalculate 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
     InventorySupplierRequest:
       type: object
       description: 请求载荷 `InventorySupplierRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -11701,8 +11759,7 @@ components:
           maxItems: 200
         trace_code:
           type: string
-          description: StockMovementRequest.trace_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: StockMovementRequest.trace_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
     SavedBottleRequest:
       type: object
@@ -11770,8 +11827,7 @@ components:
           maxItems: 50
         claim_items:
           type: array
-          description: SavedBottleClaimRequest.claim_items 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: SavedBottleClaimRequest.claim_items 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           items:
             type: object
           maxItems: 200
@@ -11782,8 +11838,7 @@ components:
           pattern: ^\+?[0-9]{6,20}$
         verification_code:
           type: string
-          description: SavedBottleClaimRequest.verification_code 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: SavedBottleClaimRequest.verification_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
     StockAdjustmentRequest:
       type: object
@@ -11876,8 +11931,7 @@ components:
           maxLength: 64
         eligibility_rule:
           type: object
-          description: AmusementProjectRequest.eligibility_rule 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: AmusementProjectRequest.eligibility_rule 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
     AmusementSessionRequest:
       type: object
       description: 请求载荷 `AmusementSessionRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -11976,9 +12030,7 @@ components:
           maxLength: 1000
     AmusementMaintenanceRecordRequest:
       type: object
-      description: 请求载荷
-        `AmusementMaintenanceRecordRequest`；提交游乐定期检修，检修单位/工程师/结果/异常说明/来源终端/点位结构化留痕（设计
-        §7.14a/§8.7.1）。
+      description: 请求载荷 `AmusementMaintenanceRecordRequest`；提交游乐定期检修，检修单位/工程师/结果/异常说明/来源终端/点位结构化留痕（设计 §7.14a/§8.7.1）。
       additionalProperties: false
       required:
         - project_id
@@ -12047,8 +12099,7 @@ components:
           maxLength: 32
     AmusementMaintenanceResumeRequest:
       type: object
-      description: 请求载荷 `AmusementMaintenanceResumeRequest`；主管确认恢复营业，result=pass
-        方可调用，触发 maintenance→open（设计 §5.1.1/§8.7.1）。
+      description: 请求载荷 `AmusementMaintenanceResumeRequest`；主管确认恢复营业，result=pass 方可调用，触发 maintenance→open（设计 §5.1.1/§8.7.1）。
       additionalProperties: false
       required:
         - supervisor_confirmed_by
@@ -12094,15 +12145,13 @@ components:
           maxLength: 120
         items:
           type: array
-          description: AmusementSafetyTemplateRequest 明细列表；每一项必须按对应明细 schema
-            校验类型、数量、金额、状态和数据范围。
+          description: AmusementSafetyTemplateRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。
           items:
             type: object
           maxItems: 200
         effective_from:
           type: string
-          description: AmusementSafetyTemplateRequest.effective_from 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: AmusementSafetyTemplateRequest.effective_from 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           format: date
           maxLength: 255
     AmusementSafetyInspectionRequest:
@@ -12139,15 +12188,13 @@ components:
           maxLength: 64
         items:
           type: array
-          description: AmusementSafetyInspectionRequest 明细列表；每一项必须按对应明细 schema
-            校验类型、数量、金额、状态和数据范围。
+          description: AmusementSafetyInspectionRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。
           items:
             type: object
           maxItems: 200
         overall_result:
           type: string
-          description: AmusementSafetyInspectionRequest.overall_result 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: AmusementSafetyInspectionRequest.overall_result 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           enum:
             - pass
             - fail
@@ -12185,8 +12232,7 @@ components:
           maxLength: 64
         comment:
           type: string
-          description: AmusementSafetyActionRequest.comment 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: AmusementSafetyActionRequest.comment 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
         attachment_ids:
           type: array
@@ -12268,8 +12314,7 @@ components:
           maxItems: 50
         direction:
           type: string
-          description: ArApItemRequest.direction 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD
-            规则校验。
+          description: ArApItemRequest.direction 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           enum:
             - receivable
             - payable
@@ -12343,8 +12388,7 @@ components:
           format: date-time
         bank_flow_ref:
           type: string
-          description: ArApPaymentRequest.bank_flow_ref 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: ArApPaymentRequest.bank_flow_ref 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 2048
     DailyCloseRequest:
       type: object
@@ -12390,8 +12434,7 @@ components:
           maxLength: 64
         force_close:
           type: boolean
-          description: DailyCloseRequest.force_close 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: DailyCloseRequest.force_close 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
     EvidenceAttachmentUploadIntentRequest:
       type: object
       description: 请求载荷 `EvidenceAttachmentUploadIntentRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -12411,8 +12454,7 @@ components:
           maxLength: 64
         file_size:
           type: integer
-          description: EvidenceAttachmentUploadIntentRequest.file_size 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: EvidenceAttachmentUploadIntentRequest.file_size 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           minimum: 0
           maximum: 999999999999
         business_type:
@@ -12433,18 +12475,15 @@ components:
       properties:
         object_key:
           type: string
-          description: EvidenceAttachmentCompleteRequest.object_key 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: EvidenceAttachmentCompleteRequest.object_key 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         checksum:
           type: string
-          description: EvidenceAttachmentCompleteRequest.checksum 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: EvidenceAttachmentCompleteRequest.checksum 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
         file_size:
           type: integer
-          description: EvidenceAttachmentCompleteRequest.file_size 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: EvidenceAttachmentCompleteRequest.file_size 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           minimum: 0
           maximum: 999999999999
     EvidenceAttachmentBindRequest:
@@ -12465,8 +12504,7 @@ components:
           maxLength: 64
         attachment_role:
           type: string
-          description: EvidenceAttachmentBindRequest.attachment_role 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: EvidenceAttachmentBindRequest.attachment_role 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           enum:
             - contract
             - receipt
@@ -12509,8 +12547,7 @@ components:
           maxLength: 64
         review_result:
           type: string
-          description: EvidenceReviewRequest.review_result 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: EvidenceReviewRequest.review_result 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           enum:
             - pass
             - reject
@@ -12518,8 +12555,7 @@ components:
           maxLength: 255
         comment:
           type: string
-          description: EvidenceReviewRequest.comment 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: EvidenceReviewRequest.comment 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
     OpenAuthTokenRequest:
       type: object
@@ -12533,8 +12569,7 @@ components:
       properties:
         app_key:
           type: string
-          description: OpenAuthTokenRequest.app_key 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD
-            规则校验。
+          description: OpenAuthTokenRequest.app_key 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         timestamp:
           type: integer
@@ -12543,13 +12578,11 @@ components:
           maximum: 999999999999
         nonce:
           type: string
-          description: OpenAuthTokenRequest.nonce 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD
-            规则校验。
+          description: OpenAuthTokenRequest.nonce 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
         signature:
           type: string
-          description: OpenAuthTokenRequest.signature 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应
-            PRD 规则校验。
+          description: OpenAuthTokenRequest.signature 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 512
     ProviderAdapterTestRequest:
       type: object
@@ -12576,13 +12609,11 @@ components:
           maxItems: 50
         provider_code:
           type: string
-          description: ProviderAdapterTestRequest.provider_code 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: ProviderAdapterTestRequest.provider_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         scenario:
           type: string
-          description: ProviderAdapterTestRequest.scenario 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: ProviderAdapterTestRequest.scenario 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           enum:
             - auth
             - webhook
@@ -12593,8 +12624,7 @@ components:
           maxLength: 255
         mock_payload:
           type: object
-          description: ProviderAdapterTestRequest.mock_payload 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: ProviderAdapterTestRequest.mock_payload 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
     RobotTaskEventRequest:
       type: object
       description: 请求载荷 `RobotTaskEventRequest`（R5 T14 机器人被动留痕上报）；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -12619,8 +12649,7 @@ components:
           maxLength: 32
         handover_id:
           type: string
-          description: 交接 ID 预留；对接 T17 dispatch
-            段交接（integration_robot_task_events.handover_id）。
+          description: 交接 ID 预留；对接 T17 dispatch 段交接（integration_robot_task_events.handover_id）。
           maxLength: 64
         payload:
           type: object
@@ -12655,8 +12684,7 @@ components:
           maxItems: 50
         provider_code:
           type: string
-          description: ProviderAdapterRequest.provider_code 字段；必须按本 schema
-            的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: ProviderAdapterRequest.provider_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         adapter_type:
           type: string
@@ -13155,8 +13183,7 @@ components:
         bar_item_ref:
           type: string
           maxLength: 64
-          description: 权益模板.bar_item_ref 字段（可选）；gift_drink 模板指向的吧台商品/库存
-            item，赠饮核销据此扣减库存；为空则跳过扣减并标注。
+          description: 权益模板.bar_item_ref 字段（可选）；gift_drink 模板指向的吧台商品/库存 item，赠饮核销据此扣减库存；为空则跳过扣减并标注。
         merchant_id:
           type: string
           maxLength: 64
@@ -13224,8 +13251,7 @@ components:
           type: integer
           minimum: 0
           maximum: 999999999999
-          description: 票类型权益.component_price_cent
-            字段（可选）；该权益分项标准单价/手动单价，组合票按各分项单价比例拆分订单实付到各业态。
+          description: 票类型权益.component_price_cent 字段（可选）；该权益分项标准单价/手动单价，组合票按各分项单价比例拆分订单实付到各业态。
     ProjectRequest:
       type: object
       description: 项目请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
@@ -13422,9 +13448,8 @@ components:
             $ref: "#/components/schemas/TerminalEventItem"
     TicketDynamicPricingRuleRequest:
       type: object
-      description: P2 ticket dynamic pricing rule write request. Draft rules are
-        simulation-only; published matching rules may affect formal ticket order
-        settlement and must retain price trace evidence.
+      description: P2 ticket dynamic pricing rule write request. Draft rules are simulation-only; published matching rules may
+        affect formal ticket order settlement and must retain price trace evidence.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -13466,8 +13491,7 @@ components:
         effective_to:
           type: string
           format: date
-          description: Last valid visit date for the rule; must not be before
-            effective_from.
+          description: Last valid visit date for the rule; must not be before effective_from.
         sales_channel:
           type: string
           description: Sales channel filter; null means all channels.
@@ -13495,8 +13519,7 @@ components:
           x-java-type: java.math.BigDecimal
         adjustment_amount_cent:
           type: integer
-          description: Fixed delta amount in cents; required when adjustment_type is
-            fixed_delta.
+          description: Fixed delta amount in cents; required when adjustment_type is fixed_delta.
           minimum: -999999999999
           maximum: 999999999999
         min_price_cent:
@@ -13511,13 +13534,12 @@ components:
           maximum: 999999999999
         condition_rule:
           type: object
-          description: Structured matching condition, for example weekday, holiday,
-            channel, crowd, or campaign segment.
+          description: Structured matching condition, for example weekday, holiday, channel, crowd, or campaign segment.
           additionalProperties: true
     TicketDynamicPricingSimulationRequest:
       type: object
-      description: P2 ticket dynamic pricing simulation request. The response is for
-        operational preview and must not create ticket orders or receivables.
+      description: P2 ticket dynamic pricing simulation request. The response is for operational preview and must not create
+        ticket orders or receivables.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -13548,14 +13570,12 @@ components:
             - channel
         context:
           type: object
-          description: Additional matching context such as party_size, is_holiday, or
-            segment tags.
+          description: Additional matching context such as party_size, is_holiday, or segment tags.
           additionalProperties: true
     AmusementGroupBookingRequest:
       type: object
-      description: P2 amusement group/private booking request. Approval must lock
-        capacity in backend transaction; frontend display cannot decide capacity
-        success.
+      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend
+        display cannot decide capacity success.
       additionalProperties: false
       required:
         - project_id
@@ -13614,8 +13634,7 @@ components:
           maximum: 999999
     AmusementGroupBookingApprovalRequest:
       type: object
-      description: P2 amusement group/private booking approval request. Approval locks
-        capacity and must leave audit evidence.
+      description: P2 amusement group/private booking approval request. Approval locks capacity and must leave audit evidence.
       additionalProperties: false
       required:
         - idempotency_key
@@ -13638,8 +13657,8 @@ components:
           maxItems: 50
     AmusementGroupBookingReleaseRequest:
       type: object
-      description: P2 amusement group/private booking release request. Release frees
-        previously locked capacity and must leave audit evidence.
+      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave
+        audit evidence.
       additionalProperties: false
       required:
         - idempotency_key
@@ -13662,8 +13681,8 @@ components:
           maxItems: 50
     AiQualitySuggestionRequest:
       type: object
-      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is
-        allowed; backend must redact and truncate before model invocation.
+      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and
+        truncate before model invocation.
       additionalProperties: false
       required:
         - idempotency_key
@@ -13673,8 +13692,7 @@ components:
       properties:
         idempotency_key:
           type: string
-          description: Idempotency key. Retries for the same AI quality suggestion must
-            reuse it.
+          description: Idempotency key. Retries for the same AI quality suggestion must reuse it.
           maxLength: 128
         source_type:
           type: string
@@ -13686,8 +13704,7 @@ components:
           maxLength: 64
         source_text:
           type: string
-          description: Text to inspect. Do not submit ID card, face image, payment proof,
-            or unredacted sensitive source content.
+          description: Text to inspect. Do not submit ID card, face image, payment proof, or unredacted sensitive source content.
           maxLength: 12000
         requested_by:
           type: string
@@ -13828,21 +13845,18 @@ components:
         idempotency_key:
           type: string
           maxLength: 128
-          description: Idempotency key for write operations; repeated submissions must
-            return the same result.
+          description: Idempotency key for write operations; repeated submissions must return the same result.
         operator_note:
           type: string
           maxLength: 1000
-          description: Operator note for manual processing, exception handling, and audit
-            review.
+          description: Operator note for manual processing, exception handling, and audit review.
         evidence_attachment_ids:
           type: array
           items:
             type: string
             maxLength: 64
           maxItems: 50
-          description: Evidence attachment id list for photos, complaints, repairs, or
-            rectification proof.
+          description: Evidence attachment id list for photos, complaints, repairs, or rectification proof.
         merchant_id:
           type: string
           maxLength: 64
@@ -13854,8 +13868,7 @@ components:
         contract_id:
           type: string
           maxLength: 64
-          description: Optional contract id used to preserve the contract responsibility
-            chain.
+          description: Optional contract id used to preserve the contract responsibility chain.
         work_order_type:
           type: string
           enum:
@@ -13915,21 +13928,18 @@ components:
         idempotency_key:
           type: string
           maxLength: 128
-          description: Idempotency key for write operations; repeated submissions must
-            return the same result.
+          description: Idempotency key for write operations; repeated submissions must return the same result.
         operator_note:
           type: string
           maxLength: 1000
-          description: Operator note for manual processing, exception handling, and audit
-            review.
+          description: Operator note for manual processing, exception handling, and audit review.
         evidence_attachment_ids:
           type: array
           items:
             type: string
             maxLength: 64
           maxItems: 50
-          description: Evidence attachment id list for photos, complaints, repairs, or
-            rectification proof.
+          description: Evidence attachment id list for photos, complaints, repairs, or rectification proof.
         owner_department:
           type: string
           maxLength: 64
@@ -13954,21 +13964,18 @@ components:
         idempotency_key:
           type: string
           maxLength: 128
-          description: Idempotency key for write operations; repeated submissions must
-            return the same result.
+          description: Idempotency key for write operations; repeated submissions must return the same result.
         operator_note:
           type: string
           maxLength: 1000
-          description: Operator note for manual processing, exception handling, and audit
-            review.
+          description: Operator note for manual processing, exception handling, and audit review.
         evidence_attachment_ids:
           type: array
           items:
             type: string
             maxLength: 64
           maxItems: 50
-          description: Evidence attachment id list for photos, complaints, repairs, or
-            rectification proof.
+          description: Evidence attachment id list for photos, complaints, repairs, or rectification proof.
         target_status:
           type: string
           enum:
@@ -13994,21 +14001,18 @@ components:
         idempotency_key:
           type: string
           maxLength: 128
-          description: Idempotency key for write operations; repeated submissions must
-            return the same result.
+          description: Idempotency key for write operations; repeated submissions must return the same result.
         operator_note:
           type: string
           maxLength: 1000
-          description: Operator note for manual processing, exception handling, and audit
-            review.
+          description: Operator note for manual processing, exception handling, and audit review.
         evidence_attachment_ids:
           type: array
           items:
             type: string
             maxLength: 64
           maxItems: 50
-          description: Evidence attachment id list for photos, complaints, repairs, or
-            rectification proof.
+          description: Evidence attachment id list for photos, complaints, repairs, or rectification proof.
         resolution:
           type: string
           minLength: 1
@@ -14068,8 +14072,7 @@ components:
         reported_by_user_id:
           type: string
           maxLength: 64
-          description: 商户work订单record.reported_by_user_id
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: 商户work订单record.reported_by_user_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         reported_channel:
           type: string
           maxLength: 64
@@ -14098,16 +14101,14 @@ components:
           type: integer
           minimum: 1
           maximum: 5
-          description: 商户work订单record.satisfaction_score
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: 商户work订单record.satisfaction_score 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         evidence_attachment_ids:
           type: array
           items:
             type: string
             maxLength: 64
           maxItems: 50
-          description: 商户work订单record.evidence_attachment_ids
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: 商户work订单record.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         created_at:
           type: string
           format: date-time
@@ -14127,18 +14128,15 @@ components:
         idempotency_key:
           type: string
           minLength: 1
-          description: supervisorreviewevaluate.idempotency_key
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewevaluate.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         operator_note:
           type: string
-          description: supervisorreviewevaluate.operator_note
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewevaluate.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         evidence_attachment_ids:
           type: array
           items:
             type: string
-          description: supervisorreviewevaluate.evidence_attachment_ids
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewevaluate.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         action_type:
           type: string
           enum:
@@ -14148,30 +14146,24 @@ components:
             - ar_ap_adjustment
             - contract_violation
             - base_definition_violation
-          description: supervisorreviewevaluate.action_type
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewevaluate.action_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         object_type:
           type: string
           minLength: 1
-          description: supervisorreviewevaluate.object_type
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewevaluate.object_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         object_id:
           type: string
           minLength: 1
-          description: supervisorreviewevaluate.object_id
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewevaluate.object_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         amount_cent:
           type: integer
           format: int64
           minimum: 0
-          description: supervisorreviewevaluate.amount_cent
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewevaluate.amount_cent 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         violation_summary:
           type: string
-          description: supervisorreviewevaluate.violation_summary
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-      description: supervisorreviewevaluate请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android
-        请求和供应商 mock 保持一致。
+          description: supervisorreviewevaluate.violation_summary 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+      description: supervisorreviewevaluate请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
     SupervisorReviewApprovalRequest:
       type: object
       required:
@@ -14182,36 +14174,29 @@ components:
         idempotency_key:
           type: string
           minLength: 1
-          description: supervisorreviewapproval.idempotency_key
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewapproval.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         operator_note:
           type: string
-          description: supervisorreviewapproval.operator_note
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewapproval.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         evidence_attachment_ids:
           type: array
           items:
             type: string
-          description: supervisorreviewapproval.evidence_attachment_ids
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewapproval.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         reviewer_level:
           type: integer
           minimum: 1
-          description: supervisorreviewapproval.reviewer_level
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewapproval.reviewer_level 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         decision:
           type: string
           enum:
             - approved
             - rejected
-          description: supervisorreviewapproval.decision
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: supervisorreviewapproval.decision 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         comment:
           type: string
-          description: supervisorreviewapproval.comment
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-      description: supervisorreviewapproval请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android
-        请求和供应商 mock 保持一致。
+          description: supervisorreviewapproval.comment 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+      description: supervisorreviewapproval请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
     StaffLevelAssignmentRequest:
       type: object
       description: 员工职级与薪资分配请求体。字段必须与 OpenAPI、后端 DTO、前端请求和审计保持一致。user_id 由路径参数提供，不在请求体。
@@ -14298,8 +14283,7 @@ components:
           maxLength: 255
     ArApAdjustmentDecisionRequest:
       type: object
-      description: 请求载荷 `ArApAdjustmentDecisionRequest`（R5 T7 补录审批决定）；字段、必填项和枚举用于生成
-        DTO、校验和契约测试。
+      description: 请求载荷 `ArApAdjustmentDecisionRequest`（R5 T7 补录审批决定）；字段、必填项和枚举用于生成 DTO、校验和契约测试。
       additionalProperties: false
       required:
         - decision
@@ -14510,8 +14494,7 @@ components:
           maxLength: 255
     StaffDeviceBindRequest:
       type: object
-      description: 员工设备凭证绑定/换机请求体。device_public_key=Keystore
-        公钥，device_fingerprint_hash=不可逆指纹（不读 NFC）。
+      description: 员工设备凭证绑定/换机请求体。device_public_key=Keystore 公钥，device_fingerprint_hash=不可逆指纹（不读 NFC）。
       additionalProperties: false
       required:
         - idempotency_key
@@ -14689,8 +14672,7 @@ components:
         package_name:
           type: string
           maxLength: 255
-          description: mdmappwhitelistrecord.package_name
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmappwhitelistrecord.package_name 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         app_label:
           type: string
           nullable: true
@@ -14702,8 +14684,7 @@ components:
             - global
             - project
             - device_model
-          description: mdmappwhitelistrecord.scope_type
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmappwhitelistrecord.scope_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         scope_id:
           type: string
           maxLength: 128
@@ -14719,13 +14700,11 @@ components:
         created_at:
           type: string
           format: date-time
-          description: mdmappwhitelistrecord.created_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmappwhitelistrecord.created_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         updated_at:
           type: string
           format: date-time
-          description: mdmappwhitelistrecord.updated_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmappwhitelistrecord.updated_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
     MdmSiteWhitelistRequest:
       type: object
       description: R5 T9 MDM 自有侧：允许访问网站域名白名单新增或更新请求（受 mdm.policy.manage）。
@@ -14737,8 +14716,7 @@ components:
         idempotency_key:
           type: string
           maxLength: 128
-          description: mdmsitewhitelist.idempotency_key
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmsitewhitelist.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         operator_note:
           type: string
           nullable: true
@@ -14749,8 +14727,7 @@ components:
           items:
             type: string
             maxLength: 64
-          description: mdmsitewhitelist.evidence_attachment_ids
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmsitewhitelist.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         domain:
           type: string
           description: 允许访问域名。
@@ -14805,16 +14782,14 @@ components:
           type: string
           nullable: true
           maxLength: 255
-          description: mdmsitewhitelistrecord.description
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmsitewhitelistrecord.description 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         scope_type:
           type: string
           enum:
             - global
             - project
             - device_model
-          description: mdmsitewhitelistrecord.scope_type
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmsitewhitelistrecord.scope_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         scope_id:
           type: string
           maxLength: 128
@@ -14830,13 +14805,11 @@ components:
         created_at:
           type: string
           format: date-time
-          description: mdmsitewhitelistrecord.created_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmsitewhitelistrecord.created_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         updated_at:
           type: string
           format: date-time
-          description: mdmsitewhitelistrecord.updated_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmsitewhitelistrecord.updated_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
     MdmDeviceEnrollRequest:
       type: object
       description: R5 T9 MDM 自有侧：设备纳管/策略同步请求（受 mdm.device.manage）。
@@ -14859,8 +14832,7 @@ components:
           items:
             type: string
             maxLength: 64
-          description: mdm设备enroll.evidence_attachment_ids
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdm设备enroll.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         device_id:
           type: string
           description: terminal_devices.device_id。
@@ -14895,8 +14867,7 @@ components:
           type: string
           nullable: true
           maxLength: 64
-          description: mdm设备managementrecord.terminal_type
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdm设备managementrecord.terminal_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         status:
           type: string
           nullable: true
@@ -14909,8 +14880,7 @@ components:
             - enrolled
             - compliant
             - violation
-          description: mdm设备managementrecord.management_status
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdm设备managementrecord.management_status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         policy_status:
           type: string
           nullable: true
@@ -14919,20 +14889,17 @@ components:
             - applied
             - failed
             - outdated
-          description: mdm设备managementrecord.policy_status
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdm设备managementrecord.policy_status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         last_policy_sync_at:
           type: string
           nullable: true
           format: date-time
-          description: mdm设备managementrecord.last_policy_sync_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdm设备managementrecord.last_policy_sync_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         enrolled_at:
           type: string
           nullable: true
           format: date-time
-          description: mdm设备managementrecord.enrolled_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdm设备managementrecord.enrolled_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
     MdmPolicyViolationRequest:
       type: object
       description: R5 T9 MDM 自有侧：设备策略违规上报请求（受 mdm.device.manage）。
@@ -14945,21 +14912,18 @@ components:
         idempotency_key:
           type: string
           maxLength: 128
-          description: mdmpolicyviolation.idempotency_key
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolation.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         operator_note:
           type: string
           nullable: true
           maxLength: 500
-          description: mdmpolicyviolation.operator_note
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolation.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         evidence_attachment_ids:
           type: array
           items:
             type: string
             maxLength: 64
-          description: mdmpolicyviolation.evidence_attachment_ids
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolation.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         device_id:
           type: string
           maxLength: 128
@@ -14973,8 +14937,7 @@ components:
             - root_detected
             - policy_sync_failed
             - other
-          description: mdmpolicyviolation.violation_type
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolation.violation_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         detail:
           type: string
           nullable: true
@@ -14999,8 +14962,7 @@ components:
         device_id:
           type: string
           maxLength: 128
-          description: mdmpolicyviolationrecord.device_id
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolationrecord.device_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         violation_type:
           type: string
           enum:
@@ -15010,8 +14972,7 @@ components:
             - root_detected
             - policy_sync_failed
             - other
-          description: mdmpolicyviolationrecord.violation_type
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolationrecord.violation_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         detail:
           type: string
           nullable: true
@@ -15020,23 +14981,19 @@ components:
         occurred_at:
           type: string
           format: date-time
-          description: mdmpolicyviolationrecord.occurred_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolationrecord.occurred_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         handled:
           type: boolean
-          description: mdmpolicyviolationrecord.handled
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolationrecord.handled 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         handled_note:
           type: string
           nullable: true
           maxLength: 1000
-          description: mdmpolicyviolationrecord.handled_note
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolationrecord.handled_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         created_at:
           type: string
           format: date-time
-          description: mdmpolicyviolationrecord.created_at
-            字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: mdmpolicyviolationrecord.created_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
     CustomerCheckInRequest:
       type: object
       description: 请求载荷 `CustomerCheckInRequest`；客人每日签到（连续签到阶梯），字段用于生成 DTO、校验和契约测试。
@@ -15061,8 +15018,7 @@ components:
           maxLength: 128
         reason:
           type: string
-          description: LoyaltyFreezeRequest.reason 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD
-            规则校验。
+          description: LoyaltyFreezeRequest.reason 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 255
     StoredValueTopupRequest:
       type: object
@@ -15270,18 +15226,101 @@ components:
           type: string
           description: 配置状态：active/inactive。
           maxLength: 32
+    BarOrderItemVoidRequest:
+      type: object
+      description: 请求载荷 `BarOrderItemVoidRequest`（V091 退菜退酒）；未出品=取消明细，已出品=退酒并按 return_to_stock 回补库存，资金从账单扣减。
+      additionalProperties: false
+      required:
+        - order_item_id
+        - reason
+      properties:
+        idempotency_key: &a2
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        operator_note: &a3
+          type: string
+          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids: &a4
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        order_item_id:
+          type: string
+          description: 待退菜退酒的订单明细 ID；必须属于路径订单。
+          maxLength: 64
+        reason:
+          type: string
+          description: 退菜退酒原因码/说明；进入审计与责任归属留痕。
+          maxLength: 500
+        return_to_stock:
+          type: boolean
+          description: 已出品退酒是否回补库存（仅 delivered 明细生效）；未出品撤单不计库存损耗。
+        bill_id:
+          type: string
+          description: 关联账单 ID；提供时资金回退（未结=减应付/已结=退款冲正）。
+          maxLength: 64
+    BarBillReopenRequest:
+      type: object
+      description: 请求载荷 `BarBillReopenRequest`（V091 反结）；已结账单 settled→reopened 需原因+高危权限+审批，与日结锁定协同（锁定日须走补录审批）。
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        idempotency_key: *a2
+        operator_note: *a3
+        evidence_attachment_ids: *a4
+        reason:
+          type: string
+          description: 反结原因；进入主管复核与审计留痕。
+          maxLength: 500
+    BarProductSoldOutRequest:
+      type: object
+      description: 请求载荷 `BarProductSoldOutRequest`（V091 沽清/估清 86）；soldOut=true 置沽清，false 恢复供应；沽清后下单该品被拒。
+      additionalProperties: false
+      properties:
+        idempotency_key: *a2
+        operator_note: *a3
+        evidence_attachment_ids: *a4
+        sold_out:
+          type: boolean
+          description: true=置沽清(86)，false=恢复供应；省略默认置沽清。
+        reason:
+          type: string
+          description: 沽清/恢复原因；进入审计留痕。
+          maxLength: 500
+    BarBillTipRequest:
+      type: object
+      description: 请求载荷 `BarBillTipRequest`（V091 小费）；tip_amount_cent 或 tip_ratio_bps 二选一；小费计入 payable 与结算（代收口径，不计低消/提成基数）。
+      additionalProperties: false
+      properties:
+        idempotency_key: *a2
+        operator_note: *a3
+        evidence_attachment_ids: *a4
+        tip_amount_cent:
+          type: integer
+          description: "`tip_amount_cent` 小费固定额，单位分；不得使用浮点数。"
+          minimum: 0
+          maximum: 999999999999
+        tip_ratio_bps:
+          type: integer
+          description: 小费比例（基点 bp，10000=100%）；按账单应付计算小费额。
+          minimum: 0
+          maximum: 100000
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
-  authContextExtension: "`x-auth-context` 表达
-    customer-token/device-credential/open-app-credential/webhook-signature
-    等鉴权上下文"
+  authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
   requestBodyRule: 所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入
   idempotencyRule: x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕
-  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10
-    个终端码；设备能力写入 x-device-capability，服务端/监控调用写入 x-invocation-channel。
+  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码；设备能力写入
+    x-device-capability，服务端/监控调用写入 x-invocation-channel。
   authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为
-    public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用
-    x-permission 或 x-data-scope 代替认证上下文。
+    public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或
+    x-data-scope 代替认证上下文。
 x-contract-hardening:
   date: 2026-06-12
   scope: P0 OpenAPI 字段级可编码补强
@@ -15290,8 +15329,8 @@ x-contract-hardening:
     - 金额字段单位统一为分，比例字段范围为 0-100，数量字段必须非负。
     - 路径、方法、operationId、权限、认证上下文和业务枚举不在本次机械补强中改变。
 x-p0-example-coverage:
-  strategy: P0 first covers high-risk write flows and external integration flows;
-    full operation examples are P1 documentation hardening.
+  strategy: P0 first covers high-risk write flows and external integration flows; full operation examples are P1
+    documentation hardening.
   request_bodies:
     - OpenAuthTokenRequest
     - Webhook

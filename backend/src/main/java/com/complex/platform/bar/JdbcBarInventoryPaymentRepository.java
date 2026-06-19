@@ -34,6 +34,19 @@ final class JdbcBarInventoryPaymentRepository {
         return updated > 0;
     }
 
+    public boolean atomicIncreaseStock(String itemId, String locationId, int quantity) {
+        // V091 退酒回补库存：无可用量下限，原子加回（仅当余额行已存在；不存在则由调用方决定是否兜底创建）。
+        int updated = jdbcTemplate.update("""
+                UPDATE inventory_stock_balances
+                   SET available_quantity = available_quantity + :qty,
+                       quantity           = quantity           + :qty,
+                       updated_at         = NOW()
+                 WHERE item_id   = :item_id
+                   AND location_id = :location_id
+                """, Map.of("item_id", itemId, "location_id", locationId, "qty", quantity));
+        return updated > 0;
+    }
+
     public Optional<StockBalanceSnapshot> findStockBalance(String itemId, String locationId) {
         return jdbcTemplate.query("""
                 SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at

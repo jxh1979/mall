@@ -87,12 +87,14 @@ final class JdbcBarOrderRepository {
                 INSERT INTO bar_order_items (
                     id, order_id, product_id, product_name, quantity, unit_price_cent,
                     amount_cent, delivery_status, created_at, updated_at,
-                    actual_pour_volume, loss_volume
+                    actual_pour_volume, loss_volume,
+                    voided, void_reason, voided_at, voided_by_user_id, return_to_stock
                 )
                 VALUES (
                     :id, :order_id, :product_id, :product_name, :quantity, :unit_price_cent,
                     :amount_cent, :delivery_status, :created_at, :updated_at,
-                    :actual_pour_volume, :loss_volume
+                    :actual_pour_volume, :loss_volume,
+                    :voided, :void_reason, :voided_at, :voided_by_user_id, :return_to_stock
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     product_name = EXCLUDED.product_name,
@@ -102,7 +104,12 @@ final class JdbcBarOrderRepository {
                     delivery_status = EXCLUDED.delivery_status,
                     updated_at = EXCLUDED.updated_at,
                     actual_pour_volume = EXCLUDED.actual_pour_volume,
-                    loss_volume = EXCLUDED.loss_volume
+                    loss_volume = EXCLUDED.loss_volume,
+                    voided = EXCLUDED.voided,
+                    void_reason = EXCLUDED.void_reason,
+                    voided_at = EXCLUDED.voided_at,
+                    voided_by_user_id = EXCLUDED.voided_by_user_id,
+                    return_to_stock = EXCLUDED.return_to_stock
                 """, parameterSource.orderItemParameters(item));
         return item;
     }
@@ -122,6 +129,42 @@ final class JdbcBarOrderRepository {
                   FROM bar_order_items
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapOrderItem).stream().findFirst();
+    }
+
+    public BarOrderItemVoidRecord saveOrderItemVoid(BarOrderItemVoidRecord voidRecord) {
+        jdbcTemplate.update("""
+                INSERT INTO bar_order_item_voids (
+                    id, order_item_id, order_id, bar_id, merchant_id, void_type, quantity,
+                    amount_cent, was_delivered, return_to_stock, inventory_movement_id,
+                    bill_id, bill_adjustment_id, reason, requested_by_user_id, approval_required,
+                    status, idempotency_key, evidence_attachment_ids, created_at
+                )
+                VALUES (
+                    :id, :order_item_id, :order_id, :bar_id, :merchant_id, :void_type, :quantity,
+                    :amount_cent, :was_delivered, :return_to_stock, :inventory_movement_id,
+                    :bill_id, :bill_adjustment_id, :reason, :requested_by_user_id, :approval_required,
+                    :status, :idempotency_key, CAST(:evidence_attachment_ids AS jsonb), :created_at
+                )
+                ON CONFLICT (order_item_id, idempotency_key) DO UPDATE SET
+                    void_type = EXCLUDED.void_type,
+                    quantity = EXCLUDED.quantity,
+                    amount_cent = EXCLUDED.amount_cent,
+                    was_delivered = EXCLUDED.was_delivered,
+                    return_to_stock = EXCLUDED.return_to_stock,
+                    inventory_movement_id = EXCLUDED.inventory_movement_id,
+                    bill_id = EXCLUDED.bill_id,
+                    bill_adjustment_id = EXCLUDED.bill_adjustment_id,
+                    reason = EXCLUDED.reason,
+                    status = EXCLUDED.status,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
+                """, parameterSource.orderItemVoidParameters(voidRecord));
+        return voidRecord;
+    }
+
+    public List<BarOrderItemVoidRecord> listOrderItemVoids(String orderId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM bar_order_item_voids WHERE order_id = :order_id ORDER BY created_at, id
+                """, Map.of("order_id", orderId), rowMapper::mapOrderItemVoid);
     }
 
     public BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket) {

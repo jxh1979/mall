@@ -55,6 +55,7 @@ public class BarOperationExecutor {
         if (value instanceof BarProductRecord record) return record.id();
         if (value instanceof BarOrderRecord record) return record.id();
         if (value instanceof BarOrderItemRecord record) return record.id();
+        if (value instanceof BarOrderItemVoidRecord record) return record.id();
         if (value instanceof BarProductionTicketRecord record) return record.id();
         if (value instanceof BarProductionTicketEventRecord record) return record.id();
         if (value instanceof BarBillRecord record) return record.id();

@@ -420,6 +420,62 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.order_item.void", admissionAction = "bar.order_item_void", objectType = "bar_order_item")
+    @Transactional
+    public BarOrderItemVoidRecord voidOrderItem(String orderId, BarOrderItemVoidRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        return operations.executeWrite(
+                "voidBarOrderItem:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderItemVoidRecord.class,
+                BarWriteOperation.VOID_ORDER_ITEM,
+                () -> orderService.voidOrderItem(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.reopen", admissionAction = "bar.bill_reopen", objectType = "bar_bill")
+    @Transactional
+    public BarBillOperationRecord reopenBill(String billId, BarBillReopenRequest request) {
+        String id = operations.requireText(billId, "bill_id");
+        return operations.executeWrite(
+                "reopenBarBill:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarBillOperationRecord.class,
+                BarWriteOperation.REOPEN_BILL,
+                () -> billingService.reopenBill(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.product.sold_out")
+    @Transactional
+    public BarProductRecord markProductSoldOut(String productId, BarProductSoldOutRequest request) {
+        String id = operations.requireText(productId, "product_id");
+        return operations.executeWrite(
+                "markBarProductSoldOut:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarProductRecord.class,
+                BarWriteOperation.MARK_PRODUCT_SOLD_OUT,
+                () -> orderService.markSoldOut(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.tip")
+    @Transactional
+    public BarBillRecord addBillTip(String billId, BarBillTipRequest request) {
+        String id = operations.requireText(billId, "bill_id");
+        return operations.executeWrite(
+                "addBarBillTip:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarBillRecord.class,
+                BarWriteOperation.ADD_BILL_TIP,
+                () -> billingService.addTip(id, request)
+        );
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "bar.table_commission.calculate")
     @Transactional
     public BarCommissionCalculationRecord calculateCommission(String billId, CommissionCalculateRequest request) {

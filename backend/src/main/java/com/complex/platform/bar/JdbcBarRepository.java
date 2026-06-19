@@ -132,6 +132,16 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public BarOrderItemVoidRecord saveOrderItemVoid(BarOrderItemVoidRecord voidRecord) {
+        return orderRepository.saveOrderItemVoid(voidRecord);
+    }
+
+    @Override
+    public List<BarOrderItemVoidRecord> listOrderItemVoids(String orderId) {
+        return orderRepository.listOrderItemVoids(orderId);
+    }
+
+    @Override
     public BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket) {
         return orderRepository.saveProductionTicket(ticket);
     }
@@ -254,6 +264,11 @@ class JdbcBarRepository implements BarRepository {
     @Override
     public boolean atomicDecreaseStock(String itemId, String locationId, int quantity) {
         return inventoryPayment.atomicDecreaseStock(itemId, locationId, quantity);
+    }
+
+    @Override
+    public boolean atomicIncreaseStock(String itemId, String locationId, int quantity) {
+        return inventoryPayment.atomicIncreaseStock(itemId, locationId, quantity);
     }
 
     @Override

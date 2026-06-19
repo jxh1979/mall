@@ -18,6 +18,11 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
     }
 
     @Override
+    public boolean isBusinessDayLocked(LocalDate businessDate) {
+        return financeService.isBusinessDayLocked(businessDate);
+    }
+
+    @Override
     public String createReceivableForOnAccountBill(
             BarBillRecord bill,
             BarOrderRecord order,

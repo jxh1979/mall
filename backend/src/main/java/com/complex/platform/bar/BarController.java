@@ -135,6 +135,46 @@ public class BarController {
         return ApiResponse.ok(service.deliverOrder(orderId, request));
     }
 
+    @PostMapping("/orders/{order_id}/void-item")
+    public ApiResponse<BarOrderItemVoidRecord> voidOrderItem(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) BarOrderItemVoidRequest request
+    ) {
+        authorizationService.requirePermission("bar.order_item.void");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.voidOrderItem(orderId, request));
+    }
+
+    @PostMapping("/bills/{bill_id}/reopen")
+    public ApiResponse<BarBillOperationRecord> reopenBill(
+            @PathVariable("bill_id") String billId,
+            @RequestBody(required = false) BarBillReopenRequest request
+    ) {
+        authorizationService.requirePermission("bar.bill.reopen");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reopenBill(billId, request));
+    }
+
+    @PostMapping("/bills/{bill_id}/tip")
+    public ApiResponse<BarBillRecord> addBillTip(
+            @PathVariable("bill_id") String billId,
+            @RequestBody(required = false) BarBillTipRequest request
+    ) {
+        authorizationService.requirePermission("bar.bill.tip");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.addBillTip(billId, request));
+    }
+
+    @PostMapping("/products/{product_id}/sold-out")
+    public ApiResponse<BarProductRecord> markProductSoldOut(
+            @PathVariable("product_id") String productId,
+            @RequestBody(required = false) BarProductSoldOutRequest request
+    ) {
+        authorizationService.requirePermission("bar.product.sold_out");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markProductSoldOut(productId, request));
+    }
+
     @PostMapping("/orders/{order_id}/items")
     public ApiResponse<BarOrderItemRecord> addOrderItem(
             @PathVariable("order_id") String orderId,

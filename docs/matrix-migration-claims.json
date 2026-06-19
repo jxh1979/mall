@@ -865,6 +865,89 @@
       "column": "daily_points_limit",
       "expected": "present",
       "note": "V090 积分转赠风控配置（防套现：daily_points_limit 日限额 + daily_count_limit 日次数）"
+    },
+    {
+      "req": "REQ-10.1-void",
+      "table": "bar_order_items",
+      "column": "voided",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：退菜退酒撤单标记"
+    },
+    {
+      "req": "REQ-10.1-void",
+      "table": "bar_order_items",
+      "column": "void_reason",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：退菜退酒原因"
+    },
+    {
+      "req": "REQ-10.1-void",
+      "table": "bar_order_items",
+      "column": "voided_at",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：退菜退酒时点"
+    },
+    {
+      "req": "REQ-10.1-void",
+      "table": "bar_order_items",
+      "column": "return_to_stock",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：已出品退酒是否回补库存"
+    },
+    {
+      "req": "REQ-10.1-void",
+      "table": "bar_order_item_voids",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：退菜退酒流水表（区分 cancel/return + 库存回补/资金扣减留痕）"
+    },
+    {
+      "req": "REQ-10.1-reopen",
+      "table": "bar_bills",
+      "column": "reopened",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：反结状态机标记"
+    },
+    {
+      "req": "REQ-10.1-reopen",
+      "table": "bar_bills",
+      "column": "reopened_by_user_id",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：反结责任人"
+    },
+    {
+      "req": "REQ-10.1-reopen",
+      "table": "bar_bills",
+      "column": "reopened_at",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：反结时点"
+    },
+    {
+      "req": "REQ-10.1-reopen",
+      "table": "bar_bills",
+      "column": "reopen_reason",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：反结原因"
+    },
+    {
+      "req": "REQ-10.1-soldout",
+      "table": "bar_products",
+      "column": "sold_out",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：沽清(86)标记，沽清后下单拒"
+    },
+    {
+      "req": "REQ-10.1-soldout",
+      "table": "bar_products",
+      "column": "sold_out_at",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：沽清时点"
+    },
+    {
+      "req": "REQ-10.1-tip",
+      "table": "bar_bills",
+      "column": "tip_amount_cent",
+      "expected": "present",
+      "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：小费入账单，结算 payable 含小费（代收口径）"
     }
   ]
 }

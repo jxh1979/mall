@@ -27,13 +27,15 @@ final class JdbcBarBillingRepository {
                     id, bill_no, order_id, bar_id, merchant_id, table_id, reservation_id,
                     subtotal_amount_cent, discount_amount_cent, deposit_deduct_amount_cent,
                     payable_amount_cent, paid_amount_cent, currency, payment_status,
-                    settlement_status, sales_staff_id, sales_role_type, created_at, updated_at
+                    settlement_status, sales_staff_id, sales_role_type, created_at, updated_at,
+                    reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent
                 )
                 VALUES (
                     :id, :bill_no, :order_id, :bar_id, :merchant_id, :table_id, :reservation_id,
                     :subtotal_amount_cent, :discount_amount_cent, :deposit_deduct_amount_cent,
                     :payable_amount_cent, :paid_amount_cent, :currency, :payment_status,
-                    :settlement_status, :sales_staff_id, :sales_role_type, :created_at, :updated_at
+                    :settlement_status, :sales_staff_id, :sales_role_type, :created_at, :updated_at,
+                    :reopened, :reopened_by_user_id, :reopened_at, :reopen_reason, :reopen_count, :tip_amount_cent
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_id = EXCLUDED.merchant_id,
@@ -46,7 +48,13 @@ final class JdbcBarBillingRepository {
                     settlement_status = EXCLUDED.settlement_status,
                     sales_staff_id = EXCLUDED.sales_staff_id,
                     sales_role_type = EXCLUDED.sales_role_type,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    reopened = EXCLUDED.reopened,
+                    reopened_by_user_id = EXCLUDED.reopened_by_user_id,
+                    reopened_at = EXCLUDED.reopened_at,
+                    reopen_reason = EXCLUDED.reopen_reason,
+                    reopen_count = EXCLUDED.reopen_count,
+                    tip_amount_cent = EXCLUDED.tip_amount_cent
                 """, parameterSource.billParameters(bill));
         return bill;
     }
@@ -77,7 +85,8 @@ final class JdbcBarBillingRepository {
                 SELECT id, bill_no, order_id, bar_id, merchant_id, table_id, reservation_id,
                        subtotal_amount_cent, discount_amount_cent, deposit_deduct_amount_cent,
                        payable_amount_cent, paid_amount_cent, currency, payment_status,
-                       settlement_status, sales_staff_id, sales_role_type, created_at, updated_at
+                       settlement_status, sales_staff_id, sales_role_type, created_at, updated_at,
+                       reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent
                   FROM bar_bills
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapBill).stream().findFirst();

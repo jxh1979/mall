@@ -54,6 +54,15 @@ public interface BarRepository {
 
     Optional<BarOrderItemRecord> findOrderItemById(String id);
 
+    /** V091 退菜退酒流水（区分 cancel/return + 库存回补/资金扣减留痕）。 */
+    default BarOrderItemVoidRecord saveOrderItemVoid(BarOrderItemVoidRecord voidRecord) {
+        return voidRecord;
+    }
+
+    default List<BarOrderItemVoidRecord> listOrderItemVoids(String orderId) {
+        return List.of();
+    }
+
     BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket);
 
     List<BarProductionTicketRecord> listProductionTickets(Optional<String> merchantScope);
@@ -102,6 +111,11 @@ public interface BarRepository {
     Optional<StockBalanceSnapshot> findStockBalance(String itemId, String locationId);
 
     boolean atomicDecreaseStock(String itemId, String locationId, int quantity);
+
+    /** V091 退酒回补库存（原子加回）。 */
+    default boolean atomicIncreaseStock(String itemId, String locationId, int quantity) {
+        return false;
+    }
 
     StockBalanceSnapshot saveStockBalance(StockBalanceSnapshot balance);
 

@@ -115,7 +115,10 @@ final class JdbcBarRowMapper {
                 nullableInstant(resultSet, "updated_at"),
                 resultSet.getObject("standard_pour_volume", Integer.class),
                 resultSet.getString("pour_volume_unit"),
-                resultSet.getObject("loss_threshold", Integer.class)
+                resultSet.getObject("loss_threshold", Integer.class),
+                resultSet.getBoolean("sold_out"),
+                nullableInstant(resultSet, "sold_out_at"),
+                resultSet.getString("sold_out_reason")
         );
     }
 
@@ -153,7 +156,37 @@ final class JdbcBarRowMapper {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
                 resultSet.getObject("actual_pour_volume", Integer.class),
-                resultSet.getLong("loss_volume")
+                resultSet.getLong("loss_volume"),
+                resultSet.getBoolean("voided"),
+                resultSet.getString("void_reason"),
+                nullableInstant(resultSet, "voided_at"),
+                resultSet.getString("voided_by_user_id"),
+                resultSet.getBoolean("return_to_stock")
+        );
+    }
+
+    BarOrderItemVoidRecord mapOrderItemVoid(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new BarOrderItemVoidRecord(
+                resultSet.getString("id"),
+                resultSet.getString("order_item_id"),
+                resultSet.getString("order_id"),
+                resultSet.getString("bar_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("void_type"),
+                resultSet.getInt("quantity"),
+                resultSet.getLong("amount_cent"),
+                resultSet.getBoolean("was_delivered"),
+                resultSet.getBoolean("return_to_stock"),
+                resultSet.getString("inventory_movement_id"),
+                resultSet.getString("bill_id"),
+                resultSet.getString("bill_adjustment_id"),
+                resultSet.getString("reason"),
+                resultSet.getString("requested_by_user_id"),
+                resultSet.getBoolean("approval_required"),
+                resultSet.getString("status"),
+                resultSet.getString("idempotency_key"),
+                readStringList(resultSet.getString("evidence_attachment_ids")),
+                nullableInstant(resultSet, "created_at")
         );
     }
 
@@ -225,7 +258,13 @@ final class JdbcBarRowMapper {
                 resultSet.getString("sales_staff_id"),
                 resultSet.getString("sales_role_type"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getBoolean("reopened"),
+                resultSet.getString("reopened_by_user_id"),
+                nullableInstant(resultSet, "reopened_at"),
+                resultSet.getString("reopen_reason"),
+                resultSet.getInt("reopen_count"),
+                resultSet.getLong("tip_amount_cent")
         );
     }
 

@@ -1,8 +1,13 @@
 package com.complex.platform.bar;
 
+import java.time.LocalDate;
 import java.util.List;
 
 interface BarReceivableLedgerService {
+
+    /** R5 T7 协同：经营日是否被锁定日结纳入；反结改动结账后金额前校验，锁定则须走补录审批。 */
+    boolean isBusinessDayLocked(LocalDate businessDate);
+
     String createReceivableForOnAccountBill(
             BarBillRecord bill,
             BarOrderRecord order,

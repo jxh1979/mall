@@ -9,6 +9,8 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -114,11 +116,13 @@ public class BarBillingService {
             throw ApiException.conflict("BAR_BILL_ALREADY_SETTLED", "bar bill is already settled");
         }
         requireText(actual.paymentId(), "payment_id");
+        // V091：结算应收含小费（payable + tip）。小费为代收（归属服务员/交班结算），不计入低消/提成基数。
+        long settleTotal = bill.payableAmountCent() + bill.tipAmountCent();
         long settlementAmount = actual.settlementAmountCent() == null
-                ? bill.payableAmountCent()
+                ? settleTotal
                 : nonNegative(actual.settlementAmountCent(), "settlement_amount_cent");
-        if (settlementAmount > bill.payableAmountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "settlement amount cannot exceed payable amount");
+        if (settlementAmount > settleTotal) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "settlement amount cannot exceed payable amount plus tip");
         }
         Instant now = Instant.now();
         // A2/A3：结算渠道（统一词表，与 finance 对账归并）+ 现金/POS 收款留痕 + D4 权威事件。
@@ -154,8 +158,8 @@ public class BarBillingService {
                 bill.depositDeductAmountCent(),
                 bill.payableAmountCent(),
                 settlementAmount,
-                settlementAmount >= bill.payableAmountCent() ? "paid" : "partial_paid",
-                settlementAmount >= bill.payableAmountCent() ? "settled" : "partial_settled",
+                settlementAmount >= settleTotal ? "paid" : "partial_paid",
+                settlementAmount >= settleTotal ? "settled" : "partial_settled",
                 now
         ));
     }
@@ -420,6 +424,96 @@ public class BarBillingService {
         if (saved.commissionAmountCent() > 0 && saved.salesStaffId() != null) {
             receivableLedgerService.createPayableForCommission(saved);
         }
+        return saved;
+    }
+
+    // ========================================================================
+    // V091 反结：settled→reopened→重结的状态机。需高危权限 + 原因 + 审批；与 T7 日结锁定协同。
+    // ========================================================================
+    BarBillOperationRecord reopenBill(String billId, BarBillReopenRequest request) {
+        BarBillReopenRequest actual = requireRequest(request);
+        BarBillRecord bill = repository.findBillById(billId)
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+        checkMerchantOwnership(bill.merchantId());
+        if (!"settled".equals(bill.settlementStatus())) {
+            throw ApiException.conflict("BAR_BILL_NOT_REOPENABLE", "only a settled bar bill can be reopened");
+        }
+        // 与 T7 日结锁定协同：若账单结算经营日已纳入锁定日结，反结改影响金额须走补录审批 → 硬拦截 DAY_CLOSE_LOCKED。
+        BarBillSettlementRecord latestSettlement = repository.listBillSettlements(bill.id()).stream()
+                .reduce((first, second) -> second)
+                .orElse(null);
+        LocalDate settleDay = latestSettlement != null && latestSettlement.settledAt() != null
+                ? latestSettlement.settledAt().atZone(ZoneOffset.UTC).toLocalDate()
+                : LocalDate.now();
+        if (receivableLedgerService.isBusinessDayLocked(settleDay)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "settlement business day " + settleDay + " is locked; use the backfill adjustment workflow");
+        }
+        String reason = requireText(actual.reason(), "reason");
+        String requestedBy = authorizationService.currentActor().id();
+        String key = requireText(actual.idempotencyKey(), "idempotency_key");
+        Instant now = Instant.now();
+        BarBillRecord reopened = BarBillRecords.billReopened(bill, requestedBy, reason, now);
+        repository.saveBill(reopened);
+        auditEventService.recordSuccess("bar.bill_reopened", "bar.bill.reopen", "bar_bill",
+                bill.id(), null, key,
+                Map.of("reopen_count", reopened.reopenCount(), "payable_amount_cent", reopened.payableAmountCent()));
+        return repository.saveBillOperation(new BarBillOperationRecord(
+                "bill_operation_" + billSlug(bill.id() + ":reopen:" + key),
+                "reopen",
+                bill.id(),
+                null,
+                null,
+                bill.payableAmountCent(),
+                reason,
+                requestedBy,
+                "applied",
+                key,
+                safeList(actual.evidenceAttachmentIds()),
+                billOperationSnapshot(bill, reopened, bill),
+                now));
+    }
+
+    // ========================================================================
+    // V091 小费：向账单追加小费（额/比例之一），计入 payable 与结算（代收，不计低消/提成基数）。
+    // ========================================================================
+    BarBillRecord addTip(String billId, BarBillTipRequest request) {
+        BarBillTipRequest actual = requireRequest(request);
+        BarBillRecord bill = repository.findBillById(billId)
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
+        checkMerchantOwnership(bill.merchantId());
+        if ("settled".equals(bill.settlementStatus()) || "merged".equals(bill.settlementStatus())) {
+            throw ApiException.conflict("BAR_BILL_NOT_TIPPABLE", "settled or merged bar bill cannot accept a tip");
+        }
+        long tip;
+        if (actual.tipAmountCent() != null) {
+            tip = positive(actual.tipAmountCent(), "tip_amount_cent");
+        } else if (actual.tipRatioBps() != null) {
+            int ratioBps = actual.tipRatioBps();
+            if (ratioBps <= 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "tip_ratio_bps must be positive");
+            }
+            tip = bill.payableAmountCent() * ratioBps / 10_000L;
+            if (tip <= 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "computed tip must be positive");
+            }
+        } else {
+            throw ApiException.badRequest("VALIDATION_FAILED", "tip_amount_cent or tip_ratio_bps is required");
+        }
+        Instant now = Instant.now();
+        long newTip = bill.tipAmountCent() + tip;
+        BarBillRecord updated = new BarBillRecord(
+                bill.id(), bill.billNo(), bill.orderId(), bill.barId(), bill.merchantId(),
+                bill.tableId(), bill.reservationId(), bill.subtotalAmountCent(), bill.discountAmountCent(),
+                bill.depositDeductAmountCent(), bill.payableAmountCent(), bill.paidAmountCent(),
+                bill.currency(), bill.paymentStatus(), bill.settlementStatus(), bill.salesStaffId(),
+                bill.salesRoleType(), bill.createdAt(), now,
+                bill.reopened(), bill.reopenedByUserId(), bill.reopenedAt(), bill.reopenReason(),
+                bill.reopenCount(), newTip);
+        BarBillRecord saved = repository.saveBill(updated);
+        auditEventService.recordSuccess("bar.bill_tip_added", "bar.bill.tip", "bar_bill",
+                bill.id(), null, actual.idempotencyKey(),
+                Map.of("tip_amount_cent", tip, "tip_total_cent", newTip));
         return saved;
     }
 

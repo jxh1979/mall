@@ -43,7 +43,50 @@ final class BarBillRecords {
                 bill.salesStaffId(),
                 bill.salesRoleType(),
                 bill.createdAt(),
-                updatedAt
+                updatedAt,
+                // V091：金额变更不改反结/小费元数据，原样携带。
+                bill.reopened(),
+                bill.reopenedByUserId(),
+                bill.reopenedAt(),
+                bill.reopenReason(),
+                bill.reopenCount(),
+                bill.tipAmountCent()
+        );
+    }
+
+    /** V091 反结：settled→reopened，重置可调整状态（unpaid/unsettled），保留累计反结次数 +1，留痕。 */
+    static BarBillRecord billReopened(
+            BarBillRecord bill,
+            String reopenedByUserId,
+            String reopenReason,
+            Instant reopenedAt
+    ) {
+        return new BarBillRecord(
+                bill.id(),
+                bill.billNo(),
+                bill.orderId(),
+                bill.barId(),
+                bill.merchantId(),
+                bill.tableId(),
+                bill.reservationId(),
+                bill.subtotalAmountCent(),
+                bill.discountAmountCent(),
+                bill.depositDeductAmountCent(),
+                bill.payableAmountCent(),
+                0L,
+                bill.currency(),
+                "unpaid",
+                "unsettled",
+                bill.salesStaffId(),
+                bill.salesRoleType(),
+                bill.createdAt(),
+                reopenedAt,
+                true,
+                reopenedByUserId,
+                reopenedAt,
+                reopenReason,
+                bill.reopenCount() + 1,
+                bill.tipAmountCent()
         );
     }
 

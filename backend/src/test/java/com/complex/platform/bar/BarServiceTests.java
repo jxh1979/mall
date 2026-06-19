@@ -63,7 +63,8 @@ class BarServiceTests {
                 new BarBillingService(barRepository, receivableLedgerService, authorizationService, auditEventService),
                 new BarTableSessionService(barRepository, authorizationService),
                 new BarOrderService(barRepository, authorizationService, auditEventService,
-                        new TraceabilityService(mock(TraceabilityRepository.class), authorizationService)),
+                        new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
+                        receivableLedgerService),
                 entryService,
                 new BarAgeVerificationService(idempotencyService, auditEventService, entryService),
                 authorizationService
@@ -1824,6 +1825,198 @@ class BarServiceTests {
         ));
     }
 
+    // ========================================================================
+    // V091 成熟 POS 深度：退菜退酒 / 反结 / 沽清 / 小费
+    // ========================================================================
+
+    @Test
+    void voidPendingOrderItemCancelsLineWithoutStockMovement() {
+        BarReservationRecord reservation = createReservation("void-pending", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-pending", "create product", List.of(), "bar_1", "Beer", "beer",
+                3000L, null, null, "active", null, null, false));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-pending", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-pending-1", "wrong item", List.of(), orderItemId, "customer changed mind", false, null));
+
+        assertThat(voided.voidType()).isEqualTo("cancel");
+        assertThat(voided.wasDelivered()).isFalse();
+        assertThat(voided.returnToStock()).isFalse();
+        assertThat(barRepository.orderItems.get(orderItemId).voided()).isTrue();
+        assertThat(barRepository.orderItems.get(orderItemId).deliveryStatus()).isEqualTo("voided");
+        assertThat(barRepository.stockMovements).isEmpty();
+    }
+
+    @Test
+    void voidDeliveredOrderItemReturnsStockAndDeductsBill() {
+        BarReservationRecord reservation = createReservation("void-return", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-return", "create product", List.of(), "bar_1", "Champagne", "spirit",
+                100000L, null, null, "active", "inventory_void_return", "bar_1", true));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-void-return", "inventory_void_return", "bar_1", 5, 0, 5, Instant.now()));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-return", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-void-return", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)), "staff_1", List.of("att1")));
+        // stock decreased to 3 after delivery
+        assertThat(barRepository.findStockBalance("inventory_void_return", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(3);
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-void-return", "create bill", List.of(), "offline", false, 0));
+        long payableBefore = bill.payableAmountCent();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-return-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+
+        assertThat(voided.voidType()).isEqualTo("return");
+        assertThat(voided.wasDelivered()).isTrue();
+        assertThat(voided.returnToStock()).isTrue();
+        // stock restored to 5, inbound movement recorded
+        assertThat(barRepository.findStockBalance("inventory_void_return", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
+        assertThat(barRepository.stockMovements.stream().anyMatch(m -> "inbound".equals(m.movementType()))).isTrue();
+        // bill payable deducted by the voided line amount
+        assertThat(barRepository.bills.get(bill.id()).payableAmountCent())
+                .isEqualTo(payableBefore - 200000L);
+    }
+
+    @Test
+    void voidAlreadyVoidedOrderItemIsRejected() {
+        BarReservationRecord reservation = createReservation("void-twice", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-twice", "create product", List.of(), "bar_1", "Beer", "beer",
+                3000L, null, null, "active", null, null, false));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-twice", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+        service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-twice-1", "x", List.of(), orderItemId, "first", false, null));
+
+        assertThatThrownBy(() -> service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-twice-2", "y", List.of(), orderItemId, "second", false, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_ITEM_ALREADY_VOIDED");
+    }
+
+    @Test
+    void reopenSettledBillTransitionsToReopenedAndAllowsResettle() {
+        BarBillRecord bill = billForOrder("reopen-flow", null);
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-reopen-flow", "settle", List.of(), "pay_reopen_flow", null, "cash"));
+        assertThat(barRepository.bills.get(bill.id()).settlementStatus()).isEqualTo("settled");
+
+        BarBillOperationRecord op = service.reopenBill(bill.id(), new BarBillReopenRequest(
+                "reopen-flow-1", "reopen", List.of(), "wrong payment method"));
+
+        assertThat(op.operationType()).isEqualTo("reopen");
+        BarBillRecord reopened = barRepository.bills.get(bill.id());
+        assertThat(reopened.reopened()).isTrue();
+        assertThat(reopened.settlementStatus()).isEqualTo("unsettled");
+        assertThat(reopened.reopenCount()).isEqualTo(1);
+
+        // re-settle after reopen succeeds
+        BarBillRecord resettled = service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-reopen-flow-2", "resettle", List.of(), "pay_reopen_flow_2", null, "pos"));
+        assertThat(resettled.settlementStatus()).isEqualTo("settled");
+    }
+
+    @Test
+    void reopenUnsettledBillIsRejected() {
+        BarBillRecord bill = billForOrder("reopen-unsettled", null);
+        assertThatThrownBy(() -> service.reopenBill(bill.id(), new BarBillReopenRequest(
+                "reopen-unsettled-1", "reopen", List.of(), "no")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_BILL_NOT_REOPENABLE");
+    }
+
+    @Test
+    void reopenSettledBillOnLockedBusinessDayRequiresBackfill() {
+        BarBillRecord bill = billForOrder("reopen-locked", null);
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-reopen-locked", "settle", List.of(), "pay_reopen_locked", null, "cash"));
+        receivableLedgerService.businessDayLocked = true;
+
+        assertThatThrownBy(() -> service.reopenBill(bill.id(), new BarBillReopenRequest(
+                "reopen-locked-1", "reopen", List.of(), "late fix")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DAY_CLOSE_LOCKED");
+    }
+
+    @Test
+    void soldOutProductIsRejectedOnOrderThenRestored() {
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-soldout", "create product", List.of(), "bar_1", "Limited Whisky", "spirit",
+                500000L, null, null, "active", null, null, false));
+        BarReservationRecord reservation = createReservation("soldout", "bar_1", 2);
+
+        BarProductRecord soldOut = service.markProductSoldOut(product.id(), new BarProductSoldOutRequest(
+                "soldout-1", "out of stock", List.of(), true, "kegs empty"));
+        assertThat(soldOut.soldOut()).isTrue();
+
+        assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
+                "order-soldout", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("PRODUCT_SOLD_OUT");
+
+        BarProductRecord restored = service.markProductSoldOut(product.id(), new BarProductSoldOutRequest(
+                "soldout-2", "back in stock", List.of(), false, "refilled"));
+        assertThat(restored.soldOut()).isFalse();
+
+        // now ordering succeeds
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-soldout-ok", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        assertThat(order.totalAmountCent()).isEqualTo(500000L);
+    }
+
+    @Test
+    void addTipIncreasesBillAndSettlementIncludesTip() {
+        BarBillRecord bill = billForOrder("tip-flow", null);
+        long payable = bill.payableAmountCent();
+
+        BarBillRecord tipped = service.addBillTip(bill.id(), new BarBillTipRequest(
+                "tip-flow-1", "tip", List.of(), 5000L, null));
+        assertThat(tipped.tipAmountCent()).isEqualTo(5000L);
+
+        // settling for less than payable+tip is partial; full amount settles
+        BarBillRecord settled = service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-tip-flow", "settle", List.of(), "pay_tip_flow", payable + 5000L, "cash"));
+        assertThat(settled.settlementStatus()).isEqualTo("settled");
+        assertThat(settled.paidAmountCent()).isEqualTo(payable + 5000L);
+    }
+
+    @Test
+    void settlementExceedingPayablePlusTipIsRejected() {
+        BarBillRecord bill = billForOrder("tip-exceed", null);
+        long payable = bill.payableAmountCent();
+        service.addBillTip(bill.id(), new BarBillTipRequest("tip-exceed-1", "tip", List.of(), 1000L, null));
+
+        assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-tip-exceed", "settle", List.of(), "pay_tip_exceed", payable + 1000L + 1L, "cash")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
     private BarReservationRecord createReservation(String key, String barId, int allowedFreeGuests) {
         BarTableRecord table = service.createTable(new BarTableRequest(
                 "table-" + key,
@@ -1906,6 +2099,7 @@ class BarServiceTests {
         private final Map<String, BarProductRecord> products = new LinkedHashMap<>();
         private final Map<String, BarOrderRecord> orders = new LinkedHashMap<>();
         private final Map<String, BarOrderItemRecord> orderItems = new LinkedHashMap<>();
+        private final List<BarOrderItemVoidRecord> orderItemVoids = new ArrayList<>();
         private final Map<String, BarBillRecord> bills = new LinkedHashMap<>();
         private final List<BarBillAdjustmentRecord> billAdjustments = new ArrayList<>();
         private final List<BarBillOperationRecord> billOperations = new ArrayList<>();
@@ -2046,6 +2240,18 @@ class BarServiceTests {
         @Override
         public Optional<BarOrderItemRecord> findOrderItemById(String id) {
             return Optional.ofNullable(orderItems.get(id));
+        }
+
+        @Override
+        public BarOrderItemVoidRecord saveOrderItemVoid(BarOrderItemVoidRecord voidRecord) {
+            orderItemVoids.removeIf(existing -> existing.id().equals(voidRecord.id()));
+            orderItemVoids.add(voidRecord);
+            return voidRecord;
+        }
+
+        @Override
+        public List<BarOrderItemVoidRecord> listOrderItemVoids(String orderId) {
+            return orderItemVoids.stream().filter(v -> orderId.equals(v.orderId())).toList();
         }
 
         @Override
@@ -2198,6 +2404,25 @@ class BarServiceTests {
         }
 
         @Override
+        public boolean atomicIncreaseStock(String itemId, String locationId, int quantity) {
+            String key = itemId + ":" + locationId;
+            StockBalanceSnapshot current = stockBalances.get(key);
+            if (current == null) {
+                return false;
+            }
+            stockBalances.put(key, new StockBalanceSnapshot(
+                    current.id(),
+                    current.itemId(),
+                    current.locationId(),
+                    current.quantity() + quantity,
+                    current.reservedQuantity(),
+                    current.availableQuantity() + quantity,
+                    Instant.now()
+            ));
+            return true;
+        }
+
+        @Override
         public StockBalanceSnapshot saveStockBalance(StockBalanceSnapshot balance) {
             stockBalances.put(balance.itemId() + ":" + balance.locationId(), balance);
             return balance;
@@ -2283,6 +2508,12 @@ class BarServiceTests {
 
     private static final class CapturingBarReceivableLedgerService implements BarReceivableLedgerService {
         private final List<CapturedReceivableRequest> requests = new ArrayList<>();
+        private boolean businessDayLocked = false;
+
+        @Override
+        public boolean isBusinessDayLocked(java.time.LocalDate businessDate) {
+            return businessDayLocked;
+        }
 
         @Override
         public String createReceivableForOnAccountBill(

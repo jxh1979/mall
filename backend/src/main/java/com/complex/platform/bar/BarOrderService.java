@@ -25,13 +25,16 @@ public class BarOrderService {
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
     private final TraceabilityService traceabilityService;
+    private final BarReceivableLedgerService receivableLedgerService;
 
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
-            AuditEventService auditEventService, TraceabilityService traceabilityService) {
+            AuditEventService auditEventService, TraceabilityService traceabilityService,
+            BarReceivableLedgerService receivableLedgerService) {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
         this.traceabilityService = traceabilityService;
+        this.receivableLedgerService = receivableLedgerService;
     }
 
     BarProductRecord createProduct(BarProductRequest request) {
@@ -84,6 +87,7 @@ public class BarOrderService {
             String productId = requireItemText(item, "product_id", "sku_id", "skuId");
             BarProductRecord product = repository.findProductById(productId)
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+            requireProductSellable(product);
             int quantity = requirePositiveItemQuantity(item, "quantity");
             long amount = product.priceCent() * quantity;
             total += amount;
@@ -144,6 +148,7 @@ public class BarOrderService {
             String productId = requireItemText(item, "product_id", "sku_id", "skuId");
             BarProductRecord product = repository.findProductById(productId)
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+            requireProductSellable(product);
             int quantity = requirePositiveItemQuantity(item, "quantity");
             long amount = product.priceCent() * quantity;
             total += amount;
@@ -417,6 +422,237 @@ public class BarOrderService {
                 "completed",
                 Instant.now()
         ));
+    }
+
+    // ========================================================================
+    // V091 沽清（86/估清）：置沽清 / 恢复供应；下单时 requireProductSellable 拦截。
+    // ========================================================================
+    BarProductRecord markSoldOut(String productId, BarProductSoldOutRequest request) {
+        BarProductSoldOutRequest actual = requireRequest(request);
+        BarProductRecord product = repository.findProductById(requireText(productId, "product_id"))
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+        checkMerchantOwnership(product.merchantId());
+        boolean targetSoldOut = actual.soldOut() == null || Boolean.TRUE.equals(actual.soldOut());
+        if (targetSoldOut == product.soldOut()) {
+            throw ApiException.conflict("BAR_PRODUCT_SOLD_OUT_UNCHANGED", "bar product sold-out state is unchanged");
+        }
+        Instant now = Instant.now();
+        BarProductRecord updated = new BarProductRecord(
+                product.id(),
+                product.barId(),
+                product.merchantId(),
+                product.productName(),
+                product.productType(),
+                product.priceCent(),
+                product.currency(),
+                product.inventoryItemId(),
+                product.stockLocationId(),
+                product.stockDeductionRequired(),
+                product.status(),
+                product.createdAt(),
+                now,
+                product.standardPourVolume(),
+                product.pourVolumeUnit(),
+                product.lossThreshold(),
+                targetSoldOut,
+                targetSoldOut ? now : null,
+                targetSoldOut ? trimToDefault(actual.reason(), "marked sold out") : null
+        );
+        BarProductRecord saved = repository.saveProduct(updated);
+        auditEventService.recordSuccess(
+                targetSoldOut ? "bar.product_sold_out" : "bar.product_restored",
+                targetSoldOut ? "bar.product.sold_out" : "bar.product.restore",
+                "bar_product",
+                product.id(),
+                null,
+                actual.idempotencyKey(),
+                Map.of("product_id", product.id(), "sold_out", targetSoldOut));
+        return saved;
+    }
+
+    private void requireProductSellable(BarProductRecord product) {
+        if (product.soldOut()) {
+            throw ApiException.conflict("PRODUCT_SOLD_OUT", "bar product is sold out (86) and cannot be ordered");
+        }
+    }
+
+    // ========================================================================
+    // V091 退菜退酒：未出品→直接取消明细（不计库存损耗）；已出品→退酒（可回补库存）+ 资金从账单扣减。
+    // ========================================================================
+    BarOrderItemVoidRecord voidOrderItem(String orderId, BarOrderItemVoidRequest request) {
+        BarOrderItemVoidRequest actual = requireRequest(request);
+        BarOrderRecord order = repository.findOrderById(requireText(orderId, "order_id"))
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+        checkMerchantOwnership(order.merchantId());
+        BarOrderItemRecord item = repository.findOrderItemById(requireText(actual.orderItemId(), "order_item_id"))
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "bar order item not found"));
+        if (!order.id().equals(item.orderId())) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_SCOPE_MISMATCH", "bar order item does not belong to order");
+        }
+        if (item.voided()) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "bar order item is already voided");
+        }
+        String reason = requireText(actual.reason(), "reason");
+        String actorId = authorizationService.currentActor().id();
+        String idempotencyKey = requireText(actual.idempotencyKey(), "idempotency_key");
+        boolean wasDelivered = "delivered".equals(item.deliveryStatus());
+        boolean returnToStock = wasDelivered && Boolean.TRUE.equals(actual.returnToStock());
+        Instant now = Instant.now();
+
+        BarProductRecord product = repository.findProductById(item.productId())
+                .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+
+        // 已出品退酒 + 选择回补库存：原子加回 + inbound 库存流水留痕。
+        String inventoryMovementId = null;
+        if (returnToStock && product.stockDeductionRequired()) {
+            String inventoryItemId = requireText(product.inventoryItemId(), "inventory_item_id");
+            String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
+            boolean increased = repository.atomicIncreaseStock(inventoryItemId, stockLocationId, item.quantity());
+            if (!increased) {
+                throw ApiException.conflict("STOCK_BALANCE_NOT_FOUND", "stock balance not found for return-to-stock");
+            }
+            inventoryMovementId = "movement_" + slug(order.id() + ":void:" + item.id() + ":" + idempotencyKey);
+            repository.saveStockMovement(new StockMovementSnapshot(
+                    inventoryMovementId,
+                    "inbound",
+                    inventoryItemId,
+                    null,
+                    stockLocationId,
+                    item.quantity(),
+                    "bar_order_item_void",
+                    item.id(),
+                    null,
+                    actorId,
+                    safeList(actual.evidenceAttachmentIds()),
+                    "completed",
+                    now));
+        }
+
+        // 资金：从关联账单扣减（结账前减应付 = waiver 类减项；结账后走 refund 冲正——复用既有账单调整路径）。
+        String billAdjustmentId = handleVoidBillAmount(actual, item, reason, actorId, idempotencyKey);
+
+        // 标记明细已撤单（保留原金额，撤单状态独立列承载，便于审计与聚合）。
+        repository.saveOrderItem(new BarOrderItemRecord(
+                item.id(),
+                item.orderId(),
+                item.productId(),
+                item.productName(),
+                item.quantity(),
+                item.unitPriceCent(),
+                item.amountCent(),
+                "voided",
+                item.createdAt(),
+                now,
+                item.actualPourVolume(),
+                item.lossVolume(),
+                true,
+                reason,
+                now,
+                actorId,
+                returnToStock));
+
+        BarOrderItemVoidRecord voidRecord = repository.saveOrderItemVoid(new BarOrderItemVoidRecord(
+                "void_" + slug(item.id() + ":" + idempotencyKey),
+                item.id(),
+                order.id(),
+                order.barId(),
+                order.merchantId(),
+                wasDelivered ? "return" : "cancel",
+                item.quantity(),
+                item.amountCent(),
+                wasDelivered,
+                returnToStock,
+                inventoryMovementId,
+                trimToNull(actual.billId()),
+                billAdjustmentId,
+                reason,
+                actorId,
+                true,
+                "applied",
+                idempotencyKey,
+                safeList(actual.evidenceAttachmentIds()),
+                now));
+
+        auditEventService.recordSuccess(
+                "bar.order_item_voided",
+                "bar.order_item.void",
+                "bar_order_item",
+                item.id(),
+                null,
+                idempotencyKey,
+                Map.of(
+                        "order_id", order.id(),
+                        "void_type", voidRecord.voidType(),
+                        "was_delivered", wasDelivered,
+                        "return_to_stock", returnToStock,
+                        "amount_cent", item.amountCent()));
+        return voidRecord;
+    }
+
+    /** 退菜退酒资金回退：在关联账单上做减项（未结=waiver 减应付；已结=refund 冲正）；无账单则仅明细取消不动资金。 */
+    private String handleVoidBillAmount(
+            BarOrderItemVoidRequest request,
+            BarOrderItemRecord item,
+            String reason,
+            String actorId,
+            String idempotencyKey
+    ) {
+        String billId = trimToNull(request.billId());
+        if (billId == null || item.amountCent() <= 0) {
+            return null;
+        }
+        BarBillRecord bill = repository.findBillById(billId).orElse(null);
+        if (bill == null) {
+            return null;
+        }
+        checkMerchantOwnership(bill.merchantId());
+        boolean settled = "settled".equals(bill.settlementStatus());
+        long amount = item.amountCent();
+        long beforePayable = bill.payableAmountCent();
+        long afterPayable = Math.max(0L, beforePayable - amount);
+        Instant now = Instant.now();
+        String adjustmentType = settled ? "refund" : "waiver";
+        Instant refundedAt = settled ? now : null;
+        // 已结账单退酒资金回退 → finance refund 应付台账（含 DAY_CLOSE_LOCKED 校验在 finance 层强拦截）。
+        String arApItemId = null;
+        if (settled) {
+            BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+            arApItemId = receivableLedgerService.createRefundPayable(
+                    bill, refundOrder,
+                    "bill_adjustment_void_" + slug(bill.id() + ":" + item.id() + ":" + idempotencyKey),
+                    amount, idempotencyKey, reason, safeList(request.evidenceAttachmentIds()));
+        }
+        repository.saveBill(com.complex.platform.bar.BarBillRecords.billWithAmounts(
+                bill,
+                bill.subtotalAmountCent(),
+                bill.discountAmountCent(),
+                bill.depositDeductAmountCent(),
+                afterPayable,
+                bill.paidAmountCent(),
+                bill.paymentStatus(),
+                bill.settlementStatus(),
+                now));
+        String adjustmentId = "bill_adjustment_void_" + slug(bill.id() + ":" + item.id() + ":" + idempotencyKey);
+        repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                adjustmentId,
+                bill.id(),
+                adjustmentType,
+                amount,
+                beforePayable,
+                afterPayable,
+                "void item: " + reason,
+                actorId,
+                true,
+                "applied",
+                idempotencyKey,
+                safeList(request.evidenceAttachmentIds()),
+                arApItemId,
+                com.complex.platform.bar.BarBillRecords.billAdjustmentSnapshot(
+                        bill, afterPayable, bill.paymentStatus(), bill.settlementStatus(), arApItemId),
+                now,
+                refundedAt));
+        return adjustmentId;
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {

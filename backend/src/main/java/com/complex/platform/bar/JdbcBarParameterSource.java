@@ -120,7 +120,10 @@ final class JdbcBarParameterSource {
                 .addValue("updated_at", timestampWithTimeZone(product.updatedAt()))
                 .addValue("standard_pour_volume", product.standardPourVolume())
                 .addValue("pour_volume_unit", product.pourVolumeUnit())
-                .addValue("loss_threshold", product.lossThreshold());
+                .addValue("loss_threshold", product.lossThreshold())
+                .addValue("sold_out", product.soldOut())
+                .addValue("sold_out_at", timestampWithTimeZone(product.soldOutAt()))
+                .addValue("sold_out_reason", product.soldOutReason());
     }
 
     MapSqlParameterSource orderParameters(BarOrderRecord order) {
@@ -168,7 +171,36 @@ final class JdbcBarParameterSource {
                 .addValue("created_at", timestampWithTimeZone(item.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(item.updatedAt()))
                 .addValue("actual_pour_volume", item.actualPourVolume())
-                .addValue("loss_volume", item.lossVolume());
+                .addValue("loss_volume", item.lossVolume())
+                .addValue("voided", item.voided())
+                .addValue("void_reason", item.voidReason())
+                .addValue("voided_at", timestampWithTimeZone(item.voidedAt()))
+                .addValue("voided_by_user_id", item.voidedByUserId())
+                .addValue("return_to_stock", item.returnToStock());
+    }
+
+    MapSqlParameterSource orderItemVoidParameters(BarOrderItemVoidRecord voidRecord) {
+        return new MapSqlParameterSource()
+                .addValue("id", voidRecord.id())
+                .addValue("order_item_id", voidRecord.orderItemId())
+                .addValue("order_id", voidRecord.orderId())
+                .addValue("bar_id", voidRecord.barId())
+                .addValue("merchant_id", voidRecord.merchantId())
+                .addValue("void_type", voidRecord.voidType())
+                .addValue("quantity", voidRecord.quantity())
+                .addValue("amount_cent", voidRecord.amountCent())
+                .addValue("was_delivered", voidRecord.wasDelivered())
+                .addValue("return_to_stock", voidRecord.returnToStock())
+                .addValue("inventory_movement_id", voidRecord.inventoryMovementId())
+                .addValue("bill_id", voidRecord.billId())
+                .addValue("bill_adjustment_id", voidRecord.billAdjustmentId())
+                .addValue("reason", voidRecord.reason())
+                .addValue("requested_by_user_id", voidRecord.requestedByUserId())
+                .addValue("approval_required", voidRecord.approvalRequired())
+                .addValue("status", voidRecord.status())
+                .addValue("idempotency_key", voidRecord.idempotencyKey())
+                .addValue("evidence_attachment_ids", writeJson(voidRecord.evidenceAttachmentIds()))
+                .addValue("created_at", timestampWithTimeZone(voidRecord.createdAt()));
     }
 
     MapSqlParameterSource productionTicketParameters(BarProductionTicketRecord ticket) {
@@ -220,7 +252,13 @@ final class JdbcBarParameterSource {
                 .addValue("sales_staff_id", bill.salesStaffId())
                 .addValue("sales_role_type", bill.salesRoleType())
                 .addValue("created_at", timestampWithTimeZone(bill.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(bill.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(bill.updatedAt()))
+                .addValue("reopened", bill.reopened())
+                .addValue("reopened_by_user_id", bill.reopenedByUserId())
+                .addValue("reopened_at", timestampWithTimeZone(bill.reopenedAt()))
+                .addValue("reopen_reason", bill.reopenReason())
+                .addValue("reopen_count", bill.reopenCount())
+                .addValue("tip_amount_cent", bill.tipAmountCent());
     }
 
     MapSqlParameterSource billAdjustmentParameters(BarBillAdjustmentRecord adjustment) {

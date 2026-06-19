@@ -109,6 +109,18 @@ public class FinanceService {
         );
     }
 
+    /**
+     * R5 T7 协同：判断某经营日是否已被锁定日结纳入（status='locked'）。
+     * 供其他域（如 bar 反结）在改动结账后金额前校验，锁定则须走补录审批，不得直接冲减锁定日 net。
+     */
+    @Transactional(readOnly = true)
+    public boolean isBusinessDayLocked(LocalDate businessDate) {
+        if (businessDate == null) {
+            return false;
+        }
+        return repository.lockedDailyCloseExistsForDate(businessDate);
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
     @Transactional
     public DailyCloseRecord createDailyClose(DailyCloseRequest request) {
