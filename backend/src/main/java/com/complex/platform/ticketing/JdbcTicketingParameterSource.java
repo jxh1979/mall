@@ -75,7 +75,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("valid_from", timestampWithTimeZone(entitlement.validFrom()))
                 .addValue("valid_to", timestampWithTimeZone(entitlement.validTo()))
                 .addValue("created_at", timestampWithTimeZone(entitlement.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()))
+                .addValue("num_people", entitlement.numPeople());
     }
 
     MapSqlParameterSource verificationParameters(VerificationRecord verification) {
@@ -97,7 +98,11 @@ final class JdbcTicketingParameterSource {
                 .addValue("staff_id", verification.staffId())
                 .addValue("merchant_id", verification.merchantId())
                 .addValue("window_valid", verification.windowValid())
-                .addValue("signature_valid", verification.signatureValid());
+                .addValue("signature_valid", verification.signatureValid())
+                .addValue("verified_people", verification.verifiedPeople())
+                .addValue("reverses_verification_id", verification.reversesVerificationId())
+                .addValue("reversed_by", verification.reversedBy())
+                .addValue("reversed_at", timestampWithTimeZone(verification.reversedAt()));
     }
 
     MapSqlParameterSource terminalSyncTaskParameters(TerminalSyncTaskRecord task) {

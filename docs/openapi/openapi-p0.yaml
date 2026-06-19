@@ -5348,6 +5348,41 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       description: 用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+  /api/v1/ticketing/verifications/{id}/reverse:
+    post:
+      tags:
+        - ticketing
+      operationId: reverseTicketVerification
+      summary: 核销冲正
+      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。
+      x-permission: ticket.verify.reverse
+      x-data-scope: project-point
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: ticket.verification_reversed
+      x-audit-event-failure: ticket.verification_reverse_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: Resource id path parameter.
+      requestBody:
+        $ref: "#/components/requestBodies/VerificationReverse"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/ticketing/verifications/preview:
     post:
       tags:
@@ -5792,6 +5827,15 @@ components:
             business_context:
               scenario: ticket_checkin
               ticket_id: ticket_inst_000001
+    VerificationReverse:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/VerificationReverseRequest"
+          example:
+            idempotency_key: reverse_20260618_000001
+            reason: 误核销，需冲正回滚核销次数
     ProviderAdapter:
       required: true
       content:
@@ -6777,6 +6821,21 @@ components:
           additionalProperties: true
           description: 核销业务上下文；用于区分通票、权益、酒水领取、卡座入场等场景。
       description: 核销请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
+    VerificationReverseRequest:
+      type: object
+      required:
+        - idempotency_key
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键；同一冲正重试必须复用。
+          maxLength: 128
+        reason:
+          type: string
+          description: 核销冲正原因；必填，留痕可追溯。
+          maxLength: 1000
+      description: 核销冲正请求体。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。
     ProviderAdapter:
       type: object
       required:

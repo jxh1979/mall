@@ -16,6 +16,7 @@ import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
+import com.complex.platform.ticketing.dto.VerificationReverseRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -240,11 +241,29 @@ public class TicketingController {
         return ApiResponse.ok(service.listVerifications());
     }
 
+    @PostMapping("/ticketing/verifications/{id}/reverse")
+    public ApiResponse<VerificationResponse> reverseVerification(
+            @PathVariable String id,
+            @RequestBody VerificationReverseRequest request
+    ) {
+        authorizationService.requirePermission("ticket.verify.reverse");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reverseVerification(id, request, resolveReversedBy()));
+    }
+
     @PostMapping("/terminals/sync-tasks")
     public ApiResponse<SyncTasksResponse> syncTerminalTasks(@RequestBody TerminalSyncTasksRequest request) {
         authorizationService.requirePermission("terminal.device.bind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.syncTerminalTasks(request));
+    }
+
+    private String resolveReversedBy() {
+        try {
+            return authorizationService.currentActor().id();
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 
     private String firstNonBlank(String first, String second) {

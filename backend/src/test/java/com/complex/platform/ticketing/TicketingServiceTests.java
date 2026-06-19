@@ -176,6 +176,92 @@ class TicketingServiceTests {
                 .hasSize(1);
     }
 
+    // R5 T5：多人票核销，verified_people 随权益 num_people 写入（当前默认 1）。
+    @Test
+    void verificationWritesVerifiedPeopleFromEntitlementNumPeople() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("verified-people");
+        // 模拟多人票：把权益 num_people 改为 4（来源待票种配置，本期发放默认 1）。
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                entitlement.id(), entitlement.entitlementCode(), entitlement.ticketTypeId(), entitlement.orderId(),
+                entitlement.entitlementTemplateId(), entitlement.entitlementType(), entitlement.merchantId(),
+                entitlement.venueId(), entitlement.pointId(), entitlement.totalTimes(), entitlement.usedTimes(),
+                entitlement.valueAmountCent(), entitlement.status(), entitlement.validFrom(), entitlement.validTo(),
+                entitlement.createdAt(), entitlement.updatedAt(), 4
+        ));
+
+        service.createVerification(new VerificationRequest(
+                "verified-people-1", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+
+        assertThat(ticketingRepository.verifications.values())
+                .filteredOn(v -> "success".equals(v.status()))
+                .singleElement()
+                .extracting(VerificationRecord::verifiedPeople)
+                .isEqualTo(4);
+        // used_times 一次性 +1（沿用 atomicUseEntitlement），不超 total_times。
+        assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
+                .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(1);
+    }
+
+    // R5 T5：核销冲正回滚 used_times，原记录置 reversed，新建 reversed 记录指向原记录。
+    @Test
+    void reverseVerificationRollsBackUsedTimesAndMarksOriginalReversed() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("reverse-rollback");
+        VerificationResponse success = service.createVerification(new VerificationRequest(
+                "reverse-rollback-1", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+        assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
+                .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(1);
+
+        VerificationResponse reversal = service.reverseVerification(
+                success.id(),
+                new com.complex.platform.ticketing.dto.VerificationReverseRequest("reverse-rollback-rev", "误核销"),
+                "supervisor_1");
+
+        assertThat(reversal.status()).isEqualTo("reversed");
+        // used_times 回滚到 0，权益恢复 active。
+        assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
+                .get().extracting(IssuedEntitlementRecord::usedTimes, IssuedEntitlementRecord::status)
+                .containsExactly(0, "active");
+        // 原记录置 reversed + reversed_by/reversed_at。
+        assertThat(ticketingRepository.findVerificationById(success.id()))
+                .get()
+                .satisfies(v -> {
+                    assertThat(v.status()).isEqualTo("reversed");
+                    assertThat(v.reversedBy()).isEqualTo("supervisor_1");
+                    assertThat(v.reversedAt()).isNotNull();
+                });
+        // 新建一条 reversed 记录 reverses_verification_id 指向原 id。
+        assertThat(ticketingRepository.findVerificationById(reversal.id()))
+                .get()
+                .satisfies(v -> {
+                    assertThat(v.status()).isEqualTo("reversed");
+                    assertThat(v.reversesVerificationId()).isEqualTo(success.id());
+                });
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("ticket.verification_reversed");
+    }
+
+    // R5 T5：重复冲正被拒（幂等/重复冲正拒绝）。
+    @Test
+    void reverseVerificationRejectsRepeatedReverse() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("reverse-dup");
+        VerificationResponse success = service.createVerification(new VerificationRequest(
+                "reverse-dup-1", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+        service.reverseVerification(success.id(),
+                new com.complex.platform.ticketing.dto.VerificationReverseRequest("reverse-dup-rev-1", "误核销"),
+                "supervisor_1");
+
+        // 第二次冲正（不同幂等键，非幂等回放）原记录已 reversed（非 success 且 reversed_at 非空）→ 拒绝，不二次回滚。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.reverseVerification(success.id(),
+                        new com.complex.platform.ticketing.dto.VerificationReverseRequest("reverse-dup-rev-2", "再次冲正"),
+                        "supervisor_1"))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageMatching(".*(reversed|reversible).*");
+        // used_times 不被二次回滚（仍为 0，不会变负）。
+        assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
+                .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(0);
+    }
+
     @Test
     void verificationConsumesExactlyOneRemainingTimeAndIsIdempotent() {
         IssuedEntitlementRecord entitlement = issueSingleEntitlement("verify");
@@ -1228,7 +1314,7 @@ class TicketingServiceTests {
                 entitlement.totalTimes(), entitlement.usedTimes(), entitlement.valueAmountCent(),
                 entitlement.status(), entitlement.validFrom(),
                 Instant.now().minusSeconds(3600), // expired 1 hour ago
-                entitlement.createdAt(), entitlement.updatedAt()
+                entitlement.createdAt(), entitlement.updatedAt(), entitlement.numPeople()
         ));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
@@ -1605,6 +1691,25 @@ class TicketingServiceTests {
         }
 
         @Override
+        public Optional<VerificationRecord> findVerificationById(String id) {
+            return Optional.ofNullable(verifications.get(id));
+        }
+
+        @Override
+        public void markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt) {
+            VerificationRecord v = verifications.get(id);
+            if (v == null) {
+                return;
+            }
+            verifications.put(id, new VerificationRecord(
+                    v.id(), v.verificationNo(), v.entitlementId(), v.entitlementCode(), v.credentialType(),
+                    v.credentialPayload(), v.deviceId(), v.pointId(), "reversed", v.resultReason(), v.sourceType(),
+                    v.clientTaskId(), v.createdAt(), v.nonce(), v.staffId(), v.merchantId(), v.windowValid(),
+                    v.signatureValid(), v.verifiedPeople(), v.reversesVerificationId(), reversedBy, reversedAt
+            ));
+        }
+
+        @Override
         public Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId) {
             return Optional.ofNullable(terminalSyncTasks.get(deviceCode + ":" + clientTaskId));
         }
@@ -1745,6 +1850,24 @@ class TicketingServiceTests {
                 return java.util.Optional.empty();
             }
             IssuedEntitlementRecord updated = entitlement.useOnce(updatedAt);
+            issuedEntitlements.put(id, updated);
+            return java.util.Optional.of(updated);
+        }
+
+        @Override
+        public java.util.Optional<IssuedEntitlementRecord> atomicReverseEntitlement(String id, java.time.Instant updatedAt) {
+            IssuedEntitlementRecord entitlement = issuedEntitlements.get(id);
+            if (entitlement == null || entitlement.usedTimes() <= 0) {
+                return java.util.Optional.empty();
+            }
+            IssuedEntitlementRecord updated = new IssuedEntitlementRecord(
+                    entitlement.id(), entitlement.entitlementCode(), entitlement.ticketTypeId(), entitlement.orderId(),
+                    entitlement.entitlementTemplateId(), entitlement.entitlementType(), entitlement.merchantId(),
+                    entitlement.venueId(), entitlement.pointId(), entitlement.totalTimes(),
+                    Math.max(entitlement.usedTimes() - 1, 0), entitlement.valueAmountCent(),
+                    "active", entitlement.validFrom(), entitlement.validTo(), entitlement.createdAt(), updatedAt,
+                    entitlement.numPeople()
+            );
             issuedEntitlements.put(id, updated);
             return java.util.Optional.of(updated);
         }

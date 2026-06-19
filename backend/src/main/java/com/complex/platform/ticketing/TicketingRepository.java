@@ -32,6 +32,10 @@ public interface TicketingRepository {
 
     List<VerificationRecord> listVerifications();
 
+    Optional<VerificationRecord> findVerificationById(String id);
+
+    void markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt);
+
     Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId);
 
     TerminalSyncTaskRecord saveTerminalSyncTask(TerminalSyncTaskRecord task);
@@ -79,6 +83,8 @@ public interface TicketingRepository {
     long sumPendingRefundAmountByOrderId(String orderId);
 
     Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt);
+
+    Optional<IssuedEntitlementRecord> atomicReverseEntitlement(String id, java.time.Instant updatedAt);
 
     boolean tryLockOrderForIssuance(String orderId);
 

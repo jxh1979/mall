@@ -148,12 +148,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO issued_entitlements (
                     id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                    value_amount_cent, status, valid_from, valid_to, created_at, updated_at
+                    value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
-                    :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at
+                    :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -170,7 +170,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                     status = EXCLUDED.status,
                     valid_from = EXCLUDED.valid_from,
                     valid_to = EXCLUDED.valid_to,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    num_people = EXCLUDED.num_people
                 """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
     }
@@ -180,7 +181,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at
+                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -203,7 +204,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at
+                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)
@@ -223,12 +224,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO ticket_verifications (
                     id, verification_no, entitlement_id, entitlement_code, credential_type,
                     credential_payload, device_id, point_id, status, result_reason, source_type,
-                    client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid
+                    client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
+                    verified_people, reverses_verification_id, reversed_by, reversed_at
                 )
                 VALUES (
                     :id, :verification_no, :entitlement_id, :entitlement_code, :credential_type,
                     :credential_payload, :device_id, :point_id, :status, :result_reason, :source_type,
-                    :client_task_id, :created_at, :nonce, :staff_id, :merchant_id, :window_valid, :signature_valid
+                    :client_task_id, :created_at, :nonce, :staff_id, :merchant_id, :window_valid, :signature_valid,
+                    :verified_people, :reverses_verification_id, :reversed_by, :reversed_at
                 )
                 """, parameterSource.verificationParameters(verification));
         return verification;
@@ -239,10 +242,37 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, verification_no, entitlement_id, entitlement_code, credential_type,
                        credential_payload, device_id, point_id, status, result_reason, source_type,
-                       client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid
+                       client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
+                       verified_people, reverses_verification_id, reversed_by, reversed_at
                   FROM ticket_verifications
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapVerification);
+    }
+
+    @Override
+    public Optional<VerificationRecord> findVerificationById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, verification_no, entitlement_id, entitlement_code, credential_type,
+                       credential_payload, device_id, point_id, status, result_reason, source_type,
+                       client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
+                       verified_people, reverses_verification_id, reversed_by, reversed_at
+                  FROM ticket_verifications
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapVerification).stream().findFirst();
+    }
+
+    @Override
+    public void markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt) {
+        jdbcTemplate.update("""
+                UPDATE ticket_verifications
+                   SET status = 'reversed',
+                       reversed_by = :reversed_by,
+                       reversed_at = :reversed_at
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("reversed_by", reversedBy)
+                .addValue("reversed_at", reversedAt.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override
@@ -599,6 +629,25 @@ class JdbcTicketingRepository implements TicketingRepository {
                        updated_at = :updated_at
                  WHERE id = :id
                    AND used_times < total_times
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
+        if (rowCount == 0) {
+            return Optional.empty();
+        }
+        return findIssuedEntitlementById(id);
+    }
+
+    @Override
+    public Optional<IssuedEntitlementRecord> atomicReverseEntitlement(String id, java.time.Instant updatedAt) {
+        // R5 T5 核销冲正：回滚一次核销（used_times-1，下限 0）；曾用满（status 非 active）则恢复 active。
+        int rowCount = jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET used_times = GREATEST(used_times - 1, 0),
+                       status = CASE WHEN status <> 'active' THEN 'active' ELSE status END,
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND used_times > 0
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));

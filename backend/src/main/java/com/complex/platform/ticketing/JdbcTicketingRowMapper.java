@@ -86,7 +86,8 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "valid_from"),
                 nullableInstant(resultSet, "valid_to"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getInt("num_people")
         );
     }
 
@@ -109,7 +110,11 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("staff_id"),
                 resultSet.getString("merchant_id"),
                 nullableBoolean(resultSet, "window_valid"),
-                nullableBoolean(resultSet, "signature_valid")
+                nullableBoolean(resultSet, "signature_valid"),
+                resultSet.getInt("verified_people"),
+                resultSet.getString("reverses_verification_id"),
+                resultSet.getString("reversed_by"),
+                nullableInstant(resultSet, "reversed_at")
         );
     }
 

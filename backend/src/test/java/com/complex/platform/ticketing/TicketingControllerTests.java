@@ -134,6 +134,64 @@ class TicketingControllerTests {
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 
+    // R5 T5：核销冲正端点权限 ticket.verify.reverse + 幂等键必填 + 成功回包。
+    @Test
+    void reverseVerificationWithoutReversePermissionReturnsPermissionDenied() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("ticket.verify.reverse");
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications/ver_1/reverse")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "reverse-denied",
+                                  "reason": "wrong scan"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+    }
+
+    @Test
+    void reverseVerificationWithoutIdempotencyKeyReturnsValidationFailed() throws Exception {
+        mockMvc.perform(post("/api/v1/ticketing/verifications/ver_1/reverse")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "reason": "wrong scan"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+    }
+
+    @Test
+    void reverseVerificationRouteUsesReversePermission() throws Exception {
+        when(authorizationService.currentActor()).thenReturn(new com.complex.platform.access.AccessActor(
+                "supervisor_1", "supervisor", "staff", null, null, "active"));
+        when(service.reverseVerification(any(String.class),
+                any(com.complex.platform.ticketing.dto.VerificationReverseRequest.class), any()))
+                .thenReturn(new VerificationResponse("ver_rev_1", "V20260618000001", "reversed", "误核销"));
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications/ver_1/reverse")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "reverse-ok",
+                                  "reason": "误核销"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("reversed"));
+
+        verify(authorizationService).requirePermission("ticket.verify.reverse");
+    }
+
     @Test
     void creatingTicketTypeUsesOpenApiPermissionAndSnakeCaseResponse() throws Exception {
         when(service.createTicketType(any(TicketTypeRequest.class))).thenReturn(new TicketTypeRecord(

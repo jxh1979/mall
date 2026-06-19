@@ -12,6 +12,7 @@ import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
+import com.complex.platform.ticketing.dto.VerificationReverseRequest;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -314,6 +315,23 @@ public class TicketingService {
     /** C1/REQ-05：人工放行（主管），留痕 status=manual_overridden。权限在端点层按主管权限码控制。 */
     public VerificationResponse manualOverrideVerification(VerificationRequest request, String reason) {
         return verificationService.manualOverride(request, reason);
+    }
+
+    /** R5 T5：核销冲正。幂等键必填、reason 必填、权限 ticket.verify.reverse；成功事件 ticket.verification_reversed。 */
+    @Transactional
+    public VerificationResponse reverseVerification(String verificationId, VerificationReverseRequest request, String reversedBy) {
+        return operations.executeWrite(
+                "reverseTicketVerification",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                VerificationResponse.class,
+                TicketingWriteOperation.REVERSE_VERIFICATION,
+                () -> verificationService.reverseVerification(
+                        verificationId,
+                        request == null ? null : request.reason(),
+                        reversedBy
+                )
+        );
     }
 
     public PageResponse<VerificationRecord> listVerifications() {

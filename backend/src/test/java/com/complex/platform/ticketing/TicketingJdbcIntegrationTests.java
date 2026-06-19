@@ -186,7 +186,8 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now.plusSeconds(86400),
                 now,
-                now
+                now,
+                3
         ));
         repository.saveVerification(new VerificationRecord(
                 "ver_jdbc",
@@ -206,6 +207,10 @@ class TicketingJdbcIntegrationTests {
                 "staff_jdbc",
                 "mch_jdbc",
                 Boolean.TRUE,
+                null,
+                3,
+                null,
+                null,
                 null
         ));
         repository.saveTerminalSyncTask(new TerminalSyncTaskRecord(
@@ -252,6 +257,48 @@ class TicketingJdbcIntegrationTests {
         assertThat(syncTask.verificationNo()).isEqualTo("V20260614000001");
         assertThat(syncTask.payload().get("credentialPayload")).isEqualTo("sha256:" + sha256("cred_terminal_jdbc"));
         assertThat(syncTask.payload().values()).doesNotContain("cred_terminal_jdbc");
+    }
+
+    // R5 T5：ticket_verifications.status CHECK 收口——非法状态被拒，manual_overridden/reversed 合法。
+    @Test
+    void ticketVerificationStatusCheckRejectsUnknownStatus() {
+        Instant now = Instant.parse("2026-06-18T00:00:00Z");
+        seedIssuedEntitlementForStatusCheck(now);
+
+        // 合法状态 manual_overridden 必须通过（漏掉会破坏人工放行流）。
+        repository.saveVerification(verificationWithStatus("ver_chk_mo", "V20260618CHK01", now, "manual_overridden"));
+        assertThat(repository.findVerificationById("ver_chk_mo")).isPresent();
+
+        // 非法状态被 CHECK 拒绝。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        repository.saveVerification(verificationWithStatus("ver_chk_bad", "V20260618CHK02", now, "bogus_status")))
+                .hasMessageContaining("chk_ticket_verifications_status");
+    }
+
+    @Test
+    void issuedEntitlementPersistsNumPeople() {
+        Instant now = Instant.parse("2026-06-18T00:00:00Z");
+        seedIssuedEntitlementForStatusCheck(now);
+        assertThat(repository.findIssuedEntitlementByCode("P0-CHK"))
+                .get().extracting(IssuedEntitlementRecord::numPeople).isEqualTo(4);
+    }
+
+    private void seedIssuedEntitlementForStatusCheck(Instant now) {
+        repository.saveTicketType(new TicketTypeRecord(
+                "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published", now, now));
+        repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "template_chk", "P0 Entry", "entry", 4, 9900L, "active", now, now));
+        repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
+                "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",
+                now, now.plusSeconds(86400), now, now, 4));
+    }
+
+    private VerificationRecord verificationWithStatus(String id, String no, Instant now, String status) {
+        return new VerificationRecord(
+                id, no, "ent_chk", "P0-CHK", "qr", "P0-CHK", "dev_chk", "gate_chk",
+                status, null, "android_terminal_online", null, now,
+                "nonce_" + id, "staff_chk", "mch_chk", Boolean.TRUE, null, 1, null, null, null);
     }
 
     @Test
@@ -341,7 +388,8 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now.plusSeconds(86400),
                 now,
-                now
+                now,
+                1
         ));
         repository.saveTicketCredential(new TicketCredentialRecord(
                 "credential_jdbc",

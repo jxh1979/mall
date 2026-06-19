@@ -121,10 +121,65 @@ public class TicketVerificationService {
                 null,
                 entitlement.merchantId(),
                 null,
+                null,
+                entitlement.numPeople(),
+                null,
+                null,
                 null
         ));
         return new VerificationResponse(verification.id(), verification.verificationNo(),
                 verification.status(), verification.resultReason());
+    }
+
+    /**
+     * R5 T5 核销冲正：对 status=success 的核销记录做冲正——回滚 issued_entitlements.used_times、
+     * 原记录置 reversed/reversed_by/reversed_at、新建一条 status=reversed 的核销记录 reverses_verification_id=原id。
+     * 不存在/非 success/已冲正 → 拒绝（幂等/重复冲正拒绝）。reason 必填、权限 ticket.verify.reverse、幂等键在端点层。
+     */
+    VerificationResponse reverseVerification(String verificationId, String reason, String reversedBy) {
+        String id = requireText(verificationId, "verification_id");
+        String reverseReason = requireText(reason, "reason");
+        VerificationRecord original = repository.findVerificationById(id)
+                .orElseThrow(() -> ApiException.notFound("VERIFICATION_NOT_FOUND", "verification not found"));
+        if (!"success".equals(original.status())) {
+            throw ApiException.conflict("VERIFICATION_NOT_REVERSIBLE", "only successful verification can be reversed");
+        }
+        if (original.reversedAt() != null) {
+            throw ApiException.conflict("VERIFICATION_ALREADY_REVERSED", "verification has already been reversed");
+        }
+        Instant now = Instant.now();
+        // 回滚权益核销次数（used_times-1，曾用满恢复 active）。原记录此前核销失败则无可回滚 → 拒绝。
+        repository.atomicReverseEntitlement(original.entitlementId(), now)
+                .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_REVERSE_FAILED", "no used times to reverse for entitlement"));
+        // 原 success 记录置 reversed/reversed_by/reversed_at。
+        repository.markVerificationReversed(original.id(), reversedBy, now);
+        // 新建一条 status=reversed 的核销记录，reverses_verification_id 指向原记录，可追溯。
+        VerificationRecord reversal = repository.saveVerification(new VerificationRecord(
+                "ver_" + UUID.randomUUID().toString().replace("-", ""),
+                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
+                original.entitlementId(),
+                original.entitlementCode(),
+                original.credentialType(),
+                original.credentialPayload(),
+                original.deviceId(),
+                original.pointId(),
+                "reversed",
+                reverseReason,
+                "verification_reverse",
+                null,
+                now,
+                original.nonce(),
+                original.staffId(),
+                original.merchantId(),
+                null,
+                null,
+                original.verifiedPeople(),
+                original.id(),
+                reversedBy,
+                now
+        ));
+        // TODO R5 T7 结算冲正 / R5 T15 赠饮库存回补联动本期未落地，待对应任务实现后在此触发对应冲正。
+        return new VerificationResponse(reversal.id(), reversal.verificationNo(), reversal.status(), reversal.resultReason());
     }
 
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
@@ -145,6 +200,11 @@ public class TicketVerificationService {
         }
         IssuedEntitlementRecord updated = repository.atomicUseEntitlement(entitlement.id(), now)
                 .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "entitlement has no remaining times"));
+        // R5 T5 多人票：本次核销人数 = 票面 num_people（同场次集中核销），不可超 num_people。
+        int verifiedPeople = updated.numPeople();
+        if (verifiedPeople > updated.numPeople()) {
+            throw ApiException.conflict("VERIFIED_PEOPLE_EXCEEDED", "verified people exceeds ticket num_people");
+        }
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
                 "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
@@ -163,6 +223,10 @@ public class TicketVerificationService {
                 null,
                 updated.merchantId(),
                 Boolean.TRUE,
+                null,
+                verifiedPeople,
+                null,
+                null,
                 null
         ));
         if (credential != null) {

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 211 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 124 | 人工权限矩阵正文未覆盖 22 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 422 | 人工事件矩阵正文未覆盖 379 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 211 | 人工任务映射正文未逐项覆盖 205 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 116 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 212 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 125 | 人工权限矩阵正文未覆盖 23 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 424 | 人工事件矩阵正文未覆盖 381 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 212 | 人工任务映射正文未逐项覆盖 206 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 117 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -147,6 +147,7 @@
 | `ticket.refund.approve` | staff-token | project-order | 1 | approveTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 1 | requestTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.ticket.issue` | staff-token | project-order | 1 | issueTicket | 已在权限矩阵正文出现 |
+| `ticket.verify.reverse` | staff-token | project-point | 1 | reverseTicketVerification | OpenAPI 补充，以本附录为准 |
 | `ticket.verify.view` | staff-token | project | 1 | listIssuedEntitlements | 已在权限矩阵正文出现 |
 | `verification.execute` | staff-token | project-point | 2 | createTicketVerification, previewTicketVerification | 已在权限矩阵正文出现 |
 | `verification.view` | staff-token | project-merchant | 1 | listTicketVerifications | 已在权限矩阵正文出现 |
@@ -573,6 +574,8 @@
 | `ticket_refund.requested` | success | `requestTicketRefund` | `POST` | `/api/v1/ticketing/refunds` | TIC-票务权益 | `ticket.refund.request` | 接口级事件，以本附录为准 |
 | `ticket.issue_failed` | failure | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
 | `ticket.issued` | success | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
+| `ticket.verification_reverse_failed` | failure | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | TIC-票务权益 | `ticket.verify.reverse` | 接口级事件，以本附录为准 |
+| `ticket.verification_reversed` | success | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | TIC-票务权益 | `ticket.verify.reverse` | 接口级事件，以本附录为准 |
 | `verification.failed` | failure | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.execute` | 已在事件矩阵正文出现 |
 | `verification.failed` | failure | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | TIC-票务权益 | `verification.execute` | 已在事件矩阵正文出现 |
 | `verification.previewed` | success | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | TIC-票务权益 | `verification.execute` | 接口级事件，以本附录为准 |
@@ -796,6 +799,7 @@
 | TIC-票务权益 | `publishTicketDynamicPricingRule` | `POST` | `/api/v1/ticketing/dynamic-pricing-rules/{id}/publish` | Publish P2 ticket dynamic pricing rule | `ticket.dynamic_pricing.publish` | `ticket_dynamic_pricing.published.success` / `ticket_dynamic_pricing.published.failure` | web | operation 级补充 |
 | TIC-票务权益 | `publishTicketType` | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | 发布票种 | `ticket.product.manage` | `ticket_price.published` / `ticket_price.publish_failed` | web | operation 级补充 |
 | TIC-票务权益 | `requestTicketRefund` | `POST` | `/api/v1/ticketing/refunds` | 退款或撤销申请 | `ticket.refund.request` | `ticket_refund.requested` / `ticket_refund.request_failed` | web, merchant_portal | operation 级补充 |
+| TIC-票务权益 | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | 核销冲正 | `ticket.verify.reverse` | `ticket.verification_reversed` / `ticket.verification_reverse_failed` | web, staff_work_phone, mobile_admin | operation 级补充 |
 | TIC-票务权益 | `simulateTicketDynamicPricing` | `POST` | `/api/v1/ticketing/dynamic-pricing/simulations` | Simulate P2 ticket dynamic pricing without creating an order | `ticket.dynamic_pricing.simulate` | `ticket_dynamic_pricing.simulated.success` / `ticket_dynamic_pricing.simulated.failure` | web | operation 级补充 |
 
 ## 6. OpenAPI 示例覆盖执行口径

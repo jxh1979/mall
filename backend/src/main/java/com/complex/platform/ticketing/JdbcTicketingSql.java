@@ -30,7 +30,7 @@ final class JdbcTicketingSql {
         return """
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at
+                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people
                   FROM issued_entitlements
                 """;
     }

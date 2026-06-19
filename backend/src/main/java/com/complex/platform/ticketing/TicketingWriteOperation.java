@@ -19,6 +19,7 @@ enum TicketingWriteOperation implements AuditedOperation {
     APPROVE_TICKET_REFUND("ticket_refund.approved", "ticket_refund.approve_failed", "ticket.refund.approve", "ticket_refund"),
     PREVIEW_VERIFICATION("verification.previewed", "verification.failed", "verification.execute", "ticket_verification"),
     CREATE_VERIFICATION("verification.succeeded", "verification.failed", "verification.execute", "ticket_verification"),
+    REVERSE_VERIFICATION("ticket.verification_reversed", "ticket.verification_reverse_failed", "ticket.verify.reverse", "ticket_verification"),
     SYNC_TERMINAL_TASKS("terminal.sync_task.accepted", "terminal.sync_task.accepted_failed", "terminal.device.bind", "terminal_sync_task");
 
     private final String successEvent;
