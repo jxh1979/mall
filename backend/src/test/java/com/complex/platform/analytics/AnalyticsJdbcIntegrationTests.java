@@ -166,6 +166,70 @@ class AnalyticsJdbcIntegrationTests {
                 .containsExactly("resolved", "analytics-jdbc-create", "handled by integration test", resolvedAt);
     }
 
+    @Test
+    void dashboardEtlAggregatesRealBusinessTablesAndUpsertsNonSeedSnapshots() {
+        java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-17");
+        // 造真实业务数据：当日 2 名新会员 + 1 条 pending 复核。
+        insertCustomer("cust_etl_1", "13900000001", businessDate);
+        insertCustomer("cust_etl_2", "13900000002", businessDate);
+        insertPendingReview("review_etl_1");
+
+        var job = new DashboardAggregationJob(repository,
+                java.time.Clock.fixed(Instant.parse("2026-06-17T05:00:00Z"), java.time.ZoneOffset.UTC));
+        job.refreshSnapshots(businessDate);
+
+        java.util.Map<String, java.math.BigDecimal> platform = repository.readMetricSnapshots(businessDate, null);
+        // 对拍真实业务表：member.new = 当日真实新建会员数（非种子）。
+        assertThat(platform.get("member.new")).isEqualByComparingTo("2");
+        // risk.pending_review 含 supervisor_review_decisions pending + analytics_risk_alerts open（种子 alert_p0 open=1） → >=2。
+        assertThat(platform.get("risk.pending_review")).isGreaterThanOrEqualTo(java.math.BigDecimal.valueOf(2));
+        // projection_method 标注为 etl_aggregate（非 manual_baseline 种子）。
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT projection_method FROM analytics_business_metric_snapshots
+                 WHERE metric_key = 'member.new' AND business_date = :d AND segment_type = 'platform'
+                """, Map.of("d", businessDate), String.class)).isEqualTo("etl_aggregate");
+    }
+
+    @Test
+    void metricSnapshotUpsertIsIdempotentAndScopeIsolated() {
+        java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-16");
+        Instant now = Instant.parse("2026-06-16T05:00:00Z");
+        var keyMerchantA = new AnalyticsRecords.MetricSnapshotKey("revenue.bar", "bar", "daily", businessDate, "merchant", "merchant_iso_a");
+        var keyMerchantB = new AnalyticsRecords.MetricSnapshotKey("revenue.bar", "bar", "daily", businessDate, "merchant", "merchant_iso_b");
+
+        repository.upsertMetricSnapshot(keyMerchantA, new java.math.BigDecimal("5000"), "etl_aggregate", now);
+        repository.upsertMetricSnapshot(keyMerchantB, new java.math.BigDecimal("9000"), "etl_aggregate", now);
+        // 重复 upsert 同键 → 幂等（不重复插入，更新值）。
+        repository.upsertMetricSnapshot(keyMerchantA, new java.math.BigDecimal("7000"), "etl_aggregate", now);
+
+        // 行级隔离：商户 A 只见自身值 7000，看不到 B 的 9000。
+        assertThat(repository.readMetricSnapshots(businessDate, "merchant_iso_a").get("revenue.bar")).isEqualByComparingTo("7000");
+        assertThat(repository.readMetricSnapshots(businessDate, "merchant_iso_b").get("revenue.bar")).isEqualByComparingTo("9000");
+        // 幂等：A 在该业务日只有一行。
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM analytics_business_metric_snapshots
+                 WHERE metric_key = 'revenue.bar' AND business_date = :d AND segment_type = 'merchant' AND segment_id = 'merchant_iso_a'
+                """, Map.of("d", businessDate), Long.class)).isEqualTo(1L);
+    }
+
+    private void insertCustomer(String id, String phone, java.time.LocalDate businessDate) {
+        Instant at = businessDate.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);
+        jdbcTemplate.update("""
+                INSERT INTO customers (id, phone, masked_phone, status, created_at, updated_at)
+                VALUES (:id, :phone, :masked, 'active', :at, :at)
+                """, Map.of("id", id, "phone", phone, "masked", "139****" + phone.substring(7), "at", java.sql.Timestamp.from(at)));
+    }
+
+    private void insertPendingReview(String reviewId) {
+        jdbcTemplate.update("""
+                INSERT INTO supervisor_review_decisions (
+                    review_id, policy_code, action_type, object_type, object_id, blocked,
+                    review_status, required_level, evaluated_at
+                )
+                VALUES (:id, 'pol_etl', 'high_risk', 'merchant', 'merchant_etl', TRUE, 'pending', 5, now())
+                """, Map.of("id", reviewId));
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("""
                 SELECT to_regclass(:qualified_name)::text

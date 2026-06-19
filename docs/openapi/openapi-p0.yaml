@@ -1229,6 +1229,36 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/analytics/dashboards/{domain}:
+    get:
+      tags:
+        - analytics
+      operationId: getAnalyticsDomainDashboard
+      summary: P0 经营看板下钻（按域）
+      description: 按业务域下钻经营看板指标（metric_code map），经 currentMerchantScope 行级隔离。
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 看板下钻业务域（如 finance/bar/ticketing/amusement/inventory/customer/governance）。
+      x-permission: analytics.dashboard.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.dashboard_domain.viewed
+      x-audit-event-failure: analytics.dashboard_domain.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/analytics/merchant-health:
     get:
       tags:

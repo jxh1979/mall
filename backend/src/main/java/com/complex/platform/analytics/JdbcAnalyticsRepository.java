@@ -14,15 +14,20 @@ import com.complex.platform.analytics.AnalyticsRecords.RiskAlertRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RiskRuleRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
 import com.complex.platform.analytics.AnalyticsRecords.StaffServiceScoreRecord;
+import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -288,6 +293,184 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM analytics_staff_service_scores
                  ORDER BY business_date DESC, service_score ASC, staff_id
                 """, this::mapStaffServiceScore);
+    }
+
+    // --- T12 看板真实聚合 / 行级隔离 ---
+
+    @Override
+    public Map<String, BigDecimal> readMetricSnapshots(LocalDate businessDate, String scope) {
+        String segmentType = scope == null ? "platform" : "merchant";
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("segment_type", segmentType)
+                .addValue("segment_id", scope);
+        String segmentFilter = scope == null ? "segment_id IS NULL" : "segment_id = :segment_id";
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT metric_key, actual_value
+                  FROM analytics_business_metric_snapshots
+                 WHERE business_date = :business_date
+                   AND period_type = 'daily'
+                   AND segment_type = :segment_type
+                   AND %s
+                """.formatted(segmentFilter), params, (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("actual_value"))
+        );
+        return result;
+    }
+
+    @Override
+    public Optional<LocalDate> latestEtlBusinessDate(String scope) {
+        String segmentType = scope == null ? "platform" : "merchant";
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("segment_type", segmentType)
+                .addValue("segment_id", scope);
+        String segmentFilter = scope == null ? "segment_id IS NULL" : "segment_id = :segment_id";
+        LocalDate latest = jdbcTemplate.query("""
+                SELECT MAX(business_date) AS latest
+                  FROM analytics_business_metric_snapshots
+                 WHERE period_type = 'daily'
+                   AND projection_method = 'etl_aggregate'
+                   AND segment_type = :segment_type
+                   AND %s
+                """.formatted(segmentFilter), params, resultSet ->
+                resultSet.next() ? resultSet.getObject("latest", LocalDate.class) : null
+        );
+        return Optional.ofNullable(latest);
+    }
+
+    @Override
+    public void upsertMetricSnapshot(
+            MetricSnapshotKey key,
+            BigDecimal actualValue,
+            String projectionMethod,
+            Instant createdAt
+    ) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("snapshot_id", "etl_" + UUID.randomUUID())
+                .addValue("metric_key", key.metricKey())
+                .addValue("domain", key.domain())
+                .addValue("period_type", key.periodType())
+                .addValue("business_date", key.businessDate())
+                .addValue("segment_type", key.segmentType())
+                .addValue("segment_id", key.segmentId())
+                .addValue("actual_value", actualValue)
+                .addValue("projection_method", projectionMethod)
+                .addValue("created_at", timestampWithTimeZone(createdAt));
+        // 与 V070 唯一索引 (metric_key, period_type, business_date, segment_type, COALESCE(segment_id,'__platform__')) 对齐。
+        jdbcTemplate.update("""
+                INSERT INTO analytics_business_metric_snapshots (
+                    snapshot_id, metric_key, domain, period_type, business_date, segment_type, segment_id,
+                    actual_value, trend_direction, projection_method, payload_json, created_at
+                )
+                VALUES (
+                    :snapshot_id, :metric_key, :domain, :period_type, :business_date, :segment_type, :segment_id,
+                    :actual_value, 'unknown', :projection_method, '{}'::jsonb, :created_at
+                )
+                ON CONFLICT (metric_key, period_type, business_date, segment_type, COALESCE(segment_id, '__platform__'))
+                DO UPDATE SET
+                    actual_value = EXCLUDED.actual_value,
+                    projection_method = EXCLUDED.projection_method,
+                    created_at = EXCLUDED.created_at
+                """, params);
+    }
+
+    @Override
+    public BigDecimal sumTicketRevenueCents(LocalDate businessDate) {
+        BigDecimal value = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0)
+                  FROM ticket_orders
+                 WHERE pay_status = 'paid'
+                   AND created_at >= :start
+                   AND created_at < :end
+                """, dayRange(businessDate), BigDecimal.class);
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COALESCE(SUM(settlement_amount_cent), 0) AS total
+                  FROM bar_bill_settlements
+                 WHERE settled_at >= :start
+                   AND settled_at < :end
+                 GROUP BY merchant_id
+                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
+        );
+        return result;
+    }
+
+    @Override
+    public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
+        BigDecimal value = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM amusement_verifications
+                 WHERE verification_result = 'success'
+                   AND created_at >= :start
+                   AND created_at < :end
+                """, dayRange(businessDate), BigDecimal.class);
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    @Override
+    public Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate) {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COUNT(*) AS total
+                  FROM ticket_verifications
+                 WHERE status = 'success'
+                   AND created_at >= :start
+                   AND created_at < :end
+                 GROUP BY merchant_id
+                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
+        );
+        return result;
+    }
+
+    @Override
+    public BigDecimal countNewMembers(LocalDate businessDate) {
+        BigDecimal value = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM customers
+                 WHERE created_at >= :start
+                   AND created_at < :end
+                """, dayRange(businessDate), BigDecimal.class);
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumInventoryBalanceByMerchant() {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COALESCE(SUM(quantity), 0) AS total
+                  FROM inventory_stock_balances
+                 GROUP BY merchant_id
+                """, new MapSqlParameterSource(), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
+        );
+        return result;
+    }
+
+    @Override
+    public BigDecimal countPendingReview() {
+        BigDecimal reviews = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM supervisor_review_decisions WHERE review_status = 'pending'
+                """, new MapSqlParameterSource(), BigDecimal.class);
+        BigDecimal alerts = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM analytics_risk_alerts WHERE status = 'open'
+                """, new MapSqlParameterSource(), BigDecimal.class);
+        return (reviews == null ? BigDecimal.ZERO : reviews).add(alerts == null ? BigDecimal.ZERO : alerts);
+    }
+
+    private MapSqlParameterSource dayRange(LocalDate businessDate) {
+        Instant start = businessDate.atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+        Instant end = businessDate.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+        return new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end));
     }
 
     private MapSqlParameterSource aiQualityTaskParameters(AiQualityTaskRecord task) {

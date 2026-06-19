@@ -161,17 +161,24 @@ export const menuItems: MenuProps["items"] = navigationGroups.map((group) => ({
   })),
 }));
 
+function metricValue(snapshot: Snapshot, metricCode: string): number | string {
+  const metric = snapshot.overview.metrics?.[metricCode];
+  if (!metric || metric.value === null || metric.value === undefined) {
+    return "—";
+  }
+  return metric.value;
+}
+
 function metricItems(snapshot: Snapshot) {
-  const { overview, integration } = snapshot;
+  const { integration } = snapshot;
   return [
-    { label: "商户", value: overview.merchants, hint: "经营主体" },
-    { label: "票务产品", value: overview.ticketProducts, hint: `出票 ${overview.issuedTickets}` },
-    { label: "核销", value: overview.verifications, hint: "成功核销" },
-    { label: "酒吧订单", value: overview.barOrders, hint: "开台到结账" },
-    { label: "游乐场次", value: overview.amusementSessions, hint: "容量池" },
+    { label: "票务收入", value: metricValue(snapshot, "revenue.ticket"), hint: "已支付实付（分）" },
+    { label: "酒吧收入", value: metricValue(snapshot, "revenue.bar"), hint: "已结算实收（分）" },
+    { label: "票务核销", value: metricValue(snapshot, "verify.done"), hint: "成功核销" },
+    { label: "游乐核销", value: metricValue(snapshot, "traffic.amusement"), hint: "成功核销人次" },
+    { label: "新增会员", value: metricValue(snapshot, "member.new"), hint: "当日新建" },
     { label: "第三方接口", value: integration.interfaces.length, hint: "接口目录" },
-    { label: "风险预警", value: overview.openRiskAlerts, hint: "未处理" },
-    { label: "事件", value: overview.auditEvents, hint: "审计留痕" },
+    { label: "待复核", value: metricValue(snapshot, "risk.pending_review"), hint: "复核 + 风险预警" },
   ];
 }
 
@@ -193,7 +200,7 @@ export function getSectionStats(section: SectionKey, snapshot: Snapshot): PageSt
     dashboard: [
       { label: "API", value: snapshot.health.ok ? "正常" : "异常", tone: snapshot.health.ok ? "good" : "danger" },
       { label: "待处理风险", value: openRiskCount(snapshot), tone: openRiskCount(snapshot) > 0 ? "warning" : "good" },
-      { label: "审计事件", value: snapshot.overview.auditEvents },
+      { label: "待复核", value: metricValue(snapshot, "risk.pending_review") },
       { label: "已启用接口", value: activeInterfaces },
     ],
     foundation: [

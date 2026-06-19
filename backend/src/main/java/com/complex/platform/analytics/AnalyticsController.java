@@ -6,11 +6,11 @@ import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
-import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantSummaryRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricAnomalyRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricDefinitionRecord;
+import com.complex.platform.analytics.AnalyticsRecords.OverviewResponse;
 import com.complex.platform.analytics.AnalyticsRecords.RiskAlertRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RiskRuleRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
@@ -65,9 +65,15 @@ public class AnalyticsController {
     }
 
     @GetMapping("/dashboards/p0-overview")
-    public ApiResponse<DashboardSnapshotRecord> getP0OverviewDashboard() {
+    public ApiResponse<OverviewResponse> getP0OverviewDashboard() {
         authorizationService.requirePermission("analytics.dashboard.view");
-        return ApiResponse.ok(service.getP0OverviewDashboard());
+        return ApiResponse.ok(service.overview(authorizationService.currentMerchantScope()));
+    }
+
+    @GetMapping("/dashboards/{domain}")
+    public ApiResponse<OverviewResponse> getDomainDashboard(@PathVariable String domain) {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        return ApiResponse.ok(service.dashboardDomain(domain, authorizationService.currentMerchantScope()));
     }
 
 

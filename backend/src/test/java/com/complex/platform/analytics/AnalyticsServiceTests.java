@@ -104,6 +104,62 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void overviewReturnsMetricCodeKeyedMapForPlatformScope() {
+        // 平台口径快照（ETL 落地）。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.ticket", "platform", null), new BigDecimal("128800"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "platform", null), new BigDecimal("68800"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var overview = service.overview(Optional.empty());
+
+        assertThat(overview.scope()).isNull();
+        // DTO 契约：键为 metric_code。
+        assertThat(overview.metrics()).containsKeys("revenue.ticket", "revenue.bar", "verify.done", "member.new", "risk.pending_review");
+        assertThat(overview.metrics().get("revenue.ticket").value()).isEqualByComparingTo("128800");
+        assertThat(overview.metrics().get("revenue.bar").value()).isEqualByComparingTo("68800");
+    }
+
+    @Test
+    void overviewEnforcesMerchantScopeIsolation() {
+        // 商户 A 与 B 的酒吧收入分别落快照（行级隔离按 segment_id）。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_b"), new BigDecimal("9000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var merchantA = service.overview(Optional.of("merchant_a"));
+
+        assertThat(merchantA.scope()).isEqualTo("merchant_a");
+        assertThat(merchantA.metrics().get("revenue.bar").value()).isEqualByComparingTo("5000");
+        // 跨商户不可见：商户 A 不应看到商户 B 的 9000。
+        assertThat(merchantA.metrics().get("revenue.bar").value()).isNotEqualByComparingTo("9000");
+    }
+
+    @Test
+    void overviewReturnsNullWithoutFabricationForUnreadyAndScopelessMetrics() {
+        // 仅落地平台口径 revenue.bar；商户口径无该指标行。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var merchantA = service.overview(Optional.of("merchant_a"));
+
+        // 数据源未就绪的指标不伪造：value=null + note。
+        assertThat(merchantA.metrics().get("supply.received").value()).isNull();
+        assertThat(merchantA.metrics().get("supply.received").note()).contains("T6");
+        assertThat(merchantA.metrics().get("risk.manual_backfill").value()).isNull();
+        assertThat(merchantA.metrics().get("revenue.thirdparty").value()).isNull();
+        // 源表无 merchant_id 的指标在商户口径下无快照行 → null（不伪造），带 scope note。
+        assertThat(merchantA.metrics().get("revenue.ticket").value()).isNull();
+        assertThat(merchantA.metrics().get("revenue.ticket").note()).contains("merchant_id");
+    }
+
+    @Test
+    void dashboardDomainFiltersByDomainAndIsScopeIsolated() {
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var barDomain = service.dashboardDomain("bar", Optional.of("merchant_a"));
+
+        assertThat(barDomain.metrics()).containsOnlyKeys("revenue.bar");
+        assertThat(barDomain.metrics().get("revenue.bar").value()).isEqualByComparingTo("5000");
+    }
+
+    @Test
     void repositoryFailureRecordsExactFailureAuditEventAndRethrows() {
         analyticsRepository.failAiQualityResults = true;
 
@@ -350,6 +406,15 @@ class AnalyticsServiceTests {
         assertThat(response.result().findingCount()).isZero();
         assertThat(analyticsRepository.aiQualityTaskSaveCount).isEqualTo(1);
         assertThat(analyticsRepository.aiQualityResultSaveCount).isEqualTo(1);
+    }
+
+    private com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey metricKey(
+            String metricCode,
+            String segmentType,
+            String segmentId
+    ) {
+        return new com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey(
+                metricCode, "test", "daily", LocalDate.parse("2026-06-14"), segmentType, segmentId);
     }
 
     private RiskAlertRequest riskAlertRequest(
@@ -681,6 +746,70 @@ class AnalyticsServiceTests {
         @Override
         public List<StaffServiceScoreRecord> listStaffServiceScores() {
             return staffServiceScores;
+        }
+
+        // --- T12 看板真实聚合 / 行级隔离（内存实现，用 metricSnapshots 模拟 ETL 落地的快照） ---
+        // key = scope|metricKey（scope=null 用 "__platform__"），value = actual_value。
+        private final Map<String, Map<String, BigDecimal>> metricSnapshots = new LinkedHashMap<>();
+        private LocalDate etlBusinessDate;
+
+        @Override
+        public Map<String, BigDecimal> readMetricSnapshots(LocalDate businessDate, String scope) {
+            String key = scope == null ? "__platform__" : scope;
+            return new LinkedHashMap<>(metricSnapshots.getOrDefault(key, Map.of()));
+        }
+
+        @Override
+        public Optional<LocalDate> latestEtlBusinessDate(String scope) {
+            return Optional.ofNullable(etlBusinessDate);
+        }
+
+        @Override
+        public void upsertMetricSnapshot(
+                com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey snapshotKey,
+                BigDecimal actualValue,
+                String projectionMethod,
+                Instant createdAt
+        ) {
+            etlBusinessDate = snapshotKey.businessDate();
+            String scope = "merchant".equals(snapshotKey.segmentType()) ? snapshotKey.segmentId() : "__platform__";
+            metricSnapshots.computeIfAbsent(scope, ignored -> new LinkedHashMap<>())
+                    .put(snapshotKey.metricKey(), actualValue);
+        }
+
+        @Override
+        public BigDecimal sumTicketRevenueCents(LocalDate businessDate) {
+            return BigDecimal.ZERO;
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
+        public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
+            return BigDecimal.ZERO;
+        }
+
+        @Override
+        public Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
+        public BigDecimal countNewMembers(LocalDate businessDate) {
+            return BigDecimal.ZERO;
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumInventoryBalanceByMerchant() {
+            return Map.of();
+        }
+
+        @Override
+        public BigDecimal countPendingReview() {
+            return BigDecimal.ZERO;
         }
     }
 

@@ -4,6 +4,14 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, OverviewPayload } from "../types";
 
+function metricText(data: OverviewPayload | null, metricCode: string): string {
+  const metric = data?.metrics?.[metricCode];
+  if (!metric || metric.value === null || metric.value === undefined) {
+    return "—";
+  }
+  return String(metric.value);
+}
+
 export function OverviewPage({ api, setGlobalError }: AdminPageProps) {
   const [data, setData] = React.useState<OverviewPayload | null>(null);
   const [dateFrom, setDateFrom] = React.useState("");
@@ -37,12 +45,12 @@ export function OverviewPage({ api, setGlobalError }: AdminPageProps) {
       </div>
       <AdminDataState loading={loading} error={error} empty={!data} onRetry={reload}>
         <div className="admin-kpi-grid">
-          <div className="admin-kpi-card" data-testid="overview-kpi-ticket"><span>票务</span><strong>{data?.ticketProducts ?? 0}</strong><small>票种 / 出票 {data?.issuedTickets ?? 0}</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-bar"><span>酒吧</span><strong>{data?.barOrders ?? 0}</strong><small>订单闭环</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-amusement"><span>游乐</span><strong>{data?.amusementSessions ?? 0}</strong><small>场次运行</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-finance"><span>财务</span><strong>{data?.merchants ?? 0}</strong><small>主体 / 商户汇总</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-integration"><span>第三方</span><strong>{data?.verifications ?? 0}</strong><small>核销与回调</small></div>
-          <div className="admin-kpi-card" data-testid="overview-kpi-audit"><span>审计</span><strong>{data?.auditEvents ?? 0}</strong><small>留痕事件</small></div>
+          <div className="admin-kpi-card" data-testid="overview-kpi-ticket"><span>票务收入</span><strong>{metricText(data, "revenue.ticket")}</strong><small>已支付订单实付（分）</small></div>
+          <div className="admin-kpi-card" data-testid="overview-kpi-bar"><span>酒吧收入</span><strong>{metricText(data, "revenue.bar")}</strong><small>已结算账单实收（分）</small></div>
+          <div className="admin-kpi-card" data-testid="overview-kpi-amusement"><span>游乐核销</span><strong>{metricText(data, "traffic.amusement")}</strong><small>成功核销人次</small></div>
+          <div className="admin-kpi-card" data-testid="overview-kpi-verify"><span>票务核销</span><strong>{metricText(data, "verify.done")}</strong><small>成功核销数</small></div>
+          <div className="admin-kpi-card" data-testid="overview-kpi-member"><span>新增会员</span><strong>{metricText(data, "member.new")}</strong><small>当日新建</small></div>
+          <div className="admin-kpi-card" data-testid="overview-kpi-risk"><span>待复核</span><strong>{metricText(data, "risk.pending_review")}</strong><small>复核 + 风险预警</small></div>
         </div>
       </AdminDataState>
     </section>

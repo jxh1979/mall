@@ -37,6 +37,46 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /**
+     * T12 看板总览/下钻响应：以 metric_code 为权威键的指标 map。
+     * scope=null 表示平台口径（全量）；scope=merchantId 表示商户口径（仅自身）。
+     * metrics 的 value 可能为 null（数据源未就绪，按"不伪造"返回 null + note）。
+     */
+    public record OverviewResponse(
+            Instant asOf,
+            String scope,
+            LocalDate businessDate,
+            Map<String, MetricValue> metrics
+    ) {
+    }
+
+    /** 单个指标值：value 可空（数据未就绪）；note 携带口径/未就绪说明；dimension 可承载下钻明细。 */
+    public record MetricValue(
+            BigDecimal value,
+            String unit,
+            String note,
+            Map<String, Object> dimension
+    ) {
+        public static MetricValue of(BigDecimal value, String unit) {
+            return new MetricValue(value, unit, null, null);
+        }
+
+        public static MetricValue unavailable(String note) {
+            return new MetricValue(null, null, note, null);
+        }
+    }
+
+    /** ETL upsert 的快照唯一键（与 V070 唯一索引对齐）。 */
+    public record MetricSnapshotKey(
+            String metricKey,
+            String domain,
+            String periodType,
+            LocalDate businessDate,
+            String segmentType,
+            String segmentId
+    ) {
+    }
+
 
     public record BusinessMetricSnapshotRecord(
             String snapshotId,

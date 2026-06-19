@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 215 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 216 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 128 | 人工权限矩阵正文未覆盖 26 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 430 | 人工事件矩阵正文未覆盖 387 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 215 | 人工任务映射正文未逐项覆盖 209 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 432 | 人工事件矩阵正文未覆盖 389 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 216 | 人工任务映射正文未逐项覆盖 210 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 119 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -58,7 +58,7 @@
 | `amusement.verification.execute` | staff-token | project-amusement-point | 1 | createAmusementVerification | 已在权限矩阵正文出现 |
 | `amusement.verification.override` | staff-token | project-amusement, project-amusement-point | 2 | listAmusementManualOverrides, createAmusementManualOverride | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 1 | listAmusementVerifications | 已在权限矩阵正文出现 |
-| `analytics.dashboard.view` | staff-token | project | 6 | listBusinessMetricSnapshots, getP0OverviewDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics | 已在权限矩阵正文出现 |
+| `analytics.dashboard.view` | staff-token | project | 7 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 7 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
 | `authenticated` | staff-token | current-session, self | 3 | logout, refreshToken, getEffectivePermissions | 已在权限矩阵正文出现 |
@@ -233,6 +233,8 @@
 | `analytics.ai_quality.local_llm_suggestion.failed` | failure | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.customer_intent.viewed` | success | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.customer_intent.viewed_failed` | failure | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
+| `analytics.dashboard_domain.view_failed` | failure | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.dashboard_domain.viewed` | success | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_view_failed` | failure | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_viewed` | success | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.merchant_health.viewed` | success | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -625,6 +627,7 @@
 | AMU-游乐安全 | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | 提交巡检结果 | `amusement.safety_inspection.submit` | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | staff_work_phone, web | operation 级补充 |
 | ANA-风控分析 | `createRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts` | 创建风险alert | `analytics.risk_alert.manage` | `risk_alert.created` / `risk_alert.create_failed` | web | operation 级补充 |
 | ANA-风控分析 | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | Generate local LLM AI quality suggestion | `analytics.risk_alert.manage` | `analytics.ai_quality.local_llm_suggestion.created` / `analytics.ai_quality.local_llm_suggestion.failed` | web | operation 级补充 |
+| ANA-风控分析 | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | P0 经营看板下钻（按域） | `analytics.dashboard.view` | `analytics.dashboard_domain.viewed` / `analytics.dashboard_domain.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | P0 经营总览 | `analytics.dashboard.view` | `analytics.dashboard_viewed` / `analytics.dashboard_view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getRobotAnalytics` | `GET` | `/api/v1/analytics/robot` | 获取机器人经营分析 | `analytics.dashboard.view` | `analytics.robot.viewed` / `analytics.robot.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | 查询ai质检结果 | `analytics.risk_alert.view` | `analytics.ai_quality_result.viewed` / `analytics.ai_quality_result.viewed_failed` | web | operation 级补充 |

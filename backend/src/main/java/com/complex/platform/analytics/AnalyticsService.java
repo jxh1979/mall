@@ -9,6 +9,8 @@ import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord
 import com.complex.platform.analytics.AnalyticsRecords.MerchantSummaryRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricAnomalyRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricDefinitionRecord;
+import com.complex.platform.analytics.AnalyticsRecords.MetricValue;
+import com.complex.platform.analytics.AnalyticsRecords.OverviewResponse;
 import com.complex.platform.analytics.AnalyticsRecords.RiskAlertRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RiskRuleRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
@@ -20,9 +22,12 @@ import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -41,6 +46,34 @@ public class AnalyticsService {
     private static final BigDecimal LOCAL_LLM_MIN_CONFIDENCE = new BigDecimal("0.60");
     private static final int MAX_SOURCE_TEXT_CHARS = 12_000;
     private static final int MAX_LLM_INPUT_CHARS = 4_000;
+
+    private static final String MERCHANT_SCOPE_UNAVAILABLE =
+            "source table has no merchant_id; merchant-scoped value not available";
+
+    /**
+     * T12 看板七类指标目录（与 r5-aggregation-metrics-draft §2 / DashboardAggregationJob 对齐）。
+     * ready=false 的指标数据源未就绪，按"不伪造"返回 null + note（采购到货依赖 T6；补录依赖 P1 留痕；第三方回流依赖开关接线）。
+     */
+    private static final List<MetricCatalogEntry> METRIC_CATALOG = List.of(
+            new MetricCatalogEntry(DashboardAggregationJob.REVENUE_TICKET, "finance", "cent", true,
+                    "ticket_orders has no merchant_id; merchant-scoped value not available"),
+            new MetricCatalogEntry(DashboardAggregationJob.REVENUE_BAR, "bar", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.TRAFFIC_AMUSEMENT, "amusement", "count", true,
+                    "amusement_verifications has no merchant_id; merchant-scoped value not available"),
+            new MetricCatalogEntry(DashboardAggregationJob.VERIFY_DONE, "ticketing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.MEMBER_NEW, "customer", "count", true,
+                    "customers has no merchant_id; merchant-scoped value not available"),
+            new MetricCatalogEntry(DashboardAggregationJob.SUPPLY_BALANCE, "inventory", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.RISK_PENDING_REVIEW, "governance", "count", true,
+                    "supervisor_review_decisions has no merchant_id; merchant-scoped value not available"),
+            // 数据源未就绪（不伪造）：
+            new MetricCatalogEntry("revenue.thirdparty", "finance", "cent", false,
+                    "third-party reflow depends on integration capability switch wiring (not yet aggregated)"),
+            new MetricCatalogEntry("supply.received", "inventory", "count", false,
+                    "purchase receipt depends on T6 procurement cycle (data source not ready)"),
+            new MetricCatalogEntry("risk.manual_backfill", "governance", "count", false,
+                    "manual backfill count depends on P1 audit-trail wiring (data source not ready)")
+    );
 
     private final AnalyticsRepository repository;
     private final AuditedOperationExecutor operations;
@@ -123,6 +156,62 @@ public class AnalyticsService {
         );
     }
 
+
+    /**
+     * T12 经营总览：以 metric_code 为权威键返回指标 map，经 scope 行级隔离。
+     * scope=Optional.empty() → 平台口径（全量）；scope=Optional.of(merchantId) → 仅本商户。
+     * 数据源未就绪的指标返回 value=null + note（不伪造）。
+     */
+    public OverviewResponse overview(Optional<String> scope) {
+        return readSingle(
+                "analytics.dashboard_viewed",
+                "analytics.dashboard_view_failed",
+                "analytics.dashboard.view",
+                "analytics_dashboard_snapshot",
+                () -> buildOverview(scope, null)
+        );
+    }
+
+    /** T12 下钻：按域返回该域指标 map，同样经 scope 隔离。 */
+    public OverviewResponse dashboardDomain(String domain, Optional<String> scope) {
+        String normalizedDomain = requireText(domain, "domain");
+        return readSingle(
+                "analytics.dashboard_domain.viewed",
+                "analytics.dashboard_domain.view_failed",
+                "analytics.dashboard.view",
+                "analytics_dashboard_snapshot",
+                () -> buildOverview(scope, normalizedDomain)
+        );
+    }
+
+    private OverviewResponse buildOverview(Optional<String> scope, String domainFilter) {
+        String scopeValue = scope.orElse(null);
+        Instant now = Instant.now(clock);
+        LocalDate businessDate = repository.latestEtlBusinessDate(scopeValue)
+                .or(() -> repository.latestEtlBusinessDate(null))
+                .orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
+        Map<String, BigDecimal> snapshots = repository.readMetricSnapshots(businessDate, scopeValue);
+
+        Map<String, MetricValue> metrics = new LinkedHashMap<>();
+        for (MetricCatalogEntry entry : METRIC_CATALOG) {
+            if (domainFilter != null && !domainFilter.equals(entry.domain())) {
+                continue;
+            }
+            if (!entry.ready()) {
+                metrics.put(entry.metricCode(), MetricValue.unavailable(entry.note()));
+                continue;
+            }
+            BigDecimal value = snapshots.get(entry.metricCode());
+            if (value == null) {
+                // 商户口径下源表无 merchant_id 维度的指标无快照行 → 不伪造，返回 null + note。
+                metrics.put(entry.metricCode(), MetricValue.unavailable(
+                        scopeValue == null ? "no snapshot for business date" : entry.scopeNote()));
+            } else {
+                metrics.put(entry.metricCode(), MetricValue.of(value, entry.unit()));
+            }
+        }
+        return new OverviewResponse(now, scopeValue, businessDate, metrics);
+    }
 
     public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {
         return readPage(
@@ -506,12 +595,27 @@ public class AnalyticsService {
         if (value instanceof DashboardSnapshotRecord record) {
             return record.snapshotKey();
         }
+        if (value instanceof OverviewResponse response) {
+            return response.scope() == null ? "platform" : response.scope();
+        }
         if (value instanceof AiQualitySuggestionResponse response) {
             return response.task().taskId();
         }
         return null;
     }
 
+
+    private record MetricCatalogEntry(
+            String metricCode,
+            String domain,
+            String unit,
+            boolean ready,
+            String scopeNote
+    ) {
+        String note() {
+            return scopeNote;
+        }
+    }
 
     private record NormalizedRiskLevel(String value, boolean adjusted) {
     }

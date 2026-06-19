@@ -75,6 +75,9 @@ class AnalyticsControllerTests {
         when(service.generateLocalLlmAiQualitySuggestion(any(AiQualitySuggestionRequest.class))).thenReturn(aiQualitySuggestion());
         when(service.listCustomerIntents()).thenReturn(new PageResponse<>(List.of(customerIntent()), 1, 50, 1));
         when(service.getP0OverviewDashboard()).thenReturn(dashboard());
+        when(authorizationService.currentMerchantScope()).thenReturn(java.util.Optional.empty());
+        when(service.overview(any())).thenReturn(overviewResponse());
+        when(service.dashboardDomain(anyString(), any())).thenReturn(overviewResponse());
         when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
         when(service.listMerchantHealthScores()).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
         when(service.listAnalyticsMerchants()).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
@@ -95,6 +98,7 @@ class AnalyticsControllerTests {
             "POST,/api/v1/analytics/ai-quality/local-llm-suggestions,analytics.risk_alert.manage",
             "GET,/api/v1/analytics/customer-intents,analytics.risk_alert.view",
             "GET,/api/v1/analytics/dashboards/p0-overview,analytics.dashboard.view",
+            "GET,/api/v1/analytics/dashboards/bar,analytics.dashboard.view",
             "GET,/api/v1/analytics/business-metric-snapshots,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchant-health,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchants,analytics.dashboard.view",
@@ -172,6 +176,15 @@ class AnalyticsControllerTests {
         );
     }
 
+
+    private AnalyticsRecords.OverviewResponse overviewResponse() {
+        return new AnalyticsRecords.OverviewResponse(
+                now(),
+                null,
+                LocalDate.parse("2026-06-14"),
+                Map.of("revenue.ticket", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent"))
+        );
+    }
 
     private BusinessMetricSnapshotRecord businessMetricSnapshot() {
         return new BusinessMetricSnapshotRecord(

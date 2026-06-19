@@ -40,15 +40,20 @@ export type AdminPageProps = {
   setGlobalError: (value: string | null) => void;
 };
 
+// T12 经营看板：以 metric_code 为权威键的指标 map（与后端 OverviewResponse 对齐）。
+// value 可能为 null（数据源未就绪/源表无 merchant_id 维度，不伪造）。
+export type MetricValue = {
+  value: number | null;
+  unit?: string | null;
+  note?: string | null;
+  dimension?: Record<string, unknown> | null;
+};
+
 export type OverviewPayload = {
-  merchants?: number;
-  ticketProducts?: number;
-  issuedTickets?: number;
-  verifications?: number;
-  barOrders?: number;
-  amusementSessions?: number;
-  openRiskAlerts?: number;
-  auditEvents?: number;
+  asOf: string;
+  scope: string | null;
+  businessDate: string;
+  metrics: Record<string, MetricValue>;
 };
 
 export type AccessUserRow = {

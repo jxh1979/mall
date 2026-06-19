@@ -4,15 +4,18 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 export type HealthResponse = { ok: boolean; service?: string; time?: string };
 export type ApiUser = { id: string; username: string; accountType: string; organizationId?: string | null; merchantId?: string | null };
 export type LoginResponse = { accessToken: string; refreshToken: string; sessionId: string; tokenType: string; user: ApiUser };
+// T12 经营看板：以 metric_code 为权威键的指标 map（与后端 OverviewResponse 对齐）。
+export type MetricValue = {
+  value: number | null;
+  unit?: string | null;
+  note?: string | null;
+  dimension?: Record<string, unknown> | null;
+};
 export type Overview = {
-  merchants: number;
-  ticketProducts: number;
-  issuedTickets: number;
-  verifications: number;
-  barOrders: number;
-  amusementSessions: number;
-  openRiskAlerts: number;
-  auditEvents: number;
+  asOf: string;
+  scope: string | null;
+  businessDate: string;
+  metrics: Record<string, MetricValue>;
 };
 export type InterfaceItem = { code: string; name: string; method: string; path: string; status: string };
 export type IntegrationResponse = { policy: string; interfaces: InterfaceItem[] };
