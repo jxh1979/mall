@@ -264,7 +264,8 @@ class InventoryServiceTests {
                 List.of("attachment_2"),
                 supplier.id(),
                 List.of(Map.of("item_id", item.id(), "quantity", 5)),
-                LocalDate.parse("2026-06-20")
+                LocalDate.parse("2026-06-20"),
+                null
         ));
         TraceHandoverRecord handover = service.scanTraceCodeHandover(new VerificationRequest(
                 "trace-create",
@@ -854,8 +855,11 @@ class InventoryServiceTests {
                     .toList();
         }
 
+        final List<PurchaseRequestEventRecord> purchaseRequestEvents = new ArrayList<>();
+
         @Override
         public PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord request) {
+            purchaseRequests.removeIf(r -> r.id().equals(request.id()));
             purchaseRequests.add(request);
             return request;
         }
@@ -863,6 +867,24 @@ class InventoryServiceTests {
         @Override
         public List<PurchaseRequestRecord> listPurchaseRequests() {
             return new ArrayList<>(purchaseRequests);
+        }
+
+        @Override
+        public Optional<PurchaseRequestRecord> findPurchaseRequestByIdForUpdate(String id) {
+            return purchaseRequests.stream().filter(r -> r.id().equals(id)).reduce((first, second) -> second);
+        }
+
+        @Override
+        public PurchaseRequestEventRecord savePurchaseRequestEvent(PurchaseRequestEventRecord event) {
+            purchaseRequestEvents.add(event);
+            return event;
+        }
+
+        @Override
+        public List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId) {
+            return purchaseRequestEvents.stream()
+                    .filter(e -> requestId.equals(e.requestId()))
+                    .toList();
         }
 
         @Override

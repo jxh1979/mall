@@ -9,7 +9,10 @@ import com.complex.platform.inventory.dto.InventoryItemRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
+import com.complex.platform.inventory.dto.PurchaseRequestApproveRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
+import com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest;
+import com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
@@ -37,17 +40,20 @@ public class InventoryController {
 
     private final InventoryService service;
     private final SupplyContractService supplyContractService;
+    private final PurchaseRequestService purchaseRequestService;
     private final WarehouseService warehouseService;
     private final AuthorizationService authorizationService;
 
     public InventoryController(
             InventoryService service,
             SupplyContractService supplyContractService,
+            PurchaseRequestService purchaseRequestService,
             WarehouseService warehouseService,
             AuthorizationService authorizationService
     ) {
         this.service = service;
         this.supplyContractService = supplyContractService;
+        this.purchaseRequestService = purchaseRequestService;
         this.warehouseService = warehouseService;
         this.authorizationService = authorizationService;
     }
@@ -76,6 +82,47 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.purchase_request.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createPurchaseRequest(request));
+    }
+
+    // ── R5 T6：采购周期状态机（created/submitted → approved/rejected → ordered → expected → arrived → received）──
+    @PostMapping("/purchase-requests/{id}/approve")
+    public ApiResponse<PurchaseRequestRecord> approvePurchaseRequest(
+            @PathVariable String id,
+            @RequestBody PurchaseRequestApproveRequest request
+    ) {
+        authorizationService.requirePermission("inventory.purchase.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(purchaseRequestService.approve(id, request));
+    }
+
+    @PostMapping("/purchase-requests/{id}/order")
+    public ApiResponse<PurchaseRequestRecord> orderPurchaseRequest(
+            @PathVariable String id,
+            @RequestBody PurchaseRequestTransitionRequest request
+    ) {
+        authorizationService.requirePermission("inventory.purchase.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(purchaseRequestService.order(id, request));
+    }
+
+    @PostMapping("/purchase-requests/{id}/arrive")
+    public ApiResponse<PurchaseRequestRecord> arrivePurchaseRequest(
+            @PathVariable String id,
+            @RequestBody PurchaseRequestTransitionRequest request
+    ) {
+        authorizationService.requirePermission("inventory.purchase.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(purchaseRequestService.arrive(id, request));
+    }
+
+    @PostMapping("/purchase-requests/{id}/receive")
+    public ApiResponse<PurchaseRequestRecord> receivePurchaseRequest(
+            @PathVariable String id,
+            @RequestBody PurchaseRequestReceiveRequest request
+    ) {
+        authorizationService.requirePermission("inventory.purchase.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(purchaseRequestService.receive(id, request));
     }
 
     @GetMapping("/saved-bottles")

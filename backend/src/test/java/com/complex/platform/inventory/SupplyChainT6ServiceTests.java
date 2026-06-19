@@ -44,6 +44,8 @@ class SupplyChainT6ServiceTests {
     private AuthorizationService authorizationService;
     private SupplyContractService contractService;
     private WarehouseService warehouseService;
+    private PurchaseRequestService purchaseRequestService;
+    private InMemoryAudit auditRepo;
 
     @BeforeEach
     void setUp() {
@@ -53,9 +55,12 @@ class SupplyChainT6ServiceTests {
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
         IdempotencyService idem =
                 new IdempotencyService(new InMemoryIdem(), new ObjectMapper());
-        AuditEventService audit = new AuditEventService(new InMemoryAudit());
+        auditRepo = new InMemoryAudit();
+        AuditEventService audit = new AuditEventService(auditRepo);
         contractService = new SupplyContractService(repo, idem, audit, authorizationService);
         warehouseService = new WarehouseService(repo, idem, audit, authorizationService);
+        purchaseRequestService = new PurchaseRequestService(
+                repo, idem, audit, authorizationService, contractService);
     }
 
     // ── 合同：三模式建合同 ──────────────────────────────────────────────────────
@@ -235,6 +240,128 @@ class SupplyChainT6ServiceTests {
         assertThat(warehouseService.listWarehouses().items()).isEmpty();
     }
 
+    // ── 采购周期状态机 ──────────────────────────────────────────────────────────
+    @Test
+    void purchaseFullFlowTransitionsStepByStepAndLeavesEvents() {
+        seedPurchase("pr_flow", "item_1", null, null);
+        purchaseRequestService.approve("pr_flow",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("a1", "approved", null, "ok"));
+        assertThat(repo.purchaseRequests.get("pr_flow").status()).isEqualTo("approved");
+        assertThat(repo.purchaseRequests.get("pr_flow").approvedBy()).isEqualTo("usr_admin");
+
+        purchaseRequestService.order("pr_flow",
+                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("a2", null));
+        assertThat(repo.purchaseRequests.get("pr_flow").status()).isEqualTo("ordered");
+        assertThat(repo.purchaseRequests.get("pr_flow").orderedAt()).isNotNull();
+
+        purchaseRequestService.arrive("pr_flow",
+                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("a3", null));
+        assertThat(repo.purchaseRequests.get("pr_flow").status()).isEqualTo("arrived");
+        assertThat(repo.purchaseRequests.get("pr_flow").actualArrivalDate()).isNotNull();
+
+        purchaseRequestService.receive("pr_flow",
+                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest(
+                        "a4", "loc_1", "wh_1", List.of("photo_1"), null));
+        PurchaseRequestRecord received = repo.purchaseRequests.get("pr_flow");
+        assertThat(received.status()).isEqualTo("received");
+        assertThat(received.receivedBy()).isEqualTo("usr_admin");
+        assertThat(received.receivedAt()).isNotNull();
+
+        // 每步留事件（含 received）。
+        assertThat(repo.listPurchaseRequestEvents("pr_flow"))
+                .extracting(PurchaseRequestEventRecord::toStatus)
+                .containsExactly("approved", "ordered", "arrived", "received");
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName)
+                .contains("inventory.purchase_status_changed", "inventory.received");
+    }
+
+    @Test
+    void receiveGeneratesInboundMovementToWarehouse() {
+        seedPurchase("pr_recv", "item_1", null, null);
+        purchaseRequestService.approve("pr_recv",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("r1", "approved", null, null));
+        purchaseRequestService.order("pr_recv",
+                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("r2", null));
+        purchaseRequestService.arrive("pr_recv",
+                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("r3", null));
+        purchaseRequestService.receive("pr_recv",
+                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest(
+                        "r4", "loc_main", "wh_main", List.of(), null));
+
+        // 入库流水 inbound，关联采购单，落库位 + 数量。
+        assertThat(repo.stockMovements)
+                .anySatisfy(m -> {
+                    assertThat(m.movementType()).isEqualTo("inbound");
+                    assertThat(m.businessId()).isEqualTo("pr_recv");
+                    assertThat(m.targetLocationId()).isEqualTo("loc_main");
+                    assertThat(m.quantity()).isEqualTo(7);
+                });
+        // 余额挂结构化库房 warehouse_id。
+        assertThat(repo.findStockBalance("item_1", "loc_main"))
+                .get()
+                .extracting(StockBalanceRecord::availableQuantity, StockBalanceRecord::warehouseId)
+                .containsExactly(7, "wh_main");
+    }
+
+    @Test
+    void illegalStepTransitionsAreRejected() {
+        seedPurchase("pr_bad", "item_1", null, null);
+        // created → order 非法（须先 approve）。
+        assertThatThrownBy(() -> purchaseRequestService.order("pr_bad",
+                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("b1", null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("cannot transition");
+        // created → receive 非法。
+        assertThatThrownBy(() -> purchaseRequestService.receive("pr_bad",
+                new com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest("b2", "loc", null, List.of(), null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("cannot transition");
+        // rejected 后不能 order。
+        purchaseRequestService.approve("pr_bad",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("b3", "rejected", null, null));
+        assertThatThrownBy(() -> purchaseRequestService.order("pr_bad",
+                new com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest("b4", null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("cannot transition");
+    }
+
+    @Test
+    void approveEnforcesContractPurchasableScope() {
+        SupplyContractRecord draft = createDraft("ck-pr-scope", null, List.of("item_1"));
+        contractService.approveSupplyContract(
+                draft.id(), new SupplyContractApproveRequest("ck-pr-scope-appr", "approved", null));
+        // 采购引用合同但物料超出 purchasable_scope → approve 被卡。
+        seedPurchase("pr_scope_bad", "item_999", null, draft.id());
+        assertThatThrownBy(() -> purchaseRequestService.approve("pr_scope_bad",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("s1", "approved", null, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("purchasable scope");
+        // 物料在 scope 内 → 放行。
+        seedPurchase("pr_scope_ok", "item_1", null, draft.id());
+        PurchaseRequestRecord ok = purchaseRequestService.approve("pr_scope_ok",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("s2", "approved", null, null));
+        assertThat(ok.status()).isEqualTo("approved");
+        assertThat(ok.supplyContractId()).isEqualTo(draft.id());
+    }
+
+    @Test
+    void merchantScopeCannotTransitionOtherMerchantPurchase() {
+        seedPurchase("pr_iso", "item_1", "m_a", null);
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThatThrownBy(() -> purchaseRequestService.approve("pr_iso",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("i1", "approved", null, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("scope");
+    }
+
+    private void seedPurchase(String id, String itemId, String merchantId, String contractId) {
+        repo.savePurchaseRequest(new PurchaseRequestRecord(
+                id, "PR-" + id, "supplier_1", itemId, 7, LocalDate.now(),
+                "created", List.of(), java.time.Instant.now(), java.time.Instant.now(), merchantId,
+                contractId, null, null, null, null, null));
+    }
+
     private SupplyContractRecord createDraft(String key, String merchant, List<String> scope) {
         return contractService.createSupplyContract(new SupplyContractCreateRequest(
                 key, "supplier_1", "proj_1", merchant, "platform_self_use",
@@ -269,8 +396,11 @@ class SupplyChainT6ServiceTests {
     }
 
     private static final class InMemoryAudit implements AuditEventRepository {
+        final List<AuditEvent> events = new ArrayList<>();
+
         @Override
         public AuditEvent save(AuditEvent event) {
+            events.add(event);
             return event;
         }
     }
@@ -279,6 +409,10 @@ class SupplyChainT6ServiceTests {
     private static final class InMemoryRepo implements InventoryRepository {
         private final Map<String, SupplyContractRecord> contracts = new LinkedHashMap<>();
         private final Map<String, WarehouseRecord> warehouses = new LinkedHashMap<>();
+        final Map<String, PurchaseRequestRecord> purchaseRequests = new LinkedHashMap<>();
+        final List<PurchaseRequestEventRecord> purchaseRequestEvents = new ArrayList<>();
+        final Map<String, StockBalanceRecord> balances = new LinkedHashMap<>();
+        final List<StockMovementRecord> stockMovements = new ArrayList<>();
 
         @Override
         public SupplyContractRecord saveSupplyContract(SupplyContractRecord contract) {
@@ -323,19 +457,46 @@ class SupplyChainT6ServiceTests {
         @Override public Optional<InventoryItemRecord> findInventoryItemById(String id) { throw nyi(); }
         @Override public InventorySupplierRecord saveInventorySupplier(InventorySupplierRecord s) { throw nyi(); }
         @Override public List<InventorySupplierRecord> listInventorySuppliers() { throw nyi(); }
-        @Override public PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord r) { throw nyi(); }
-        @Override public List<PurchaseRequestRecord> listPurchaseRequests() { throw nyi(); }
-        @Override public Optional<StockBalanceRecord> findStockBalance(String i, String l) { throw nyi(); }
-        @Override public StockBalanceRecord saveStockBalance(StockBalanceRecord b) { throw nyi(); }
-        @Override public List<StockBalanceRecord> listStockBalances() { throw nyi(); }
+        @Override public PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord r) {
+            purchaseRequests.put(r.id(), r);
+            return r;
+        }
+        @Override public List<PurchaseRequestRecord> listPurchaseRequests() {
+            return new ArrayList<>(purchaseRequests.values());
+        }
+        @Override public Optional<PurchaseRequestRecord> findPurchaseRequestByIdForUpdate(String id) {
+            return Optional.ofNullable(purchaseRequests.get(id));
+        }
+        @Override public PurchaseRequestEventRecord savePurchaseRequestEvent(PurchaseRequestEventRecord e) {
+            purchaseRequestEvents.add(e);
+            return e;
+        }
+        @Override public List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId) {
+            return purchaseRequestEvents.stream().filter(e -> requestId.equals(e.requestId())).toList();
+        }
+        @Override public Optional<StockBalanceRecord> findStockBalance(String i, String l) {
+            return Optional.ofNullable(balances.get(i + ":" + l));
+        }
+        @Override public StockBalanceRecord saveStockBalance(StockBalanceRecord b) {
+            balances.put(b.itemId() + ":" + b.locationId(), b);
+            return b;
+        }
+        @Override public List<StockBalanceRecord> listStockBalances() {
+            return new ArrayList<>(balances.values());
+        }
         @Override public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord b) { throw nyi(); }
         @Override public List<InventoryStockBatchRecord> listStockBatches() { throw nyi(); }
         @Override public InventoryRiskAlertRecord saveRiskAlert(InventoryRiskAlertRecord a) { throw nyi(); }
         @Override public List<InventoryRiskAlertRecord> listRiskAlerts() { throw nyi(); }
         @Override public SupplierReconciliationRecord saveSupplierReconciliation(SupplierReconciliationRecord r) { throw nyi(); }
         @Override public List<SupplierReconciliationRecord> listSupplierReconciliations() { throw nyi(); }
-        @Override public StockMovementRecord saveStockMovement(StockMovementRecord m) { throw nyi(); }
-        @Override public List<StockMovementRecord> listStockMovements() { throw nyi(); }
+        @Override public StockMovementRecord saveStockMovement(StockMovementRecord m) {
+            stockMovements.add(m);
+            return m;
+        }
+        @Override public List<StockMovementRecord> listStockMovements() {
+            return new ArrayList<>(stockMovements);
+        }
         @Override public StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord a) { throw nyi(); }
         @Override public SavedBottleRecord saveSavedBottle(SavedBottleRecord s) { throw nyi(); }
         @Override public Optional<SavedBottleRecord> findSavedBottleById(String id) { throw nyi(); }
@@ -350,7 +511,17 @@ class SupplyChainT6ServiceTests {
         @Override public Optional<TraceHandoverExceptionRecord> findTraceHandoverExceptionByIdForUpdate(String id) { throw nyi(); }
         @Override public void saveRobotTaskEvent(String id, String ref, String type, String h, String p, java.time.Instant t) { throw nyi(); }
         @Override public int atomicDecreaseStockBalance(String i, String l, int q) { throw nyi(); }
-        @Override public void atomicIncreaseStockBalance(String i, String l, int q, String id, String m, String w) { throw nyi(); }
+        @Override public void atomicIncreaseStockBalance(String i, String l, int q, String id, String m, String w) {
+            String key = i + ":" + l;
+            StockBalanceRecord existing = balances.get(key);
+            if (existing == null) {
+                balances.put(key, new StockBalanceRecord(id, i, l, q, 0, q, java.time.Instant.now(), m, w));
+            } else {
+                balances.put(key, new StockBalanceRecord(existing.id(), i, l,
+                        existing.quantity() + q, existing.reservedQuantity(), existing.availableQuantity() + q,
+                        java.time.Instant.now(), existing.merchantId(), w == null ? existing.warehouseId() : w));
+            }
+        }
         @Override public Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id) { throw nyi(); }
         @Override public List<InventoryItemRecord> listInventoryItemsByMerchant(String m) { throw nyi(); }
         @Override public List<InventorySupplierRecord> listInventorySuppliersByMerchant(String m) { throw nyi(); }

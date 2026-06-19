@@ -63,7 +63,25 @@ final class JdbcInventoryRowMapper {
                 readList(resultSet.getString("evidence_attachment_ids")),
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                resultSet.getString("supply_contract_id"),
+                resultSet.getString("approved_by"),
+                instantOrNull(resultSet, "ordered_at"),
+                resultSet.getObject("actual_arrival_date", java.time.LocalDate.class),
+                instantOrNull(resultSet, "received_at"),
+                resultSet.getString("received_by")
+        );
+    }
+
+    PurchaseRequestEventRecord mapPurchaseRequestEvent(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new PurchaseRequestEventRecord(
+                resultSet.getString("id"),
+                resultSet.getString("request_id"),
+                resultSet.getString("from_status"),
+                resultSet.getString("to_status"),
+                resultSet.getString("operator_user_id"),
+                resultSet.getString("note"),
+                instant(resultSet, "created_at")
         );
     }
 

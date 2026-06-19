@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 234 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 238 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -162,6 +162,10 @@
 | inventory | `POST` | `/api/v1/inventory/items` | `createInventoryItem` | 创建库存物品 | `InventoryItemRequest` | `inventory.stock.move` | `staff-token` | `project` | web | 是 | `inventory.item.created` | `inventory.item.created_failed` |
 | inventory | `GET` | `/api/v1/inventory/purchase-requests` | `listPurchaseRequests` | 查询采购申请 | `-` | `inventory.purchase_request.view` | `staff-token` | `project` | web | 否 | `inventory.purchase_request_viewed` | `inventory.purchase_request_view_failed` |
 | inventory | `POST` | `/api/v1/inventory/purchase-requests` | `createPurchaseRequest` | 创建采购申请 | `PurchaseRequestCreate` | `inventory.purchase_request.manage` | `staff-token` | `project` | web | 是 | `inventory.purchase_request_changed` | `inventory.purchase_request_change_failed` |
+| inventory | `POST` | `/api/v1/inventory/purchase-requests/{id}/approve` | `approvePurchaseRequest` | 采购单审批(created/submitted→approved/rejected) | `object` | `inventory.purchase.approve` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.purchase_status_changed` | `inventory.purchase_status_change_failed` |
+| inventory | `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | `orderPurchaseRequest` | 采购单下单(approved→ordered) | `object` | `inventory.purchase.approve` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.purchase_status_changed` | `inventory.purchase_status_change_failed` |
+| inventory | `POST` | `/api/v1/inventory/purchase-requests/{id}/arrive` | `arrivePurchaseRequest` | 采购单到货(ordered/expected→arrived) | `object` | `inventory.purchase.approve` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.purchase_status_changed` | `inventory.purchase_status_change_failed` |
+| inventory | `POST` | `/api/v1/inventory/purchase-requests/{id}/receive` | `receivePurchaseRequest` | 采购单入库确认(arrived→received,生成入库流水) | `object` | `inventory.purchase.approve` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.received` | `inventory.received_failed` |
 | inventory | `GET` | `/api/v1/inventory/saved-bottles` | `listSavedBottles` | 查询存酒 | `-` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-customer` | web, tablet, staff_work_phone | 否 | `bar.saved_bottle.viewed` | `bar.saved_bottle.view_failed` |
 | inventory | `POST` | `/api/v1/inventory/saved-bottles` | `createSavedBottle` | 存酒登记 | `SavedBottleRequest` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-customer` | tablet, web | 是 | `bar.saved_bottle.created` | `bar.saved_bottle.create_failed` |
 | inventory | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | `claimSavedBottle` | 存酒领取 | `SavedBottleClaimRequest` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-customer` | tablet, staff_work_phone | 是 | `bar.saved_bottle_picked_up` | `bar.saved_bottle.pickup_failed` |
@@ -322,5 +326,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 234 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 238 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

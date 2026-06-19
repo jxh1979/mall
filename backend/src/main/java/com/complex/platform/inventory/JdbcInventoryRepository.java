@@ -107,11 +107,13 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_purchase_requests (
                     id, request_no, supplier_id, item_id, quantity, expected_arrival_date,
-                    status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                    status, evidence_attachment_ids, created_at, updated_at, merchant_id,
+                    supply_contract_id, approved_by, ordered_at, actual_arrival_date, received_at, received_by
                 )
                 VALUES (
                     :id, :request_no, :supplier_id, :item_id, :quantity, :expected_arrival_date,
-                    :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
+                    :status, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id,
+                    :supply_contract_id, :approved_by, :ordered_at, :actual_arrival_date, :received_at, :received_by
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     request_no = EXCLUDED.request_no,
@@ -121,7 +123,13 @@ class JdbcInventoryRepository implements InventoryRepository {
                     expected_arrival_date = EXCLUDED.expected_arrival_date,
                     status = EXCLUDED.status,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    supply_contract_id = EXCLUDED.supply_contract_id,
+                    approved_by = EXCLUDED.approved_by,
+                    ordered_at = EXCLUDED.ordered_at,
+                    actual_arrival_date = EXCLUDED.actual_arrival_date,
+                    received_at = EXCLUDED.received_at,
+                    received_by = EXCLUDED.received_by
                 """, purchaseRequestParameters(request));
         return request;
     }
@@ -130,10 +138,53 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<PurchaseRequestRecord> listPurchaseRequests() {
         return jdbcTemplate.query("""
                 SELECT id, request_no, supplier_id, item_id, quantity, expected_arrival_date,
-                       status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                       status, evidence_attachment_ids, created_at, updated_at, merchant_id,
+                       supply_contract_id, approved_by, ordered_at, actual_arrival_date, received_at, received_by
                   FROM inventory_purchase_requests
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapPurchaseRequest);
+    }
+
+    // R5 T6 采购周期状态机：行锁读取 + 流转留痕事件。
+    @Override
+    public Optional<PurchaseRequestRecord> findPurchaseRequestByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, request_no, supplier_id, item_id, quantity, expected_arrival_date,
+                       status, evidence_attachment_ids, created_at, updated_at, merchant_id,
+                       supply_contract_id, approved_by, ordered_at, actual_arrival_date, received_at, received_by
+                  FROM inventory_purchase_requests
+                 WHERE id = :id
+                 FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapPurchaseRequest).stream().findFirst();
+    }
+
+    @Override
+    public PurchaseRequestEventRecord savePurchaseRequestEvent(PurchaseRequestEventRecord event) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_purchase_request_events (
+                    id, request_id, from_status, to_status, operator_user_id, note, created_at
+                )
+                VALUES (:id, :request_id, :from_status, :to_status, :operator_user_id, :note, :created_at)
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", event.id())
+                .addValue("request_id", event.requestId())
+                .addValue("from_status", event.fromStatus())
+                .addValue("to_status", event.toStatus())
+                .addValue("operator_user_id", event.operatorUserId())
+                .addValue("note", event.note())
+                .addValue("created_at", offset(event.createdAt())));
+        return event;
+    }
+
+    @Override
+    public List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId) {
+        return jdbcTemplate.query("""
+                SELECT id, request_id, from_status, to_status, operator_user_id, note, created_at
+                  FROM inventory_purchase_request_events
+                 WHERE request_id = :request_id
+                 ORDER BY created_at ASC, id
+                """, Map.of("request_id", requestId), rowMapper::mapPurchaseRequestEvent);
     }
 
     @Override
@@ -638,7 +689,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<PurchaseRequestRecord> listPurchaseRequestsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, request_no, supplier_id, item_id, quantity, expected_arrival_date,
-                       status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                       status, evidence_attachment_ids, created_at, updated_at, merchant_id,
+                       supply_contract_id, approved_by, ordered_at, actual_arrival_date, received_at, received_by
                   FROM inventory_purchase_requests
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -753,7 +805,13 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("evidence_attachment_ids", writeList(request.evidenceAttachmentIds()))
                 .addValue("created_at", offset(request.createdAt()))
                 .addValue("updated_at", offset(request.updatedAt()))
-                .addValue("merchant_id", request.merchantId());
+                .addValue("merchant_id", request.merchantId())
+                .addValue("supply_contract_id", request.supplyContractId())
+                .addValue("approved_by", request.approvedBy())
+                .addValue("ordered_at", offset(request.orderedAt()))
+                .addValue("actual_arrival_date", request.actualArrivalDate())
+                .addValue("received_at", offset(request.receivedAt()))
+                .addValue("received_by", request.receivedBy());
     }
 
     private MapSqlParameterSource stockBalanceParameters(StockBalanceRecord balance) {

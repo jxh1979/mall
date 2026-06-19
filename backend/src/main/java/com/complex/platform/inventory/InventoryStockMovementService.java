@@ -131,6 +131,40 @@ final class InventoryStockMovementService {
         );
     }
 
+    /**
+     * R5 T6 采购入库：采购单 received 时生成 inbound 入库流水。
+     *
+     * <p>原子增加余额（落 location 与可空 warehouse_id），并写一条 movement_type=inbound 的流水，
+     * business_type=purchase_request、business_id=采购单 id 关联采购单。由调用方在事务内调用。
+     *
+     * @return 生成的入库流水记录
+     */
+    StockMovementRecord createPurchaseInbound(
+            String idempotencySeed,
+            String purchaseRequestId,
+            String itemId,
+            String locationId,
+            String warehouseId,
+            int quantity,
+            List<String> evidenceAttachmentIds
+    ) {
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        increaseBalance(itemId, locationId, quantity, warehouseId);
+        return saveMovement(
+                "movement_" + slug(idempotencySeed + ":" + itemId + ":purchase_in"),
+                "inbound",
+                itemId,
+                null,
+                locationId,
+                quantity,
+                "purchase_request",
+                purchaseRequestId,
+                null,
+                safeList(evidenceAttachmentIds),
+                merchantId
+        );
+    }
+
     PageResponse<StockMovementRecord> listStockMovements() {
         return readPage(
                 "inventory.stock_movement.viewed",

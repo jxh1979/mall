@@ -164,11 +164,19 @@ public class InventoryService {
                             itemId,
                             quantity,
                             actual.expectedArrivalDate() == null ? LocalDate.now() : actual.expectedArrivalDate(),
+                            // R5 T6：起点保留 'created'（兼容既有写入/测试），视为 submitted 同义起点；
+                            // 审批流转入口 approve 从 created/submitted 均可进入。
                             "created",
                             safeList(actual.evidenceAttachmentIds()),
                             now,
                             now,
-                            merchantId
+                            merchantId,
+                            trimToNull(actual.supplyContractId()),
+                            null,
+                            null,
+                            null,
+                            null,
+                            null
                     ));
                 }
         );

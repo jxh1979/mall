@@ -451,7 +451,7 @@
       "table": "inventory_purchase_request_events",
       "column": "to_status",
       "expected": "present",
-      "note": "R5 T6（V085 一次性建表）：采购周期留痕事件表 + inventory_purchase_requests 状态机扩列(supply_contract_id/approved_by/ordered_at/actual_arrival_date/received_at/received_by)+CHECK。表已建；采购周期状态机服务留后续代理（代理2）"
+      "note": "R5 T6 第2部分已落地（V085）：采购周期留痕事件表 + inventory_purchase_requests 状态机扩列(supply_contract_id/approved_by/ordered_at/actual_arrival_date/received_at/received_by)+CHECK。PurchaseRequestService 接全流转(created/submitted→approved/rejected→ordered→expected→arrived→received)，每步写 events 留痕、approve 步按合同 purchasable_scope 卡控、received 生成 inbound 入库流水落库位/warehouse_id，currentMerchantScope 隔离"
     },
     {
       "req": "REQ-27",

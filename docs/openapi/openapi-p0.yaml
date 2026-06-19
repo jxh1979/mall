@@ -3730,6 +3730,240 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/inventory/purchase-requests/{id}/approve:
+    post:
+      tags:
+        - inventory
+      operationId: approvePurchaseRequest
+      summary: 采购单审批(created/submitted→approved/rejected)
+      x-permission: inventory.purchase.approve
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+        - tablet
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: inventory.purchase_status_changed
+      x-audit-event-failure: inventory.purchase_status_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - decision
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                decision:
+                  type: string
+                  description: 审批结论
+                  enum:
+                    - approved
+                    - rejected
+                supply_contract_id:
+                  type: string
+                  description: 供应合同 id；提供则按合同 purchasable_scope 卡控物料
+                  maxLength: 64
+                note:
+                  type: string
+                  description: 流转留痕备注
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/inventory/purchase-requests/{id}/order:
+    post:
+      tags:
+        - inventory
+      operationId: orderPurchaseRequest
+      summary: 采购单下单(approved→ordered)
+      x-permission: inventory.purchase.approve
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+        - tablet
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: inventory.purchase_status_changed
+      x-audit-event-failure: inventory.purchase_status_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                note:
+                  type: string
+                  description: 流转留痕备注
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/inventory/purchase-requests/{id}/arrive:
+    post:
+      tags:
+        - inventory
+      operationId: arrivePurchaseRequest
+      summary: 采购单到货(ordered/expected→arrived)
+      x-permission: inventory.purchase.approve
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+        - tablet
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: inventory.purchase_status_changed
+      x-audit-event-failure: inventory.purchase_status_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                note:
+                  type: string
+                  description: 流转留痕备注
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/inventory/purchase-requests/{id}/receive:
+    post:
+      tags:
+        - inventory
+      operationId: receivePurchaseRequest
+      summary: 采购单入库确认(arrived→received,生成入库流水)
+      x-permission: inventory.purchase.approve
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+        - tablet
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: inventory.received
+      x-audit-event-failure: inventory.received_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - location_id
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                location_id:
+                  type: string
+                  description: 入库库位
+                  maxLength: 64
+                warehouse_id:
+                  type: string
+                  description: 结构化库房 id(可空,挂在余额上)
+                  maxLength: 64
+                evidence_attachment_ids:
+                  type: array
+                  description: 入库凭证附件 id 列表
+                  items:
+                    type: string
+                    maxLength: 64
+                note:
+                  type: string
+                  description: 流转留痕备注
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/inventory/saved-bottles:
     get:
       tags:
@@ -9611,6 +9845,10 @@ components:
           type: string
           description: "`expected_arrival_date` 日期字段；使用 YYYY-MM-DD。"
           format: date
+        supply_contract_id:
+          type: string
+          description: 供应合同 id；采购周期审批步按合同 purchasable_scope 卡控物料是否可采购。
+          maxLength: 64
     StockInRequest:
       type: object
       description: 请求载荷 `StockInRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。

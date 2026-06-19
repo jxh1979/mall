@@ -19,6 +19,13 @@ public interface InventoryRepository {
 
     List<PurchaseRequestRecord> listPurchaseRequests();
 
+    // R5 T6 采购周期状态机：行锁读取 + 流转留痕事件。
+    Optional<PurchaseRequestRecord> findPurchaseRequestByIdForUpdate(String id);
+
+    PurchaseRequestEventRecord savePurchaseRequestEvent(PurchaseRequestEventRecord event);
+
+    List<PurchaseRequestEventRecord> listPurchaseRequestEvents(String requestId);
+
     Optional<StockBalanceRecord> findStockBalance(String itemId, String locationId);
 
     StockBalanceRecord saveStockBalance(StockBalanceRecord balance);

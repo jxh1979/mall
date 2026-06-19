@@ -258,7 +258,7 @@ class InventoryControllerTests {
 
     private PurchaseRequestRecord purchaseRequest() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new PurchaseRequestRecord("purchase_1", "PR202606140001", "supplier_1", "item_1", 2, LocalDate.parse("2026-06-20"), "created", List.of(), now, now, null);
+        return new PurchaseRequestRecord("purchase_1", "PR202606140001", "supplier_1", "item_1", 2, LocalDate.parse("2026-06-20"), "created", List.of(), now, now, null, null, null, null, null, null, null);
     }
 
     private SavedBottleRecord savedBottle() {
@@ -316,6 +316,11 @@ class InventoryControllerTests {
         @Bean
         SupplyContractService supplyContractService() {
             return Mockito.mock(SupplyContractService.class);
+        }
+
+        @Bean
+        PurchaseRequestService purchaseRequestService() {
+            return Mockito.mock(PurchaseRequestService.class);
         }
 
         @Bean

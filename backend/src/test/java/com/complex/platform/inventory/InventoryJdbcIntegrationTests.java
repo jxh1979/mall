@@ -136,6 +136,12 @@ class InventoryJdbcIntegrationTests {
                 List.of("attachment_jdbc"),
                 now,
                 now,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null
         ));
 
@@ -269,6 +275,34 @@ class InventoryJdbcIntegrationTests {
                 INSERT INTO inventory_purchase_requests (id, request_no, item_id, quantity, status, created_at, updated_at)
                 VALUES ('pr_bad', 'PR-BAD', 'item_prchk', 1, 'totally_invalid', now(), now())
                 """)).hasMessageContaining("chk_inv_purchase_status");
+    }
+
+    @Test
+    void repositoryPersistsPurchaseFlowColumnsAndEvents() {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_items (id, sku_code, item_name, item_type, unit, trace_required, min_quantity, status, created_at, updated_at)
+                VALUES ('item_prflow', 'SKU-PRFLOW', 'PR Flow Item', 'spirit', 'bottle', false, 0, 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        Instant now = Instant.parse("2026-06-18T00:00:00Z");
+        // 写入携带全部流转字段的采购单，验证扩列往返。
+        repository.savePurchaseRequest(new PurchaseRequestRecord(
+                "pr_jdbc_flow", "PR-FLOW", null, "item_prflow", 3, LocalDate.parse("2026-06-25"),
+                "received", List.of(), now, now, null,
+                null, "usr_appr", now, LocalDate.parse("2026-06-24"), now, "usr_recv"));
+        PurchaseRequestRecord loaded = repository.findPurchaseRequestByIdForUpdate("pr_jdbc_flow").orElseThrow();
+        assertThat(loaded)
+                .extracting(PurchaseRequestRecord::status, PurchaseRequestRecord::approvedBy,
+                        PurchaseRequestRecord::receivedBy)
+                .containsExactly("received", "usr_appr", "usr_recv");
+        assertThat(loaded.actualArrivalDate()).isEqualTo(LocalDate.parse("2026-06-24"));
+
+        // 流转事件留痕往返。
+        repository.savePurchaseRequestEvent(new PurchaseRequestEventRecord(
+                "pr_evt_jdbc", "pr_jdbc_flow", "arrived", "received", "usr_recv", "ok", now));
+        assertThat(repository.listPurchaseRequestEvents("pr_jdbc_flow"))
+                .extracting(PurchaseRequestEventRecord::fromStatus, PurchaseRequestEventRecord::toStatus)
+                .containsExactly(tuple("arrived", "received"));
     }
 
     @Test
