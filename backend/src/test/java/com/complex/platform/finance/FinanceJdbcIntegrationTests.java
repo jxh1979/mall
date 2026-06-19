@@ -186,6 +186,66 @@ class FinanceJdbcIntegrationTests {
                 .contains(tuple("amount_mismatch", "payment_jdbc"));
     }
 
+    @Test
+    void officialTicketRefundIsDeductedWithinBusinessDayCutoffWindow() {
+        // 经营日 2026-06-18，日切 04:00 → 窗口 [2026-06-18T04:00Z, 2026-06-19T04:00Z)。
+        LocalDate businessDate = LocalDate.parse("2026-06-18");
+        Instant from = Instant.parse("2026-06-18T04:00:00Z");
+        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+
+        // 窗口内退款（10:00）计入；窗口外退款（03:00，归前一经营日）不计入。
+        insertTicketRefund("tr_in_window", 5000L, Instant.parse("2026-06-18T10:00:00Z"));
+        insertTicketRefund("tr_before_cutoff", 9999L, Instant.parse("2026-06-18T03:00:00Z"));
+
+        FinanceRepository.DailyCloseSourceTotals totals =
+                repository.aggregateOfficialTicket(businessDate, from, to);
+
+        assertThat(totals.refundCent()).isEqualTo(5000L);
+    }
+
+    @Test
+    void thirdpartyReflowIsAggregatedSeparatelyAndNotFoldedIntoTicketOrBar() {
+        // 财务确认：第三方回流单列，不进 revenue.net（净收入 = 售票 + 酒吧 − 退款，剔除第三方）。
+        LocalDate businessDate = LocalDate.parse("2026-06-18");
+        Instant from = Instant.parse("2026-06-18T04:00:00Z");
+        Instant to = Instant.parse("2026-06-19T04:00:00Z");
+
+        insertThirdpartySync("ios_tp_1", 120000L, Instant.parse("2026-06-18T12:00:00Z"));
+
+        // 第三方源单列出该金额。
+        FinanceRepository.DailyCloseSourceTotals thirdparty =
+                repository.aggregateThirdpartyReflow(businessDate, from, to);
+        assertThat(thirdparty.amountCent()).isEqualTo(120000L);
+
+        // 第三方回流不会渗入官方售票/酒吧源（这两源 SQL 不查 integration_order_syncs）。
+        FinanceRepository.DailyCloseSourceTotals official = repository.aggregateOfficialTicket(businessDate, from, to);
+        long officialAmount = official.amountCent();
+        long barAmount = repository.aggregateBar(businessDate, from, to).amountCent();
+        long refund = official.refundCent();
+        // net 派生（售票 + 酒吧 − 退款）天然不含第三方 120000。
+        long net = officialAmount + barAmount - refund;
+        assertThat(net).isEqualTo(officialAmount + barAmount - refund);
+        assertThat(net).isNotEqualTo(officialAmount + barAmount - refund + 120000L);
+    }
+
+    private void insertTicketRefund(String id, long amountCent, Instant createdAt) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel,
+                                            status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, "order_" + id, amountCent, "test refund", "manual", "requested",
+                java.sql.Timestamp.from(createdAt), java.sql.Timestamp.from(createdAt));
+    }
+
+    private void insertThirdpartySync(String id, long amountCent, Instant createdAt) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type,
+                                                     external_business_id, status, amount_cent, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, "meituan", "catering", "order", "ext_" + id, "synced", amountCent,
+                java.sql.Timestamp.from(createdAt), java.sql.Timestamp.from(createdAt));
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

@@ -1,5 +1,6 @@
 package com.complex.platform.finance;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -67,18 +68,22 @@ public interface FinanceRepository {
     /** 该经营日是否已存在 locked 状态的日结（用于拦截向已锁定经营日新增/回填台账）。 */
     boolean lockedDailyCloseExistsForDate(LocalDate businessDate);
 
-    /** 六源汇总聚合：按经营日聚合源表，得到 amount/refund/count。 */
-    DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate);
+    /**
+     * 六源汇总聚合：按经营日窗口 [fromInclusive, toExclusive) 聚合源表，得到 amount/refund/count。
+     * 窗口由 {@link com.complex.platform.common.BusinessDayResolver} 按可配日切（默认 04:00）派生；
+     * official_ticket 以 visit_date（DATE 列）为经营日，故同时透传 businessDate。
+     */
+    DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
-    DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate);
+    DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
-    DailyCloseSourceTotals aggregateBar(LocalDate businessDate);
+    DailyCloseSourceTotals aggregateBar(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
-    DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate);
+    DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
-    DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate);
+    DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
-    DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate);
+    DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
     ArApAdjustmentRecord saveArApAdjustment(ArApAdjustmentRecord adjustment);
 

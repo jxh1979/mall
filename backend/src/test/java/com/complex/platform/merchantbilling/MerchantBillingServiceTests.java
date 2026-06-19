@@ -555,32 +555,32 @@ class MerchantBillingServiceTests {
         }
 
         @Override
-        public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate) {
+        public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return DailyCloseSourceTotals.empty();
         }
 
         @Override
-        public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate) {
+        public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return DailyCloseSourceTotals.empty();
         }
 
         @Override
-        public DailyCloseSourceTotals aggregateBar(LocalDate businessDate) {
+        public DailyCloseSourceTotals aggregateBar(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return DailyCloseSourceTotals.empty();
         }
 
         @Override
-        public DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate) {
+        public DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return DailyCloseSourceTotals.empty();
         }
 
         @Override
-        public DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate) {
+        public DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return DailyCloseSourceTotals.empty();
         }
 
         @Override
-        public DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate) {
+        public DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return DailyCloseSourceTotals.empty();
         }
 

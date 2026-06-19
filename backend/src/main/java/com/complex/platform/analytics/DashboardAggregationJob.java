@@ -34,6 +34,7 @@ public class DashboardAggregationJob {
     static final String VERIFY_DONE = "verify.done";            // 核销
     static final String MEMBER_NEW = "member.new";              // 会员
     static final String SUPPLY_BALANCE = "supply.balance";      // 供应链
+    static final String SUPPLY_LOW_STOCK = "supply.low_stock";  // 供应链·缺货预警
     static final String RISK_PENDING_REVIEW = "risk.pending_review"; // 风险
 
     static final String SEGMENT_PLATFORM = "platform";
@@ -82,6 +83,9 @@ public class DashboardAggregationJob {
 
         // 供应链·库存余额：inventory_stock_balances 有 merchant_id → 平台 + 商户口径（存量快照，与经营日无关，落当日）。
         upsertByMerchant(SUPPLY_BALANCE, "inventory", businessDate, repository.sumInventoryBalanceByMerchant(), now);
+
+        // 供应链·缺货预警：按 SKU 绝对值阈值（inventory_items.min_quantity）count(可用量<阈值)，阈值≤0 不预警（财务确认口径）。
+        upsertByMerchant(SUPPLY_LOW_STOCK, "inventory", businessDate, repository.countLowStockByMerchant(), now);
 
         // 风险·待复核：supervisor_review_decisions / analytics_risk_alerts 无 merchant_id → 仅平台口径。
         upsertPlatform(RISK_PENDING_REVIEW, "governance", businessDate, repository.countPendingReview(), now);

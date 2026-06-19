@@ -64,6 +64,7 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.MEMBER_NEW, "customer", "count", true,
                     "customers has no merchant_id; merchant-scoped value not available"),
             new MetricCatalogEntry(DashboardAggregationJob.SUPPLY_BALANCE, "inventory", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.SUPPLY_LOW_STOCK, "inventory", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.RISK_PENDING_REVIEW, "governance", "count", true,
                     "supervisor_review_decisions has no merchant_id; merchant-scoped value not available"),
             // 数据源未就绪（不伪造）：

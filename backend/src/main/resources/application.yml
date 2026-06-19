@@ -53,3 +53,8 @@ complex:
     name: complex-api
     version: ${COMPLEX_API_VERSION:0.1.0}
     build-time: ${COMPLEX_API_BUILD_TIME:local}
+
+finance:
+  # 经营日切时点（小时, 0-23），凌晨该点切自然日。财务确认默认 04:00。
+  # 此前的流水归前一经营日；T7 日结六源汇总与 T12 看板 ETL 统一按此分桶。
+  business-day-cutoff-hour: ${COMPLEX_BUSINESS_DAY_CUTOFF_HOUR:4}

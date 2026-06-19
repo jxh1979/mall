@@ -61,7 +61,8 @@ class FinanceServiceTests {
                 financeRepository,
                 operations,
                 auditEventService,
-                authorizationService
+                authorizationService,
+                new com.complex.platform.common.BusinessDayResolver(4)
         );
     }
 
@@ -562,6 +563,36 @@ class FinanceServiceTests {
     }
 
     @Test
+    void revenueNetDerivesFromTicketAndBarMinusRefundExcludingThirdparty() {
+        // 财务确认口径：net = 自营售票 + 酒吧 − 退款；第三方回流单列展示，不计入 net。
+        financeRepository.officialTicketTotals = new FinanceRepository.DailyCloseSourceTotals(500000L, 20000L, 12);
+        financeRepository.barTotals = new FinanceRepository.DailyCloseSourceTotals(300000L, 0L, 8);
+        financeRepository.thirdpartyTotals = new FinanceRepository.DailyCloseSourceTotals(120000L, 0L, 6);
+
+        DailyCloseRecord close = service.createDailyClose(new DailyCloseRequest(
+                "daily-close-net", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_net", false));
+
+        List<DailyCloseSummaryRecord> rows = service.listDailyCloseSummaries(close.id()).items();
+        // 第三方回流单列存在，且金额单列 120000，refund 不混入 net。
+        assertThat(rows).filteredOn(s -> "thirdparty_reflow".equals(s.sourceStream()))
+                .extracting(DailyCloseSummaryRecord::amountCent).containsExactly(120000L);
+
+        // 退款落在 official_ticket 源的 refund_cent 列（按经营日冲减）。
+        assertThat(rows).filteredOn(s -> "official_ticket".equals(s.sourceStream()))
+                .extracting(DailyCloseSummaryRecord::refundCent).containsExactly(20000L);
+
+        // net 派生：售票(500000) + 酒吧(300000) − 退款(20000) = 780000，剔除第三方 120000。
+        long net = rows.stream()
+                .filter(s -> "official_ticket".equals(s.sourceStream()) || "bar".equals(s.sourceStream()))
+                .mapToLong(s -> s.amountCent() - s.refundCent())
+                .sum();
+        assertThat(net).isEqualTo(780000L);
+        // 反证：若误把第三方计入 net，则会变成 900000。
+        assertThat(net).isNotEqualTo(900000L);
+    }
+
+    @Test
     void lockedItemRejectsDirectPaymentWithDayCloseLocked() {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-locked-pay", "receivable", 128800L));
         service.createDailyClose(new DailyCloseRequest(
@@ -857,32 +888,32 @@ class FinanceServiceTests {
         }
 
         @Override
-        public FinanceRepository.DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate) {
+        public FinanceRepository.DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return officialTicketTotals;
         }
 
         @Override
-        public FinanceRepository.DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate) {
+        public FinanceRepository.DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return channelTicketTotals;
         }
 
         @Override
-        public FinanceRepository.DailyCloseSourceTotals aggregateBar(LocalDate businessDate) {
+        public FinanceRepository.DailyCloseSourceTotals aggregateBar(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return barTotals;
         }
 
         @Override
-        public FinanceRepository.DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate) {
+        public FinanceRepository.DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return amusementTotals;
         }
 
         @Override
-        public FinanceRepository.DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate) {
+        public FinanceRepository.DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return supplyCostTotals;
         }
 
         @Override
-        public FinanceRepository.DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate) {
+        public FinanceRepository.DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate, java.time.Instant fromInclusive, java.time.Instant toExclusive) {
             return thirdpartyTotals;
         }
 

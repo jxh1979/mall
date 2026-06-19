@@ -808,6 +808,11 @@ class AnalyticsServiceTests {
         }
 
         @Override
+        public Map<String, BigDecimal> countLowStockByMerchant() {
+            return Map.of();
+        }
+
+        @Override
         public BigDecimal countPendingReview() {
             return BigDecimal.ZERO;
         }

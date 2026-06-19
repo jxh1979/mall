@@ -42,10 +42,15 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
-    JdbcAnalyticsRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcAnalyticsRepository(
+            NamedParameterJdbcTemplate jdbcTemplate,
+            ObjectMapper objectMapper,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.businessDayResolver = businessDayResolver;
     }
 
     @Override
@@ -455,6 +460,28 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, BigDecimal> countLowStockByMerchant() {
+        // 缺货预警（财务确认：绝对值阈值/SKU 可配）：按 SKU 汇总各库位可用量，低于该 SKU 的安全库存阈值则计一个预警。
+        // 阈值取 inventory_items.min_quantity（绝对值/SKU），阈值 ≤ 0 视为不预警（与 InventoryService.safety_stock_low 一致）。
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT i.merchant_id AS merchant_id, COUNT(*) AS total
+                  FROM inventory_items i
+                  JOIN (
+                        SELECT item_id, COALESCE(SUM(available_quantity), 0) AS available
+                          FROM inventory_stock_balances
+                         GROUP BY item_id
+                       ) b ON b.item_id = i.id
+                 WHERE i.min_quantity > 0
+                   AND b.available < i.min_quantity
+                 GROUP BY i.merchant_id
+                """, new MapSqlParameterSource(), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
+        );
+        return result;
+    }
+
+    @Override
     public BigDecimal countPendingReview() {
         BigDecimal reviews = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM supervisor_review_decisions WHERE review_status = 'pending'
@@ -466,8 +493,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     private MapSqlParameterSource dayRange(LocalDate businessDate) {
-        Instant start = businessDate.atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
-        Instant end = businessDate.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+        // 经营日窗口按可配日切（默认 04:00）派生：[经营日 00:00+cutoff, 次日 00:00+cutoff)。
+        Instant start = businessDayResolver.startInstant(businessDate);
+        Instant end = businessDayResolver.endInstant(businessDate);
         return new MapSqlParameterSource()
                 .addValue("start", timestampWithTimeZone(start))
                 .addValue("end", timestampWithTimeZone(end));

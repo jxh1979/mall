@@ -45,17 +45,20 @@ public class FinanceService {
     private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     public FinanceService(
             FinanceRepository repository,
             AuditedOperationExecutor operations,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver
     ) {
         this.repository = repository;
         this.operations = operations;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.businessDayResolver = businessDayResolver;
     }
 
     public PageResponse<ArApItemRecord> listArApItems() {
@@ -514,14 +517,17 @@ public class FinanceService {
      * 每源一行写入 finance_daily_close_summaries。聚合公式按聚合草案保守取值，口径未定处见草案 §四"待财务复核"。
      */
     private void summarizeDailyClose(String dailyCloseId, LocalDate businessDate, Instant now) {
+        // 经营日窗口按可配日切（默认 04:00）派生，时间戳类源表统一用 [from, to) 分桶；official_ticket 以 visit_date 为经营日。
+        Instant from = businessDayResolver.startInstant(businessDate);
+        Instant to = businessDayResolver.endInstant(businessDate);
         for (String source : DAILY_CLOSE_SOURCES) {
             FinanceRepository.DailyCloseSourceTotals totals = switch (source) {
-                case "official_ticket" -> repository.aggregateOfficialTicket(businessDate);
-                case "channel_ticket" -> repository.aggregateChannelTicket(businessDate);
-                case "bar" -> repository.aggregateBar(businessDate);
-                case "amusement" -> repository.aggregateAmusement(businessDate);
-                case "supply_cost" -> repository.aggregateSupplyCost(businessDate);
-                case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate);
+                case "official_ticket" -> repository.aggregateOfficialTicket(businessDate, from, to);
+                case "channel_ticket" -> repository.aggregateChannelTicket(businessDate, from, to);
+                case "bar" -> repository.aggregateBar(businessDate, from, to);
+                case "amusement" -> repository.aggregateAmusement(businessDate, from, to);
+                case "supply_cost" -> repository.aggregateSupplyCost(businessDate, from, to);
+                case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate, from, to);
                 default -> FinanceRepository.DailyCloseSourceTotals.empty();
             };
             repository.saveDailyCloseSummary(new DailyCloseSummaryRecord(

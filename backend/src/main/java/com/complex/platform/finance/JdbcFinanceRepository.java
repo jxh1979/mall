@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -419,39 +420,46 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
-    public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate) {
+    public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
         // 官方售票：ticket_orders 已支付(paid)，以 visit_date 为经营日；金额=实付分，count=单数。
+        // 退款（冲减当日净收入）：ticket_refunds 以 created_at 落在经营日窗口 [from, to) 归集，单列入本源 refund_cent。
+        // 财务确认：revenue.net = 自营售票 + 酒吧 − 退款（不含第三方回流）；退款冲减按经营日发生。
         return aggregateTotals("""
-                SELECT COALESCE(SUM(amount_cent), 0) AS amount_cent,
-                       0 AS refund_cent,
+                SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
+                       (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
+                          FROM ticket_refunds r
+                         WHERE r.created_at >= :from
+                           AND r.created_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
-                  FROM ticket_orders
-                 WHERE pay_status = 'paid'
-                   AND visit_date = :business_date
-                """, businessDate);
+                  FROM ticket_orders o
+                 WHERE o.pay_status = 'paid'
+                   AND o.visit_date = :business_date
+                """, businessDate, fromInclusive, toExclusive);
     }
 
     @Override
-    public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate) {
+    public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
         // 第三方渠道售票回流：integration_order_syncs 中票务渠道回流。当前 business_type CHECK 仅 catering/retail，
         // 票务回流维度尚未在该表区分（待财务/集成复核），故保守取 0 计数 0 金额，并不阻断锁定。
         return DailyCloseSourceTotals.empty();
     }
 
     @Override
-    public DailyCloseSourceTotals aggregateBar(LocalDate businessDate) {
-        // 酒吧：bar_bill_settlements 已结算（settle_channel 全计），以 settled_at 当日为经营日；金额=结算分，count=结算笔数。
+    public DailyCloseSourceTotals aggregateBar(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
+        // 酒吧：bar_bill_settlements 已结算（settle_channel 全计），以 settled_at 落在经营日窗口 [from, to) 归集；
+        // 金额=结算分，count=结算笔数。（酒吧侧无独立退款表，bar_bill_adjustments 为加项/挂账，故 refund 暂为 0。）
         return aggregateTotals("""
                 SELECT COALESCE(SUM(settlement_amount_cent), 0) AS amount_cent,
                        0 AS refund_cent,
                        COUNT(*) AS order_count
                   FROM bar_bill_settlements
-                 WHERE (settled_at AT TIME ZONE 'UTC')::date = :business_date
-                """, businessDate);
+                 WHERE settled_at >= :from
+                   AND settled_at < :to
+                """, businessDate, fromInclusive, toExclusive);
     }
 
     @Override
-    public DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate) {
+    public DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
         // 游乐：amusement_verifications 成功核销计数（收入归票务，此处仅客流/核销量，不计收入）。
         return aggregateTotals("""
                 SELECT 0 AS amount_cent,
@@ -459,25 +467,28 @@ class JdbcFinanceRepository implements FinanceRepository {
                        COUNT(*) AS order_count
                   FROM amusement_verifications
                  WHERE verification_result = 'success'
-                   AND (created_at AT TIME ZONE 'UTC')::date = :business_date
-                """, businessDate);
+                   AND created_at >= :from
+                   AND created_at < :to
+                """, businessDate, fromInclusive, toExclusive);
     }
 
     @Override
-    public DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate) {
+    public DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
         // 供应链成本侧：inventory_stock_movements 当日出库消耗笔数（成本/库存影响，不计经营收入）。
         return aggregateTotals("""
                 SELECT 0 AS amount_cent,
                        0 AS refund_cent,
                        COUNT(*) AS order_count
                   FROM inventory_stock_movements
-                 WHERE (created_at AT TIME ZONE 'UTC')::date = :business_date
-                """, businessDate);
+                 WHERE created_at >= :from
+                   AND created_at < :to
+                """, businessDate, fromInclusive, toExclusive);
     }
 
     @Override
-    public DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate) {
-        // 第三方回流（餐饮/零售）：integration_order_syncs 回流已 synced 的 order 类，以 created_at 当日为经营日。
+    public DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
+        // 第三方回流（餐饮/零售）：integration_order_syncs 回流已 synced 的 order 类，以 created_at 落在经营日窗口归集。
+        // 财务确认：第三方回流仅作商户结算口径单列展示，不计入平台 revenue.net（净收入派生时剔除本源）。
         return aggregateTotals("""
                 SELECT COALESCE(SUM(amount_cent), 0) AS amount_cent,
                        0 AS refund_cent,
@@ -485,12 +496,18 @@ class JdbcFinanceRepository implements FinanceRepository {
                   FROM integration_order_syncs
                  WHERE sync_type = 'order'
                    AND status = 'synced'
-                   AND (created_at AT TIME ZONE 'UTC')::date = :business_date
-                """, businessDate);
+                   AND created_at >= :from
+                   AND created_at < :to
+                """, businessDate, fromInclusive, toExclusive);
     }
 
-    private DailyCloseSourceTotals aggregateTotals(String sql, LocalDate businessDate) {
-        return jdbcTemplate.query(sql, Map.of("business_date", businessDate), (rs) -> {
+    private DailyCloseSourceTotals aggregateTotals(
+            String sql, LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("from", timestampWithTimeZone(fromInclusive))
+                .addValue("to", timestampWithTimeZone(toExclusive));
+        return jdbcTemplate.query(sql, params, (rs) -> {
             if (!rs.next()) {
                 return DailyCloseSourceTotals.empty();
             }

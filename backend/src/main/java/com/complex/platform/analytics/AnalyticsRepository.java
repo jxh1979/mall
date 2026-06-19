@@ -94,6 +94,12 @@ public interface AnalyticsRepository {
     /** Σ inventory_stock_balances.quantity——库存余额（截至当日的存量快照）；返回 merchantId(可 null) -> 数量。 */
     Map<String, BigDecimal> sumInventoryBalanceByMerchant();
 
+    /**
+     * 缺货预警计数（按 SKU 绝对值阈值，财务确认口径）：count(SKU 现存量 &lt; 该 SKU 的安全库存阈值)。
+     * 阈值取 inventory_items.min_quantity（绝对值/SKU 可配），阈值 ≤ 0 视为不预警。返回 merchantId(可 null) -> 数量。
+     */
+    Map<String, BigDecimal> countLowStockByMerchant();
+
     /** count(supervisor_review_decisions pending) + count(analytics_risk_alerts open)——待复核；无 merchant_id，仅平台口径。 */
     BigDecimal countPendingReview();
 }

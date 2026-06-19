@@ -212,6 +212,42 @@ class AnalyticsJdbcIntegrationTests {
                 """, Map.of("d", businessDate), Long.class)).isEqualTo(1L);
     }
 
+    @Test
+    void lowStockCountsSkusBelowPerSkuAbsoluteThresholdAndIgnoresZeroThreshold() {
+        // 财务确认：缺货预警 = 绝对值阈值/SKU 可配（inventory_items.min_quantity），阈值 ≤ 0 不预警。
+        // SKU 低于阈值 → 计入。
+        insertInventoryItem("item_low", "merchant_low_stock", 100);
+        insertStockBalance("bal_low", "item_low", "loc_1", 30);
+        // SKU 充足（>= 阈值）→ 不计入。
+        insertInventoryItem("item_ok", "merchant_low_stock", 100);
+        insertStockBalance("bal_ok", "item_ok", "loc_1", 150);
+        // SKU 阈值 0（不预警）→ 即使为 0 库存也不计入。
+        insertInventoryItem("item_no_threshold", "merchant_low_stock", 0);
+        insertStockBalance("bal_no_threshold", "item_no_threshold", "loc_1", 0);
+
+        Map<String, java.math.BigDecimal> byMerchant = repository.countLowStockByMerchant();
+        assertThat(byMerchant.get("merchant_low_stock")).isEqualByComparingTo("1");
+    }
+
+    private void insertInventoryItem(String id, String merchantId, int minQuantity) {
+        Instant at = Instant.parse("2026-06-17T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO inventory_items (id, item_name, item_type, unit, min_quantity, status,
+                                             created_at, updated_at, merchant_id)
+                VALUES (:id, :name, 'liquor', 'bottle', :minq, 'active', :at, :at, :mid)
+                """, Map.of("id", id, "name", id, "minq", minQuantity, "at", java.sql.Timestamp.from(at), "mid", merchantId));
+    }
+
+    private void insertStockBalance(String id, String itemId, String locationId, int available) {
+        Instant at = Instant.parse("2026-06-17T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity,
+                                                      reserved_quantity, available_quantity, updated_at)
+                VALUES (:id, :item, :loc, :qty, 0, :avail, :at)
+                """, Map.of("id", id, "item", itemId, "loc", locationId, "qty", available,
+                "avail", available, "at", java.sql.Timestamp.from(at)));
+    }
+
     private void insertCustomer(String id, String phone, java.time.LocalDate businessDate) {
         Instant at = businessDate.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);
         jdbcTemplate.update("""
