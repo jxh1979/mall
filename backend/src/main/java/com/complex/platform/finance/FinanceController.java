@@ -5,6 +5,8 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
+import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
@@ -58,6 +60,29 @@ public class FinanceController {
         authorizationService.requirePermission("finance.daily_close.lock");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createDailyClose(request));
+    }
+
+    @GetMapping("/daily-closes/{id}/summaries")
+    public ApiResponse<PageResponse<DailyCloseSummaryRecord>> listDailyCloseSummaries(@PathVariable String id) {
+        authorizationService.requirePermission("finance.daily_close.manage");
+        return ApiResponse.ok(service.listDailyCloseSummaries(id));
+    }
+
+    @PostMapping("/ar-ap-adjustments")
+    public ApiResponse<ArApAdjustmentRecord> requestArApAdjustment(@RequestBody ArApAdjustmentRequest request) {
+        authorizationService.requirePermission("finance.locked_backfill.request");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestAdjustment(request));
+    }
+
+    @PostMapping("/ar-ap-adjustments/{id}/approve")
+    public ApiResponse<ArApAdjustmentRecord> approveArApAdjustment(
+            @PathVariable String id,
+            @RequestBody ArApAdjustmentDecisionRequest request
+    ) {
+        authorizationService.requirePermission("finance.locked_backfill.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveAdjustment(id, request));
     }
 
     @PostMapping("/payment-intents")

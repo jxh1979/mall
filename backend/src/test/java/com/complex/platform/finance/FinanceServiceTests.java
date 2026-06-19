@@ -525,6 +525,123 @@ class FinanceServiceTests {
         assertThat(refund.refundAmountCent()).isEqualTo(20000L);
     }
 
+    // ─── R5 T7：日结锁定 + 补录审批 + 多源汇总 ─────────────────────────────────
+
+    @Test
+    void lockDailyCloseAggregatesSixSourcesAndTagsSameDayItems() {
+        // 六源聚合返回真实数（非种子），逐源写一行汇总。
+        financeRepository.officialTicketTotals = new FinanceRepository.DailyCloseSourceTotals(500000L, 0L, 12);
+        financeRepository.barTotals = new FinanceRepository.DailyCloseSourceTotals(300000L, 0L, 8);
+        financeRepository.amusementTotals = new FinanceRepository.DailyCloseSourceTotals(0L, 0L, 40);
+        financeRepository.supplyCostTotals = new FinanceRepository.DailyCloseSourceTotals(0L, 0L, 5);
+        financeRepository.thirdpartyTotals = new FinanceRepository.DailyCloseSourceTotals(120000L, 0L, 6);
+
+        // 同经营日(due_date=2026-06-30) 的台账应被打 locked_day_close_id。
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-to-lock", "receivable", 128800L));
+
+        DailyCloseRecord close = service.createDailyClose(new DailyCloseRequest(
+                "daily-close-t7",
+                "lock",
+                List.of(),
+                LocalDate.parse("2026-06-30"),
+                "project",
+                "project_t7",
+                false));
+
+        PageResponse<DailyCloseSummaryRecord> summaries = service.listDailyCloseSummaries(close.id());
+        assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::sourceStream)
+                .containsExactlyInAnyOrder(
+                        "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow");
+        assertThat(summaries.items())
+                .filteredOn(s -> "official_ticket".equals(s.sourceStream()))
+                .extracting(DailyCloseSummaryRecord::amountCent, DailyCloseSummaryRecord::orderCount)
+                .containsExactly(tuple(500000L, 12));
+        assertThat(financeRepository.findArApItemLockedDayCloseId(item.id())).contains(close.id());
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("finance.daily_close_summarized");
+    }
+
+    @Test
+    void lockedItemRejectsDirectPaymentWithDayCloseLocked() {
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-locked-pay", "receivable", 128800L));
+        service.createDailyClose(new DailyCloseRequest(
+                "daily-close-lock-pay", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_lp", false));
+
+        assertThatThrownBy(() -> service.registerArApPayment(item.id(), paymentRequest("pay-blocked", 1000L)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DAY_CLOSE_LOCKED");
+    }
+
+    @Test
+    void createItemOnLockedBusinessDateRejected() {
+        service.createDailyClose(new DailyCloseRequest(
+                "daily-close-lock-create", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_lc", false));
+
+        assertThatThrownBy(() -> service.createArApItem(itemRequest("arap-after-lock", "receivable", 1000L)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DAY_CLOSE_LOCKED");
+    }
+
+    @Test
+    void backfillApprovalAppliesAmountChangeAndRejectDoesNot() {
+        stubActor("staff_finance_1");
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill", "receivable", 100000L));
+        service.createDailyClose(new DailyCloseRequest(
+                "daily-close-backfill", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_bf", false));
+
+        // 申请补录 +5000。
+        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
+                "adj-req-1", "backfill", List.of(), item.id(), 5000L, "late invoice"));
+        assertThat(requested.approvalStatus()).isEqualTo("pending");
+
+        // 审批通过：金额变动入账。
+        ArApAdjustmentRecord approved = service.approveAdjustment(requested.id(),
+                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-1", "ok", List.of(), "approve"));
+        assertThat(approved.approvalStatus()).isEqualTo("approved");
+        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(105000L);
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("finance.locked_backfill_requested", "finance.locked_backfill_approved");
+    }
+
+    @Test
+    void backfillRejectDoesNotChangeLedger() {
+        stubActor("staff_finance_2");
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-rej", "receivable", 100000L));
+        service.createDailyClose(new DailyCloseRequest(
+                "daily-close-backfill-rej", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_bfr", false));
+
+        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
+                "adj-req-2", "backfill", List.of(), item.id(), 7000L, "disputed"));
+        ArApAdjustmentRecord rejected = service.approveAdjustment(requested.id(),
+                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-2", "no", List.of(), "reject"));
+
+        assertThat(rejected.approvalStatus()).isEqualTo("rejected");
+        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(100000L);
+    }
+
+    @Test
+    void requestAdjustmentRejectedWhenItemNotLocked() {
+        stubActor("staff_finance_3");
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-not-locked", "receivable", 100000L));
+
+        assertThatThrownBy(() -> service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
+                "adj-req-3", "backfill", List.of(), item.id(), 1000L, "no lock")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("AR_AP_ITEM_NOT_LOCKED");
+    }
+
+    private void stubActor(String id) {
+        when(authorizationService.currentActor())
+                .thenReturn(new AccessActor(id, id, "staff", null, null, "active"));
+    }
+
     // ─── helpers ─────────────────────────────────────────────────────────────
 
     private ArApItemRequest itemRequest(String idempotencyKey, String direction, long amountCent) {
@@ -682,6 +799,108 @@ class FinanceServiceTests {
         public ReconciliationDifferenceRecord saveReconciliationDifference(ReconciliationDifferenceRecord difference) {
             reconciliationDifferences.put(difference.id(), difference);
             return difference;
+        }
+
+        // ── R5 T7：日结锁定 + 补录审批 + 多源汇总 ──────────────────────────
+
+        private final Map<String, DailyCloseSummaryRecord> summaries = new LinkedHashMap<>();
+        private final Map<String, ArApAdjustmentRecord> adjustments = new LinkedHashMap<>();
+        private final Map<String, String> itemLocks = new LinkedHashMap<>();
+        FinanceRepository.DailyCloseSourceTotals officialTicketTotals = FinanceRepository.DailyCloseSourceTotals.empty();
+        FinanceRepository.DailyCloseSourceTotals barTotals = FinanceRepository.DailyCloseSourceTotals.empty();
+        FinanceRepository.DailyCloseSourceTotals amusementTotals = FinanceRepository.DailyCloseSourceTotals.empty();
+        FinanceRepository.DailyCloseSourceTotals supplyCostTotals = FinanceRepository.DailyCloseSourceTotals.empty();
+        FinanceRepository.DailyCloseSourceTotals thirdpartyTotals = FinanceRepository.DailyCloseSourceTotals.empty();
+        FinanceRepository.DailyCloseSourceTotals channelTicketTotals = FinanceRepository.DailyCloseSourceTotals.empty();
+
+        @Override
+        public Optional<DailyCloseRecord> findDailyCloseById(String id) {
+            return Optional.ofNullable(dailyCloses.get(id));
+        }
+
+        @Override
+        public DailyCloseSummaryRecord saveDailyCloseSummary(DailyCloseSummaryRecord summary) {
+            summaries.put(summary.dailyCloseId() + "|" + summary.sourceStream(), summary);
+            return summary;
+        }
+
+        @Override
+        public List<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId) {
+            return summaries.values().stream()
+                    .filter(s -> dailyCloseId.equals(s.dailyCloseId()))
+                    .toList();
+        }
+
+        @Override
+        public int lockArApItemsForDailyClose(String dailyCloseId, LocalDate businessDate, String merchantId) {
+            int locked = 0;
+            for (ArApItemRecord item : arApItems.values()) {
+                boolean dateMatch = businessDate.equals(item.dueDate());
+                boolean merchantMatch = merchantId == null || merchantId.equals(item.merchantId());
+                if (dateMatch && merchantMatch && !itemLocks.containsKey(item.id())) {
+                    itemLocks.put(item.id(), dailyCloseId);
+                    locked += 1;
+                }
+            }
+            return locked;
+        }
+
+        @Override
+        public Optional<String> findArApItemLockedDayCloseId(String arApItemId) {
+            return Optional.ofNullable(itemLocks.get(arApItemId));
+        }
+
+        @Override
+        public boolean lockedDailyCloseExistsForDate(LocalDate businessDate) {
+            return dailyCloses.values().stream()
+                    .anyMatch(dc -> businessDate.equals(dc.businessDate()) && "locked".equals(dc.status()));
+        }
+
+        @Override
+        public FinanceRepository.DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate) {
+            return officialTicketTotals;
+        }
+
+        @Override
+        public FinanceRepository.DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate) {
+            return channelTicketTotals;
+        }
+
+        @Override
+        public FinanceRepository.DailyCloseSourceTotals aggregateBar(LocalDate businessDate) {
+            return barTotals;
+        }
+
+        @Override
+        public FinanceRepository.DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate) {
+            return amusementTotals;
+        }
+
+        @Override
+        public FinanceRepository.DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate) {
+            return supplyCostTotals;
+        }
+
+        @Override
+        public FinanceRepository.DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate) {
+            return thirdpartyTotals;
+        }
+
+        @Override
+        public ArApAdjustmentRecord saveArApAdjustment(ArApAdjustmentRecord adjustment) {
+            adjustments.putIfAbsent(adjustment.id(), adjustment);
+            return adjustments.get(adjustment.id());
+        }
+
+        @Override
+        public Optional<ArApAdjustmentRecord> findArApAdjustmentByIdForUpdate(String id) {
+            return Optional.ofNullable(adjustments.get(id));
+        }
+
+        @Override
+        public ArApAdjustmentRecord updateArApAdjustment(ArApAdjustmentRecord adjustment) {
+            adjustments.put(adjustment.id(), adjustment);
+            return adjustment;
         }
     }
 

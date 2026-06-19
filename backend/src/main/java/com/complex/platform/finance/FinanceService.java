@@ -6,6 +6,8 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
+import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
+import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
@@ -34,6 +36,10 @@ public class FinanceService {
     private static final Set<String> SOURCE_TYPES = Set.of("contract", "order", "refund", "manual", "settlement", "bar_bill");
     private static final Set<String> DAILY_CLOSE_SCOPES = Set.of("project", "merchant", "bar", "ticketing", "amusement");
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
+    // R5 T7：六源（与 finance_daily_close_summaries.chk_fdcs_source 一致）。
+    private static final List<String> DAILY_CLOSE_SOURCES = List.of(
+            "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow");
+    private static final Set<String> ADJUSTMENT_DECISIONS = Set.of("approve", "reject");
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
@@ -203,12 +209,176 @@ public class FinanceService {
         );
     }
 
+    public PageResponse<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId) {
+        String id = requireText(dailyCloseId, "daily_close_id");
+        return readPage(
+                "finance.daily_close_summary.viewed",
+                "finance.daily_close_summary.view_failed",
+                "finance.daily_close.manage",
+                "finance_daily_close_summary",
+                () -> {
+                    DailyCloseRecord dailyClose = repository.findDailyCloseById(id)
+                            .orElseThrow(() -> ApiException.notFound("DAILY_CLOSE_NOT_FOUND", "daily close not found"));
+                    // 隔离：商户角色只能看自身 scope 的日结汇总。
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (scope.isPresent()
+                            && "merchant".equals(dailyClose.scopeType())
+                            && !scope.get().equals(dailyClose.scopeId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                "access to another merchant's daily close is not allowed");
+                    }
+                    return repository.listDailyCloseSummaries(id);
+                });
+    }
+
+    @Transactional
+    public ArApAdjustmentRecord requestAdjustment(ArApAdjustmentRequest request) {
+        return executeWrite(
+                "requestArApAdjustment",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ArApAdjustmentRecord.class,
+                "finance.locked_backfill_requested",
+                "finance.locked_backfill_request_failed",
+                "finance.locked_backfill.request",
+                "ar_ap_adjustment",
+                () -> createAdjustment(request));
+    }
+
+    @Transactional
+    public ArApAdjustmentRecord approveAdjustment(String adjustmentId, ArApAdjustmentDecisionRequest request) {
+        String id = requireText(adjustmentId, "adjustment_id");
+        String decision = requireEnum(request == null ? null : request.decision(), ADJUSTMENT_DECISIONS, "decision");
+        boolean approve = "approve".equals(decision);
+        return executeWrite(
+                "decideArApAdjustment:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ArApAdjustmentRecord.class,
+                approve ? "finance.locked_backfill_approved" : "finance.locked_backfill_rejected",
+                "finance.locked_backfill_decision_failed",
+                "finance.locked_backfill.approve",
+                "ar_ap_adjustment",
+                () -> decideAdjustment(id, approve));
+    }
+
+    private ArApAdjustmentRecord createAdjustment(ArApAdjustmentRequest request) {
+        ArApAdjustmentRequest actual = requireRequest(request);
+        String itemId = requireText(actual.arApItemId(), "ar_ap_item_id");
+        long amountCent = requireNonZero(actual.adjustmentAmountCent(), "adjustment_amount_cent");
+        String reason = requireText(actual.reason(), "reason");
+
+        ArApItemRecord item = repository.findArApItemById(itemId)
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+        checkMerchantOwnership(item.merchantId());
+
+        // 补录只针对已锁定台账（未锁定应直接改账，不走审批）。
+        String lockedDayCloseId = repository.findArApItemLockedDayCloseId(itemId)
+                .orElseThrow(() -> ApiException.badRequest("AR_AP_ITEM_NOT_LOCKED",
+                        "AR/AP item is not locked; modify it directly instead of requesting a backfill"));
+
+        Instant now = Instant.now();
+        return repository.saveArApAdjustment(new ArApAdjustmentRecord(
+                "arap_adj_" + slug(itemId + "_" + actual.idempotencyKey()),
+                itemId,
+                lockedDayCloseId,
+                amountCent,
+                "pending",
+                authorizationService.currentActor().id(),
+                null,
+                reason,
+                now,
+                null));
+    }
+
+    private ArApAdjustmentRecord decideAdjustment(String adjustmentId, boolean approve) {
+        ArApAdjustmentRecord adjustment = repository.findArApAdjustmentByIdForUpdate(adjustmentId)
+                .orElseThrow(() -> ApiException.notFound("ADJUSTMENT_NOT_FOUND", "adjustment not found"));
+        if (!"pending".equals(adjustment.approvalStatus())) {
+            throw ApiException.conflict("ADJUSTMENT_ALREADY_DECIDED",
+                    "adjustment is already " + adjustment.approvalStatus());
+        }
+
+        ArApItemRecord item = repository.findArApItemByIdForUpdate(adjustment.arApItemId())
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
+        checkMerchantOwnership(item.merchantId());
+
+        Instant now = Instant.now();
+        String approver = authorizationService.currentActor().id();
+
+        if (approve) {
+            // 审批通过：真正写入金额变动（带符号），同步刷新 paid/unpaid/status，并留痕。
+            long newAmountCent = item.amountCent() + adjustment.adjustmentAmountCent();
+            if (newAmountCent < 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "adjustment would drive amount negative");
+            }
+            long unpaidAmountCent = newAmountCent - item.paidAmountCent();
+            if (unpaidAmountCent < 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "adjustment would drive unpaid amount negative");
+            }
+            String status = unpaidAmountCent == 0
+                    ? "settled"
+                    : ("receivable".equals(item.direction()) ? "pending_collection" : "pending_payment");
+            repository.updateArApItemLedger(new ArApItemRecord(
+                    item.id(),
+                    item.itemNo(),
+                    item.direction(),
+                    item.counterpartyId(),
+                    item.sourceType(),
+                    item.sourceId(),
+                    newAmountCent,
+                    item.paidAmountCent(),
+                    unpaidAmountCent,
+                    item.currency(),
+                    item.dueDate(),
+                    item.accountingPeriod(),
+                    status,
+                    item.createdAt(),
+                    now,
+                    item.merchantId()));
+        }
+        // reject：不改账，只标状态。
+        return repository.updateArApAdjustment(new ArApAdjustmentRecord(
+                adjustment.id(),
+                adjustment.arApItemId(),
+                adjustment.lockedDayCloseId(),
+                adjustment.adjustmentAmountCent(),
+                approve ? "approved" : "rejected",
+                adjustment.requestedBy(),
+                approver,
+                adjustment.reason(),
+                adjustment.createdAt(),
+                now));
+    }
+
+    private void requireNotLocked(String arApItemId) {
+        if (repository.findArApItemLockedDayCloseId(arApItemId).isPresent()) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "AR/AP item is locked by a daily close; use the backfill adjustment workflow");
+        }
+    }
+
+    private long requireNonZero(Long value, String fieldName) {
+        if (value == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
+        }
+        if (value == 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-zero");
+        }
+        return value;
+    }
+
     private ArApItemRecord createItem(ArApItemRequest request) {
         ArApItemRequest actual = requireRequest(request);
         String direction = requireEnum(actual.direction(), DIRECTIONS, "direction");
         String sourceType = optionalEnum(actual.sourceType(), SOURCE_TYPES, "source_type");
         long amountCent = requirePositive(actual.amountCent(), "amount_cent");
         LocalDate dueDate = requireDate(actual.dueDate(), "due_date");
+        // R5 T7 硬拦截：禁止向已锁定经营日新增/回填台账，必须走补录审批。
+        if (repository.lockedDailyCloseExistsForDate(dueDate)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "business date " + dueDate + " is locked; use the backfill adjustment workflow");
+        }
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
         String id = "arap_" + slug;
@@ -256,6 +426,9 @@ public class FinanceService {
 
         // P1 fix: reject cross-merchant writes
         checkMerchantOwnership(current.merchantId());
+
+        // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。
+        requireNotLocked(current.id());
 
         if (amountCent > current.unpaidAmountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "payment amount exceeds unpaid amount");
@@ -308,8 +481,9 @@ public class FinanceService {
                     "daily close already locked for date " + businessDate + " scope " + scopeType + "/" + scopeId);
         }
         Instant now = Instant.now();
-        return repository.saveDailyClose(new DailyCloseRecord(
-                "daily_close_" + slug(actual.idempotencyKey()),
+        String dailyCloseId = "daily_close_" + slug(actual.idempotencyKey());
+        DailyCloseRecord saved = repository.saveDailyClose(new DailyCloseRecord(
+                dailyCloseId,
                 businessDate,
                 scopeType,
                 scopeId,
@@ -318,6 +492,50 @@ public class FinanceService {
                 now,
                 now
         ));
+
+        // R5 T7：六源汇总写入 finance_daily_close_summaries（口径见 r5-aggregation-metrics-draft §1.2，待财务复核）。
+        summarizeDailyClose(dailyCloseId, businessDate, now);
+
+        // R5 T7：把当日属于本 scope 的 ar_ap_items 打上 locked_day_close_id（merchant 角色仅锁本商户行）。
+        Optional<String> merchantScope = authorizationService.currentMerchantScope();
+        repository.lockArApItemsForDailyClose(dailyCloseId, businessDate, merchantScope.orElse(null));
+
+        return saved;
+    }
+
+    /**
+     * 六源汇总聚合（official_ticket / channel_ticket / bar / amusement / supply_cost / thirdparty_reflow），
+     * 每源一行写入 finance_daily_close_summaries。聚合公式按聚合草案保守取值，口径未定处见草案 §四"待财务复核"。
+     */
+    private void summarizeDailyClose(String dailyCloseId, LocalDate businessDate, Instant now) {
+        for (String source : DAILY_CLOSE_SOURCES) {
+            FinanceRepository.DailyCloseSourceTotals totals = switch (source) {
+                case "official_ticket" -> repository.aggregateOfficialTicket(businessDate);
+                case "channel_ticket" -> repository.aggregateChannelTicket(businessDate);
+                case "bar" -> repository.aggregateBar(businessDate);
+                case "amusement" -> repository.aggregateAmusement(businessDate);
+                case "supply_cost" -> repository.aggregateSupplyCost(businessDate);
+                case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate);
+                default -> FinanceRepository.DailyCloseSourceTotals.empty();
+            };
+            repository.saveDailyCloseSummary(new DailyCloseSummaryRecord(
+                    "fdcs_" + slug(dailyCloseId + "_" + source),
+                    dailyCloseId,
+                    source,
+                    totals.amountCent(),
+                    totals.refundCent(),
+                    totals.orderCount(),
+                    now
+            ));
+        }
+        auditEventService.recordSuccess(
+                "finance.daily_close_summarized",
+                "finance.daily_close.manage",
+                "finance_daily_close_summary",
+                dailyCloseId,
+                null,
+                null,
+                Map.of("source_count", DAILY_CLOSE_SOURCES.size()));
     }
 
     private PaymentIntentRecord createIntent(PaymentIntentRequest request) {
@@ -371,6 +589,9 @@ public class FinanceService {
         ArApItemRecord item = repository.findArApItemById(payment.arApItemId())
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
         checkMerchantOwnership(item.merchantId());
+
+        // R5 T7 硬拦截：已锁定台账禁止直接退款（影响金额），必须走补录审批。
+        requireNotLocked(item.id());
 
         // P1 fix: prevent refunding more than the original payment (cumulative check)
         long alreadyRefunded = repository.sumRefundedAmountByTargetId(targetId);
@@ -523,6 +744,9 @@ public class FinanceService {
             return record.id();
         }
         if (value instanceof FinanceRefundRecord record) {
+            return record.id();
+        }
+        if (value instanceof ArApAdjustmentRecord record) {
             return record.id();
         }
         return null;

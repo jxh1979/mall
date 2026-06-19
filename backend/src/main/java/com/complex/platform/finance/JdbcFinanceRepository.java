@@ -332,6 +332,265 @@ class JdbcFinanceRepository implements FinanceRepository {
         return difference;
     }
 
+    // ── R5 T7：日结锁定 + 补录审批 + 多源汇总 ──────────────────────────────
+
+    @Override
+    public Optional<DailyCloseRecord> findDailyCloseById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at
+                  FROM finance_daily_closes
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapDailyClose).stream().findFirst();
+    }
+
+    @Override
+    public DailyCloseSummaryRecord saveDailyCloseSummary(DailyCloseSummaryRecord summary) {
+        jdbcTemplate.update("""
+                INSERT INTO finance_daily_close_summaries (
+                    id, daily_close_id, source_stream, amount_cent, refund_cent, order_count, created_at
+                )
+                VALUES (
+                    :id, :daily_close_id, :source_stream, :amount_cent, :refund_cent, :order_count, :created_at
+                )
+                ON CONFLICT (daily_close_id, source_stream) DO UPDATE SET
+                    amount_cent = EXCLUDED.amount_cent,
+                    refund_cent = EXCLUDED.refund_cent,
+                    order_count = EXCLUDED.order_count
+                """, new MapSqlParameterSource()
+                .addValue("id", summary.id())
+                .addValue("daily_close_id", summary.dailyCloseId())
+                .addValue("source_stream", summary.sourceStream())
+                .addValue("amount_cent", summary.amountCent())
+                .addValue("refund_cent", summary.refundCent())
+                .addValue("order_count", summary.orderCount())
+                .addValue("created_at", timestampWithTimeZone(summary.createdAt())));
+        return summary;
+    }
+
+    @Override
+    public List<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId) {
+        return jdbcTemplate.query("""
+                SELECT id, daily_close_id, source_stream, amount_cent, refund_cent, order_count, created_at
+                  FROM finance_daily_close_summaries
+                 WHERE daily_close_id = :daily_close_id
+                 ORDER BY source_stream
+                """, Map.of("daily_close_id", dailyCloseId), this::mapDailyCloseSummary);
+    }
+
+    @Override
+    public int lockArApItemsForDailyClose(String dailyCloseId, LocalDate businessDate, String merchantId) {
+        // 经营日范围：以 due_date 当日（AR/AP 业务日）锁定本批次台账。merchantId 非空时仅锁本商户行（隔离）。
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("daily_close_id", dailyCloseId)
+                .addValue("business_date", businessDate)
+                .addValue("merchant_id", merchantId);
+        return jdbcTemplate.update("""
+                UPDATE ar_ap_items
+                   SET locked_day_close_id = :daily_close_id
+                 WHERE due_date = :business_date
+                   AND locked_day_close_id IS NULL
+                   AND (:merchant_id IS NULL OR merchant_id = :merchant_id)
+                """, params);
+    }
+
+    @Override
+    public Optional<String> findArApItemLockedDayCloseId(String arApItemId) {
+        List<String> rows = jdbcTemplate.query("""
+                SELECT locked_day_close_id
+                  FROM ar_ap_items
+                 WHERE id = :id
+                """, Map.of("id", arApItemId),
+                (rs, rowNum) -> rs.getString("locked_day_close_id"));
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(rows.get(0));
+    }
+
+    @Override
+    public boolean lockedDailyCloseExistsForDate(LocalDate businessDate) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM finance_daily_closes
+                 WHERE business_date = :business_date
+                   AND status = 'locked'
+                """, Map.of("business_date", businessDate), Integer.class);
+        return count != null && count > 0;
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate) {
+        // 官方售票：ticket_orders 已支付(paid)，以 visit_date 为经营日；金额=实付分，count=单数。
+        return aggregateTotals("""
+                SELECT COALESCE(SUM(amount_cent), 0) AS amount_cent,
+                       0 AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM ticket_orders
+                 WHERE pay_status = 'paid'
+                   AND visit_date = :business_date
+                """, businessDate);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate) {
+        // 第三方渠道售票回流：integration_order_syncs 中票务渠道回流。当前 business_type CHECK 仅 catering/retail，
+        // 票务回流维度尚未在该表区分（待财务/集成复核），故保守取 0 计数 0 金额，并不阻断锁定。
+        return DailyCloseSourceTotals.empty();
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateBar(LocalDate businessDate) {
+        // 酒吧：bar_bill_settlements 已结算（settle_channel 全计），以 settled_at 当日为经营日；金额=结算分，count=结算笔数。
+        return aggregateTotals("""
+                SELECT COALESCE(SUM(settlement_amount_cent), 0) AS amount_cent,
+                       0 AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM bar_bill_settlements
+                 WHERE (settled_at AT TIME ZONE 'UTC')::date = :business_date
+                """, businessDate);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate) {
+        // 游乐：amusement_verifications 成功核销计数（收入归票务，此处仅客流/核销量，不计收入）。
+        return aggregateTotals("""
+                SELECT 0 AS amount_cent,
+                       0 AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM amusement_verifications
+                 WHERE verification_result = 'success'
+                   AND (created_at AT TIME ZONE 'UTC')::date = :business_date
+                """, businessDate);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate) {
+        // 供应链成本侧：inventory_stock_movements 当日出库消耗笔数（成本/库存影响，不计经营收入）。
+        return aggregateTotals("""
+                SELECT 0 AS amount_cent,
+                       0 AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM inventory_stock_movements
+                 WHERE (created_at AT TIME ZONE 'UTC')::date = :business_date
+                """, businessDate);
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate) {
+        // 第三方回流（餐饮/零售）：integration_order_syncs 回流已 synced 的 order 类，以 created_at 当日为经营日。
+        return aggregateTotals("""
+                SELECT COALESCE(SUM(amount_cent), 0) AS amount_cent,
+                       0 AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM integration_order_syncs
+                 WHERE sync_type = 'order'
+                   AND status = 'synced'
+                   AND (created_at AT TIME ZONE 'UTC')::date = :business_date
+                """, businessDate);
+    }
+
+    private DailyCloseSourceTotals aggregateTotals(String sql, LocalDate businessDate) {
+        return jdbcTemplate.query(sql, Map.of("business_date", businessDate), (rs) -> {
+            if (!rs.next()) {
+                return DailyCloseSourceTotals.empty();
+            }
+            return new DailyCloseSourceTotals(
+                    rs.getLong("amount_cent"),
+                    rs.getLong("refund_cent"),
+                    rs.getInt("order_count"));
+        });
+    }
+
+    @Override
+    public ArApAdjustmentRecord saveArApAdjustment(ArApAdjustmentRecord adjustment) {
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_adjustments (
+                    id, ar_ap_item_id, locked_day_close_id, adjustment_amount_cent,
+                    approval_status, requested_by, approved_by, reason, created_at, decided_at
+                )
+                VALUES (
+                    :id, :ar_ap_item_id, :locked_day_close_id, :adjustment_amount_cent,
+                    :approval_status, :requested_by, :approved_by, :reason, :created_at, :decided_at
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, adjustmentParameters(adjustment));
+        return adjustment;
+    }
+
+    @Override
+    public Optional<ArApAdjustmentRecord> findArApAdjustmentByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, ar_ap_item_id, locked_day_close_id, adjustment_amount_cent,
+                       approval_status, requested_by, approved_by, reason, created_at, decided_at
+                  FROM ar_ap_adjustments
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), this::mapAdjustment).stream().findFirst();
+    }
+
+    @Override
+    public ArApAdjustmentRecord updateArApAdjustment(ArApAdjustmentRecord adjustment) {
+        jdbcTemplate.update("""
+                UPDATE ar_ap_adjustments
+                   SET approval_status = :approval_status,
+                       approved_by = :approved_by,
+                       decided_at = :decided_at
+                 WHERE id = :id
+                """, adjustmentParameters(adjustment));
+        return adjustment;
+    }
+
+    private MapSqlParameterSource adjustmentParameters(ArApAdjustmentRecord adjustment) {
+        return new MapSqlParameterSource()
+                .addValue("id", adjustment.id())
+                .addValue("ar_ap_item_id", adjustment.arApItemId())
+                .addValue("locked_day_close_id", adjustment.lockedDayCloseId())
+                .addValue("adjustment_amount_cent", adjustment.adjustmentAmountCent())
+                .addValue("approval_status", adjustment.approvalStatus())
+                .addValue("requested_by", adjustment.requestedBy())
+                .addValue("approved_by", adjustment.approvedBy())
+                .addValue("reason", adjustment.reason())
+                .addValue("created_at", timestampWithTimeZone(adjustment.createdAt()))
+                .addValue("decided_at", timestampWithTimeZone(adjustment.decidedAt()));
+    }
+
+    private DailyCloseRecord mapDailyClose(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new DailyCloseRecord(
+                resultSet.getString("id"),
+                resultSet.getObject("business_date", java.time.LocalDate.class),
+                resultSet.getString("scope_type"),
+                resultSet.getString("scope_id"),
+                resultSet.getBoolean("force_close"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "locked_at"),
+                nullableInstant(resultSet, "created_at"));
+    }
+
+    private DailyCloseSummaryRecord mapDailyCloseSummary(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new DailyCloseSummaryRecord(
+                resultSet.getString("id"),
+                resultSet.getString("daily_close_id"),
+                resultSet.getString("source_stream"),
+                resultSet.getLong("amount_cent"),
+                resultSet.getLong("refund_cent"),
+                resultSet.getInt("order_count"),
+                nullableInstant(resultSet, "created_at"));
+    }
+
+    private ArApAdjustmentRecord mapAdjustment(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new ArApAdjustmentRecord(
+                resultSet.getString("id"),
+                resultSet.getString("ar_ap_item_id"),
+                resultSet.getString("locked_day_close_id"),
+                resultSet.getLong("adjustment_amount_cent"),
+                resultSet.getString("approval_status"),
+                resultSet.getString("requested_by"),
+                resultSet.getString("approved_by"),
+                resultSet.getString("reason"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "decided_at"));
+    }
+
     private MapSqlParameterSource arApItemParameters(ArApItemRecord item) {
         return new MapSqlParameterSource()
                 .addValue("id", item.id())

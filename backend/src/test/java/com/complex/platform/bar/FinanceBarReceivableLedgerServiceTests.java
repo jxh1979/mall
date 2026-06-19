@@ -12,8 +12,10 @@ import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
+import com.complex.platform.finance.ArApAdjustmentRecord;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.ArApItemSourceRecord;
+import com.complex.platform.finance.DailyCloseSummaryRecord;
 import com.complex.platform.finance.ArApPaymentRecord;
 import com.complex.platform.finance.DailyCloseRecord;
 import com.complex.platform.finance.FinanceRefundRecord;
@@ -247,6 +249,82 @@ class FinanceBarReceivableLedgerServiceTests {
         @Override
         public ReconciliationDifferenceRecord saveReconciliationDifference(ReconciliationDifferenceRecord difference) {
             return difference;
+        }
+
+        // ── R5 T7：日结锁定 + 补录审批 + 多源汇总（bar 域测试无需，提供空实现以满足接口）──
+        @Override
+        public Optional<DailyCloseRecord> findDailyCloseById(String id) {
+            return Optional.ofNullable(dailyCloses.get(id));
+        }
+
+        @Override
+        public DailyCloseSummaryRecord saveDailyCloseSummary(DailyCloseSummaryRecord summary) {
+            return summary;
+        }
+
+        @Override
+        public List<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId) {
+            return List.of();
+        }
+
+        @Override
+        public int lockArApItemsForDailyClose(String dailyCloseId, LocalDate businessDate, String merchantId) {
+            return 0;
+        }
+
+        @Override
+        public Optional<String> findArApItemLockedDayCloseId(String arApItemId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public boolean lockedDailyCloseExistsForDate(LocalDate businessDate) {
+            return false;
+        }
+
+        @Override
+        public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate) {
+            return DailyCloseSourceTotals.empty();
+        }
+
+        @Override
+        public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate) {
+            return DailyCloseSourceTotals.empty();
+        }
+
+        @Override
+        public DailyCloseSourceTotals aggregateBar(LocalDate businessDate) {
+            return DailyCloseSourceTotals.empty();
+        }
+
+        @Override
+        public DailyCloseSourceTotals aggregateAmusement(LocalDate businessDate) {
+            return DailyCloseSourceTotals.empty();
+        }
+
+        @Override
+        public DailyCloseSourceTotals aggregateSupplyCost(LocalDate businessDate) {
+            return DailyCloseSourceTotals.empty();
+        }
+
+        @Override
+        public DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate) {
+            return DailyCloseSourceTotals.empty();
+        }
+
+        @Override
+        public ArApAdjustmentRecord saveArApAdjustment(ArApAdjustmentRecord adjustment) {
+            return adjustment;
+        }
+
+        @Override
+        public Optional<ArApAdjustmentRecord> findArApAdjustmentByIdForUpdate(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public ArApAdjustmentRecord updateArApAdjustment(ArApAdjustmentRecord adjustment) {
+            return adjustment;
         }
     }
 

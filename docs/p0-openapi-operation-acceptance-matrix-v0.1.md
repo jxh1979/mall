@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 212 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 215 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -233,6 +233,9 @@
 | access | `GET` | `/api/v1/access/effective-permissions` | `getEffectivePermissions` | 查询当前账号有效权限集 | `-` | `authenticated` | `staff-token` | `self` | web, mobile_admin | 否 | `access.effective_permission.viewed` | `access.effective_permission.viewed_failed` |
 | access | `GET` | `/api/v1/access/users/{id}/effective-permissions` | `getUserEffectivePermissions` | 查询指定账号有效权限集 | `-` | `access.user.view` | `staff-token` | `project` | web, mobile_admin | 否 | `access.effective_permission.viewed` | `access.effective_permission.viewed_failed` |
 | access | `PUT` | `/api/v1/access/users/{id}/staff-level` | `assignStaffLevel` | 分配员工职级与薪资 | `StaffLevelAssignmentRequest` | `access.staff_level.manage` | `staff-token` | `project` | web | 是 | `access.staff_level.assigned` | `access.staff_level.assign_failed` |
+| finance | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | `listDailyCloseSummaries` | 查询日结六源汇总 | `-` | `finance.daily_close.manage` | `staff-token` | `project-entity` | web, mobile_admin | 否 | `finance.daily_close_summary.viewed` | `finance.daily_close_summary.view_failed` |
+| finance | `POST` | `/api/v1/finance/ar-ap-adjustments` | `requestArApAdjustment` | 锁定后补录审批申请 | `ArApAdjustmentRequest` | `finance.locked_backfill.request` | `staff-token` | `project-entity` | web, mobile_admin | 是 | `finance.locked_backfill_requested` | `finance.locked_backfill_request_failed` |
+| finance | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | `approveArApAdjustment` | 锁定后补录审批决定 | `ArApAdjustmentDecisionRequest` | `finance.locked_backfill.approve` | `staff-token` | `project-entity` | web, mobile_admin | 是 | `finance.locked_backfill_approved` | `finance.locked_backfill_decision_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -300,5 +303,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 212 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 215 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

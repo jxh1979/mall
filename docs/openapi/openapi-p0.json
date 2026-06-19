@@ -7856,6 +7856,138 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/finance/daily-closes/{id}/summaries": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listDailyCloseSummaries",
+        "summary": "查询日结六源汇总",
+        "description": "返回日结锁定时按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流六源聚合的金额、退款、计数；商户角色仅见自身 scope。",
+        "x-permission": "finance.daily_close.manage",
+        "x-data-scope": "project-entity",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "finance.daily_close_summary.viewed",
+        "x-audit-event-failure": "finance.daily_close_summary.view_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/finance/ar-ap-adjustments": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "requestArApAdjustment",
+        "summary": "锁定后补录审批申请",
+        "description": "对已锁定日结的应收应付台账发起补录申请（pending），由上级审批通过后才真正写入金额变动。",
+        "x-permission": "finance.locked_backfill.request",
+        "x-data-scope": "project-entity",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance.locked_backfill_requested",
+        "x-audit-event-failure": "finance.locked_backfill_request_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ArApAdjustmentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/finance/ar-ap-adjustments/{id}/approve": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "approveArApAdjustment",
+        "summary": "锁定后补录审批决定",
+        "description": "上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。",
+        "x-permission": "finance.locked_backfill.approve",
+        "x-data-scope": "project-entity",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance.locked_backfill_approved",
+        "x-audit-event-failure": "finance.locked_backfill_decision_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "补录工单 id；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ArApAdjustmentDecisionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -9140,6 +9272,37 @@
             "example": {
               "idempotency_key": "reverse_20260618_000001",
               "reason": "误核销，需冲正回滚核销次数"
+            }
+          }
+        }
+      },
+      "ArApAdjustmentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArApAdjustmentRequest"
+            },
+            "example": {
+              "idempotency_key": "arap_adj_20260630_000001",
+              "ar_ap_item_id": "arap_late_invoice_001",
+              "adjustment_amount_cent": 5000,
+              "reason": "锁定后到票补录差额"
+            }
+          }
+        }
+      },
+      "ArApAdjustmentDecisionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArApAdjustmentDecisionRequest"
+            },
+            "example": {
+              "idempotency_key": "arap_adj_decide_20260630_000001",
+              "decision": "approve",
+              "operator_note": "经财务复核同意补录"
             }
           }
         }
@@ -14998,6 +15161,90 @@
             "type": "string",
             "description": "核销冲正原因；必填，留痕可追溯。",
             "maxLength": 1000
+          }
+        }
+      },
+      "ArApAdjustmentRequest": {
+        "type": "object",
+        "description": "请求载荷 `ArApAdjustmentRequest`（R5 T7 锁定后补录审批申请）；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
+        "additionalProperties": false,
+        "required": [
+          "ar_ap_item_id",
+          "adjustment_amount_cent",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复入账。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注；进入审计留痕。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表；用于绑定补录凭证。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "ar_ap_item_id": {
+            "type": "string",
+            "description": "目标应收应付台账项 id；必须为已锁定（locked_day_close_id 非空）的台账项。",
+            "maxLength": 64
+          },
+          "adjustment_amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "补录变动额（整数分，带符号；正=增、负=减）；不得为 0。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "补录原因；必填，进入审计留痕。",
+            "maxLength": 255
+          }
+        }
+      },
+      "ArApAdjustmentDecisionRequest": {
+        "type": "object",
+        "description": "请求载荷 `ArApAdjustmentDecisionRequest`（R5 T7 补录审批决定）；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
+        "additionalProperties": false,
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "审批备注；进入审计留痕。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表；用于绑定审批凭证。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "decision": {
+            "type": "string",
+            "description": "审批决定；approve 才把金额变动入账，reject 不改账。",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "maxLength": 32
           }
         }
       }
