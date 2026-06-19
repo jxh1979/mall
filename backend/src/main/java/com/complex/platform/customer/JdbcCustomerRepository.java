@@ -976,4 +976,396 @@ class JdbcCustomerRepository implements CustomerRepository {
             throw new IllegalStateException("customer JSON payload is not readable", exception);
         }
     }
+
+    // ---- V090 会员忠诚度 第2部分：储值 / 付费会员 / 积分转赠 ----
+
+    private static final String STORED_VALUE_ACCOUNT_SELECT = """
+            SELECT id, customer_id, project_id, balance_cent, status, created_at, updated_at
+              FROM customer_stored_value_accounts
+            """;
+
+    @Override
+    public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String customerId, String projectId) {
+        return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
+                        + " WHERE customer_id = :customer_id AND project_id IS NOT DISTINCT FROM :project_id",
+                new MapSqlParameterSource().addValue("customer_id", customerId).addValue("project_id", projectId),
+                this::mapStoredValueAccount).stream().findFirst();
+    }
+
+    @Override
+    public Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String customerId, String projectId) {
+        return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
+                        + " WHERE customer_id = :customer_id AND project_id IS NOT DISTINCT FROM :project_id FOR UPDATE",
+                new MapSqlParameterSource().addValue("customer_id", customerId).addValue("project_id", projectId),
+                this::mapStoredValueAccount).stream().findFirst();
+    }
+
+    @Override
+    public CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_stored_value_accounts (
+                    id, customer_id, project_id, balance_cent, status, created_at, updated_at
+                )
+                VALUES (:id, :customer_id, :project_id, :balance_cent, :status, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET
+                    balance_cent = EXCLUDED.balance_cent,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", account.id())
+                .addValue("customer_id", account.customerId())
+                .addValue("project_id", account.projectId())
+                .addValue("balance_cent", account.balanceCent())
+                .addValue("status", account.status())
+                .addValue("created_at", timestampWithTimeZone(account.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(account.updatedAt())));
+        return account;
+    }
+
+    @Override
+    public CustomerStoredValueTransactionRecord saveStoredValueTransaction(CustomerStoredValueTransactionRecord txn) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_stored_value_transactions (
+                    id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
+                    payment_intent_id, reason, idempotency_key, created_at
+                )
+                VALUES (
+                    :id, :account_id, :customer_id, :txn_type, :amount_cent, :balance_after_cent,
+                    :payment_intent_id, :reason, :idempotency_key, :created_at
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", txn.id())
+                .addValue("account_id", txn.accountId())
+                .addValue("customer_id", txn.customerId())
+                .addValue("txn_type", txn.txnType())
+                .addValue("amount_cent", txn.amountCent())
+                .addValue("balance_after_cent", txn.balanceAfterCent())
+                .addValue("payment_intent_id", txn.paymentIntentId())
+                .addValue("reason", txn.reason())
+                .addValue("idempotency_key", txn.idempotencyKey())
+                .addValue("created_at", timestampWithTimeZone(txn.createdAt())));
+        return txn;
+    }
+
+    @Override
+    public Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdempotencyKey(String key) {
+        if (key == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("""
+                SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
+                       payment_intent_id, reason, idempotency_key, created_at
+                  FROM customer_stored_value_transactions
+                 WHERE idempotency_key = :key
+                """, Map.of("key", key), this::mapStoredValueTransaction).stream().findFirst();
+    }
+
+    @Override
+    public boolean storedValueTransactionExistsForPaymentIntent(String paymentIntentId) {
+        if (paymentIntentId == null) {
+            return false;
+        }
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM customer_stored_value_transactions
+                 WHERE payment_intent_id = :pi AND txn_type = 'topup'
+                """, Map.of("pi", paymentIntentId), Integer.class);
+        return count != null && count > 0;
+    }
+
+    @Override
+    public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
+        return jdbcTemplate.query("""
+                SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
+                       payment_intent_id, reason, idempotency_key, created_at
+                  FROM customer_stored_value_transactions
+                 WHERE account_id = :account_id
+                 ORDER BY created_at DESC, id DESC
+                """, Map.of("account_id", accountId), this::mapStoredValueTransaction);
+    }
+
+    @Override
+    public CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord plan) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_membership_plans (
+                    id, project_id, plan_code, name, price_cent, duration_days, benefits, status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :plan_code, :name, :price_cent, :duration_days,
+                    CAST(:benefits AS jsonb), :status, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    price_cent = EXCLUDED.price_cent,
+                    duration_days = EXCLUDED.duration_days,
+                    benefits = EXCLUDED.benefits,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", plan.id())
+                .addValue("project_id", plan.projectId())
+                .addValue("plan_code", plan.planCode())
+                .addValue("name", plan.name())
+                .addValue("price_cent", plan.priceCent())
+                .addValue("duration_days", plan.durationDays())
+                .addValue("benefits", writeJson(plan.benefits()))
+                .addValue("status", plan.status())
+                .addValue("created_at", timestampWithTimeZone(plan.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(plan.updatedAt())));
+        return plan;
+    }
+
+    @Override
+    public Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String planId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, plan_code, name, price_cent, duration_days,
+                       benefits::text AS benefits, status, created_at, updated_at
+                  FROM customer_membership_plans WHERE id = :id
+                """, Map.of("id", planId), this::mapMembershipPlan).stream().findFirst();
+    }
+
+    @Override
+    public List<CustomerMembershipPlanRecord> listMembershipPlans(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, plan_code, name, price_cent, duration_days,
+                       benefits::text AS benefits, status, created_at, updated_at
+                  FROM customer_membership_plans
+                 WHERE status = 'active'
+                   AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
+                 ORDER BY price_cent ASC, id ASC
+                """, Map.of("project_id", (Object) projectId), this::mapMembershipPlan);
+    }
+
+    @Override
+    public CustomerMembershipRecord saveMembership(CustomerMembershipRecord membership) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_memberships (
+                    id, customer_id, plan_id, project_id, start_at, expire_at, status,
+                    auto_renew, payment_intent_id, idempotency_key, created_at, updated_at
+                )
+                VALUES (
+                    :id, :customer_id, :plan_id, :project_id, :start_at, :expire_at, :status,
+                    :auto_renew, :payment_intent_id, :idempotency_key, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    expire_at = EXCLUDED.expire_at,
+                    status = EXCLUDED.status,
+                    auto_renew = EXCLUDED.auto_renew,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", membership.id())
+                .addValue("customer_id", membership.customerId())
+                .addValue("plan_id", membership.planId())
+                .addValue("project_id", membership.projectId())
+                .addValue("start_at", timestampWithTimeZone(membership.startAt()))
+                .addValue("expire_at", timestampWithTimeZone(membership.expireAt()))
+                .addValue("status", membership.status())
+                .addValue("auto_renew", membership.autoRenew())
+                .addValue("payment_intent_id", membership.paymentIntentId())
+                .addValue("idempotency_key", membership.idempotencyKey())
+                .addValue("created_at", timestampWithTimeZone(membership.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(membership.updatedAt())));
+        return membership;
+    }
+
+    private static final String MEMBERSHIP_SELECT = """
+            SELECT id, customer_id, plan_id, project_id, start_at, expire_at, status,
+                   auto_renew, payment_intent_id, idempotency_key, created_at, updated_at
+              FROM customer_memberships
+            """;
+
+    @Override
+    public Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String membershipId) {
+        return jdbcTemplate.query(MEMBERSHIP_SELECT + " WHERE id = :id FOR UPDATE",
+                Map.of("id", membershipId), this::mapMembership).stream().findFirst();
+    }
+
+    @Override
+    public Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String key) {
+        if (key == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query(MEMBERSHIP_SELECT + " WHERE idempotency_key = :key",
+                Map.of("key", key), this::mapMembership).stream().findFirst();
+    }
+
+    @Override
+    public List<CustomerMembershipRecord> listMembershipsByCustomerId(String customerId) {
+        return jdbcTemplate.query(MEMBERSHIP_SELECT + " WHERE customer_id = :cid ORDER BY created_at DESC, id DESC",
+                Map.of("cid", customerId), this::mapMembership);
+    }
+
+    @Override
+    public List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
+        return jdbcTemplate.query(MEMBERSHIP_SELECT
+                        + " WHERE status = 'active' AND expire_at <= :now ORDER BY expire_at ASC",
+                Map.of("now", timestampWithTimeZone(now)), this::mapMembership);
+    }
+
+    @Override
+    public CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord transfer) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_points_transfers (
+                    id, from_customer_id, to_customer_id, points, status, reason, idempotency_key, created_at
+                )
+                VALUES (
+                    :id, :from_customer_id, :to_customer_id, :points, :status, :reason, :idempotency_key, :created_at
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", transfer.id())
+                .addValue("from_customer_id", transfer.fromCustomerId())
+                .addValue("to_customer_id", transfer.toCustomerId())
+                .addValue("points", transfer.points())
+                .addValue("status", transfer.status())
+                .addValue("reason", transfer.reason())
+                .addValue("idempotency_key", transfer.idempotencyKey())
+                .addValue("created_at", timestampWithTimeZone(transfer.createdAt())));
+        return transfer;
+    }
+
+    @Override
+    public Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String key) {
+        if (key == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("""
+                SELECT id, from_customer_id, to_customer_id, points, status, reason, idempotency_key, created_at
+                  FROM customer_points_transfers WHERE idempotency_key = :key
+                """, Map.of("key", key), this::mapPointsTransfer).stream().findFirst();
+    }
+
+    @Override
+    public long sumPointsTransferredOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(points), 0) FROM customer_points_transfers
+                 WHERE from_customer_id = :cid AND status = 'completed'
+                   AND created_at >= :start AND created_at < :end
+                """, new MapSqlParameterSource().addValue("cid", fromCustomerId)
+                .addValue("start", timestampWithTimeZone(dayStart))
+                .addValue("end", timestampWithTimeZone(dayEnd)), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    @Override
+    public int countPointsTransfersOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM customer_points_transfers
+                 WHERE from_customer_id = :cid AND status = 'completed'
+                   AND created_at >= :start AND created_at < :end
+                """, new MapSqlParameterSource().addValue("cid", fromCustomerId)
+                .addValue("start", timestampWithTimeZone(dayStart))
+                .addValue("end", timestampWithTimeZone(dayEnd)), Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    @Override
+    public Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, daily_points_limit, daily_count_limit, status, created_at, updated_at
+                  FROM customer_points_transfer_limits
+                 WHERE status = 'active'
+                   AND project_id IS NOT DISTINCT FROM :project_id
+                """, new MapSqlParameterSource().addValue("project_id", projectId),
+                this::mapPointsTransferLimit).stream().findFirst();
+    }
+
+    @Override
+    public CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord limit) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_points_transfer_limits (
+                    id, project_id, daily_points_limit, daily_count_limit, status, created_at, updated_at
+                )
+                VALUES (:id, :project_id, :daily_points_limit, :daily_count_limit, :status, :created_at, :updated_at)
+                ON CONFLICT (project_id) DO UPDATE SET
+                    daily_points_limit = EXCLUDED.daily_points_limit,
+                    daily_count_limit = EXCLUDED.daily_count_limit,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", limit.id())
+                .addValue("project_id", limit.projectId())
+                .addValue("daily_points_limit", limit.dailyPointsLimit())
+                .addValue("daily_count_limit", limit.dailyCountLimit())
+                .addValue("status", limit.status())
+                .addValue("created_at", timestampWithTimeZone(limit.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(limit.updatedAt())));
+        return limit;
+    }
+
+    private CustomerStoredValueAccountRecord mapStoredValueAccount(ResultSet rs, int rowNumber) throws SQLException {
+        return new CustomerStoredValueAccountRecord(
+                rs.getString("id"),
+                rs.getString("customer_id"),
+                rs.getString("project_id"),
+                rs.getLong("balance_cent"),
+                rs.getString("status"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
+    }
+
+    private CustomerStoredValueTransactionRecord mapStoredValueTransaction(ResultSet rs, int rowNumber) throws SQLException {
+        return new CustomerStoredValueTransactionRecord(
+                rs.getString("id"),
+                rs.getString("account_id"),
+                rs.getString("customer_id"),
+                rs.getString("txn_type"),
+                rs.getLong("amount_cent"),
+                rs.getLong("balance_after_cent"),
+                rs.getString("payment_intent_id"),
+                rs.getString("reason"),
+                rs.getString("idempotency_key"),
+                nullableInstant(rs, "created_at"));
+    }
+
+    private CustomerMembershipPlanRecord mapMembershipPlan(ResultSet rs, int rowNumber) throws SQLException {
+        return new CustomerMembershipPlanRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("plan_code"),
+                rs.getString("name"),
+                rs.getLong("price_cent"),
+                rs.getInt("duration_days"),
+                readObjectMap(rs.getString("benefits")),
+                rs.getString("status"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
+    }
+
+    private CustomerMembershipRecord mapMembership(ResultSet rs, int rowNumber) throws SQLException {
+        return new CustomerMembershipRecord(
+                rs.getString("id"),
+                rs.getString("customer_id"),
+                rs.getString("plan_id"),
+                rs.getString("project_id"),
+                nullableInstant(rs, "start_at"),
+                nullableInstant(rs, "expire_at"),
+                rs.getString("status"),
+                rs.getBoolean("auto_renew"),
+                rs.getString("payment_intent_id"),
+                rs.getString("idempotency_key"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
+    }
+
+    private CustomerPointsTransferRecord mapPointsTransfer(ResultSet rs, int rowNumber) throws SQLException {
+        return new CustomerPointsTransferRecord(
+                rs.getString("id"),
+                rs.getString("from_customer_id"),
+                rs.getString("to_customer_id"),
+                rs.getLong("points"),
+                rs.getString("status"),
+                rs.getString("reason"),
+                rs.getString("idempotency_key"),
+                nullableInstant(rs, "created_at"));
+    }
+
+    private CustomerPointsTransferLimitRecord mapPointsTransferLimit(ResultSet rs, int rowNumber) throws SQLException {
+        return new CustomerPointsTransferLimitRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getLong("daily_points_limit"),
+                rs.getInt("daily_count_limit"),
+                rs.getString("status"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
+    }
 }

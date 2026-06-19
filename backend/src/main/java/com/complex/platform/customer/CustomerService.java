@@ -559,6 +559,11 @@ public class CustomerService {
         );
     }
 
+    /** 解析客人 token → customerId（鉴权失败抛 401）。供储值/付费会员/积分转赠等客人端动作复用。 */
+    public String resolveCustomerId(String customerToken) {
+        return requireCustomer(customerToken).id();
+    }
+
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {

@@ -121,4 +121,98 @@ public interface CustomerRepository {
     default void consumeBatchRemaining(String ledgerId, long remainingPoints) {
         throw new UnsupportedOperationException("consumeBatchRemaining not supported by this repository");
     }
+
+    // ---- 会员忠诚度 第2部分（V090）：储值 / 付费会员 / 积分转赠 ----
+
+    /** 储值账户（每客每项目唯一），带行锁用于充值/消费一致。 */
+    default Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String customerId, String projectId) {
+        return Optional.empty();
+    }
+
+    default Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String customerId, String projectId) {
+        return Optional.empty();
+    }
+
+    default CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
+        throw new UnsupportedOperationException("saveStoredValueAccount not supported by this repository");
+    }
+
+    default CustomerStoredValueTransactionRecord saveStoredValueTransaction(CustomerStoredValueTransactionRecord txn) {
+        throw new UnsupportedOperationException("saveStoredValueTransaction not supported by this repository");
+    }
+
+    /** 幂等校验：按 idempotency_key 查已落库的储值流水。 */
+    default Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdempotencyKey(String key) {
+        return Optional.empty();
+    }
+
+    /** 储值流水是否已引用某支付意图（防同一充值支付意图重复入账）。 */
+    default boolean storedValueTransactionExistsForPaymentIntent(String paymentIntentId) {
+        return false;
+    }
+
+    default List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accountId) {
+        return List.of();
+    }
+
+    // 付费会员档位 / 订阅
+    default CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord plan) {
+        throw new UnsupportedOperationException("saveMembershipPlan not supported by this repository");
+    }
+
+    default Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String planId) {
+        return Optional.empty();
+    }
+
+    default List<CustomerMembershipPlanRecord> listMembershipPlans(String projectId) {
+        return List.of();
+    }
+
+    default CustomerMembershipRecord saveMembership(CustomerMembershipRecord membership) {
+        throw new UnsupportedOperationException("saveMembership not supported by this repository");
+    }
+
+    default Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String membershipId) {
+        return Optional.empty();
+    }
+
+    default Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String key) {
+        return Optional.empty();
+    }
+
+    default List<CustomerMembershipRecord> listMembershipsByCustomerId(String customerId) {
+        return List.of();
+    }
+
+    /** 列出已到期但仍 active 的订阅（到期作业用）。 */
+    default List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
+        return List.of();
+    }
+
+    // 积分转赠 + 风控
+    default CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord transfer) {
+        throw new UnsupportedOperationException("savePointsTransfer not supported by this repository");
+    }
+
+    default Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String key) {
+        return Optional.empty();
+    }
+
+    /** 某客今日（[dayStart, dayEnd)）已转出的积分总额（风控日限额用）。 */
+    default long sumPointsTransferredOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
+        return 0L;
+    }
+
+    /** 某客今日（[dayStart, dayEnd)）已成功转出次数（风控日次数用）。 */
+    default int countPointsTransfersOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
+        return 0;
+    }
+
+    default Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String projectId) {
+        return Optional.empty();
+    }
+
+    default CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord limit) {
+        throw new UnsupportedOperationException("savePointsTransferLimit not supported by this repository");
+    }
 }

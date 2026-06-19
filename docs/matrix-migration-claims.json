@@ -795,6 +795,76 @@
       "column": "multiplier_basis_points",
       "expected": "present",
       "note": "V089 生日加倍规则倍率（万分比，window_type=birthday_day/birthday_month）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_stored_value_accounts",
+      "column": "balance_cent",
+      "expected": "present",
+      "note": "V090 会员忠诚度 第2部分①：储值余额账户（gap-analysis §7A P1 预付卡/余额账户），每客每项目唯一，status active/frozen/closed"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_stored_value_transactions",
+      "column": "payment_intent_id",
+      "expected": "present",
+      "note": "V090 储值流水关联充值支付意图（预付资金合规：充值绑 finance_payment_intents，支付成功才入账）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_stored_value_transactions",
+      "column": "idempotency_key",
+      "expected": "present",
+      "note": "V090 储值流水幂等键（uq，防重复入账/扣减）；txn_type topup/consume/refund/adjust 带方向"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_membership_plans",
+      "column": "benefits",
+      "expected": "present",
+      "note": "V090 会员忠诚度 第2部分②：付费会员档位权益 jsonb（gap-analysis §7A P1 订阅制权益）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_membership_plans",
+      "column": "duration_days",
+      "expected": "present",
+      "note": "V090 付费会员档位权益时长（天）+ price_cent 价格"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_memberships",
+      "column": "expire_at",
+      "expected": "present",
+      "note": "V090 付费会员订阅生效窗口（start_at/expire_at），status active/expired/cancelled，到期作业置 expired"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_memberships",
+      "column": "payment_intent_id",
+      "expected": "present",
+      "note": "V090 付费会员开通关联支付意图（支付成功才生效，不凭空开通）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_transfers",
+      "column": "points",
+      "expected": "present",
+      "note": "V090 会员忠诚度 第2部分③：积分转赠（gap-analysis §7A P2 会员间转移）from 扣/to 加原子事务"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_transfers",
+      "column": "idempotency_key",
+      "expected": "present",
+      "note": "V090 积分转赠幂等键（uq，防重复转赠）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_transfer_limits",
+      "column": "daily_points_limit",
+      "expected": "present",
+      "note": "V090 积分转赠风控配置（防套现：daily_points_limit 日限额 + daily_count_limit 日次数）"
     }
   ]
 }

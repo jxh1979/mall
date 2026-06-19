@@ -237,6 +237,29 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public Optional<PaymentIntentRecord> findPaymentIntentById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, business_order_type, business_order_id, amount_cent, currency,
+                       channel, status, created_at, updated_at
+                  FROM finance_payment_intents
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapPaymentIntent).stream().findFirst();
+    }
+
+    private PaymentIntentRecord mapPaymentIntent(ResultSet rs, int rowNumber) throws SQLException {
+        return new PaymentIntentRecord(
+                rs.getString("id"),
+                rs.getString("business_order_type"),
+                rs.getString("business_order_id"),
+                rs.getLong("amount_cent"),
+                rs.getString("currency"),
+                rs.getString("channel"),
+                rs.getString("status"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
+    }
+
+    @Override
     public OfflinePaymentConfirmationRecord saveOfflinePaymentConfirmation(OfflinePaymentConfirmationRecord confirmation) {
         jdbcTemplate.update("""
                 INSERT INTO finance_offline_payment_confirmations (

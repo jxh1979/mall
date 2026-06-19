@@ -10849,6 +10849,652 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/customer/stored-value/topup": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerStoredValueTopup",
+        "summary": "客人储值充值（绑支付意图）",
+        "x-permission": "customer.stored_value.topup",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.stored_value.topup",
+        "x-audit-event-failure": "customer.stored_value.topup_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueTopupRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/stored-value/settle": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerStoredValueSettle",
+        "summary": "客人储值充值入账（支付成功后）",
+        "x-permission": "customer.stored_value.topup",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.stored_value.settle",
+        "x-audit-event-failure": "customer.stored_value.settle_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueSettleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/stored-value/consume": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerStoredValueConsume",
+        "summary": "客人储值消费（余额扣减）",
+        "x-permission": "customer.stored_value.consume",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.stored_value.consume",
+        "x-audit-event-failure": "customer.stored_value.consume_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueConsumeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/stored-value/account": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerStoredValueAccount",
+        "summary": "客人储值账户查询",
+        "x-permission": "customer.stored_value.view",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.stored_value_account_viewed",
+        "x-audit-event-failure": "customer.stored_value_account_viewed_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "综合体项目隔离键"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/memberships/subscribe": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerMembershipSubscribe",
+        "summary": "客人付费会员开通（绑支付意图）",
+        "x-permission": "customer.membership.subscribe",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.membership.subscribe",
+        "x-audit-event-failure": "customer.membership.subscribe_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MembershipSubscribeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/memberships": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerMemberships",
+        "summary": "客人付费会员列表",
+        "x-permission": "customer.membership.view",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.memberships_viewed",
+        "x-audit-event-failure": "customer.memberships_viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/membership-plans": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerMembershipPlans",
+        "summary": "付费会员档位列表（客人端）",
+        "x-permission": "not_applicable",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.membership_plans_viewed",
+        "x-audit-event-failure": "customer.membership_plans_viewed_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "综合体项目隔离键"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/membership-benefits": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerMembershipBenefits",
+        "summary": "客人当前生效会员权益",
+        "x-permission": "customer.membership.view",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.membership_benefits_viewed",
+        "x-audit-event-failure": "customer.membership_benefits_viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/points/transfers": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerPointsTransfer",
+        "summary": "客人积分转赠（风控防套现）",
+        "x-permission": "customer.points.transfer",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "points.transferred",
+        "x-audit-event-failure": "points.transferred_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PointsTransferRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/loyalty/membership-plans": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "saveMembershipPlan",
+        "summary": "保存付费会员档位（后台）",
+        "x-permission": "customer.membership.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "membership.plan_saved",
+        "x-audit-event-failure": "membership.plan_saved_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MembershipPlanRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listMembershipPlans",
+        "summary": "付费会员档位列表（后台）",
+        "x-permission": "customer.membership.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.membership_plans_admin_viewed",
+        "x-audit-event-failure": "customer.membership_plans_admin_viewed_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "综合体项目隔离键"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/{customer_id}/freeze": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "freezeStoredValueAccount",
+        "summary": "冻结会员储值账户（后台）",
+        "x-permission": "customer.stored_value.freeze",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.frozen",
+        "x-audit-event-failure": "stored_value.frozen_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "会员ID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueFreezeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/{customer_id}/unfreeze": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "unfreezeStoredValueAccount",
+        "summary": "解冻会员储值账户（后台）",
+        "x-permission": "customer.stored_value.freeze",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.unfrozen",
+        "x-audit-event-failure": "stored_value.unfrozen_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "会员ID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueFreezeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/{customer_id}/refund": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "refundStoredValueAccount",
+        "summary": "会员储值退卡/退余额（后台）",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.refund",
+        "x-audit-event-failure": "stored_value.refund_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "会员ID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueRefundRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/points-transfer-limits": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "savePointsTransferLimit",
+        "summary": "保存积分转赠风控配置（后台）",
+        "x-permission": "customer.points.transfer_limit",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "points.transfer_limit_saved",
+        "x-audit-event-failure": "points.transfer_limit_saved_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PointsTransferLimitRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -12434,6 +13080,106 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/LoyaltyFreezeRequest"
+            }
+          }
+        }
+      },
+      "StoredValueTopupRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueTopupRequest"
+            }
+          }
+        }
+      },
+      "StoredValueSettleRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueSettleRequest"
+            }
+          }
+        }
+      },
+      "StoredValueConsumeRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueConsumeRequest"
+            }
+          }
+        }
+      },
+      "StoredValueRefundRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueRefundRequest"
+            }
+          }
+        }
+      },
+      "StoredValueFreezeRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueFreezeRequest"
+            }
+          }
+        }
+      },
+      "MembershipPlanRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MembershipPlanRequest"
+            }
+          }
+        }
+      },
+      "MembershipSubscribeRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MembershipSubscribeRequest"
+            }
+          }
+        }
+      },
+      "MembershipActivateRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MembershipActivateRequest"
+            }
+          }
+        }
+      },
+      "PointsTransferRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PointsTransferRequest"
+            }
+          }
+        }
+      },
+      "PointsTransferLimitRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PointsTransferLimitRequest"
             }
           }
         }
@@ -19504,6 +20250,272 @@
             "type": "string",
             "description": "LoyaltyFreezeRequest.reason 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
             "maxLength": 255
+          }
+        }
+      },
+      "StoredValueTopupRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueTopupRequest`；储值充值（绑 finance 支付意图，返回支付意图，支付成功后再调入账）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局账户。",
+            "maxLength": 255
+          },
+          "amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "充值金额（分），必须为正。"
+          },
+          "channel": {
+            "type": "string",
+            "description": "支付渠道编码；必须使用后端枚举/配置字典取值。",
+            "maxLength": 64
+          }
+        }
+      },
+      "StoredValueSettleRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueSettleRequest`；储值充值入账（校验支付意图已 succeeded、金额一致、未重复入账后加余额）。",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局账户。",
+            "maxLength": 255
+          },
+          "payment_intent_id": {
+            "type": "string",
+            "description": "充值绑定的 finance 支付意图 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "StoredValueConsumeRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueConsumeRequest`；储值消费（余额扣减，不足拒，冻结阻断）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局账户。",
+            "maxLength": 255
+          },
+          "amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "消费金额（分），必须为正。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "消费事由描述。",
+            "maxLength": 255
+          }
+        }
+      },
+      "StoredValueRefundRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueRefundRequest`；储值退卡/退余额（退回余额；实际退款打款待支付渠道）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局账户。",
+            "maxLength": 255
+          },
+          "amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "退款金额（分），必须为正且不超过余额。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "退款事由描述。",
+            "maxLength": 255
+          },
+          "close_account": {
+            "type": "boolean",
+            "description": "退款后余额为 0 时是否关闭账户。"
+          }
+        }
+      },
+      "StoredValueFreezeRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueFreezeRequest`；储值账户冻结/解冻（后台风控）。",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局账户。",
+            "maxLength": 255
+          },
+          "reason": {
+            "type": "string",
+            "description": "冻结/解冻事由描述。",
+            "maxLength": 255
+          }
+        }
+      },
+      "MembershipPlanRequest": {
+        "type": "object",
+        "description": "请求载荷 `MembershipPlanRequest`；付费会员档位配置（后台，权益 benefits 口径自定义）。",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局档位。",
+            "maxLength": 255
+          },
+          "plan_code": {
+            "type": "string",
+            "description": "档位编码（项目内唯一）。",
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "description": "档位名称。",
+            "maxLength": 160
+          },
+          "price_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "档位价格（分），>=0。"
+          },
+          "duration_days": {
+            "type": "integer",
+            "description": "权益时长（天），必须为正。"
+          },
+          "benefits": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "权益配置（折扣/赠饮等口径，jsonb）。"
+          },
+          "status": {
+            "type": "string",
+            "description": "档位状态：active/inactive/archived。",
+            "maxLength": 32
+          }
+        }
+      },
+      "MembershipSubscribeRequest": {
+        "type": "object",
+        "description": "请求载荷 `MembershipSubscribeRequest`；付费会员开通（绑 finance 支付意图，支付成功后再调生效）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "plan_id": {
+            "type": "string",
+            "description": "会员档位 id。",
+            "maxLength": 64
+          },
+          "channel": {
+            "type": "string",
+            "description": "支付渠道编码；必须使用后端枚举/配置字典取值。",
+            "maxLength": 64
+          }
+        }
+      },
+      "MembershipActivateRequest": {
+        "type": "object",
+        "description": "请求载荷 `MembershipActivateRequest`；付费会员生效（校验支付意图已 succeeded、金额一致后生效）。",
+        "additionalProperties": false,
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "description": "会员档位 id。",
+            "maxLength": 64
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局。",
+            "maxLength": 255
+          },
+          "payment_intent_id": {
+            "type": "string",
+            "description": "开通绑定的 finance 支付意图 id。",
+            "maxLength": 64
+          },
+          "auto_renew": {
+            "type": "boolean",
+            "description": "自动续费意向（实际扣款待支付渠道）。"
+          }
+        }
+      },
+      "PointsTransferRequest": {
+        "type": "object",
+        "description": "请求载荷 `PointsTransferRequest`；积分转赠（from=当前登录会员，风控防套现：日限额/日次数/冻结校验）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "to_customer_id": {
+            "type": "string",
+            "description": "收赠会员 id。",
+            "maxLength": 64
+          },
+          "points": {
+            "type": "integer",
+            "format": "int64",
+            "description": "转赠积分数，必须为正。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "转赠事由描述。",
+            "maxLength": 255
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；风控配置按项目取。",
+            "maxLength": 255
+          }
+        }
+      },
+      "PointsTransferLimitRequest": {
+        "type": "object",
+        "description": "请求载荷 `PointsTransferLimitRequest`；积分转赠风控配置（后台，防套现：日限额/日次数，0=不限）。",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目隔离键；空=综合体级全局。",
+            "maxLength": 255
+          },
+          "daily_points_limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "单客每日转出积分上限（0=不限）。"
+          },
+          "daily_count_limit": {
+            "type": "integer",
+            "description": "单客每日转出次数上限（0=不限）。"
+          },
+          "status": {
+            "type": "string",
+            "description": "配置状态：active/inactive。",
+            "maxLength": 32
           }
         }
       }

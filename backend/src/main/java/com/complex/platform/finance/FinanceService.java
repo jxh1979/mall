@@ -141,6 +141,41 @@ public class FinanceService {
         );
     }
 
+    /** 按 id 查支付意图（储值充值/会员开通：入账前校验支付意图存在且已成功）。 */
+    public Optional<PaymentIntentRecord> findPaymentIntent(String paymentIntentId) {
+        if (paymentIntentId == null || paymentIntentId.isBlank()) {
+            return Optional.empty();
+        }
+        return repository.findPaymentIntentById(paymentIntentId);
+    }
+
+    /**
+     * 将支付意图标记为成功（占位代替真实支付渠道回调）。储值充值 / 付费会员开通在测试与本地联调期
+     * 通过本方法把绑定的支付意图置 succeeded，再由各自服务校验后入账，保证"无支付不入账"。
+     * 真实支付渠道接入后由渠道回调驱动此状态。
+     */
+    @Transactional
+    public PaymentIntentRecord markPaymentIntentSucceeded(String paymentIntentId) {
+        PaymentIntentRecord intent = repository.findPaymentIntentById(paymentIntentId)
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "payment intent not found"));
+        if ("succeeded".equals(intent.status())) {
+            return intent;
+        }
+        if (!"created".equals(intent.status())) {
+            throw ApiException.conflict("PAYMENT_INTENT_NOT_PENDING", "payment intent is not pending");
+        }
+        return repository.savePaymentIntent(new PaymentIntentRecord(
+                intent.id(),
+                intent.businessOrderType(),
+                intent.businessOrderId(),
+                intent.amountCent(),
+                intent.currency(),
+                intent.channel(),
+                "succeeded",
+                intent.createdAt(),
+                Instant.now()));
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register", admissionAction = "finance.offline_payment_confirm", objectType = "finance_offline_payment_confirmation")
     @Transactional
     public OfflinePaymentConfirmationRecord confirmOfflinePayment(

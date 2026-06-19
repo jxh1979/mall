@@ -1,0 +1,400 @@
+package com.complex.platform.customer;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.complex.platform.common.api.ApiException;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.PaymentIntentRecord;
+import com.complex.platform.finance.dto.PaymentIntentRequest;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+
+/**
+ * 会员忠诚度 第2部分（V090）单测：储值充值（绑支付意图：无支付不加余额）/消费不足拒/冻结阻断；
+ * 付费会员开通→生效期、到期→expired、续费；积分转赠原子 + 日限额拒 + 不足拒。
+ */
+class MemberWalletServiceTests {
+
+    private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
+
+    private AuditEventService audit() {
+        return new AuditEventService(event -> event);
+    }
+
+    private long days(int d) {
+        return (long) d * 86_400L;
+    }
+
+    // ============================================================
+    // 储值：充值绑支付意图 —— 无支付不加余额，支付成功后入账
+    // ============================================================
+
+    @Test
+    void topupAddsBalanceOnlyAfterPaymentSucceeds() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+
+        // 发起充值：仅建支付意图（created），余额不变。
+        PaymentIntentRecord intent = service.topup("c1", null, 10_000L, "wechat", "topup-1");
+        assertThat(intent.status()).isEqualTo("created");
+        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
+
+        // 支付未成功时入账被拒（不凭空加余额）。
+        assertThatThrownBy(() -> service.settleTopup("c1", null, intent.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PAYMENT_NOT_SUCCEEDED"));
+        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
+
+        // 支付成功后入账：余额 +10000。
+        finance.markPaymentIntentSucceeded(intent.id());
+        CustomerStoredValueTransactionRecord txn = service.settleTopup("c1", null, intent.id());
+        assertThat(txn.txnType()).isEqualTo("topup");
+        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(10_000L);
+
+        // 重复入账同一支付意图：不重复加余额。
+        CustomerStoredValueTransactionRecord again = service.settleTopup("c1", null, intent.id());
+        assertThat(again.id()).isEqualTo(txn.id());
+        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(10_000L);
+    }
+
+    @Test
+    void consumeRejectedWhenInsufficient() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        // 充值 5000 入账
+        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-2");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, intent.id());
+        // 消费 3000 OK
+        service.consume("c1", null, 3_000L, "buy", "consume-1");
+        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(2_000L);
+        // 消费 5000 不足拒
+        assertThatThrownBy(() -> service.consume("c1", null, 5_000L, "buy", "consume-2"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_INSUFFICIENT"));
+        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(2_000L);
+    }
+
+    @Test
+    void freezeBlocksConsumeAndUnfreezeRestores() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-3");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, intent.id());
+
+        service.freeze("c1", null, "risk");
+        assertThat(repo.storedValue.get("c1").status()).isEqualTo("frozen");
+        assertThatThrownBy(() -> service.consume("c1", null, 1_000L, "buy", "c-frozen"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_ACCOUNT_FROZEN"));
+
+        service.unfreeze("c1", null, "cleared");
+        assertThat(repo.storedValue.get("c1").status()).isEqualTo("active");
+        CustomerStoredValueTransactionRecord txn = service.consume("c1", null, 1_000L, "buy", "c-ok");
+        assertThat(txn.balanceAfterCent()).isEqualTo(4_000L);
+    }
+
+    @Test
+    void refundReturnsBalanceAndClosesAccount() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-4");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, intent.id());
+        service.refund("c1", null, 5_000L, "refund all", true, "refund-1");
+        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
+        assertThat(repo.storedValue.get("c1").status()).isEqualTo("closed");
+    }
+
+    // ============================================================
+    // 付费会员：开通→生效期、到期→expired、续费
+    // ============================================================
+
+    @Test
+    void subscribeActivatesWithinValidityAndExpiresAfter() {
+        InMemoryRepo repo = seeded();
+        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
+                "plan1", null, "gold", "金卡", 9_900L, 30,
+                Map.of("discount_bp", 9000), "active", T0, T0));
+        FakeFinance finance = new FakeFinance();
+        MembershipService service = new MembershipService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+
+        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-1");
+        assertThat(intent.amountCent()).isEqualTo(9_900L);
+        // 未支付不生效
+        assertThatThrownBy(() -> service.activate("c1", "plan1", null, intent.id(), false))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PAYMENT_NOT_SUCCEEDED"));
+
+        finance.markPaymentIntentSucceeded(intent.id());
+        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), false);
+        assertThat(m.status()).isEqualTo("active");
+        assertThat(m.expireAt()).isEqualTo(T0.plusSeconds(days(30)));
+
+        // 生效期内权益可用
+        assertThat(service.activeBenefits("c1")).containsEntry("discount_bp", 9000);
+
+        // 到期作业（在 T0+31d）→ expired
+        MembershipService later = new MembershipService(repo, finance, audit(),
+                Clock.fixed(T0.plusSeconds(days(31)), ZoneOffset.UTC));
+        int expired = later.expireMemberships(T0.plusSeconds(days(31)));
+        assertThat(expired).isEqualTo(1);
+        assertThat(repo.memberships.get(m.id()).status()).isEqualTo("expired");
+        // 过期后权益不可用
+        assertThat(later.activeBenefits("c1")).isEmpty();
+    }
+
+    @Test
+    void renewExtendsExpiry() {
+        InMemoryRepo repo = seeded();
+        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
+                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
+        FakeFinance finance = new FakeFinance();
+        MembershipService service = new MembershipService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-2");
+        finance.markPaymentIntentSucceeded(intent.id());
+        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
+
+        PaymentIntentRecord renewIntent = finance.create("membership_subscribe", "c1", 9_900L, "renew-1");
+        finance.markPaymentIntentSucceeded(renewIntent.id());
+        CustomerMembershipRecord renewed = service.renew(m.id(), renewIntent.id());
+        // 生效期内续费：在原 expire 基础上 +30d
+        assertThat(renewed.expireAt()).isEqualTo(T0.plusSeconds(days(60)));
+    }
+
+    // ============================================================
+    // 积分转赠：原子 + 日限额拒 + 不足拒
+    // ============================================================
+
+    @Test
+    void transferMovesPointsAtomically() {
+        InMemoryRepo repo = seeded();
+        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
+        repo.points.put("c1", account("c1", 500));
+        repo.points.put("c2", account("c2", 0));
+        LoyaltyService service = new LoyaltyService(repo, audit(), Clock.fixed(T0, ZoneOffset.UTC));
+
+        CustomerPointsTransferRecord t = service.transferPoints("c1", "c2", 200, "gift", null, "xfer-1");
+        assertThat(t.status()).isEqualTo("completed");
+        assertThat(repo.points.get("c1").balance()).isEqualTo(300);
+        assertThat(repo.points.get("c2").balance()).isEqualTo(200);
+    }
+
+    @Test
+    void transferRejectedWhenInsufficient() {
+        InMemoryRepo repo = seeded();
+        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
+        repo.points.put("c1", account("c1", 100));
+        repo.points.put("c2", account("c2", 0));
+        LoyaltyService service = new LoyaltyService(repo, audit(), Clock.fixed(T0, ZoneOffset.UTC));
+        assertThatThrownBy(() -> service.transferPoints("c1", "c2", 200, "gift", null, "xfer-2"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("POINTS_INSUFFICIENT"));
+        assertThat(repo.points.get("c1").balance()).isEqualTo(100);
+        assertThat(repo.points.get("c2").balance()).isZero();
+    }
+
+    @Test
+    void transferRejectedWhenDailyPointsLimitExceeded() {
+        InMemoryRepo repo = seeded();
+        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
+        repo.points.put("c1", account("c1", 1000));
+        repo.points.put("c2", account("c2", 0));
+        repo.transferLimit = new CustomerPointsTransferLimitRecord(
+                "lim", null, 150, 0, "active", T0, T0);
+        LoyaltyService service = new LoyaltyService(repo, audit(), Clock.fixed(T0, ZoneOffset.UTC));
+        service.transferPoints("c1", "c2", 100, "gift", null, "xfer-3");
+        // 当日累计 100 + 100 = 200 > 150 限额 → 拒
+        assertThatThrownBy(() -> service.transferPoints("c1", "c2", 100, "gift", null, "xfer-4"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TRANSFER_DAILY_POINTS_EXCEEDED"));
+        assertThat(repo.points.get("c1").balance()).isEqualTo(900);
+    }
+
+    // ============================================================
+    // helpers
+    // ============================================================
+
+    private CustomerPointsAccountRecord account(String customerId, long balance) {
+        return new CustomerPointsAccountRecord("points_" + customerId, customerId, balance, "base",
+                Map.of(), 0L, "active", T0, 0L, null, null, 0, T0, T0);
+    }
+
+    private InMemoryRepo seeded() {
+        InMemoryRepo repo = new InMemoryRepo();
+        repo.saveCustomer(new CustomerRecord("c1", "138", "138", "active", null, T0, T0, T0));
+        return repo;
+    }
+
+    /** 测试用 finance：仅实现支付意图三方法，其余继承（不调用）。 */
+    private static final class FakeFinance extends FinanceService {
+        private final Map<String, PaymentIntentRecord> intents = new java.util.LinkedHashMap<>();
+        private int seq = 0;
+
+        FakeFinance() {
+            super(null, null, null, null, null);
+        }
+
+        PaymentIntentRecord create(String type, String orderId, long amount, String key) {
+            PaymentIntentRecord intent = new PaymentIntentRecord(
+                    "pi_" + (++seq), type, orderId, amount, "CNY", "wechat", "created", T0, T0);
+            intents.put(intent.id(), intent);
+            return intent;
+        }
+
+        @Override
+        public PaymentIntentRecord createPaymentIntent(PaymentIntentRequest request) {
+            return create(request.businessOrderType(), request.businessOrderId(),
+                    request.amountCent(), request.idempotencyKey());
+        }
+
+        @Override
+        public Optional<PaymentIntentRecord> findPaymentIntent(String id) {
+            return Optional.ofNullable(intents.get(id));
+        }
+
+        @Override
+        public PaymentIntentRecord markPaymentIntentSucceeded(String id) {
+            PaymentIntentRecord i = intents.get(id);
+            PaymentIntentRecord s = new PaymentIntentRecord(i.id(), i.businessOrderType(),
+                    i.businessOrderId(), i.amountCent(), i.currency(), i.channel(), "succeeded", i.createdAt(), T0);
+            intents.put(id, s);
+            return s;
+        }
+    }
+
+    /** 复用 V090 相关方法的内存 repo（只实现本测试用到的方法）。 */
+    private static final class InMemoryRepo implements CustomerRepository {
+        final Map<String, CustomerRecord> customers = new java.util.LinkedHashMap<>();
+        final Map<String, CustomerPointsAccountRecord> points = new java.util.LinkedHashMap<>();
+        final List<CustomerPointsLedgerRecord> pointsLedger = new ArrayList<>();
+        final Map<String, CustomerStoredValueAccountRecord> storedValue = new java.util.LinkedHashMap<>();
+        final List<CustomerStoredValueTransactionRecord> storedValueTxns = new ArrayList<>();
+        final Map<String, CustomerMembershipPlanRecord> plans = new java.util.LinkedHashMap<>();
+        final Map<String, CustomerMembershipRecord> memberships = new java.util.LinkedHashMap<>();
+        final List<CustomerPointsTransferRecord> transfers = new ArrayList<>();
+        CustomerPointsTransferLimitRecord transferLimit;
+
+        @Override public Optional<CustomerRecord> findCustomerByPhone(String phone) {
+            return customers.values().stream().filter(c -> phone.equals(c.phone())).findFirst();
+        }
+        @Override public Optional<CustomerRecord> findCustomerById(String id) {
+            return Optional.ofNullable(customers.get(id));
+        }
+        @Override public CustomerRecord saveCustomer(CustomerRecord c) { customers.put(c.id(), c); return c; }
+        @Override public CustomerSessionRecord saveSession(CustomerSessionRecord s) { return s; }
+        @Override public Optional<CustomerSessionRecord> findSessionByToken(String t) { return Optional.empty(); }
+        @Override public CustomerConsentRecord saveConsent(CustomerConsentRecord c) { return c; }
+        @Override public Optional<CustomerPointsAccountRecord> findPointsByCustomerId(String id) {
+            return Optional.ofNullable(points.get(id));
+        }
+        @Override public Optional<CustomerPointsAccountRecord> findPointsByCustomerIdForUpdate(String id) {
+            return Optional.ofNullable(points.get(id));
+        }
+        @Override public CustomerPointsAccountRecord savePoints(CustomerPointsAccountRecord a) {
+            points.put(a.customerId(), a); return a;
+        }
+        @Override public CustomerPointsLedgerRecord savePointsLedger(CustomerPointsLedgerRecord l) {
+            pointsLedger.add(l); return l;
+        }
+        @Override public List<CustomerPointsLedgerRecord> listPointsLedgerByCustomerId(String id) {
+            return pointsLedger.stream().filter(l -> id.equals(l.customerId())).toList();
+        }
+        @Override public CustomerRedemptionCatalogItemRecord saveRedemptionCatalogItem(CustomerRedemptionCatalogItemRecord i) { return i; }
+        @Override public Optional<CustomerRedemptionCatalogItemRecord> findRedemptionCatalogItemById(String id) { return Optional.empty(); }
+        @Override public List<CustomerRedemptionCatalogItemRecord> listActiveRedemptionCatalogItems(Instant n) { return List.of(); }
+        @Override public CustomerPointsRedemptionRecord savePointsRedemption(CustomerPointsRedemptionRecord r) { return r; }
+        @Override public List<CustomerPointsRedemptionRecord> listPointsRedemptionsByCustomerId(String id) { return List.of(); }
+        @Override public List<CustomerBarReservationOptionResponse> listBarReservationOptions() { return List.of(); }
+        @Override public Optional<com.complex.platform.bar.BarTableRecord> findActiveBarTableForReservation(String b, String t, String tt) { return Optional.empty(); }
+        @Override public com.complex.platform.bar.BarReservationRecord saveCustomerBarReservation(com.complex.platform.bar.BarReservationRecord r) { return r; }
+
+        // V090 storedValue
+        @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String cid, String pid) {
+            return storedValue.values().stream()
+                    .filter(a -> cid.equals(a.customerId()) && java.util.Objects.equals(pid, a.projectId())).findFirst();
+        }
+        @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String cid, String pid) {
+            return findStoredValueAccount(cid, pid);
+        }
+        @Override public CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord a) {
+            storedValue.put(a.customerId(), a); return a;
+        }
+        @Override public CustomerStoredValueTransactionRecord saveStoredValueTransaction(CustomerStoredValueTransactionRecord t) {
+            storedValueTxns.add(t); return t;
+        }
+        @Override public Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdempotencyKey(String k) {
+            return storedValueTxns.stream().filter(t -> k != null && k.equals(t.idempotencyKey())).findFirst();
+        }
+        @Override public boolean storedValueTransactionExistsForPaymentIntent(String pi) {
+            return storedValueTxns.stream().anyMatch(t -> "topup".equals(t.txnType()) && pi.equals(t.paymentIntentId()));
+        }
+        @Override public List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(String accId) {
+            return storedValueTxns.stream().filter(t -> accId.equals(t.accountId())).toList();
+        }
+
+        // V090 membership
+        @Override public CustomerMembershipPlanRecord saveMembershipPlan(CustomerMembershipPlanRecord p) {
+            plans.put(p.id(), p); return p;
+        }
+        @Override public Optional<CustomerMembershipPlanRecord> findMembershipPlanById(String id) {
+            return Optional.ofNullable(plans.get(id));
+        }
+        @Override public List<CustomerMembershipPlanRecord> listMembershipPlans(String pid) {
+            return plans.values().stream().filter(p -> "active".equals(p.status())).toList();
+        }
+        @Override public CustomerMembershipRecord saveMembership(CustomerMembershipRecord m) {
+            memberships.put(m.id(), m); return m;
+        }
+        @Override public Optional<CustomerMembershipRecord> findMembershipByIdForUpdate(String id) {
+            return Optional.ofNullable(memberships.get(id));
+        }
+        @Override public Optional<CustomerMembershipRecord> findMembershipByIdempotencyKey(String k) {
+            return memberships.values().stream().filter(m -> k != null && k.equals(m.idempotencyKey())).findFirst();
+        }
+        @Override public List<CustomerMembershipRecord> listMembershipsByCustomerId(String cid) {
+            return memberships.values().stream().filter(m -> cid.equals(m.customerId())).toList();
+        }
+        @Override public List<CustomerMembershipRecord> listActiveMembershipsExpiringBefore(Instant now) {
+            return memberships.values().stream()
+                    .filter(m -> "active".equals(m.status()) && !m.expireAt().isAfter(now)).toList();
+        }
+
+        // V090 transfer
+        @Override public CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord t) {
+            transfers.add(t); return t;
+        }
+        @Override public Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String k) {
+            return transfers.stream().filter(t -> k != null && k.equals(t.idempotencyKey())).findFirst();
+        }
+        @Override public long sumPointsTransferredOut(String cid, Instant s, Instant e) {
+            return transfers.stream().filter(t -> cid.equals(t.fromCustomerId()) && "completed".equals(t.status()))
+                    .filter(t -> !t.createdAt().isBefore(s) && t.createdAt().isBefore(e))
+                    .mapToLong(CustomerPointsTransferRecord::points).sum();
+        }
+        @Override public int countPointsTransfersOut(String cid, Instant s, Instant e) {
+            return (int) transfers.stream().filter(t -> cid.equals(t.fromCustomerId()) && "completed".equals(t.status()))
+                    .filter(t -> !t.createdAt().isBefore(s) && t.createdAt().isBefore(e)).count();
+        }
+        @Override public Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String pid) {
+            return Optional.ofNullable(transferLimit);
+        }
+        @Override public CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord l) {
+            transferLimit = l; return l;
+        }
+    }
+}
