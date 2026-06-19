@@ -231,6 +231,24 @@ public class AuthorizationService implements CallerScopeResolver {
         throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "a merchant scope is required for this operation");
     }
 
+    /**
+     * Returns the current caller's merchant id if present, otherwise empty.
+     * Unlike {@link #currentMerchantScope()}, this never throws: platform admins and staff
+     * without a merchant simply yield {@code Optional.empty()}. Degrades to empty on any error.
+     * Used by admission-gate fact checks that are scoped to the caller's merchant.
+     */
+    public Optional<String> currentMerchantIdQuietly() {
+        try {
+            String merchantId = currentActor().merchantId();
+            if (merchantId != null && !merchantId.isBlank()) {
+                return Optional.of(merchantId);
+            }
+            return Optional.empty();
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
     private boolean isPlatformAdminBridge(AccessActor actor) {
         return "active".equals(actor.status())
                 && "platform_admin".equals(normalize(actor.accountType()));
