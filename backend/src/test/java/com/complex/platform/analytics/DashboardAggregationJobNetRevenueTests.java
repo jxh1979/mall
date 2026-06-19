@@ -61,6 +61,68 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void merchantNetIncludesTicketAllocatedShareAndRefundShare() {
+        // 清单#4：商户行级 net = 本商户售票分量(allocated) + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        // 平台售票实付 100000、售票退款 12000（平台口径维持现有，不改用 allocated）。
+        repository.ticketRevenue = new BigDecimal("100000");
+        repository.ticketRefund = new BigDecimal("12000");
+        // 售票分量按商户（allocated）：A=70000、B=30000（Σ=100000=订单实付，无 direct 出票差额）。
+        repository.ticketAllocated = orderedMap("merchant_a", "70000", "merchant_b", "30000");
+        // 售票退款分摊：A=8000、B=4000（Σ=12000=平台售票退款，按 allocated 占比分摊）。
+        repository.ticketRefundByMerchant = orderedMap("merchant_a", "8000", "merchant_b", "4000");
+        // 酒吧实收 A=80000 / B=20000；酒吧退款 A=5000。
+        repository.barRevenue = orderedMap("merchant_a", "80000", "merchant_b", "20000");
+        repository.barRefund = orderedMap("merchant_a", "5000");
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        // A: 70000 + 80000 − 8000 − 5000 = 137000。
+        assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("137000");
+        // B: 30000 + 20000 − 4000 − 0 = 46000。
+        assertThat(repository.upserts.get(netKey("merchant_b"))).isEqualByComparingTo("46000");
+        // 平台 net 维持现有口径：100000 + (80000+20000) − 12000 − 5000 = 183000（不改用 allocated）。
+        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("183000");
+        // 一致性（无 direct 出票差额时）：Σ商户 net == 平台 net。
+        BigDecimal merchantSum = repository.upserts.get(netKey("merchant_a"))
+                .add(repository.upserts.get(netKey("merchant_b")));
+        assertThat(merchantSum).isEqualByComparingTo(repository.upserts.get(netKey("platform")));
+    }
+
+    @Test
+    void merchantNetTicketShareCanCoverMerchantWithoutBarActivity() {
+        // 商户只有售票分量、无酒吧活动：net 仍应体现售票分量（行只来自 ticketAllocated 也能产出）。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.ticketRevenue = new BigDecimal("40000");
+        repository.ticketRefund = BigDecimal.ZERO;
+        repository.ticketAllocated = orderedMap("merchant_c", "40000");
+        repository.barRevenue = Map.of();
+        repository.barRefund = Map.of();
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.upserts.get(netKey("merchant_c"))).isEqualByComparingTo("40000");
+        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("40000");
+    }
+
+    @Test
+    void platformNetIgnoresDirectIssuanceGapButStaysConsistentForAllocatedOrders() {
+        // direct 出票（无 allocated）造成平台售票实付 > Σ商户售票分量：平台口径维持全额，差额不归商户（保守）。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.ticketRevenue = new BigDecimal("100000"); // 含 30000 direct 出票（无 allocated）。
+        repository.ticketRefund = BigDecimal.ZERO;
+        repository.ticketAllocated = orderedMap("merchant_a", "70000"); // 仅有发券订单进商户分量。
+        repository.barRevenue = Map.of();
+        repository.barRefund = Map.of();
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        // 商户 net 仅含可归属的 70000；平台 net 维持 100000（差额 30000 是 direct 出票，保守不归商户、不重复）。
+        assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("70000");
+        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("100000");
+    }
+
+    @Test
     void netDeductsRefundOnTheBusinessDayTheRefundOccurred() {
         // 退款冲减当日：聚合按经营日（BusinessDayResolver 窗口）取数，退款随当日 ticketRefund/barRefund 入 net。
         CapturingAnalyticsRepository sameDay = new CapturingAnalyticsRepository();
@@ -110,6 +172,8 @@ class DashboardAggregationJobNetRevenueTests {
         private BigDecimal ticketRefund = BigDecimal.ZERO;
         private Map<String, BigDecimal> barRevenue = Map.of();
         private Map<String, BigDecimal> barRefund = Map.of();
+        private Map<String, BigDecimal> ticketAllocated = Map.of();
+        private Map<String, BigDecimal> ticketRefundByMerchant = Map.of();
 
         @Override
         public void upsertMetricSnapshot(MetricSnapshotKey key, BigDecimal actualValue, String projectionMethod, Instant createdAt) {
@@ -135,6 +199,16 @@ class DashboardAggregationJobNetRevenueTests {
         @Override
         public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate) {
             return barRefund;
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate) {
+            return ticketAllocated;
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate) {
+            return ticketRefundByMerchant;
         }
 
         // ── 其余聚合源：本测试不关心，返回中性值 ──

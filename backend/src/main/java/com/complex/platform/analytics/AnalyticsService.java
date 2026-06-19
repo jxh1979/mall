@@ -61,7 +61,8 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_BAR_REFUND, "bar", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_TICKET_REFUND, "finance", "cent", true,
                     "ticket_refunds has no merchant_id; merchant-scoped value not available"),
-            // RC1②：派生净收入（平台口径 = 售票+酒吧−退款；商户行级 = 酒吧实收−酒吧退款；第三方回流不计）。
+            // RC1② + 清单#4：派生净收入（平台口径 = 售票实付+酒吧−退款；
+            // 商户行级 = 售票分量(allocated)+酒吧实收−售票退款分摊−酒吧退款；第三方回流不计）。
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_NET, "finance", "cent", true,
                     "no revenue.net snapshot for merchant on business date"),
             new MetricCatalogEntry(DashboardAggregationJob.TRAFFIC_AMUSEMENT, "amusement", "count", true,

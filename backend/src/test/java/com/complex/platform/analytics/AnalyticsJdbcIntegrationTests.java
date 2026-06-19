@@ -234,6 +234,41 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void ticketAllocatedRevenueAndRefundAreAggregatedAndDistributedByMerchant() {
+        // 清单#4：售票分量按商户(allocated) + 售票退款按 allocated 占比分摊到商户。
+        java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-16");
+        // 订单 ord_net 实付 1000，发两张权益：mch_a 分摊 600 / mch_b 分摊 400（Σ=订单实付）。
+        insertTicketOrder("ord_net", 1000L, businessDate);
+        insertIssuedEntitlementForOrder("ent_net_a", "ord_net", "drink", "mch_a", 600L, businessDate);
+        insertIssuedEntitlementForOrder("ent_net_b", "ord_net", "amusement", "mch_b", 400L, businessDate);
+
+        Map<String, java.math.BigDecimal> allocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate);
+        assertThat(allocated.get("mch_a")).isEqualByComparingTo("600");
+        assertThat(allocated.get("mch_b")).isEqualByComparingTo("400");
+
+        // 退款 300 针对 ord_net：按 allocated 占比分摊 → mch_a=180(=300*600/1000)、mch_b=120(=300*400/1000)。
+        insertTicketRefund("rf_net", "ord_net", 300L, businessDate);
+        Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate);
+        assertThat(refundShare.get("mch_a")).isEqualByComparingTo("180");
+        assertThat(refundShare.get("mch_b")).isEqualByComparingTo("120");
+        // Σ分摊 == 退款额（不丢分）。
+        assertThat(refundShare.get("mch_a").add(refundShare.get("mch_b"))).isEqualByComparingTo("300");
+    }
+
+    @Test
+    void ticketRefundForOrderWithoutAllocatedEntitlementsIsNotAttributedToAnyMerchant() {
+        // 清单#4：订单无 allocated 权益（direct 出票/历史）→ 该退款保守不归任何商户。
+        java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-15");
+        insertTicketOrder("ord_noalloc", 500L, businessDate);
+        insertIssuedEntitlementForOrder("ent_noalloc", "ord_noalloc", "entry", "mch_x", null, businessDate);
+        insertTicketRefund("rf_noalloc", "ord_noalloc", 200L, businessDate);
+
+        Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate);
+        assertThat(refundShare).doesNotContainKey("mch_x");
+        assertThat(refundShare).isEmpty();
+    }
+
+    @Test
     void lowStockCountsSkusBelowPerSkuAbsoluteThresholdAndIgnoresZeroThreshold() {
         // 财务确认：缺货预警 = 绝对值阈值/SKU 可配（inventory_items.min_quantity），阈值 ≤ 0 不预警。
         // SKU 低于阈值 → 计入。
@@ -279,6 +314,63 @@ class AnalyticsJdbcIntegrationTests {
                 VALUES (:id, 'tt_share', :id, 'tpl_share', :id, :type, :merchant_id, 1, 0, 'active', :at, :at,
                     :at, :at, 1, :allocated)
                 """, params);
+    }
+
+    private void insertTicketOrder(String id, long amountCent, java.time.LocalDate businessDate) {
+        Instant at = businessDate.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);
+        java.sql.Timestamp ts = java.sql.Timestamp.from(at);
+        // 满足 FK：ticket_type 先存在（共享 tt_share，幂等）。
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES ('tt_share', 'Share Pass', 'weekday_weekend_holiday', FALSE, 'published', :at, :at)
+                ON CONFLICT (id) DO NOTHING
+                """, Map.of("at", ts));
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                    pay_status, issue_status, status, created_at, updated_at)
+                VALUES (:id, :id, 'tt_share', 1, 'online', :amount, 'paid', 'issued', 'active', :at, :at)
+                """, Map.of("id", id, "amount", amountCent, "at", ts));
+    }
+
+    private void insertIssuedEntitlementForOrder(String id, String orderId, String entitlementType, String merchantId,
+                                                 Long allocatedRevenueCent, java.time.LocalDate businessDate) {
+        Instant at = businessDate.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);
+        java.sql.Timestamp ts = java.sql.Timestamp.from(at);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES ('tt_share', 'Share Pass', 'weekday_weekend_holiday', FALSE, 'published', :at, :at)
+                ON CONFLICT (id) DO NOTHING
+                """, Map.of("at", ts));
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent,
+                                                   status, created_at, updated_at)
+                VALUES ('tpl_share', 'Share Tpl', 'entry', 1, 0, 'active', :at, :at)
+                ON CONFLICT (id) DO NOTHING
+                """, Map.of("at", ts));
+        var params = new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("order_id", orderId)
+                .addValue("type", entitlementType)
+                .addValue("merchant_id", merchantId)
+                .addValue("allocated", allocatedRevenueCent)
+                .addValue("at", ts);
+        jdbcTemplate.update("""
+                INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
+                    entitlement_type, merchant_id, total_times, used_times, status, valid_from, valid_to,
+                    created_at, updated_at, num_people, allocated_revenue_cent)
+                VALUES (:id, 'tt_share', :order_id, 'tpl_share', :id, :type, :merchant_id, 1, 0, 'active', :at, :at,
+                    :at, :at, 1, :allocated)
+                """, params);
+    }
+
+    private void insertTicketRefund(String id, String targetOrderId, long refundAmountCent, java.time.LocalDate businessDate) {
+        Instant at = businessDate.atTime(11, 0).toInstant(java.time.ZoneOffset.UTC);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel, status,
+                    created_at, updated_at)
+                VALUES (:id, :target, :amount, 'test refund', 'original', 'approved', :at, :at)
+                """, Map.of("id", id, "target", targetOrderId, "amount", refundAmountCent,
+                "at", java.sql.Timestamp.from(at)));
     }
 
     private void insertInventoryItem(String id, String merchantId, int minQuantity) {

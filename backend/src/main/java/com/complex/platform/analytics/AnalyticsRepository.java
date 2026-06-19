@@ -109,6 +109,23 @@ public interface AnalyticsRepository {
      */
     Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate);
 
+    /**
+     * 清单#4：本商户售票分量——Σ issued_entitlements.allocated_revenue_cent 按 merchant_id 汇总（按 created_at 落经营日窗口）。
+     * 与 revenue.ticket（ticket_orders 实付全额，平台口径）口径互补：allocateRevenue 保证同一订单 Σallocated==订单实付，
+     * 故 Σmerchant(allocated) 等于 Σ有发券订单的实付；direct 出票/无 allocated 的权益（allocated_revenue_cent IS NULL）不计，
+     * 保守不归任何商户（避免凭空摊派）。返回 merchantId(可 null) -> 金额，并入商户行级 revenue.net 的售票分量。
+     */
+    Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate);
+
+    /**
+     * 清单#4：本商户售票退款分量——按 ticket_refunds（按 created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径同population）
+     * 关联订单各权益的 allocated_revenue_cent 占比，把每笔退款分摊到 merchant_id。
+     * 口径：单笔退款 → 该订单 Σallocated 为基数 → 各 merchant 的 allocated 占比 × 退款额（最大余数补尾，Σ分摊==退款额）。
+     * 订单无 allocated 权益（基数为 0）的退款保守不归任何商户（与售票分量口径一致，避免摊派）。
+     * 返回 merchantId(可 null) -> 退款分摊额，用于商户行级 revenue.net 冲减。
+     */
+    Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate);
+
     /** count amusement_verifications(verification_result='success')——游乐核销人次；无 merchant_id，仅平台口径。 */
     BigDecimal countAmusementVerificationSuccess(LocalDate businessDate);
 

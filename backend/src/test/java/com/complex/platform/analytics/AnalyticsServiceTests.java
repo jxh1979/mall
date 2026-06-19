@@ -809,6 +809,16 @@ class AnalyticsServiceTests {
         }
 
         @Override
+        public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
         public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
             return BigDecimal.ZERO;
         }

@@ -91,11 +91,20 @@ public class DashboardAggregationJob {
         // RC1② 统一净收入 revenue.net（派生指标，财务确认口径 2026-06-18）：
         //   net = 自营售票实付(revenue.ticket) + 酒吧实收(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
         //   第三方回流不计入平台净收入；退款按经营日（BusinessDayResolver）窗口冲减当日。
-        //   商户口径（行级）：源表无 merchant_id 的售票分量不可归商户，故商户 net = 该商户酒吧实收 − 该商户酒吧退款；
-        //   平台口径：售票分量（平台维度）+ 全商户酒吧实收 − 售票退款 − 全商户酒吧退款。
+        //
+        // 清单#4：商户行级 net 纳入售票分量（V075 merchant 归属 + V078 allocated_revenue_cent）：
+        //   商户 net = 本商户售票分量(Σ allocated) + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
+        //   平台 net 保持现有口径（售票实付全额 + Σ酒吧实收 − 售票退款 − Σ酒吧退款），不改用 allocated，
+        //   避免 direct 出票/无 allocated 订单造成平台口径漂移。两者一致性：allocateRevenue 保证同一订单
+        //   Σallocated==订单实付，故"有发券且有 allocated"的订单其商户分量 Σ 等于平台售票分量的对应部分；
+        //   仅 direct 出票/历史无 allocated 的订单不进商户行（保守不归任何商户），是平台≥Σ商户的唯一差额来源——
+        //   因平台与商户用各自来源各算一次，无重复计入。
         Map<String, BigDecimal> barRevenue = repository.sumBarRevenueCentsByMerchant(businessDate);
         Map<String, BigDecimal> barRefund = repository.sumBarRefundCentsByMerchant(businessDate);
-        upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund, now);
+        Map<String, BigDecimal> ticketAllocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate);
+        Map<String, BigDecimal> ticketRefundByMerchant = repository.sumTicketRefundByMerchant(businessDate);
+        upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund,
+                ticketAllocated, ticketRefundByMerchant, now);
 
         // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
@@ -164,9 +173,9 @@ public class DashboardAggregationJob {
     }
 
     /**
-     * RC1②：派生并 upsert 平台净收入 revenue.net（按 merchant 行级 + 平台口径）。
-     * 商户行：net = 酒吧实收 − 酒吧退款（售票分量无 merchant_id 不可归商户）。
-     * 平台行：net = 售票实付 + Σ酒吧实收 − 售票退款 − Σ酒吧退款。第三方回流不计入。
+     * RC1② + 清单#4：派生并 upsert 净收入 revenue.net（按 merchant 行级 + 平台口径）。
+     * 商户行：net = 本商户售票分量(Σallocated) + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
+     * 平台行：net = 售票实付 + Σ酒吧实收 − 售票退款 − Σ酒吧退款（保持现有口径，不改用 allocated）。第三方回流不计入。
      */
     private void upsertNetRevenue(
             LocalDate businessDate,
@@ -174,23 +183,33 @@ public class DashboardAggregationJob {
             BigDecimal ticketRefund,
             Map<String, BigDecimal> barRevenueByMerchant,
             Map<String, BigDecimal> barRefundByMerchant,
+            Map<String, BigDecimal> ticketAllocatedByMerchant,
+            Map<String, BigDecimal> ticketRefundByMerchant,
             Instant now
     ) {
-        // 商户行级 net：仅含本商户酒吧实收 − 本商户酒吧退款。
+        // 商户行级 net：本商户售票分量 + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
         java.util.Set<String> merchantIds = new java.util.LinkedHashSet<>();
         merchantIds.addAll(barRevenueByMerchant.keySet());
         merchantIds.addAll(barRefundByMerchant.keySet());
+        merchantIds.addAll(ticketAllocatedByMerchant.keySet());
+        merchantIds.addAll(ticketRefundByMerchant.keySet());
         BigDecimal barRevenueTotal = BigDecimal.ZERO;
         BigDecimal barRefundTotal = BigDecimal.ZERO;
         for (String merchantId : merchantIds) {
             BigDecimal revenue = nonNull(barRevenueByMerchant.get(merchantId));
             BigDecimal refund = nonNull(barRefundByMerchant.get(merchantId));
+            BigDecimal ticketShare = nonNull(ticketAllocatedByMerchant.get(merchantId));
+            BigDecimal ticketRefundShare = nonNull(ticketRefundByMerchant.get(merchantId));
             barRevenueTotal = barRevenueTotal.add(revenue);
             barRefundTotal = barRefundTotal.add(refund);
             if (merchantId != null && !merchantId.isBlank()) {
+                BigDecimal merchantNet = ticketShare
+                        .add(revenue)
+                        .subtract(ticketRefundShare)
+                        .subtract(refund);
                 repository.upsertMetricSnapshot(
                         new MetricSnapshotKey(REVENUE_NET, "finance", PERIOD_DAILY, businessDate, SEGMENT_MERCHANT, merchantId),
-                        revenue.subtract(refund),
+                        merchantNet,
                         PROJECTION_ETL,
                         now
                 );
