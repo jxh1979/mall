@@ -17,7 +17,7 @@
     "credential_blockers": 4,
     "finding_blockers": 2,
     "deferred_items": 10,
-    "accepted_dev_smoke_findings": 1,
+    "accepted_dev_smoke_findings": 0,
     "switch_disabled_items": 11
   },
   "readiness_blockers": [
@@ -308,18 +308,7 @@
       "source_table": "credential_rotation"
     }
   ],
-  "accepted_dev_smoke_findings": [
-    {
-      "severity": "P2",
-      "id": "SEC-P2-SMOKE-HASH-001",
-      "title": "dev smoke AuthService 使用 SHA-256 密码摘要，不可迁移到生产认证",
-      "status": "accepted_for_dev_smoke",
-      "owner": "后端/安全",
-      "blocking_scope": "仅允许 local/dev/test；公开生产必须替换为正式身份源或强密码哈希方案",
-      "next_action": "生产认证不得复用该 smoke 账号存储；若自建密码，采用 Argon2id/bcrypt/PBKDF2 并补 MFA/锁定策略",
-      "source": "security-scans/findings-register-v1.md"
-    }
-  ],
+  "accepted_dev_smoke_findings": [],
   "switch_disabled_items": [
     {
       "id": "PRD-MDM-001",

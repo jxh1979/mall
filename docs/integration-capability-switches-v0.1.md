@@ -29,7 +29,6 @@
 | robot_platform | 机器人平台 | off | no | PRD-3P-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不下发机器人任务、不接机器人状态、不要求机器人 API；配送和交接按人工流程留痕。 | 开启后必须补齐机器人任务 API、状态回调、签名、异常补偿、测试账号和生产证据。 |
 | video_platform | 视频监控平台 | off | no | PRD-3P-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不读取摄像头、录像、截图、片段链接或播放 token；系统只记录人工 evidence_link，不做视频内嵌播放或自动关联。 | 开启后必须补齐摄像头点位、播放鉴权、截图/片段接口、事件关联、审计回调和 credential_ref。 |
 | gate_nfc_scan_device | 闸机/NFC/扫码设备 | off | no | PRD-3P-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不接闸机、NFC 读卡器、扫码枪或设备网关接口；票务/权益核销只能走后台或人工扫码录入。 | 开启后必须补齐设备协议/API、核销校验、开闸结果、离线队列、设备事件、签名和补偿证据。 |
-| sms_notification | 短信/通知 | off | no | PRD-3P-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不调用真实短信供应商接口；登录验证码走 mock OTP（固定/loopback，禁止生产）；商户催缴与严重风险短信告警降级为 manual/站内记录，不静默丢弃。 | 开启后必须补齐供应商字段映射（mobile/templateId/params/signName）、回执回调和占位错误码（`SMS_THROTTLED`/`SMS_TEMPLATE_NOT_FOUND`/`SMS_CODE_EXPIRED`），并实现超时、限流退避重试、模板不存在、验证码失效、回执缺失轮询兜底等失败场景与 credential_ref。源口径见 `third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md` §1。 |
 | local_ai_llm | 160 本地 AI 大模型 | on | no |  |  | 关闭后只使用 Java 内置规则处理器。 | 开启后使用 160 本地大模型作为辅助分析，不调用外部云 AI，不允许 AI 直接做付款、核销、处罚、退款或员工绩效最终决策。 |
 | nas_smb_backup | NAS SMB 备份恢复 | on | yes | PRD-CRED-NAS-001, PRD-NAS-AUTOMOUNT-001, PRD-NAS-SCHEDULE-001, PRD-NAS-ALERT-001, PRD-NAS-DRILL-CADENCE-001 | SEC-P0-OPS-RECOVERY-001 | 不建议关闭。若关闭，必须先指定等效备份恢复目标；否则不能宣称生产可恢复。 | 开启后必须固化 //192.168.88.113/bn 到 160 本地挂载点、定时备份、容量/失败告警和周期性恢复演练。 |
 
@@ -45,7 +44,6 @@
 4. Given 企业微信关闭，When 创建工作人员，Then 后台手动录入、角色或权限模板分配、审计留痕必须可完成。
 5. Given 工作手机/平板/一体机 MDM 关闭，When 执行高风险核销、出酒或支付动作，Then 移动终端不得放行，必须转后台或人工流程。
 6. Given 酒吧人脸/年龄核验关闭，When 酒吧入场，Then 系统只能记录人工证件核验结果，不能展示自动人脸核验已通过。
-7. Given 短信/通知（`sms_notification`）关闭，When 客户登录获取验证码，Then 登录验证码必须走 mock OTP（固定/loopback，禁止生产环境放行），且商户催缴与严重风险告警必须降级为 manual/站内记录、不得静默丢弃；When 开启进入生产准入检查，Then 必须要求供应商字段映射（mobile/templateId/params/signName）、回执回调、占位错误码、失败场景（超时/限流退避/模板不存在/验证码失效/回执缺失轮询兜底）和 credential_ref 的真实证据。
 
 ## 6. 餐饮 POS 和零售 POS 解释
 

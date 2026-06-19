@@ -78,10 +78,10 @@
 |---|---:|---|
 | `apps/web/src/main.tsx` | 31 行 | Web 入口薄层 |
 | `apps/web/src/legacy-console/LegacyConsoleApp.tsx` | 313 行 | Legacy 控制台编排层 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 332 行 | 票务 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 360 行 | 酒吧 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 390 行 | 酒吧订单/出品子服务 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 354 行 | 酒吧账单编排子服务 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 372 行 | 票务 facade |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 436 行 | 酒吧 facade |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 452 行 | 酒吧订单/出品子服务 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 418 行 | 酒吧账单编排子服务 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillRecords.java` | 108 行 | 酒吧账单记录/审计快照辅助 |
 | `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 411 行 | 酒吧卡座/会话子服务 |
 

@@ -276,26 +276,6 @@
       "production_interface_required": false
     },
     {
-      "capability_id": "sms_notification",
-      "label": "短信/通知",
-      "default_enabled": false,
-      "category": "sms_notification",
-      "evidence_item_ids": [
-        "PRD-3P-001"
-      ],
-      "credential_item_ids": [
-        "PRD-CRED-3P-001"
-      ],
-      "security_finding_ids": [
-        "SEC-P1-WEBHOOK-REPLAY-001"
-      ],
-      "requirement_ids": [],
-      "disabled_behavior": "关闭后不调用真实短信供应商接口；登录验证码走 mock OTP（固定/loopback，禁止生产）；商户催缴与严重风险短信告警降级为 manual/站内记录，不静默丢弃。",
-      "enabled_requirements": "开启后必须补齐供应商字段映射（mobile/templateId/params/signName）、回执回调和占位错误码（SMS_THROTTLED/SMS_TEMPLATE_NOT_FOUND/SMS_CODE_EXPIRED），并实现超时、限流退避重试、模板不存在、验证码失效、回执缺失轮询兜底等失败场景与 credential_ref。源口径见 third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md §1。",
-      "enabled": false,
-      "production_interface_required": false
-    },
-    {
       "capability_id": "local_ai_llm",
       "label": "160 本地 AI 大模型",
       "default_enabled": true,
