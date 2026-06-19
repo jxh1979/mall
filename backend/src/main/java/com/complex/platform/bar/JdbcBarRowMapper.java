@@ -111,7 +111,8 @@ final class JdbcBarRowMapper {
                 resultSet.getString("device_id"),
                 resultSet.getString("sales_staff_id"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("order_type")
         );
     }
 
@@ -158,7 +159,25 @@ final class JdbcBarRowMapper {
                 resultSet.getString("operator_note"),
                 resultSet.getString("idempotency_key"),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
-                nullableInstant(resultSet, "created_at")
+                nullableInstant(resultSet, "created_at"),
+                resultSet.getString("inventory_movement_id")
+        );
+    }
+
+    BarGiftRedemptionRecord mapGiftRedemption(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new BarGiftRedemptionRecord(
+                resultSet.getString("id"),
+                resultSet.getString("entitlement_id"),
+                resultSet.getString("verification_id"),
+                resultSet.getString("bar_order_id"),
+                resultSet.getString("bar_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("item_ref"),
+                resultSet.getString("inventory_movement_id"),
+                resultSet.getString("status"),
+                resultSet.getString("note"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
         );
     }
 

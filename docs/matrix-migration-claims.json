@@ -199,8 +199,15 @@
       "req": "REQ-23",
       "table": "bar_production_ticket_events",
       "column": "inventory_movement_id",
-      "expected": "absent",
-      "note": "R4-G1 DRIFT: 矩阵称赠饮核销→出品触发库存扣减，但 events 表无库存关联列；门票赠饮→bar库存链路未实现"
+      "expected": "present",
+      "note": "R5 T15 已落地(V072)：赠饮核销→0元单→出品 deliver 调 redeem_consume 扣库存→回填 inventory_movement_id；事件驱动(ticket.gift_verified→BarGiftConsumer)，端到端测试覆盖。修原 R4-G1 DRIFT。"
+    },
+    {
+      "req": "REQ-23",
+      "table": "bar_gift_redemptions",
+      "column": "verification_id",
+      "expected": "present",
+      "note": "R5 T15 赠饮兑换桥(V072)：verification_id 唯一键保证一次核销至多一单(幂等)；冲正联动 status=reversed + 回补库存。"
     },
     {
       "req": "REQ-35",

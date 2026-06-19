@@ -37,6 +37,11 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public Optional<BarTableRecord> findFirstTableByBar(String barId) {
+        return catalog.findFirstTableByBar(barId);
+    }
+
+    @Override
     public Optional<BarTableRecord> findTableById(String id) {
         return catalog.findTableById(id);
     }
@@ -144,6 +149,26 @@ class JdbcBarRepository implements BarRepository {
     @Override
     public List<BarProductionTicketEventRecord> listProductionTicketEvents(String ticketId) {
         return orderRepository.listProductionTicketEvents(ticketId);
+    }
+
+    @Override
+    public boolean insertGiftRedemptionIfAbsent(BarGiftRedemptionRecord redemption) {
+        return orderRepository.insertGiftRedemptionIfAbsent(redemption);
+    }
+
+    @Override
+    public BarGiftRedemptionRecord saveGiftRedemption(BarGiftRedemptionRecord redemption) {
+        return orderRepository.saveGiftRedemption(redemption);
+    }
+
+    @Override
+    public Optional<BarGiftRedemptionRecord> findGiftRedemptionByVerification(String verificationId) {
+        return orderRepository.findGiftRedemptionByVerification(verificationId);
+    }
+
+    @Override
+    public List<BarGiftRedemptionRecord> listGiftRedemptions(Optional<String> merchantScope) {
+        return orderRepository.listGiftRedemptions(merchantScope);
     }
 
     @Override

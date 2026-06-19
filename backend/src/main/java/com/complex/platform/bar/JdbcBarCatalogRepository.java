@@ -79,6 +79,18 @@ final class JdbcBarCatalogRepository {
                 """, Map.of("id", id), rowMapper::mapTable).stream().findFirst();
     }
 
+    public Optional<BarTableRecord> findFirstTableByBar(String barId) {
+        return jdbcTemplate.query("""
+                SELECT id, bar_id, merchant_id, table_code, table_name, table_type, capacity,
+                       allowed_pass_free_guest_count, min_consumption_cent, currency,
+                       status, created_at, updated_at
+                  FROM bar_tables
+                 WHERE bar_id = :bar_id
+                 ORDER BY created_at, id
+                 LIMIT 1
+                """, Map.of("bar_id", barId), rowMapper::mapTable).stream().findFirst();
+    }
+
     public BarReservationRecord saveReservation(BarReservationRecord reservation) {
         jdbcTemplate.update("""
                 INSERT INTO bar_reservations (

@@ -13,15 +13,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
 public class TicketVerificationService {
 
-    private final TicketingRepository repository;
+    // R5 T15：赠饮权益类型——核销成功后触发 ticket.gift_verified，由 bar 域生成 0 元单并扣库存。
+    private static final String GIFT_DRINK_ENTITLEMENT_TYPE = "gift_drink";
 
-    public TicketVerificationService(TicketingRepository repository) {
+    private final TicketingRepository repository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public TicketVerificationService(TicketingRepository repository, ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
+        this.eventPublisher = eventPublisher;
     }
 
     TicketCredentialResponse refreshCredential(String ticketId, String customerId) {
@@ -178,7 +184,15 @@ public class TicketVerificationService {
                 reversedBy,
                 now
         ));
-        // TODO R5 T7 结算冲正 / R5 T15 赠饮库存回补联动本期未落地，待对应任务实现后在此触发对应冲正。
+        // R5 T15 赠饮库存回补联动：若原核销系赠饮权益，发 bar.gift_reversed → bar 域将赠饮单置 reversed 并回补已扣库存。
+        // 以原核销 verification_id 关联 bar_gift_redemptions（唯一键），未触发过赠饮兑换则消费者幂等跳过。
+        boolean giftDrink = repository.findIssuedEntitlementById(original.entitlementId())
+                .map(entitlement -> GIFT_DRINK_ENTITLEMENT_TYPE.equals(entitlement.entitlementType()))
+                .orElse(false);
+        if (giftDrink) {
+            eventPublisher.publishEvent(new GiftReversedEvent(original.id()));
+        }
+        // TODO R5 T7 结算冲正联动本期未落地，待对应任务实现后在此触发对应冲正。
         return new VerificationResponse(reversal.id(), reversal.verificationNo(), reversal.status(), reversal.resultReason());
     }
 
@@ -248,6 +262,20 @@ public class TicketVerificationService {
                     credential.windowStartedAt(),
                     credential.signatureValue(),
                     credential.signatureVersion()
+            ));
+        }
+        // R5 T15：赠饮权益核销成功 → 发同步事件 ticket.gift_verified，bar 域据此生成 0 元单并扣库存。
+        // 同步发布以便测试与同事务；不与本核销主链耦合（主链已照常完成，下游异常不回滚核销由消费者自行兜底）。
+        if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(updated.entitlementType())) {
+            eventPublisher.publishEvent(new GiftVerifiedEvent(
+                    updated.id(),
+                    verification.id(),
+                    // 赠饮→吧台 SKU 映射来源：issued_entitlement/票种/权益模板当前无该配置字段（无可靠来源），
+                    // 故 itemRef=null；下游据此跳过实际扣减并在 redemption 标注（TODO 待票种/权益模板补映射）。
+                    null,
+                    updated.pointId(),
+                    null,
+                    updated.merchantId()
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());

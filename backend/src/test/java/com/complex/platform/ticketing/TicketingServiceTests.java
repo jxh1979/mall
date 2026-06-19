@@ -50,7 +50,7 @@ class TicketingServiceTests {
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
         TicketPricingService pricingService = new TicketPricingService(ticketingRepository);
-        TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository);
+        TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository, event -> { });
         AuthorizationService authorizationService = new AuthorizationService(null);
         service = new TicketingService(
                 ticketingRepository,

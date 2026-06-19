@@ -1953,6 +1953,42 @@ class BarServiceTests {
             stockMovements.add(movement);
             return movement;
         }
+
+        private final Map<String, BarGiftRedemptionRecord> giftRedemptions = new LinkedHashMap<>();
+
+        @Override
+        public Optional<BarTableRecord> findFirstTableByBar(String barId) {
+            return tables.values().stream().filter(t -> barId.equals(t.barId())).findFirst();
+        }
+
+        @Override
+        public boolean insertGiftRedemptionIfAbsent(BarGiftRedemptionRecord redemption) {
+            if (giftRedemptions.containsKey(redemption.verificationId())) {
+                return false;
+            }
+            giftRedemptions.put(redemption.verificationId(), redemption);
+            return true;
+        }
+
+        @Override
+        public BarGiftRedemptionRecord saveGiftRedemption(BarGiftRedemptionRecord redemption) {
+            giftRedemptions.put(redemption.verificationId(), redemption);
+            return redemption;
+        }
+
+        @Override
+        public Optional<BarGiftRedemptionRecord> findGiftRedemptionByVerification(String verificationId) {
+            return Optional.ofNullable(giftRedemptions.get(verificationId));
+        }
+
+        @Override
+        public List<BarGiftRedemptionRecord> listGiftRedemptions(Optional<String> merchantScope) {
+            List<BarGiftRedemptionRecord> all = new ArrayList<>(giftRedemptions.values());
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
+        }
     }
 
     private static final class InMemoryIdempotencyRepository implements IdempotencyRepository {

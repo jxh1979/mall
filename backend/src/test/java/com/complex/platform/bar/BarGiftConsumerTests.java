@@ -1,0 +1,264 @@
+package com.complex.platform.bar;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.complex.platform.finance.PaymentIntentRecord;
+import com.complex.platform.ticketing.GiftReversedEvent;
+import com.complex.platform.ticketing.GiftVerifiedEvent;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+/**
+ * R5 T15 赠饮兑换消费者单元测试：覆盖 核销事件→0元单→扣减→inventory_movement_id 回填 全链、
+ * 幂等（重复事件只一单一次扣减）、冲正回补、以及"无 SKU 映射来源时跳过扣减仅留痕"的落地形态。
+ */
+class BarGiftConsumerTests {
+
+    private static final String BAR_ID = "bar_1";
+    private static final String ITEM_REF = "sku_beer";
+    private static final String LOCATION = "default";
+
+    private CapturingBarRepository repository;
+    private BarGiftConsumer consumer;
+
+    @BeforeEach
+    void setUp() {
+        repository = new CapturingBarRepository();
+        // 吧台落 FK 用台位
+        repository.saveTable(table("table_1", BAR_ID));
+        // SKU 映射存在时的库存余额
+        repository.saveStockBalance(new StockBalanceSnapshot(
+                "balance_1", ITEM_REF, LOCATION, 10, 0, 10, Instant.now()));
+        consumer = new BarGiftConsumer(repository);
+    }
+
+    @Test
+    void giftVerifiedWithItemRefCreatesZeroAmountOrderDeductsStockAndBackfillsMovementId() {
+        consumer.onGiftVerified(new GiftVerifiedEvent(
+                "ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1"));
+
+        // 0 元赠饮单（order_type=gift, amount=0）已落、状态 delivered。
+        List<BarOrderRecord> orders = repository.listOrders(Optional.empty());
+        assertThat(orders).hasSize(1);
+        BarOrderRecord order = orders.getFirst();
+        assertThat(order.orderType()).isEqualTo("gift");
+        assertThat(order.totalAmountCent()).isZero();
+        assertThat(order.status()).isEqualTo("delivered");
+
+        // 库存按 redeem_consume 扣减 1。
+        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
+        assertThat(repository.stockMovements).hasSize(1);
+        assertThat(repository.stockMovements.getFirst().movementType()).isEqualTo("redeem_consume");
+        String movementId = repository.stockMovements.getFirst().id();
+
+        // 出品 deliver 事件回填 inventory_movement_id。
+        BarProductionTicketEventRecord event = repository.productionTicketEvents.stream()
+                .filter(e -> "deliver".equals(e.actionType())).findFirst().orElseThrow();
+        assertThat(event.inventoryMovementId()).isEqualTo(movementId);
+
+        // 桥表 delivered + 回填 movement id。
+        BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_1").orElseThrow();
+        assertThat(redemption.status()).isEqualTo("delivered");
+        assertThat(redemption.barOrderId()).isEqualTo(order.id());
+        assertThat(redemption.inventoryMovementId()).isEqualTo(movementId);
+    }
+
+    @Test
+    void giftVerifiedIsIdempotentAcrossRepeatedEvents() {
+        GiftVerifiedEvent event = new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1");
+        consumer.onGiftVerified(event);
+        consumer.onGiftVerified(event); // 重复核销事件
+
+        assertThat(repository.listOrders(Optional.empty())).hasSize(1); // 幂等：只一单
+        assertThat(repository.stockMovements).hasSize(1);               // 只扣一次
+        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
+    }
+
+    @Test
+    void giftReversedRestoresStockAndMarksRedemptionReversed() {
+        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1"));
+        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
+
+        consumer.onGiftReversed(new GiftReversedEvent("ver_1"));
+
+        BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_1").orElseThrow();
+        assertThat(redemption.status()).isEqualTo("reversed");
+        // 库存回补到 10。
+        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void giftReversedIsIdempotent() {
+        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1"));
+        consumer.onGiftReversed(new GiftReversedEvent("ver_1"));
+        consumer.onGiftReversed(new GiftReversedEvent("ver_1")); // 重复冲正
+
+        assertThat(repository.findStockBalance(ITEM_REF, LOCATION).orElseThrow().availableQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void giftVerifiedWithoutItemRefCreatesOrderButSkipsStockDecreaseAndNotes() {
+        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", null, BAR_ID, null, "merchant_1"));
+
+        assertThat(repository.listOrders(Optional.empty())).hasSize(1);
+        assertThat(repository.stockMovements).isEmpty();
+        BarGiftRedemptionRecord redemption = repository.findGiftRedemptionByVerification("ver_1").orElseThrow();
+        assertThat(redemption.inventoryMovementId()).isNull();
+        assertThat(redemption.note()).contains("no item mapping source");
+    }
+
+    @Test
+    void giftVerifiedWithoutResolvableTableSkipsOrder() {
+        consumer.onGiftVerified(new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, "bar_unknown", null, "merchant_1"));
+        assertThat(repository.listOrders(Optional.empty())).isEmpty();
+        assertThat(repository.findGiftRedemptionByVerification("ver_1")).isEmpty();
+    }
+
+    private static BarTableRecord table(String id, String barId) {
+        Instant now = Instant.now();
+        return new BarTableRecord(id, barId, "merchant_1", "T1", "Table 1", "standard", 4,
+                0, 0L, "CNY", "active", now, now);
+    }
+
+    /** 仅实现消费者所需 + 断言所需方法的内存 BarRepository。 */
+    private static final class CapturingBarRepository implements BarRepository {
+        private final Map<String, BarTableRecord> tables = new LinkedHashMap<>();
+        private final Map<String, BarOrderRecord> orders = new LinkedHashMap<>();
+        private final List<BarProductionTicketRecord> productionTickets = new ArrayList<>();
+        final List<BarProductionTicketEventRecord> productionTicketEvents = new ArrayList<>();
+        private final Map<String, StockBalanceSnapshot> stockBalances = new LinkedHashMap<>();
+        final List<StockMovementSnapshot> stockMovements = new ArrayList<>();
+        private final Map<String, BarGiftRedemptionRecord> giftRedemptions = new LinkedHashMap<>();
+
+        @Override
+        public BarTableRecord saveTable(BarTableRecord table) {
+            tables.put(table.id(), table);
+            return table;
+        }
+
+        @Override
+        public Optional<BarTableRecord> findFirstTableByBar(String barId) {
+            return tables.values().stream().filter(t -> barId.equals(t.barId())).findFirst();
+        }
+
+        @Override
+        public BarOrderRecord saveOrder(BarOrderRecord order) {
+            orders.put(order.id(), order);
+            return order;
+        }
+
+        @Override
+        public List<BarOrderRecord> listOrders(Optional<String> merchantScope) {
+            return new ArrayList<>(orders.values());
+        }
+
+        @Override
+        public BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket) {
+            productionTickets.removeIf(existing -> existing.id().equals(ticket.id()));
+            productionTickets.add(ticket);
+            return ticket;
+        }
+
+        @Override
+        public BarProductionTicketEventRecord saveProductionTicketEvent(BarProductionTicketEventRecord event) {
+            productionTicketEvents.add(event);
+            return event;
+        }
+
+        @Override
+        public Optional<StockBalanceSnapshot> findStockBalance(String itemId, String locationId) {
+            return Optional.ofNullable(stockBalances.get(itemId + ":" + locationId));
+        }
+
+        @Override
+        public boolean atomicDecreaseStock(String itemId, String locationId, int quantity) {
+            String key = itemId + ":" + locationId;
+            StockBalanceSnapshot current = stockBalances.get(key);
+            if (current == null || current.availableQuantity() < quantity) {
+                return false;
+            }
+            stockBalances.put(key, new StockBalanceSnapshot(
+                    current.id(), current.itemId(), current.locationId(),
+                    current.quantity() - quantity, current.reservedQuantity(),
+                    current.availableQuantity() - quantity, Instant.now()));
+            return true;
+        }
+
+        @Override
+        public StockBalanceSnapshot saveStockBalance(StockBalanceSnapshot balance) {
+            stockBalances.put(balance.itemId() + ":" + balance.locationId(), balance);
+            return balance;
+        }
+
+        @Override
+        public StockMovementSnapshot saveStockMovement(StockMovementSnapshot movement) {
+            stockMovements.add(movement);
+            return movement;
+        }
+
+        @Override
+        public boolean insertGiftRedemptionIfAbsent(BarGiftRedemptionRecord redemption) {
+            if (giftRedemptions.containsKey(redemption.verificationId())) {
+                return false;
+            }
+            giftRedemptions.put(redemption.verificationId(), redemption);
+            return true;
+        }
+
+        @Override
+        public BarGiftRedemptionRecord saveGiftRedemption(BarGiftRedemptionRecord redemption) {
+            giftRedemptions.put(redemption.verificationId(), redemption);
+            return redemption;
+        }
+
+        @Override
+        public Optional<BarGiftRedemptionRecord> findGiftRedemptionByVerification(String verificationId) {
+            return Optional.ofNullable(giftRedemptions.get(verificationId));
+        }
+
+        @Override
+        public List<BarGiftRedemptionRecord> listGiftRedemptions(Optional<String> merchantScope) {
+            return new ArrayList<>(giftRedemptions.values());
+        }
+
+        // ── 未使用的接口方法（默认空实现）──────────────────────────────
+        @Override public List<BarTableRecord> listTables(Optional<String> merchantScope) { return List.of(); }
+        @Override public Optional<BarTableRecord> findTableById(String id) { return Optional.ofNullable(tables.get(id)); }
+        @Override public BarReservationRecord saveReservation(BarReservationRecord reservation) { return reservation; }
+        @Override public List<BarReservationRecord> listReservations(Optional<String> merchantScope) { return List.of(); }
+        @Override public Optional<BarReservationRecord> findReservationById(String id) { return Optional.empty(); }
+        @Override public int countGuestCheckins(String reservationId) { return 0; }
+        @Override public BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin) { return checkin; }
+        @Override public BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification) { return verification; }
+        @Override public BarProductRecord saveProduct(BarProductRecord product) { return product; }
+        @Override public List<BarProductRecord> listProducts(Optional<String> merchantScope) { return List.of(); }
+        @Override public Optional<BarProductRecord> findProductById(String id) { return Optional.empty(); }
+        @Override public Optional<BarOrderRecord> findOrderById(String id) { return Optional.ofNullable(orders.get(id)); }
+        @Override public BarOrderItemRecord saveOrderItem(BarOrderItemRecord item) { return item; }
+        @Override public List<BarOrderItemRecord> listOrderItems(String orderId) { return List.of(); }
+        @Override public Optional<BarOrderItemRecord> findOrderItemById(String id) { return Optional.empty(); }
+        @Override public List<BarProductionTicketRecord> listProductionTickets(Optional<String> merchantScope) { return List.copyOf(productionTickets); }
+        @Override public Optional<BarProductionTicketRecord> findProductionTicketById(String id) { return Optional.empty(); }
+        @Override public Optional<BarProductionTicketRecord> findProductionTicketByOrderId(String orderId) { return Optional.empty(); }
+        @Override public List<BarProductionTicketEventRecord> listProductionTicketEvents(String ticketId) { return List.copyOf(productionTicketEvents); }
+        @Override public BarBillRecord saveBill(BarBillRecord bill) { return bill; }
+        @Override public Optional<BarBillRecord> findBillById(String id) { return Optional.empty(); }
+        @Override public BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment) { return adjustment; }
+        @Override public List<BarBillAdjustmentRecord> listBillAdjustments(String billId) { return List.of(); }
+        @Override public BarBillOperationRecord saveBillOperation(BarBillOperationRecord operation) { return operation; }
+        @Override public List<BarBillOperationRecord> listBillOperations(String billId) { return List.of(); }
+        @Override public BarCommissionCalculationRecord saveCommissionCalculation(BarCommissionCalculationRecord calculation) { return calculation; }
+        @Override public BarTableSessionRecord saveTableSession(BarTableSessionRecord session) { return session; }
+        @Override public List<BarTableSessionRecord> listTableSessions(Optional<String> merchantScope) { return List.of(); }
+        @Override public Optional<BarTableSessionRecord> findTableSessionById(String id) { return Optional.empty(); }
+        @Override public BarTableSessionAdjustmentRecord saveTableSessionAdjustment(BarTableSessionAdjustmentRecord adjustment) { return adjustment; }
+        @Override public List<BarTableSessionAdjustmentRecord> listTableSessionAdjustments(String sessionId) { return List.of(); }
+        @Override public PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent) { return paymentIntent; }
+    }
+}

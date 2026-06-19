@@ -120,7 +120,8 @@ final class JdbcBarParameterSource {
                 .addValue("device_id", order.deviceId())
                 .addValue("sales_staff_id", order.salesStaffId())
                 .addValue("created_at", timestampWithTimeZone(order.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(order.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(order.updatedAt()))
+                .addValue("order_type", order.orderType() == null ? "standard" : order.orderType());
     }
 
     MapSqlParameterSource billSettlementParameters(BarBillSettlementRecord settlement) {
@@ -176,7 +177,8 @@ final class JdbcBarParameterSource {
                 .addValue("operator_note", event.operatorNote())
                 .addValue("idempotency_key", event.idempotencyKey())
                 .addValue("evidence_attachment_ids", writeJson(event.evidenceAttachmentIds()))
-                .addValue("created_at", timestampWithTimeZone(event.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(event.createdAt()))
+                .addValue("inventory_movement_id", event.inventoryMovementId());
     }
 
     MapSqlParameterSource billParameters(BarBillRecord bill) {
@@ -311,6 +313,22 @@ final class JdbcBarParameterSource {
                 .addValue("reserved_quantity", balance.reservedQuantity())
                 .addValue("available_quantity", balance.availableQuantity())
                 .addValue("updated_at", timestampWithTimeZone(balance.updatedAt()));
+    }
+
+    MapSqlParameterSource giftRedemptionParameters(BarGiftRedemptionRecord redemption) {
+        return new MapSqlParameterSource()
+                .addValue("id", redemption.id())
+                .addValue("entitlement_id", redemption.entitlementId())
+                .addValue("verification_id", redemption.verificationId())
+                .addValue("bar_order_id", redemption.barOrderId())
+                .addValue("bar_id", redemption.barId())
+                .addValue("merchant_id", redemption.merchantId())
+                .addValue("item_ref", redemption.itemRef())
+                .addValue("inventory_movement_id", redemption.inventoryMovementId())
+                .addValue("status", redemption.status())
+                .addValue("note", redemption.note())
+                .addValue("created_at", timestampWithTimeZone(redemption.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(redemption.updatedAt()));
     }
 
     MapSqlParameterSource stockMovementParameters(StockMovementSnapshot movement) {

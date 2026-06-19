@@ -26,12 +26,12 @@ final class JdbcBarOrderRepository {
                 INSERT INTO bar_orders (
                     id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                     status, total_amount_cent, currency, created_terminal, device_id,
-                    sales_staff_id, created_at, updated_at
+                    sales_staff_id, created_at, updated_at, order_type
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :reservation_id, :customer_id, :order_source,
                     :status, :total_amount_cent, :currency, :created_terminal, :device_id,
-                    :sales_staff_id, :created_at, :updated_at
+                    :sales_staff_id, :created_at, :updated_at, :order_type
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -46,7 +46,8 @@ final class JdbcBarOrderRepository {
                     created_terminal = EXCLUDED.created_terminal,
                     device_id = EXCLUDED.device_id,
                     sales_staff_id = EXCLUDED.sales_staff_id,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    order_type = EXCLUDED.order_type
                 """, parameterSource.orderParameters(order));
         return order;
     }
@@ -56,7 +57,7 @@ final class JdbcBarOrderRepository {
             return jdbcTemplate.query("""
                     SELECT id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                            status, total_amount_cent, currency, created_terminal, device_id,
-                           sales_staff_id, created_at, updated_at
+                           sales_staff_id, created_at, updated_at, order_type
                       FROM bar_orders
                      ORDER BY created_at DESC, id
                     """, rowMapper::mapOrder);
@@ -64,7 +65,7 @@ final class JdbcBarOrderRepository {
         return jdbcTemplate.query("""
                 SELECT id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                        status, total_amount_cent, currency, created_terminal, device_id,
-                       sales_staff_id, created_at, updated_at
+                       sales_staff_id, created_at, updated_at, order_type
                   FROM bar_orders
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -75,7 +76,7 @@ final class JdbcBarOrderRepository {
         return jdbcTemplate.query("""
                 SELECT id, bar_id, merchant_id, table_id, reservation_id, customer_id, order_source,
                        status, total_amount_cent, currency, created_terminal, device_id,
-                       sales_staff_id, created_at, updated_at
+                       sales_staff_id, created_at, updated_at, order_type
                   FROM bar_orders
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapOrder).stream().findFirst();
@@ -178,12 +179,12 @@ final class JdbcBarOrderRepository {
                 INSERT INTO bar_production_ticket_events (
                     id, ticket_id, order_id, bar_id, action_type, from_status, to_status,
                     station_code, operator_user_id, operator_note, idempotency_key,
-                    evidence_attachment_ids, created_at
+                    evidence_attachment_ids, created_at, inventory_movement_id
                 )
                 VALUES (
                     :id, :ticket_id, :order_id, :bar_id, :action_type, :from_status, :to_status,
                     :station_code, :operator_user_id, :operator_note, :idempotency_key,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at
+                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :inventory_movement_id
                 )
                 ON CONFLICT (ticket_id, idempotency_key) DO UPDATE SET
                     action_type = EXCLUDED.action_type,
@@ -192,7 +193,8 @@ final class JdbcBarOrderRepository {
                     station_code = EXCLUDED.station_code,
                     operator_user_id = EXCLUDED.operator_user_id,
                     operator_note = EXCLUDED.operator_note,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    inventory_movement_id = EXCLUDED.inventory_movement_id
                 """, parameterSource.productionTicketEventParameters(event));
         return event;
     }
@@ -201,10 +203,74 @@ final class JdbcBarOrderRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_id, order_id, bar_id, action_type, from_status, to_status,
                        station_code, operator_user_id, operator_note, idempotency_key,
-                       evidence_attachment_ids, created_at
+                       evidence_attachment_ids, created_at, inventory_movement_id
                   FROM bar_production_ticket_events
                  WHERE ticket_id = :ticket_id
                  ORDER BY created_at DESC, id
                 """, Map.of("ticket_id", ticketId), rowMapper::mapProductionTicketEvent);
+    }
+
+    public boolean insertGiftRedemptionIfAbsent(BarGiftRedemptionRecord redemption) {
+        // 幂等：uq_bar_gift_redemption_verification 唯一键防一次核销重复生成单；撞唯一键即 DO NOTHING（返回 0 行）。
+        int affected = jdbcTemplate.update("""
+                INSERT INTO bar_gift_redemptions (
+                    id, entitlement_id, verification_id, bar_order_id, bar_id, merchant_id,
+                    item_ref, inventory_movement_id, status, note, created_at, updated_at
+                )
+                VALUES (
+                    :id, :entitlement_id, :verification_id, :bar_order_id, :bar_id, :merchant_id,
+                    :item_ref, :inventory_movement_id, :status, :note, :created_at, :updated_at
+                )
+                ON CONFLICT (verification_id) DO NOTHING
+                """, parameterSource.giftRedemptionParameters(redemption));
+        return affected > 0;
+    }
+
+    public BarGiftRedemptionRecord saveGiftRedemption(BarGiftRedemptionRecord redemption) {
+        jdbcTemplate.update("""
+                INSERT INTO bar_gift_redemptions (
+                    id, entitlement_id, verification_id, bar_order_id, bar_id, merchant_id,
+                    item_ref, inventory_movement_id, status, note, created_at, updated_at
+                )
+                VALUES (
+                    :id, :entitlement_id, :verification_id, :bar_order_id, :bar_id, :merchant_id,
+                    :item_ref, :inventory_movement_id, :status, :note, :created_at, :updated_at
+                )
+                ON CONFLICT (verification_id) DO UPDATE SET
+                    bar_order_id = EXCLUDED.bar_order_id,
+                    item_ref = EXCLUDED.item_ref,
+                    inventory_movement_id = EXCLUDED.inventory_movement_id,
+                    status = EXCLUDED.status,
+                    note = EXCLUDED.note,
+                    updated_at = EXCLUDED.updated_at
+                """, parameterSource.giftRedemptionParameters(redemption));
+        return redemption;
+    }
+
+    public Optional<BarGiftRedemptionRecord> findGiftRedemptionByVerification(String verificationId) {
+        return jdbcTemplate.query("""
+                SELECT id, entitlement_id, verification_id, bar_order_id, bar_id, merchant_id,
+                       item_ref, inventory_movement_id, status, note, created_at, updated_at
+                  FROM bar_gift_redemptions
+                 WHERE verification_id = :verification_id
+                """, Map.of("verification_id", verificationId), rowMapper::mapGiftRedemption).stream().findFirst();
+    }
+
+    public List<BarGiftRedemptionRecord> listGiftRedemptions(Optional<String> merchantScope) {
+        if (merchantScope.isEmpty()) {
+            return jdbcTemplate.query("""
+                    SELECT id, entitlement_id, verification_id, bar_order_id, bar_id, merchant_id,
+                           item_ref, inventory_movement_id, status, note, created_at, updated_at
+                      FROM bar_gift_redemptions
+                     ORDER BY created_at DESC, id
+                    """, rowMapper::mapGiftRedemption);
+        }
+        return jdbcTemplate.query("""
+                SELECT id, entitlement_id, verification_id, bar_order_id, bar_id, merchant_id,
+                       item_ref, inventory_movement_id, status, note, created_at, updated_at
+                  FROM bar_gift_redemptions
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapGiftRedemption);
     }
 }

@@ -11,6 +11,9 @@ public interface BarRepository {
 
     Optional<BarTableRecord> findTableById(String id);
 
+    /** R5 T15：按吧台解析一张台位用于赠饮 0 元单落 FK（无可靠台位来源时的兜底；无台位则跳过落单）。 */
+    Optional<BarTableRecord> findFirstTableByBar(String barId);
+
     BarReservationRecord saveReservation(BarReservationRecord reservation);
 
     List<BarReservationRecord> listReservations(Optional<String> merchantScope);
@@ -52,6 +55,15 @@ public interface BarRepository {
     BarProductionTicketEventRecord saveProductionTicketEvent(BarProductionTicketEventRecord event);
 
     List<BarProductionTicketEventRecord> listProductionTicketEvents(String ticketId);
+
+    /** R5 T15：赠饮兑换桥 upsert（幂等键 verification_id；首次插入返回 true，已存在返回 false）。 */
+    boolean insertGiftRedemptionIfAbsent(BarGiftRedemptionRecord redemption);
+
+    BarGiftRedemptionRecord saveGiftRedemption(BarGiftRedemptionRecord redemption);
+
+    Optional<BarGiftRedemptionRecord> findGiftRedemptionByVerification(String verificationId);
+
+    List<BarGiftRedemptionRecord> listGiftRedemptions(Optional<String> merchantScope);
 
     BarBillRecord saveBill(BarBillRecord bill);
 
