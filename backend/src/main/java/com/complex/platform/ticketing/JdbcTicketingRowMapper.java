@@ -69,6 +69,7 @@ final class JdbcTicketingRowMapper {
                 nullableLong(resultSet, "value_amount_cent"),
                 resultSet.getString("effective_rule"),
                 resultSet.getInt("num_people"),
+                nullableLong(resultSet, "component_price_cent"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")
         );
@@ -93,7 +94,8 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "valid_to"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
-                resultSet.getInt("num_people")
+                resultSet.getInt("num_people"),
+                nullableLong(resultSet, "allocated_revenue_cent")
         );
     }
 

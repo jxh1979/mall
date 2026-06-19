@@ -48,11 +48,17 @@
 ### 2.1 收入
 | 指标 | metric_code | 聚合 | 源表 |
 |---|---|---|---|
-| 售票收入 | revenue.ticket | Σ 已支付订单实付分 | ticket_orders |
-| 酒吧收入 | revenue.bar | Σ 已结算账单实收分 | bar_bills/bar_bill_settlements |
+| 售票收入 | revenue.ticket | Σ 已支付订单实付分（**完整售票确认收入，不拆分**） | ticket_orders |
+| 酒吧收入 | revenue.bar | Σ 已结算账单实收分（**仅现场消费实收**） | bar_bills/bar_bill_settlements |
+| 通票酒吧分摊 | revenue.ticket_bar_share | Σ 当日发放、业态映射到酒吧的权益分配收入（**展示口径，不并入 net**） | issued_entitlements.allocated_revenue_cent |
+| 通票游乐分摊 | revenue.ticket_amusement_share | Σ 当日发放、业态映射到游乐的权益分配收入（**展示口径，不并入 net**） | issued_entitlements.allocated_revenue_cent |
 | 第三方回流收入 | revenue.thirdparty | Σ 回流 accepted 分 | integration_order_syncs |
 | 退款 | revenue.refund | Σ 退款分 | ticket_refunds/finance_refunds/bar_bill_adjustments |
-| 净收入 | revenue.net | 售票 + 酒吧 − 退款（**不含第三方回流**） | 派生 |
+| 净收入 | revenue.net | 售票 + 酒吧 − 退款（**不含第三方回流，不含通票分摊**） | 派生 |
+
+> **【已定稿 2026-06-19】通票收入业态拆分（待确认项#1）。** 财务确认：酒吧+游乐组合票按打折比例（各分项标准单价比例）拆分计入酒吧/游乐，**法律双实体**；也支持运营手动输入各分项单价（`ticket_type_entitlements.component_price_cent`）。出票时按 `allocated = orderAmount × (componentPrice / Σ(componentPrice × quantity))` 把订单实付逐张拆到每张权益（最大余数补尾，各张之和恰等于订单实付），落 `issued_entitlements.allocated_revenue_cent`；分项单价全空回退按数量均摊；direct 出票无真实订单则不拆分（null）。业态归属映射：`drink/gift_drink/bar_*`→酒吧、`amusement/amusement_*`→游乐、其它→票务，结合 `merchant_id`（V075）。
+>
+> **【净收入不重复硬约束，关键】** 订单实付**全额**已计入 T7 `official_ticket` / T12 `revenue.ticket`（=售票确认收入）。通票业态拆分**仅作展示口径**（`revenue.ticket_bar_share` / `revenue.ticket_amusement_share`）与法律双实体对账依据，**不并入 `revenue.net`**；`revenue.bar` 仍只取 `bar_bill_settlements` 现场**消费实收**。"售票拆分收入"（售票确认时的业态归属）与"消费实收"（现场实际消费）是两个不同口径，二者均不重复计入净收入。T7 六源与 `revenue.net` 派生口径保持不变。
 
 ### 2.2 客流
 | 指标 | metric_code | 聚合 | 源表 |
@@ -113,10 +119,10 @@
 
 ---
 
-## 四、财务/运营复核确认点（4 项已定稿，2026-06-19）
+## 四、财务/运营复核确认点（5 项已定稿，2026-06-19）
 1. **【已定稿】经营日切时点 = 可后台配置，默认 04:00。** 配置项 `finance.business-day-cutoff-hour`（0–23，默认 4），凌晨该点前的流水归前一经营日。助手 `BusinessDayResolver.businessDate(Instant)`；T7 日结六源汇总与 T12 看板 ETL 的"经营日"分桶统一改用该助手（替换原自然日 UTC date）。
 2. **【已定稿】第三方回流仅计商户结算口径，不计平台净收入。** 平台 `revenue.net` = 自营售票实付 + 酒吧实收 − 当日退款；第三方回流单列展示（T7 `thirdparty_reflow` 源、T12 `revenue.thirdparty`），net 派生时剔除。
-3. 游乐通票收入是否在票务侧一次计入（避免与游乐核销重复计收入）——本文按"收入归票务、游乐计客流/核销"处理。**仍待确认。**
+3. **【已定稿 2026-06-19】游乐通票收入业态拆分（待确认项#1）。** 酒吧+游乐组合票按打折比例（各分项标准单价比例）拆分计入酒吧/游乐，法律双实体；支持手动输入各分项单价（`ticket_type_entitlements.component_price_cent`）。出票时按比例把订单实付逐张拆到每张权益，落 `issued_entitlements.allocated_revenue_cent`（V078）；全空回退按数量均摊；无订单不拆分。**硬约束：仅作展示口径（`revenue.ticket_bar_share`/`revenue.ticket_amusement_share`）与法律双实体对账，不并入 `revenue.net`**——订单实付全额已计入 `official_ticket`/`revenue.ticket`，`revenue.bar` 仍仅取 `bar_bill_settlements` 消费实收，避免重复计净收入。详见 §2.1。
 4. `ar_ap_items` vs `finance_ar_ap_items`、`finance_reconciliation_*` vs `integration_reconciliation_*` 两套表的权威收口（影响 T7）。**仍待确认。**
 5. **【已定稿】退款冲减当日净收入。** net = 收入 − 当日退款；退款按经营日（可配日切）归集，T7 落 `official_ticket` 源 `refund_cent`（`ticket_refunds` 当日发生额）。
 6. **【已定稿】缺货预警阈值 = 绝对值阈值/SKU 可配。** 复用 `inventory_items.min_quantity`（绝对值/SKU，阈值 ≤ 0 不预警），无需新增字段/迁移；T12 `supply.low_stock = count(SKU 可用量 < 该 SKU 阈值)`。
@@ -131,3 +137,4 @@
 |---|---|---|
 | 2026-06-18 | 新建聚合口径草案 V0.1，映射六源日结 + 七类指标到真实迁移表 + metric_code + 维度 + 隔离 | R5 backlog T7/T12；HTML #finance/#analytics；表名取自 V001–V065 |
 | 2026-06-19 | **定稿**：财务确认 4 项口径并落代码——(1) 经营日切可配默认 04:00（配置项 `finance.business-day-cutoff-hour` + `BusinessDayResolver`，T7/T12 统一分桶）；(2) 第三方回流不计平台净收入（单列展示，`revenue.net` 剔除）；(3) 退款冲减当日净收入（按经营日归集，落 `official_ticket.refund_cent`）；(4) 缺货阈值绝对值/SKU 可配（复用 `inventory_items.min_quantity`，无新迁移）。新增 `supply.low_stock` 指标接入 ETL。§3（游乐通票收入归属）、§4（双表权威收口）仍待确认 | 2026-06-19 财务确认；代码：`BusinessDayResolver`、`FinanceService.summarizeDailyClose`、`JdbcFinanceRepository.aggregate*`、`DashboardAggregationJob`、`JdbcAnalyticsRepository.dayRange/countLowStockByMerchant` |
+| 2026-06-19 | **定稿（待确认项#1）**：游乐通票收入业态拆分——组合票按打折比例（各分项单价比例）拆分计入酒吧/游乐（法律双实体），支持手动输入分项单价。迁移 V078 加 `ticket_type_entitlements.component_price_cent` + `issued_entitlements.allocated_revenue_cent`；出票按比例逐张拆分（最大余数补尾）落 `allocated_revenue_cent`，全空回退均摊、无订单不拆分。T12 新增展示口径 `revenue.ticket_bar_share`/`revenue.ticket_amusement_share`（按业态/商户汇总），**不并入 net**（硬约束：净收入不重复）。配置入口（#3）：`TicketTypeEntitlementRequest.num_people/component_price_cent`、`EntitlementTemplateRequest.bar_item_ref/merchant_id/venue_id/point_id` 经 `TicketCatalogService` 透传 + OpenAPI 同步 | 2026-06-19 财务确认；代码：`TicketOrderService.allocateRevenue/issueEntitlements`、`TicketCatalogService`、`JdbcTicketing*`、`DashboardAggregationJob`、`JdbcAnalyticsRepository.sumTicket*ShareCentsByMerchant`、V078 |

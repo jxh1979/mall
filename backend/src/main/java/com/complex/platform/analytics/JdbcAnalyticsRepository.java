@@ -408,6 +408,42 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate) {
+        // 待确认项#1：当日发放（created_at 落经营日窗口）、业态映射到酒吧的权益分配收入按商户汇总（展示口径）。
+        // 业态归属映射：drink/gift_drink/bar_* → 酒吧（与 ticket_amusement_share 互斥，避免重复）。
+        return sumAllocatedRevenueByMerchant(businessDate, """
+                   AND (entitlement_type IN ('drink', 'gift_drink')
+                        OR entitlement_type LIKE 'bar\\_%' ESCAPE '\\')
+                """);
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate) {
+        // 待确认项#1：当日发放、业态映射到游乐的权益分配收入按商户汇总（展示口径）。
+        // 业态归属映射：amusement / amusement_* → 游乐。
+        return sumAllocatedRevenueByMerchant(businessDate, """
+                   AND (entitlement_type = 'amusement'
+                        OR entitlement_type LIKE 'amusement\\_%' ESCAPE '\\')
+                """);
+    }
+
+    private Map<String, BigDecimal> sumAllocatedRevenueByMerchant(LocalDate businessDate, String entitlementTypeFilter) {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COALESCE(SUM(allocated_revenue_cent), 0) AS total
+                  FROM issued_entitlements
+                 WHERE allocated_revenue_cent IS NOT NULL
+                   AND created_at >= :start
+                   AND created_at < :end
+                """ + entitlementTypeFilter + """
+                 GROUP BY merchant_id
+                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
+        );
+        return result;
+    }
+
+    @Override
     public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
         BigDecimal value = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)

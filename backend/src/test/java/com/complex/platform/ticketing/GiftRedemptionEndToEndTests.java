@@ -217,6 +217,7 @@ class GiftRedemptionEndToEndTests {
                 now.plusSeconds(3600),// validTo
                 now,                  // createdAt
                 now,                  // updatedAt
-                1));                  // numPeople
+                1,                    // numPeople
+                null));               // allocatedRevenueCent
     }
 }

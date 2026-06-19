@@ -367,21 +367,35 @@
       "table": "issued_entitlements",
       "column": "num_people",
       "expected": "present",
-      "note": "R5 T5 多人票已落（V067）：发放时记录核销人数 num_people。R5 TODO#1 来源已接通（V076）：num_people=ticket_type_entitlements.num_people（binding 级），多人/联合票 binding 配 >1，普通票默认 1，向后兼容；发放写入见 TicketOrderService.issueEntitlements。运营创建 DTO 透传为后续工作"
+      "note": "R5 T5 多人票已落（V067）：发放时记录核销人数 num_people。R5 TODO#1 来源已接通（V076）：num_people=ticket_type_entitlements.num_people（binding 级），多人/联合票 binding 配 >1，普通票默认 1，向后兼容；发放写入见 TicketOrderService.issueEntitlements。运营创建 DTO 透传已落（#3）：TicketTypeEntitlementRequest.num_people 经 TicketCatalogService.bindTicketTypeEntitlement 透传"
     },
     {
       "req": "REQ-05",
       "table": "ticket_type_entitlements",
       "column": "num_people",
       "expected": "present",
-      "note": "R5 TODO#1 多人票核销人数来源已落（V076）：binding 级每份核销人数，默认 1（向后兼容），多人/联合票配 >1；发放时写入 issued_entitlements.num_people。运营创建 DTO(TicketTypeEntitlementRequest) 透传为后续工作"
+      "note": "R5 TODO#1 多人票核销人数来源已落（V076）：binding 级每份核销人数，默认 1（向后兼容），多人/联合票配 >1；发放时写入 issued_entitlements.num_people。运营创建 DTO(TicketTypeEntitlementRequest.num_people) 透传已落（#3），见 TicketCatalogService.bindTicketTypeEntitlement + OpenAPI"
+    },
+    {
+      "req": "REQ-05",
+      "table": "ticket_type_entitlements",
+      "column": "component_price_cent",
+      "expected": "present",
+      "note": "待确认项#1 通票收入业态拆分已落（V078）：binding 级分项标准单价/手动单价（可空）。组合票出票时按各分项单价比例把订单实付拆到每张权益（TicketOrderService.allocateRevenue），写入 issued_entitlements.allocated_revenue_cent；全空回退按数量均摊；无订单（direct 出票）不拆分。运营创建 DTO(TicketTypeEntitlementRequest.component_price_cent) 透传已落（#3）+ OpenAPI"
     },
     {
       "req": "REQ-06",
       "table": "entitlement_templates",
       "column": "bar_item_ref",
       "expected": "present",
-      "note": "R5 TODO#2 赠饮→吧台 SKU 映射来源已落（V076）：gift_drink 模板指向吧台商品/库存 item（可空）；核销发 ticket.gift_verified 时取此作 itemRef，BarGiftConsumer 据此对该 item 走 redeem_consume 扣减，未配置则跳过扣减并标注。运营创建 DTO(EntitlementTemplateRequest) 透传为后续工作"
+      "note": "R5 TODO#2 赠饮→吧台 SKU 映射来源已落（V076）：gift_drink 模板指向吧台商品/库存 item（可空）；核销发 ticket.gift_verified 时取此作 itemRef，BarGiftConsumer 据此对该 item 走 redeem_consume 扣减，未配置则跳过扣减并标注。运营创建 DTO(EntitlementTemplateRequest.bar_item_ref + merchant_id/venue_id/point_id) 透传已落（#3），见 TicketCatalogService.createEntitlementTemplate + OpenAPI"
+    },
+    {
+      "req": "REQ-05",
+      "table": "issued_entitlements",
+      "column": "allocated_revenue_cent",
+      "expected": "present",
+      "note": "待确认项#1 通票收入业态拆分已落（V078）：出票时算得的该权益分配收入（订单实付按分项单价比例拆分；可空，无订单/单价时 null）。按 entitlement_type 映射业态（drink/gift_drink/bar_*→酒吧、amusement/amusement_*→游乐）+ merchant_id 在 T12 分析侧汇总为展示口径 revenue.ticket_bar_share/revenue.ticket_amusement_share（JdbcAnalyticsRepository + DashboardAggregationJob）。硬约束：仅作售票收入业态拆分展示与法律双实体对账，不并入 revenue.net——订单实付全额已计入 official_ticket/revenue.ticket，revenue.bar 仍仅取 bar_bill_settlements 消费实收，避免重复计净收入"
     },
     {
       "req": "REQ-06",

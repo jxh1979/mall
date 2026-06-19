@@ -82,6 +82,20 @@ public interface AnalyticsRepository {
     /** Σ bar_bill_settlements.settlement_amount_cent——酒吧收入；返回 merchantId(可 null) -> 金额。 */
     Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate);
 
+    /**
+     * 待确认项#1：通票售票收入的"业态拆分展示口径"——按 issued_entitlements.allocated_revenue_cent
+     * 汇总当日发放的、业态映射到酒吧的权益分配收入；返回 merchantId(可 null) -> 金额。
+     * 仅作展示（revenue.ticket_bar_share），不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，
+     * revenue.bar 仍仅取 bar_bill_settlements 现场消费实收，二者口径区分，避免重复计净收入。
+     */
+    Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate);
+
+    /**
+     * 待确认项#1：通票售票收入业态拆分——映射到游乐的权益分配收入；返回 merchantId(可 null) -> 金额。
+     * 仅作展示（revenue.ticket_amusement_share），不并入 revenue.net（同上理由）。
+     */
+    Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate);
+
     /** count amusement_verifications(verification_result='success')——游乐核销人次；无 merchant_id，仅平台口径。 */
     BigDecimal countAmusementVerificationSuccess(LocalDate businessDate);
 

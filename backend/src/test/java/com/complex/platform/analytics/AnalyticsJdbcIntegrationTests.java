@@ -10,6 +10,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -213,6 +214,26 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void ticketRevenueShareSplitsAllocatedRevenueByBusinessTypeAndMerchantWithoutTouchingNet() {
+        // 待确认项#1：通票售票收入业态拆分展示口径——按 issued_entitlements.allocated_revenue_cent 汇总，
+        // gift_drink→酒吧分摊、amusement→游乐分摊，按商户行级；不影响 revenue.bar（消费实收）/net 口径。
+        java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-17");
+        // 组合票实付 800 拆分：酒吧 480（mch_bar）/ 游乐 320（mch_amu）。
+        insertIssuedEntitlement("ent_share_bar", "gift_drink", "mch_bar", 480L, businessDate);
+        insertIssuedEntitlement("ent_share_amu", "amusement", "mch_amu", 320L, businessDate);
+        // 无 allocated（direct 出票）→ 不计入任何 share。
+        insertIssuedEntitlement("ent_share_null", "entry", "mch_bar", null, businessDate);
+
+        Map<String, java.math.BigDecimal> barShare = repository.sumTicketBarShareCentsByMerchant(businessDate);
+        Map<String, java.math.BigDecimal> amuShare = repository.sumTicketAmusementShareCentsByMerchant(businessDate);
+
+        assertThat(barShare.get("mch_bar")).isEqualByComparingTo("480");
+        assertThat(barShare).doesNotContainKey("mch_amu");
+        assertThat(amuShare.get("mch_amu")).isEqualByComparingTo("320");
+        assertThat(amuShare).doesNotContainKey("mch_bar");
+    }
+
+    @Test
     void lowStockCountsSkusBelowPerSkuAbsoluteThresholdAndIgnoresZeroThreshold() {
         // 财务确认：缺货预警 = 绝对值阈值/SKU 可配（inventory_items.min_quantity），阈值 ≤ 0 不预警。
         // SKU 低于阈值 → 计入。
@@ -227,6 +248,37 @@ class AnalyticsJdbcIntegrationTests {
 
         Map<String, java.math.BigDecimal> byMerchant = repository.countLowStockByMerchant();
         assertThat(byMerchant.get("merchant_low_stock")).isEqualByComparingTo("1");
+    }
+
+    private void insertIssuedEntitlement(String id, String entitlementType, String merchantId,
+                                         Long allocatedRevenueCent, java.time.LocalDate businessDate) {
+        Instant at = businessDate.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC);
+        java.sql.Timestamp ts = java.sql.Timestamp.from(at);
+        // 满足 FK：ticket_type / entitlement_template 先存在（共享父行，幂等）。
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES ('tt_share', 'Share Pass', 'weekday_weekend_holiday', FALSE, 'published', :at, :at)
+                ON CONFLICT (id) DO NOTHING
+                """, Map.of("at", ts));
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent,
+                                                   status, created_at, updated_at)
+                VALUES ('tpl_share', 'Share Tpl', 'entry', 1, 0, 'active', :at, :at)
+                ON CONFLICT (id) DO NOTHING
+                """, Map.of("at", ts));
+        var params = new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("type", entitlementType)
+                .addValue("merchant_id", merchantId)
+                .addValue("allocated", allocatedRevenueCent)
+                .addValue("at", ts);
+        jdbcTemplate.update("""
+                INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
+                    entitlement_type, merchant_id, total_times, used_times, status, valid_from, valid_to,
+                    created_at, updated_at, num_people, allocated_revenue_cent)
+                VALUES (:id, 'tt_share', :id, 'tpl_share', :id, :type, :merchant_id, 1, 0, 'active', :at, :at,
+                    :at, :at, 1, :allocated)
+                """, params);
     }
 
     private void insertInventoryItem(String id, String merchantId, int minQuantity) {

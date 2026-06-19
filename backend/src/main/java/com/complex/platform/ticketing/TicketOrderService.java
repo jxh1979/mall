@@ -185,7 +185,13 @@ public class TicketOrderService {
                 : now.plusSeconds(86_400);
         // 出票方商户，仅作为模板未配置归属时的回退（保证既有单模板票仍可用）。
         String issuerMerchantId = resolveMerchantId();
+        // 待确认项#1：拆分基数=订单实付（无订单则不拆分，allocated=null）。direct 出票（issueTicketTypeDirectly）
+        // 用合成 order_id 多无真实订单，此时跳过拆分，向后兼容既有单模板票。
+        Long orderAmount = repository.findTicketOrderById(orderId).map(TicketOrderRecord::amountCent).orElse(null);
+        long[] allocations = allocateRevenue(bindings, orderAmount);
+
         List<IssuedEntitlementResponse> responses = new ArrayList<>();
+        int allocationIndex = 0;
         for (TicketTypeEntitlementRecord binding : bindings) {
             EntitlementTemplateRecord template = repository.findEntitlementTemplateById(binding.entitlementTemplateId())
                     .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
@@ -196,6 +202,8 @@ public class TicketOrderService {
             String pointId = template.pointId();
             for (int i = 0; i < binding.quantity(); i++) {
                 String entitlementCode = "P0-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+                // 待确认项#1：每张权益分配收入（无订单则 null）。业态归属由 entitlement_type + merchant_id 在聚合侧映射。
+                Long allocatedRevenue = allocations == null ? null : allocations[allocationIndex];
                 IssuedEntitlementRecord entitlement = new IssuedEntitlementRecord(
                         "ent_" + UUID.randomUUID().toString().replace("-", ""),
                         entitlementCode,
@@ -217,13 +225,102 @@ public class TicketOrderService {
                         // R5 TODO#1：核销人数来源——票种该权益绑定(binding) 的 num_people。
                         // binding 默认 1（单人票，向后兼容）；联合票/多人票 binding 配 >1 即随之生效。
                         // 核销时 verified_people = entitlement.numPeople()（接 R5 T5）。
-                        binding.numPeople()
+                        binding.numPeople(),
+                        allocatedRevenue
                 );
                 repository.saveIssuedEntitlement(entitlement);
                 responses.add(new IssuedEntitlementResponse(entitlementCode));
+                allocationIndex++;
             }
         }
         return new IssuedTicketResponse(responses);
+    }
+
+    /**
+     * 待确认项#1：把订单实付按各权益分项单价比例拆分到每张已发权益（每个 binding 发 quantity 张，逐张分配）。
+     *
+     * <p>拆分算法（财务确认：酒吧+游乐组合票按打折比例拆分，法律双实体；也支持手动输入各分项单价）：
+     * <ul>
+     *   <li>权重 = binding.componentPriceCent（分项标准单价/手动单价），每张权益按其 binding 的权重参与分配。</li>
+     *   <li>allocated(每张) = orderAmount × (componentPrice / Σ(componentPrice × quantity))。</li>
+     *   <li>分项单价全空 → 回退按数量均摊（orderAmount 平均分到每张权益，口径：无分项单价时各权益等额）。</li>
+     *   <li>订单实付为 null（direct 出票无订单）→ 返回 null，不拆分（向后兼容）。</li>
+     * </ul>
+     * 采用"逐张整数分配 + 最大余数补尾"使各张之和恰等于 orderAmount（分到分，不丢分、不重复计）。
+     *
+     * @return 与发券顺序一致的每张权益分配收入数组；不拆分时返回 null。
+     */
+    private long[] allocateRevenue(List<TicketTypeEntitlementRecord> bindings, Long orderAmount) {
+        if (orderAmount == null) {
+            return null;
+        }
+        int totalUnits = 0;
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            totalUnits += binding.quantity();
+        }
+        if (totalUnits == 0) {
+            return new long[0];
+        }
+        // 每张权益的权重（分项单价；全空回退均摊→权重置 1）。
+        long[] weights = new long[totalUnits];
+        long totalWeight = 0;
+        boolean anyComponentPrice = bindings.stream().anyMatch(b -> b.componentPriceCent() != null);
+        int idx = 0;
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            // 分项单价全空回退均摊：每张权重=1；否则取本 binding 单价（缺省 0，不参与分配）。
+            long unitWeight = anyComponentPrice
+                    ? (binding.componentPriceCent() == null ? 0L : binding.componentPriceCent())
+                    : 1L;
+            for (int i = 0; i < binding.quantity(); i++) {
+                weights[idx] = unitWeight;
+                totalWeight += unitWeight;
+                idx++;
+            }
+        }
+        long[] allocations = new long[totalUnits];
+        if (totalWeight <= 0) {
+            // 有分项单价配置但全为 0（异常配置）→ 退化为按数量均摊，保证不丢分。
+            return allocateEvenly(orderAmount, totalUnits);
+        }
+        // 逐张整数分配 + 最大余数补尾，使 Σallocations == orderAmount。
+        long assigned = 0;
+        double[] remainders = new double[totalUnits];
+        for (int i = 0; i < totalUnits; i++) {
+            long product = orderAmount * weights[i];
+            long floor = product / totalWeight;
+            allocations[i] = floor;
+            assigned += floor;
+            remainders[i] = (double) (product - floor * totalWeight) / totalWeight;
+        }
+        long remainder = orderAmount - assigned;
+        // 把余数（最多 totalUnits-1 分）按小数余数从大到小逐分补给权重>0 的张。
+        while (remainder > 0) {
+            int best = -1;
+            double bestRem = -1.0;
+            for (int i = 0; i < totalUnits; i++) {
+                if (weights[i] > 0 && remainders[i] > bestRem) {
+                    bestRem = remainders[i];
+                    best = i;
+                }
+            }
+            if (best < 0) {
+                break;
+            }
+            allocations[best] += 1;
+            remainders[best] = -1.0;
+            remainder -= 1;
+        }
+        return allocations;
+    }
+
+    private long[] allocateEvenly(long orderAmount, int totalUnits) {
+        long[] allocations = new long[totalUnits];
+        long base = orderAmount / totalUnits;
+        long remainder = orderAmount - base * totalUnits;
+        for (int i = 0; i < totalUnits; i++) {
+            allocations[i] = base + (i < remainder ? 1 : 0);
+        }
+        return allocations;
     }
 
     private String resolveMerchantId() {

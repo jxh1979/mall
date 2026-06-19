@@ -99,7 +99,11 @@ class TicketingServiceTests {
                 "entry",
                 2,
                 9900L,
-                "active"
+                "active",
+                null,
+                null,
+                null,
+                null
         );
 
         EntitlementTemplateRecord first = service.createEntitlementTemplate(request);
@@ -124,7 +128,9 @@ class TicketingServiceTests {
                 1,
                 2,
                 9900L,
-                "default"
+                "default",
+                1,
+                null
         ));
 
         IssuedTicketResponse issued = service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
@@ -187,7 +193,7 @@ class TicketingServiceTests {
                 entitlement.entitlementTemplateId(), entitlement.entitlementType(), entitlement.merchantId(),
                 entitlement.venueId(), entitlement.pointId(), entitlement.totalTimes(), entitlement.usedTimes(),
                 entitlement.valueAmountCent(), entitlement.status(), entitlement.validFrom(), entitlement.validTo(),
-                entitlement.createdAt(), entitlement.updatedAt(), 4
+                entitlement.createdAt(), entitlement.updatedAt(), 4, entitlement.allocatedRevenueCent()
         ));
 
         service.createVerification(new VerificationRequest(
@@ -214,7 +220,7 @@ class TicketingServiceTests {
                 "tpl_np4", "Group Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         // binding 配 num_people=4（多人票/联合票运营配置；本期通过仓储直配，创建 DTO 透传为后续工作）。
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                "link_np4", "tt_np4", "tpl_np4", 1, 1, 9900L, "default", 4, now, now));
+                "link_np4", "tt_np4", "tpl_np4", 1, 1, 9900L, "default", 4, null, now, now));
 
         IssuedTicketResponse issued = service.issueTicketTypeDirectly("tt_np4", new TicketIssueRequest(
                 "np4-issue", "issue", List.of(), "order_np4", "manual", List.of("qr")));
@@ -528,7 +534,9 @@ class TicketingServiceTests {
                 1,
                 2,
                 9900L,
-                "default"
+                "default",
+                1,
+                null
         ));
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
                 "issue-order-create",
@@ -830,7 +838,9 @@ class TicketingServiceTests {
                 2,
                 1,
                 9900L,
-                "default"
+                "default",
+                1,
+                null
         ));
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
                 "refund-lines-order",
@@ -1330,7 +1340,7 @@ class TicketingServiceTests {
         TicketTypeRecord ticketType = createTicketType("expired-ticket");
         EntitlementTemplateRecord template = createTemplate("expired-template", 2, 9900L);
         service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                "expired-bind", "bind", List.of(), template.id(), 1, 2, 9900L, "default"
+                "expired-bind", "bind", List.of(), template.id(), 1, 2, 9900L, "default", null, null
         ));
         IssuedTicketResponse issued = service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
                 "expired-issue", "issue", List.of(), "order_expired", "manual", List.of("qr")
@@ -1345,7 +1355,7 @@ class TicketingServiceTests {
                 entitlement.totalTimes(), entitlement.usedTimes(), entitlement.valueAmountCent(),
                 entitlement.status(), entitlement.validFrom(),
                 Instant.now().minusSeconds(3600), // expired 1 hour ago
-                entitlement.createdAt(), entitlement.updatedAt(), entitlement.numPeople()
+                entitlement.createdAt(), entitlement.updatedAt(), entitlement.numPeople(), entitlement.allocatedRevenueCent()
         ));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
@@ -1365,7 +1375,7 @@ class TicketingServiceTests {
         TicketTypeRecord ticketType = createTicketType("atomic-ticket");
         EntitlementTemplateRecord template = createTemplate("atomic-template", 1, 9900L);
         service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                "atomic-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+                "atomic-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", null, null
         ));
         IssuedTicketResponse issued = service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
                 "atomic-issue", "issue", List.of(), "order_atomic", "manual", List.of("qr")
@@ -1410,7 +1420,7 @@ class TicketingServiceTests {
         TicketTypeRecord ticketType = createTicketType("payment-guard");
         EntitlementTemplateRecord template = createTemplate("payment-guard-template", 1, 9900L);
         service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                "payment-guard-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+                "payment-guard-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", null, null
         ));
 
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
@@ -1431,7 +1441,7 @@ class TicketingServiceTests {
         TicketTypeRecord ticketType = createTicketType("toctou-ticket");
         EntitlementTemplateRecord template = createTemplate("toctou-template", 1, 9900L);
         service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                "toctou-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+                "toctou-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", null, null
         ));
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
                 "toctou-order", "create", List.of(), ticketType.id(), null, 1,
@@ -1456,7 +1466,7 @@ class TicketingServiceTests {
             TicketTypeRecord ticketType = createTicketType("merchant-filter");
             EntitlementTemplateRecord template = createTemplate("merchant-filter-template", 1, 9900L);
             service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
-                    "merchant-filter-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default"
+                    "merchant-filter-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", null, null
             ));
             service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
                     "merchant-filter-issue", "issue", List.of(), "order_mch_filter", "manual", List.of("qr")
@@ -1501,9 +1511,9 @@ class TicketingServiceTests {
                     "tpl_b", "Entry B", "entry", 1, 9900L, "active",
                     "mch_b", "venue_b", "gate_b", null, now, now));
             ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                    "link_a", "tt_union", "tpl_a", 1, 1, 9900L, "default", 1, now, now));
+                    "link_a", "tt_union", "tpl_a", 1, 1, 9900L, "default", 1, null, now, now));
             ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                    "link_b", "tt_union", "tpl_b", 1, 1, 9900L, "default", 1, now, now));
+                    "link_b", "tt_union", "tpl_b", 1, 1, 9900L, "default", 1, null, now, now));
 
             service.issueTicketTypeDirectly("tt_union", new TicketIssueRequest(
                     "union-issue", "issue", List.of(), "order_union", "manual", List.of("qr")));
@@ -1534,6 +1544,100 @@ class TicketingServiceTests {
         }
     }
 
+    // 待确认项#1：组合票酒吧分项 600 / 游乐分项 400、组合实付 800（打折）→ 出票后酒吧权益 allocated=480、游乐 allocated=320。
+    @Test
+    void issueAllocatesOrderRevenueByComponentPriceRatio() {
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_combo", "Combo Pass", "weekday_weekend_holiday", 99900L, 99900L, 99900L,
+                false, "published", null, now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_bar", "Bar Entry", "gift_drink", 1, 0L, "active", "mch_bar", null, null, "bar_sku_1", now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_amu", "Amusement Ride", "amusement", 1, 0L, "active", "mch_amu", null, null, null, now, now));
+        // binding 分项单价：酒吧 600 / 游乐 400。
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_bar", "tt_combo", "tpl_bar", 1, 1, 0L, "default", 1, 600L, now, now));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_amu", "tt_combo", "tpl_amu", 1, 1, 0L, "default", 1, 400L, now, now));
+        // 组合票打折实付 800（admin 渠道可直接出票）。
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_combo", "TO-COMBO", "customer_combo", "tt_combo", null, 1,
+                LocalDate.parse("2026-06-20"), "admin", "13800138000", 800L, null, 1000L, -200L,
+                "CNY", "paid", "not_issued", "created", now, now));
+
+        service.issueTicketOrder("order_combo", new StatusChangeRequest(
+                "combo-issue", "issue", "issue", List.of()));
+
+        List<IssuedEntitlementRecord> issued = ticketingRepository.listIssuedEntitlementsByOrderId("order_combo");
+        assertThat(issued).hasSize(2);
+        assertThat(issued).filteredOn(e -> "tpl_bar".equals(e.entitlementTemplateId()))
+                .singleElement().extracting(IssuedEntitlementRecord::allocatedRevenueCent).isEqualTo(480L);
+        assertThat(issued).filteredOn(e -> "tpl_amu".equals(e.entitlementTemplateId()))
+                .singleElement().extracting(IssuedEntitlementRecord::allocatedRevenueCent).isEqualTo(320L);
+        // 净收入不重复硬约束：各权益分配收入之和恰等于订单实付（不丢分、不超额）。
+        assertThat(issued.stream().mapToLong(IssuedEntitlementRecord::allocatedRevenueCent).sum()).isEqualTo(800L);
+    }
+
+    // 待确认项#1：分项单价全空 → 回退按数量均摊（订单实付 800、两张权益 → 各 400）。
+    @Test
+    void issueFallsBackToEvenAllocationWhenComponentPriceAllNull() {
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_even", "Even Pass", "weekday_weekend_holiday", 99900L, 99900L, 99900L,
+                false, "published", null, now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_e1", "E1", "entry", 1, 0L, "active", null, null, null, null, now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_e2", "E2", "amusement", 1, 0L, "active", null, null, null, null, now, now));
+        // 两个 binding 分项单价均为空（回退均摊）。
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_e1", "tt_even", "tpl_e1", 1, 1, 0L, "default", 1, null, now, now));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_e2", "tt_even", "tpl_e2", 1, 1, 0L, "default", 1, null, now, now));
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_even", "TO-EVEN", "customer_even", "tt_even", null, 1,
+                LocalDate.parse("2026-06-20"), "admin", "13800138000", 800L, null, 800L, 0L,
+                "CNY", "paid", "not_issued", "created", now, now));
+
+        service.issueTicketOrder("order_even", new StatusChangeRequest(
+                "even-issue", "issue", "issue", List.of()));
+
+        List<IssuedEntitlementRecord> issued = ticketingRepository.listIssuedEntitlementsByOrderId("order_even");
+        assertThat(issued).extracting(IssuedEntitlementRecord::allocatedRevenueCent).containsExactlyInAnyOrder(400L, 400L);
+        assertThat(issued.stream().mapToLong(IssuedEntitlementRecord::allocatedRevenueCent).sum()).isEqualTo(800L);
+    }
+
+    // 待确认项#1：direct 出票（无真实订单）→ 不拆分，allocated_revenue_cent 为 null（向后兼容）。
+    @Test
+    void directIssueWithoutOrderLeavesAllocatedRevenueNull() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("no-order-alloc");
+        assertThat(entitlement.allocatedRevenueCent()).isNull();
+    }
+
+    // #3 配置入口：创建 binding 带 num_people / component_price_cent 透传落库。
+    @Test
+    void bindTicketTypeEntitlementPassesThroughNumPeopleAndComponentPrice() {
+        TicketTypeRecord ticketType = createTicketType("cfg-binding");
+        EntitlementTemplateRecord template = createTemplate("cfg-binding-template", 1, 9900L);
+        TicketTypeEntitlementRecord bound = service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "cfg-binding-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 4, 600L));
+        assertThat(bound.numPeople()).isEqualTo(4);
+        assertThat(bound.componentPriceCent()).isEqualTo(600L);
+    }
+
+    // #3 配置入口：创建 template 带 bar_item_ref / merchant/venue/point 透传落库。
+    @Test
+    void createEntitlementTemplatePassesThroughBarItemRefAndOwnership() {
+        EntitlementTemplateRecord template = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "cfg-template", "create", List.of(), "Gift Drink", "gift_drink", 1, 0L, "active",
+                "bar_sku_42", "mch_x", "venue_x", "point_x"));
+        assertThat(template.barItemRef()).isEqualTo("bar_sku_42");
+        assertThat(template.merchantId()).isEqualTo("mch_x");
+        assertThat(template.venueId()).isEqualTo("venue_x");
+        assertThat(template.pointId()).isEqualTo("point_x");
+    }
+
     @Test
     void entitlementFallsBackToIssuerMerchantWhenTemplateMerchantNull() {
         // R5 审计点②：模板 merchant_id 为空时回退出票方（向后兼容既有单模板票）。
@@ -1547,7 +1651,7 @@ class TicketingServiceTests {
                     "tpl_fb", "Entry FB", "entry", 1, 9900L, "active",
                     null, null, null, null, now, now));
             ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                    "link_fb", "tt_fb", "tpl_fb", 1, 1, 9900L, "default", 1, now, now));
+                    "link_fb", "tt_fb", "tpl_fb", 1, 1, 9900L, "default", 1, null, now, now));
 
             service.issueTicketTypeDirectly("tt_fb", new TicketIssueRequest(
                     "fb-issue", "issue", List.of(), "order_fb", "manual", List.of("qr")));
@@ -1573,7 +1677,7 @@ class TicketingServiceTests {
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_v30", "Entry V30", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                "link_v30", "tt_v30", "tpl_v30", 1, 1, 9900L, "default", 1, now, now));
+                "link_v30", "tt_v30", "tpl_v30", 1, 1, 9900L, "default", 1, null, now, now));
 
         Instant before30 = Instant.now();
         service.issueTicketTypeDirectly("tt_v30", new TicketIssueRequest(
@@ -1591,7 +1695,7 @@ class TicketingServiceTests {
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_vnull", "Entry Vnull", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                "link_vnull", "tt_vnull", "tpl_vnull", 1, 1, 9900L, "default", 1, now, now));
+                "link_vnull", "tt_vnull", "tpl_vnull", 1, 1, 9900L, "default", 1, null, now, now));
         service.issueTicketTypeDirectly("tt_vnull", new TicketIssueRequest(
                 "vnull-issue", "issue", List.of(), "order_vnull", "manual", List.of("qr")));
         IssuedEntitlementRecord entNull = ticketingRepository.issuedEntitlements.values().stream()
@@ -1670,7 +1774,11 @@ class TicketingServiceTests {
                 "entry",
                 totalTimes,
                 valueCent,
-                "active"
+                "active",
+                null,
+                null,
+                null,
+                null
         ));
     }
 
@@ -1685,7 +1793,9 @@ class TicketingServiceTests {
                 1,
                 2,
                 9900L,
-                "default"
+                "default",
+                1,
+                null
         ));
         IssuedTicketResponse response = service.issueTicketTypeDirectly(ticketType.id(), new TicketIssueRequest(
                 key + "-issue",
@@ -1710,7 +1820,9 @@ class TicketingServiceTests {
                 1,
                 2,
                 9900L,
-                "default"
+                "default",
+                1,
+                null
         ));
         TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
                 key + "-order",
@@ -2011,7 +2123,7 @@ class TicketingServiceTests {
                     entitlement.venueId(), entitlement.pointId(), entitlement.totalTimes(),
                     Math.max(entitlement.usedTimes() - 1, 0), entitlement.valueAmountCent(),
                     "active", entitlement.validFrom(), entitlement.validTo(), entitlement.createdAt(), updatedAt,
-                    entitlement.numPeople()
+                    entitlement.numPeople(), entitlement.allocatedRevenueCent()
             );
             issuedEntitlements.put(id, updated);
             return java.util.Optional.of(updated);

@@ -167,6 +167,7 @@ class TicketingJdbcIntegrationTests {
                 9900L,
                 "default",
                 1,
+                null,
                 now,
                 now
         ));
@@ -188,7 +189,8 @@ class TicketingJdbcIntegrationTests {
                 now.plusSeconds(86400),
                 now,
                 now,
-                3
+                3,
+                null
         ));
         repository.saveVerification(new VerificationRecord(
                 "ver_jdbc",
@@ -292,7 +294,7 @@ class TicketingJdbcIntegrationTests {
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
                 "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",
-                now, now.plusSeconds(86400), now, now, 4));
+                now, now.plusSeconds(86400), now, now, 4, null));
     }
 
     private VerificationRecord verificationWithStatus(String id, String no, Instant now, String status) {
@@ -390,7 +392,8 @@ class TicketingJdbcIntegrationTests {
                 now.plusSeconds(86400),
                 now,
                 now,
-                1
+                1,
+                null
         ));
         repository.saveTicketCredential(new TicketCredentialRecord(
                 "credential_jdbc",

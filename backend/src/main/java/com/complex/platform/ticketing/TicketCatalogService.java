@@ -100,14 +100,14 @@ public class TicketCatalogService {
                 positiveOrDefault(actual.defaultTotalTimes(), 1, "default_total_times"),
                 nonNegativeOrDefault(actual.defaultValueCent(), 0L, "default_value_cent"),
                 trimToDefault(actual.status(), "active"),
-                // R5 审计点②：模板归属（merchant/venue/point）暂无创建入口（DTO 未扩展），保持 null。
-                // 为空时发放回退出票方商户；联合通票各模板归属配置入口为后续工作。
-                null,
-                null,
-                null,
-                // R5 TODO#2：赠饮→吧台 SKU 映射（bar_item_ref）暂无创建入口（DTO 未扩展），保持 null。
-                // 为空时赠饮核销跳过库存扣减并标注；运营配置入口（扩展 EntitlementTemplateRequest）为后续工作。
-                null,
+                // #3 配置入口：模板归属（merchant/venue/point）由请求透传（各可选）。
+                // 为空时发放回退出票方商户；联合通票各模板可填各自归属。
+                trimToNull(actual.merchantId()),
+                trimToNull(actual.venueId()),
+                trimToNull(actual.pointId()),
+                // #3 配置入口：赠饮→吧台 SKU 映射（bar_item_ref）由请求透传（可选）。
+                // 为空时赠饮核销跳过库存扣减并标注。
+                trimToNull(actual.barItemRef()),
                 now,
                 now
         ));
@@ -128,9 +128,10 @@ public class TicketCatalogService {
                 positiveOrDefault(actual.totalTimes(), template.defaultTotalTimes(), "total_times"),
                 actual.valueAmountCent() == null ? template.defaultValueCent() : actual.valueAmountCent(),
                 trimToNull(actual.effectiveRule()),
-                // R5 TODO#1：每份核销人数（num_people）暂无创建入口（DTO 未扩展），默认 1（单人票，向后兼容）。
-                // 多人票/联合票配 >1 的运营配置入口（扩展 TicketTypeEntitlementRequest）为后续工作。
-                1,
+                // #3 配置入口：每份核销人数（num_people）由请求透传，缺省 1（单人票，向后兼容）；多人票/联合票配 >1。
+                positiveOrDefault(actual.numPeople(), 1, "num_people"),
+                // 待确认项#1 配置入口：分项标准单价/手动单价（可选，可空回退）。联合票各分项配单价以按比例拆分订单实付。
+                nonNegativeOrNull(actual.componentPriceCent(), "component_price_cent"),
                 now,
                 now
         ));
@@ -194,6 +195,16 @@ public class TicketCatalogService {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
         }
         return resolved;
+    }
+
+    private Long nonNegativeOrNull(Long value, String fieldName) {
+        if (value == null) {
+            return null;
+        }
+        if (value < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+        }
+        return value;
     }
 
     private void validateNonNegative(Long value, String fieldName) {

@@ -14562,6 +14562,26 @@
               "disabled"
             ],
             "description": "权益模板.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+          },
+          "bar_item_ref": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "权益模板.bar_item_ref 字段（可选）；gift_drink 模板指向的吧台商品/库存 item，赠饮核销据此扣减库存；为空则跳过扣减并标注。"
+          },
+          "merchant_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "权益模板.merchant_id 字段（可选）；权益归属商户，联合通票各模板可填各自商户；为空发放回退出票方商户。"
+          },
+          "venue_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "权益模板.venue_id 字段（可选）；权益归属场地，为空表示不限定。"
+          },
+          "point_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "权益模板.point_id 字段（可选）；权益归属点位，为空表示不限定。"
           }
         }
       },
@@ -14620,6 +14640,18 @@
             "type": "string",
             "maxLength": 1000,
             "description": "票类型权益.effective_rule 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+          },
+          "num_people": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9999,
+            "description": "票类型权益.num_people 字段（可选）；该权益每份核销人数，多人票/联合票配 >1，缺省 1（单人票）。"
+          },
+          "component_price_cent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999999999999,
+            "description": "票类型权益.component_price_cent 字段（可选）；该权益分项标准单价/手动单价，组合票按各分项单价比例拆分订单实付到各业态。"
           }
         }
       },

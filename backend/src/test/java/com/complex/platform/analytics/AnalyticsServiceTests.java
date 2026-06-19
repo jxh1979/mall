@@ -788,6 +788,16 @@ class AnalyticsServiceTests {
         }
 
         @Override
+        public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
         public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
             return BigDecimal.ZERO;
         }

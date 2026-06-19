@@ -118,11 +118,11 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_type_entitlements (
                     id, ticket_type_id, entitlement_template_id, quantity, total_times,
-                    value_amount_cent, effective_rule, num_people, created_at, updated_at
+                    value_amount_cent, effective_rule, num_people, component_price_cent, created_at, updated_at
                 )
                 VALUES (
                     :id, :ticket_type_id, :entitlement_template_id, :quantity, :total_times,
-                    :value_amount_cent, :effective_rule, :num_people, :created_at, :updated_at
+                    :value_amount_cent, :effective_rule, :num_people, :component_price_cent, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -132,6 +132,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     value_amount_cent = EXCLUDED.value_amount_cent,
                     effective_rule = EXCLUDED.effective_rule,
                     num_people = EXCLUDED.num_people,
+                    component_price_cent = EXCLUDED.component_price_cent,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketTypeEntitlementParameters(entitlement));
         return entitlement;
@@ -141,7 +142,7 @@ class JdbcTicketingRepository implements TicketingRepository {
     public List<TicketTypeEntitlementRecord> listTicketTypeEntitlements(String ticketTypeId) {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, entitlement_template_id, quantity, total_times,
-                       value_amount_cent, effective_rule, num_people, created_at, updated_at
+                       value_amount_cent, effective_rule, num_people, component_price_cent, created_at, updated_at
                   FROM ticket_type_entitlements
                  WHERE ticket_type_id = :ticket_type_id
                  ORDER BY created_at ASC, id
@@ -154,12 +155,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO issued_entitlements (
                     id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                    value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people
+                    value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
+                    allocated_revenue_cent
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
-                    :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people
+                    :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people,
+                    :allocated_revenue_cent
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -177,7 +180,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                     valid_from = EXCLUDED.valid_from,
                     valid_to = EXCLUDED.valid_to,
                     updated_at = EXCLUDED.updated_at,
-                    num_people = EXCLUDED.num_people
+                    num_people = EXCLUDED.num_people,
+                    allocated_revenue_cent = EXCLUDED.allocated_revenue_cent
                 """, parameterSource.issuedEntitlementParameters(entitlement));
         return entitlement;
     }
@@ -187,7 +191,8 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people
+                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
+                       allocated_revenue_cent
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
@@ -210,7 +215,8 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people
+                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
+                       allocated_revenue_cent
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)

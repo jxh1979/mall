@@ -30,6 +30,9 @@ public class DashboardAggregationJob {
     // 七类 metric_code（与聚合草案 §2 对齐）。
     static final String REVENUE_TICKET = "revenue.ticket";      // 收入
     static final String REVENUE_BAR = "revenue.bar";            // 收入
+    // 待确认项#1：通票售票收入的业态拆分展示口径（不并入 net，仅展示）。
+    static final String REVENUE_TICKET_BAR_SHARE = "revenue.ticket_bar_share";             // 收入·通票酒吧分摊
+    static final String REVENUE_TICKET_AMUSEMENT_SHARE = "revenue.ticket_amusement_share"; // 收入·通票游乐分摊
     static final String TRAFFIC_AMUSEMENT = "traffic.amusement"; // 客流
     static final String VERIFY_DONE = "verify.done";            // 核销
     static final String MEMBER_NEW = "member.new";              // 会员
@@ -70,7 +73,16 @@ public class DashboardAggregationJob {
         upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate), now);
 
         // 收入·酒吧：bar_bill_settlements 有 merchant_id → 平台 + 商户口径。
+        // 硬约束：revenue.bar 仅取现场消费实收（bar_bill_settlements），不含通票售票分摊，保证净收入口径不重复。
         upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate), now);
+
+        // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
+        // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
+        // 按酒吧/游乐业态拆出展示行，与 revenue.bar（消费实收）口径区分，避免重复计净收入。
+        upsertByMerchant(REVENUE_TICKET_BAR_SHARE, "ticketing", businessDate,
+                repository.sumTicketBarShareCentsByMerchant(businessDate), now);
+        upsertByMerchant(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
+                repository.sumTicketAmusementShareCentsByMerchant(businessDate), now);
 
         // 客流·游乐：amusement_verifications 无 merchant_id → 仅平台口径。
         upsertPlatform(TRAFFIC_AMUSEMENT, "amusement", businessDate, repository.countAmusementVerificationSuccess(businessDate), now);

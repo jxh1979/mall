@@ -59,6 +59,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("value_amount_cent", entitlement.valueAmountCent())
                 .addValue("effective_rule", entitlement.effectiveRule())
                 .addValue("num_people", entitlement.numPeople())
+                .addValue("component_price_cent", entitlement.componentPriceCent())
                 .addValue("created_at", timestampWithTimeZone(entitlement.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()));
     }
@@ -82,7 +83,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("valid_to", timestampWithTimeZone(entitlement.validTo()))
                 .addValue("created_at", timestampWithTimeZone(entitlement.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()))
-                .addValue("num_people", entitlement.numPeople());
+                .addValue("num_people", entitlement.numPeople())
+                .addValue("allocated_revenue_cent", entitlement.allocatedRevenueCent());
     }
 
     MapSqlParameterSource verificationParameters(VerificationRecord verification) {
