@@ -187,6 +187,40 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     }
 
     @Override
+    public Optional<TerminalCapabilitySwitchRecord> resolveEffectiveSwitch(
+            String terminalType, String capabilityCode, Map<String, String> orderedScopes) {
+        // 按最具体在前的顺序逐级查询；命中第一条显式行即胜出。
+        // terminal_type 同时匹配请求端与跨端通配 '*'。
+        for (Map.Entry<String, String> scope : orderedScopes.entrySet()) {
+            String scopeType = scope.getKey();
+            String scopeId = scope.getValue();
+            if (scopeId == null || scopeId.isBlank()) {
+                continue;
+            }
+            Optional<TerminalCapabilitySwitchRecord> hit = jdbcTemplate.query("""
+                    SELECT id, terminal_type, capability_code, scope_type, scope_id, enabled,
+                           reason, created_at, updated_at
+                      FROM terminal_capability_switches
+                     WHERE terminal_type IN (:terminal_type, '*')
+                       AND capability_code = :capability_code
+                       AND scope_type = :scope_type
+                       AND scope_id = :scope_id
+                     ORDER BY CASE WHEN terminal_type = '*' THEN 1 ELSE 0 END, updated_at DESC, id
+                     LIMIT 1
+                    """, Map.of(
+                    "terminal_type", terminalType == null ? "" : terminalType,
+                    "capability_code", capabilityCode,
+                    "scope_type", scopeType,
+                    "scope_id", scopeId
+            ), this::mapCapabilitySwitch).stream().findFirst();
+            if (hit.isPresent()) {
+                return hit;
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public TerminalCapabilitySwitchRecord saveCapabilitySwitch(TerminalCapabilitySwitchRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO terminal_capability_switches (

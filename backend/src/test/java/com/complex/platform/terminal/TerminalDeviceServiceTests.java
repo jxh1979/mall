@@ -660,6 +660,26 @@ class TerminalDeviceServiceTests {
         }
 
         @Override
+        public java.util.Optional<TerminalCapabilitySwitchRecord> resolveEffectiveSwitch(
+                String terminalType, String capabilityCode, Map<String, String> orderedScopes) {
+            for (Map.Entry<String, String> scope : orderedScopes.entrySet()) {
+                if (scope.getValue() == null || scope.getValue().isBlank()) {
+                    continue;
+                }
+                java.util.Optional<TerminalCapabilitySwitchRecord> hit = capabilitySwitches.values().stream()
+                        .filter(r -> terminalType.equals(r.terminalType()) || "*".equals(r.terminalType()))
+                        .filter(r -> capabilityCode.equals(r.capabilityCode()))
+                        .filter(r -> scope.getKey().equals(r.scopeType()))
+                        .filter(r -> scope.getValue().equals(r.scopeId()))
+                        .findFirst();
+                if (hit.isPresent()) {
+                    return hit;
+                }
+            }
+            return java.util.Optional.empty();
+        }
+
+        @Override
         public TerminalCapabilitySwitchRecord saveCapabilitySwitch(TerminalCapabilitySwitchRecord record) {
             capabilitySwitches.put(record.id(), record);
             return record;

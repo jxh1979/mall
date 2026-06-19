@@ -185,10 +185,78 @@ public class SupervisorReviewService {
                             request.idempotencyKey(),
                             Map.of("decision", decision, "reviewer_level", reviewerLevel)
                     );
+                    // R5 T3 事件名收口：准入复核放行/驳回额外发 admission.released（替代零命中的 contract.released）。
+                    auditEventService.recordSuccess(
+                            "approved".equals(decision) ? "admission.released" : "admission.escalated",
+                            APPROVE_PERMISSION,
+                            "supervisor_review",
+                            id,
+                            null,
+                            request.idempotencyKey(),
+                            Map.of("decision", decision, "action_type", pending.actionType())
+                    );
                     return result;
                 },
                 SupervisorReviewDecisionRecord.class
         );
+    }
+
+    /**
+     * R5 T3 准入闸 block 分支：为命中 block 策略的业务动作建立 pending 复核（走 supervisor_review），
+     * 按 approval_level + 发起人 level_rank 计算所需审批人 rank（与 {@link #evaluate} 同一逻辑），
+     * 发 {@code admission.blocked} 事件，返回带 reviewId 的决策。放行沿用 {@link #approve}（发 admission.released）。
+     *
+     * @param policyCode    supervisor_review_policies.policy_code
+     * @param actionType    业务动作（admissionAction）
+     * @param objectType    准入对象类型
+     * @param objectId      准入对象 id（可空）
+     * @param approvalLevelCode 升级类型 one_level_up/two_levels_up/top_authority/specific_role
+     * @param requiredLevel 主管复核所需 level
+     */
+    public SupervisorReviewDecisionRecord blockForAdmission(
+            String policyCode,
+            String actionType,
+            String objectType,
+            String objectId,
+            String approvalLevelCode,
+            int requiredLevel
+    ) {
+        String initiatedBy = authorizationService.currentActor().id();
+        ApprovalLevel approvalLevel = ApprovalLevel.fromCode(approvalLevelCode);
+        int initiatorRank = authorizationService.currentActorLevelRank();
+        Integer requiredApproverRank = (approvalLevel.rankBased() && initiatorRank > 0)
+                ? approvalLevel.requiredApproverRank(initiatorRank)
+                : null;
+        SupervisorReviewDecisionRecord decision = new SupervisorReviewDecisionRecord(
+                "review_" + UUID.randomUUID(),
+                policyCode,
+                actionType,
+                objectType == null || objectType.isBlank() ? actionType : objectType,
+                objectId == null || objectId.isBlank() ? actionType : objectId,
+                true,
+                "pending_review",
+                requiredLevel,
+                null,
+                "blocked",
+                null,
+                List.of(),
+                Instant.now(),
+                initiatedBy,
+                approvalLevelCode,
+                requiredApproverRank
+        );
+        supervisorReviewRepository.saveSupervisorReview(decision);
+        auditEventService.recordSuccess(
+                "admission.blocked",
+                MANAGE_PERMISSION,
+                "supervisor_review",
+                decision.reviewId(),
+                null,
+                null,
+                Map.of("action_type", actionType, "object_type", objectType == null ? "" : objectType,
+                        "approval_level", approvalLevelCode, "required_level", requiredLevel)
+        );
+        return decision;
     }
 
     private SupervisorReviewPolicyRecord findPolicy(String actionType) {

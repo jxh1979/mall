@@ -298,6 +298,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(admissionAction = "bar.bill_waiver", objectType = "bar_bill")
     @Transactional
     public BarBillAdjustmentRecord applyBillAdjustment(String billId, BarBillAdjustmentRequest request) {
         String id = operations.requireText(billId, "bill_id");

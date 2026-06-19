@@ -244,6 +244,7 @@ public class AmusementService {
         return inspectionService.recheckSafetyInspection(inspectionId, request);
     }
 
+    @com.complex.platform.gate.GuardedAction(admissionAction = "amusement.reopen", objectType = "inspection")
     @Transactional
     public AmusementSafetyInspectionRecord approveReopen(String inspectionId, StatusChangeRequest request) {
         return inspectionService.approveReopen(inspectionId, request);

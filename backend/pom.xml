@@ -27,6 +27,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- AOP：动作前置闸口切面 ActionGateAspect。离线 .m2 无 spring-boot-starter-aop，
+             但已含 spring-aop（spring-context 传递）+ aspectjweaver；显式引入 aspectjweaver
+             即可触发 Spring Boot AopAutoConfiguration 启用 @EnableAspectJAutoProxy。 -->
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>

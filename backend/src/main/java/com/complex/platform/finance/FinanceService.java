@@ -67,6 +67,7 @@ public class FinanceService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(admissionAction = "finance.locked_backfill", objectType = "ar_ap_item")
     @Transactional
     public ArApItemRecord createArApItem(ArApItemRequest request) {
         return executeWrite(
@@ -98,6 +99,7 @@ public class FinanceService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
     @Transactional
     public DailyCloseRecord createDailyClose(DailyCloseRequest request) {
         return executeWrite(
