@@ -113,6 +113,7 @@ class AmusementJdbcIntegrationTests {
                 "open",
                 "template_jdbc",
                 Map.of("min_age", 12),
+                "point_jdbc",
                 now,
                 now,
                 null
@@ -159,7 +160,11 @@ class AmusementJdbcIntegrationTests {
                 "passed",
                 List.of("att_inspection"),
                 now,
-                now
+                now,
+                "inspector_jdbc",
+                "pass",
+                false,
+                null
         ));
         repository.saveSafetyAction(new AmusementSafetyActionRecord(
                 "action_jdbc",
@@ -335,12 +340,13 @@ class AmusementJdbcIntegrationTests {
                 List.of(Map.of("name", "restraint", "required", true)),
                 LocalDate.parse("2026-06-14"), "active", List.of(), now, now, "merchant_space_8"));
         repository.saveProject(new AmusementProjectRecord(
-                "project_space_8", "Space8 Coaster", 2, "open", "template_space_8", Map.of(), now, now, "merchant_space_8"));
+                "project_space_8", "Space8 Coaster", 2, "open", "template_space_8", Map.of(), "point_space_8", now, now, "merchant_space_8"));
         repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 "inspection_space_8", "project_space_8", "template_space_8",
                 List.of(Map.of("name", "restraint", "result", "pass")),
                 "pass", "submitted", "none", "not_required",
-                now, now, null, null, "passed", List.of(), now, now));
+                now, now, null, null, "passed", List.of(), now, now,
+                "inspector_space_8", "pass", false, null));
 
         // 回填前：项目出现在「未回填空间」清单；inspection 无法解析到 space（over_space 保守放行）。
         assertThat(repository.listProjectsWithoutSpace(java.util.Optional.of("merchant_space_8")))

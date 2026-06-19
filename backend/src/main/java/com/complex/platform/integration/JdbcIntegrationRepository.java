@@ -231,16 +231,20 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         jdbcTemplate.update("""
                 INSERT INTO integration_order_syncs (
                     id, provider_code, business_type, sync_type, external_business_id,
-                    status, amount_cent, currency, provider_payload_json, created_at, updated_at
+                    status, amount_cent, currency, channel, external_channel_order_id,
+                    provider_payload_json, created_at, updated_at
                 )
                 VALUES (
                     :id, :provider_code, :business_type, :sync_type, :external_business_id,
-                    :status, :amount_cent, :currency, CAST(:provider_payload_json AS jsonb), :created_at, :updated_at
+                    :status, :amount_cent, :currency, :channel, :external_channel_order_id,
+                    CAST(:provider_payload_json AS jsonb), :created_at, :updated_at
                 )
                 ON CONFLICT (provider_code, business_type, sync_type, external_business_id) DO UPDATE SET
                     status = EXCLUDED.status,
                     amount_cent = EXCLUDED.amount_cent,
                     currency = EXCLUDED.currency,
+                    channel = EXCLUDED.channel,
+                    external_channel_order_id = EXCLUDED.external_channel_order_id,
                     provider_payload_json = EXCLUDED.provider_payload_json,
                     updated_at = EXCLUDED.updated_at
                 """, orderSyncParameters(record));
@@ -251,7 +255,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     public List<IntegrationOrderSyncRecord> listOrderSyncs() {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
-                       status, amount_cent, currency, provider_payload_json, created_at, updated_at
+                       status, amount_cent, currency, channel, external_channel_order_id,
+                       provider_payload_json, created_at, updated_at
                   FROM integration_order_syncs
                  ORDER BY created_at DESC, id
                  LIMIT 200
@@ -267,7 +272,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     ) {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
-                       status, amount_cent, currency, provider_payload_json, created_at, updated_at
+                       status, amount_cent, currency, channel, external_channel_order_id,
+                       provider_payload_json, created_at, updated_at
                   FROM integration_order_syncs
                  WHERE provider_code = :provider_code
                    AND business_type = :business_type
@@ -408,13 +414,13 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 INSERT INTO integration_reconciliation_differences (
                     id, batch_id, provider_code, business_type, external_business_id,
                     difference_type, internal_amount_cent, provider_amount_cent,
-                    difference_amount_cent, status, assigned_to_user_id, resolution_note,
+                    difference_amount_cent, status, source_domain, assigned_to_user_id, resolution_note,
                     provider_payload_json, evidence_attachment_ids, created_at, updated_at
                 )
                 VALUES (
                     :id, :batch_id, :provider_code, :business_type, :external_business_id,
                     :difference_type, :internal_amount_cent, :provider_amount_cent,
-                    :difference_amount_cent, :status, :assigned_to_user_id, :resolution_note,
+                    :difference_amount_cent, :status, :source_domain, :assigned_to_user_id, :resolution_note,
                     CAST(:provider_payload_json AS jsonb), CAST(:evidence_attachment_ids AS jsonb),
                     :created_at, :updated_at
                 )
@@ -433,7 +439,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, batch_id, provider_code, business_type, external_business_id,
                        difference_type, internal_amount_cent, provider_amount_cent,
-                       difference_amount_cent, status, assigned_to_user_id, resolution_note,
+                       difference_amount_cent, status, source_domain, assigned_to_user_id, resolution_note,
                        provider_payload_json, evidence_attachment_ids, created_at, updated_at
                   FROM integration_reconciliation_differences
                  WHERE id = :id
@@ -445,7 +451,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, batch_id, provider_code, business_type, external_business_id,
                        difference_type, internal_amount_cent, provider_amount_cent,
-                       difference_amount_cent, status, assigned_to_user_id, resolution_note,
+                       difference_amount_cent, status, source_domain, assigned_to_user_id, resolution_note,
                        provider_payload_json, evidence_attachment_ids, created_at, updated_at
                   FROM integration_reconciliation_differences
                  ORDER BY created_at DESC, id
@@ -598,6 +604,8 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 .addValue("status", record.status())
                 .addValue("amount_cent", record.amountCent())
                 .addValue("currency", record.currency())
+                .addValue("channel", record.channel())
+                .addValue("external_channel_order_id", record.externalChannelOrderId())
                 .addValue("provider_payload_json", writeJson(record.providerPayload()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
@@ -650,6 +658,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 .addValue("provider_amount_cent", record.providerAmountCent())
                 .addValue("difference_amount_cent", record.differenceAmountCent())
                 .addValue("status", record.status())
+                .addValue("source_domain", record.sourceDomain())
                 .addValue("assigned_to_user_id", record.assignedToUserId())
                 .addValue("resolution_note", record.resolutionNote())
                 .addValue("provider_payload_json", writeJson(record.providerPayload()))

@@ -193,6 +193,18 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public List<AccessUser> listUsersByMerchant(String merchantId) {
+        // 商户面 scoped 读通道：按 access_users.merchant_id = token scope 过滤（AC-ISO-1，§4）。
+        if (merchantId == null) return listUsers();
+        return jdbcTemplate.query("""
+                SELECT id, username, account_type, organization_id, merchant_id, status, created_at
+                  FROM access_users
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY username
+                """, Map.of("merchant_id", merchantId), this::mapUser);
+    }
+
+    @Override
     public Optional<AccessUser> findUserById(String userId) {
         List<AccessUser> result = jdbcTemplate.query("""
                 SELECT id, username, account_type, organization_id, merchant_id, status, created_at
@@ -252,6 +264,18 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("assigned_by", assignment.assignedBy())
                 .addValue("assigned_at", timestampWithTimeZone(assignment.assignedAt())));
         return assignment;
+    }
+
+    @Override
+    public List<StaffLevelAssignment> listStaffLevelAssignmentsByMerchant(String merchantId) {
+        // 商户面 scoped 读通道：按 staff_level_assignments.merchant_id = token scope 过滤（AC-ISO-1，§4）。
+        return jdbcTemplate.query("""
+                SELECT user_id, staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       organization_id, merchant_id, assigned_by, assigned_at
+                  FROM staff_level_assignments
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY user_id
+                """, Map.of("merchant_id", merchantId), this::mapStaffLevelAssignment);
     }
 
     @Override

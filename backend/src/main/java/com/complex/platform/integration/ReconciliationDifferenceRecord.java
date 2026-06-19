@@ -15,6 +15,7 @@ public record ReconciliationDifferenceRecord(
         long providerAmountCent,
         long differenceAmountCent,
         String status,
+        String sourceDomain,
         String assignedToUserId,
         String resolutionNote,
         Map<String, Object> providerPayload,

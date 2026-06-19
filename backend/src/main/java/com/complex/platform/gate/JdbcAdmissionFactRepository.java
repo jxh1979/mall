@@ -11,7 +11,9 @@ import org.springframework.stereotype.Repository;
 /**
  * {@link AdmissionFactRepository} 的 JDBC 只读实现：查 contracts / compliance_expiry_items
  * （V010/V028 既有表）+ contracts.allowed_business_scope / contract_spaces（V080）。
- * 任一查询抛异常 → 返回 false（fail-open，未命中=放行），异常向上由 {@link AdmissionGuard} 决定是否留痕。
+ * 任一查询抛异常 → 向上抛出，由 {@link AdmissionGuard} 决定 fail-open（非越界类）或
+ * <b>fail-closed 进复核</b>（over_contract_scope / over_space 越界类，P0）。
+ * {@link #resolveSpaceId} 返回 empty 是"不可解析"的明确信号，上层据此对 over_space 保守进复核。
  */
 @Repository
 class JdbcAdmissionFactRepository implements AdmissionFactRepository {
@@ -126,11 +128,15 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
         //   - bar_bill：objectId=bill_id → bar_bills.table_id → bar_tables.space_id（V084 多级解析）。
         //   - inspection / amusement_maintenance_record / amusement_incident / amusement_group_booking：
         //     objectId → 各表 project_id → amusement_projects.space_id（V084）。
-        // 仍未支持（无可用 对象→空间 映射或无 objectId）→ empty（放行，over_space 不阻断）：
-        //   - amusement_manual_override（写接口首参非 String，objectId=null，无法解析）。
-        //   - amusement_project / amusement_session（当前无受控 over_space 动作直传，未接入）。
-        //   - finance_*（ar_ap_item/finance_refund/...）/ ticketing_*（ticket_refund/verification/...）/
-        //     inventory_*（saved_bottle/inventory_stock_adjustment）：业务对象无空间归属或非空间受控，不解析。
+        // P0 fail-closed 契约变更：empty 不再等于"over_space 静默放行"。AdmissionGuard 对配置了
+        //   over_space 策略却返回 empty 的场景一律保守进复核（admission.space_unresolved_closed）。
+        //   因此 finance_*（ar_ap_item/finance_refund/...）、ticketing_*（ticket_refund/verification/...）、
+        //   inventory_*（saved_bottle/inventory_stock_adjustment/inventory_purchase_request）等业务对象
+        //   表无空间归属列（仅 target_id/location_id/bar_project_id 等，非 spaces.id），无法解析到 space；
+        //   按 V099 设计这些域改走 over_contract_scope（基于业务域，不需 space），故不在此补 over_space 解析。
+        //   若后续给某域配置了 over_space 策略，default→empty 将令其在 AdmissionGuard 走 fail-closed 进复核
+        //   （明确"不可解析"信号 → 保守而非放行），不会再 silent pass。
+        //   amusement_manual_override（写接口首参非 String，objectId=null）同理走经营范围。
         String sql = switch (objectType) {
             case "merchant_service_work_order" ->
                     "SELECT space_id FROM merchant_service_work_orders WHERE id = :object_id";

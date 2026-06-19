@@ -171,7 +171,7 @@ class FinanceJdbcIntegrationTests {
         repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
                 "recon_diff_jdbc",
                 "recon_batch_jdbc",
-                "amount_mismatch",
+                "amount",
                 "payment_jdbc",
                 100L,
                 "open",
@@ -183,7 +183,7 @@ class FinanceJdbcIntegrationTests {
                 .contains(tuple("RB-JDBC-001", "created"));
         assertThat(repository.listReconciliationDifferences())
                 .extracting(ReconciliationDifferenceRecord::differenceType, ReconciliationDifferenceRecord::businessRef)
-                .contains(tuple("amount_mismatch", "payment_jdbc"));
+                .contains(tuple("amount", "payment_jdbc"));
     }
 
     @Test

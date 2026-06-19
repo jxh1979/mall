@@ -346,6 +346,11 @@ public class IntegrationService {
         return orderSyncService.createOrderSync(request);
     }
 
+    /** 自动对账（P0#11）：从 order_syncs 标准模型自动比对生成对账差异（开关 off → dryRun，不伪造）。 */
+    public ChannelReconciliationResult reconcileChannel(ChannelReconciliationRequest request) {
+        return orderSyncService.reconcileChannel(request);
+    }
+
     public PageResponse<IntegrationTaskRecord> listRetryTasks() {
         return orderSyncService.listRetryTasks();
     }

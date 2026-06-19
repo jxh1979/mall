@@ -61,6 +61,9 @@ public interface InventoryRepository {
 
     SavedBottleClaimRecord saveSavedBottleClaim(SavedBottleClaimRecord claim);
 
+    // P0#4 存酒转赠留痕。
+    SavedBottleTransferRecord saveSavedBottleTransfer(SavedBottleTransferRecord transfer);
+
     TraceHandoverRecord saveTraceHandover(TraceHandoverRecord handover);
 
     // R5 T17：交接全链状态机——表头查询、分段步骤、异常复核、机器人段被动留痕（T14 关联）。
@@ -127,4 +130,21 @@ public interface InventoryRepository {
     Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id);
 
     List<InventoryHighValueReviewRecord> listHighValueReviews();
+
+    // P1#18：供应商资质（进货查验）+ 结算多档/账期子表。
+    SupplierQualificationRecord saveSupplierQualification(SupplierQualificationRecord qualification);
+
+    List<SupplierQualificationRecord> listSupplierQualificationsBySupplier(String supplierId);
+
+    List<SupplierQualificationRecord> listSupplierQualificationsByMerchant(String merchantId);
+
+    List<SupplierQualificationRecord> listSupplierQualifications();
+
+    SupplierSettlementMethodRecord saveSupplierSettlementMethod(SupplierSettlementMethodRecord method);
+
+    List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsBySupplier(String supplierId);
+
+    List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsByMerchant(String merchantId);
+
+    List<SupplierSettlementMethodRecord> listSupplierSettlementMethods();
 }

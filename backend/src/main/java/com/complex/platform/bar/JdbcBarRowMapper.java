@@ -218,7 +218,10 @@ final class JdbcBarRowMapper {
                 resultSet.getString("status"),
                 resultSet.getString("idempotency_key"),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
-                nullableInstant(resultSet, "created_at")
+                nullableInstant(resultSet, "created_at"),
+                resultSet.getString("reviewed_by_user_id"),
+                nullableInstant(resultSet, "reviewed_at"),
+                resultSet.getString("review_reason")
         );
     }
 

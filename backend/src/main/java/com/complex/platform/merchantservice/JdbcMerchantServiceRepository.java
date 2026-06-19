@@ -35,7 +35,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                     SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                            title, description, reported_by_user_id, reported_channel, owner_department,
                            owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                           evidence_attachment_ids, created_at, updated_at
+                           evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
                       FROM merchant_service_work_orders
                      WHERE merchant_id = :merchant_id
                      ORDER BY created_at DESC, id
@@ -46,7 +46,7 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                       evidence_attachment_ids, created_at, updated_at
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
                   FROM merchant_service_work_orders
                  ORDER BY created_at DESC, id
                  LIMIT :limit
@@ -59,10 +59,27 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                        title, description, reported_by_user_id, reported_channel, owner_department,
                        owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                       evidence_attachment_ids, created_at, updated_at
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
                   FROM merchant_service_work_orders
                  WHERE id = :id
                 """, Map.of("id", id), this::mapWorkOrder).stream().findFirst();
+    }
+
+    @Override
+    public List<MerchantWorkOrderRecord> findOverdueOpenWorkOrders(Instant now, int limit) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
+                       title, description, reported_by_user_id, reported_channel, owner_department,
+                       owner_user_id, due_at, closed_at, resolution, satisfaction_score,
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
+                  FROM merchant_service_work_orders
+                 WHERE due_at IS NOT NULL
+                   AND due_at <= :now
+                   AND escalated_at IS NULL
+                   AND status NOT IN ('resolved', 'closed', 'cancelled')
+                 ORDER BY due_at ASC, id
+                 LIMIT :limit
+                """, Map.of("now", timestampWithTimeZone(now), "limit", limit), this::mapWorkOrder);
     }
 
     @Override
@@ -72,13 +89,13 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                     id, merchant_id, space_id, contract_id, work_order_type, priority, status,
                     title, description, reported_by_user_id, reported_channel, owner_department,
                     owner_user_id, due_at, closed_at, resolution, satisfaction_score,
-                    evidence_attachment_ids, created_at, updated_at
+                    evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at
                 )
                 VALUES (
                     :id, :merchant_id, :space_id, :contract_id, :work_order_type, :priority, :status,
                     :title, :description, :reported_by_user_id, :reported_channel, :owner_department,
                     :owner_user_id, :due_at, :closed_at, :resolution, :satisfaction_score,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :sla_breached, :escalated_at, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     space_id = EXCLUDED.space_id,
@@ -94,6 +111,8 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                     resolution = EXCLUDED.resolution,
                     satisfaction_score = EXCLUDED.satisfaction_score,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    sla_breached = EXCLUDED.sla_breached,
+                    escalated_at = EXCLUDED.escalated_at,
                     updated_at = EXCLUDED.updated_at
                 """, workOrderParameters(record));
         return record;
@@ -145,6 +164,8 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 .addValue("resolution", record.resolution())
                 .addValue("satisfaction_score", record.satisfactionScore())
                 .addValue("evidence_attachment_ids", writeJson(record.evidenceAttachmentIds()))
+                .addValue("sla_breached", record.slaBreached())
+                .addValue("escalated_at", timestampWithTimeZone(record.escalatedAt()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));
     }
@@ -182,6 +203,8 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 resultSet.getString("resolution"),
                 nullableInteger(resultSet, "satisfaction_score"),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
+                resultSet.getBoolean("sla_breached"),
+                nullableInstant(resultSet, "escalated_at"),
                 resultSet.getTimestamp("created_at").toInstant(),
                 resultSet.getTimestamp("updated_at").toInstant()
         );

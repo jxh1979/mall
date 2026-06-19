@@ -194,6 +194,7 @@ stateDiagram-v2
 | `finished` | 已取完 | 剩余量为 0 |
 | `expired` | 已过期 | 超过有效期 |
 | `transferred` | 已转赠 | 所有权转移 |
+| `disputed` | 争议 | 归属/数量争议冻结，待人工或主管处置后流转 <!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：补争议态 --> |
 | `voided` | 已作废 | 丢失、破损、异常处理 |
 
 ### 4.6 库存流水状态
@@ -339,6 +340,7 @@ P0 规则：
 3. 系统校验订单已支付或权益已核销。
 4. 录入客户手机号/会员、酒品、规格、剩余量、有效期、存放位置。
 5. **必填采集取酒核身与举证三项：姓名/昵称（`customer_name_or_nickname`）、瓶底标签数值（`bottle_label_value`）、登记照片（`registration_photo_refs`）**；可选填人工备注（`manual_note`）。缺任一必填项不允许提交登记。<!-- 增（2026-06-07）：finding bar-4/supply-2，登记强制采集三项必填字段 -->
+   - **散客存酒**：`customer_id` 可空，散客（无会员）允许存酒；核身落 `customer_phone` + `customer_name_or_nickname` + `bottle_label_value`。登记必填字段与契约口径以票务设计 `ticketing-pass-entitlement-development-design.md` §10.4.1 为权威，本文不重复长篇。<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id 可空（散客存酒）、customer_phone 核身、口径指向文件1 -->
 6. 生成存酒编号和二维码。
 7. 库存从可售库存转为已售未取库存。
 8. 写入 `bar.saved_bottle.created` 和库存流水事件。
@@ -347,13 +349,15 @@ P0 规则：
 
 1. 客人提供手机号、会员码、存酒二维码或企业微信客户身份。
 2. 员工查询存酒记录。
-3. 系统校验状态、有效期、客户身份、当前酒吧门店；**核身时比对登记的姓名/昵称（`customer_name_or_nickname`）与瓶底标签数值（`bottle_label_value`），不一致进入人工复核**。<!-- 增（2026-06-07）：finding bar-4，取酒核身纳入姓名/昵称与瓶底标签数值比对 -->
+3. 系统校验状态、有效期、客户身份、当前酒吧门店；**核身必须比对登记的瓶底标签数值（`bottle_label_value`）且比对姓名/昵称（`customer_name_or_nickname`）同时通过方可放行，不止手机号 + 验证码**；任一不一致进入人工复核或可登记为 `disputed` 争议态。<!-- 增（2026-06-07）：finding bar-4，取酒核身纳入姓名/昵称与瓶底标签数值比对；修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：强表述"标签+昵称必须比对通过，不止手机号+验证码"，补争议入口，口径以文件1 §10.4.1 为权威 -->
 4. 录入本次取用量。
 5. 更新剩余量。
 6. 如果剩余量为 0，状态变为 `finished`；否则为 `partially_used`。
 7. 写入 `bar.saved_bottle_picked_up` 事件。
 
-#### 5.3.3 转赠
+#### 5.3.3 转赠（`transferSavedBottle`）<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：补 transferSavedBottle 方法名，对齐 §7.5 POST /saved-bottles/{id}/transfer -->
+
+领域方法 `transferSavedBottle`（对齐 §7.5 `POST /api/v1/bar/saved-bottles/{id}/transfer`，权限 `bar.saved_bottle.transfer`）：
 
 1. 原客户发起或现场确认转赠。
 2. 员工录入新客户手机号/会员。
@@ -361,6 +365,10 @@ P0 规则：
 4. 生成转赠流水。
 5. 原存酒记录可直接更换客户归属，或关闭旧记录并创建新记录。
 6. 写入 `bar.saved_bottle.transferred` 事件。
+
+#### 5.3.3a 争议处置（`disputed`）<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：补 disputed 争议态入口 -->
+
+存酒归属/数量发生争议（核身不通过、客户异议等）时，提供争议登记入口将记录置为 `disputed`（§4.5），冻结取酒/转赠，待人工或主管处置后流转回 `stored`/`partially_used` 或转 `voided`。口径以 `ticketing-pass-entitlement-development-design.md` §10.4.1 为权威。
 
 #### 5.3.4 作废
 
@@ -373,6 +381,8 @@ P0 规则：
 - 风控或纠纷冻结后处理。
 
 作废必须填写原因、上传证据，必要时主管审批。**高价值存酒作废必须同时上传照片和视频双证据**（`evidence_ref` 区分 `photo_refs` 与 `video_refs`，高价值场景二者均必填）并主管复核。<!-- 增（2026-06-07）：finding supply-3，高价值作废双证据强制，消除"证据"泛化与"拍照/视频"二选一歧义 -->
+
+> **业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：散客（无 `customer_id`）存酒风控口径确认为**不限瓶数**（取消原 R6 默认"单手机号≤3 瓶"上限），仅按**存期默认 90 天（后台可配）+ 到期提醒 + 作废须主管复核**管控；口径与 `ticketing-pass-entitlement-development-design.md` §10.4.1 权威小节一致。
 
 ### 5.4 库存出入库流程
 
@@ -1377,6 +1387,76 @@ P0 完成时必须能演示：
 | 机器人配送是否进入 P1 | P0 做机器人或人工配送的交接留痕；真实机器人调度和厂家联动进入 P1/P2，取决于厂商 API |
 | 扫码点单是否 P0 | 扫码点单进入 P1；P0 先做服务员点单、吧台点单和一体机/平板辅助下单 |
 
+## 17. 出品后异常／沽清／pour cost 强制采集／卡座责任链接线（开发设计）`R6 全闭环(2026-06-19)`
+
+> 说明（2026-06-19 新增，R6 全闭环）：本章承接 PRD §10.2 与 `business-decision-log-v0.1.md` R6-D14（退菜/退酒、反结、沽清 86 三项全升 P0；业务确认 2026-06-19 覆盖原"沽清 86 保持 P1"）、R6-D09（现金差异阈值），把"出品后异常/沽清/pour cost 强制采集/卡座责任链接线"四组能力收口为开发设计。
+>
+> **据实标注（核迁移+代码后回填，不重构既有内容）**：经核 `V091__bar_pos_depth.sql`、`BarController`、`BarService`，退菜退酒（`void-item`/`bar_order_item_voids`）、反结（`reopen`/`bar_bills.reopened*`）、沽清 86（`sold-out`/`bar_products`）已先行落库并暴露端点；故 17.1~17.3 为**优先级与状态/事件/验收口径正式收口**，并据实指出仍缺的验收用例与强制项。pour cost 强制采集（17.4）与卡座责任链接线（17.5）为**当前真实开放缺口**：字段/建表已存在但未形成强制/接线，本章给出落地设计。
+
+### 17.1 退菜退酒（void/return item）`R6-D14`
+
+- **API**：`POST /bars/{bar_id}/orders/{order_id}/void-item`（已暴露，权限 `bar.order_item.void`），对已出品/未出品明细发起撤单。请求含 `void_type`（cancel/return）、`reason`、`return_to_stock`、`idempotency_key`、证据附件。
+- **状态流转**：明细 `served`→`returned`（出品后退酒）；`pending`→`cancelled`（出品前撤单，不计损耗）。落 `bar_order_items.voided` + 流水表 `bar_order_item_voids`（`void_type`/`was_delivered`/`return_to_stock`/`inventory_movement_id`/`reason`/`requested_by_user_id`/`approval_required`）。
+- **库存回写规则**：
+  - 出品前撤单（`pending`/cancel）：不产生出酒消耗、不回写库存损耗；
+  - 出品后退酒（`served`/return）且**未动可回库**（`return_to_stock=true`）：调库存回补，记 `inventory_movement_id`；
+  - 出品后退酒且**已出品损耗**（`return_to_stock=false`）：记损耗，不回补，按损耗/责任归属处理。
+- **权限**：`bar.order_item.void`（GuardedAction）；高价值退酒须主管审批，`approval_required=true`。
+- **事件**：`bar.order.item_returned`（出品后退酒）/ 出品前撤单可复用撤单流水；退酒资金回退联动 §6 退款/冲正事件。
+- **R6-D14 默认值**：`served/delivered` 默认 `return_to_stock=false`（计损耗，需显式勾选回库）；`approval_required` 默认 `true`。
+- **验收**：可对单项明细发起退菜/退酒并记录原因/责任人/是否已出品/是否回库；出品前撤单不计损耗、账单回退；出品后回库则库存回补、否则记损耗；退酒资金回退进账单/日结/对账。**仍缺：端到端 G/W/T 验收用例待补。**
+
+### 17.2 反结（reopenBarBill）`R6-D14`
+
+- **API**：`POST /bars/{bar_id}/bills/{bill_id}/reopen`（已暴露，权限 `bar.bill.reopen`），请求体 `BarBillReopenRequest`（`reason` 等）。
+- **状态流转**：账单 `settled`→`reopened`（→重结回 `unpaid`/`partial_paid` 或整单作废）。落 `bar_bills.reopened`/`reopened_by_user_id`/`reopened_at`/`reopen_reason`。
+- **审批**：反结需**主管审批**（高危），强制审批节点 + 留痕。
+- **事件**：`bar.bill_reopened`；财务联动原支付**冲正**（与 `FinanceService`/`BarReceivableLedgerService` 退款冲正联动），日结与对账同步冲正；与 T7 日结锁定协同（已锁定期走冲正，不改写已锁定日结）。
+- **权限**：`bar.bill.reopen`（GuardedAction），主管级。
+- **R6-D14 默认值**：`approval_required=true`（强制主管审批，不可免审批）；默认回退至 `unpaid`/`partial_paid`，整单作废须显式选择+单独审批。
+- **验收**：已结账单在授权+主管审批下可反结并重结/作废；原支付冲正、日结对账同步；全程留痕可举证。**仍缺：端到端 G/W/T 验收用例待补。**
+
+### 17.3 沽清 86（out_of_stock_86）`R6-D14`
+
+- **API**：`POST /bars/{bar_id}/products/{product_id}/sold-out`（已暴露，权限 `bar.product.sold_out`）标记沽清；恢复供应解除。
+- **状态流转**：商品 `on_sale`→`out_of_stock_86`（沽清）→可恢复 `on_sale`。落 `bar_products` 沽清字段。
+- **下单拦截**：沽清后下单服务层拒 `PRODUCT_SOLD_OUT`，平板/下单端即时隐藏或禁选。
+- **事件**：沽清/解除留痕（操作人/时点/触发方式：手工 or 库存阈值）。
+- **权限**：`bar.product.sold_out`（GuardedAction）。
+- **优先级**：~~保持 **P1**（非资金回退）~~ → **升 P0**（见下方业务确认）；手工标记优先，库存阈值自动沽清为配置项（阈值后台可配）。
+- **业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：沽清 86 **升 P0**（业务确认 R6-D14 三项全升 P0），与退菜退酒/反结同批 P0 交付，需补 G/W/T 验收（标记/解除/下单拦截/恢复全链路）。
+- **验收**：商品标记沽清→下单端禁选/隐藏（下单被 `PRODUCT_SOLD_OUT` 拒）→恢复可解除；标记/解除留痕。
+
+### 17.4 pour cost 强制采集（消除"不传则 loss=0"）`R6-D14`
+
+> **真实开放缺口**：`bar_products.standard_pour_volume`、`bar_order_items.actual_pour_volume`/`loss_volume` 字段均已存在（V091/§6.6/§6.16），但按杯出品当前**依赖请求传入 `actual_pour_volume`，不传则 `loss_volume=0`**（见本文 R7 横幅"仍开放"项与 `JdbcBarOrderRepository`），等于按杯损耗可被静默绕过。R6-D14 要求按杯 pour cost **强制采集**。
+
+- **状态/流转**：按杯出品明细（商品类型=杯卖 `cup`/by_glass）在**出品/送达确认**节点必须携带 `actual_pour_volume`。
+- **强制采集规则（二选一，后台可配）**：
+  - **拒绝模式**：按杯单未传 `actual_pour_volume` → 出品/送达接口直接拒绝（`POUR_VOLUME_REQUIRED`），不允许放行；
+  - **标准量兜底+异常标记模式**：缺采集时按 `standard_pour_volume` 兜底记账，但**标记 `pour_volume_pending=true`（待补）并生成补采集异常事件**，进入异常核查，禁止静默 `loss=0`。
+- **损耗计算**：`loss_volume = actual_pour_volume − standard_pour_volume`（超标准记损耗），超 `loss_threshold` 生成损耗异常事件（沿用 §6.6/§9 既有损耗异常口径）。
+- **权限**：兜底/待补补采集为受控动作，补采集修订须留痕操作人。
+- **事件**：按杯缺采集 → `bar.pour_volume_missing`（待补/兜底标记）；补采集完成 → 损耗重算并沿用既有损耗异常事件。
+- **R6-D14 默认值**：默认采用**拒绝模式**（从严，强制采集）；门店可配置切换为"标准量兜底+异常标记"，但不得回到"不传则 loss=0"的静默口径。
+- **验收**：按杯单缺 `actual_pour_volume` 被拒绝（`POUR_VOLUME_REQUIRED`）**或**强制走标准量兜底并打 `pour_volume_pending` 异常标记（二者其一，依配置）；任一路径都不得出现按杯单 `loss_volume=0` 且无标记的静默放行。
+
+### 17.5 卡座责任链接线（service_responsibility_records V059）`R6-D14`
+
+> **真实开放缺口**：`service_responsibility_records`（V059）**建表已存在**（字段含 `primary_service_staff_id`/`assist_staff_ids`/`sales_staff_id`/`first_handler_staff_id`/`assigned_by`/`shift_assignment_id`/`assigned_event_id`/`status`），但当前仅被 evidence 域 `JdbcTraceabilityRepository` 引用，**bar 域无 Controller/Service 写入接入点**——开台绑定主责、加单人、送达人、换人等责任链动作未落表。本节补接线设计。
+
+- **接入点（补 Controller/Service 写入）**：
+  - **主责指派**：开台/卡座指派主责服务员 → 写 `primary_service_staff_id`，`status=active`；
+  - **协助**：追加协助服务员 → 追加 `assist_staff_ids`；
+  - **加单**：加单动作记加单人（归入责任链留痕，可复用 `assist_staff_ids`/扩展字段）；
+  - **送达**：送达确认记送达人（与 §7.5 履约留痕/`bar.order_delivered` 衔接）；
+  - **换人**：服务责任变更 → 旧记录 `status=changed`、新建责任记录，记 `assigned_by`。
+- **状态流转**：`active`→`changed`（换人）/`completed`（关台结束服务，落 `service_end_at`）/`cancelled`。
+- **权限**：责任指派/变更为受控动作（指派权限），换人须记 `assigned_by`/审批留痕。
+- **事件**：`table.service_assigned`（指派/主责绑定）、`table.service_transferred`（换人，与既有 §9.1 `table.service_changed` 口径对齐/衔接），与 F2 统一异常链（`first_handler_staff_id`/`exception_id`）衔接，异常首响落同一责任链。
+- **R6-D14 默认值**：开台默认必须绑定主责服务员（无主责不允许进入服务态）；换人默认留旧记录 `changed` 不物理删除（留痕优先）。
+- **验收**：开台绑定主责写入 `service_responsibility_records` 可回查；加单/送达/换人在责任链留痕；换人后旧记录 `changed`、新记录 `active`；异常首响 `first_handler_staff_id` 与责任链/异常 `exception_id` 关联可查。
+
 ## 16. 变更日志
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
@@ -1415,3 +1495,5 @@ P0 完成时必须能演示：
 | 2026-06-08 三轮收口 | 改 | §9.1 桌台事件 | `bar.reservation.created`（三段）改为权威名 `reservation.created`（§4.1.2 已登记替代三段写法），并在 §9 命名统一说明补登该改名 | finding event-consumers-6、基准 D4 |
 | 2026-06-08 三轮收口 | 改 | §6.3/§6.4/§6.11 `customer_id` | 补"外键指向 foundation `customers.id`（散客无会员时可空，核身用 `customer_phone`/`customer_name_or_nickname`）"注释，显式声明 FK 目标 | finding newtable-fk-5 |
 | 2026-06-18 R5 回填 | 增 | R5 横幅后「R5-D11 订台定金现状与收口」 | 把订台定金按"现状（createReservation 硬编码 deposit=0/not_required，到店抵扣/退没收空转）→目标（P0 真实记录定金+到店抵扣+取消退没收，退没收时限后台可配）→候选验收"三段式收敛，并标注订台/定金 UI 验收用例需补 | R5-D11、2026-06-18 二轮业务裁决 |
+| 2026-06-19 `R6 全闭环` | 增 | §17 出品后异常/沽清/pour cost 强制采集/卡座责任链接线 | 承接 R6-D14/R6-D09：17.1 退菜退酒（served→returned、库存回库/损耗规则、bar.order.item_returned）、17.2 反结（settled→reopened、bar.bill_reopened、财务冲正联动）、17.3 沽清 86、17.4 pour cost 强制采集（缺 actual_pour_volume 拒绝或标准量兜底+异常标记，消除"不传则 loss=0"）、17.5 卡座责任链接线（service_responsibility_records V059 补 Controller/接入点，table.service_assigned/transferred，与 F2 异常链衔接）；据实标注 V091 退菜退酒/反结/沽清已先行落库，pour cost/责任链为真实开放缺口 | R6-D14、R6-D09（business-decision-log）、V059、V091 |
+| 2026-06-19 R5业务HTML缺口审计 F4 | 增/改 | §4.5 / §5.3.1 / §5.3.2 / §5.3.3 / §5.3.3a | §4.5 状态表补 `disputed` 争议态；§5.3.1 补散客 `customer_id` 可空+`customer_phone` 核身；§5.3.2 取酒核身强表述"瓶底标签数值+姓名/昵称必须比对通过，不止手机号+验证码"；§5.3.3 补 `transferSavedBottle` 方法名；新增 §5.3.3a 争议处置入口；口径以 ticketing §10.4.1 为权威 | F4 存酒核身契约对齐，与文件1口径一致 |

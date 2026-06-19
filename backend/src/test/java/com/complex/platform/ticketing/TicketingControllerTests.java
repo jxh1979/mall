@@ -204,6 +204,7 @@ class TicketingControllerTests {
                 false,
                 "active",
                 null,
+                null,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));

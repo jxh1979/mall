@@ -53,6 +53,13 @@ public interface AmusementRepository {
     /** 按 id 查询容量配置（用于归属隔离校验与停用）。 */
     Optional<AmusementCapacityConfigRecord> findCapacityConfigById(String id);
 
+    /**
+     * P0 清单#6 查询项目「超容处置策略」（V104 amusement_over_capacity_policy）：
+     * 运营容量（软上限）与处置模式（block_hard 硬阻断+软告警 / warn_only 仅告警留痕不阻断）。
+     * 未配置则返回禁用占位（仅硬阻断、无软上限告警），退化为既有行为（向后兼容）。
+     */
+    AmusementOverCapacityPolicy findOverCapacityPolicy(String projectId);
+
     AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule);
 
     List<AmusementProjectRuleRecord> listActiveBlockingProjectRules(String projectId);
@@ -161,6 +168,13 @@ public interface AmusementRepository {
     List<AmusementMaintenanceRecord> listMaintenanceRecordsByMerchant(String merchantId);
 
     Optional<AmusementMaintenanceRecord> findMaintenanceRecordById(String id);
+
+    /**
+     * 检修单位存在性校验（amuse-3 / 设计 §6.6.1）：检修单位复用供应链供应商主数据
+     * {@code inventory_suppliers}。返回该供应商主表记录的 {@code status}（active/paused/archived）；
+     * 供应商不存在时返回 {@link Optional#empty()}，供 Service 层区分「不存在」与「已停用」。
+     */
+    Optional<String> findMaintenanceVendorStatus(String vendorId);
 
     /**
      * 联动项目 open_status（设计 §5.1.1：主管确认检修恢复后 maintenance → open）。

@@ -146,6 +146,16 @@ public class BarController {
         return ApiResponse.ok(service.voidOrderItem(orderId, request));
     }
 
+    @PostMapping("/order-item-voids/{void_id}/decision")
+    public ApiResponse<BarOrderItemVoidRecord> decideOrderItemVoid(
+            @PathVariable("void_id") String voidId,
+            @RequestBody(required = false) BarOrderItemVoidDecisionRequest request
+    ) {
+        authorizationService.requirePermission("bar.order_item.void");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.decideOrderItemVoid(voidId, request));
+    }
+
     @PostMapping("/bills/{bill_id}/reopen")
     public ApiResponse<BarBillOperationRecord> reopenBill(
             @PathVariable("bill_id") String billId,

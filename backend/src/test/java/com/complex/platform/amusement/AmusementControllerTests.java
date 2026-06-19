@@ -259,7 +259,7 @@ class AmusementControllerTests {
 
     private AmusementProjectRecord project() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementProjectRecord("project_1", "Roller Coaster", 2, "open", "template_1", Map.of("min_age", 12), now, now, null);
+        return new AmusementProjectRecord("project_1", "Roller Coaster", 2, "open", "template_1", Map.of("min_age", 12), "point_1", now, now, null);
     }
 
     private AmusementProjectEntitlementRecord projectEntitlement() {
@@ -283,27 +283,27 @@ class AmusementControllerTests {
 
     private AmusementSafetyInspectionRecord inspection() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "pass")), "pass", "created", "none", "not_required", now, null, null, null, null, List.of("att_1"), now, now);
+        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "pass")), "pass", "created", "none", "not_required", now, null, null, null, null, List.of("att_1"), now, now, "inspector_1", "pass", false, null);
     }
 
     private AmusementSafetyInspectionRecord submittedInspection() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "pass")), "pass", "submitted", "none", "not_required", now, now, null, null, null, List.of("att_1"), now, now);
+        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "pass")), "pass", "submitted", "none", "not_required", now, now, null, null, null, List.of("att_1"), now, now, "inspector_1", "pass", false, null);
     }
 
     private AmusementSafetyInspectionRecord rectifiedInspection() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "fail")), "fail", "submitted", "rectification_submitted", "pending", now, now, null, null, "fixed restraint sensor", List.of("att_2"), now, now);
+        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "fail")), "fail", "submitted", "rectification_submitted", "pending", now, now, null, null, "fixed restraint sensor", List.of("att_2"), now, now, "inspector_1", "fail", true, "restraint sensor abnormal");
     }
 
     private AmusementSafetyInspectionRecord recheckedInspection() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "fail")), "fail", "submitted", "rechecked", "pending", now, now, now, null, "passed after repair", List.of("att_2"), now, now);
+        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "fail")), "fail", "submitted", "rechecked", "pending", now, now, now, null, "passed after repair", List.of("att_2"), now, now, "inspector_1", "fail", true, "restraint sensor abnormal");
     }
 
     private AmusementSafetyInspectionRecord reopenedInspection() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "fail")), "fail", "submitted", "rechecked", "approved", now, now, now, now, "recheck passed", List.of("att_2"), now, now);
+        return new AmusementSafetyInspectionRecord("inspection_1", "project_1", "template_1", List.of(Map.of("name", "restraint", "result", "fail")), "fail", "submitted", "rechecked", "approved", now, now, now, now, "recheck passed", List.of("att_2"), now, now, "inspector_1", "pass", false, null);
     }
 
     private AmusementVerificationRecord verification() {

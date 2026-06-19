@@ -66,6 +66,30 @@ public final class AnalyticsRecords {
         }
     }
 
+    /**
+     * P2 集团/跨项目汇总响应（R6-D13）：按 project 维 rollup 关键指标（收入/客流/核销/风险/商户数）。
+     * 当前单综合体——projects 列表通常仅一行；endpoint 真实读 ETL 平台快照按 project 归集，不伪造多 project。
+     * asOf 为生成时刻；businessDate 为所读 ETL 经营日；projects 为各 project 的指标 rollup。
+     */
+    public record GroupOverviewResponse(
+            Instant asOf,
+            LocalDate businessDate,
+            List<GroupProjectRollup> projects
+    ) {
+    }
+
+    /**
+     * 单个 project 的指标 rollup。metrics 以 metric_code 为权威键，value 可空（数据源未就绪 → null + note，不伪造）。
+     * merchantCount 为该 project 当日有 ETL 商户口径快照的去重商户数（真实计数，无快照则为 0）。
+     */
+    public record GroupProjectRollup(
+            String projectId,
+            String projectName,
+            long merchantCount,
+            Map<String, MetricValue> metrics
+    ) {
+    }
+
     /** ETL upsert 的快照唯一键（与 V070 唯一索引对齐）。 */
     public record MetricSnapshotKey(
             String metricKey,

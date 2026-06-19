@@ -20,6 +20,19 @@ export function AuthShell({ error, form, loading, onLogin }: AuthShellProps) {
             <BankOutlined />
             <span>综合体管理系统</span>
           </div>
+          <Alert
+            className="status-alert"
+            data-testid="legacy-retired-banner"
+            type="warning"
+            showIcon
+            message="该控制台已退役"
+            description="已迁移至管理后台，写动作请在管理后台/现场端执行。"
+            action={(
+              <Button size="small" type="primary" data-testid="legacy-go-admin" onClick={() => window.location.assign("/admin")}>
+                前往管理后台
+              </Button>
+            )}
+          />
           {error ? (
             <Alert
               className="status-alert"

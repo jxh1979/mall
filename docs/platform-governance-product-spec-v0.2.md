@@ -2902,4 +2902,117 @@ P0 大多数页面采用“筛选区 + 列表 + 详情入口 + 批量/单项操�
 | 2026-06-07 | 改 | §7.1 空间区域低保真 | 空间树补"区块"层级，列表补所属区块/铺位号/经营面积 | govfam-6、govern-3 |
 | 2026-06-10 | 改 | §1/§3.1/§12/§13/§19/§20/§21/§22 | 按 D8/A6 把"NFC绑定/NFC/读手机 NFC 唯一标识"改为"设备凭证（设备公钥/不可逆设备指纹 device_key_fingerprint）/设备凭证绑定"；明确二维码由摄像头扫码、NFC 读取外部 NFC 腕带/标签/卡 | D8、finding decision-land-1/baseline-conf-1；二维码/NFC 技术边界复核 |
 | 2026-06-07 | 增 | §12 员工注册审批低保真 | 补"同意凭据"区域，承接合规 C4 注册审批记录同意凭据 | 合规 C4、finding compliance-land-8 |
+| 2026-06-19 | 增 | §24 | 新增"有效权限集接口 + 字段级权限后端执行 + 准入审批层级映射（深度补齐）"章节 | R6 全闭环(2026-06-19) |
+
+---
+
+## 24. 有效权限集接口 + 字段级权限后端执行 + 准入审批层级映射（深度补齐）
+
+> **标注：R6 全闭环(2026-06-19)。** 本章在只读核验现网代码后回填，承接治理 HTML #permission「权限细到单一功能最小颗粒度、角色模板+员工级完全自定义」与 #contract「上一级/上两级/最高权限审批放行」两条治理链。
+>
+> **代码核验结论（2026-06-19，先 Grep 后回填，未改代码）**：本章所述三件事中，①有效权限集接口、③准入审批层级到职级映射在 R6 已落地，本章做收口确认；②字段级权限仅"固定脱敏"落地，"按权限动态投影"为本章新增的待补齐执行口径。逐条核验见各节"代码核验"。
+
+### 24.1 有效权限集接口 GET /me/effective-permissions
+
+#### 24.1.1 目的
+
+把"角色模板权限 ∪ 员工自定义权限，应用 DENY 优先"的最终结果，以端可直接消费的权限点集合形式返回，前端据此显示/隐藏菜单、按钮、字段，**不再在前端任何位置硬编码角色到权限的映射**。回应 #permission「角色模板+员工级完全自定义」与 §14（角色权限页）、统一口径 D11（显式拒绝优先）。
+
+#### 24.1.2 API
+
+| 项 | 口径 |
+|---|---|
+| 自身有效集 | `GET /api/v1/access/effective-permissions`，仅需已登录（self 端，scope 安全，不消费单次授权） |
+| 指定用户有效集 | `GET /api/v1/access/users/{id}/effective-permissions`，调用方须先校验 `access.user.view` |
+| 返回体 | `{ userId, grants[], denies[], wildcard, computedAt }`：`grants` 为已扣除 `denies` 的有效授予权限点集合；`denies` 单独返回供前端展示冲突来源；`wildcard=true` 表示平台管理员通配（仍受 `denies` 拦截） |
+| 消费方式 | 前端 `PermissionGate`/导航按 `hasPermissions(state, required)` 裁决：`status!=ready` 一律 fail-safe 隐藏；命中 `denies` 即拒（含 wildcard 也拒）；否则 wildcard 放行或要求 `required ⊆ grants` |
+
+#### 24.1.3 数据来源
+
+- 合并来源：角色权限 + 基础模板授权 + 有效临时模板授权 + 员工单独授予 −（员工/模板）显式拒绝，与 P0 权限矩阵 §2.2 规则 5/6 一致。
+- 有效性过滤：剔除已消费单次授权、未到 `valid_from`、已过 `valid_until` 的条目。
+- DENY 优先：`grants` 计算阶段即预扣 `denies`（同一权限同时存在授予与拒绝时按拒绝处理）。
+
+#### 24.1.4 事件
+
+- 读取自身/指定用户有效集为只读，不强制写业务留痕；指定用户查询沿用 `access.user.view` 的 `permission.viewed` 口径（按需）。
+- 真正消费单次授权的留痕在执行动作接口（`requirePermission`），不在本只读接口产生。
+
+#### 24.1.5 验收
+
+1. **前端不再硬编码**：前端无任何角色→权限的静态映射常量；菜单、页面门禁、按钮显隐全部由本接口返回的 `grants/denies/wildcard` 驱动。
+2. 同一权限同时被授予与拒绝时，接口返回的 `grants` 不含该权限、`denies` 含该权限，前端展示冲突来源。
+3. 单次授权在"看菜单/取有效集"时不被消费，仅在执行动作时消费一次，第二次执行被拒。
+4. 接口加载中（loading）或失败（error）时前端 fail-safe 隐藏受控对象，不出现"先显示后收回"。
+
+> **代码核验（2026-06-19）**：现网已落地 `AccessController.effectivePermissions()`（`/api/v1/access/effective-permissions`）与 `effectivePermissionsForUser()`（`/api/v1/access/users/{id}/effective-permissions`），由 `AuthorizationService.computeEffectivePermissions` 按上述合并口径与 DENY 优先计算；前端 `AdminApp.tsx` 已改用该接口、`PermissionGate.tsx` 已实现 DENY 优先+wildcard+fail-safe，`adminRolePermissions` 等硬编码在全仓零命中。本节为对既有实现的收口确认，路径以现网 `/api/v1/access/...` 为准（治理 HTML 文案的 `/me/effective-permissions` 即 self 端同义）。
+
+### 24.2 字段级权限后端执行（敏感字段后端裁决与投影）
+
+#### 24.2.1 目的
+
+敏感字段的"脱敏 / 可见 / 可编辑"必须由**后端按调用方有效权限裁决并落实**，响应按权限投影后再下发，而非仅靠前端隐藏。回应字段字典 §2.3 敏感字段原则（手机号、证件号、统一社会信用代码、银行账户、合同附件、结算口径摘要、权限范围、设备唯一标识、关键联系人信息）。
+
+#### 24.2.2 API / 数据来源
+
+| 项 | 口径 |
+|---|---|
+| 裁决依据 | 调用方有效权限集（§24.1）+ 字段敏感级别；敏感字段查看绑定 `evidence.sensitive.view` 等敏感权限码（P0 权限矩阵 §3） |
+| 投影规则 | 无敏感权限：字段以脱敏值（如 `138****0000`）或省略下发；有查看权限：明文下发；有编辑权限：字段在响应中标记可编辑，写接口再次校验同一权限 |
+| 落实位置 | 在后端序列化响应前完成投影；前端只负责按后端已投影结果渲染，不得依赖前端隐藏来"保护"未投影的明文 |
+
+#### 24.2.3 事件
+
+- 敏感字段明文查看按 `sensitive.viewed` 留痕（最小授权）。
+- 敏感字段越权取数被拦截时，按拒绝口径记录（`PERMISSION_DENIED`），不下发明文。
+
+#### 24.2.4 验收
+
+1. **字段级越权取数被后端拦截**：无敏感权限的调用方，即使绕过前端直接调接口，响应中敏感字段也为脱敏/缺省值，拿不到明文。
+2. 有查看权限的调用方拿到明文；有编辑权限的调用方写回时再次过权限闸，无编辑权限写回被拒。
+3. 同一接口对不同权限调用方返回不同投影，差异仅在敏感字段，非敏感字段一致。
+
+> **代码核验（2026-06-19）**：现网 `PiiTextRedactor`、`CustomerService.maskPhone` 等已对手机号等做**固定脱敏**（如登录响应仅回 `maskedPhone`），属"敏感字段不外泄明文"的体验/合规底线已具备；但**按调用方权限动态决定明文/脱敏/可编辑的投影**尚未成体系（脱敏为固定行为而非权限裁决）。本节将"字段级权限由后端按权限裁决并投影"明确为待补齐执行口径，标注 R6 全闭环(2026-06-19)。
+
+### 24.3 准入审批层级到岗位映射（approval_level → resolver）
+
+#### 24.3.1 目的
+
+把 #contract「上一级 / 上两级 / 最高权限」的放行层级，映射为可由系统解析的具体审批人规则：以发起人职级 `level_rank`（M1-M10×上/中/下，1..30）为基准，按升级类型解析出"所需审批人最低 `level_rank`"或"指定角色"，支撑准入卡控命中后的分级放行。回应 §9.6 合同准入规则与字段字典 §8.1 审批阶梯。
+
+#### 24.3.2 映射规则（approval_level → resolver）
+
+| approval_level | 含义 | 解析规则（resolver） |
+|---|---|---|
+| `one_level_up`（上一级） | 上提一个主职级 | 所需审批人 `level_rank = min(发起人 rank + 3, 30)`（一个主级=上/中/下 3 个子级） |
+| `two_levels_up`（上两级） | 上提两个主职级 | 所需审批人 `level_rank = min(发起人 rank + 6, 30)` |
+| `top_authority`（最高权限） | 顶级放行 | 所需审批人 `level_rank = 30`（最高职级） |
+| `specific_role`（指定角色） | 不按职级 | 不按 rank 解析，由角色判定（`rankBased=false`，`requiredApproverRank=0` 表示不适用） |
+
+#### 24.3.3 数据来源
+
+- 职级表 `staff_levels`（`main_level` M1-M10、`sub_level` upper/middle/lower、`level_rank` 1..30）与 `staff_level_assignments`（员工→职级、薪资）。
+- 准入/审批落库于 `supervisor_review_decisions`，含 `approval_level`（升级类型）与 `required_approver_rank`（按发起人职级解析出的所需审批人 rank）。
+- 不新建并行 `admission_audits` 表，统一走 supervisor_review（与 §9.6 R5 业务裁决一致）。
+
+#### 24.3.4 越级与代理
+
+- **越级**：发起人无职级或解析得到的 rank 高于现有最高在岗 rank 时，回退到 supervisor_review 既有 `required_level`（0-3 主管级）校验；`top_authority` 直接落最高 rank。
+- **代理**：审批人不可达时，可由同 rank 或更高 rank 的同范围在岗人员代理放行；代理须留代理人与原因。
+- **范围**：审批人解析在满足 rank 门槛的同时，须落在与发起业务**同商户 / 同项目**范围内（默认范围，见 §24.3.6）。
+
+#### 24.3.5 事件 / 验收
+
+- 事件：升级类型与解析结果在 `approval_level` 留痕；放行须留放行证据、原因、责任人（承接 §9.6.5、字段字典 §8.1 放行证据）。
+- 验收：
+  1. **审批人可由职级解析**：给定发起人职级与升级类型，系统能解析出"所需审批人最低 `level_rank`"或"指定角色"，低于门槛的审批人不能放行。
+  2. `top_authority` 必须由最高 rank 放行；`specific_role` 按角色判定而非 rank。
+  3. 越级/无职级场景回退既有 `required_level` 校验，不被卡死；代理放行留代理人与原因。
+
+#### 24.3.6 R6 建议默认
+
+- **审批人解析默认按职级 `level_rank`（rank 门槛）+ 同商户/同项目范围**：即在满足"所需审批人最低 rank"的候选中，默认只取与发起业务同商户、同项目者；跨范围放行需显式配置并加倍留痕。
+- 一个主职级 = 上/中/下 3 个子级，故"上一级 = 发起人 rank + 3"，"上两级 = +6"，上限 30。
+
+> **代码核验（2026-06-19）**：现网 V055（`staff_levels`/`staff_level_assignments`/`level_rank`）、V057（`supervisor_review_decisions.approval_level` + `required_approver_rank`，CHECK 枚举 one_level_up/two_levels_up/top_authority/specific_role）已落地；`ApprovalLevel.java` 已实现 `requiredApproverRank(initiatorRank)` 解析（+3/+6/30/不适用），`AuthorizationService.levelRankOf/currentActorLevelRank` 已可取职级 rank。本节为对既有实现的收口确认，并补"越级/代理/同商户同项目范围"默认口径。
 

@@ -23,6 +23,9 @@ final class IntegrationValidation {
     private static final Set<String> STATUSES = Set.of("draft", "mock_ready", "test_ready", "production_ready", "disabled");
     private static final Set<String> TEST_SCENARIOS = Set.of("auth", "webhook", "polling", "reconcile", "field_mapping", "failure_retry");
     private static final Set<String> BUSINESS_TYPES = Set.of("catering", "retail");
+    // 第三方回流渠道（third-party §14.11b/§2B）。资料未到时取占位集合，开关 off 仍允许识别但不伪造对账。
+    private static final Set<String> CHANNELS = Set.of(
+            "meituan", "dianping", "douyin", "koubei", "eleme", "alipay", "wechat", "internal", "unknown");
     private static final Set<String> SYNC_TYPES = Set.of("order", "refund", "voucher_verification");
     private static final Set<String> SYNC_STATUSES = Set.of("received", "synced", "failed", "difference_found");
     private static final Set<String> TASK_STATUSES = Set.of("open", "ready", "running", "failed", "resolved", "ignored");
@@ -95,6 +98,19 @@ final class IntegrationValidation {
         requireText(request.externalBusinessId(), "external_business_id");
         requireEnum(SYNC_STATUSES, request.status(), "status");
         currency(request.currency());
+        channel(request.channel());
+    }
+
+    /**
+     * 回流渠道语义解析：空值归一为 unknown（资料未到时占位），非法值拒绝。
+     * 与 external_channel_order_id 共同构成渠道级幂等键（V109）。
+     */
+    static String channel(String value) {
+        String resolved = value == null || value.isBlank() ? "unknown" : value;
+        if (!CHANNELS.contains(resolved)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "channel is invalid");
+        }
+        return resolved;
     }
 
     static void validateTaskRequest(IntegrationTaskRequest request) {
@@ -144,6 +160,22 @@ final class IntegrationValidation {
         requireEnum(BUSINESS_TYPES, request.businessType(), "business_type");
         requireText(request.externalBusinessId(), "external_business_id");
         requireText(request.differenceType(), "difference_type");
+    }
+
+    static void validateChannelReconciliationRequest(ChannelReconciliationRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        requireText(request.idempotencyKey(), "idempotency_key");
+        requireText(request.providerCode(), "provider_code");
+        requireEnum(BUSINESS_TYPES, request.businessType(), "business_type");
+        channel(request.channel());
+        if (request.periodStart() == null || request.periodEnd() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "period_start and period_end are required");
+        }
+        if (request.periodEnd().isBefore(request.periodStart())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "period_end must be on or after period_start");
+        }
     }
 
     static void validateReconciliationDifferenceResolveRequest(ReconciliationDifferenceResolveRequest request) {

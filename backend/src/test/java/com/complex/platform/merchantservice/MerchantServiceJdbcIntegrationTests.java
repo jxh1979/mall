@@ -69,6 +69,8 @@ class MerchantServiceJdbcIntegrationTests {
                 null,
                 null,
                 List.of("att-photo-1", "att-photo-2"),
+                false,
+                null,
                 now,
                 now
         ));

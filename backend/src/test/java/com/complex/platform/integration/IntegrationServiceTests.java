@@ -567,6 +567,8 @@ class IntegrationServiceTests {
                 "synced",
                 128800L,
                 "CNY",
+                "meituan",
+                "mt-channel-order-1",
                 Map.of("provider_private_status", "PAID", "tableNo", "A1")
         ));
         IntegrationTaskRecord retry = service.createRetryTask(new IntegrationTaskRequest(
@@ -668,6 +670,110 @@ class IntegrationServiceTests {
                         "integration.reconciliation_difference.created",
                         "integration.reconciliation_difference.resolved"
                 );
+    }
+
+    @Test
+    void p0ChannelOrderSyncsAreDistinguishableByChannelAndExternalChannelOrderId() {
+        IntegrationOrderSyncRecord meituan = service.createOrderSync(orderSyncRequest(
+                "ch-mt", "ext-shared-1", "meituan", "mt-1", 10000L, "synced"));
+        IntegrationOrderSyncRecord douyin = service.createOrderSync(orderSyncRequest(
+                "ch-dy", "ext-shared-2", "douyin", "dy-1", 20000L, "synced"));
+
+        assertThat(meituan.channel()).isEqualTo("meituan");
+        assertThat(meituan.externalChannelOrderId()).isEqualTo("mt-1");
+        assertThat(douyin.channel()).isEqualTo("douyin");
+        // mapPayload 占位标准模型保留渠道语义，开关 off / 无适配器时 mock=true 不伪造。
+        @SuppressWarnings("unchecked")
+        Map<String, Object> standard = (Map<String, Object>) meituan.providerPayload().get("standard_model");
+        assertThat(standard).containsEntry("channel", "meituan").containsEntry("mock", true);
+        assertThat(meituan.providerPayload()).containsEntry("channel_map_status", "unmapped");
+    }
+
+    @Test
+    void p0AutoReconciliationGeneratesDifferencesFromStandardModelWhenSwitchOn() {
+        // 适配器 webhook 开 → 自动对账落库（非 dryRun）。
+        repository.providerAdapters.put("recon-adapter", adapter(
+                "recon-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                true, true, "manual-ledger:p0", true));
+        // 第三方侧 actual：order_syncs 标准模型。
+        service.createOrderSync(orderSyncRequest("a1", "ext-amount", "meituan", "mt-amount", 9900L, "synced"));
+        service.createOrderSync(orderSyncRequest("a2", "ext-extra", "meituan", "mt-extra", 5000L, "synced"));
+
+        ChannelReconciliationResult result = service.reconcileChannel(new ChannelReconciliationRequest(
+                "recon-1",
+                "mock-provider",
+                "catering",
+                "meituan",
+                LocalDate.parse("2026-06-14"),
+                LocalDate.parse("2026-06-14"),
+                false,
+                List.of(
+                        // 平台侧期望：金额差异（10000 vs 9900）。
+                        new ChannelReconciliationRequest.ExpectedEntry("ext-amount", 10000L, "synced", 1, Map.of()),
+                        // 平台侧期望但第三方缺口（missing）。
+                        new ChannelReconciliationRequest.ExpectedEntry("ext-missing", 8000L, "synced", 1, Map.of())
+                )
+        ));
+
+        assertThat(result.dryRun()).isFalse();
+        assertThat(result.batchId()).isNotNull();
+        // amount(ext-amount) + missing(ext-missing) + count(ext-extra 未被期望匹配) = 3。
+        assertThat(result.differences())
+                .extracting(ReconciliationDifferenceRecord::differenceType)
+                .containsExactlyInAnyOrder("amount", "missing", "count");
+        assertThat(result.differences())
+                .allSatisfy(d -> assertThat(d.sourceDomain()).isEqualTo("thirdparty"));
+        assertThat(auditEventRepository.events)
+                .anyMatch(e -> "integration.channel_reconciliation.completed".equals(e.eventName()));
+    }
+
+    @Test
+    void p0AutoReconciliationDoesNotFabricateWhenSwitchOff() {
+        // 无 webhook 适配器（开关 off）→ 强制 dryRun，不落任何对账数据。
+        service.createOrderSync(orderSyncRequest("o1", "ext-x", "meituan", "mt-x", 9900L, "synced"));
+
+        ChannelReconciliationResult result = service.reconcileChannel(new ChannelReconciliationRequest(
+                "recon-off",
+                "mock-provider",
+                "catering",
+                "meituan",
+                LocalDate.parse("2026-06-14"),
+                LocalDate.parse("2026-06-14"),
+                false,
+                List.of(new ChannelReconciliationRequest.ExpectedEntry("ext-x", 10000L, "synced", 1, Map.of()))
+        ));
+
+        assertThat(result.dryRun()).isTrue();
+        assertThat(result.batchId()).isNull();
+        assertThat(result.differences()).isEmpty();
+        // 预览仍计算差异数（amount 不匹配），但不落库、不伪造。
+        assertThat(result.differenceCount()).isEqualTo(1);
+        assertThat(repository.reconciliationBatches).isEmpty();
+        assertThat(repository.reconciliationDifferences).isEmpty();
+    }
+
+    private IntegrationOrderSyncRequest orderSyncRequest(
+            String idempotencyKey,
+            String externalBusinessId,
+            String channel,
+            String externalChannelOrderId,
+            long amountCent,
+            String status
+    ) {
+        return new IntegrationOrderSyncRequest(
+                idempotencyKey,
+                "auto-test",
+                List.of(),
+                "mock-provider",
+                "catering",
+                "order",
+                externalBusinessId,
+                status,
+                amountCent,
+                "CNY",
+                channel,
+                externalChannelOrderId,
+                Map.of());
     }
 
     private ProviderAdapterRecord adapter(

@@ -5,6 +5,8 @@ import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
+import com.complex.platform.analytics.AnalyticsRecords.GroupOverviewResponse;
+import com.complex.platform.analytics.AnalyticsRecords.GroupProjectRollup;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantSummaryRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricAnomalyRecord;
@@ -81,6 +83,26 @@ public class AnalyticsService {
                     "purchase receipt depends on T6 procurement cycle (data source not ready)"),
             new MetricCatalogEntry("risk.manual_backfill", "governance", "count", false,
                     "manual backfill count depends on P1 audit-trail wiring (data source not ready)")
+    );
+
+    /**
+     * P2 集团总览（R6-D13）：当前单综合体——平台口径 ETL 快照即该综合体（project）的跨商户汇总。
+     * 用 V037 既有合成 project 标识，仅作 rollup 行 key/展示名，不假装多 project。
+     */
+    private static final String GROUP_PROJECT_ID = "project_1";
+    private static final String GROUP_PROJECT_NAME = "综合体（默认）";
+
+    /**
+     * 集团总览汇总指标目录：收入（净收入/售票/酒吧）/客流/核销/风险，来源均为 DashboardAggregationJob 平台口径 ETL 快照。
+     * 商户数另由 countMerchantsWithEtlSnapshot 真实计数（非快照指标），不在此目录。
+     */
+    private static final List<GroupMetricEntry> GROUP_METRIC_CATALOG = List.of(
+            new GroupMetricEntry(DashboardAggregationJob.REVENUE_NET, "cent"),
+            new GroupMetricEntry(DashboardAggregationJob.REVENUE_TICKET, "cent"),
+            new GroupMetricEntry(DashboardAggregationJob.REVENUE_BAR, "cent"),
+            new GroupMetricEntry(DashboardAggregationJob.TRAFFIC_AMUSEMENT, "count"),
+            new GroupMetricEntry(DashboardAggregationJob.VERIFY_DONE, "count"),
+            new GroupMetricEntry(DashboardAggregationJob.RISK_PENDING_REVIEW, "count")
     );
 
     private final AnalyticsRepository repository;
@@ -219,6 +241,75 @@ public class AnalyticsService {
             }
         }
         return new OverviewResponse(now, scopeValue, businessDate, metrics);
+    }
+
+    /**
+     * P2 集团/跨项目汇总（R6-D13）：按 project 维 rollup 关键指标（收入/客流/核销/风险/商户数）。
+     * 当前为单综合体——平台口径 ETL 快照即该 project 的跨商户汇总，故返回单个 project rollup（不伪造多 project）。
+     * 真实聚合：复用 readMetricSnapshots(date, null) 平台快照 + countMerchantsWithEtlSnapshot 真实商户数；
+     * 无 ETL 快照时 metrics 诚实置 null + note，merchantCount=0。
+     */
+    public GroupOverviewResponse groupOverview() {
+        return readSingle(
+                "analytics.group_overview.viewed",
+                "analytics.group_overview.view_failed",
+                "analytics.group.view",
+                "analytics_business_metric_snapshot",
+                this::buildGroupOverview
+        );
+    }
+
+    private GroupOverviewResponse buildGroupOverview() {
+        Instant now = Instant.now(clock);
+        Optional<LocalDate> etlDate = repository.latestEtlBusinessDate(null);
+        LocalDate businessDate = etlDate.orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
+
+        // ⑤ 集团多项目 ETL：优先读 segment_type='project' 维度，按 project_id 产出 per-project rollup（多综合体→多行）。
+        // 无 project 口径快照时回退到平台口径单行（向后兼容旧 ETL 与"无快照诚实空态"），不伪造多 project。
+        List<String> projectIds = etlDate.isPresent()
+                ? repository.listProjectIdsWithEtlSnapshot(businessDate)
+                : List.of();
+
+        List<GroupProjectRollup> rollups = new java.util.ArrayList<>();
+        if (!projectIds.isEmpty()) {
+            for (String projectId : projectIds) {
+                Map<String, BigDecimal> snapshots = repository.readProjectMetricSnapshots(businessDate, projectId);
+                Map<String, MetricValue> metrics = buildGroupMetrics(snapshots, true);
+                long merchantCount = repository.countMerchantsWithEtlSnapshotByProject(businessDate, projectId);
+                rollups.add(new GroupProjectRollup(projectId, projectDisplayName(projectId), merchantCount, metrics));
+            }
+        } else {
+            // 回退：平台口径单 project rollup（单综合体合成 project 标识，口径与现状一致）。
+            Map<String, BigDecimal> snapshots = etlDate.isPresent()
+                    ? repository.readMetricSnapshots(businessDate, null)
+                    : Map.of();
+            Map<String, MetricValue> metrics = buildGroupMetrics(snapshots, etlDate.isPresent());
+            long merchantCount = etlDate.isPresent() ? repository.countMerchantsWithEtlSnapshot(businessDate) : 0L;
+            rollups.add(new GroupProjectRollup(GROUP_PROJECT_ID, GROUP_PROJECT_NAME, merchantCount, metrics));
+        }
+        return new GroupOverviewResponse(now, businessDate, List.copyOf(rollups));
+    }
+
+    /** 按集团指标目录从快照构造 metrics；无快照按"不伪造"返回 null + note。 */
+    private Map<String, MetricValue> buildGroupMetrics(Map<String, BigDecimal> snapshots, boolean hasEtl) {
+        Map<String, MetricValue> metrics = new LinkedHashMap<>();
+        for (GroupMetricEntry entry : GROUP_METRIC_CATALOG) {
+            BigDecimal value = snapshots.get(entry.metricCode());
+            if (value == null) {
+                metrics.put(entry.metricCode(), MetricValue.unavailable(
+                        hasEtl
+                                ? "no etl snapshot for metric on business date"
+                                : "no etl snapshot available yet"));
+            } else {
+                metrics.put(entry.metricCode(), MetricValue.of(value, entry.unit()));
+            }
+        }
+        return metrics;
+    }
+
+    /** 单综合体默认 project 用既有展示名；其余 project_id 暂以 id 作展示名（多综合体接入主数据后替换）。 */
+    private String projectDisplayName(String projectId) {
+        return GROUP_PROJECT_ID.equals(projectId) ? GROUP_PROJECT_NAME : projectId;
     }
 
     public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {
@@ -606,6 +697,9 @@ public class AnalyticsService {
         if (value instanceof OverviewResponse response) {
             return response.scope() == null ? "platform" : response.scope();
         }
+        if (value instanceof GroupOverviewResponse) {
+            return "group";
+        }
         if (value instanceof AiQualitySuggestionResponse response) {
             return response.task().taskId();
         }
@@ -623,6 +717,10 @@ public class AnalyticsService {
         String note() {
             return scopeNote;
         }
+    }
+
+    /** P2 集团总览汇总指标条目（metric_code + 单位），来源为平台口径 ETL 快照。 */
+    private record GroupMetricEntry(String metricCode, String unit) {
     }
 
     private record NormalizedRiskLevel(String value, boolean adjusted) {

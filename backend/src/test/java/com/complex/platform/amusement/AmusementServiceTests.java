@@ -35,14 +35,18 @@ class AmusementServiceTests {
     private InMemoryAmusementRepository amusementRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private InMemoryAmusementEntitlementGateway entitlementGateway;
+    private InMemorySafetyRepository safetyRepository;
     private AmusementService service;
     private AuthorizationService authorizationService;
 
     @BeforeEach
     void setUp() {
         amusementRepository = new InMemoryAmusementRepository();
+        // 检修单位须为供应商主表真实记录：默认登记一个 active 供应商供既有检修用例使用。
+        amusementRepository.registerMaintenanceVendor("supplier_maint_1", "active");
         auditEventRepository = new InMemoryAuditEventRepository();
         entitlementGateway = new InMemoryAmusementEntitlementGateway();
+        safetyRepository = new InMemorySafetyRepository();
         authorizationService = new AuthorizationService(mock(AccessRepository.class));
         TestSecurityActors.asPlatformAdmin();
         service = new AmusementService(
@@ -50,7 +54,8 @@ class AmusementServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 authorizationService,
-                entitlementGateway
+                entitlementGateway,
+                safetyRepository
         );
     }
 
@@ -216,7 +221,9 @@ class AmusementServiceTests {
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
-                Instant.parse("2026-06-14T08:00:00Z")
+                Instant.parse("2026-06-14T08:00:00Z"),
+                "inspector_blocked",
+                "restraint sensor abnormal"
         ));
 
         service.submitSafetyInspection(failed.id(), action("submit-blocked", "submit", "submit failed inspection"));
@@ -257,7 +264,9 @@ class AmusementServiceTests {
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "pass")),
                 "pass",
-                Instant.parse("2026-06-14T08:00:00Z")
+                Instant.parse("2026-06-14T08:00:00Z"),
+                "inspector_pass",
+                null
         ));
 
         AmusementSafetyInspectionRecord submitted = service.submitSafetyInspection(
@@ -282,7 +291,9 @@ class AmusementServiceTests {
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
-                Instant.parse("2026-06-14T08:00:00Z")
+                Instant.parse("2026-06-14T08:00:00Z"),
+                "inspector_approve_reject",
+                "restraint abnormal"
         ));
         service.submitSafetyInspection(inspection.id(), action("submit-approve-reject", "submit", "submit fail"));
         service.rectifySafetyInspection(inspection.id(), action("rectify-approve-reject", "submitted", "fixed"));
@@ -301,6 +312,112 @@ class AmusementServiceTests {
     }
 
     @Test
+    void approveReopenRestoresProjectOpenStatusAndPersistsStructuredInspector() {
+        // 清单#18 断链修复：失败巡检整改/复检通过后，主管"批准恢复营业"应联动 amusement_projects.open_status
+        // 从停业态（此处 closed）翻转为 open；并验证巡检 inspector_id 等结构化字段落库（不再只塞 operator_note）。
+        AmusementProjectRecord project = projectWithTemplate("reopen-link");
+        // 将项目置于停业态 closed（模拟失败巡检导致的停业）。
+        amusementRepository.saveProject(new AmusementProjectRecord(
+                project.id(),
+                project.projectName(),
+                project.capacity(),
+                "closed",
+                project.safetyTemplateId(),
+                project.eligibilityRule(),
+                project.locationPointId(),
+                project.createdAt(),
+                project.updatedAt(),
+                project.merchantId()
+        ));
+
+        AmusementSafetyInspectionRecord failed = service.createSafetyInspection(new AmusementSafetyInspectionRequest(
+                "inspection-reopen-link",
+                "inspect",
+                List.of(),
+                project.id(),
+                project.safetyTemplateId(),
+                List.of(Map.of("name", "restraint", "result", "fail")),
+                "fail",
+                Instant.parse("2026-06-14T08:00:00Z"),
+                "inspector_reopen_link",
+                "restraint sensor abnormal"
+        ));
+        // 创建即结构化落库：巡检人、结构化结论、异常标记/说明。
+        assertThat(failed)
+                .extracting(
+                        AmusementSafetyInspectionRecord::inspectorId,
+                        AmusementSafetyInspectionRecord::inspectionResult,
+                        AmusementSafetyInspectionRecord::abnormalFound,
+                        AmusementSafetyInspectionRecord::abnormalNote)
+                .containsExactly("inspector_reopen_link", "fail", true, "restraint sensor abnormal");
+
+        service.submitSafetyInspection(failed.id(), action("submit-reopen-link", "submit", "submit fail"));
+        service.rectifySafetyInspection(failed.id(), action("rectify-reopen-link", "submitted", "fixed"));
+        service.recheckSafetyInspection(failed.id(), action("recheck-reopen-link", "pass", "passed recheck"));
+        AmusementSafetyInspectionRecord approved = service.approveReopen(
+                failed.id(),
+                new StatusChangeRequest("approve-reopen-link", "approve", "supervisor approved", List.of())
+        );
+
+        assertThat(approved.reopenStatus()).isEqualTo("approved");
+        // 复检 pass 后结构化结论同步刷新为 pass、异常消除；巡检人保留。
+        assertThat(approved)
+                .extracting(
+                        AmusementSafetyInspectionRecord::inspectorId,
+                        AmusementSafetyInspectionRecord::inspectionResult,
+                        AmusementSafetyInspectionRecord::abnormalFound)
+                .containsExactly("inspector_reopen_link", "pass", false);
+        // 断链修复：批准恢复营业联动 open_status closed → open。
+        assertThat(amusementRepository.findProjectById(project.id()))
+                .get().extracting(AmusementProjectRecord::openStatus).isEqualTo("open");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.safety_inspection.reopened");
+    }
+
+    @Test
+    void approveReopenDoesNotOverridePausedRunningProject() {
+        // 取舍验证：项目已处运营态（paused 人工暂停）时，批准恢复营业不强翻 open_status（避免与暂停线冲突）。
+        AmusementProjectRecord project = projectWithTemplate("reopen-paused");
+        amusementRepository.saveProject(new AmusementProjectRecord(
+                project.id(),
+                project.projectName(),
+                project.capacity(),
+                "paused",
+                project.safetyTemplateId(),
+                project.eligibilityRule(),
+                project.locationPointId(),
+                project.createdAt(),
+                project.updatedAt(),
+                project.merchantId()
+        ));
+
+        AmusementSafetyInspectionRecord failed = service.createSafetyInspection(new AmusementSafetyInspectionRequest(
+                "inspection-reopen-paused",
+                "inspect",
+                List.of(),
+                project.id(),
+                project.safetyTemplateId(),
+                List.of(Map.of("name", "restraint", "result", "fail")),
+                "fail",
+                Instant.parse("2026-06-14T08:00:00Z"),
+                "inspector_reopen_paused",
+                "abnormal"
+        ));
+        service.submitSafetyInspection(failed.id(), action("submit-reopen-paused", "submit", "submit fail"));
+        service.rectifySafetyInspection(failed.id(), action("rectify-reopen-paused", "submitted", "fixed"));
+        service.recheckSafetyInspection(failed.id(), action("recheck-reopen-paused", "pass", "passed recheck"));
+        service.approveReopen(
+                failed.id(),
+                new StatusChangeRequest("approve-reopen-paused", "approve", "supervisor approved", List.of())
+        );
+
+        // paused 属运营态，不被巡检审批强翻为 open。
+        assertThat(amusementRepository.findProjectById(project.id()))
+                .get().extracting(AmusementProjectRecord::openStatus).isEqualTo("paused");
+    }
+
+    @Test
     void verificationRejectsClosedProjectBlockedSafetyFullSessionAndBlankCredential() {
         AmusementProjectRecord closedProject = projectWithTemplate("closed");
         amusementRepository.saveProject(new AmusementProjectRecord(
@@ -310,6 +427,7 @@ class AmusementServiceTests {
                 "closed",
                 closedProject.safetyTemplateId(),
                 closedProject.eligibilityRule(),
+                closedProject.locationPointId(),
                 closedProject.createdAt(),
                 Instant.parse("2026-06-14T09:00:00Z"),
                 null
@@ -336,7 +454,9 @@ class AmusementServiceTests {
                 blockedProject.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
-                Instant.parse("2026-06-14T08:00:00Z")
+                Instant.parse("2026-06-14T08:00:00Z"),
+                "inspector_safety_blocked",
+                "restraint abnormal"
         ));
         service.submitSafetyInspection(failed.id(), action("submit-safety-blocked", "submit", "submit fail"));
 
@@ -588,6 +708,89 @@ class AmusementServiceTests {
         assertThat(disabled.enabled()).isFalse();
         assertThat(service.createVerification(verification("v-dis-2", project.id(), session.id(), "credential-dis-2"))
                 .verificationResult()).isEqualTo("success");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 清单#6：超容落事件（§6.4/§7.18 + R6-D10）——硬上限阻断、软上限告警放行、仅告警模式留痕不阻断，均落 over_capacity 事件。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void hardOverCapacityBlocksAndRecordsOverCapacityIncidentAndEvent() {
+        // 安全容量（硬上限）=1：第二次核销达硬上限被阻断，且落 over_capacity incident + 发事件。
+        AmusementProjectRecord project = createProject("oc-hard", createTemplate("oc-hard-tpl").id(), "open", 1);
+        submitPassingInspection(project, "oc-hard");
+        AmusementSessionRecord session = createSession("oc-hard-session", project.id(), 100, "open");
+        registerAmusementEntitlement("credential-oc-hard-1", 1);
+        registerAmusementEntitlement("credential-oc-hard-2", 1);
+
+        assertThat(service.createVerification(verification("v-oc-hard-1", project.id(), session.id(), "credential-oc-hard-1"))
+                .verificationResult()).isEqualTo("success");
+
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-oc-hard-2", project.id(), session.id(), "credential-oc-hard-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+
+        // 硬超容被阻断仍落 over_capacity incident。
+        assertThat(safetyRepository.incidents())
+                .extracting(AmusementIncidentRecord::incidentType)
+                .containsExactly("over_capacity");
+        // 发 amusement.incident.over_capacity 事件。
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.incident.over_capacity");
+        // 硬超容被阻断回补权益（未被白扣）。
+        assertThat(entitlementGateway.usedTimes("credential-oc-hard-2")).isEqualTo(0);
+    }
+
+    @Test
+    void softOverCapacityWarnsAndAllowsAndRecordsOverCapacityIncidentAndEvent() {
+        // 运营容量（软上限）=1、硬上限充足：达运营容量即告警放行，落 over_capacity incident + 发事件。
+        AmusementProjectRecord project = createProject("oc-soft", createTemplate("oc-soft-tpl").id(), "open", 100);
+        submitPassingInspection(project, "oc-soft");
+        AmusementSessionRecord session = createSession("oc-soft-session", project.id(), 100, "open");
+        amusementRepository.configureOverCapacityPolicy(project.id(), 1, AmusementOverCapacityPolicy.MODE_BLOCK_HARD);
+        registerAmusementEntitlement("credential-oc-soft-1", 1);
+
+        // 放行成功（软上限不阻断），但落 over_capacity 告警事件。
+        assertThat(service.createVerification(verification("v-oc-soft-1", project.id(), session.id(), "credential-oc-soft-1"))
+                .verificationResult()).isEqualTo("success");
+        assertThat(entitlementGateway.usedTimes("credential-oc-soft-1")).isEqualTo(1);
+
+        assertThat(safetyRepository.incidents())
+                .extracting(AmusementIncidentRecord::incidentType)
+                .containsExactly("over_capacity");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.incident.over_capacity");
+    }
+
+    @Test
+    void warnOnlyDisposalModeDoesNotBlockHardOverCapacityButStillRecordsIncidentAndEvent() {
+        // 处置模式 warn_only：硬上限耗尽亦不阻断（留痕放行），但必落 over_capacity incident + 发事件。
+        AmusementProjectRecord project = createProject("oc-warn", createTemplate("oc-warn-tpl").id(), "open", 1);
+        submitPassingInspection(project, "oc-warn");
+        AmusementSessionRecord session = createSession("oc-warn-session", project.id(), 100, "open");
+        amusementRepository.configureOverCapacityPolicy(project.id(), 1, AmusementOverCapacityPolicy.MODE_WARN_ONLY);
+        registerAmusementEntitlement("credential-oc-warn-1", 1);
+        registerAmusementEntitlement("credential-oc-warn-2", 1);
+
+        // 第一次占满硬上限（1/1）成功。
+        assertThat(service.createVerification(verification("v-oc-warn-1", project.id(), session.id(), "credential-oc-warn-1"))
+                .verificationResult()).isEqualTo("success");
+
+        // 第二次达硬上限：warn_only 不阻断，仍放行（留痕），且不回补权益。
+        assertThat(service.createVerification(verification("v-oc-warn-2", project.id(), session.id(), "credential-oc-warn-2"))
+                .verificationResult()).isEqualTo("success");
+        assertThat(entitlementGateway.usedTimes("credential-oc-warn-2")).isEqualTo(1);
+
+        // 两次（第一次软超容达运营容量 + 第二次硬超容留痕）均落 over_capacity 事件。
+        assertThat(safetyRepository.incidents())
+                .extracting(AmusementIncidentRecord::incidentType)
+                .containsOnly("over_capacity");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .filteredOn(name -> name.equals("amusement.incident.over_capacity"))
+                .hasSizeGreaterThanOrEqualTo(1);
     }
 
     @Test
@@ -1131,6 +1334,81 @@ class AmusementServiceTests {
                 .contains("amusement.maintenance_recorded", "amusement.project.resumed");
     }
 
+    @Test
+    void createMaintenanceRejectsUnknownVendor() {
+        AmusementSafetyTemplateRecord template = createTemplate("maint-unknown-vendor");
+        AmusementProjectRecord project = createProject("maint-unknown-vendor", template.id(), "maintenance", 2);
+
+        assertThatThrownBy(() -> service.createMaintenanceRecord(new AmusementMaintenanceRecordRequest(
+                "maint-unknown-vendor-create",
+                project.id(),
+                "device_1",
+                "point_1",
+                "supplier_not_exist",
+                "engineer_1",
+                "钱工",
+                Instant.parse("2026-06-18T02:00:00Z"),
+                "pass",
+                null,
+                "kiosk")))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code())
+                .isEqualTo("MAINTENANCE_VENDOR_NOT_FOUND");
+
+        assertThat(amusementRepository.listMaintenanceRecords()).isEmpty();
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.maintenance_record_failed");
+    }
+
+    @Test
+    void createMaintenanceRejectsInactiveVendor() {
+        AmusementSafetyTemplateRecord template = createTemplate("maint-inactive-vendor");
+        AmusementProjectRecord project = createProject("maint-inactive-vendor", template.id(), "maintenance", 2);
+        amusementRepository.registerMaintenanceVendor("supplier_archived", "archived");
+
+        assertThatThrownBy(() -> service.createMaintenanceRecord(new AmusementMaintenanceRecordRequest(
+                "maint-inactive-vendor-create",
+                project.id(),
+                "device_1",
+                "point_1",
+                "supplier_archived",
+                "engineer_1",
+                "孙工",
+                Instant.parse("2026-06-18T02:00:00Z"),
+                "pass",
+                null,
+                "kiosk")))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code())
+                .isEqualTo("MAINTENANCE_VENDOR_NOT_AVAILABLE");
+
+        assertThat(amusementRepository.listMaintenanceRecords()).isEmpty();
+    }
+
+    @Test
+    void createMaintenanceAcceptsRealActiveVendor() {
+        AmusementSafetyTemplateRecord template = createTemplate("maint-real-vendor");
+        AmusementProjectRecord project = createProject("maint-real-vendor", template.id(), "maintenance", 2);
+        amusementRepository.registerMaintenanceVendor("supplier_real_active", "active");
+
+        AmusementMaintenanceRecord record = service.createMaintenanceRecord(new AmusementMaintenanceRecordRequest(
+                "maint-real-vendor-create",
+                project.id(),
+                "device_1",
+                "point_1",
+                "supplier_real_active",
+                "engineer_1",
+                "李工",
+                Instant.parse("2026-06-18T02:00:00Z"),
+                "pass",
+                null,
+                "kiosk"));
+
+        assertThat(record.maintenanceVendorId()).isEqualTo("supplier_real_active");
+        assertThat(record.status()).isEqualTo("pending_confirm");
+    }
+
     private AmusementProjectRecord projectWithTemplate(String key) {
         AmusementSafetyTemplateRecord template = createTemplate(key + "-template");
         return createProject(key, template.id(), "open", 2);
@@ -1156,7 +1434,8 @@ class AmusementServiceTests {
                 capacity,
                 status,
                 templateId,
-                Map.of("min_age", 12)
+                Map.of("min_age", 12),
+                "point_" + key
         ));
     }
 
@@ -1186,7 +1465,9 @@ class AmusementServiceTests {
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "pass")),
                 "pass",
-                Instant.parse("2026-06-14T08:00:00Z")
+                Instant.parse("2026-06-14T08:00:00Z"),
+                "inspector_" + key,
+                null
         ));
         service.submitSafetyInspection(inspection.id(), action("submit-pass-" + key, "submit", "submit pass"));
     }
@@ -1202,6 +1483,71 @@ class AmusementServiceTests {
         );
     }
 
+    /** 清单#6：仅承载超容 over_capacity incident 落库的最小内存 safety 仓储。 */
+    private static final class InMemorySafetyRepository implements AmusementSafetyRepository {
+        private final Map<String, AmusementIncidentRecord> incidents = new LinkedHashMap<>();
+
+        @Override
+        public AmusementIncidentRecord saveIncident(AmusementIncidentRecord record) {
+            incidents.put(record.id(), record);
+            return record;
+        }
+
+        List<AmusementIncidentRecord> incidents() {
+            return new ArrayList<>(incidents.values());
+        }
+
+        @Override
+        public List<AmusementIncidentRecord> findAllIncidents() {
+            return incidents();
+        }
+
+        @Override
+        public List<AmusementIncidentRecord> findIncidentsByMerchant(String merchantId) {
+            return incidents.values().stream().filter(i -> merchantId.equals(i.merchantId())).toList();
+        }
+
+        @Override
+        public Optional<AmusementIncidentRecord> findIncidentById(String id) {
+            return Optional.ofNullable(incidents.get(id));
+        }
+
+        @Override
+        public List<AmusementSafetyNoticeRecord> findAllSafetyNotices() {
+            return List.of();
+        }
+
+        @Override
+        public List<AmusementSafetyNoticeRecord> findSafetyNoticesByMerchant(String merchantId) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<AmusementSafetyNoticeRecord> findSafetyNoticeById(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public AmusementSafetyNoticeRecord saveSafetyNotice(AmusementSafetyNoticeRecord record) {
+            return record;
+        }
+
+        @Override
+        public AmusementWaiverAcknowledgementRecord saveWaiverAcknowledgement(AmusementWaiverAcknowledgementRecord record) {
+            return record;
+        }
+
+        @Override
+        public AmusementIncidentActionRecord saveIncidentAction(AmusementIncidentActionRecord record) {
+            return record;
+        }
+
+        @Override
+        public List<AmusementIncidentActionRecord> findIncidentActionsByIncidentId(String incidentId) {
+            return List.of();
+        }
+    }
+
     private static final class InMemoryAmusementRepository implements AmusementRepository {
         private final Map<String, AmusementSafetyTemplateRecord> safetyTemplates = new LinkedHashMap<>();
         private final Map<String, AmusementProjectRecord> projects = new LinkedHashMap<>();
@@ -1215,6 +1561,8 @@ class AmusementServiceTests {
         private final Map<String, AmusementReservationRecord> reservations = new LinkedHashMap<>();
         private final Map<String, AmusementGroupBookingRecord> groupBookings = new LinkedHashMap<>();
         private final Map<String, AmusementMaintenanceRecord> maintenanceRecords = new LinkedHashMap<>();
+        // 供应链供应商主数据（inventory_suppliers）镜像：vendorId → status（检修单位存在性/可用性校验）。
+        private final Map<String, String> maintenanceVendors = new LinkedHashMap<>();
         private final List<AmusementSafetyActionRecord> safetyActions = new ArrayList<>();
         private final Map<String, List<String>> projectEntitlementTypes = new LinkedHashMap<>();
         private final Map<String, AmusementProjectEntitlementRecord> projectEntitlements = new LinkedHashMap<>();
@@ -1319,6 +1667,19 @@ class AmusementServiceTests {
         @Override
         public Optional<AmusementCapacityConfigRecord> findCapacityConfigById(String id) {
             return Optional.ofNullable(capacityConfigs.get(id));
+        }
+
+        // 清单#6：超容处置策略夹具（运营容量软上限 + 处置模式）。
+        private final Map<String, AmusementOverCapacityPolicy> overCapacityPolicies = new LinkedHashMap<>();
+
+        void configureOverCapacityPolicy(String projectId, int operatingCapacity, String disposalMode) {
+            overCapacityPolicies.put(projectId,
+                    new AmusementOverCapacityPolicy(projectId, operatingCapacity, disposalMode, true));
+        }
+
+        @Override
+        public AmusementOverCapacityPolicy findOverCapacityPolicy(String projectId) {
+            return overCapacityPolicies.getOrDefault(projectId, AmusementOverCapacityPolicy.disabled(projectId));
         }
 
         @Override
@@ -1795,6 +2156,16 @@ class AmusementServiceTests {
             return Optional.ofNullable(maintenanceRecords.get(id));
         }
 
+        /** 测试夹具：在供应商主表登记一个检修单位（vendorId → status）。 */
+        void registerMaintenanceVendor(String vendorId, String status) {
+            maintenanceVendors.put(vendorId, status);
+        }
+
+        @Override
+        public Optional<String> findMaintenanceVendorStatus(String vendorId) {
+            return Optional.ofNullable(maintenanceVendors.get(vendorId));
+        }
+
         @Override
         public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
             AmusementProjectRecord project = projects.get(projectId);
@@ -1808,6 +2179,7 @@ class AmusementServiceTests {
                     newStatus,
                     project.safetyTemplateId(),
                     project.eligibilityRule(),
+                    project.locationPointId(),
                     project.createdAt(),
                     Instant.now(),
                     project.merchantId()));

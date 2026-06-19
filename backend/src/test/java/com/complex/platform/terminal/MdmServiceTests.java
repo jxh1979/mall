@@ -162,6 +162,109 @@ class MdmServiceTests {
                 .containsExactly("device.policy_violation");
     }
 
+    // ── P0#9 服务端违规检测 ──────────────────────────────────────────────────
+    @Test
+    void detectViolationsProducesViolationsForNonWhitelistedAppAndSite() {
+        mdmRepository.management.put("device_d", new MdmDeviceManagementRecord(
+                "device_d", "staff_work_phone", "bound", "compliant", "applied", Instant.now(), Instant.now()));
+        // 仅企微 app + 一个站点在白名单。
+        service.upsertAppWhitelist("mdm_app_wecom", new MdmAppWhitelistRequest(
+                "wl-app", "n", List.of(), "com.tencent.wework", "WeCom", "global", "global", true, null));
+        service.upsertSiteWhitelist("mdm_site_ok", new MdmSiteWhitelistRequest(
+                "wl-site", "n", List.of(), "ok.example.com", "ok", "global", "global", true, null));
+
+        MdmViolationDetectionResult result = service.detectViolations(
+                "detect-1", "device_d",
+                List.of("com.tencent.wework", "com.evil.app"),
+                List.of("ok.example.com", "evil.example.com"));
+
+        assertThat(result.violationCount()).isEqualTo(2);
+        assertThat(result.violations())
+                .extracting(MdmPolicyViolationRecord::violationType)
+                .containsExactlyInAnyOrder("unauthorized_app", "non_whitelisted_site");
+        assertThat(mdmRepository.violations).hasSize(2);
+        // 命中违规即把设备纳管状态降级为 violation。
+        assertThat(mdmRepository.management.get("device_d").managementStatus()).isEqualTo("violation");
+    }
+
+    @Test
+    void detectViolationsEmptyWhenAllWhitelisted() {
+        service.upsertAppWhitelist("mdm_app_wecom", new MdmAppWhitelistRequest(
+                "wl-app", "n", List.of(), "com.tencent.wework", "WeCom", "global", "global", true, null));
+
+        MdmViolationDetectionResult result = service.detectViolations(
+                "detect-clean", "device_clean", List.of("com.tencent.wework"), List.of());
+
+        assertThat(result.violationCount()).isZero();
+        assertThat(mdmRepository.violations).isEmpty();
+    }
+
+    // ── P0#9 违规处置闭环 ────────────────────────────────────────────────────
+    @Test
+    void handleViolationBlocksDeviceAndRevokesCredential() {
+        mdmRepository.management.put("device_h", new MdmDeviceManagementRecord(
+                "device_h", "staff_work_phone", "bound", "violation", "failed", Instant.now(), Instant.now()));
+        MdmPolicyViolationRecord saved = service.reportPolicyViolation(new MdmPolicyViolationRequest(
+                "vio-h", "note", List.of(), "device_h", "root_detected", "root"));
+
+        MdmPolicyViolationRecord handled = service.handleViolation(
+                saved.id(), "device_blocked", "confiscated", "handle-h");
+
+        assertThat(handled.handled()).isTrue();
+        assertThat(handled.disposition()).isEqualTo("device_blocked");
+        assertThat(handled.blockedAt()).isNotNull();
+        assertThat(mdmRepository.management.get("device_h").managementStatus()).isEqualTo("blocked");
+        assertThat(mdmRepository.findViolationById(saved.id()))
+                .get()
+                .extracting(MdmPolicyViolationRecord::handled)
+                .isEqualTo(true);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("mdm.violation.handled");
+    }
+
+    @Test
+    void handleViolationAcknowledgeDoesNotBlockDevice() {
+        mdmRepository.management.put("device_a", new MdmDeviceManagementRecord(
+                "device_a", "staff_work_phone", "bound", "violation", "failed", Instant.now(), Instant.now()));
+        MdmPolicyViolationRecord saved = service.reportPolicyViolation(new MdmPolicyViolationRequest(
+                "vio-a", "note", List.of(), "device_a", "other", "x"));
+
+        service.handleViolation(saved.id(), "acknowledged", "logged", "handle-a");
+
+        assertThat(mdmRepository.management.get("device_a").managementStatus()).isEqualTo("violation");
+        assertThat(mdmRepository.findViolationById(saved.id()))
+                .get()
+                .satisfies(v -> {
+                    assertThat(v.handled()).isTrue();
+                    assertThat(v.blockedAt()).isNull();
+                });
+    }
+
+    @Test
+    void handleViolationRejectsAlreadyHandled() {
+        MdmPolicyViolationRecord saved = service.reportPolicyViolation(new MdmPolicyViolationRequest(
+                "vio-twice", "note", List.of(), "device_t", "other", "x"));
+        service.handleViolation(saved.id(), "dismissed", "false positive", "handle-1");
+
+        assertThatThrownBy(() -> service.handleViolation(saved.id(), "acknowledged", "again", "handle-2"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VIOLATION_ALREADY_HANDLED");
+    }
+
+    @Test
+    void mdmEnabledHardBlocksLostDeviceRegardlessOfManaged() {
+        terminalRepository.setMdmEnabled(false);
+        mdmRepository.management.put("device_lost", new MdmDeviceManagementRecord(
+                "device_lost", "staff_work_phone", "lost", "lost", null, null, null));
+
+        assertThatThrownBy(() -> service.requireManagedForHighRiskAction("device_lost", "terminal.device.unbind"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DEVICE_BLOCKED");
+    }
+
     @Test
     void reportPolicyViolationRejectsInvalidType() {
         assertThatThrownBy(() -> service.reportPolicyViolation(new MdmPolicyViolationRequest(
@@ -195,6 +298,12 @@ class MdmServiceTests {
         }
 
         @Override
+        public boolean isAppWhitelisted(String packageName) {
+            return apps.values().stream()
+                    .anyMatch(r -> r.enabled() && packageName.equals(r.packageName()));
+        }
+
+        @Override
         public List<MdmSiteWhitelistRecord> listSiteWhitelist() {
             return new ArrayList<>(sites.values());
         }
@@ -208,6 +317,12 @@ class MdmServiceTests {
         public MdmSiteWhitelistRecord saveSiteWhitelist(MdmSiteWhitelistRecord record) {
             sites.put(record.id(), record);
             return record;
+        }
+
+        @Override
+        public boolean isSiteWhitelisted(String domain) {
+            return sites.values().stream()
+                    .anyMatch(r -> r.enabled() && domain.equals(r.domain()));
         }
 
         @Override
@@ -233,6 +348,24 @@ class MdmServiceTests {
         public MdmPolicyViolationRecord saveViolation(MdmPolicyViolationRecord record) {
             violations.add(record);
             return record;
+        }
+
+        @Override
+        public Optional<MdmPolicyViolationRecord> findViolationById(String id) {
+            return violations.stream().filter(v -> v.id().equals(id)).findFirst();
+        }
+
+        @Override
+        public void markViolationHandled(String id, String disposition, String handledNote, Instant blockedAt) {
+            for (int i = 0; i < violations.size(); i++) {
+                MdmPolicyViolationRecord v = violations.get(i);
+                if (v.id().equals(id)) {
+                    violations.set(i, new MdmPolicyViolationRecord(
+                            v.id(), v.deviceId(), v.violationType(), v.detail(), v.occurredAt(),
+                            true, handledNote, disposition, blockedAt, v.createdAt()));
+                    return;
+                }
+            }
         }
 
         @Override

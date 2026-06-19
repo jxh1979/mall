@@ -42,23 +42,26 @@ class TicketingServiceTests {
     private InMemoryTicketingRepository ticketingRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private TicketingService service;
+    // P1 清单#19：捕获 ticketing 域发布的领域事件（如退款/结算冲正联动 VerificationReversedEvent），供断言。
+    private final List<Object> publishedEvents = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
+        publishedEvents.clear();
         ticketingRepository = new InMemoryTicketingRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
         TicketPricingService pricingService = new TicketPricingService(ticketingRepository);
-        TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository, event -> { });
+        TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository, publishedEvents::add);
         AuthorizationService authorizationService = new AuthorizationService(null);
         service = new TicketingService(
                 ticketingRepository,
                 new TicketCatalogService(ticketingRepository),
                 pricingService,
-                new TicketOrderService(ticketingRepository, pricingService, authorizationService),
-                new TicketRefundService(ticketingRepository),
+                new TicketOrderService(ticketingRepository, pricingService, authorizationService, event -> { }),
+                new TicketRefundService(ticketingRepository, event -> { }),
                 verificationService,
                 new TicketCredentialService(verificationService, auditEventService),
                 new TicketOfflinePackageService(ticketingRepository, auditEventService),
@@ -215,7 +218,7 @@ class TicketingServiceTests {
         Instant now = Instant.now();
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_np4", "Group Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
-                false, "published", null, now, now));
+                false, "published", null, null, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_np4", "Group Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         // binding 配 num_people=4（多人票/联合票运营配置；本期通过仓储直配，创建 DTO 透传为后续工作）。
@@ -677,6 +680,84 @@ class TicketingServiceTests {
         assertThat(stored.windowStartedAt()).isEqualTo(credential.issuedAt());
         assertThat(stored.signatureValue()).isNull();
         assertThat(stored.signatureVersion()).isNull();
+    }
+
+    // P1 清单#19：发凭证刷新窗口按票种级 refresh_interval_seconds 取值（此处票种配 30）。
+    @Test
+    void credentialRefreshUsesTicketTypeConfiguredRefreshInterval() {
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_ri30", "RI30 Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
+                false, "published", null, 30, now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_ri30", "Entry RI30", "entry", 1, 9900L, "active", null, null, null, null, now, now));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_ri30", "tt_ri30", "tpl_ri30", 1, 1, 9900L, "default", 1, null, now, now));
+        service.issueTicketTypeDirectly("tt_ri30", new TicketIssueRequest(
+                "ri30-issue", "issue", List.of(), "order_ri30", "manual", List.of("qr")));
+        IssuedEntitlementRecord issued = ticketingRepository.issuedEntitlements.values().stream()
+                .filter(e -> "order_ri30".equals(e.orderId())).findFirst().orElseThrow();
+
+        TicketCredentialResponse credential = service.getTicketCredential(issued.id());
+        long windowSeconds = java.time.Duration.between(credential.issuedAt(), credential.expiresAt()).getSeconds();
+        assertThat(windowSeconds).isEqualTo(30L);
+        assertThat(ticketingRepository.findTicketCredentialByToken(credential.credentialToken()).orElseThrow()
+                .refreshIntervalSeconds()).isEqualTo(30);
+    }
+
+    // P1 清单#19：动态二维码过刷新窗口（截图重放旧 token）→ window_valid=false、result_reason=window_expired、不消费权益。
+    @Test
+    void verificationPastRefreshWindowMarksWindowExpiredAndDoesNotConsume() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("window-expired");
+        TicketCredentialResponse credential = service.getTicketCredential(entitlement.id());
+        TicketCredentialRecord stored = ticketingRepository.findTicketCredentialByToken(credential.credentialToken()).orElseThrow();
+        // 把窗口起点推到过去，使 window_started_at + refresh_interval 落在当前之前（模拟离线截图重放过窗口旧 token）。
+        Instant past = Instant.now().minusSeconds(stored.refreshIntervalSeconds() + 60L);
+        ticketingRepository.saveTicketCredential(new TicketCredentialRecord(
+                stored.id(), stored.entitlementId(), stored.orderId(), stored.credentialToken(), stored.nonce(),
+                stored.credentialHash(), stored.credentialType(), past, past.plusSeconds(stored.refreshIntervalSeconds()),
+                "active", stored.refreshedCount(), past, past, stored.refreshIntervalSeconds(), past,
+                stored.signatureValue(), stored.signatureVersion()));
+
+        VerificationResponse response = service.createVerification(new VerificationRequest(
+                "window-expired-once", "dynamic_qr", credential.credentialToken(), "dev_1", "gate_1", Map.of()));
+
+        assertThat(response.status()).isEqualTo("failed");
+        assertThat(response.resultReason()).isEqualTo("window_expired");
+        // 过窗口不消费权益：used_times 保持 0。
+        assertThat(ticketingRepository.findIssuedEntitlementById(entitlement.id()).orElseThrow().usedTimes()).isZero();
+        // 核销记录 window_valid=false 留痕。
+        assertThat(ticketingRepository.verifications.values())
+                .filteredOn(v -> "failed".equals(v.status()))
+                .singleElement()
+                .satisfies(v -> {
+                    assertThat(v.windowValid()).isFalse();
+                    assertThat(v.resultReason()).isEqualTo("window_expired");
+                });
+    }
+
+    // P1 清单#19：核销冲正 → 发 VerificationReversedEvent（退款/结算冲正联动对接点）。
+    @Test
+    void reverseVerificationPublishesVerificationReversedEvent() {
+        IssuedEntitlementRecord entitlement = issueOrderEntitlement("reverse-event");
+        VerificationResponse success = service.createVerification(new VerificationRequest(
+                "reverse-event-1", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+        publishedEvents.clear();
+
+        service.reverseVerification(
+                success.id(),
+                new com.complex.platform.ticketing.dto.VerificationReverseRequest("reverse-event-rev", "误核销"),
+                "supervisor_1");
+
+        assertThat(publishedEvents)
+                .filteredOn(e -> e instanceof VerificationReversedEvent)
+                .singleElement()
+                .satisfies(e -> {
+                    VerificationReversedEvent event = (VerificationReversedEvent) e;
+                    assertThat(event.verificationId()).isEqualTo(success.id());
+                    assertThat(event.entitlementId()).isEqualTo(entitlement.id());
+                    assertThat(event.orderId()).isEqualTo(entitlement.orderId());
+                });
     }
 
     // T4：成功核销留 nonce/merchant_id/window_valid=true 事后核对维度，signature_valid 本期恒 null。
@@ -1503,7 +1584,7 @@ class TicketingServiceTests {
             Instant now = Instant.now();
             ticketingRepository.saveTicketType(new TicketTypeRecord(
                     "tt_union", "Union Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
-                    false, "published", null, now, now));
+                    false, "published", null, null, now, now));
             ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                     "tpl_a", "Entry A", "entry", 1, 9900L, "active",
                     "mch_a", "venue_a", "gate_a", null, now, now));
@@ -1550,7 +1631,7 @@ class TicketingServiceTests {
         Instant now = Instant.now();
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_combo", "Combo Pass", "weekday_weekend_holiday", 99900L, 99900L, 99900L,
-                false, "published", null, now, now));
+                false, "published", null, null, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_bar", "Bar Entry", "gift_drink", 1, 0L, "active", "mch_bar", null, null, "bar_sku_1", now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
@@ -1585,7 +1666,7 @@ class TicketingServiceTests {
         Instant now = Instant.now();
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_even", "Even Pass", "weekday_weekend_holiday", 99900L, 99900L, 99900L,
-                false, "published", null, now, now));
+                false, "published", null, null, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_e1", "E1", "entry", 1, 0L, "active", null, null, null, null, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
@@ -1646,7 +1727,7 @@ class TicketingServiceTests {
             Instant now = Instant.now();
             ticketingRepository.saveTicketType(new TicketTypeRecord(
                     "tt_fb", "Single Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
-                    false, "published", null, now, now));
+                    false, "published", null, null, now, now));
             ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                     "tpl_fb", "Entry FB", "entry", 1, 9900L, "active",
                     null, null, null, null, now, now));
@@ -1673,7 +1754,7 @@ class TicketingServiceTests {
         Instant now = Instant.now();
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_v30", "30d Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
-                false, "published", 30, now, now));
+                false, "published", 30, null, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_v30", "Entry V30", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
@@ -1691,7 +1772,7 @@ class TicketingServiceTests {
         // validity_days 为空 → 回退 1 天
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_vnull", "Default Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
-                false, "published", null, now, now));
+                false, "published", null, null, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_vnull", "Entry Vnull", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(

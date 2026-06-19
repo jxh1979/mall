@@ -2,8 +2,13 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { rowMatchesKeyword } from "../components/rowSearch";
+
+// 后端写权限码（IntegrationController）
+const RETRY_MANAGE_PERMISSION = "integration.retry.manage";
+const COMPENSATION_MANAGE_PERMISSION = "integration.compensation.manage";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, IntegrationEventRow } from "../types";
 
@@ -65,7 +70,7 @@ function nextKey() {
   return `integration-polling-${Date.now()}`;
 }
 
-export function IntegrationEventsPage({ api, user, setActionResult, setGlobalError }: AdminPageProps) {
+export function IntegrationEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<LoadedEventRow[]>([]);
   const [pollingNote, setPollingNote] = React.useState("已完成 Webhook 与定时轮询一致性校验");
   const [retryReason, setRetryReason] = React.useState("供应商超时后人工触发重试");
@@ -111,6 +116,8 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     }
   }
 
+  // TODO 接口未就绪：后端 IntegrationController 无“轮询校验登记/记录”写接口，
+  // 该动作只是前端的一致性自检快照，不落库。状态标注 not_persisted 避免误判为已留痕。
   function logPollingCheck() {
     if (!pollingNote.trim()) {
       setFormError("轮询校验说明不能为空。");
@@ -120,7 +127,9 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     setGlobalError(null);
     setActionResult({
       action: "integration_polling_checked",
-      status: "logged",
+      status: "not_persisted",
+      persistedToBackend: false,
+      note: "后端暂无轮询校验登记接口，本结果仅为前端一致性自检快照，未落库。",
       audit: "webhook_plus_polling_verified",
       operatorNote: pollingNote,
       idempotencyKey: nextKey(),
@@ -130,6 +139,22 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
       sourceCount: ENDPOINTS.length,
       productionBoundary: "platform_task_status_only_not_supplier_execution",
     });
+  }
+
+  function validateRetry() {
+    if (!selectedRetry?.id) {
+      setFormError(TEXT.noRetry);
+      return false;
+    }
+    return true;
+  }
+
+  function validateCompensation() {
+    if (!selectedCompensation?.id) {
+      setFormError(TEXT.noCompensation);
+      return false;
+    }
+    return true;
   }
 
   async function runRetryNow() {
@@ -180,8 +205,26 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
         </div>
         <div className="admin-form-row">
           <button type="button" data-testid="integration-events-log-polling" disabled={busyAction !== ""} onClick={logPollingCheck}>{TEXT.logPolling}</button>
-          <button type="button" data-testid="integration-events-run-retry" disabled={busyAction !== ""} onClick={() => void runRetryNow()}>{TEXT.runRetry}</button>
-          <button type="button" data-testid="integration-events-resolve-compensation" disabled={busyAction !== ""} onClick={() => void resolveCompensation()}>{TEXT.resolveCompensation}</button>
+          <HighRiskConfirm
+            label={TEXT.runRetry}
+            impact="将立即触发选中重试任务并更新平台任务状态与审计；仅代表平台侧重试，不等于供应商生产补偿已执行。"
+            disabled={busyAction !== ""}
+            precheck={validateRetry}
+            onConfirm={() => void runRetryNow()}
+            permissionsState={effectivePermissions}
+            permissions={[RETRY_MANAGE_PERMISSION]}
+            data-testid="integration-events-run-retry"
+          />
+          <HighRiskConfirm
+            label={TEXT.resolveCompensation}
+            impact="将把选中补偿任务置为已处理并写入审计；仅更新平台任务状态，不代表供应商真实补偿已完成。"
+            disabled={busyAction !== ""}
+            precheck={validateCompensation}
+            onConfirm={() => void resolveCompensation()}
+            permissionsState={effectivePermissions}
+            permissions={[COMPENSATION_MANAGE_PERMISSION]}
+            data-testid="integration-events-resolve-compensation"
+          />
           <span className="admin-muted-action" data-testid="integration-events-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="integration-events-error" className="admin-inline-error">{formError}</div> : null}

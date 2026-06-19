@@ -18,7 +18,7 @@ async function expectRealBackendReady(request: APIRequestContext) {
   expect(apiLogin.ok(), await apiLogin.text()).toBeTruthy();
 }
 
-async function loginAgainstRealBackend(page: Page, path = "/") {
+async function loginAgainstRealBackend(page: Page, path = "/legacy") {
   await page.goto(path);
   await expect(page.getByTestId("login-view")).toBeVisible();
   await page.getByTestId("login-username").fill(username);
@@ -52,22 +52,22 @@ test.describe("real backend UI acceptance", () => {
 
     for (const pageCase of [
       {
-        path: "/?page=ticketing",
+        path: "/legacy?page=ticketing",
         title: "票务核销",
         expectedTexts: ["创建票种并出票", "P2 Dynamic Pricing Rules", "票种", "核销记录"],
       },
       {
-        path: "/?page=bar",
+        path: "/legacy?page=bar",
         title: "酒吧经营",
         expectedTexts: ["一键完成酒吧闭环", "桌台", "订单", "P1 存酒"],
       },
       {
-        path: "/?page=amusement",
+        path: "/legacy?page=amusement",
         title: "游乐运营",
         expectedTexts: ["创建项目和场次", "P2 团体/包场", "游乐项目", "P1 设备状态"],
       },
       {
-        path: "/?page=interfaces",
+        path: "/legacy?page=interfaces",
         title: "第三方接口",
         expectedTexts: ["第三方预留接口与开放应用", "接口目录", "供应商适配器", "P1 重试任务"],
       },

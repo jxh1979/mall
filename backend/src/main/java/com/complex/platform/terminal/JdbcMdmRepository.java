@@ -75,6 +75,17 @@ class JdbcMdmRepository implements MdmRepository {
     }
 
     @Override
+    public boolean isAppWhitelisted(String packageName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM mdm_app_whitelist
+                 WHERE package_name = :package_name
+                   AND enabled = TRUE
+                """, Map.of("package_name", packageName), Integer.class);
+        return count != null && count > 0;
+    }
+
+    @Override
     public List<MdmSiteWhitelistRecord> listSiteWhitelist() {
         return jdbcTemplate.query("""
                 SELECT id, domain, description, scope_type, scope_id, enabled,
@@ -128,6 +139,17 @@ class JdbcMdmRepository implements MdmRepository {
     }
 
     @Override
+    public boolean isSiteWhitelisted(String domain) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM mdm_site_whitelist
+                 WHERE domain = :domain
+                   AND enabled = TRUE
+                """, Map.of("domain", domain), Integer.class);
+        return count != null && count > 0;
+    }
+
+    @Override
     public Optional<MdmDeviceManagementRecord> findDeviceManagement(String deviceId) {
         return jdbcTemplate.query("""
                 SELECT device_id, terminal_type, status, management_status, policy_status,
@@ -165,10 +187,12 @@ class JdbcMdmRepository implements MdmRepository {
     public MdmPolicyViolationRecord saveViolation(MdmPolicyViolationRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO mdm_policy_violations (
-                    id, device_id, violation_type, detail, occurred_at, handled, handled_note, created_at
+                    id, device_id, violation_type, detail, occurred_at, handled, handled_note,
+                    disposition, blocked_at, created_at
                 )
                 VALUES (
-                    :id, :device_id, :violation_type, :detail, :occurred_at, :handled, :handled_note, :created_at
+                    :id, :device_id, :violation_type, :detail, :occurred_at, :handled, :handled_note,
+                    :disposition, :blocked_at, :created_at
                 )
                 """, new MapSqlParameterSource()
                 .addValue("id", record.id())
@@ -178,14 +202,43 @@ class JdbcMdmRepository implements MdmRepository {
                 .addValue("occurred_at", timestampWithTimeZone(record.occurredAt()))
                 .addValue("handled", record.handled())
                 .addValue("handled_note", record.handledNote())
+                .addValue("disposition", record.disposition())
+                .addValue("blocked_at", timestampWithTimeZone(record.blockedAt()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt())));
         return record;
     }
 
     @Override
+    public Optional<MdmPolicyViolationRecord> findViolationById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, device_id, violation_type, detail, occurred_at, handled, handled_note,
+                       disposition, blocked_at, created_at
+                  FROM mdm_policy_violations
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapViolation).stream().findFirst();
+    }
+
+    @Override
+    public void markViolationHandled(String id, String disposition, String handledNote, Instant blockedAt) {
+        jdbcTemplate.update("""
+                UPDATE mdm_policy_violations
+                   SET handled = TRUE,
+                       disposition = :disposition,
+                       handled_note = :handled_note,
+                       blocked_at = :blocked_at
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("disposition", disposition)
+                .addValue("handled_note", handledNote)
+                .addValue("blocked_at", timestampWithTimeZone(blockedAt)));
+    }
+
+    @Override
     public List<MdmPolicyViolationRecord> listViolations(String deviceId) {
         String sql = """
-                SELECT id, device_id, violation_type, detail, occurred_at, handled, handled_note, created_at
+                SELECT id, device_id, violation_type, detail, occurred_at, handled, handled_note,
+                       disposition, blocked_at, created_at
                   FROM mdm_policy_violations
                 """
                 + (deviceId == null ? "" : " WHERE device_id = :device_id")
@@ -246,6 +299,8 @@ class JdbcMdmRepository implements MdmRepository {
                 nullableInstant(rs, "occurred_at"),
                 rs.getBoolean("handled"),
                 rs.getString("handled_note"),
+                rs.getString("disposition"),
+                nullableInstant(rs, "blocked_at"),
                 nullableInstant(rs, "created_at")
         );
     }

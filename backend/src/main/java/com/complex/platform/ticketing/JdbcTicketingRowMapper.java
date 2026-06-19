@@ -37,6 +37,7 @@ final class JdbcTicketingRowMapper {
                 resultSet.getBoolean("stock_required"),
                 resultSet.getString("status"),
                 nullableInteger(resultSet, "validity_days"),
+                nullableInteger(resultSet, "refresh_interval_seconds"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")
         );

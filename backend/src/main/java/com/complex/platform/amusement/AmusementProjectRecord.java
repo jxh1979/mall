@@ -11,6 +11,8 @@ public record AmusementProjectRecord(
         String openStatus,
         String safetyTemplateId,
         Map<String, Object> eligibilityRule,
+        // V114 清单#21：项目入口点位（可空；未绑定为 NULL，向后兼容）。
+        String locationPointId,
         Instant createdAt,
         Instant updatedAt,
         @JsonIgnore

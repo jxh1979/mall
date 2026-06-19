@@ -774,6 +774,87 @@ class BarServiceTests {
                 .anyMatch(event -> "inventory.loss_exception".equals(event.eventName()))).isTrue();
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // P0#4 按杯 pour cost 强制采集（文档 bar §17.4 / R6）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void deliveryRejectsByGlassWhenActualPourVolumeMissingInStrictMode() {
+        // 默认拒绝模式：按杯产品（配置 standard_pour_volume）出品缺 actual_pour_volume → 拒单。
+        BarReservationRecord reservation = createReservation("reservation-pour-required", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-pour-required", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
+                "active", null, null, false, 30, "ml", 10));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-pour-required", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        assertThatThrownBy(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-pour-required", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)),
+                "staff_1", List.of())))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("POUR_VOLUME_REQUIRED");
+
+        assertThat(barRepository.orderItems.get(orderItemId).deliveryStatus()).isEqualTo("pending");
+    }
+
+    @Test
+    void deliveryByGlassFallbackModeUsesStandardVolumeAndMarksNeedsReviewWhenActualMissing() {
+        // 兜底模式：缺 actual_pour_volume → 按标准量计、loss=0，但落异常事件标记 needs_review（严禁静默）。
+        BarOrderService fallbackOrderService = new BarOrderService(
+                barRepository, authorizationService,
+                new AuditEventService(auditEventRepository),
+                new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
+                receivableLedgerService, false);
+
+        BarReservationRecord reservation = createReservation("reservation-pour-fallback", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-pour-fallback", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
+                "active", null, null, false, 30, "ml", 10));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-pour-fallback", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        fallbackOrderService.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-pour-fallback", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)),
+                "staff_1", List.of()));
+
+        // 2 杯标准 30ml → 兜底实际量 60ml，损耗 0。
+        assertThat(barRepository.listOrderItems(order.id()).getFirst().actualPourVolume()).isEqualTo(60);
+        assertThat(barRepository.listOrderItems(order.id()).getFirst().lossVolume()).isEqualTo(0L);
+        assertThat(auditEventRepository.events.stream()
+                .anyMatch(event -> "inventory.loss_exception".equals(event.eventName())
+                        && "pour_volume_fallback".equals(event.metadata().get("reason"))
+                        && Boolean.TRUE.equals(event.metadata().get("needs_review")))).isTrue();
+    }
+
+    @Test
+    void deliveryNonByGlassProductWithoutPourVolumeIsAllowed() {
+        // 非按杯产品（未配置 standard_pour_volume）：缺 actual_pour_volume 不拦截，保持既有行为。
+        BarReservationRecord reservation = createReservation("reservation-non-by-glass", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-non-by-glass", "create", List.of(), "bar_1", "Bottle Beer", "beer", 2800L, null, null,
+                "active", null, null, false));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-non-by-glass", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-non-by-glass", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 1)),
+                "staff_1", List.of()));
+
+        assertThat(barRepository.orderItems.get(orderItemId).deliveryStatus()).isEqualTo("delivered");
+        assertThat(barRepository.listOrderItems(order.id()).getFirst().actualPourVolume()).isNull();
+        assertThat(barRepository.listOrderItems(order.id()).getFirst().lossVolume()).isEqualTo(0L);
+    }
+
     @Test
     void deliveryRejectsPartialQuantityAndKeepsOrderInventoryAndTicketPending() {
         BarReservationRecord reservation = createReservation("reservation-partial-delivery", "bar_1", 2);
@@ -1967,6 +2048,204 @@ class BarServiceTests {
     }
 
     @Test
+    void voidApprovalDecisionWritesBackApprovedStatusToVoidLedger() {
+        BarReservationRecord reservation = createReservation("void-approve", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-approve", "create product", List.of(), "bar_1", "Beer", "beer",
+                3000L, null, null, "active", null, null, false));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-approve", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-approve-1", "x", List.of(), orderItemId, "guest left", false, null));
+        // 高危需审批 → 流水落待审批态。
+        assertThat(voided.approvalRequired()).isTrue();
+        assertThat(voided.status()).isEqualTo("pending");
+
+        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-approve-decide-1", "approved", "supervisor ok"));
+
+        // 审批通过 → status 回写 approved，落审批人/时点/理由。
+        assertThat(decided.status()).isEqualTo("approved");
+        assertThat(decided.reviewedByUserId()).isNotNull();
+        assertThat(decided.reviewedAt()).isNotNull();
+        assertThat(decided.reviewReason()).isEqualTo("supervisor ok");
+        assertThat(barRepository.findOrderItemVoidById(voided.id()))
+                .get().extracting(BarOrderItemVoidRecord::status).isEqualTo("approved");
+    }
+
+    @Test
+    void voidRejectionDecisionWritesBackRejectedStatusToVoidLedger() {
+        BarReservationRecord reservation = createReservation("void-reject", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-reject", "create product", List.of(), "bar_1", "Beer", "beer",
+                3000L, null, null, "active", null, null, false));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-reject", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-reject-1", "x", List.of(), orderItemId, "mistake", false, null));
+        assertThat(voided.status()).isEqualTo("pending");
+
+        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-reject-decide-1", "rejected", "not justified"));
+
+        // 审批驳回 → status 回写 rejected。
+        assertThat(decided.status()).isEqualTo("rejected");
+        assertThat(decided.reviewedByUserId()).isNotNull();
+        assertThat(barRepository.findOrderItemVoidById(voided.id()))
+                .get().extracting(BarOrderItemVoidRecord::status).isEqualTo("rejected");
+
+        // 已决策（非 pending）再次决策被拒。
+        assertThatThrownBy(() -> service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-reject-decide-2", "approved", "late")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_ITEM_VOID_NOT_PENDING");
+    }
+
+    // ========================================================================
+    // 延期项④：退菜退酒审批驳回的资金/库存反向冲销（恢复 void 前状态）。
+    // ========================================================================
+
+    @Test
+    void voidRejectionReversesStockAndBillBackToPreVoidState() {
+        BarReservationRecord reservation = createReservation("void-rej-reverse", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-rej-reverse", "create product", List.of(), "bar_1", "Champagne", "spirit",
+                100000L, null, null, "active", "inventory_void_rej_reverse", "bar_1", true));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-void-rej-reverse", "inventory_void_rej_reverse", "bar_1", 5, 0, 5, Instant.now()));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-rej-reverse", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-void-rej-reverse", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)), "staff_1", List.of("att1")));
+        // 出品后库存 5→3。
+        assertThat(barRepository.findStockBalance("inventory_void_rej_reverse", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(3);
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-void-rej-reverse", "create bill", List.of(), "offline", false, 0));
+        long payableBeforeVoid = bill.payableAmountCent();
+
+        // void：回补库存 3→5、账单减 200000。
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-rej-reverse-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+        assertThat(barRepository.findStockBalance("inventory_void_rej_reverse", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
+        assertThat(barRepository.bills.get(bill.id()).payableAmountCent()).isEqualTo(payableBeforeVoid - 200000L);
+
+        // 驳回：对称冲销 → 库存回到 void 前 3、账单回到 void 前 payable、明细恢复 delivered/未撤单。
+        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-rej-reverse-decide", "rejected", "not justified"));
+        assertThat(decided.status()).isEqualTo("rejected");
+        assertThat(barRepository.findStockBalance("inventory_void_rej_reverse", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(3);
+        assertThat(barRepository.bills.get(bill.id()).payableAmountCent()).isEqualTo(payableBeforeVoid);
+        // outbound 冲销流水落库。
+        assertThat(barRepository.stockMovements.stream()
+                .anyMatch(m -> "outbound".equals(m.movementType())
+                        && "bar_order_item_void_reject".equals(m.businessType()))).isTrue();
+        // 反向账单调整落 waiver_reversal（未结账单）。
+        assertThat(barRepository.billAdjustments.stream()
+                .anyMatch(a -> "waiver_reversal".equals(a.adjustmentType()))).isTrue();
+        // 明细恢复未撤单 + delivered。
+        BarOrderItemRecord restored = barRepository.orderItems.get(orderItemId);
+        assertThat(restored.voided()).isFalse();
+        assertThat(restored.deliveryStatus()).isEqualTo("delivered");
+    }
+
+    @Test
+    void voidApprovalKeepsAppliedSideEffectsWithoutReversal() {
+        BarReservationRecord reservation = createReservation("void-appr-keep", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-appr-keep", "create product", List.of(), "bar_1", "Champagne", "spirit",
+                100000L, null, null, "active", "inventory_void_appr_keep", "bar_1", true));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-void-appr-keep", "inventory_void_appr_keep", "bar_1", 5, 0, 5, Instant.now()));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-appr-keep", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-void-appr-keep", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)), "staff_1", List.of("att1")));
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-void-appr-keep", "create bill", List.of(), "offline", false, 0));
+        long payableBeforeVoid = bill.payableAmountCent();
+
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-appr-keep-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+        // void 副作用：库存回补 5、账单减项。
+        long payableAfterVoid = barRepository.bills.get(bill.id()).payableAmountCent();
+        assertThat(payableAfterVoid).isEqualTo(payableBeforeVoid - 200000L);
+
+        // 通过：保持已施加副作用，不冲销。
+        service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-appr-keep-decide", "approved", "supervisor ok"));
+        assertThat(barRepository.findStockBalance("inventory_void_appr_keep", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
+        assertThat(barRepository.bills.get(bill.id()).payableAmountCent()).isEqualTo(payableAfterVoid);
+        // 无冲销流水/反向调整。
+        assertThat(barRepository.stockMovements.stream()
+                .noneMatch(m -> "bar_order_item_void_reject".equals(m.businessType()))).isTrue();
+        assertThat(barRepository.billAdjustments.stream()
+                .noneMatch(a -> a.adjustmentType().endsWith("_reversal"))).isTrue();
+        assertThat(barRepository.orderItems.get(orderItemId).voided()).isTrue();
+    }
+
+    @Test
+    void voidRejectionReversalIsIdempotentBecauseSecondDecisionIsBlocked() {
+        BarReservationRecord reservation = createReservation("void-rej-idem", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-rej-idem", "create product", List.of(), "bar_1", "Champagne", "spirit",
+                100000L, null, null, "active", "inventory_void_rej_idem", "bar_1", true));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-void-rej-idem", "inventory_void_rej_idem", "bar_1", 5, 0, 5, Instant.now()));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-rej-idem", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-void-rej-idem", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)), "staff_1", List.of("att1")));
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-void-rej-idem", "create bill", List.of(), "offline", false, 0));
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-rej-idem-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+
+        service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-rej-idem-decide-1", "rejected", "not justified"));
+        int stockAfterFirst = barRepository.findStockBalance("inventory_void_rej_idem", "bar_1")
+                .map(StockBalanceSnapshot::quantity).orElseThrow();
+        long reversalAdjustmentsAfterFirst = barRepository.billAdjustments.stream()
+                .filter(a -> a.adjustmentType().endsWith("_reversal")).count();
+
+        // 二次决策被 pending 守卫拦截 → 不会重复冲销（幂等）。
+        assertThatThrownBy(() -> service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-rej-idem-decide-2", "rejected", "again")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_ITEM_VOID_NOT_PENDING");
+        assertThat(barRepository.findStockBalance("inventory_void_rej_idem", "bar_1")
+                .map(StockBalanceSnapshot::quantity).orElseThrow()).isEqualTo(stockAfterFirst);
+        assertThat(barRepository.billAdjustments.stream()
+                .filter(a -> a.adjustmentType().endsWith("_reversal")).count())
+                .isEqualTo(reversalAdjustmentsAfterFirst);
+    }
+
+    @Test
     void reopenSettledBillTransitionsToReopenedAndAllowsResettle() {
         BarBillRecord bill = billForOrder("reopen-flow", null);
         service.settleBill(bill.id(), new BarBillSettleRequest(
@@ -2464,6 +2743,11 @@ class BarServiceTests {
         }
 
         @Override
+        public java.util.Optional<BarOrderItemVoidRecord> findOrderItemVoidById(String id) {
+            return orderItemVoids.stream().filter(v -> v.id().equals(id)).findFirst();
+        }
+
+        @Override
         public BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket) {
             productionTickets.removeIf(existing -> existing.id().equals(ticket.id()));
             productionTickets.add(ticket);
@@ -2632,7 +2916,9 @@ class BarServiceTests {
             }
             long refund = 0L;
             for (BarBillAdjustmentRecord a : billAdjustments) {
-                if (!"refund".equals(a.adjustmentType()) || a.refundedAt() == null) {
+                boolean isRefund = "refund".equals(a.adjustmentType());
+                boolean isRefundReversal = "refund_reversal".equals(a.adjustmentType());
+                if ((!isRefund && !isRefundReversal) || a.refundedAt() == null) {
                     continue;
                 }
                 BarBillRecord bill = bills.get(a.billId());
@@ -2646,7 +2932,8 @@ class BarServiceTests {
                 if (at.isBefore(from) || !at.isBefore(to)) {
                     continue;
                 }
-                refund += a.amountCent();
+                // 延期项④：refund 计入退款净额，refund_reversal（驳回冲销）抵减，net 归零。
+                refund += isRefundReversal ? -a.amountCent() : a.amountCent();
             }
             return new BarShiftReconciliationSnapshot(cash, pos, online, refund, tip);
         }
@@ -2911,6 +3198,30 @@ class BarServiceTests {
                     List.copyOf(evidenceAttachmentIds)
             ));
             return "arap_refund_" + adjustmentId;
+        }
+
+        private final List<CapturedRefundPayable> refundReversals = new ArrayList<>();
+
+        @Override
+        public String reverseRefundPayable(
+                BarBillRecord bill,
+                BarOrderRecord order,
+                String reversalAdjustmentId,
+                long refundAmountCent,
+                String idempotencyKey,
+                String reason,
+                List<String> evidenceAttachmentIds
+        ) {
+            refundReversals.add(new CapturedRefundPayable(
+                    bill.id(),
+                    order.id(),
+                    reversalAdjustmentId,
+                    refundAmountCent,
+                    idempotencyKey,
+                    reason,
+                    List.copyOf(evidenceAttachmentIds)
+            ));
+            return "arap_refund_reversal_" + reversalAdjustmentId;
         }
     }
 

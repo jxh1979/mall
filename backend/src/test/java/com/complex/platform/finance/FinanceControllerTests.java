@@ -276,6 +276,7 @@ class FinanceControllerTests {
                 18800L,
                 "guest request",
                 "original_channel",
+                "original",
                 "requested",
                 Instant.parse("2026-06-14T00:00:00Z")
         ));

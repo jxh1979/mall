@@ -49,6 +49,18 @@ public interface AccessRepository {
         return listUsers().stream().filter(u -> u.id().equals(userId)).findFirst();
     }
 
+    /**
+     * 按商户 scope 列出员工账号（access_users.merchant_id = token scope）。
+     * 商户面数据：商户管理员只能看到归属本商户的账号。默认在内存过滤，JdbcAccessRepository 用 SQL 谓词下推。
+     * 隔离闸口（AC-ISO-1）：提供 merchant_id 行级 scoped 读通道，服务端可按 token scope 过滤。
+     */
+    default List<AccessUser> listUsersByMerchant(String merchantId) {
+        if (merchantId == null) return listUsers();
+        return listUsers().stream()
+                .filter(u -> merchantId.equals(u.merchantId()))
+                .toList();
+    }
+
     List<RoleRecord> listRoles();
 
     /**
@@ -97,6 +109,15 @@ public interface AccessRepository {
 
     default Optional<StaffLevelAssignment> findStaffLevelAssignment(String userId) {
         return Optional.empty();
+    }
+
+    /**
+     * 按商户 scope 列出员工职级/薪资归属（staff_level_assignments.merchant_id = token scope）。
+     * 商户面数据：商户管理员只能看到本商户员工的职级薪资归属。默认空，JdbcAccessRepository 用 SQL 谓词下推。
+     * 隔离闸口（AC-ISO-1）：提供 merchant_id 行级 scoped 读通道。
+     */
+    default List<StaffLevelAssignment> listStaffLevelAssignmentsByMerchant(String merchantId) {
+        return List.of();
     }
 
     boolean permissionExists(String permissionCode);

@@ -22,6 +22,97 @@
 
 ---
 
+## 2B. 回流 payload 映射与渠道语义（mapPayload）
+
+> 新增章节（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)）：依据业务HTML #thirdparty——餐饮/零售四级汇总+实时、团购渠道（美团/点评/抖音）订单号/票码/支付/退款/核销/差异。**代码核验（Grep 佐证）**：webhook 入站仅落信封（`IntegrationOrderSyncService` 以 `safeMap(request.payload())` 原样存 `provider_payload_json`），**无 mapPayload 标准化映射**；团购回流复用通用 `integration_order_syncs`（V030），其 CHECK 仅约束 `business_type ∈ {catering, retail}`、`sync_type ∈ {order, refund, voucher_verification}`，**无渠道语义列**（无 `external_channel_order_id`、无 `channel`），无法区分美团/点评/抖音渠道，也无自动差异识别（全靠管理员手填）。本章补映射框架，使回流能解析为标准模型并参与对账。
+
+### 2B.1 mapPayload 映射规范（webhook payload → 标准订单/券核销模型）
+
+回流 webhook 的原始 payload 落库后，必须经 mapPayload 标准化为平台标准订单/券核销模型，而非原样透传业务主模型：
+
+| 环节 | 规范 |
+|---|---|
+| 字段对齐 | 原始 payload 字段经 `request_mapping`/`response_mapping` 映射占位（见集成开发设计 §14.3）映射到标准订单（外部单号、金额分、支付/退款状态、营业日）/标准券核销（券码、核销状态、核销时间）模型；映射失败的 payload 仍保留原始留痕（`parse_status = failed`），进异常复核 |
+| 幂等 | 映射前先按幂等键去重（订单：`open_app_id + (channel) + external_(channel_)order_id + order_status`；退款：`+ external_(channel_)refund_id`；券核销：`+ external_voucher_code + verification_seq`），重复回调返回首次结果不重复落标准模型 |
+| 签名校验 | webhook 入站必须验签（HMAC + 时间戳 + nonce 防重放，复用开放平台动态鉴权）后才进入 mapPayload；验签失败拒绝并写调用审计，不落标准模型 |
+| 金额口径 | 标准模型金额一律整数分（per 统一口径基准 D1），映射时完成单位归一 |
+
+### 2B.2 团购渠道语义
+
+为区分通用 POS 回流与团购渠道回流，标准模型新增渠道语义字段（落地以集成开发设计 §9.1 幂等键、§13.7 渠道事件为准，本层为产品口径登记）：
+
+| 字段 | 含义 | 取值/说明 |
+|---|---|---|
+| `external_channel_order_id` | 团购渠道侧订单号 | 区分一笔渠道券核销与一笔 POS 订单（两条独立对账线，对齐 §6 回流层级） |
+| `channel` | 团购渠道 | `meituan`（美团）/ `dianping`（大众点评）/ `douyin`（抖音） |
+
+> 与现状差异：真实 `integration_order_syncs`（V030）当前**无** `external_channel_order_id`/`channel` 列，团购回流被并入通用 catering/retail。落地时需新迁移补渠道语义列或独立渠道回流表，并在 mapPayload 中按 `channel` 分流。
+
+### 2B.3 自动差异识别（回流→标准模型→对账→差异→复核）
+
+回流不再只落信封等管理员手填，而是构成自动链路（与 F5 对账强制化衔接）：
+
+1. webhook 回流 → 验签 → 落原始 payload；
+2. mapPayload → 标准订单/券核销模型（按 §2B.1）；
+3. 标准模型自动进入对账：按回流层级（订单级/券核销级）与渠道分别比对平台侧流水；
+4. 比对不一致自动生成差异（金额/数量/状态/缺失/重复），不依赖人工逐条录入；
+5. 差异进差异清单复核（确认平台口径/第三方口径/转财务）。
+
+### 2B.4 真实供应商字段未定前的占位
+
+真实第三方接口字段/签名/对账文件未定前，按 `third-party-supplier-integration-kit-v0.1.md`（supplier kit）以适配器映射占位先行：固化 mapPayload 框架、标准模型、渠道语义字段、幂等与对账链路；供应商私有字段经适配器 `request_mapping/response_mapping` 占位，**不写死进票务/财务等业务主模型**。映射框架先行、真实字段后补。
+
+### 2B.5 验收
+
+- 回流 webhook payload 能经 mapPayload 解析为标准订单/券核销模型（映射失败留痕进异常），而非原样信封手填。
+- 团购渠道订单可按 `channel`（meituan/dianping/douyin）与 `external_channel_order_id` 区分，订单级与券核销级两条对账线不混算。
+- 回流标准模型自动参与对账并按四类差异自动识别，进差异清单复核。
+
+> **待业务确认**：真实第三方（美团/点评/抖音、餐饮/零售 POS）接口字段、签名算法/header、对账文件格式资料未定；上述为映射框架与产品口径，真实字段映射、错误码、对账细则待供应商资料到位后补齐。
+
+### 2B.6 回流自动差异识别与对账闭环（衔接F5）
+
+> 新增小节（`R6 全闭环(2026-06-19)`）：承接 §2B.3（自动差异识别）并与 §5 流程图 F4（差异确认与对账协同）、集成开发设计 §12 对账差异衔接，明确"回流标准模型→对账批次→四类差异→差异进复核→结算"的数据流与状态。本小节与现有 R5(F12) 标注口径一致，不改既有内容；真实接口未接入前以 mock + 人工兜底（business-decision-log `R6-D07`）。
+
+#### 2B.6.1 数据流与状态（回流→对账批次→四类差异→复核→结算）
+
+| 环节 | 输入 | 处理 | 状态流转 |
+|---|---|---|---|
+| 回流标准模型 | webhook 原始 payload | 经 §2B.1 mapPayload 标准化为标准订单/券核销模型（映射失败 `parse_status=failed` 进异常） | 回流记录：received → matched / to_handle |
+| 对账批次 | 标准模型（按回流层级订单级/券核销级 + 渠道分流） | 平台侧 expected 由系统取数自动生成（**禁止人工手填**，R6-D07）；第三方侧取数；按批次归集 | 回流批次：processing → completed / has_error |
+| 四类差异识别 | 平台侧 expected vs 第三方侧 actual | 自动比对识别四类差异（见 §2B.6.2，引用集成开发设计 §12 强制枚举） | 差异记录：to_identify → open |
+| 差异进复核 | open 差异 | 进差异清单（§9）复核：确认平台口径/第三方口径/转财务 | 差异记录：open → pending_review → closed / ignored |
+| 结算 | 已关闭差异结论 | 按处理结论进入日结/对账/结算依据（财务子域） | 入账口径：accounted |
+
+#### 2B.6.2 四类差异（amount/count/status/missing，引用 F5 强制枚举）
+
+四类差异枚举与集成开发设计 §12.2 对账差异类型对齐（强制枚举，不自定义）：
+
+| 差异类型 | 含义 | 处理方式（对齐 §9 差异清单） |
+|---|---|---|
+| `amount`（金额） | 平台侧与第三方侧金额不一致（单位分，D1） | 财务复核，确认采用口径 |
+| `count`（数量） | 订单数/核销数不一致 | 运营确认事实，按层级核对 |
+| `status`（状态） | 订单/核销/退款状态不一致 | 按状态优先级修正 |
+| `missing`（缺失） | 一侧有另一侧无（平台缺/第三方缺） | 主动补拉或人工确认/重发 |
+
+> 与 §9 差异清单页字段（差异类型：金额/数量/状态/缺失/重复）对齐；`missing` 对应集成开发设计 §12.2 的 `missing_in_platform`/`missing_in_third_party` 两向。
+
+#### 2B.6.3 真实接口未接入前以 mock + 人工兜底（R6-D07）
+
+按 business-decision-log `R6-D07`（对账 P0 边界）：
+
+- **平台侧** expected 由系统取数自动生成，禁止人工手填，保证权威性。
+- **第三方侧** 在真实接口未接入前，以人工录入（`source=manual`）方式登记并强制进复核；真实接口接入后由自动匹配（P1）替换人工录入，`manual` 记录保留可追溯。
+- 占位期遵循 §2B.4：mapPayload 框架/标准模型/渠道语义/对账链路先固化，供应商私有字段经适配器映射占位，不写死进票务/财务等业务主模型。
+
+#### 2B.6.4 验收
+
+- 一笔回流可走完"映射（mapPayload）→对账（批次，平台侧系统取数 expected）→四类差异（amount/count/status/missing）→复核（差异清单确认口径/转财务）"，全链状态可追溯。
+- 平台侧 expected 无人工手填；第三方侧未接入期以 `source=manual` 兜底 + 强制复核，manual 记录可追溯（R6-D07）。
+- 四类差异枚举与集成开发设计 §12.2 强制枚举一致，不自定义差异类型。
+
+---
+
 ## 3. 来源：第三方接入层页面清单 V0.1
 
 > 原文件：`third-party-access-layer-page-list-v0.1.md`
@@ -167,6 +258,7 @@
 | 2026-06-07 | 改 | §6、§9 | 回流记录页/差异清单页增"回流层级（订单级/券核销级）"并按层级区分对账 | finding third-5：两条对账线未区分 |
 | 2026-06-07 | 增 | §6 | 回流记录页补团购售票渠道专项字段 | finding third-7：渠道/支付无页面入口 |
 | 2026-06-07 | 改 | §11 | 补对外授权、汇总粒度、团购渠道、回流层级验收项 | finding third-1/third-4/third-5/third-7 |
+| 2026-06-19 R6 全闭环 | 增 | §2B.6 | 新增"回流自动差异识别与对账闭环（衔接F5）"：明确 回流标准模型→对账批次→四类差异(amount/count/status/missing，引用集成开发设计 §12 强制枚举)→差异进复核→结算 的数据流与状态；真实接口未接入前以 mock + 人工(source=manual)兜底，平台侧 expected 系统取数禁手填(R6-D07)；补"一笔回流走完映射→对账→差异→复核"验收。承接 §2B.3，未改既有 R5(F12) 内容 | `R6 全闭环(2026-06-19)`；business-decision-log R6-D07(对账边界) |
 
 ---
 

@@ -120,6 +120,22 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public List<MerchantRecord> listMerchantsByBusinessEntity(String businessEntityId) {
+        // 商户面 scoped 读通道：按 merchants.business_entity_id = token scope 过滤（AC-ISO-1，§4）。
+        if (businessEntityId == null) return listMerchants();
+        return jdbcTemplate.query("""
+                SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
+                       settlement_entity_id, contact_name, contact_phone, mall_block_code, area_square_meter,
+                       leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
+                       rent_per_square_meter, cooperation_form, status, created_at, updated_at
+                  FROM merchants
+                 WHERE business_entity_id = :business_entity_id
+                 ORDER BY created_at DESC, id
+                 LIMIT 500
+                """, Map.of("business_entity_id", businessEntityId), this::mapMerchant);
+    }
+
+    @Override
     public ProjectRecord saveProject(ProjectRecord project) {
         jdbcTemplate.update("""
                 INSERT INTO projects (

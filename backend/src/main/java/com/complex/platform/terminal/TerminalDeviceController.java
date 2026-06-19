@@ -7,6 +7,7 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.terminal.dto.CapabilitySwitchRequest;
 import com.complex.platform.terminal.dto.DeviceBindRequest;
+import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
@@ -53,6 +54,47 @@ public class TerminalDeviceController {
         authorizationService.requirePermission("terminal.device.unbind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.unbindDevice(id, request));
+    }
+
+    // ── P0#9 设备生命周期状态机端点 ───────────────────────────────────────────
+    @PostMapping("/devices/{id}/repair")
+    public ApiResponse<DeviceBindingResponse> repairDevice(
+            @PathVariable String id,
+            @RequestBody DeviceLifecycleRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.repairDevice(id, request));
+    }
+
+    @PostMapping("/devices/{id}/lost")
+    public ApiResponse<DeviceBindingResponse> markDeviceLost(
+            @PathVariable String id,
+            @RequestBody DeviceLifecycleRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markDeviceLost(id, request));
+    }
+
+    @PostMapping("/devices/{id}/found")
+    public ApiResponse<DeviceBindingResponse> markDeviceFound(
+            @PathVariable String id,
+            @RequestBody DeviceLifecycleRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markDeviceFound(id, request));
+    }
+
+    @PostMapping("/devices/{id}/scrap")
+    public ApiResponse<DeviceBindingResponse> scrapDevice(
+            @PathVariable String id,
+            @RequestBody DeviceLifecycleRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.scrapDevice(id, request));
     }
 
     @GetMapping("/capability-switches")

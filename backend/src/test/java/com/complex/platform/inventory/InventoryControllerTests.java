@@ -25,7 +25,9 @@ import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
+import com.complex.platform.inventory.dto.SupplierQualificationRequest;
 import com.complex.platform.inventory.dto.SupplierReconciliationRequest;
+import com.complex.platform.inventory.dto.SupplierSettlementMethodRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -64,11 +66,22 @@ class InventoryControllerTests {
     private InventoryService service;
 
     @Autowired
+    private SupplierQualificationService supplierQualificationService;
+
+    @Autowired
     private AuthorizationService authorizationService;
 
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(service, authorizationService);
+        Mockito.reset(service, supplierQualificationService, authorizationService);
+        when(supplierQualificationService.listQualifications(any()))
+                .thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        when(supplierQualificationService.createQualification(any(SupplierQualificationRequest.class)))
+                .thenReturn(qualification());
+        when(supplierQualificationService.listSettlementMethods(any()))
+                .thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        when(supplierQualificationService.createSettlementMethod(any(SupplierSettlementMethodRequest.class)))
+                .thenReturn(settlementMethod());
         when(service.listInventoryItems()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.listPurchaseRequests()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.listSavedBottles()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
@@ -118,6 +131,10 @@ class InventoryControllerTests {
             "POST,/api/v1/inventory/stock-movements/damage,inventory.stock.move",
             "GET,/api/v1/inventory/suppliers,inventory.supplier.view",
             "POST,/api/v1/inventory/suppliers,inventory.supplier.manage",
+            "GET,/api/v1/inventory/supplier-qualifications,inventory.supplier.qualification.manage",
+            "POST,/api/v1/inventory/supplier-qualifications,inventory.supplier.qualification.manage",
+            "GET,/api/v1/inventory/supplier-settlement-methods,inventory.supplier.settlement.manage",
+            "POST,/api/v1/inventory/supplier-settlement-methods,inventory.supplier.settlement.manage",
             "POST,/api/v1/inventory/trace-codes/scan-handover,inventory.handover.scan"
     })
     void inventoryRoutesUseExactOpenApiPermission(String method, String path, String permission) throws Exception {
@@ -150,6 +167,8 @@ class InventoryControllerTests {
             "/api/v1/inventory/stock-movements/transfer,'{\"from_location_id\":\"wh_1\",\"to_location_id\":\"bar_1\",\"items\":[{\"item_id\":\"item_1\",\"quantity\":1}]}'",
             "/api/v1/inventory/stock-movements/outbound,'{\"from_location_id\":\"wh_1\",\"to_location_id\":\"bar_1\",\"items\":[{\"item_id\":\"item_1\",\"quantity\":1}]}'",
             "/api/v1/inventory/suppliers,'{\"supplier_name\":\"Supplier\"}'",
+            "/api/v1/inventory/supplier-qualifications,'{\"supplier_id\":\"supplier_1\",\"qualification_type\":\"business_license\"}'",
+            "/api/v1/inventory/supplier-settlement-methods,'{\"supplier_id\":\"supplier_1\",\"settlement_method\":\"monthly\"}'",
             "/api/v1/inventory/trace-codes/scan-handover,'{\"credential_type\":\"manual\",\"credential_payload\":\"TRACE-1\",\"device_id\":\"dev_1\",\"point_id\":\"bar_1\"}'"
     })
     void writeRoutesRejectMissingIdempotencyKey(String path, String body) throws Exception {
@@ -186,6 +205,16 @@ class InventoryControllerTests {
     }
 
     private String bodyFor(String path) {
+        if (path.contains("supplier-qualifications")) {
+            return """
+                    {"idempotency_key":"qual-create","supplier_id":"supplier_1","qualification_type":"business_license","qualification_no":"BL-1","valid_to":"2030-01-01"}
+                    """;
+        }
+        if (path.contains("supplier-settlement-methods")) {
+            return """
+                    {"idempotency_key":"settle-create","supplier_id":"supplier_1","settlement_method":"monthly","payment_term_days":30,"applicable_category":"spirit","is_default":true}
+                    """;
+        }
         if (path.contains("purchase-requests")) {
             return """
                     {"idempotency_key":"purchase-create","items":[{"item_id":"item_1","quantity":2}]}
@@ -254,6 +283,18 @@ class InventoryControllerTests {
     private InventorySupplierRecord supplier() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new InventorySupplierRecord("supplier_1", "Supplier", "general", null, null, "active", now, now, null);
+    }
+
+    private SupplierQualificationRecord qualification() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new SupplierQualificationRecord("supplier_qual_1", "supplier_1", "business_license", "BL-1", "机构",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2030-01-01"), List.of("att_1"), "active", now, now, null);
+    }
+
+    private SupplierSettlementMethodRecord settlementMethod() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new SupplierSettlementMethodRecord("supplier_settle_1", "supplier_1", "monthly", 30, "spirit", true,
+                "active", now, now, null);
     }
 
     private PurchaseRequestRecord purchaseRequest() {
@@ -326,6 +367,11 @@ class InventoryControllerTests {
         @Bean
         WarehouseService warehouseService() {
             return Mockito.mock(WarehouseService.class);
+        }
+
+        @Bean
+        SupplierQualificationService supplierQualificationService() {
+            return Mockito.mock(SupplierQualificationService.class);
         }
 
         @Bean

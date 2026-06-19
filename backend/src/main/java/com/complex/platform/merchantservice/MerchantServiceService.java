@@ -25,6 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class MerchantServiceService {
 
     private static final int DEFAULT_PAGE_LIMIT = 100;
+    // SLA 升级单批上限：一次定时扫描最多处理的工单数，防止单次事务过大。
+    private static final int ESCALATE_BATCH_LIMIT = 200;
+    // 系统操作者标识：SLA 自动升级无登录用户，留痕 operator_user_id 用此系统标识。
+    private static final String SYSTEM_OPERATOR = "system";
     private static final String BUSINESS_TYPE = "merchant_service_work_order";
     private static final Set<String> TYPES = Set.of("repair", "complaint", "rectification", "service");
     private static final Set<String> PRIORITIES = Set.of("low", "medium", "high", "critical");
@@ -142,6 +146,47 @@ public class MerchantServiceService {
         );
     }
 
+    /**
+     * SLA 自动超时升级（可直接调用，供 @Scheduled 薄包装与单测调用）：
+     * 扫描 due_at 已过、未完成（status 非 resolved/closed/cancelled）且尚未升级（escalated_at IS NULL）的工单，
+     * 逐单打标 sla_breached + escalated_at（markSlaBreached，不改 status），并写一条 'escalated' 动作留痕。
+     * 留痕的 from/to status 一致（升级不迁移状态），operator 用系统标识（无登录上下文）。
+     * 一次调用最多处理 escalateBatchLimit 条；返回本次升级的工单数。
+     *
+     * @param now 参照时刻（due_at &lt;= now 视为已超时）
+     */
+    @Transactional
+    public int escalateOverdueWorkOrders(Instant now) {
+        if (now == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "now is required");
+        }
+        List<MerchantWorkOrderRecord> overdue = repository.findOverdueOpenWorkOrders(now, ESCALATE_BATCH_LIMIT);
+        int escalated = 0;
+        for (MerchantWorkOrderRecord record : overdue) {
+            MerchantWorkOrderRecord breached = repository.saveWorkOrder(record.markSlaBreached(now));
+            repository.saveAction(action(
+                    breached.id(),
+                    "escalated",
+                    record.status(),
+                    breached.status(),
+                    SYSTEM_OPERATOR,
+                    "SLA overdue auto-escalation",
+                    List.of()
+            ));
+            auditEventService.recordSuccess(
+                    "merchant_service.work_order.escalated",
+                    "merchant.service_work_order.process",
+                    BUSINESS_TYPE,
+                    breached.id(),
+                    requestId(),
+                    null,
+                    Map.of("status", breached.status(), "sla_breached", breached.slaBreached())
+            );
+            escalated++;
+        }
+        return escalated;
+    }
+
     private MerchantWorkOrderRecord createWorkOrderOnce(MerchantWorkOrderCreateRequest request) {
         String type = normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
         String priority = normalizeAllowed(request.priority(), "priority", PRIORITIES);
@@ -170,6 +215,8 @@ public class MerchantServiceService {
                 null,
                 null,
                 evidenceIds(request.evidenceAttachmentIds()),
+                false,
+                null,
                 now,
                 now
         ));

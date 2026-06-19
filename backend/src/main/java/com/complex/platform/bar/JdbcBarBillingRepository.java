@@ -268,13 +268,17 @@ final class JdbcBarBillingRepository {
         long cash = ((Number) row.get("cash_cent")).longValue();
         long pos = ((Number) row.get("pos_cent")).longValue();
         long online = ((Number) row.get("online_cent")).longValue();
-        // 退款：本吧台 + refunded_at 落窗口的 refund 调整额。
+        // 退款：本吧台 + refunded_at 落窗口的 refund 调整额，净额扣减 refund_reversal（延期项④：
+        // 退菜退酒审批驳回的退款冲销，加回应付并冲正退款台账，故经营日退款净额须相应抵减，不重复计入退款额）。
         Long refund = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(a.amount_cent), 0)
+                SELECT COALESCE(SUM(
+                           CASE WHEN a.adjustment_type = 'refund' THEN a.amount_cent
+                                WHEN a.adjustment_type = 'refund_reversal' THEN -a.amount_cent
+                                ELSE 0 END), 0)
                   FROM bar_bill_adjustments a
                   JOIN bar_bills b ON b.id = a.bill_id
                  WHERE b.bar_id = :bar_id
-                   AND a.adjustment_type = 'refund'
+                   AND a.adjustment_type IN ('refund', 'refund_reversal')
                    AND a.refunded_at >= :from_ts AND a.refunded_at < :to_ts""" + merchantFilter,
                 new HashMap<>(params.getValues()), Long.class);
         // 小费：本吧台 + 本收银员窗口内结算账单的 tip（代收，不计低消/提成基数）。

@@ -119,6 +119,7 @@ class CustomerServiceTests {
                 false,
                 "published",
                 null,
+                null,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         )), 1, 50, 1));
@@ -310,6 +311,46 @@ class CustomerServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("customer.bar_reservation_options_viewed", "customer.bar_reservation.created");
+    }
+
+    // P0#3: 订台定金按 bar_deposit_rules 计算（固定额规则 → deposit pending + 金额按规则）。
+    @Test
+    void barReservationComputesDepositFromFixedRule() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        customerRepository.saveBarTable(new BarTableRecord(
+                "table_deposit", "bar_dep", null, "T-DEP", "VIP", "card_seat",
+                6, 2, 50000L, "CNY", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
+        customerRepository.depositRules.put("rule_fixed", new com.complex.platform.bar.BarDepositRuleRecord(
+                "rule_fixed", "bar_dep", null, "bar", "bar_dep", "fixed",
+                20000L, null, 60, true, Instant.now(), Instant.now()));
+
+        BarReservationRecord reservation = service.createBarReservation(login.customerToken(), "dep-fixed",
+                new CustomerBarReservationRequest(null, "bar_dep", "table_deposit", "card_seat",
+                        Instant.parse("2026-06-20T21:00:00Z"), 2, "13800138000"));
+
+        assertThat(reservation.depositAmountCent()).isEqualTo(20000L);
+        assertThat(reservation.depositStatus()).isEqualTo("pending");
+    }
+
+    // P0#3: 比例规则（min_consumption_ratio）→ 低消 × ratioBps/10000。
+    @Test
+    void barReservationComputesDepositFromRatioRule() {
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        customerRepository.saveBarTable(new BarTableRecord(
+                "table_ratio", "bar_ratio", null, "T-R", "VIP", "card_seat",
+                6, 2, 100000L, "CNY", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
+        customerRepository.depositRules.put("rule_ratio", new com.complex.platform.bar.BarDepositRuleRecord(
+                "rule_ratio", "bar_ratio", null, "table_type", "card_seat", "min_consumption_ratio",
+                null, 3000 /* 30% */, 0, true, Instant.now(), Instant.now()));
+
+        BarReservationRecord reservation = service.createBarReservation(login.customerToken(), "dep-ratio",
+                new CustomerBarReservationRequest(null, "bar_ratio", "table_ratio", "card_seat",
+                        Instant.parse("2026-06-20T21:00:00Z"), 2, "13800138000"));
+
+        assertThat(reservation.depositAmountCent()).isEqualTo(30000L); // 100000 * 3000 / 10000
+        assertThat(reservation.depositStatus()).isEqualTo("pending");
     }
 
     @Test
@@ -772,6 +813,16 @@ class CustomerServiceTests {
                     .filter(table -> barId.equals(table.barId()))
                     .filter(table -> tableType.equals(table.tableType()))
                     .filter(table -> "active".equals(table.status()));
+        }
+
+        final Map<String, com.complex.platform.bar.BarDepositRuleRecord> depositRules = new LinkedHashMap<>();
+
+        @Override
+        public List<com.complex.platform.bar.BarDepositRuleRecord> listDepositRules(String barId) {
+            return depositRules.values().stream()
+                    .filter(r -> barId.equals(r.barId()) && r.enabled())
+                    .sorted((a, b) -> b.scopeType().compareTo(a.scopeType()))
+                    .toList();
         }
 
         @Override

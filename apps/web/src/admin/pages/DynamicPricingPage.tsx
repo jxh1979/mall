@@ -2,9 +2,13 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, TicketDynamicPricingRuleRow, TicketDynamicPricingSimulationResult } from "../types";
+
+// 后端写权限码（TicketingController：/dynamic-pricing-rules/{id}/publish）
+const DYNAMIC_PUBLISH_PERMISSION = "ticket.dynamic_pricing.publish";
 
 const TEXT = {
   title: "\u52a8\u6001\u5b9a\u4ef7",
@@ -46,7 +50,7 @@ function ruleLabel(rule: TicketDynamicPricingRuleRow | undefined) {
   return rule?.ruleName ?? rule?.id ?? "-";
 }
 
-export function DynamicPricingPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function DynamicPricingPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rules, setRules] = React.useState<TicketDynamicPricingRuleRow[]>([]);
   const { selectedId: selectedRuleId, setSelectedId: setSelectedRuleId, selected: selectedRule } = useSelectedRow(rules);
   const [ruleName, setRuleName] = React.useState("Weekend Boost");
@@ -120,6 +124,14 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError }: Adm
     if (result) setSimulation(result as TicketDynamicPricingSimulationResult);
   }
 
+  function validatePublish() {
+    if (!selectedRule) {
+      setFormError(TEXT.ruleRequired);
+      return false;
+    }
+    return true;
+  }
+
   async function publishRule() {
     if (!selectedRule) {
       setFormError(TEXT.ruleRequired);
@@ -153,7 +165,16 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError }: Adm
           <input data-testid="dynamic-pricing-visit-date" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} placeholder={TEXT.visitDate} />
           <button type="button" data-testid="dynamic-pricing-create" disabled={busyAction !== ""} onClick={() => void createDraft()}>{TEXT.createDraft}</button>
           <button type="button" data-testid="dynamic-pricing-simulate" disabled={busyAction !== ""} onClick={() => void simulate()}>{TEXT.simulate}</button>
-          <button type="button" data-testid="dynamic-pricing-publish" disabled={busyAction !== ""} onClick={() => void publishRule()}>{TEXT.publish}</button>
+          <HighRiskConfirm
+            label={TEXT.publish}
+            impact="将发布选中动态定价规则并写入审计留痕，规则生效后影响对应渠道/日期的售价计算。"
+            disabled={busyAction !== ""}
+            precheck={validatePublish}
+            onConfirm={() => void publishRule()}
+            permissionsState={effectivePermissions}
+            permissions={[DYNAMIC_PUBLISH_PERMISSION]}
+            data-testid="dynamic-pricing-publish"
+          />
         </div>
         {formError ? <div data-testid="dynamic-pricing-error" className="admin-inline-error">{formError}</div> : null}
 

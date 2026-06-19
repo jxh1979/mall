@@ -102,7 +102,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
     public List<AmusementIncidentRecord> findAllIncidents() {
         return jdbcTemplate.query("""
                 SELECT id, project_id, amusement_project_id, session_id, device_id, customer_id,
-                       severity, status, title, description, reported_by_user_id, reported_channel,
+                       severity, incident_type, status, title, description, reported_by_user_id, reported_channel,
                        occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_incidents
                  ORDER BY occurred_at DESC, id
@@ -113,7 +113,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
     public List<AmusementIncidentRecord> findIncidentsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, amusement_project_id, session_id, device_id, customer_id,
-                       severity, status, title, description, reported_by_user_id, reported_channel,
+                       severity, incident_type, status, title, description, reported_by_user_id, reported_channel,
                        occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_incidents
                  WHERE merchant_id = :merchant_id
@@ -125,7 +125,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
     public Optional<AmusementIncidentRecord> findIncidentById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, amusement_project_id, session_id, device_id, customer_id,
-                       severity, status, title, description, reported_by_user_id, reported_channel,
+                       severity, incident_type, status, title, description, reported_by_user_id, reported_channel,
                        occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
                   FROM amusement_incidents
                  WHERE id = :id
@@ -137,12 +137,12 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
         jdbcTemplate.update("""
                 INSERT INTO amusement_incidents (
                     id, project_id, amusement_project_id, session_id, device_id, customer_id,
-                    severity, status, title, description, reported_by_user_id, reported_channel,
+                    severity, incident_type, status, title, description, reported_by_user_id, reported_channel,
                     occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :project_id, :amusement_project_id, :session_id, :device_id, :customer_id,
-                    :severity, :status, :title, :description, :reported_by_user_id, :reported_channel,
+                    :severity, :incident_type, :status, :title, :description, :reported_by_user_id, :reported_channel,
                     :occurred_at, :resolution, :closed_at, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -236,6 +236,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 .addValue("device_id", record.deviceId())
                 .addValue("customer_id", record.customerId())
                 .addValue("severity", record.severity())
+                .addValue("incident_type", record.incidentType())
                 .addValue("status", record.status())
                 .addValue("title", record.title())
                 .addValue("description", record.description())
@@ -312,6 +313,7 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 resultSet.getString("device_id"),
                 resultSet.getString("customer_id"),
                 resultSet.getString("severity"),
+                resultSet.getString("incident_type"),
                 resultSet.getString("status"),
                 resultSet.getString("title"),
                 resultSet.getString("description"),

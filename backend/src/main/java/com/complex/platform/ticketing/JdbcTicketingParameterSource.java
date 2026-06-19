@@ -29,6 +29,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("stock_required", ticketType.stockRequired())
                 .addValue("status", ticketType.status())
                 .addValue("validity_days", ticketType.validityDays())
+                .addValue("refresh_interval_seconds", ticketType.refreshIntervalSeconds())
                 .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()));
     }

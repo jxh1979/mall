@@ -8,6 +8,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError }: Admin
   const [rows, setRows] = React.useState<ReadinessItemRow[]>([]);
   const [evidenceRef, setEvidenceRef] = React.useState("");
   const [formError, setFormError] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -26,9 +27,21 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError }: Admin
       return;
     }
     setFormError("");
+    setGlobalError(null);
+    setSubmitting(true);
     const item = rows[0];
-    const result = await api.patch(`/api/v1/ops/production-readiness/items/${item?.id ?? "blocker-1"}`, { status: "verified", evidenceRef });
-    setActionResult({ action: "ops_blocker_verify", status: "verified", result });
+    try {
+      const result = await api.patch(`/api/v1/ops/production-readiness/items/${item?.id ?? "blocker-1"}`, { status: "verified", evidenceRef });
+      setActionResult({ action: "ops_blocker_verify", status: "verified", result });
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "生产 blocker 验证失败";
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action: "ops_blocker_verify", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -37,7 +50,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError }: Admin
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-form-row">
           <input data-testid="ops-evidence-ref" value={evidenceRef} onChange={(event) => setEvidenceRef(event.target.value)} placeholder="evidence://..." />
-          <button type="button" data-testid="ops-verify-blocker" onClick={() => void verifyBlocker()}>标记已验证</button>
+          <button type="button" data-testid="ops-verify-blocker" disabled={submitting} onClick={() => void verifyBlocker()}>标记已验证</button>
         </div>
         {formError ? <div data-testid="ops-readiness-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">

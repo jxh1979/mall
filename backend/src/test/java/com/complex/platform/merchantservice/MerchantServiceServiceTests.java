@@ -522,6 +522,69 @@ class MerchantServiceServiceTests {
         assertThat(r1.id()).matches("mswo_[0-9a-f]{32}");
     }
 
+    @Test
+    void escalateOverdueWorkOrdersMarksBreachedAndWritesEscalatedAction() {
+        Instant now = Instant.parse("2026-06-19T00:00:00Z");
+        // overdue（due_at 已过）且未完成（processing）→ 应被升级
+        repository.saveWorkOrder(overdueRecord("mswo_overdue", "processing",
+                Instant.parse("2026-06-18T00:00:00Z")));
+        // 未到期（due_at 在 now 之后）→ 不应动
+        repository.saveWorkOrder(overdueRecord("mswo_future", "processing",
+                Instant.parse("2026-06-20T00:00:00Z")));
+        // 已完成态（resolved）虽过期但不属未完成态 → 不应动
+        repository.saveWorkOrder(overdueRecord("mswo_resolved", "resolved",
+                Instant.parse("2026-06-18T00:00:00Z")));
+
+        int escalated = service.escalateOverdueWorkOrders(now);
+
+        assertThat(escalated).isEqualTo(1);
+
+        MerchantWorkOrderRecord breached = repository.workOrders.get("mswo_overdue");
+        assertThat(breached.slaBreached()).isTrue();
+        assertThat(breached.escalatedAt()).isEqualTo(now);
+        assertThat(breached.status()).isEqualTo("processing"); // 升级不改 status
+
+        // 未被升级的两单保持原样
+        assertThat(repository.workOrders.get("mswo_future").slaBreached()).isFalse();
+        assertThat(repository.workOrders.get("mswo_future").escalatedAt()).isNull();
+        assertThat(repository.workOrders.get("mswo_resolved").slaBreached()).isFalse();
+
+        // escalated 留痕：from/to 一致、operator 为系统标识
+        List<MerchantWorkOrderActionRecord> actions = repository.findActionsByWorkOrderId("mswo_overdue");
+        assertThat(actions).hasSize(1);
+        MerchantWorkOrderActionRecord action = actions.getFirst();
+        assertThat(action.actionType()).isEqualTo("escalated");
+        assertThat(action.fromStatus()).isEqualTo("processing");
+        assertThat(action.toStatus()).isEqualTo("processing");
+        assertThat(action.operatorUserId()).isEqualTo("system");
+
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("merchant_service.work_order.escalated");
+    }
+
+    @Test
+    void escalateOverdueWorkOrdersIsIdempotentForAlreadyEscalated() {
+        Instant now = Instant.parse("2026-06-19T00:00:00Z");
+        repository.saveWorkOrder(overdueRecord("mswo_overdue", "processing",
+                Instant.parse("2026-06-18T00:00:00Z")));
+
+        assertThat(service.escalateOverdueWorkOrders(now)).isEqualTo(1);
+        // 第二次扫描：已升级（escalated_at 非空）应被 findOverdueOpenWorkOrders 过滤掉
+        assertThat(service.escalateOverdueWorkOrders(now)).isEqualTo(0);
+        assertThat(repository.findActionsByWorkOrderId("mswo_overdue")).hasSize(1);
+    }
+
+    private MerchantWorkOrderRecord overdueRecord(String id, String status, Instant dueAt) {
+        Instant created = Instant.parse("2026-06-14T00:00:00Z");
+        return new MerchantWorkOrderRecord(
+                id, "mch_1", null, null, "repair", "high", status,
+                "Test", "Test description", "reporter", "web",
+                "property", "staff_owner", dueAt, null, null, null, List.of(),
+                false, null, created, created
+        );
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private MerchantWorkOrderCreateRequest createRequest(String idempotencyKey) {
@@ -558,7 +621,7 @@ class MerchantServiceServiceTests {
         return new MerchantWorkOrderRecord(
                 id, merchantId, null, null, "repair", "high", status,
                 "Test", "Test description", "reporter", "web",
-                null, null, null, null, null, null, List.of(), now, now
+                null, null, null, null, null, null, List.of(), false, null, now, now
         );
     }
 
@@ -578,6 +641,19 @@ class MerchantServiceServiceTests {
         @Override
         public Optional<MerchantWorkOrderRecord> findWorkOrderById(String id) {
             return Optional.ofNullable(workOrders.get(id));
+        }
+
+        @Override
+        public List<MerchantWorkOrderRecord> findOverdueOpenWorkOrders(Instant now, int limit) {
+            java.util.Set<String> doneStatuses = java.util.Set.of("resolved", "closed", "cancelled");
+            return workOrders.values().stream()
+                    .filter(r -> r.dueAt() != null && !r.dueAt().isAfter(now))
+                    .filter(r -> r.escalatedAt() == null)
+                    .filter(r -> !doneStatuses.contains(r.status()))
+                    .sorted(java.util.Comparator.comparing(MerchantWorkOrderRecord::dueAt)
+                            .thenComparing(MerchantWorkOrderRecord::id))
+                    .limit(limit)
+                    .toList();
         }
 
         @Override

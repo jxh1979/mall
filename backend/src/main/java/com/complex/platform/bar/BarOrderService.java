@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -26,15 +28,33 @@ public class BarOrderService {
     private final AuditEventService auditEventService;
     private final TraceabilityService traceabilityService;
     private final BarReceivableLedgerService receivableLedgerService;
+    /**
+     * P0#4 按杯 pour cost 强制采集策略（文档 bar §17.4 / R6）。
+     * true = 拒绝模式（从严，默认）：按杯出品缺 actual_pour_volume 直接拒单（POUR_VOLUME_REQUIRED）；
+     * false = 标准量兜底模式：缺量时按 standard_pour_volume 计、loss=0，但落 inventory.loss_exception
+     * 异常事件并标记 needs_review，严禁静默 loss=0 无标记。门店可通过 bar.pour-cost.strict-mode 配置切换。
+     */
+    private final boolean pourCostStrictMode;
 
+    @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService, TraceabilityService traceabilityService,
-            BarReceivableLedgerService receivableLedgerService) {
+            BarReceivableLedgerService receivableLedgerService,
+            @Value("${bar.pour-cost.strict-mode:true}") boolean pourCostStrictMode) {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
         this.traceabilityService = traceabilityService;
         this.receivableLedgerService = receivableLedgerService;
+        this.pourCostStrictMode = pourCostStrictMode;
+    }
+
+    /** 向后兼容构造器：默认拒绝模式（从严）。 */
+    public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
+            AuditEventService auditEventService, TraceabilityService traceabilityService,
+            BarReceivableLedgerService receivableLedgerService) {
+        this(repository, authorizationService, auditEventService, traceabilityService,
+                receivableLedgerService, true);
     }
 
     BarProductRecord createProduct(BarProductRequest request) {
@@ -214,28 +234,12 @@ public class BarOrderService {
                         deliveryEvidenceAttachmentIds
                 );
             }
-            // REQ-22 按杯出酒量/损耗：出品时记录实际出酒量，超标准量记损耗；超阈值触发 inventory.loss_exception 核查留痕。
-            Integer actualPourVolume = optionalPourVolume(delivered);
-            long lossVolume = 0L;
-            if (actualPourVolume != null && product.standardPourVolume() != null) {
-                lossVolume = BarPourLoss.lossVolume(product.standardPourVolume(), quantity, actualPourVolume);
-                if (BarPourLoss.exceedsThreshold(lossVolume, product.lossThreshold())) {
-                    auditEventService.recordSuccess(
-                            "inventory.loss_exception",
-                            "bar.order.deliver",
-                            "bar_order_item",
-                            item.id(),
-                            null,
-                            actual.idempotencyKey(),
-                            Map.of(
-                                    "product_id", product.id(),
-                                    "actual_pour_volume", actualPourVolume,
-                                    "loss_volume", lossVolume,
-                                    "loss_threshold", product.lossThreshold()
-                            )
-                    );
-                }
-            }
+            // REQ-22 / P0#4 按杯出酒量/损耗（文档 bar §17.4 / R6）：按杯出品强制采集 actual_pour_volume。
+            // 缺量时按策略处理：拒绝模式直接拒单；兜底模式按标准量计 loss=0 并落异常事件标记 needs_review，
+            // 严禁静默 loss=0 无标记。actual>standard 记损耗，超阈值落 inventory.loss_exception 核查留痕。
+            PourCostResult pour = resolvePourCost(product, delivered, quantity, item, actual.idempotencyKey());
+            Integer actualPourVolume = pour.actualPourVolume();
+            long lossVolume = pour.lossVolume();
             repository.saveOrderItem(new BarOrderItemRecord(
                     item.id(),
                     item.orderId(),
@@ -275,6 +279,71 @@ public class BarOrderService {
                 actorId, List.of(), order.salesStaffId(), null, null, null, null,
                 actorId, null, null, null, null, null, "completed"));
         return deliveredOrder;
+    }
+
+    /** 按杯 pour cost 解析结果：落库的实际出酒量与损耗量。 */
+    private record PourCostResult(Integer actualPourVolume, long lossVolume) {
+    }
+
+    /**
+     * P0#4 按杯 pour cost 强制采集（文档 bar §17.4 / R6）。
+     *
+     * <ul>
+     *   <li>非按杯出品项（未配置 standard_pour_volume）：维持原行为，仅透传可空 actual_pour_volume，loss=0。</li>
+     *   <li>按杯出品 + 已采集 actual_pour_volume：actual>standard 记损耗，超阈值落 inventory.loss_exception。</li>
+     *   <li>按杯出品 + 缺 actual_pour_volume + 拒绝模式（默认）：抛 POUR_VOLUME_REQUIRED 拒单。</li>
+     *   <li>按杯出品 + 缺 actual_pour_volume + 兜底模式：按 standard×quantity 记实际量、loss=0，
+     *       但落 inventory.loss_exception 异常事件标记 needs_review，留痕核查（绝不静默）。</li>
+     * </ul>
+     */
+    private PourCostResult resolvePourCost(BarProductRecord product, Map<String, Object> delivered,
+            int quantity, BarOrderItemRecord item, String idempotencyKey) {
+        Integer actualPourVolume = optionalPourVolume(delivered);
+        // 非按杯出品项：不强制采集，保持既有可空透传。
+        if (product.standardPourVolume() == null) {
+            return new PourCostResult(actualPourVolume, 0L);
+        }
+        // 按杯出品但缺 actual_pour_volume：消除"不传则 loss=0"静默绕过。
+        if (actualPourVolume == null) {
+            if (pourCostStrictMode) {
+                throw ApiException.badRequest(
+                        "POUR_VOLUME_REQUIRED",
+                        "by-glass delivery requires actual_pour_volume");
+            }
+            // 标准量兜底：按标准量计、loss=0，但落异常事件标记 needs_review 留痕（严禁静默）。
+            int standardTotal = product.standardPourVolume() * quantity;
+            auditEventService.recordSuccess(
+                    "inventory.loss_exception",
+                    "bar.order.deliver",
+                    "bar_order_item",
+                    item.id(),
+                    null,
+                    idempotencyKey,
+                    Map.of(
+                            "product_id", product.id(),
+                            "reason", "pour_volume_fallback",
+                            "actual_pour_volume", standardTotal,
+                            "loss_volume", 0,
+                            "needs_review", true));
+            return new PourCostResult(standardTotal, 0L);
+        }
+        // 已采集：计算损耗，超阈值落异常事件。
+        long lossVolume = BarPourLoss.lossVolume(product.standardPourVolume(), quantity, actualPourVolume);
+        if (BarPourLoss.exceedsThreshold(lossVolume, product.lossThreshold())) {
+            auditEventService.recordSuccess(
+                    "inventory.loss_exception",
+                    "bar.order.deliver",
+                    "bar_order_item",
+                    item.id(),
+                    null,
+                    idempotencyKey,
+                    Map.of(
+                            "product_id", product.id(),
+                            "actual_pour_volume", actualPourVolume,
+                            "loss_volume", lossVolume,
+                            "loss_threshold", product.lossThreshold()));
+        }
+        return new PourCostResult(actualPourVolume, lossVolume);
     }
 
     private Integer optionalPourVolume(Map<String, Object> item) {
@@ -551,6 +620,10 @@ public class BarOrderService {
                 actorId,
                 returnToStock));
 
+        // 退菜退酒为高危需审批动作：流水 status 承载审批生命周期。
+        // approvalRequired=TRUE → 落 'pending'（待审批，由审批决策回写 approved/rejected）；FALSE → 'applied'（直接生效）。
+        boolean approvalRequired = true;
+        String initialStatus = approvalRequired ? "pending" : "applied";
         BarOrderItemVoidRecord voidRecord = repository.saveOrderItemVoid(new BarOrderItemVoidRecord(
                 "void_" + slug(item.id() + ":" + idempotencyKey),
                 item.id(),
@@ -567,11 +640,14 @@ public class BarOrderService {
                 billAdjustmentId,
                 reason,
                 actorId,
-                true,
-                "applied",
+                approvalRequired,
+                initialStatus,
                 idempotencyKey,
                 safeList(actual.evidenceAttachmentIds()),
-                now));
+                now,
+                null,
+                null,
+                null));
 
         auditEventService.recordSuccess(
                 "bar.order_item_voided",
@@ -587,6 +663,213 @@ public class BarOrderService {
                         "return_to_stock", returnToStock,
                         "amount_cent", item.amountCent()));
         return voidRecord;
+    }
+
+    /**
+     * V115 / 延期项④：退菜退酒审批决策回写 + 驳回反向冲销。把 pending 流水回写为 approved（通过）
+     * 或 rejected（驳回），落审批人/时点/理由，闭合“审批结果未落到 void 流水”的审计缺口。
+     *
+     * <p>语义：void 设计为“先生效后审批”——库存/资金副作用在 {@link #voidOrderItem} 时已同步施加。
+     * <ul>
+     *   <li><b>approved（通过）</b>：副作用已生效，审批通过即确认，无需重复施加。</li>
+     *   <li><b>rejected（驳回）</b>：该 void 无效，须把 voidOrderItem 已施加的副作用逐一对称回滚——
+     *       已回补的库存重新扣减、已减的账单项恢复、已生成的退款应付冲正，恢复到 void 前状态。
+     *       见 {@link #reverseVoidSideEffects}。</li>
+     * </ul>
+     * 审批决策需 bar.order_item.void 权限。
+     */
+    BarOrderItemVoidRecord decideOrderItemVoid(String voidId, BarOrderItemVoidDecisionRequest request) {
+        BarOrderItemVoidDecisionRequest actual = requireRequest(request);
+        BarOrderItemVoidRecord current = repository.findOrderItemVoidById(requireText(voidId, "void_id"))
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_VOID_NOT_FOUND", "bar order item void not found"));
+        checkMerchantOwnership(current.merchantId());
+        if (!"pending".equals(current.status())) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_VOID_NOT_PENDING", "bar order item void is not pending review");
+        }
+        String decision = normalizeVoidDecision(actual.decision());
+        String reviewer = authorizationService.currentActor().id();
+        String reviewReason = trimToNull(actual.reason());
+        Instant now = Instant.now();
+
+        // 延期项④：驳回 = 该 void 无效 → 对称冲销已施加的库存/账单/退款副作用，恢复 void 前状态。
+        // 仅入口处由 status==pending 守卫保证幂等（再次决策被 BAR_ORDER_ITEM_VOID_NOT_PENDING 拦截，不会重复冲销）。
+        if ("rejected".equals(decision)) {
+            reverseVoidSideEffects(current, reviewer, now);
+        }
+
+        BarOrderItemVoidRecord resolved = new BarOrderItemVoidRecord(
+                current.id(),
+                current.orderItemId(),
+                current.orderId(),
+                current.barId(),
+                current.merchantId(),
+                current.voidType(),
+                current.quantity(),
+                current.amountCent(),
+                current.wasDelivered(),
+                current.returnToStock(),
+                current.inventoryMovementId(),
+                current.billId(),
+                current.billAdjustmentId(),
+                current.reason(),
+                current.requestedByUserId(),
+                current.approvalRequired(),
+                decision,
+                current.idempotencyKey(),
+                current.evidenceAttachmentIds(),
+                current.createdAt(),
+                reviewer,
+                now,
+                reviewReason);
+        BarOrderItemVoidRecord saved = repository.saveOrderItemVoid(resolved);
+
+        auditEventService.recordSuccess(
+                "bar.order_item_void_decided",
+                "bar.order_item.void",
+                "bar_order_item_void",
+                saved.id(),
+                null,
+                saved.idempotencyKey(),
+                Map.of(
+                        "order_id", saved.orderId(),
+                        "order_item_id", saved.orderItemId(),
+                        "decision", decision,
+                        "void_type", saved.voidType(),
+                        "amount_cent", saved.amountCent()));
+        return saved;
+    }
+
+    private String normalizeVoidDecision(String decision) {
+        String value = requireText(decision, "decision");
+        return switch (value) {
+            case "approved", "rejected" -> value;
+            default -> throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        };
+    }
+
+    /**
+     * 延期项④：驳回退菜退酒时，对称回滚 {@link #voidOrderItem} 已施加的全部副作用，恢复 void 前状态。
+     *
+     * <p>回滚项（与 void 施加对称）：
+     * <ol>
+     *   <li><b>库存</b>：若 void 时回补过库存（returnToStock + 有 inbound 流水）→ 原子扣减相同数量（atomicDecreaseStock）
+     *       并落一条 outbound 冲销流水留痕。</li>
+     *   <li><b>账单</b>：若 void 时减过应付（有 billAdjustmentId）→ 把应付金额加回（恢复到 void 前），
+     *       并落一条反向 BillAdjustment（add_back，beforePayable/afterPayable 记录恢复轨迹）。</li>
+     *   <li><b>退款应付</b>：若 void 时为已结账单过账了 refund 应付（原 adjustment 含 arApItemId）→
+     *       过一条对冲应收，使财务退款台账净额归零。</li>
+     *   <li><b>明细</b>：把 order_item 的 voided 标记/状态恢复为 void 前（清除 voided=true、deliveryStatus 还原）。</li>
+     * </ol>
+     * 库存扣减幂等与并发由 repository 原子方法 + 行锁保证；不可负库存按既有口径抛 STOCK_INSUFFICIENT。
+     */
+    private void reverseVoidSideEffects(BarOrderItemVoidRecord current, String reviewer, Instant now) {
+        BarOrderItemRecord item = repository.findOrderItemById(current.orderItemId())
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "bar order item not found"));
+
+        // 1) 库存回滚：void 回补过库存 → 重新扣减并落 outbound 冲销流水。
+        if (current.returnToStock() && current.inventoryMovementId() != null) {
+            BarProductRecord product = repository.findProductById(item.productId())
+                    .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+            if (product.stockDeductionRequired()) {
+                String inventoryItemId = requireText(product.inventoryItemId(), "inventory_item_id");
+                String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
+                boolean decreased = repository.atomicDecreaseStock(inventoryItemId, stockLocationId, current.quantity());
+                if (!decreased) {
+                    throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
+                }
+                repository.saveStockMovement(new StockMovementSnapshot(
+                        "movement_" + slug(current.id() + ":void_reject:" + item.id() + ":" + current.idempotencyKey()),
+                        "outbound",
+                        inventoryItemId,
+                        stockLocationId,
+                        null,
+                        current.quantity(),
+                        "bar_order_item_void_reject",
+                        item.id(),
+                        null,
+                        reviewer,
+                        safeList(current.evidenceAttachmentIds()),
+                        "completed",
+                        now));
+            }
+        }
+
+        // 2/3) 账单 + 退款应付回滚：void 减过应付 → 加回应付并落反向 adjustment；已结退款过账则对冲。
+        if (current.billAdjustmentId() != null && current.billId() != null && current.amountCent() > 0) {
+            BarBillRecord bill = repository.findBillById(current.billId()).orElse(null);
+            if (bill != null) {
+                checkMerchantOwnership(bill.merchantId());
+                long amount = current.amountCent();
+                long beforePayable = bill.payableAmountCent();
+                long afterPayable = beforePayable + amount;
+                boolean settled = "settled".equals(bill.settlementStatus());
+
+                // 反向 adjustment 用独立幂等键（区别于原 void 减项，避开 uq_bar_bill_adjustments_idempotency 唯一索引冲突）。
+                String reversalIdempotencyKey = current.idempotencyKey() + ":void_reject";
+                // 已结退款过账冲正：过一条对冲应收，财务退款台账净额归零。
+                String reversalArApItemId = null;
+                String reversalAdjustmentId = "bill_adjustment_void_reject_"
+                        + slug(bill.id() + ":" + item.id() + ":" + reversalIdempotencyKey);
+                if (settled) {
+                    BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
+                            .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+                    reversalArApItemId = receivableLedgerService.reverseRefundPayable(
+                            bill, refundOrder, reversalAdjustmentId, amount,
+                            reversalIdempotencyKey, "void rejected: " + current.reason(),
+                            safeList(current.evidenceAttachmentIds()));
+                }
+
+                repository.saveBill(com.complex.platform.bar.BarBillRecords.billWithAmounts(
+                        bill,
+                        bill.subtotalAmountCent(),
+                        bill.discountAmountCent(),
+                        bill.depositDeductAmountCent(),
+                        afterPayable,
+                        bill.paidAmountCent(),
+                        bill.paymentStatus(),
+                        bill.settlementStatus(),
+                        now));
+                repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                        reversalAdjustmentId,
+                        bill.id(),
+                        settled ? "refund_reversal" : "waiver_reversal",
+                        amount,
+                        beforePayable,
+                        afterPayable,
+                        "void rejected, restore bill: " + current.reason(),
+                        reviewer,
+                        true,
+                        "applied",
+                        reversalIdempotencyKey,
+                        safeList(current.evidenceAttachmentIds()),
+                        reversalArApItemId,
+                        com.complex.platform.bar.BarBillRecords.billAdjustmentSnapshot(
+                                bill, afterPayable, bill.paymentStatus(), bill.settlementStatus(), reversalArApItemId),
+                        now,
+                        settled ? now : null));
+            }
+        }
+
+        // 4) 明细回滚：清除 voided 标记，恢复 void 前出品状态（已出品→delivered，未出品→pending）。
+        String restoredDeliveryStatus = current.wasDelivered() ? "delivered" : "pending";
+        repository.saveOrderItem(new BarOrderItemRecord(
+                item.id(),
+                item.orderId(),
+                item.productId(),
+                item.productName(),
+                item.quantity(),
+                item.unitPriceCent(),
+                item.amountCent(),
+                restoredDeliveryStatus,
+                item.createdAt(),
+                now,
+                item.actualPourVolume(),
+                item.lossVolume(),
+                false,
+                null,
+                null,
+                null,
+                false));
     }
 
     /** 退菜退酒资金回退：在关联账单上做减项（未结=waiver 减应付；已结=refund 冲正）；无账单则仅明细取消不动资金。 */

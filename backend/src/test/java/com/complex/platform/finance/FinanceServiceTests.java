@@ -21,6 +21,7 @@ import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -214,7 +215,8 @@ class FinanceServiceTests {
                 paymentId,
                 18800L,
                 "guest request",
-                "original_channel"
+                "original_channel",
+                "original"
         ));
 
         assertThat(auditEventRepository.events)
@@ -241,7 +243,7 @@ class FinanceServiceTests {
         financeRepository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
                 "recon_diff_1",
                 "recon_batch_1",
-                "amount_mismatch",
+                "amount",
                 "payment_1",
                 100L,
                 "open",
@@ -252,7 +254,7 @@ class FinanceServiceTests {
         PageResponse<ReconciliationDifferenceRecord> differences = service.listReconciliationDifferences();
 
         assertThat(batches.items()).extracting(ReconciliationBatchRecord::batchNo).contains("RB202606140001");
-        assertThat(differences.items()).extracting(ReconciliationDifferenceRecord::differenceType).contains("amount_mismatch");
+        assertThat(differences.items()).extracting(ReconciliationDifferenceRecord::differenceType).contains("amount");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("finance.reconciliation_batch.viewed", "finance_reconciliation.difference_found");
@@ -273,6 +275,86 @@ class FinanceServiceTests {
         assertThatThrownBy(() -> service.listReconciliationDifferences())
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("RECONCILIATION_PLATFORM_ONLY");
+    }
+
+    // ─── P0#7：对账差异强制化（R6-D07）───────────────────────────────────────
+
+    @Test
+    void pureManualDifferenceWithoutSystemTakingsIsRejected() {
+        seedReconciliationBatch("recon_batch_pm");
+        // 无平台侧系统取数支撑（aggregatePlatformExpectedForBusinessRef=0）→ 纯手填全字段差异被拒。
+        assertThatThrownBy(() -> service.createReconciliationDifference(new ReconciliationDifferenceRequest(
+                "diff-pure-manual", "note", List.of(),
+                "recon_batch_pm", "amount", "payment_no_system", 9999L, "manual")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("RECONCILIATION_NO_SYSTEM_EXPECTED");
+        assertThat(financeRepository.listReconciliationDifferences()).isEmpty();
+    }
+
+    @Test
+    void systemSourcedDifferenceTakesExpectedFromSystemNotRequestBody() {
+        seedReconciliationBatch("recon_batch_sys");
+        // 平台侧系统取数 expected=50000（不接受请求体手填 expected；请求体只给 actual）。
+        financeRepository.platformExpectedByRef.put("payment_sys", 50000L);
+
+        ReconciliationDifferenceRecord diff = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
+                "diff-system", "note", List.of(),
+                "recon_batch_sys", "amount", "payment_sys", 48000L, "system"));
+
+        assertThat(diff.expectedAmountCent()).isEqualTo(50000L); // 来自系统取数
+        assertThat(diff.actualAmountCent()).isEqualTo(48000L);
+        assertThat(diff.amountCent()).isEqualTo(2000L);          // 差额 = |expected − actual|
+        assertThat(diff.source()).isEqualTo("system");
+        assertThat(diff.status()).isEqualTo("open");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("finance_reconciliation.difference_created");
+    }
+
+    @Test
+    void manualSourcedDifferenceWithSystemTakingsIsForcedIntoReview() {
+        seedReconciliationBatch("recon_batch_man");
+        // 第三方侧未接入：有平台侧系统取数支撑，允许 source=manual 录入 actual，但强制进复核。
+        financeRepository.platformExpectedByRef.put("payment_man", 30000L);
+
+        ReconciliationDifferenceRecord diff = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
+                "diff-manual", "note", List.of(),
+                "recon_batch_man", "amount", "payment_man", 31000L, "manual"));
+
+        assertThat(diff.source()).isEqualTo("manual");
+        assertThat(diff.expectedAmountCent()).isEqualTo(30000L);
+        assertThat(diff.status()).isEqualTo("needs_review");
+    }
+
+    @Test
+    void invalidDifferenceTypeIsRejectedByEnum() {
+        seedReconciliationBatch("recon_batch_enum");
+        financeRepository.platformExpectedByRef.put("payment_enum", 10000L);
+        // 非四类(amount/count/status/missing)的遗留值被拒（服务层枚举对齐 V105 CHECK）。
+        assertThatThrownBy(() -> service.createReconciliationDifference(new ReconciliationDifferenceRequest(
+                "diff-bad-type", "note", List.of(),
+                "recon_batch_enum", "amount_mismatch", "payment_enum", 9000L, "system")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void allFourDifferenceTypesAreAccepted() {
+        seedReconciliationBatch("recon_batch_4");
+        financeRepository.platformExpectedByRef.put("payment_4", 40000L);
+        for (String type : List.of("amount", "count", "status", "missing")) {
+            ReconciliationDifferenceRecord diff = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
+                    "diff-" + type, "note", List.of(),
+                    "recon_batch_4", type, "payment_4", 39000L, "system"));
+            assertThat(diff.differenceType()).isEqualTo(type);
+        }
+    }
+
+    private void seedReconciliationBatch(String batchId) {
+        financeRepository.saveReconciliationBatch(new ReconciliationBatchRecord(
+                batchId, "RB-" + batchId, "project", "project_1",
+                LocalDate.parse("2026-06-18"), "created", Instant.parse("2026-06-18T00:00:00Z")));
     }
 
     // ─── P0 fix tests ─────────────────────────────────────────────────────────
@@ -318,6 +400,7 @@ class FinanceServiceTests {
                 "nonexistent_payment_id",
                 1000L,
                 "test",
+                null,
                 null
         )))
                 .isInstanceOf(ApiException.class)
@@ -337,6 +420,7 @@ class FinanceServiceTests {
                 payment.payment().id(),
                 50001L,
                 "overage",
+                null,
                 null
         )))
                 .isInstanceOf(ApiException.class)
@@ -350,7 +434,7 @@ class FinanceServiceTests {
         ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-cumulative", 10000L));
         String paymentId = payment.payment().id();
 
-        service.createRefund(new RefundRequest("refund-part1", "refund", List.of(), paymentId, 6000L, "partial", null));
+        service.createRefund(new RefundRequest("refund-part1", "refund", List.of(), paymentId, 6000L, "partial", null, null));
 
         assertThatThrownBy(() -> service.createRefund(new RefundRequest(
                 "refund-part2",
@@ -359,6 +443,7 @@ class FinanceServiceTests {
                 paymentId,
                 5000L,
                 "over cumulative",
+                null,
                 null
         )))
                 .isInstanceOf(ApiException.class)
@@ -378,11 +463,177 @@ class FinanceServiceTests {
                 payment.payment().id(),
                 15000L,
                 "partial refund",
-                null
+                null,
+                "cash"
         ));
 
         assertThat(refund.refundAmountCent()).isEqualTo(15000L);
         assertThat(refund.status()).isEqualTo("requested");
+        // P2#④ 显式传入的退款方向被统一落地。
+        assertThat(refund.refundDirection()).isEqualTo("cash");
+    }
+
+    @Test
+    void refundWithoutDirectionDefaultsToOriginal() {
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-default-dir", "receivable", 30000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-default-dir", 30000L));
+
+        FinanceRefundRecord refund = service.createRefund(new RefundRequest(
+                "refund-default-dir", "refund", List.of(), payment.payment().id(), 5000L, "no direction given", null, null));
+
+        // 未传方向 → 统一默认 original（原路退回）。
+        assertThat(refund.refundDirection()).isEqualTo("original");
+    }
+
+    @Test
+    void refundWithInvalidDirectionIsRejected() {
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-bad-dir", "receivable", 30000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-bad-dir", 30000L));
+
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-bad-dir", "refund", List.of(), payment.payment().id(), 5000L, "bad dir", null, "wormhole")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    // ─── 跨模块闭环②a：MDM 高风险门控接入（finance 链路无 device 上下文，待 device） ───────────
+    //
+    // 现状：finance 支付/退款为后台财务台账操作，RefundRequest/PaymentIntentRequest 不携带 device_id，
+    // 链路无设备上下文。按"不伪造假值"，门控接入点在 device_id 缺失时安全跳过（不阻断财务主链）。
+    // 故下述两测验证：注入 MdmService 后，当前链路（device 缺失）不会触发门控；
+    // 待端侧补传 device_id 后，调用点把真实 deviceId 传入即自动启用硬门控（接入点已就绪）。
+
+    private FinanceService financeWithMdm(com.complex.platform.terminal.MdmService mdmService) {
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        AuditedOperationExecutor ops = new AuditedOperationExecutor(
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), auditEventService);
+        return new FinanceService(
+                financeRepository, ops, auditEventService, authorizationService,
+                new com.complex.platform.common.BusinessDayResolver(4),
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(),
+                mdmService);
+    }
+
+    @Test
+    void refundWithoutDeviceContextSkipsMdmGate() {
+        com.complex.platform.terminal.MdmService mdmService = mock(com.complex.platform.terminal.MdmService.class);
+        FinanceService svc = financeWithMdm(mdmService);
+
+        ArApItemRecord item = svc.createArApItem(itemRequest("arap-mdm-refund", "receivable", 30000L));
+        ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-mdm", 30000L));
+        FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
+                "refund-mdm", "refund", List.of(), payment.payment().id(), 15000L, "guest request", null, null));
+
+        assertThat(refund.status()).isEqualTo("requested");
+        // device 上下文缺失（RefundRequest 无 device_id）→ 门控安全跳过，不调用 requireManagedForHighRiskAction。
+        org.mockito.Mockito.verify(mdmService, org.mockito.Mockito.never())
+                .requireManagedForHighRiskAction(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void createPaymentIntentWithoutDeviceContextSkipsMdmGate() {
+        com.complex.platform.terminal.MdmService mdmService = mock(com.complex.platform.terminal.MdmService.class);
+        FinanceService svc = financeWithMdm(mdmService);
+
+        PaymentIntentRecord intent = svc.createPaymentIntent(new PaymentIntentRequest(
+                "pi-mdm", "create", List.of(), "ticket_order", "order_mdm", 5000L, "CNY", "wechat"));
+
+        assertThat(intent.status()).isEqualTo("created");
+        // device 上下文缺失（PaymentIntentRequest 无 device_id）→ 门控安全跳过。
+        org.mockito.Mockito.verify(mdmService, org.mockito.Mockito.never())
+                .requireManagedForHighRiskAction(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    // ─── 跨模块闭环②a：deviceId 真实启用门控（现场/工作机发起携带 device_id） ───────────────
+
+    @Test
+    void onsiteRefundWithUnmanagedDeviceIsRejectedByMdmGate() {
+        com.complex.platform.terminal.MdmService mdmService = mock(com.complex.platform.terminal.MdmService.class);
+        // 未纳管设备执行高风险动作 → MdmService 硬拒绝（开关开+未纳管/blocked/lost）。
+        org.mockito.Mockito.doThrow(ApiException.forbidden("DEVICE_NOT_MANAGED", "device is not managed by MDM: dev_unmanaged"))
+                .when(mdmService).requireManagedForHighRiskAction("dev_unmanaged", "finance.refund");
+        FinanceService svc = financeWithMdm(mdmService);
+
+        ArApItemRecord item = svc.createArApItem(itemRequest("arap-mdm-onsite-reject", "receivable", 30000L));
+        ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-mdm-reject", 30000L));
+
+        // 现场退款携带未纳管 deviceId → 门控真实生效，退款被拒（财务产物未写）。
+        assertThatThrownBy(() -> svc.createRefund(new RefundRequest(
+                "refund-mdm-onsite-reject", "refund", List.of(), payment.payment().id(),
+                15000L, "guest request", null, null, "dev_unmanaged")))
+                .isInstanceOf(ApiException.class)
+                .hasFieldOrPropertyWithValue("code", "DEVICE_NOT_MANAGED");
+        org.mockito.Mockito.verify(mdmService)
+                .requireManagedForHighRiskAction("dev_unmanaged", "finance.refund");
+    }
+
+    @Test
+    void onsiteRefundWithManagedDeviceIsAllowed() {
+        com.complex.platform.terminal.MdmService mdmService = mock(com.complex.platform.terminal.MdmService.class);
+        // 已纳管设备 → requireManagedForHighRiskAction 不抛（mock 默认 void 不抛）→ 放行。
+        FinanceService svc = financeWithMdm(mdmService);
+
+        ArApItemRecord item = svc.createArApItem(itemRequest("arap-mdm-onsite-ok", "receivable", 30000L));
+        ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-mdm-ok", 30000L));
+        FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
+                "refund-mdm-onsite-ok", "refund", List.of(), payment.payment().id(),
+                15000L, "guest request", null, null, "dev_managed"));
+
+        assertThat(refund.status()).isEqualTo("requested");
+        // 携带已纳管 deviceId → 门控真实被调用（且未拒）。
+        org.mockito.Mockito.verify(mdmService)
+                .requireManagedForHighRiskAction("dev_managed", "finance.refund");
+    }
+
+    @Test
+    void onsitePaymentIntentWithUnmanagedDeviceIsRejectedByMdmGate() {
+        com.complex.platform.terminal.MdmService mdmService = mock(com.complex.platform.terminal.MdmService.class);
+        org.mockito.Mockito.doThrow(ApiException.forbidden("DEVICE_NOT_MANAGED", "device is not managed by MDM: dev_unmanaged"))
+                .when(mdmService).requireManagedForHighRiskAction("dev_unmanaged", "finance.payment");
+        FinanceService svc = financeWithMdm(mdmService);
+
+        // 现场收款（支付意图）携带未纳管 deviceId → 门控真实生效，被拒。
+        assertThatThrownBy(() -> svc.createPaymentIntent(new PaymentIntentRequest(
+                "pi-mdm-reject", "create", List.of(), "ticket_order", "order_mdm_reject",
+                5000L, "CNY", "wechat", "dev_unmanaged")))
+                .isInstanceOf(ApiException.class)
+                .hasFieldOrPropertyWithValue("code", "DEVICE_NOT_MANAGED");
+        org.mockito.Mockito.verify(mdmService)
+                .requireManagedForHighRiskAction("dev_unmanaged", "finance.payment");
+    }
+
+    @Test
+    void onsiteArApPaymentWithUnmanagedDeviceIsRejectedByMdmGate() {
+        com.complex.platform.terminal.MdmService mdmService = mock(com.complex.platform.terminal.MdmService.class);
+        org.mockito.Mockito.doThrow(ApiException.forbidden("DEVICE_NOT_MANAGED", "device is not managed by MDM: dev_unmanaged"))
+                .when(mdmService).requireManagedForHighRiskAction("dev_unmanaged", "finance.payment");
+        FinanceService svc = financeWithMdm(mdmService);
+
+        ArApItemRecord item = svc.createArApItem(itemRequest("arap-mdm-pay-reject", "receivable", 30000L));
+
+        // 现场登记收付款携带未纳管 deviceId → 门控真实生效，被拒。
+        assertThatThrownBy(() -> svc.registerArApPayment(item.id(), new ArApPaymentRequest(
+                "pay-mdm-onsite-reject", "register", List.of(), 15000L, "pos",
+                Instant.parse("2026-06-14T01:00:00Z"), "flow_onsite", "dev_unmanaged")))
+                .isInstanceOf(ApiException.class)
+                .hasFieldOrPropertyWithValue("code", "DEVICE_NOT_MANAGED");
+        org.mockito.Mockito.verify(mdmService)
+                .requireManagedForHighRiskAction("dev_unmanaged", "finance.payment");
+    }
+
+    @Test
+    void backofficeArApPaymentWithoutDeviceSkipsMdmGate() {
+        com.complex.platform.terminal.MdmService mdmService = mock(com.complex.platform.terminal.MdmService.class);
+        FinanceService svc = financeWithMdm(mdmService);
+
+        ArApItemRecord item = svc.createArApItem(itemRequest("arap-mdm-backoffice", "receivable", 30000L));
+        // 后台台账类登记收付款无 device 上下文（兼容构造，deviceId=null）→ 门控安全跳过。
+        ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-mdm-backoffice", 30000L));
+
+        assertThat(payment.payment().amountCent()).isEqualTo(30000L);
+        org.mockito.Mockito.verify(mdmService, org.mockito.Mockito.never())
+                .requireManagedForHighRiskAction(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     // ─── P1 DailyClose uniqueness tests ───────────────────────────────────────
@@ -499,6 +750,7 @@ class FinanceServiceTests {
                 payment.payment().id(),
                 10000L,
                 "cross merchant refund attempt",
+                null,
                 null
         )))
                 .isInstanceOf(ApiException.class)
@@ -520,6 +772,7 @@ class FinanceServiceTests {
                 payment.payment().id(),
                 20000L,
                 "admin refund",
+                null,
                 null
         ));
 
@@ -673,6 +926,289 @@ class FinanceServiceTests {
                 .thenReturn(new AccessActor(id, id, "staff", null, null, "active"));
     }
 
+    // ─── P1#13 库存差异 → AR/AP（R6-D08）──────────────────────────────────────
+
+    @Test
+    void approvedShortageVarianceIsPostedAsReceivable() {
+        financeRepository.seedVariance("var_shortage", "shortage", -50000L, "approved", null);
+
+        ArApItemRecord item = service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
+                "post-shortage", "note", List.of(), "var_shortage", "loss_account"));
+
+        assertThat(item.sourceType()).isEqualTo("inventory_difference");
+        assertThat(item.direction()).isEqualTo("receivable");      // 盘亏计损益 → receivable
+        assertThat(item.amountCent()).isEqualTo(50000L);           // 取绝对值
+        assertThat(item.sourceId()).isEqualTo("var_shortage");
+        assertThat(financeRepository.findInventoryVarianceById("var_shortage").orElseThrow().postedArApItemId())
+                .isEqualTo(item.id());
+    }
+
+    @Test
+    void supplierFaultVarianceIsPostedAsPayableToSupplier() {
+        financeRepository.seedVariance("var_sf", "supplier_fault", -30000L, "approved", "supplier_x");
+
+        ArApItemRecord item = service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
+                "post-sf", "note", List.of(), "var_sf", "supplier_x"));
+
+        assertThat(item.direction()).isEqualTo("payable");         // 供应商责任 → 向供应商挂应付索赔
+        assertThat(item.counterpartyId()).isEqualTo("supplier_x");
+        assertThat(item.amountCent()).isEqualTo(30000L);
+    }
+
+    @Test
+    void overageVarianceIsPostedAsPayableCostReversal() {
+        financeRepository.seedVariance("var_over", "overage", 12000L, "approved", null);
+
+        ArApItemRecord item = service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
+                "post-over", "note", List.of(), "var_over", "cost_account"));
+
+        assertThat(item.direction()).isEqualTo("payable");         // 盘盈冲成本 → payable
+        assertThat(item.amountCent()).isEqualTo(12000L);
+    }
+
+    @Test
+    void unreviewedVarianceCannotBePosted() {
+        financeRepository.seedVariance("var_pending", "shortage", -1000L, "pending", null);
+
+        assertThatThrownBy(() -> service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
+                "post-pending", "note", List.of(), "var_pending", "loss_account")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVENTORY_VARIANCE_NOT_APPROVED");
+    }
+
+    @Test
+    void postingVarianceTwiceIsIdempotentReturningSameItem() {
+        financeRepository.seedVariance("var_idem", "shortage", -7000L, "approved", null);
+
+        ArApItemRecord first = service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
+                "post-idem-1", "note", List.of(), "var_idem", "loss_account"));
+        // 不同幂等键再次提交同一已入账差异 → 返回原台账项，不重复入账。
+        ArApItemRecord second = service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
+                "post-idem-2", "note", List.of(), "var_idem", "loss_account"));
+
+        assertThat(second.id()).isEqualTo(first.id());
+    }
+
+    // ─── P1#14 营业额抽成计费引擎 ─────────────────────────────────────────────
+
+    @Test
+    void turnoverRentClampsBetweenFloorAndCap() {
+        // 扣率 5%（500 bps），保底 10000，封顶 80000。
+        financeRepository.seedTurnoverRule("rule_1", "merchant_1", 500, 10000L, 80000L);
+        // 回流营业额 1,000,000 → 5% = 50000，落在 [10000, 80000] → 50000。
+        financeRepository.reflowTurnoverByMerchant.put("merchant_1", 1000000L);
+
+        ArApItemRecord item = service.billTurnoverRent(new com.complex.platform.finance.dto.TurnoverRentBillRequest(
+                "bill-1", "note", List.of(), "rule_1",
+                LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-30"), LocalDate.parse("2026-07-10")));
+
+        assertThat(item.sourceType()).isEqualTo("turnover_rent");
+        assertThat(item.direction()).isEqualTo("receivable");
+        assertThat(item.amountCent()).isEqualTo(50000L);
+    }
+
+    @Test
+    void turnoverRentAppliesFloorWhenComputedBelowMinimum() {
+        financeRepository.seedTurnoverRule("rule_floor", "merchant_1", 500, 10000L, 80000L);
+        // 营业额 100,000 → 5% = 5000 < 保底 10000 → clamp 到 10000。
+        financeRepository.reflowTurnoverByMerchant.put("merchant_1", 100000L);
+
+        ArApItemRecord item = service.billTurnoverRent(new com.complex.platform.finance.dto.TurnoverRentBillRequest(
+                "bill-floor", "note", List.of(), "rule_floor",
+                LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-30"), LocalDate.parse("2026-07-10")));
+
+        assertThat(item.amountCent()).isEqualTo(10000L);
+    }
+
+    @Test
+    void turnoverRentAppliesCapWhenComputedAboveMaximum() {
+        financeRepository.seedTurnoverRule("rule_cap", "merchant_1", 500, 10000L, 80000L);
+        // 营业额 5,000,000 → 5% = 250000 > 封顶 80000 → clamp 到 80000。
+        financeRepository.reflowTurnoverByMerchant.put("merchant_1", 5000000L);
+
+        ArApItemRecord item = service.billTurnoverRent(new com.complex.platform.finance.dto.TurnoverRentBillRequest(
+                "bill-cap", "note", List.of(), "rule_cap",
+                LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-30"), LocalDate.parse("2026-07-10")));
+
+        assertThat(item.amountCent()).isEqualTo(80000L);
+    }
+
+    // ─── P1#14 保证金四动作台账 ───────────────────────────────────────────────
+
+    @Test
+    void depositFourActionsMaintainRunningBalance() {
+        // collect 100000 → 余额 100000
+        DepositLedgerRecord collect = service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-collect", "note", List.of(), "merchant_1", "collect", 100000L, "initial"));
+        assertThat(collect.balanceAfterCent()).isEqualTo(100000L);
+        assertThat(collect.arApItemId()).isNull();
+
+        // deduct 20000 → 余额 80000，联动生成应收。
+        DepositLedgerRecord deduct = service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-deduct", "note", List.of(), "merchant_1", "deduct", 20000L, "damage charge"));
+        assertThat(deduct.balanceAfterCent()).isEqualTo(80000L);
+        assertThat(deduct.arApItemId()).isNotNull();
+
+        // forfeit 30000 → 余额 50000。
+        DepositLedgerRecord forfeit = service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-forfeit", "note", List.of(), "merchant_1", "forfeit", 30000L, "breach"));
+        assertThat(forfeit.balanceAfterCent()).isEqualTo(50000L);
+
+        // refund 50000 → 余额 0。
+        DepositLedgerRecord refund = service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-refund", "note", List.of(), "merchant_1", "refund", 50000L, "lease end"));
+        assertThat(refund.balanceAfterCent()).isZero();
+        assertThat(refund.arApItemId()).isNull();
+    }
+
+    @Test
+    void depositRefundExceedingBalanceIsRejected() {
+        service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-c", "note", List.of(), "merchant_1", "collect", 10000L, "init"));
+
+        assertThatThrownBy(() -> service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-over", "note", List.of(), "merchant_1", "refund", 20000L, "too much")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DEPOSIT_INSUFFICIENT");
+    }
+
+    // ─── P1#14 CAM 权重分摊 ───────────────────────────────────────────────────
+
+    @Test
+    void camAllocationSplitsByWeightAndIsCentExact() {
+        // 总额 100001 分摊给两户：6000 bps / 4000 bps。末位归差额，逐分守恒。
+        List<CamAllocationRecord> rows = service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
+                "cam-1", "note", List.of(), "2026-06", 100001L, LocalDate.parse("2026-07-10"),
+                List.of(
+                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 6000),
+                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_2", 4000))));
+
+        assertThat(rows).hasSize(2);
+        long sum = rows.stream().mapToLong(CamAllocationRecord::allocatedAmountCent).sum();
+        assertThat(sum).isEqualTo(100001L);                        // 逐分守恒
+        assertThat(rows.get(0).allocatedAmountCent()).isEqualTo(60000L);
+        assertThat(rows.get(1).allocatedAmountCent()).isEqualTo(40001L); // 末位含差额
+        assertThat(rows).allMatch(r -> r.arApItemId() != null);
+    }
+
+    @Test
+    void camAllocationRejectsWeightsNotSummingToFull() {
+        assertThatThrownBy(() -> service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
+                "cam-bad", "note", List.of(), "2026-06", 100000L, LocalDate.parse("2026-07-10"),
+                List.of(
+                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 6000),
+                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_2", 3000)))))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CAM_WEIGHTS_NOT_FULL");
+    }
+
+    // ─── P2#④ CAM 年度 true-up（多退少补）─────────────────────────────────────
+
+    @Test
+    void camTrueUpUnderCollectedGeneratesReceivableTopUp() {
+        // 先按周期预收：merchant_1 预收 6000 / merchant_2 预收 4000（period=2026）。
+        service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
+                "cam-prepay", "note", List.of(), "2026", 10000L, LocalDate.parse("2026-02-10"),
+                List.of(
+                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 6000),
+                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_2", 4000))));
+
+        // 年度 true-up：实际发生 20000（远高于预收 10000）→ 两户均少收，补收应收。
+        CamTrueUpRunRecord run = service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
+                "cam-trueup-1", "note", List.of(), "2026", 20000L, LocalDate.parse("2027-01-31"),
+                List.of(
+                        new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 6000),
+                        new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_2", 4000))));
+
+        assertThat(run.actualTotalAmountCent()).isEqualTo(20000L);
+        assertThat(run.prepaidTotalAmountCent()).isEqualTo(10000L);
+        assertThat(run.lines()).hasSize(2);
+        // merchant_1 实际应摊 12000 − 已预收 6000 = +6000（少收补收）。
+        CamTrueUpLineRecord m1 = run.lines().get(0);
+        assertThat(m1.actualAllocatedAmountCent()).isEqualTo(12000L);
+        assertThat(m1.prepaidAmountCent()).isEqualTo(6000L);
+        assertThat(m1.diffAmountCent()).isEqualTo(6000L);
+        assertThat(m1.arApItemId()).isNotNull();
+        // 差额台账方向：少收 → receivable。
+        assertThat(financeRepository.findArApItemById(m1.arApItemId()).orElseThrow().direction())
+                .isEqualTo("receivable");
+        // 末位户含差额：merchant_2 实际应摊 8000 − 4000 = +4000。
+        assertThat(run.lines().get(1).diffAmountCent()).isEqualTo(4000L);
+    }
+
+    @Test
+    void camTrueUpOverCollectedGeneratesPayableRefund() {
+        // 预收 30000（merchant_1 全额，权重 10000）。
+        service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
+                "cam-prepay-over", "note", List.of(), "2026", 30000L, LocalDate.parse("2026-02-10"),
+                List.of(new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 10000))));
+
+        // 实际仅 18000 → 多收 12000，向商户退应付。
+        CamTrueUpRunRecord run = service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
+                "cam-trueup-over", "note", List.of(), "2026", 18000L, LocalDate.parse("2027-01-31"),
+                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 10000))));
+
+        CamTrueUpLineRecord line = run.lines().get(0);
+        assertThat(line.diffAmountCent()).isEqualTo(-12000L);
+        assertThat(line.arApItemId()).isNotNull();
+        // 差额台账：多收 → payable（向商户退还），金额取绝对值。
+        ArApItemRecord adj = financeRepository.findArApItemById(line.arApItemId()).orElseThrow();
+        assertThat(adj.direction()).isEqualTo("payable");
+        assertThat(adj.amountCent()).isEqualTo(12000L);
+        assertThat(adj.sourceType()).isEqualTo("cam");
+    }
+
+    @Test
+    void camTrueUpWithNoDiffSkipsLedgerItem() {
+        // 预收 10000，实际也 10000 → 差额 0，不生成台账项。
+        service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
+                "cam-prepay-exact", "note", List.of(), "2026", 10000L, LocalDate.parse("2026-02-10"),
+                List.of(new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 10000))));
+
+        CamTrueUpRunRecord run = service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
+                "cam-trueup-exact", "note", List.of(), "2026", 10000L, LocalDate.parse("2027-01-31"),
+                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 10000))));
+
+        CamTrueUpLineRecord line = run.lines().get(0);
+        assertThat(line.diffAmountCent()).isEqualTo(0L);
+        assertThat(line.arApItemId()).isNull();
+    }
+
+    @Test
+    void camTrueUpRejectsWeightsNotSummingToFull() {
+        assertThatThrownBy(() -> service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
+                "cam-trueup-bad", "note", List.of(), "2026", 10000L, LocalDate.parse("2027-01-31"),
+                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 6000)))))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CAM_WEIGHTS_NOT_FULL");
+    }
+
+    // ─── P1#15 日结两源非空 ───────────────────────────────────────────────────
+
+    @Test
+    void dailyCloseChannelTicketAndThirdpartySourcesAreNonEmpty() {
+        // 接入真实数据源后，channel_ticket 与 thirdparty_reflow 两源可返回非零（此处经由聚合桩注入真实值，
+        // 验证服务层把两源写入汇总且非空——JdbcFinanceRepository 已接入 ticket_orders/integration_order_syncs）。
+        financeRepository.channelTicketTotals = new FinanceRepository.DailyCloseSourceTotals(220000L, 5000L, 7);
+        financeRepository.thirdpartyTotals = new FinanceRepository.DailyCloseSourceTotals(330000L, 0L, 9);
+
+        DailyCloseRecord close = service.createDailyClose(new DailyCloseRequest(
+                "daily-close-two-src", "lock", List.of(),
+                LocalDate.parse("2026-06-25"), "project", "project_two_src", false));
+
+        List<DailyCloseSummaryRecord> rows = service.listDailyCloseSummaries(close.id()).items();
+        assertThat(rows).filteredOn(s -> "channel_ticket".equals(s.sourceStream()))
+                .extracting(DailyCloseSummaryRecord::amountCent, DailyCloseSummaryRecord::orderCount)
+                .containsExactly(tuple(220000L, 7));
+        assertThat(rows).filteredOn(s -> "thirdparty_reflow".equals(s.sourceStream()))
+                .extracting(DailyCloseSummaryRecord::amountCent, DailyCloseSummaryRecord::orderCount)
+                .containsExactly(tuple(330000L, 9));
+    }
+
     // ─── helpers ─────────────────────────────────────────────────────────────
 
     // ─── Payment gateway switch routing (V093) ────────────────────────────────
@@ -720,7 +1256,7 @@ class FinanceServiceTests {
         ArApItemRecord item = svc.createArApItem(itemRequest("arap-gw-refund-off", "receivable", 30000L));
         ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-gw-off", 30000L));
         FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
-                "refund-gw-off", "refund", List.of(), payment.payment().id(), 10000L, "refund", null));
+                "refund-gw-off", "refund", List.of(), payment.payment().id(), 10000L, "refund", null, null));
         assertThat(refund.refundChannel()).isEqualTo("manual");
         assertThat(refund.status()).isEqualTo("requested");
     }
@@ -731,7 +1267,7 @@ class FinanceServiceTests {
         ArApItemRecord item = svc.createArApItem(itemRequest("arap-gw-refund-on", "receivable", 30000L));
         ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-gw-on", 30000L));
         FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
-                "refund-gw-on", "refund", List.of(), payment.payment().id(), 10000L, "refund", null));
+                "refund-gw-on", "refund", List.of(), payment.payment().id(), 10000L, "refund", null, null));
         assertThat(refund.status()).isEqualTo("requested");
         // 占位 NOT_CONFIGURED 仍属"未真正经渠道结算"→回退内部手工打款渠道（manual），不崩、不阻塞。
         assertThat(refund.refundChannel()).isEqualTo("manual");
@@ -894,6 +1430,19 @@ class FinanceServiceTests {
             return difference;
         }
 
+        // P0#7：平台侧 expected 系统取数桩——key=business_ref → expected 金额（分）。无键=0（无系统取数支撑）。
+        private final Map<String, Long> platformExpectedByRef = new LinkedHashMap<>();
+
+        @Override
+        public Optional<ReconciliationBatchRecord> findReconciliationBatchById(String id) {
+            return Optional.ofNullable(reconciliationBatches.get(id));
+        }
+
+        @Override
+        public long aggregatePlatformExpectedForBusinessRef(String businessRef) {
+            return platformExpectedByRef.getOrDefault(businessRef, 0L);
+        }
+
         // ── R5 T7：日结锁定 + 补录审批 + 多源汇总 ──────────────────────────
 
         private final Map<String, DailyCloseSummaryRecord> summaries = new LinkedHashMap<>();
@@ -994,6 +1543,110 @@ class FinanceServiceTests {
         public ArApAdjustmentRecord updateArApAdjustment(ArApAdjustmentRecord adjustment) {
             adjustments.put(adjustment.id(), adjustment);
             return adjustment;
+        }
+
+        // ── P1#13 库存差异 → AR/AP ──────────────────────────────────────────
+        private final Map<String, InventoryVarianceRecord> inventoryVariances = new LinkedHashMap<>();
+
+        @Override
+        public Optional<InventoryVarianceRecord> findInventoryVarianceById(String id) {
+            return Optional.ofNullable(inventoryVariances.get(id));
+        }
+
+        @Override
+        public void markInventoryVariancePosted(String inventoryVarianceId, String arApItemId) {
+            InventoryVarianceRecord v = inventoryVariances.get(inventoryVarianceId);
+            if (v != null) {
+                inventoryVariances.put(inventoryVarianceId, new InventoryVarianceRecord(
+                        v.id(), v.stocktakeId(), v.itemId(), v.batchNo(), v.bookQty(), v.countedQty(),
+                        v.varianceQty(), v.varianceAmountCent(), v.reason(), v.supplierId(),
+                        v.reviewStatus(), arApItemId, v.merchantId(), v.createdAt()));
+            }
+        }
+
+        // ── P1#14 综合体计费：营业额抽成 / 保证金 / CAM ─────────────────────
+        private final Map<String, TurnoverRentRuleRecord> turnoverRentRules = new LinkedHashMap<>();
+        private final Map<String, Long> reflowTurnoverByMerchant = new LinkedHashMap<>();
+        private final List<DepositLedgerRecord> depositLedger = new ArrayList<>();
+        private final List<CamAllocationRecord> camAllocations = new ArrayList<>();
+
+        @Override
+        public Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
+            return Optional.ofNullable(turnoverRentRules.get(id));
+        }
+
+        @Override
+        public long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
+            return reflowTurnoverByMerchant.getOrDefault(merchantId, 0L);
+        }
+
+        @Override
+        public DepositLedgerRecord saveDepositLedger(DepositLedgerRecord ledger) {
+            depositLedger.add(ledger);
+            return ledger;
+        }
+
+        @Override
+        public long currentDepositBalance(String merchantId) {
+            long balance = 0L;
+            for (DepositLedgerRecord row : depositLedger) {
+                if (merchantId.equals(row.merchantId())) {
+                    balance = row.balanceAfterCent();
+                }
+            }
+            return balance;
+        }
+
+        @Override
+        public CamAllocationRecord saveCamAllocation(CamAllocationRecord allocation) {
+            camAllocations.add(allocation);
+            return allocation;
+        }
+
+        // ── P2#④ CAM 年度 true-up ───────────────────────────────────────────
+        private final List<CamTrueUpRunRecord> camTrueUpRuns = new ArrayList<>();
+        private final List<CamTrueUpLineRecord> camTrueUpLines = new ArrayList<>();
+        private final java.util.Set<String> truedUpPeriods = new java.util.LinkedHashSet<>();
+
+        @Override
+        public long sumCamPrepaidByMerchantAndPeriod(String merchantId, String settlementPeriod) {
+            // 在内存双子中以 period 等价 settlement_period（与 V118 回填 settlement_period=period 一致）。
+            return camAllocations.stream()
+                    .filter(a -> merchantId.equals(a.merchantId()) && settlementPeriod.equals(a.period()))
+                    .mapToLong(CamAllocationRecord::allocatedAmountCent)
+                    .sum();
+        }
+
+        @Override
+        public void markCamAllocationsTruedUp(String settlementPeriod) {
+            truedUpPeriods.add(settlementPeriod);
+        }
+
+        @Override
+        public CamTrueUpRunRecord saveCamTrueUpRun(CamTrueUpRunRecord run) {
+            camTrueUpRuns.add(run);
+            return run;
+        }
+
+        @Override
+        public CamTrueUpLineRecord saveCamTrueUpLine(CamTrueUpLineRecord line) {
+            camTrueUpLines.add(line);
+            return line;
+        }
+
+        // 测试种子辅助。
+        void seedVariance(String id, String reason, long varianceAmountCent, String reviewStatus, String supplierId) {
+            inventoryVariances.put(id, new InventoryVarianceRecord(
+                    id, "st_" + id, "item_" + id, null,
+                    java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.valueOf(varianceAmountCent),
+                    varianceAmountCent, reason, supplierId, reviewStatus, null, null, Instant.now()));
+        }
+
+        void seedTurnoverRule(String id, String merchantId, int rateBps, Long minAmountCent, Long maxAmountCent) {
+            turnoverRentRules.put(id, new TurnoverRentRuleRecord(
+                    id, merchantId, "rule " + id, rateBps, minAmountCent, maxAmountCent,
+                    LocalDate.parse("2026-01-01"), null, "active", Instant.now()));
         }
     }
 

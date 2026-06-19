@@ -14,6 +14,15 @@ public interface TerminalDeviceRepository {
 
     Optional<TerminalDeviceRecord> findByDeviceId(String deviceId);
 
+    /**
+     * 按场地 scope 列出终端设备（terminal_devices.venue_id = token scope）。
+     * 商户面数据：商户只能看到其场地下绑定的终端设备。默认空，JdbcTerminalDeviceRepository 用 SQL 谓词下推。
+     * 隔离闸口（AC-ISO-1）：提供 venue_id 行级 scoped 读通道。
+     */
+    default List<TerminalDeviceRecord> listDevicesByVenue(String venueId) {
+        return List.of();
+    }
+
     Optional<DeviceCredentialRecord> findDeviceCredentialByDeviceId(String deviceId);
 
     DeviceCredentialRecord saveDeviceCredential(DeviceCredentialRecord record);

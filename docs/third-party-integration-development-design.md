@@ -858,6 +858,86 @@ unique (integration_app_id, external_verification_id)
 | occurred_at | timestamptz | 发生时间 |
 | created_at | timestamptz | 创建时间 |
 
+### 14.11a 视频点位时间锚点 + 机器人被动留痕回调（P0/P1）
+
+> 新增小节（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)）：依据业务HTML #thirdparty 视频"点位+时间锚点"列 P0。**代码核验（Grep 佐证）**：本文顶部 R5 横幅曾记"锚点零落点 / 机器人仅只读端点无写回调"；本次只读复核真实迁移/代码后**上修**——V071 `thirdparty_scaffolding` 已落地 `integration_video_anchors`（点位+事件时间锚点）、`integration_video_access_audits`（调阅审计，外键 anchor_id）、`integration_robot_task_events`（CHECK event_type ∈ created/picked/delivering/delivered/failed），且 `IntegrationController` 已有 `POST /robot/report` 写回调（受 `integration.robot.sync` 开关门控，机器人被动留痕）、`integration.video.view` 为敏感+需审批权限。故缺口由"零落地"上修为"占位表/端点已落地，本设计文档需补记口径"。本小节补结构化口径，落地以 V071 真实列为准。
+
+#### ① 视频点位时间锚点（P0）+ 调阅审计
+
+每个关键动作（核销、人工放行、安全阻断、事故、争议等）记录设备点位 + 时间锚点，写 `integration_video_anchors`（真实列：id、point_id、event_time 等，索引 `(point_id, event_time DESC)`），使后续视频对齐有据可依。调阅 `snapshot_url`/`clip_url`/`stream_url` 为**敏感操作**，必须经权限点 `integration.video.view`/`integration.video.play` 校验并写 `integration_video_access_audits`（调阅人、时间、关联 anchor/事件），即"按权限 + 留痕"。
+
+| 锚点字段（口径，真实列以 V071 为准） | 说明 |
+|---|---|
+| point_id | 设备点位 ID（关键动作发生处） |
+| event_time | 事件时间锚点（供后续视频按时间对齐） |
+| related_event_id | 关联平台事件，可空 |
+| anchor_id（被审计引用） | 调阅审计 `integration_video_access_audits.anchor_id` 外键指向本表 |
+
+#### ② 机器人被动留痕回调（P1）
+
+补 `POST /integration/robot/report` 写回调（真实已落地于 `IntegrationController`，受 `integration.robot.sync` 开关门控），承接任务创建/取货/配送/送达/失败被动留痕，写 `integration_robot_task_events`（真实 CHECK event_type ∈ `created`/`picked`/`delivering`/`delivered`/`failed`，索引 `(robot_task_ref, reported_at DESC)`）。**到达 = 被动留痕**：机器人到达/状态变更由第三方回调被动落库，平台不主动调度。
+
+#### ③ 回流缺口/重复/差异进异常复核（与 F2 衔接）
+
+机器人/视频回流的缺口（漏回调）、重复（重复回调）、差异（状态/时间不一致）进入统一异常复核链（与 §11 异常补偿、§12 对账差异衔接），`source_domain = integration`/机器人/视频子类，便于跨域异常归集。
+
+#### ④ 验收（P0/P1）
+
+- 关键动作有点位 + 时间锚点（`integration_video_anchors`）可供后续视频对齐；视频调阅经权限校验并强制写 `integration_video_access_audits`。
+- 机器人状态可被动落库（`POST /integration/robot/report` → `integration_robot_task_events`，开关开启时）。
+
+> **待业务确认**：真实视频平台 / 机器人接口资料（厂商 SDK/API、回调报文、签名、调阅协议、保存期限）未定；上述口径以 V071 占位表/端点 + 开关为准，真实字段映射与回调报文待厂商资料到位 + 后台开关开启后补齐。
+
+### 14.11b 客流采集源接入（P1） + 回流→对账→差异端到端（衔接F5/F12）
+
+> 新增小节（`R6 全闭环(2026-06-19)`）：衔接 §14.11a（F12 视频/机器人占位）与 §12 对账差异（F5），把"客流采集源接入"与"第三方回流→对账→差异→统一异常复核→看板"端到端串起来。口径与本文顶部 R5 横幅及 §14.11a"V071 占位表已落地"一致：本期只做接口/开关/字段映射占位，真实回流/对账待厂商资料 + 后台开关开启后交付。
+
+#### ① 客流采集源接入（P1，能力开关默认 off）
+
+依据 business-decision-log `R6-D11`（客流采集数据源）：
+
+- 第三方客流统计 / 闸机客流为 P1 优先接入，由后台**能力开关控制（默认 off）**，不阻塞其它功能（与本文 R5 裁决"凡第三方一律预留接口 + 后台开关"一致）；摄像头视觉客流归 P2。
+- 开关开启后，客流数据经统一入站（§5.1 鉴权→幂等→原始 payload→mapPayload）进入**客流指标**，作为数据分析层客流聚合的真实上游（对齐 data-analysis §8B.3）。
+- **未接入前不渲染假值**：客流指标显示"数据源未接入"，不以种子/mock 冒充真实值（R6-D11，与 data-analysis §8B.3 同口径）。
+
+| 客流接入字段（口径，真实列待厂商资料） | 说明 |
+|---|---|
+| capability_enabled | 客流采集能力开关，默认 off；on 后方进客流指标 |
+| source_type | gate（闸机）/ third_party_counter（第三方客流统计）/ camera（P2 视觉） |
+| point_id | 采集点位（闸机/客流点） |
+| count_value | 客流计数（入场/通行人数） |
+| business_time | 客流业务时间（供按时段/高峰聚合） |
+
+#### ② 回流→对账→差异端到端（衔接 F5/F12）
+
+第三方回流（餐饮/零售/团购渠道）走完整链路，不再只落信封靠管理员手填：
+
+1. **第三方回流**：webhook 入站 → 验签 → 落原始 payload → `mapPayload` 标准化为平台标准订单/券核销模型（标准模型口径见 access-layer §2B，金额=分 per D1）；映射失败保留原始留痕进异常。
+2. **进对账**：标准模型自动进对账（§12）。按 business-decision-log `R6-D07`（对账 P0 边界）——**平台侧 expected 由系统取数自动生成（禁止人工手填）**；第三方侧在真实接口未接入前以人工录入（`source=manual`）登记并强制进复核，接口接入后由自动匹配（P1）替换、manual 记录保留可追溯。
+3. **四类差异识别**：按 §12.2 自动识别 `amount`（金额）/ `count`（数量）/ `status`（状态）/ `missing`（缺失）四类差异，不依赖逐条人工录入。
+4. **进统一异常复核（F2）**：差异进统一异常复核链（与 §14.11a③、§11 异常补偿、§12 对账差异衔接），`source_domain = integration`。
+5. **看板 thirdparty_diff**：复核结果回流对账结果看板的第三方差异（thirdparty_diff）视图，可按渠道/商户/差异类型查看（对齐 access-layer §9 差异清单、data-analysis 对账结果看板）。
+
+```mermaid
+flowchart LR
+    A["第三方回流 webhook"] --> B["验签 + 落原始 payload"]
+    B --> C["mapPayload 标准订单/券核销模型"]
+    C --> D["进对账：平台侧系统取数 expected（禁手填，R6-D07）"]
+    D --> E["第三方侧取数/人工 source=manual（未接入前，R6-D07）"]
+    D --> F["四类差异识别 amount/count/status/missing"]
+    E --> F
+    F --> G["进统一异常复核 F2 source_domain=integration"]
+    G --> H["看板 thirdparty_diff（按渠道/商户/类型）"]
+```
+
+#### ③ 全链验收（回流到看板可追溯）
+
+- 客流采集源能力开关默认 off；on 后客流数据进客流指标，off/未接入时客流指标显示"数据源未接入"不渲染假值（R6-D11）。
+- 一笔第三方回流可走完"回流→mapPayload 标准模型→对账→四类差异（amount/count/status/missing）→统一异常复核（F2）→看板 thirdparty_diff"，全链可追溯。
+- 对账平台侧 expected 系统自动取数（无人工手填），第三方侧未接入期 `source=manual` + 强制复核且 manual 记录可追溯（R6-D07）。
+
+> **待业务确认**：真实客流采集（闸机/第三方客流统计）厂商接口与真实第三方回流（餐饮/零售 POS、团购渠道）字段映射、对账文件格式未定；上述为接口/开关/映射占位与端到端口径，真实字段/签名/对账细则待厂商资料到位 + 后台开关开启后补齐（与本文 R5 裁决、§14.11a 一致）。
+
 ### 14.12 camera_devices 摄像头设备表
 
 | 字段 | 类型 | 说明 |
@@ -1102,6 +1182,7 @@ unique (device_id, event_seq)
 | `GET` | `/api/integration/robot/tasks/{id}` | 任务详情 | P2 |
 | `POST` | `/api/integration/robot/tasks/{id}/cancel` | 取消任务 | P2 |
 | `POST` | `/api/integration/robot/tasks/{id}/manual-sign` | 人工签收 | P2 |
+| `POST` | `/integration/robot/report` | 机器人被动留痕回调（任务创建/取货/配送/送达/失败，到达=被动留痕；受 `integration.robot.sync` 开关门控；真实已落地于 `IntegrationController`，写 `integration_robot_task_events`） | P1（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)，见 §14.11a） |
 
 ### 15.5 视频监控 API
 
@@ -1326,3 +1407,5 @@ unique (device_id, event_seq)
 | 2026-06-12 旧路径表头收口 | 改 | §15 | 将非 §15.0 表格表头改为能力路径/正式路径，并明确正式性以 §15.0 和 OpenAPI 为准 | 防止历史 `/api/integration/*` 被供应商或开发误读为 P0 正式联调路径 |
 | 2026-06-13 OpenAPI 示例闸口 | 改 | §15 | P0 第三方正式联调除路径、operation 和适配器外，还必须通过 `verify:openapi-examples`；供应商 mock 不得在缺 request/response example 时推进 | 防止第三方接入只约束 schema 和签名、不提供可执行 payload 样例 |
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §15 | P0 第三方正式联调必须能在 `p0-openapi-contract-closure-appendix-v0.1.md` 追溯 operation、权限、事件、任务簇、终端/调用方和样例准入，并通过 `verify:openapi-closure` | 防止历史 `/api/integration/*` 能力表直接变成供应商联调文档或正式 Controller |
+| 2026-06-19 R6 全闭环 | 增 | §14.11b | 新增"客流采集源接入(P1) + 回流→对账→差异端到端(衔接F5/F12)"小节：客流采集第三方/闸机能力开关默认 off、未接入不渲染假值进客流指标(R6-D11)；第三方回流(mapPayload 标准模型)→进对账(平台侧系统取数 expected 禁手填+第三方侧 source=manual 兜底，R6-D07)→四类差异(amount/count/status/missing)识别→进统一异常复核(F2)→看板 thirdparty_diff；补全链(回流到看板可追溯)验收与待业务确认。口径与"V071 占位表已落地"一致，未改既有内容 | `R6 全闭环(2026-06-19)`；business-decision-log R6-D11(客流数据源)、R6-D07(对账边界) |
+| 2026-06-19 R5业务HTML缺口审计 F12 | 增 | §14.11a/§15.4 | 新增"视频点位时间锚点 + 机器人被动留痕回调(P0/P1)"小节：视频关键动作记点位+时间锚点(integration_video_anchors)、调阅写审计(integration_video_access_audits)按权限+留痕；机器人补 `POST /integration/robot/report` 写回调(任务创建/取货/配送/送达/失败，到达=被动留痕)；回流缺口/重复/差异进异常复核(与 F2 衔接)；补验收与"真实视频/机器人接口未定"待业务确认 | 业务HTML #thirdparty 视频点位+时间锚点列 P0。只读复核真实迁移/代码后上修顶部横幅"零落地"：V071 已落 integration_video_anchors/integration_video_access_audits/integration_robot_task_events，IntegrationController 已有 `POST /robot/report` 写回调（Grep 佐证），文档需补记口径 |

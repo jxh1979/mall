@@ -2,7 +2,7 @@ import React from "react";
 import { ConfigProvider, theme } from "antd";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
-import { adminRoutes, findAdminRoute } from "./adminRoutes";
+import { findAdminRoute, groupedAdminRoutes } from "./adminRoutes";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AccessUsersPage } from "./pages/AccessUsersPage";
@@ -28,6 +28,7 @@ import { RiskAlertsPage } from "./pages/RiskAlertsPage";
 import { IntegrationEventsPage } from "./pages/IntegrationEventsPage";
 import { AuditEventsPage } from "./pages/AuditEventsPage";
 import { BusinessAnalyticsPage } from "./pages/BusinessAnalyticsPage";
+import { GroupOverviewPage } from "./pages/GroupOverviewPage";
 import { InventoryLedgerPage } from "./pages/InventoryLedgerPage";
 import { BarOrdersPage } from "./pages/BarOrdersPage";
 import { StoredWinePage } from "./pages/StoredWinePage";
@@ -101,6 +102,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AuditEventsPage {...props} />;
     case "ADM-ANA-001":
       return <BusinessAnalyticsPage {...props} />;
+    case "ADM-ANA-002":
+      return <GroupOverviewPage {...props} />;
     case "ADM-FIN-001":
       return <FinanceArApLedgerPage {...props} />;
     case "ADM-INT-001":
@@ -157,7 +160,17 @@ export default function AdminApp() {
     };
   }, [api, token, user]);
 
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
+
+  function toggleGroup(key: string) {
+    setCollapsedGroups((current) => ({ ...current, [key]: !current[key] }));
+  }
+
   function navigate(nextRoute: AdminRoute) {
+    // onClick 级拦截：无权限项不导航（不止 aria-disabled）。
+    if (!hasPermissions(effectivePermissions, nextRoute.requiredPermissions)) {
+      return;
+    }
     setRoute(nextRoute);
     setActionResult(null);
     setGlobalError(null);
@@ -205,20 +218,43 @@ export default function AdminApp() {
       <aside className="admin-sidebar">
         <div className="admin-brand">综合体完整后台</div>
         <nav data-testid="admin-nav">
-          {adminRoutes.map((item) => {
-            const allowed = hasPermissions(effectivePermissions, item.requiredPermissions);
+          {groupedAdminRoutes().map((group) => {
+            const collapsed = collapsedGroups[group.key] ?? false;
             return (
-              <button
-                type="button"
-                key={item.pageId}
-                data-testid={`admin-nav-${item.pageId}`}
-                className={item.pageId === route.pageId ? "active" : ""}
-                onClick={() => navigate(item)}
-                aria-disabled={!allowed}
-              >
-                <span>{item.module}</span>
-                <strong>{item.label}</strong>
-              </button>
+              <div className="admin-nav-group" key={group.key} data-testid={`admin-nav-group-${group.key}`}>
+                <button
+                  type="button"
+                  className="admin-nav-group-header"
+                  data-testid={`admin-nav-group-toggle-${group.key}`}
+                  aria-expanded={!collapsed}
+                  onClick={() => toggleGroup(group.key)}
+                >
+                  <span>{group.label}</span>
+                  <small>{collapsed ? "▸" : "▾"}</small>
+                </button>
+                {collapsed ? null : (
+                  <div className="admin-nav-group-items">
+                    {group.routes.map((item) => {
+                      const allowed = hasPermissions(effectivePermissions, item.requiredPermissions);
+                      return (
+                        <button
+                          type="button"
+                          key={item.pageId}
+                          data-testid={`admin-nav-${item.pageId}`}
+                          className={item.pageId === route.pageId ? "active" : ""}
+                          onClick={() => navigate(item)}
+                          disabled={!allowed}
+                          aria-disabled={!allowed}
+                          title={!allowed ? "当前账号无权访问该页面" : undefined}
+                        >
+                          <span>{item.module}</span>
+                          <strong>{item.label}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -230,7 +266,7 @@ export default function AdminApp() {
         </header>
         {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
         <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
-          {renderPage(route, { api, user, setActionResult, setGlobalError })}
+          {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions })}
         </PermissionGate>
         {actionResult ? <pre className="admin-result" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
       </section>

@@ -24,12 +24,12 @@ class JdbcAuditEventRepository implements AuditEventRepository {
                 INSERT INTO audit_events (
                     id, occurred_at, event_name, event_result, actor_type, actor_id, auth_context,
                     terminal, permission_code, business_type, business_id, request_id, idempotency_key,
-                    metadata, merchant_id
+                    metadata, merchant_id, event_category, subject_type
                 )
                 VALUES (
                     :id, :occurred_at, :event_name, :event_result, :actor_type, :actor_id, :auth_context,
                     :terminal, :permission_code, :business_type, :business_id, :request_id, :idempotency_key,
-                    CAST(:metadata AS jsonb), :merchant_id
+                    CAST(:metadata AS jsonb), :merchant_id, :event_category, :subject_type
                 )
                 """;
         jdbcTemplate.update(sql, new MapSqlParameterSource()
@@ -47,7 +47,9 @@ class JdbcAuditEventRepository implements AuditEventRepository {
                 .addValue("request_id", event.requestId())
                 .addValue("idempotency_key", event.idempotencyKey())
                 .addValue("metadata", writeMetadata(event))
-                .addValue("merchant_id", event.merchantId()));
+                .addValue("merchant_id", event.merchantId())
+                .addValue("event_category", event.eventCategory())
+                .addValue("subject_type", event.subjectType()));
         return event;
     }
 

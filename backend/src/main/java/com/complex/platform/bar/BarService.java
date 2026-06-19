@@ -458,6 +458,20 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(permission = "bar.order_item.void")
+    @Transactional
+    public BarOrderItemVoidRecord decideOrderItemVoid(String voidId, BarOrderItemVoidDecisionRequest request) {
+        String id = operations.requireText(voidId, "void_id");
+        return operations.executeWrite(
+                "decideBarOrderItemVoid:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderItemVoidRecord.class,
+                BarWriteOperation.DECIDE_ORDER_ITEM_VOID,
+                () -> orderService.decideOrderItemVoid(id, request)
+        );
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "bar.bill.reopen", admissionAction = "bar.bill_reopen", objectType = "bar_bill")
     @Transactional
     public BarBillOperationRecord reopenBill(String billId, BarBillReopenRequest request) {

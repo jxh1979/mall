@@ -59,7 +59,10 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds, attachmentIds: request.attachmentIds, result };
 }
 
-export function ContractApprovalPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+// 后端写权限码（PlatformController：/contracts/{id}/approve）
+const CONTRACT_APPROVE_PERMISSION = "contract.lifecycle.approve";
+
+export function ContractApprovalPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<ContractRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [draftTitle, setDraftTitle] = React.useState("主力店补充协议");
@@ -158,6 +161,8 @@ export function ContractApprovalPage({ api, setActionResult, setGlobalError }: A
             disabled={busyAction !== ""}
             precheck={validateApprove}
             onConfirm={() => void approveContract()}
+            permissionsState={effectivePermissions}
+            permissions={[CONTRACT_APPROVE_PERMISSION]}
             data-testid="contract-approval-approve"
           />
         </div>

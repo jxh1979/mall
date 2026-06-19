@@ -245,16 +245,33 @@ class AdmissionGuardTests {
     }
 
     @Test
-    void overSpacePassesThroughWhenObjectTypeNotResolvable() {
-        // objectType 无 对象→空间 映射（resolveSpaceId 返回 empty）→ 放行，绝不阻断。
-        // ar_ap_item 等 finance/ticketing 对象无空间归属，V084 后仍不解析。
+    void overSpaceFailsClosedToReviewWhenObjectTypeNotResolvable() {
+        // P0 fail-closed：配置了 over_space 却解析不到 space（resolveSpaceId 返回 empty）→
+        // 保守进复核（不再 silent pass），并写 admission.space_unresolved_closed 留痕。
         when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
                 policy("over_space", "block", 2)));
         when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
         when(factRepo.resolveSpaceId("ar_ap_item", "a1")).thenReturn(Optional.empty());
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_unresolved"));
 
-        assertThatCode(() -> guard.check("finance.locked_backfill", "ar_ap_item", "a1"))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> guard.check("finance.locked_backfill", "ar_ap_item", "a1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName)
+                .contains("admission.space_unresolved_closed");
+        verify(reviewService).blockForAdmission(
+                "p", "finance.locked_backfill", "ar_ap_item", "a1", "one_level_up", 2);
+    }
+
+    @Test
+    void overSpaceNoMerchantContextStillPassesThrough() {
+        // 无商户上下文（平台管理员等）对 over_space → 放行，不误伤合法越权角色。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.empty());
+
+        assertThatCode(() -> guard.check("bar.bill_reopen", "bar_bill", "b1")).doesNotThrowAnyException();
         verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
     }
 
@@ -317,10 +334,11 @@ class AdmissionGuardTests {
         verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
     }
 
-    // ── 异常口径：fail-open 放行 + 留痕 ─────────────────────────────────────
+    // ── 异常口径：非越界类 fail-open 放行；over_* 越界类 fail-closed 进复核 ──────
 
     @Test
-    void evalErrorFailsOpenAndRecordsEvalSkipped() {
+    void evalErrorFailsOpenAndRecordsEvalSkippedForNonOverScopeTrigger() {
+        // expired（非越界类）求值异常 → 维持 fail-open 放行 + admission.eval_skipped 留痕。
         when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(policy("expired", "block", 2)));
         when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
         when(factRepo.isContractExpiredForMerchant("m1")).thenThrow(new RuntimeException("db down"));
@@ -328,6 +346,43 @@ class AdmissionGuardTests {
         assertThatCode(() -> guard.check("act", "obj", "o1")).doesNotThrowAnyException();
         assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("admission.eval_skipped");
         verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void overContractScopeEvalErrorFailsClosedToReview() {
+        // P0：over_contract_scope 求值异常 → fail-closed 进复核（不放行）+ admission.eval_failed_closed 留痕。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_contract_scope", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.isOverContractScopeForMerchant(eq("m1"), any()))
+                .thenThrow(new RuntimeException("db down"));
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_scope_closed"));
+
+        assertThatThrownBy(() -> guard.check("ticketing.refund_approve", "ticket_refund", "tr1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName)
+                .contains("admission.eval_failed_closed");
+        verify(reviewService).blockForAdmission(
+                "p", "ticketing.refund_approve", "ticket_refund", "tr1", "one_level_up", 2);
+    }
+
+    @Test
+    void overSpaceEvalErrorFailsClosedToReview() {
+        // P0：over_space 求值异常（解析阶段抛错）→ fail-closed 进复核（不放行）+ 留痕。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 3)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("bar_bill", "b1")).thenThrow(new RuntimeException("db down"));
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_space_closed"));
+
+        assertThatThrownBy(() -> guard.check("bar.bill_reopen", "bar_bill", "b1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName)
+                .contains("admission.eval_failed_closed");
     }
 
     private static SupervisorReviewDecisionRecord decision(String reviewId) {

@@ -37,6 +37,18 @@ class ApprovalLevelTests {
         assertThat(ApprovalLevel.SPECIFIC_ROLE.requiredApproverRank(10)).isEqualTo(0);
     }
 
+    // 双轨收口（§24.3）：发起人无职级时的安全保守 rank 下限——绝不弱于既有闸，且随升级类型递增。
+    @Test
+    void conservativeRankFloorsByRequiredLevelWhenInitiatorRankUnknown() {
+        // requiredLevel=3 → floor = max(3,1)*3 = 9
+        assertThat(ApprovalLevel.ONE_LEVEL_UP.conservativeRequiredApproverRank(3)).isEqualTo(12);   // 9+3
+        assertThat(ApprovalLevel.TWO_LEVELS_UP.conservativeRequiredApproverRank(3)).isEqualTo(15);  // 9+6
+        assertThat(ApprovalLevel.TOP_AUTHORITY.conservativeRequiredApproverRank(0)).isEqualTo(30);
+        assertThat(ApprovalLevel.SPECIFIC_ROLE.conservativeRequiredApproverRank(3)).isEqualTo(0);
+        // 即便 requiredLevel=0 也有非零下限（floor 用 max(level,1)），不退化为旁路。
+        assertThat(ApprovalLevel.TWO_LEVELS_UP.conservativeRequiredApproverRank(0)).isEqualTo(9);    // 3+6
+    }
+
     @Test
     void fromCodeRoundTrips() {
         assertThat(ApprovalLevel.fromCode("two_levels_up")).isEqualTo(ApprovalLevel.TWO_LEVELS_UP);

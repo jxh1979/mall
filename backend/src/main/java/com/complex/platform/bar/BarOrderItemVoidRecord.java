@@ -28,6 +28,10 @@ public record BarOrderItemVoidRecord(
         String status,
         String idempotencyKey,
         List<String> evidenceAttachmentIds,
-        Instant createdAt
+        Instant createdAt,
+        // V115：审批回写留痕。status=approved/rejected 时填充审批人/时点/理由；pending/applied 态为空。
+        String reviewedByUserId,
+        Instant reviewedAt,
+        String reviewReason
 ) {
 }

@@ -2,6 +2,7 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { Sparkline, MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessMetricSnapshotRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
 
@@ -88,6 +89,27 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   const upwardCount = filteredSnapshots.filter((row) => row.trendDirection === "up").length;
   const averageVariance = filteredSnapshots.length === 0 ? 0 : filteredSnapshots.reduce((sum, row) => sum + numberValue(row.varianceRate), 0) / filteredSnapshots.length;
 
+  // 按指标聚合时间序列：同一 metricKey 下按 businessDate 升序的 actualValue 构成 sparkline，
+  // 并用「实际值 vs 基准值」迷你柱状图替代纯文字趋势（不引入图表依赖）。
+  const series = React.useMemo(() => {
+    const byMetric = new Map<string, BusinessMetricSnapshotRow[]>();
+    for (const row of filteredSnapshots) {
+      const key = row.metricKey ?? "metric";
+      const list = byMetric.get(key) ?? [];
+      list.push(row);
+      byMetric.set(key, list);
+    }
+    return Array.from(byMetric.entries()).slice(0, 4).map(([metricKey, list]) => {
+      const ordered = [...list].sort((a, b) => String(a.businessDate ?? "").localeCompare(String(b.businessDate ?? "")));
+      return {
+        metricKey,
+        actual: ordered.map((row) => numberValue(row.actualValue)),
+        baseline: ordered.map((row) => numberValue(row.baselineValue)),
+        latest: ordered[ordered.length - 1],
+      };
+    });
+  }, [filteredSnapshots]);
+
   function lockSnapshot() {
     if (!lockNote.trim()) {
       setFormError("复盘说明不能为空。");
@@ -130,6 +152,19 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
               <span className="admin-muted-action" data-testid="business-analytics-boundary">{TEXT.boundary}</span>
             </div>
             {formError ? <div data-testid="business-analytics-form-error" className="admin-inline-error">{formError}</div> : null}
+
+            {series.length > 0 ? (
+              <div className="admin-chart-panel" data-testid="business-analytics-charts">
+                {series.map((item) => (
+                  <div className="admin-chart-block" key={item.metricKey} data-testid={`business-analytics-chart-${item.metricKey}`}>
+                    <span>{item.metricKey}（实际值趋势 / 实际 vs 基准）</span>
+                    <Sparkline values={item.actual} width={140} height={36} testid={`business-analytics-sparkline-${item.metricKey}`} ariaLabel={`${item.metricKey} 实际值趋势`} />
+                    <MiniBars values={[numberValue(item.latest?.actualValue), numberValue(item.latest?.baselineValue)]} width={80} height={36} testid={`business-analytics-bars-${item.metricKey}`} ariaLabel={`${item.metricKey} 实际值与基准值`} />
+                    <small className="admin-muted-action">趋势 {trendLabel(item.latest?.trendDirection)} · 实际 {formatNumber(item.latest?.actualValue)} · 基准 {formatNumber(item.latest?.baselineValue)}</small>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-table">

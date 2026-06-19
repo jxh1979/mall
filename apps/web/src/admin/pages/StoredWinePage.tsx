@@ -2,9 +2,16 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
+import { rowMatchesKeyword } from "../components/rowSearch";
+import { usePagedRows, TablePager } from "../components/TablePager";
+import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps, StoredWineRow } from "../types";
+
+// 后端写权限码（InventoryController：/saved-bottles/{id}/claim）
+const STORED_WINE_CLAIM_PERMISSION = "bar.saved_bottle.manage";
 
 const TEXT = {
   title: "存酒",
@@ -41,7 +48,7 @@ function numberValue(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function StoredWinePage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function StoredWinePage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<StoredWineRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [claimPhone, setClaimPhone] = React.useState("13800013800");
@@ -50,6 +57,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError }: AdminPa
   const [operatorNote, setOperatorNote] = React.useState(TEXT.auditNote);
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [query, setQuery] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -62,6 +70,34 @@ export function StoredWinePage({ api, setActionResult, setGlobalError }: AdminPa
 
   const storedCount = rows.filter((row) => (row.status ?? "") === "stored").length;
   const totalQuantity = rows.reduce((sum, row) => sum + numberValue(row.quantity), 0);
+
+  const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
+  const sort = useSortedRows(filteredRows, {
+    savedNo: (row) => row.savedNo ?? row.id,
+    customer: (row) => row.customerName ?? row.customerId,
+    item: (row) => row.itemName ?? row.itemId,
+    quantity: (row) => numberValue(row.quantity),
+    status: (row) => row.status,
+    createdAt: (row) => row.createdAt,
+  });
+  const paged = usePagedRows(sort.sorted, 10, `${query}:${sort.key}:${sort.direction}`);
+
+  function validateClaim() {
+    if (!selected) {
+      setFormError(TEXT.noBottle);
+      return false;
+    }
+    const quantity = Number(claimQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setFormError(TEXT.quantityInvalid);
+      return false;
+    }
+    if (!verificationCode.trim()) {
+      setFormError(TEXT.codeRequired);
+      return false;
+    }
+    return true;
+  }
 
   async function claimStoredWine() {
     if (!selected) {
@@ -123,18 +159,34 @@ export function StoredWinePage({ api, setActionResult, setGlobalError }: AdminPa
           <label>{TEXT.note}<input data-testid="stored-wine-claim-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
         </div>
         <div className="admin-form-row">
-          <button type="button" data-testid="stored-wine-claim" disabled={submitting} onClick={() => void claimStoredWine()}>{TEXT.claim}</button>
+          <HighRiskConfirm
+            label={TEXT.claim}
+            impact="将在线核销选中存酒并扣减客户资产，写入幂等键、核验码与审计留痕，重复提交返回同一结果。"
+            disabled={submitting}
+            precheck={validateClaim}
+            onConfirm={() => void claimStoredWine()}
+            permissionsState={effectivePermissions}
+            permissions={[STORED_WINE_CLAIM_PERMISSION]}
+            data-testid="stored-wine-claim"
+          />
           <span className="admin-muted-action" data-testid="stored-wine-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="stored-wine-error" className="admin-inline-error">{formError}</div> : null}
 
+        <div className="admin-list-toolbar" data-testid="stored-wine-filter">
+          <input data-testid="stored-wine-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索存酒号 / 客户 / 酒水 / 状态" />
+          <span className="admin-muted-action" data-testid="stored-wine-filter-count">匹配 {filteredRows.length} / {rows.length} 条</span>
+        </div>
+        {filteredRows.length === 0 ? (
+          <div className="admin-state admin-empty" data-testid="stored-wine-filter-empty">无匹配存酒记录</div>
+        ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="stored-wine-table">
             <thead>
-              <tr><th>{TEXT.select}</th><th>{TEXT.savedNo}</th><th>{TEXT.customer}</th><th>{TEXT.item}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.createdAt}</th></tr>
+              <tr><th>{TEXT.select}</th><th className="admin-sort-th" data-testid="stored-wine-sort-savedNo" onClick={() => sort.toggle("savedNo")}>{TEXT.savedNo}{sort.indicator("savedNo")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-customer" onClick={() => sort.toggle("customer")}>{TEXT.customer}{sort.indicator("customer")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-item" onClick={() => sort.toggle("item")}>{TEXT.item}{sort.indicator("item")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-quantity" onClick={() => sort.toggle("quantity")}>{TEXT.quantity}{sort.indicator("quantity")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-status" onClick={() => sort.toggle("status")}>{TEXT.status}{sort.indicator("status")}</th><th className="admin-sort-th" data-testid="stored-wine-sort-createdAt" onClick={() => sort.toggle("createdAt")}>{TEXT.createdAt}{sort.indicator("createdAt")}</th></tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {paged.pageRows.map((row) => (
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`stored-wine-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.savedNo ?? row.id}</td>
@@ -147,7 +199,9 @@ export function StoredWinePage({ api, setActionResult, setGlobalError }: AdminPa
               ))}
             </tbody>
           </table>
+          <TablePager testid="stored-wine-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
+        )}
       </AdminDataState>
     </section>
   );

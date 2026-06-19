@@ -21,6 +21,9 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
     };
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
@@ -241,6 +244,170 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                  WHERE conversation_id = :conversation_id
                  ORDER BY viewed_at DESC, id
                 """, Map.of("conversation_id", conversationId), this::mapAudit);
+    }
+
+    // ------------------------------------------------------------------- P0#8 企微违规规则码 / 命中
+
+    @Override
+    public List<WecomRiskRuleRecord> findEnabledWecomRiskRules() {
+        // 企微违规规则码 = analytics_risk_rules 中 domain=compliance 且启用；关键词取自 rule_config_json.keywords。
+        return jdbcTemplate.query("""
+                SELECT rule_id, rule_code, risk_level, rule_config_json
+                  FROM analytics_risk_rules
+                 WHERE enabled = true
+                   AND domain = 'compliance'
+                 ORDER BY rule_code
+                """, (rs, rowNum) -> new WecomRiskRuleRecord(
+                rs.getString("rule_id"),
+                rs.getString("rule_code"),
+                rs.getString("risk_level"),
+                readKeywords(rs.getString("rule_config_json"))));
+    }
+
+    @Override
+    public WecomRiskHitRecord saveRiskHit(WecomRiskHitRecord record) {
+        // 同一消息同一规则码幂等（uq_wecom_risk_hits_message_rule）：重复同步不产生重复命中。
+        jdbcTemplate.update("""
+                INSERT INTO wecom_risk_hits (
+                    hit_id, conversation_id, message_id, rule_code, risk_level, matched_snippet,
+                    status, reviewer_id, review_note, project_id, alert_id, created_at, updated_at
+                )
+                VALUES (
+                    :hit_id, :conversation_id, :message_id, :rule_code, :risk_level, :matched_snippet,
+                    :status, :reviewer_id, :review_note, :project_id, :alert_id, :created_at, :updated_at
+                )
+                ON CONFLICT (message_id, rule_code) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("hit_id", record.hitId())
+                .addValue("conversation_id", record.conversationId())
+                .addValue("message_id", record.messageId())
+                .addValue("rule_code", record.ruleCode())
+                .addValue("risk_level", record.riskLevel())
+                .addValue("matched_snippet", record.matchedSnippet())
+                .addValue("status", record.status())
+                .addValue("reviewer_id", record.reviewerId())
+                .addValue("review_note", record.reviewNote())
+                .addValue("project_id", record.projectId())
+                .addValue("alert_id", record.alertId())
+                .addValue("created_at", timestampWithTimeZone(record.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(record.updatedAt())));
+        return record;
+    }
+
+    @Override
+    public List<WecomRiskHitRecord> findRiskHits(String status, String conversationId) {
+        return jdbcTemplate.query("""
+                SELECT hit_id, conversation_id, message_id, rule_code, risk_level, matched_snippet,
+                       status, reviewer_id, review_note, project_id, alert_id, created_at, updated_at
+                  FROM wecom_risk_hits
+                 WHERE (:status IS NULL OR status = :status)
+                   AND (:conversation_id IS NULL OR conversation_id = :conversation_id)
+                 ORDER BY created_at DESC, hit_id
+                """, new MapSqlParameterSource()
+                .addValue("status", status)
+                .addValue("conversation_id", conversationId), this::mapRiskHit);
+    }
+
+    @Override
+    public Optional<WecomRiskHitRecord> findRiskHitById(String hitId) {
+        return jdbcTemplate.query("""
+                SELECT hit_id, conversation_id, message_id, rule_code, risk_level, matched_snippet,
+                       status, reviewer_id, review_note, project_id, alert_id, created_at, updated_at
+                  FROM wecom_risk_hits
+                 WHERE hit_id = :hit_id
+                """, Map.of("hit_id", hitId), this::mapRiskHit).stream().findFirst();
+    }
+
+    @Override
+    public WecomRiskHitRecord updateRiskHitReview(
+            String hitId, String status, String reviewerId, String reviewNote) {
+        jdbcTemplate.update("""
+                UPDATE wecom_risk_hits
+                   SET status = :status,
+                       reviewer_id = :reviewer_id,
+                       review_note = :review_note,
+                       updated_at = now()
+                 WHERE hit_id = :hit_id
+                """, new MapSqlParameterSource()
+                .addValue("hit_id", hitId)
+                .addValue("status", status)
+                .addValue("reviewer_id", reviewerId)
+                .addValue("review_note", reviewNote));
+        return findRiskHitById(hitId).orElse(null);
+    }
+
+    @Override
+    public String enqueueRiskAlert(WecomRiskAlertEnqueue enqueue) {
+        // 命中入复核队列：写孤岛 analytics_risk_alerts，标 source_domain='wecom'（V106 新增列）。
+        // idempotency_key（=hit_id 派生）幂等：重复同步不产生重复告警，命中已落库即复用既有 alert_id。
+        jdbcTemplate.update("""
+                INSERT INTO analytics_risk_alerts (
+                    id, rule_id, alert_type, risk_level, object_type, object_id, summary,
+                    status, operator_note, evidence_attachment_ids_json, idempotency_key,
+                    source_domain, created_at, resolved_at, updated_at
+                )
+                VALUES (
+                    :id, :rule_id, 'wecom_risk_hit', :risk_level, :object_type, :object_id, :summary,
+                    'open', NULL, '[]'::jsonb, :idempotency_key,
+                    'wecom', :created_at, NULL, :created_at
+                )
+                ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", enqueue.alertId())
+                .addValue("rule_id", enqueue.ruleId())
+                .addValue("risk_level", enqueue.riskLevel())
+                .addValue("object_type", enqueue.objectType())
+                .addValue("object_id", enqueue.objectId())
+                .addValue("summary", enqueue.summary())
+                .addValue("idempotency_key", enqueue.idempotencyKey())
+                .addValue("created_at", timestampWithTimeZone(enqueue.createdAt())));
+        // 冲突时（已存在同 idempotency_key）返回既有 alert id，保证命中关联稳定。
+        return jdbcTemplate.query("""
+                SELECT id FROM analytics_risk_alerts WHERE idempotency_key = :idempotency_key
+                """, Map.of("idempotency_key", enqueue.idempotencyKey()),
+                (rs, rowNum) -> rs.getString("id")).stream().findFirst().orElse(enqueue.alertId());
+    }
+
+    @Override
+    public Optional<String> findRiskAlertStatus(String alertId) {
+        return jdbcTemplate.query("""
+                SELECT status FROM analytics_risk_alerts WHERE id = :id
+                """, Map.of("id", alertId),
+                (rs, rowNum) -> rs.getString("status")).stream().findFirst();
+    }
+
+    private WecomRiskHitRecord mapRiskHit(ResultSet rs, int rowNum) throws SQLException {
+        return new WecomRiskHitRecord(
+                rs.getString("hit_id"),
+                rs.getString("conversation_id"),
+                rs.getString("message_id"),
+                rs.getString("rule_code"),
+                rs.getString("risk_level"),
+                rs.getString("matched_snippet"),
+                rs.getString("status"),
+                rs.getString("reviewer_id"),
+                rs.getString("review_note"),
+                rs.getString("project_id"),
+                rs.getString("alert_id"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at")
+        );
+    }
+
+    private List<String> readKeywords(String configJson) {
+        if (configJson == null || configJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            Map<String, Object> config = objectMapper.readValue(configJson, MAP_TYPE);
+            Object keywords = config.get("keywords");
+            if (keywords instanceof List<?> list) {
+                return list.stream().filter(java.util.Objects::nonNull).map(Object::toString).toList();
+            }
+            return List.of();
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException("rule_config_json is not readable", exception);
+        }
     }
 
     private WecomRetentionPolicyRecord mapPolicy(ResultSet rs, int rowNum) throws SQLException {

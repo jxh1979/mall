@@ -38,6 +38,7 @@ public class DashboardAggregationJob {
     static final String REVENUE_TICKET_AMUSEMENT_SHARE = "revenue.ticket_amusement_share"; // 收入·通票游乐分摊
     static final String TRAFFIC_AMUSEMENT = "traffic.amusement"; // 客流
     static final String VERIFY_DONE = "verify.done";            // 核销
+    static final String REDEMPTION_RATE = "verify.redemption_rate"; // 核销·券核销率（派生：核销数/发放数）
     static final String MEMBER_NEW = "member.new";              // 会员
     static final String SUPPLY_BALANCE = "supply.balance";      // 供应链
     static final String SUPPLY_LOW_STOCK = "supply.low_stock";  // 供应链·缺货预警
@@ -45,8 +46,15 @@ public class DashboardAggregationJob {
 
     static final String SEGMENT_PLATFORM = "platform";
     static final String SEGMENT_MERCHANT = "merchant";
+    static final String SEGMENT_PROJECT = "project";
     static final String PERIOD_DAILY = "daily";
     static final String PROJECTION_ETL = "etl_aggregate";
+
+    /**
+     * ⑤ 集团多项目 ETL：单综合体默认 project_id（与 AnalyticsService 集团总览的合成 project 标识一致）。
+     * 单综合体下全部经营聚合归该综合体一个 project；多综合体启用时由真实 project 归属拆分（届时替换此默认）。
+     */
+    static final String DEFAULT_PROJECT_ID = "project_1";
 
     private final AnalyticsRepository repository;
     private final Clock clock;
@@ -72,21 +80,25 @@ public class DashboardAggregationJob {
     public void refreshSnapshots(LocalDate businessDate) {
         Instant now = Instant.now(clock);
 
+        // ⑤ 集团多项目 ETL：累积各 metric 的平台口径合计，末尾按 project_id 维度 upsert segment_type='project' 行。
+        // 单综合体默认全部经营归一个 project（值=平台口径合计，口径与现状一致、不伪造多 project）。
+        Map<String, BigDecimal> platformTotals = new java.util.LinkedHashMap<>();
+
         // 收入·售票：ticket_orders 无 merchant_id → 仅平台口径。
-        upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate), now);
+        upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate), now, platformTotals);
 
         // 收入·酒吧：bar_bill_settlements 有 merchant_id → 平台 + 商户口径。
         // 硬约束：revenue.bar 仅取现场消费实收（bar_bill_settlements），不含通票售票分摊，保证净收入口径不重复。
-        upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate), now);
+        upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate), now, platformTotals);
 
         // 收入·酒吧退款（待确认#2）：bar_bill_adjustments(adjustment_type='refund') 按 refunded_at 落经营日窗口，
         // 单列 revenue.bar_refund（不改写 revenue.bar 实收口径），net 派生时扣减；免单 waiver 不计入（已在更低结算实收体现）。
-        upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate), now);
+        upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate), now, platformTotals);
 
         // RC1②：收入·自营售票退款（ticket_refunds 无 merchant_id → 仅平台口径，与 revenue.ticket 同口径）。
         BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate));
         BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate));
-        upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate, ticketRefund, now);
+        upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate, ticketRefund, now, platformTotals);
 
         // RC1② 统一净收入 revenue.net（派生指标，财务确认口径 2026-06-18）：
         //   net = 自营售票实付(revenue.ticket) + 酒吧实收(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
@@ -104,42 +116,60 @@ public class DashboardAggregationJob {
         Map<String, BigDecimal> ticketAllocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate);
         Map<String, BigDecimal> ticketRefundByMerchant = repository.sumTicketRefundByMerchant(businessDate);
         upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund,
-                ticketAllocated, ticketRefundByMerchant, now);
+                ticketAllocated, ticketRefundByMerchant, now, platformTotals);
 
         // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
         // 按酒吧/游乐业态拆出展示行，与 revenue.bar（消费实收）口径区分，避免重复计净收入。
         upsertByMerchant(REVENUE_TICKET_BAR_SHARE, "ticketing", businessDate,
-                repository.sumTicketBarShareCentsByMerchant(businessDate), now);
+                repository.sumTicketBarShareCentsByMerchant(businessDate), now, platformTotals);
         upsertByMerchant(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
-                repository.sumTicketAmusementShareCentsByMerchant(businessDate), now);
+                repository.sumTicketAmusementShareCentsByMerchant(businessDate), now, platformTotals);
 
         // 客流·游乐：amusement_verifications 无 merchant_id → 仅平台口径。
-        upsertPlatform(TRAFFIC_AMUSEMENT, "amusement", businessDate, repository.countAmusementVerificationSuccess(businessDate), now);
+        upsertPlatform(TRAFFIC_AMUSEMENT, "amusement", businessDate, repository.countAmusementVerificationSuccess(businessDate), now, platformTotals);
 
         // 核销：ticket_verifications 有 merchant_id → 平台 + 商户口径。
-        upsertByMerchant(VERIFY_DONE, "ticketing", businessDate, repository.countTicketVerificationSuccessByMerchant(businessDate), now);
+        Map<String, BigDecimal> verifyDoneByMerchant = repository.countTicketVerificationSuccessByMerchant(businessDate);
+        upsertByMerchant(VERIFY_DONE, "ticketing", businessDate, verifyDoneByMerchant, now, platformTotals);
+
+        // 清单#18：券核销率（派生）= 核销数/发放数。发放数取 issued_entitlements 当日发放（同 merchant 维度）。
+        // 比率指标（0~1，BigDecimal 保留 4 位小数）；分母为 0（当日无发放）按"不伪造"置 0，不产生除零。
+        Map<String, BigDecimal> issuedByMerchant = repository.countTicketIssuedByMerchant(businessDate);
+        upsertRedemptionRate(businessDate, verifyDoneByMerchant, issuedByMerchant, now, platformTotals);
 
         // 会员·新增：customers 无 merchant_id → 仅平台口径。
-        upsertPlatform(MEMBER_NEW, "customer", businessDate, repository.countNewMembers(businessDate), now);
+        upsertPlatform(MEMBER_NEW, "customer", businessDate, repository.countNewMembers(businessDate), now, platformTotals);
 
         // 供应链·库存余额：inventory_stock_balances 有 merchant_id → 平台 + 商户口径（存量快照，与经营日无关，落当日）。
-        upsertByMerchant(SUPPLY_BALANCE, "inventory", businessDate, repository.sumInventoryBalanceByMerchant(), now);
+        upsertByMerchant(SUPPLY_BALANCE, "inventory", businessDate, repository.sumInventoryBalanceByMerchant(), now, platformTotals);
 
         // 供应链·缺货预警：按 SKU 绝对值阈值（inventory_items.min_quantity）count(可用量<阈值)，阈值≤0 不预警（财务确认口径）。
-        upsertByMerchant(SUPPLY_LOW_STOCK, "inventory", businessDate, repository.countLowStockByMerchant(), now);
+        upsertByMerchant(SUPPLY_LOW_STOCK, "inventory", businessDate, repository.countLowStockByMerchant(), now, platformTotals);
 
         // 风险·待复核：supervisor_review_decisions / analytics_risk_alerts 无 merchant_id → 仅平台口径。
-        upsertPlatform(RISK_PENDING_REVIEW, "governance", businessDate, repository.countPendingReview(), now);
+        upsertPlatform(RISK_PENDING_REVIEW, "governance", businessDate, repository.countPendingReview(), now, platformTotals);
+
+        // ⑤ 集团多项目 ETL：按 project_id 维度 upsert segment_type='project' 行。
+        upsertByProject(businessDate, platformTotals, now);
     }
 
-    private void upsertPlatform(String metricKey, String domain, LocalDate businessDate, BigDecimal value, Instant now) {
+    private void upsertPlatform(
+            String metricKey,
+            String domain,
+            LocalDate businessDate,
+            BigDecimal value,
+            Instant now,
+            Map<String, BigDecimal> platformTotals
+    ) {
+        BigDecimal normalized = value == null ? BigDecimal.ZERO : value;
         repository.upsertMetricSnapshot(
                 new MetricSnapshotKey(metricKey, domain, PERIOD_DAILY, businessDate, SEGMENT_PLATFORM, null),
-                value == null ? BigDecimal.ZERO : value,
+                normalized,
                 PROJECTION_ETL,
                 now
         );
+        recordPlatformTotal(platformTotals, metricKey, domain, normalized);
     }
 
     private void upsertByMerchant(
@@ -147,7 +177,8 @@ public class DashboardAggregationJob {
             String domain,
             LocalDate businessDate,
             Map<String, BigDecimal> byMerchant,
-            Instant now
+            Instant now,
+            Map<String, BigDecimal> platformTotals
     ) {
         BigDecimal platformTotal = BigDecimal.ZERO;
         for (Map.Entry<String, BigDecimal> entry : byMerchant.entrySet()) {
@@ -170,6 +201,81 @@ public class DashboardAggregationJob {
                 PROJECTION_ETL,
                 now
         );
+        recordPlatformTotal(platformTotals, metricKey, domain, platformTotal);
+    }
+
+    /** 累积 metric 的平台口径合计（key 编码 metricKey|domain，供 project 维度复用同一 domain）。 */
+    private void recordPlatformTotal(Map<String, BigDecimal> platformTotals, String metricKey, String domain, BigDecimal value) {
+        platformTotals.put(metricKey + "|" + domain, value == null ? BigDecimal.ZERO : value);
+    }
+
+    /**
+     * ⑤ 集团多项目 ETL：把当日平台口径各 metric 合计落到 segment_type='project' 维度。
+     * 单综合体默认全部经营归 DEFAULT_PROJECT_ID 一个 project（值=平台口径合计，口径与现状一致、不伪造多 project）；
+     * 多综合体启用时此处按真实 project 归属拆分（同一 metric 分组聚合到各 project_id）。
+     * 与 platform/merchant 维度并存、不互相破坏（V070 唯一键含 segment_type，segment_id=project_id 独立成行）。
+     */
+    private void upsertByProject(LocalDate businessDate, Map<String, BigDecimal> platformTotals, Instant now) {
+        for (Map.Entry<String, BigDecimal> entry : platformTotals.entrySet()) {
+            String[] parts = entry.getKey().split("\\|", 2);
+            String metricKey = parts[0];
+            String domain = parts.length > 1 ? parts[1] : "platform";
+            repository.upsertMetricSnapshot(
+                    new MetricSnapshotKey(metricKey, domain, PERIOD_DAILY, businessDate, SEGMENT_PROJECT, DEFAULT_PROJECT_ID),
+                    entry.getValue(),
+                    PROJECTION_ETL,
+                    now
+            );
+        }
+    }
+
+    /**
+     * 清单#18：派生并 upsert 券核销率 verify.redemption_rate = 核销数/发放数（按 merchant 行级 + 平台口径）。
+     * 商户行：本商户核销数 / 本商户发放数；平台行：Σ核销数 / Σ发放数（含 merchant_id 为 NULL 的行并入平台合计）。
+     * 分母为 0（当日无发放）按"不伪造"置 0，不产生除零。比率 BigDecimal 保留 4 位小数（HALF_UP）。
+     */
+    private void upsertRedemptionRate(
+            LocalDate businessDate,
+            Map<String, BigDecimal> verifyDoneByMerchant,
+            Map<String, BigDecimal> issuedByMerchant,
+            Instant now,
+            Map<String, BigDecimal> platformTotals
+    ) {
+        java.util.Set<String> merchantIds = new java.util.LinkedHashSet<>();
+        merchantIds.addAll(verifyDoneByMerchant.keySet());
+        merchantIds.addAll(issuedByMerchant.keySet());
+        BigDecimal doneTotal = BigDecimal.ZERO;
+        BigDecimal issuedTotal = BigDecimal.ZERO;
+        for (String merchantId : merchantIds) {
+            BigDecimal done = nonNull(verifyDoneByMerchant.get(merchantId));
+            BigDecimal issued = nonNull(issuedByMerchant.get(merchantId));
+            doneTotal = doneTotal.add(done);
+            issuedTotal = issuedTotal.add(issued);
+            if (merchantId != null && !merchantId.isBlank()) {
+                repository.upsertMetricSnapshot(
+                        new MetricSnapshotKey(REDEMPTION_RATE, "ticketing", PERIOD_DAILY, businessDate, SEGMENT_MERCHANT, merchantId),
+                        ratio(done, issued),
+                        PROJECTION_ETL,
+                        now
+                );
+            }
+        }
+        BigDecimal platformRate = ratio(doneTotal, issuedTotal);
+        repository.upsertMetricSnapshot(
+                new MetricSnapshotKey(REDEMPTION_RATE, "ticketing", PERIOD_DAILY, businessDate, SEGMENT_PLATFORM, null),
+                platformRate,
+                PROJECTION_ETL,
+                now
+        );
+        recordPlatformTotal(platformTotals, REDEMPTION_RATE, "ticketing", platformRate);
+    }
+
+    /** 核销率 = 核销数/发放数；分母 ≤ 0 置 0（不伪造、不除零）。保留 4 位小数 HALF_UP。 */
+    private BigDecimal ratio(BigDecimal numerator, BigDecimal denominator) {
+        if (denominator == null || denominator.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return numerator.divide(denominator, 4, java.math.RoundingMode.HALF_UP);
     }
 
     /**
@@ -185,7 +291,8 @@ public class DashboardAggregationJob {
             Map<String, BigDecimal> barRefundByMerchant,
             Map<String, BigDecimal> ticketAllocatedByMerchant,
             Map<String, BigDecimal> ticketRefundByMerchant,
-            Instant now
+            Instant now,
+            Map<String, BigDecimal> platformTotals
     ) {
         // 商户行级 net：本商户售票分量 + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
         java.util.Set<String> merchantIds = new java.util.LinkedHashSet<>();
@@ -226,6 +333,7 @@ public class DashboardAggregationJob {
                 PROJECTION_ETL,
                 now
         );
+        recordPlatformTotal(platformTotals, REVENUE_NET, "finance", platformNet);
     }
 
     private BigDecimal nonNull(BigDecimal value) {

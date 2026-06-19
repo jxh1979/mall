@@ -2,9 +2,13 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, InventoryItemRow, StockBalanceRow, StockMovementRow } from "../types";
+
+// 后端写权限码（InventoryController：POST /stock-movements）
+const STOCK_MOVE_PERMISSION = "inventory.stock.move";
 
 const TEXT = {
   title: "库存台账",
@@ -42,7 +46,7 @@ function asNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function InventoryLedgerPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [items, setItems] = React.useState<InventoryItemRow[]>([]);
   const [balances, setBalances] = React.useState<StockBalanceRow[]>([]);
   const [movements, setMovements] = React.useState<StockMovementRow[]>([]);
@@ -71,6 +75,19 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError }: Ad
 
 
   const totalQuantity = balances.reduce((sum, row) => sum + asNumber(row.quantity), 0);
+
+  function validateMovement() {
+    if (!selectedItem) {
+      setFormError(TEXT.noItem);
+      return false;
+    }
+    const movementQuantity = Number(quantity);
+    if (!Number.isFinite(movementQuantity) || movementQuantity <= 0) {
+      setFormError(TEXT.quantityInvalid);
+      return false;
+    }
+    return true;
+  }
 
   async function submitMovement() {
     if (!selectedItem) {
@@ -130,7 +147,16 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError }: Ad
           <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
         </div>
         <div className="admin-form-row">
-          <button type="button" data-testid="inventory-movement-submit" disabled={submitting} onClick={() => void submitMovement()}>{TEXT.submit}</button>
+          <HighRiskConfirm
+            label={TEXT.submit}
+            impact="将按选中物料登记库存移动并落库，影响库存余额；禁止负库存，高价值酒水保持在线核销。"
+            disabled={submitting}
+            precheck={validateMovement}
+            onConfirm={() => void submitMovement()}
+            permissionsState={effectivePermissions}
+            permissions={[STOCK_MOVE_PERMISSION]}
+            data-testid="inventory-movement-submit"
+          />
           <span className="admin-muted-action" data-testid="inventory-ledger-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="inventory-ledger-error" className="admin-inline-error">{formError}</div> : null}

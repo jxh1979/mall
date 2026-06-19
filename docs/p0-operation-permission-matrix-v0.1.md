@@ -202,3 +202,84 @@
 | 2026-06-10 | V0.1 审计收口 | 明确本文为 P0 权限码唯一事实源；补场馆/区域/点位权限；历史 `platform.*`、`access.template.*` 写法统一折算为本文权限码；游乐场次事件统一为 `amusement.session.changed` |
 | 2026-06-13 | V0.1 OpenAPI 权限补充 | 补齐当前 OpenAPI 缺失的 17 个接口级权限码/通用状态；接口级完整权限清单以 `p0-openapi-contract-closure-appendix-v0.1.md` 为准 |
 | 2026-06-13 | V0.1 生产前置权限收口 | 新增生产前置责任状态查看、维护和准入检查三项权限 |
+| 2026-06-19 | R6 全闭环(2026-06-19) | 追加 §8 "商户侧授权范围全开放的权限点逐一映射"，按酒吧/游乐/餐饮零售商户列出授权范围内可用权限点清单与不可见边界（仅追加，未改既有行） |
+
+## 8. 商户侧授权范围全开放的权限点逐一映射
+
+> **标注：R6 全闭环(2026-06-19)。** 本节回应治理 HTML #permission「权限细到单一功能最小颗粒度、角色模板+员工级完全自定义」，把"商户侧授权范围全开放"落成逐一权限点清单：当商户在其被授权范围内（同商户、同项目、所绑空间/业态）被全开放时，下列权限点对该商户**可用**；同时明确商户侧**始终不可见**的平台全局对象。本节为追加，不改 §3/§3.1/§3.2 既有权限码与既有行；权限码以上述既有表为唯一事实源，本节只做"按商户业态的可用性映射"。
+>
+> **通用前提**：①商户侧所有可用权限点一律按"同商户/同项目数据范围"过滤（端侧边界见 §4 商户门户/商户 App 行：授权范围内查看经营、核销、订单、对账；不能查看其他商户数据）；②高风险动作仍受 §3 既有"是否需审批/必须留痕"约束，全开放指授权范围内可被分配，不等于免审批；③客人 Token/设备凭证/开放平台凭证不是员工权限码（§1）。
+
+### 8.1 酒吧商户（授权范围全开放）可用权限点清单
+
+| 功能（逐一） | 权限编码 | 风险/审批沿用 §3 | 商户侧可用性 |
+|---|---|---|---|
+| 卡座/桌台查看 | `bar.table.view` | 低/否 | 可用（按本商户酒吧范围） |
+| 卡座/桌台维护 | `bar.table.manage` | 中/可配置 | 可用（影响人数、低消、终端绑定） |
+| 订台（卡座预订）创建 | `bar.reservation.create` | 中/否 | 可用 |
+| 订台记录查看 | `bar.reservation.view` | 低/否 | 可用 |
+| 卡座预订入场人数核销 | `bar.table.guest_checkin` | 中/否 | 可用（仅本酒吧预定卡座，需幂等与并发额度锁） |
+| 开台/关台 | `bar.table.open_close` | 中/否 | 可用 |
+| 点酒/出酒 | `bar.order.create` | 中/否 | 可用 |
+| 酒吧订单查看 | `bar.order.view` | 低/否 | 可用（按本酒吧/卡座范围） |
+| 账单：酒水赠饮核销 | `bar.drink_benefit.redeem` | 中/否 | 可用（通票赠酒成本由平台承担） |
+| 存酒登记/领取/作废 | `bar.saved_bottle.manage` | 高/领取作废可配置 | 可用（须照片/签收/手机号） |
+| 库存入库/出库 | `inventory.stock.move` | 中/可配置 | 可用（本商户库存扣减闭环） |
+| 库存余额/流水查看 | `inventory.stock.view` | 低/否 | 可用（按本仓库/酒吧范围） |
+| 库存盘点差异确认 | `inventory.stock.adjust` | 高/是 | 可用（高价值酒水需附件，仓库主管/财务复核） |
+| 卡座销售归属登记 | `bar.table_sales.attribute` | 中/变更需复核 | 可用 |
+| 卡座提成计算 | `bar.table_commission.calculate` | 高/是 | 可用（销售15%/非销售10%，不含通票） |
+| 卡座提成查看/复核 | `bar.table_commission.view` / `bar.table_commission.review` | 高/是 | 可用（普通销售仅看本人摘要，不得改基数） |
+| 入场年龄核验 | `bar.entry.age_verify` | 高/否 | 可用（售酒/入场合规前置） |
+| 票/券/权益核销 | `verification.execute` | 中/否 | 可用（在线核验动态码） |
+| 核销撤销 / 人工放行 | `verification.reverse` / `verification.manual_override` | 高/是 | 可用（现场主管/总控，须原因/证据） |
+| 员工：账号查看/维护 | `access.user.view` / `access.user.manage` | 中-高/高变更留痕 | 可用（限本商户范围内员工） |
+| 员工：角色/模板/临时授权 | `access.role.view` / `access.permission_template.view` / `access.temporary_grant.create` / `access.temporary_grant.revoke` | 中-高 | 可用（限本商户范围；员工级完全自定义按 §2.2 组合，DENY 优先） |
+| 对账：应收应付台账查看 | `finance.ar_ap.view` | 中/否 | 可用（按主体绑定/数据范围） |
+| 对账：财务对账批次查看 | `finance.reconciliation.view` | 中/否 | 可用（按本商户数据范围） |
+| 看板：经营总览查看 | `analytics.dashboard.view` | 中/否 | 可用（聚合数据，不暴露明细隐私） |
+| 证据/时间线/附件 | `evidence.event.view` / `evidence.timeline.view` / `evidence.attachment.create` | 中/否 | 可用（敏感字段另受 `evidence.sensitive.view` 控制） |
+
+**不可见（酒吧商户侧始终无权）**：平台全局配置（`governance.project.manage`、`terminal.switch.manage`、`openplatform.app.manage`、`device.mdm_policy.apply`、`openplatform.credential.rotate`）、其他商户数据（任何越本商户数据范围的查看/操作）、全局风控（`analytics.risk_alert.manage`、`evidence.sensitive.view` 跨商户、跨商户对账/补偿 `openplatform.reconcile.execute`）。
+
+### 8.2 游乐商户（授权范围全开放）可用权限点清单
+
+| 功能（逐一） | 权限编码 | 风险/审批沿用 §3 | 商户侧可用性 |
+|---|---|---|---|
+| 项目/场次查看 | `amusement.session.view` | 低/否 | 可用 |
+| 项目/场次维护 | `amusement.session.manage` | 中/可配置 | 可用（基础场次容量） |
+| 设备状态查看 | `amusement.device_status.view` | 中/否 | 可用 |
+| 核销记录查看 | `amusement.verification.view` | 低/否 | 可用 |
+| 核销执行 / 人工放行 | `amusement.verification.execute` / `amusement.verification.override` | 中-高/放行需审批 | 可用（与票务权益联动） |
+| 安全巡检模板查看/维护 | `amusement.safety_template.view` / `amusement.safety_template.manage` | 高/维护可配置审批 | 可用 |
+| 安全巡检任务查看/创建/提交 | `amusement.safety_inspection.view` / `.create` / `.submit` | 高 | 可用（开放前必检，阻断项自动暂停） |
+| 安全整改/复检 | `amusement.safety_inspection.rectify` / `.recheck` | 高/可配置 | 可用（严重项未复检通过不得恢复） |
+| 严重项恢复开放 | `amusement.safety_inspection.approve_reopen` | 高/是 | 可用（复检通过后仍需主管审批） |
+| 票/券/权益核销 | `verification.execute` | 中/否 | 可用 |
+| 库存入库/出库与查看 | `inventory.stock.move` / `inventory.stock.view` | 中-低 | 可用（如游乐有耗材/物料库存） |
+| 员工/角色/临时授权 | `access.user.*` / `access.role.view` / `access.temporary_grant.*` | 中-高 | 可用（限本商户范围） |
+| 对账查看 | `finance.ar_ap.view` / `finance.reconciliation.view` | 中/否 | 可用（按数据范围） |
+| 看板查看 | `analytics.dashboard.view` | 中/否 | 可用（聚合，不暴露明细） |
+| 证据/时间线/附件 | `evidence.event.view` / `evidence.timeline.view` / `evidence.attachment.create` | 中/否 | 可用 |
+
+**不可见（游乐商户侧始终无权）**：平台全局配置（`governance.project.manage`、`terminal.switch.manage`、`openplatform.app.manage`、`device.mdm_policy.apply`）、其他商户数据、全局风控（`analytics.risk_alert.manage`、跨商户敏感证据与对账补偿）。
+
+### 8.3 餐饮/零售商户（授权范围全开放）可用权限点清单
+
+| 功能（逐一） | 权限编码 | 风险/审批沿用 §3 | 商户侧可用性 |
+|---|---|---|---|
+| 票/券/权益核销 | `verification.execute` | 中/否 | 可用（餐饮/零售券核销，在线核验动态码） |
+| 核销记录查看（票务核销） | `ticket.verify.view` | 中/否 | 可用（按数据范围） |
+| 库存入库/出库 | `inventory.stock.move` | 中/可配置 | 可用（本商户库存扣减闭环） |
+| 库存余额/流水查看 | `inventory.stock.view` | 低/否 | 可用 |
+| 库存盘点差异确认 | `inventory.stock.adjust` | 高/是 | 可用（差异需复核/附件） |
+| 供应商档案查看/维护 | `inventory.supplier.view` / `inventory.supplier.manage` | 低-中 | 可用（拉黑/恢复留痕） |
+| 采购申请查看/维护 | `inventory.purchase_request.view` / `inventory.purchase_request.manage` | 低-中/可配置 | 可用（审批链按金额/品类配置） |
+| 员工/角色/临时授权 | `access.user.*` / `access.role.view` / `access.temporary_grant.*` | 中-高 | 可用（限本商户范围） |
+| 对账：应收应付/对账批次查看 | `finance.ar_ap.view` / `finance.reconciliation.view` | 中/否 | 可用（按主体绑定/数据范围） |
+| 看板：经营总览查看 | `analytics.dashboard.view` | 中/否 | 可用（聚合，不暴露明细隐私） |
+| 证据/时间线/附件 | `evidence.event.view` / `evidence.timeline.view` / `evidence.attachment.create` | 中/否 | 可用 |
+
+**不可见（餐饮/零售商户侧始终无权）**：平台全局配置（`governance.project.manage`、`terminal.switch.manage`、`openplatform.app.manage`、`openplatform.mapping.manage`、`device.mdm_policy.apply`）、其他商户数据（任何越本商户数据范围者）、全局风控（`analytics.risk_alert.manage`、跨商户敏感证据 `evidence.sensitive.view`、跨商户对账补偿 `openplatform.reconcile.execute`）。
+
+> **统一边界说明（三类商户共用）**：①票务价格/票种配置（`ticket.product.manage`、`ticket.price_variant.manage`）、出票（`ticket.ticket.issue`）默认属平台/票务主管，非商户侧全开放范围，除非另行授权；②卡座/酒吧专属权限点（`bar.*`）仅对酒吧业态商户开放，游乐/餐饮零售商户即使全开放也不出现卡座/点酒/存酒权限；③"全开放"指在本商户授权范围内权限点**可被分配且默认开放**，最终生效仍按 §2.2「角色 + 模板 + 员工单独授予/限制 + 临时授权 − 显式拒绝」组合，显式拒绝优先。

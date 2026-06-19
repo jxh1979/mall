@@ -274,7 +274,8 @@ class SupervisorReviewServiceTests {
                 "review-approval-level-contract", "v", List.of(),
                 "contract_violation", "contract", "c1", 0L, "violation"));
         assertThat(contract.approvalLevel()).isEqualTo("two_levels_up");
-        // 发起人无职级（AuthorizationService(null) → rank 0）时不按 rank 计算，回退既有 required_level。
+        // 无仓储的轻量上下文（AuthorizationService(null) → 职级不可解析）回退 level 闸，rank=null（向后兼容）。
+        // 真实可解析部署下"无职级配置不再静默降级"由 evaluateConservativeRankWhenInitiatorHasNoStaffLevel 覆盖。
         assertThat(contract.requiredApproverRank()).isNull();
 
         var baseDef = service.evaluate(new SupervisorReviewEvaluateRequest(
@@ -312,6 +313,77 @@ class SupervisorReviewServiceTests {
                 "review-rank-allow-approve", "approve", List.of(), 3, "approved", "high rank"));
         assertThat(approved.reviewStatus()).isEqualTo("approved");
         assertThat(approved.requiredApproverRank()).isEqualTo(25);
+    }
+
+    // ── 双轨收口（platform-governance §24.3）：无静默降级 / specific_role 角色解析 / 同商户范围闸 ──
+
+    // §24.3-A 无职级配置不被静默降级：可解析职级的真实部署里，发起人无 staff_level_assignment（rank 0）时
+    // 不再回退仅主管级（rank=null），而是收口为安全保守 rank 下限；rank 不足的审批人被 SUPERVISOR_RANK_TOO_LOW 拒。
+    @Test
+    void evaluateConservativeRankWhenInitiatorHasNoStaffLevelAndRepoResolvable() {
+        com.complex.platform.access.AccessRepository repo =
+                org.mockito.Mockito.mock(com.complex.platform.access.AccessRepository.class);
+        // 不 stub findStaffLevelAssignment → 默认空 Optional：发起人无职级配置。
+        SupervisorReviewService svc = new SupervisorReviewService(
+                new AuthorizationService(repo),
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository));
+
+        TestSecurityActors.asSupervisor("usr_no_level", 3);
+        var pending = svc.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-conservative", "v", List.of(),
+                "contract_violation", "contract", "c_cons", 0L, "violation"));
+        // two_levels_up + requiredLevel 3 → conservative floor(max(3,1)*3=9)+2*3 = 15（非 null，未静默降级）。
+        assertThat(pending.requiredApproverRank()).isEqualTo(15);
+
+        // 另一个无职级（rank 0 < 15）的审批人被 rank 闸拒，而非旁路放行。
+        TestSecurityActors.asSupervisor("usr_reviewer_no_level", 3);
+        assertThatThrownBy(() -> svc.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-conservative-approve", "approve", List.of(), 3, "approved", "no rank")))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("SUPERVISOR_RANK_TOO_LOW"));
+    }
+
+    // §24.3-B specific_role 按角色解析而非旁路：审批人未经角色持有指定审批权限 → SUPERVISOR_ROLE_NOT_AUTHORIZED；
+    // 经角色持有 → 放行。
+    @Test
+    void approveSpecificRoleResolvesByRoleInsteadOfBypass() {
+        String approvePerm = "governance.supervisor_review.approve";
+        com.complex.platform.access.AccessRepository repo =
+                org.mockito.Mockito.mock(com.complex.platform.access.AccessRepository.class);
+        // 授权审批人：经 ROLE 来源持有审批权限。
+        org.mockito.Mockito.when(repo.findPermissionEffects(org.mockito.ArgumentMatchers.eq("usr_role_ok"),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(new com.complex.platform.access.AccessRepository.PermissionEffect(
+                        "usr_role_ok", approvePerm,
+                        com.complex.platform.access.AccessRepository.Effect.GRANT,
+                        com.complex.platform.access.AccessRepository.Source.ROLE,
+                        "role_supervisor", null, null, false, false)));
+        // 未授权审批人：findPermissionEffects 默认空 → 不经角色持有。
+        SupervisorReviewService svc = new SupervisorReviewService(
+                new AuthorizationService(repo),
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository));
+
+        TestSecurityActors.asSupervisor("usr_init_sr", 2);
+        var pending = svc.evaluate(new SupervisorReviewEvaluateRequest(
+                "review-sr", null, List.of("att"), "refund", "ticket", "r1", 100L, null));
+        assertThat(pending.requiredApproverRank()).isNull(); // specific_role 不按 rank
+
+        // 无角色审批人被拒。
+        TestSecurityActors.asSupervisor("usr_role_missing", 2);
+        assertThatThrownBy(() -> svc.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-sr-deny", "approve", List.of("att"), 2, "approved", "no role")))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("SUPERVISOR_ROLE_NOT_AUTHORIZED"));
+
+        // 经角色持有审批权限的审批人放行。
+        TestSecurityActors.asSupervisor("usr_role_ok", 2);
+        var approved = svc.approve(pending.reviewId(), new SupervisorReviewApprovalRequest(
+                "review-sr-allow", "approve", List.of("att"), 2, "approved", "role ok"));
+        assertThat(approved.reviewStatus()).isEqualTo("approved");
     }
 
     /** 构造一个 AuthorizationService 由 mock AccessRepository 提供指定用户的 level_rank 的 service。 */

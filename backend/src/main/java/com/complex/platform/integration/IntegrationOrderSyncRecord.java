@@ -12,6 +12,8 @@ public record IntegrationOrderSyncRecord(
         String status,
         long amountCent,
         String currency,
+        String channel,
+        String externalChannelOrderId,
         Map<String, Object> providerPayload,
         Instant createdAt,
         Instant updatedAt

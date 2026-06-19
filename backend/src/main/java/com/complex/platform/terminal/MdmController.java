@@ -8,6 +8,8 @@ import com.complex.platform.terminal.dto.MdmAppWhitelistRequest;
 import com.complex.platform.terminal.dto.MdmDeviceEnrollRequest;
 import com.complex.platform.terminal.dto.MdmPolicyViolationRequest;
 import com.complex.platform.terminal.dto.MdmSiteWhitelistRequest;
+import com.complex.platform.terminal.dto.MdmViolationDetectRequest;
+import com.complex.platform.terminal.dto.MdmViolationHandleRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -74,6 +76,33 @@ public class MdmController {
         authorizationService.requirePermission("mdm.device.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reportPolicyViolation(request));
+    }
+
+    /** P0#9 服务端违规检测：上报 app/site，由服务端比对白名单判定并产生 violation。 */
+    @PostMapping("/violations/detect")
+    public ApiResponse<MdmViolationDetectionResult> detectViolations(@RequestBody MdmViolationDetectRequest request) {
+        authorizationService.requirePermission("mdm.device.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.detectViolations(
+                request == null ? null : request.idempotencyKey(),
+                request == null ? null : request.deviceId(),
+                request == null ? null : request.appPackages(),
+                request == null ? null : request.siteDomains()));
+    }
+
+    /** P0#9 违规处置闭环：置 handled + 处置类型（device_blocked 联动封禁/撤销凭证）。 */
+    @PostMapping("/violations/{id}/handle")
+    public ApiResponse<MdmPolicyViolationRecord> handleViolation(
+            @PathVariable String id,
+            @RequestBody MdmViolationHandleRequest request
+    ) {
+        authorizationService.requirePermission("mdm.violation.handle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.handleViolation(
+                id,
+                request == null ? null : request.disposition(),
+                request == null ? null : request.handledNote(),
+                request == null ? null : request.idempotencyKey()));
     }
 
     @GetMapping("/violations")

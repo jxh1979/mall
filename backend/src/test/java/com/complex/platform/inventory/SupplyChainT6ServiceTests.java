@@ -14,6 +14,8 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.inventory.dto.SupplierQualificationRequest;
+import com.complex.platform.inventory.dto.SupplierSettlementMethodRequest;
 import com.complex.platform.inventory.dto.SupplyContractApproveRequest;
 import com.complex.platform.inventory.dto.SupplyContractCreateRequest;
 import com.complex.platform.inventory.dto.WarehouseCreateRequest;
@@ -45,6 +47,7 @@ class SupplyChainT6ServiceTests {
     private SupplyContractService contractService;
     private WarehouseService warehouseService;
     private PurchaseRequestService purchaseRequestService;
+    private SupplierQualificationService qualificationService;
     private InMemoryAudit auditRepo;
 
     @BeforeEach
@@ -59,8 +62,17 @@ class SupplyChainT6ServiceTests {
         AuditEventService audit = new AuditEventService(auditRepo);
         contractService = new SupplyContractService(repo, idem, audit, authorizationService);
         warehouseService = new WarehouseService(repo, idem, audit, authorizationService);
+        qualificationService = new SupplierQualificationService(repo, idem, audit, authorizationService);
         purchaseRequestService = new PurchaseRequestService(
-                repo, idem, audit, authorizationService, contractService);
+                repo, idem, audit, authorizationService, contractService, qualificationService);
+        // 默认种子：供应商 supplier_1 + 一条 active 未过期资质（让既有采购审批流转测试不受进货查验卡控影响）。
+        repo.saveInventorySupplier(new InventorySupplierRecord(
+                "supplier_1", "供应商一", "general", null, null, "active",
+                java.time.Instant.now(), java.time.Instant.now(), null));
+        repo.saveSupplierQualification(new SupplierQualificationRecord(
+                "supplier_qual_seed", "supplier_1", "business_license", "BL-1", null,
+                LocalDate.now().minusYears(1), LocalDate.now().plusYears(1), List.of(), "active",
+                java.time.Instant.now(), java.time.Instant.now(), null));
     }
 
     // ── 合同：三模式建合同 ──────────────────────────────────────────────────────
@@ -355,6 +367,116 @@ class SupplyChainT6ServiceTests {
                 .hasMessageContaining("scope");
     }
 
+    // ── P1#18：供应商资质 CRUD + 进货查验过期卡控 ────────────────────────────────
+    @Test
+    void createsQualificationOfEachType() {
+        for (String type : List.of(
+                "business_license", "food_business_license", "production_license",
+                "inspection_report", "hygiene_permit", "import_record", "other")) {
+            SupplierQualificationRecord q = qualificationService.createQualification(new SupplierQualificationRequest(
+                    "qk-" + type, "supplier_1", type, "NO-" + type, "机构",
+                    LocalDate.now().minusMonths(1), LocalDate.now().plusYears(1), List.of("att_1"), null));
+            assertThat(q.qualificationType()).isEqualTo(type);
+            assertThat(q.status()).isEqualTo("active");
+        }
+        // 含 setUp 种子资质共 8 条。
+        assertThat(qualificationService.listQualifications("supplier_1").items()).hasSize(8);
+    }
+
+    @Test
+    void rejectsInvalidQualificationType() {
+        assertThatThrownBy(() -> qualificationService.createQualification(new SupplierQualificationRequest(
+                "qk-bad", "supplier_1", "spaceship_permit", null, null, null, null, List.of(), null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("qualification_type");
+    }
+
+    @Test
+    void rejectsQualificationForUnknownSupplier() {
+        assertThatThrownBy(() -> qualificationService.createQualification(new SupplierQualificationRequest(
+                "qk-nosup", "supplier_404", "business_license", null, null, null, null, List.of(), null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("supplier");
+    }
+
+    @Test
+    void requireQualifiedBlocksWhenNoActiveQualification() {
+        repo.saveInventorySupplier(new InventorySupplierRecord(
+                "supplier_noqual", "无证商", "general", null, null, "active",
+                java.time.Instant.now(), java.time.Instant.now(), null));
+        assertThatThrownBy(() -> qualificationService.requireQualified("supplier_noqual"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("no active qualification");
+    }
+
+    @Test
+    void requireQualifiedBlocksWhenQualificationExpired() {
+        repo.saveInventorySupplier(new InventorySupplierRecord(
+                "supplier_expired", "过期商", "general", null, null, "active",
+                java.time.Instant.now(), java.time.Instant.now(), null));
+        qualificationService.createQualification(new SupplierQualificationRequest(
+                "qk-exp", "supplier_expired", "business_license", "BL-X", null,
+                LocalDate.now().minusYears(2), LocalDate.now().minusDays(1), List.of(), null));
+        assertThatThrownBy(() -> qualificationService.requireQualified("supplier_expired"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("expired");
+    }
+
+    @Test
+    void approveBlocksPurchaseWhenSupplierQualificationExpired() {
+        repo.saveInventorySupplier(new InventorySupplierRecord(
+                "supplier_exp2", "过期商2", "general", null, null, "active",
+                java.time.Instant.now(), java.time.Instant.now(), null));
+        qualificationService.createQualification(new SupplierQualificationRequest(
+                "qk-exp2", "supplier_exp2", "food_business_license", "FB-X", null,
+                LocalDate.now().minusYears(2), LocalDate.now().minusDays(3), List.of(), null));
+        repo.savePurchaseRequest(new PurchaseRequestRecord(
+                "pr_qual_bad", "PR-qual", "supplier_exp2", "item_1", 5, LocalDate.now(),
+                "created", List.of(), java.time.Instant.now(), java.time.Instant.now(), null,
+                null, null, null, null, null, null));
+        assertThatThrownBy(() -> purchaseRequestService.approve("pr_qual_bad",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("q1", "approved", null, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("expired");
+        // rejected 决议不触发进货查验卡控（仍可驳回过期供应商采购）。
+        PurchaseRequestRecord rejected = purchaseRequestService.approve("pr_qual_bad",
+                new com.complex.platform.inventory.dto.PurchaseRequestApproveRequest("q2", "rejected", null, null));
+        assertThat(rejected.status()).isEqualTo("rejected");
+    }
+
+    // ── P1#18：结算多档/账期 CRUD ─────────────────────────────────────────────────
+    @Test
+    void createsSettlementMethodsMultipleTiersWithDefault() {
+        qualificationService.createSettlementMethod(new SupplierSettlementMethodRequest(
+                "sk-monthly", "supplier_1", "monthly", 30, "spirit", true, null));
+        qualificationService.createSettlementMethod(new SupplierSettlementMethodRequest(
+                "sk-cod", "supplier_1", "cash_on_delivery", 0, "beverage", false, null));
+        qualificationService.createSettlementMethod(new SupplierSettlementMethodRequest(
+                "sk-credit", "supplier_1", "credit_term", 60, null, false, null));
+        List<SupplierSettlementMethodRecord> tiers =
+                qualificationService.listSettlementMethods("supplier_1").items();
+        assertThat(tiers).hasSize(3);
+        assertThat(tiers).filteredOn(SupplierSettlementMethodRecord::isDefault).hasSize(1);
+        assertThat(tiers).extracting(SupplierSettlementMethodRecord::paymentTermDays)
+                .contains(30, 0, 60);
+    }
+
+    @Test
+    void rejectsInvalidSettlementMethod() {
+        assertThatThrownBy(() -> qualificationService.createSettlementMethod(new SupplierSettlementMethodRequest(
+                "sk-bad", "supplier_1", "barter", 10, null, false, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("settlement_method");
+    }
+
+    @Test
+    void rejectsNegativePaymentTermDays() {
+        assertThatThrownBy(() -> qualificationService.createSettlementMethod(new SupplierSettlementMethodRequest(
+                "sk-neg", "supplier_1", "monthly", -5, null, false, null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("payment_term_days");
+    }
+
     private void seedPurchase(String id, String itemId, String merchantId, String contractId) {
         repo.savePurchaseRequest(new PurchaseRequestRecord(
                 id, "PR-" + id, "supplier_1", itemId, 7, LocalDate.now(),
@@ -413,6 +535,9 @@ class SupplyChainT6ServiceTests {
         final List<PurchaseRequestEventRecord> purchaseRequestEvents = new ArrayList<>();
         final Map<String, StockBalanceRecord> balances = new LinkedHashMap<>();
         final List<StockMovementRecord> stockMovements = new ArrayList<>();
+        final Map<String, InventorySupplierRecord> suppliers = new LinkedHashMap<>();
+        final Map<String, SupplierQualificationRecord> qualifications = new LinkedHashMap<>();
+        final Map<String, SupplierSettlementMethodRecord> settlementMethods = new LinkedHashMap<>();
 
         @Override
         public SupplyContractRecord saveSupplyContract(SupplyContractRecord contract) {
@@ -455,8 +580,13 @@ class SupplyChainT6ServiceTests {
         @Override public InventoryItemRecord saveInventoryItem(InventoryItemRecord item) { throw nyi(); }
         @Override public List<InventoryItemRecord> listInventoryItems() { throw nyi(); }
         @Override public Optional<InventoryItemRecord> findInventoryItemById(String id) { throw nyi(); }
-        @Override public InventorySupplierRecord saveInventorySupplier(InventorySupplierRecord s) { throw nyi(); }
-        @Override public List<InventorySupplierRecord> listInventorySuppliers() { throw nyi(); }
+        @Override public InventorySupplierRecord saveInventorySupplier(InventorySupplierRecord s) {
+            suppliers.put(s.id(), s);
+            return s;
+        }
+        @Override public List<InventorySupplierRecord> listInventorySuppliers() {
+            return new ArrayList<>(suppliers.values());
+        }
         @Override public PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord r) {
             purchaseRequests.put(r.id(), r);
             return r;
@@ -503,6 +633,7 @@ class SupplyChainT6ServiceTests {
         @Override public Optional<SavedBottleRecord> findSavedBottleById(String id) { throw nyi(); }
         @Override public List<SavedBottleRecord> listSavedBottles() { throw nyi(); }
         @Override public SavedBottleClaimRecord saveSavedBottleClaim(SavedBottleClaimRecord c) { throw nyi(); }
+        @Override public SavedBottleTransferRecord saveSavedBottleTransfer(SavedBottleTransferRecord t) { throw nyi(); }
         @Override public TraceHandoverRecord saveTraceHandover(TraceHandoverRecord h) { throw nyi(); }
         @Override public Optional<TraceHandoverRecord> findTraceHandoverByIdForUpdate(String id) { throw nyi(); }
         @Override public List<TraceHandoverStepRecord> listTraceHandoverSteps(String h) { throw nyi(); }
@@ -525,7 +656,9 @@ class SupplyChainT6ServiceTests {
         }
         @Override public Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id) { throw nyi(); }
         @Override public List<InventoryItemRecord> listInventoryItemsByMerchant(String m) { throw nyi(); }
-        @Override public List<InventorySupplierRecord> listInventorySuppliersByMerchant(String m) { throw nyi(); }
+        @Override public List<InventorySupplierRecord> listInventorySuppliersByMerchant(String m) {
+            return suppliers.values().stream().filter(s -> m.equals(s.merchantId())).toList();
+        }
         @Override public List<PurchaseRequestRecord> listPurchaseRequestsByMerchant(String m) { throw nyi(); }
         @Override public List<StockBalanceRecord> listStockBalancesByMerchant(String m) { throw nyi(); }
         @Override public List<StockMovementRecord> listStockMovementsByMerchant(String m) { throw nyi(); }
@@ -536,6 +669,32 @@ class SupplyChainT6ServiceTests {
         @Override public InventoryHighValueReviewRecord saveHighValueReview(InventoryHighValueReviewRecord r) { throw nyi(); }
         @Override public Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id) { throw nyi(); }
         @Override public List<InventoryHighValueReviewRecord> listHighValueReviews() { throw nyi(); }
+        @Override public SupplierQualificationRecord saveSupplierQualification(SupplierQualificationRecord q) {
+            qualifications.put(q.id(), q);
+            return q;
+        }
+        @Override public List<SupplierQualificationRecord> listSupplierQualificationsBySupplier(String s) {
+            return qualifications.values().stream().filter(q -> s.equals(q.supplierId())).toList();
+        }
+        @Override public List<SupplierQualificationRecord> listSupplierQualificationsByMerchant(String m) {
+            return qualifications.values().stream().filter(q -> m.equals(q.merchantId())).toList();
+        }
+        @Override public List<SupplierQualificationRecord> listSupplierQualifications() {
+            return new ArrayList<>(qualifications.values());
+        }
+        @Override public SupplierSettlementMethodRecord saveSupplierSettlementMethod(SupplierSettlementMethodRecord m) {
+            settlementMethods.put(m.id(), m);
+            return m;
+        }
+        @Override public List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsBySupplier(String s) {
+            return settlementMethods.values().stream().filter(m -> s.equals(m.supplierId())).toList();
+        }
+        @Override public List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsByMerchant(String m) {
+            return settlementMethods.values().stream().filter(x -> m.equals(x.merchantId())).toList();
+        }
+        @Override public List<SupplierSettlementMethodRecord> listSupplierSettlementMethods() {
+            return new ArrayList<>(settlementMethods.values());
+        }
 
         private static UnsupportedOperationException nyi() {
             return new UnsupportedOperationException("not needed for T6 service tests");

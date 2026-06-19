@@ -27,6 +27,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError }: 
   const [sessionName, setSessionName] = React.useState("验收场次");
   const [capacity, setCapacity] = React.useState("12");
   const [formError, setFormError] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -48,6 +49,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError }: 
     const numericCapacity = Math.max(1, Number(capacity) || 1);
     setFormError("");
     setGlobalError(null);
+    setSubmitting(true);
     const request = {
       idempotencyKey: `amusement-session-create-${Date.now()}`,
       operatorNote: "完整后台项目与场次验收新增",
@@ -58,9 +60,18 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError }: 
       endsAt: "2026-06-20T11:00:00Z",
       capacity: numericCapacity,
     };
-    const result = await api.post<unknown>("/api/v1/amusement/sessions", request);
-    setActionResult({ action: "amusement_session_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
-    await reload();
+    try {
+      const result = await api.post<unknown>("/api/v1/amusement/sessions", request);
+      setActionResult({ action: "amusement_session_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "新增场次失败";
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action: "amusement_session_created", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const totalCapacity = sessions.reduce((sum, row) => sum + Number(row.capacity ?? 0), 0);
@@ -81,7 +92,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError }: 
               <div className="admin-kpi-card"><span>已锁定</span><strong>{sessions.reduce((sum, row) => sum + Number(row.lockedCapacity ?? 0), 0)}</strong><small>locked</small></div>
             </div>
             <div className="admin-form-grid"><label>场次名称<input data-testid="amusement-session-name" value={sessionName} onChange={(event) => setSessionName(event.target.value)} /></label><label>容量<input data-testid="amusement-session-capacity" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label></div>
-            <div className="admin-form-row"><button type="button" data-testid="amusement-session-create" onClick={() => void createSession()}>新增验收场次</button><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
+            <div className="admin-form-row"><button type="button" data-testid="amusement-session-create" disabled={submitting} onClick={() => void createSession()}>新增验收场次</button><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
             <div className="admin-section-title">项目</div>
             <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{display(row.status)}</td></tr>)}</tbody></table></div>
             <div className="admin-section-title">场次</div>

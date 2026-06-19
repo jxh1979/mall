@@ -27,7 +27,27 @@ public class AuditEventService {
             String idempotencyKey,
             Map<String, Object> metadata
     ) {
-        return record(eventName, "success", permissionCode, businessType, businessId, requestId, idempotencyKey, metadata);
+        return record(eventName, "success", permissionCode, businessType, businessId, requestId, idempotencyKey,
+                metadata, null, null);
+    }
+
+    /**
+     * P0 清单#2 重载：在原 recordSuccess 基础上多 eventCategory（事件类目）/ subjectType（事件主体类型），
+     * 写入 audit_events 新列（V101）。供积分入账等事件按类目 / 主体检索。旧重载等价于此处两参传 null。
+     */
+    public AuditEvent recordSuccess(
+            String eventName,
+            String permissionCode,
+            String businessType,
+            String businessId,
+            String requestId,
+            String idempotencyKey,
+            Map<String, Object> metadata,
+            String eventCategory,
+            String subjectType
+    ) {
+        return record(eventName, "success", permissionCode, businessType, businessId, requestId, idempotencyKey,
+                metadata, eventCategory, subjectType);
     }
 
     public AuditEvent recordFailure(
@@ -41,7 +61,7 @@ public class AuditEventService {
     ) {
         return record(eventName, "failure", permissionCode, businessType, businessId, requestId, idempotencyKey, Map.of(
                 "error_code", errorCode
-        ));
+        ), null, null);
     }
 
     private AuditEvent record(
@@ -52,7 +72,9 @@ public class AuditEventService {
             String businessId,
             String requestId,
             String idempotencyKey,
-            Map<String, Object> metadata
+            Map<String, Object> metadata,
+            String eventCategory,
+            String subjectType
     ) {
         String actorId = null;
         String actorType = "staff";
@@ -93,7 +115,9 @@ public class AuditEventService {
                 requestId,
                 idempotencyKey,
                 Map.copyOf(new LinkedHashMap<>(metadata == null ? Map.of() : metadata)),
-                merchantId
+                merchantId,
+                eventCategory,
+                subjectType
         );
         return repository.save(event);
     }

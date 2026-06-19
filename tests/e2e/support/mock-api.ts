@@ -242,8 +242,32 @@ function bodyValue(body: Record<string, unknown>, camelKey: string, snakeKey = c
   return body[camelKey] ?? body[snakeKey];
 }
 
+// 按账号类型返回有效权限（与 admin 前端 hasPermissions 对齐：DENY 优先 / wildcard / fail-safe）。
+// platform_admin → wildcard；其它账号给最小可用 grants，平台页（如财务）默认无权访问。
+function effectivePermissionsFor(options: MockOptions) {
+  const accountType = options.user?.accountType ?? "platform_admin";
+  if (accountType === "platform_admin") {
+    return { grants: [], denies: [], wildcard: true, computedAt: now };
+  }
+  if (accountType === "merchant_operator") {
+    return {
+      grants: ["merchant.portal.read", "merchant.service_work_order.view"],
+      denies: [],
+      wildcard: false,
+      computedAt: now,
+    };
+  }
+  // 其它受限账号（如 bar_operator）：仅授予自身域读权限，不含平台财务等。
+  return { grants: ["bar.table.read", "bar.order.read"], denies: [], wildcard: false, computedAt: now };
+}
+
 export async function installMockApi(page: Page, options: MockOptions = {}) {
   const state = createState(Boolean(options.empty));
+  // 高危二次确认（HighRiskConfirm 使用 window.confirm）在自动化下默认会被 dismiss，
+  // 统一自动 accept，使写动作成功路径可被验收；precheck 失败时不会弹框，不受影响。
+  page.on("dialog", (dialog) => {
+    void dialog.accept();
+  });
   await page.route(/\/api\/(v1|open)\//, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -265,6 +289,9 @@ export async function installMockApi(page: Page, options: MockOptions = {}) {
       return json(route, { code: "SERVER_ERROR", message: "mock server error" }, 500);
     }
 
+    if (url.pathname === "/api/v1/access/effective-permissions") {
+      return json(route, effectivePermissionsFor(options));
+    }
     if (isWrite) return handleWrite(route, url.pathname, state, options);
     return json(route, fixedRows(url.pathname, state));
   });

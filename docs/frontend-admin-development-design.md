@@ -729,6 +729,36 @@ apps/web/src
 | 风控看板 | `GET /api/admin/analytics/risk` | 风险指标 | P1 |
 | 财务看板 | `GET /api/admin/analytics/finance` | 财务指标 | P2 |
 
+#### 7.10.1 总览看板 KPI 字段对齐修复规格（F9）
+
+> 修正(2026-06-19 R5业务HTML缺口审计 F8/F9/F10)：依据本文首部审计标注（§"总览看板 KPI 全渲染 0"）——前端 `OverviewPage.tsx`/`types.ts` 期望字段（`barOrders`/`issuedTickets`/`verifications`…）与后端 `DashboardSnapshotRecord`（`revenueAmountCents`/`orderCount`/`riskAlertCount`…）**字段名零交集**，6 个 KPI 卡片全走 `?? 0`（legacy-console 同 bug）。本小节就地补充修复规格，使 6 卡渲染真实值；不重构无关页面。
+
+**①前端 `OverviewPage` 改读后端 `DashboardSnapshotRecord` 的 `metric_code`（字段映射原则）：**
+
+- **以后端契约为单一事实源：** 前端不再臆造 `barOrders` 等命名，改为按后端快照记录暴露的 **`metric_code`**（指标编码）取值，避免"前端期望字段 ↔ 后端 DTO 字段"两套命名漂移。
+- **映射原则：** 在前端建立一份 `metric_code -> KPI 卡片` 的映射常量（单一来源，禁止散落在多个组件内 `?? 0`）；卡片渲染时按 `metric_code` 从快照集合中检索对应记录的数值/单位/同比，缺失时显式区分"无数据"与"0 值"（不再用 `?? 0` 静默吞掉缺失）。
+- **单位与精度：** 金额类（如 `revenueAmountCents`）按"分→元"统一在映射层转换；计数类（如 `orderCount`/`riskAlertCount`）直取整数；口径与 `data-analysis-layer-spec-v0.2.md` 指标定义一致。
+- **`legacy-console` 同 bug 一并修：** legacy-console 的总览卡片复用同一映射常量与取数逻辑，避免一处修复另一处仍渲染 0。
+
+**②6 个 KPI 卡片绑定真实 `metric_code`（示例映射，最终编码以后端 `DashboardSnapshotRecord` 实际 `metric_code` 为准）：**
+
+| KPI 卡片 | 绑定 `metric_code`（示例） | 来源后端字段（示例） |
+|---|---|---|
+| 今日营收 | `revenue.net`（或后端定义的净营收编码） | `revenueAmountCents`（分→元） |
+| 订单数 | `order.count` | `orderCount` |
+| 出票数 | `ticket.issued` | 后端出票快照字段 |
+| 核销数 | `verification.count` | 后端核销快照字段 |
+| 酒吧订单 | `bar.order.count` | 后端酒吧订单快照字段 |
+| 风险告警 | `risk.alert.count` | `riskAlertCount` |
+
+> 实际 `metric_code` 清单以后端 `DashboardSnapshotRecord` 落库为准，前端映射常量须与之逐项对齐评审，禁止保留任何无后端来源的"占位字段"。
+
+**③UI 自动化验收：6 卡有值断言。**
+
+- 自动化用例登录后进入总览看板，断言 6 个 KPI 卡片均渲染**非占位真实值**（来自 `DashboardSnapshotRecord` 的 `metric_code`），而非全为 `0`/空。
+- 用例须能区分"真实 0 值"与"取数失败/字段未对齐"：在有种子/真实数据的环境下，至少 N 张卡片应为正数；任一卡片因字段未对齐而落 `?? 0` 即判失败。
+- 与 `full-admin-ui-acceptance-matrix-v0.1.md` 的总览看板用例对齐编号，纳入 UI 自动化回归。
+
 ### 7.11 移动管理端
 
 > 修订说明（2026-06-07）：移动管理端复用平台端事件/补录/风险/审批与分析 API，不新增后端能力，只在移动响应式工作台聚合"指标-待办-异常-审批"（finding webmobile-4）。移动审批走与后台一致的审批接口（如核销撤销、人工补录、风险处置、解锁的 approve/reject），并对齐 P0。

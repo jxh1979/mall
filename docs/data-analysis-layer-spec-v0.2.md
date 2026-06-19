@@ -510,6 +510,129 @@ flowchart TD
 | 异常 | 指标明显异常，需要处理 |
 | 待确认 | 指标依赖日结或差异确认 |
 
+### 8A. 真实聚合层落地优先级（P1）
+
+> 修正(2026-06-19 R5业务HTML缺口审计 F8/F9/F10)：依据本文首部审计标注（§"看板=种子空壳"）——analytics 包全部直读 `analytics_*` 快照表，指标值来自迁移手写 INSERT 种子（V017/V037，自标 "manual baseline only"），**无 ETL/聚合/JOIN 业务表**；客流/核销率/会员/供应链等指标后端完全未承接（客流 foot traffic 0 命中）。指标口径已定义但真实聚合为空壳。本小节明确"真实聚合层"的落地优先级，区分"现有表即可聚合"与"依赖未就绪上游"。
+
+**落地原则：** 先落"已有数据源"的指标真实聚合（替换种子），再补依赖采集源/第三方回流的指标。聚合替换种子后，对应指标的"指标状态/取数来源"须从 manual baseline 切换为真实聚合来源。
+
+**P1-A：当前可由现有表直接聚合（先落，替换种子 INSERT）**
+
+| 指标类 | 真实聚合来源（现有表） | 说明 |
+|---|---|---|
+| 券核销 | 核销记录表（`verification_record`/`issued_entitlement` 等） | 按项目/业态/商户/时间聚合核销数与核销率，可直接 JOIN 现有业务表 |
+| 营收 `revenue.net` | 订单/支付/结算明细表 | 净营收按"分"为单位聚合，口径对齐 D1 与 §3 收入指标 |
+| 库存余额 | 供应链库存/库房余额表 | 库存余额、缺货预警可由现有库存表快照聚合 |
+
+> 上述三类指标当前**可由现有表聚合**，应优先把 `analytics_*` 快照从手写种子改为定时 ETL/物化聚合产出，使前端看板取到真实值（与 `frontend-admin-development-design.md` §7.10.1 KPI 字段对齐修复配套）。
+
+**P1-B：依赖未就绪上游，聚合落地晚于 P1-A**
+
+| 指标类 | 依赖的未就绪上游 | 说明 |
+|---|---|---|
+| 客流（入场人数/酒吧入场/渠道客流/高峰时段） | 客流采集源（闸机/摄像/第三方）尚未接入 | 采集源就绪前无真实数据，不得以种子冒充真实值，指标状态保持"待确认/数据源未就绪" |
+| 餐饮/零售第三方回流（订单级/券核销级） | 第三方平台回流通道 | 回流通道接入后方可聚合 |
+
+> P1-B 指标在上游就绪前，看板应显式标注"数据源未就绪"，不渲染种子假值；上游接入后再纳入真实聚合。
+
+> **待业务确认：** 客流采集数据源（闸机/摄像/第三方）未定，直接决定 P1-B 客流指标何时可落真实聚合。
+
+### 8B. 真实聚合层ETL规格（承接§8A落地）
+
+> 新增章节（`R6 全闭环(2026-06-19)`）：承接 §8A"真实聚合层落地优先级（P1-A：现有表可直接聚合）"，把三类"现有表可直接聚合"的指标给出具体聚合口径（可 SQL 伪代码），替换 V017/V037 手写种子 INSERT。客流指标按 business-decision-log `R6-D11`（客流采集数据源）处理：数据源未接入前不渲染种子假值，显式标注"数据源未接入"。营收权威源按 `R6-D13`（商户级 revenue.net 以 V075/V078 为权威）。本节为聚合口径草案，落地以真实迁移列名为准。
+
+#### 8B.1 隔离注入原则（贯穿三类指标）
+
+所有聚合查询必须按 `currentMerchantScope`（商户行级范围）+ `project_id`（项目）隔离注入，杜绝 §"R5 现状"指出的 analytics 包 0 处 currentMerchantScope→越权可见全量：
+
+- 商户登录态：聚合 SQL 强制注入 `WHERE merchant_id IN (:currentMerchantScope) AND project_id = :project_id`，只返回授权范围内行。
+- 平台运营/管理层：按其 data_scope 注入项目/商户范围，不默认放行全量。
+- 注入由聚合层统一拼装，不依赖前端传参；缺范围即拒绝，不返回兜底全量。
+
+#### 8B.2 三类"现有表可直接聚合"指标的聚合口径
+
+**① 券核销率 = 核销数 / 发放数（按域/商户/项目）**
+
+```sql
+-- 核销率（核销数 / 发放数），按 项目/业态(域)/商户 分组
+SELECT
+  ie.project_id,
+  ie.business_domain                       AS domain,      -- 域（票务/餐饮/零售/游乐…）
+  ie.merchant_id,
+  COUNT(vr.id)                             AS verified_cnt,-- 核销数
+  COUNT(ie.id)                             AS issued_cnt,  -- 发放数
+  ROUND(COUNT(vr.id)::numeric
+        / NULLIF(COUNT(ie.id), 0), 4)      AS verify_rate  -- 核销率，分母 0 防护
+FROM issued_entitlement ie
+LEFT JOIN verification_record vr
+       ON vr.entitlement_id = ie.id
+      AND vr.status = 'success'                            -- 仅成功核销计入
+WHERE ie.merchant_id IN (:currentMerchantScope)           -- §8B.1 隔离注入
+  AND ie.project_id  = :project_id
+GROUP BY ie.project_id, ie.business_domain, ie.merchant_id;
+```
+
+口径对齐字段字典 §5：核销率 = 已核销权益数 / 已发放权益数（分母用"已发放"而非"已售"），与"权益使用率"同口径两命名。
+
+**② 营收 revenue.net（六源，按 merchant 归集，权威源 V075/V078，引用 R6-D13）**
+
+净营收六源 = 售票收入 + 酒吧收入 + 酒吧点酒收入 + 第三方回流收入 + 其它经营收入 − 退款（口径对齐 §3 收入指标、D1 金额单位为分）。**商户级 revenue.net 以代码 V075/V078（已按 merchant 归集）为权威源（business-decision-log `R6-D13`）**，本聚合口径按 V075/V078 归集结果取数，不另起一套并行口径：
+
+```sql
+-- revenue.net 六源按 merchant 归集（权威源 V075/V078，金额单位=分 per D1）
+SELECT
+  r.project_id,
+  r.merchant_id,
+  SUM(r.ticket_revenue)        AS ticket_net,      -- 源1 售票
+  SUM(r.bar_revenue)           AS bar_net,         -- 源2 酒吧
+  SUM(r.bar_order_revenue)     AS bar_order_net,   -- 源3 酒吧点酒
+  SUM(r.thirdparty_revenue)    AS thirdparty_net,  -- 源4 第三方回流
+  SUM(r.other_revenue)         AS other_net,       -- 源5 其它经营
+  SUM(r.refund_amount)         AS refund_total,    -- 源6 退款（冲减）
+  SUM(r.ticket_revenue + r.bar_revenue + r.bar_order_revenue
+    + r.thirdparty_revenue + r.other_revenue
+    - r.refund_amount)         AS revenue_net      -- 净营收
+FROM revenue_merchant_rollup r                     -- V075/V078 已按 merchant 归集（权威源）
+WHERE r.merchant_id IN (:currentMerchantScope)     -- §8B.1 隔离注入
+  AND r.project_id  = :project_id
+GROUP BY r.project_id, r.merchant_id;
+```
+
+> 售票源表补 merchant_id 维度为 P1 跟进项（R6-D13），补齐后口径不变、来源更完整。REQ-81"保持开放"已按 R6-D13 裁定为过期作废，以 V075/V078 为准。
+
+**③ 库存余额 / 吧台消耗 / 盘点差异 / 存酒余额（供应链表）**
+
+```sql
+-- 库存余额 + 吧台消耗 + 盘点差异 + 存酒余额，按 项目/商户/库房 归集（金额=分）
+SELECT
+  s.project_id, s.merchant_id, s.warehouse_id,
+  SUM(s.on_hand_qty)                       AS stock_balance,     -- 库存余额
+  SUM(s.bar_consume_qty)                   AS bar_consume,       -- 吧台消耗
+  SUM(s.stocktake_diff_qty)                AS stocktake_diff,    -- 盘点差异
+  SUM(s.saved_bottle_balance)              AS saved_bottle_bal   -- 客人存酒余额
+FROM supply_chain_stock_snapshot s
+WHERE s.merchant_id IN (:currentMerchantScope)                  -- §8B.1 隔离注入
+  AND s.project_id  = :project_id
+GROUP BY s.project_id, s.merchant_id, s.warehouse_id;
+```
+
+库存差异/报损按金额、数量、责任人、库房、证据状态展示（对齐 §10.6）；金额单位为分（D1）。
+
+#### 8B.3 客流指标（按 R6-D11：数据源未接入前不渲染假值）
+
+客流（入场人数 / 酒吧入场 / 游乐核销人数 / 渠道客流 / 高峰时段）属 §8A P1-B（依赖未就绪上游）。按 business-decision-log `R6-D11`：
+
+- 第三方客流统计/闸机为 P1 优先接入（能力开关控制）；摄像头视觉客流归 P2。
+- **数据源未接入前，看板客流指标不渲染种子假值，显式标注"数据源未接入"**；客流指标口径与数据源标识一并展示。
+- 接入后开关切 on、去除"数据源未接入"标注，纳入真实聚合（聚合口径与上述三类同构，按 currentMerchantScope/project_id 隔离注入）。
+
+#### 8B.4 验收
+
+- 券核销率、营收 revenue.net、供应链四项（库存余额/吧台消耗/盘点差异/存酒余额）三类指标在看板有**真实聚合值**（非 V017/V037 种子假值），取数来源标识从 manual baseline 切换为真实聚合来源。
+- 三类指标均按 `currentMerchantScope`/`project_id` **权限隔离**：商户登录只见自身授权范围，无越权可见全量。
+- 营收 revenue.net 口径以 V075/V078 为权威源（R6-D13），不出现并行口径。
+- 客流指标在数据源未接入前显示"数据源未接入"，不渲染种子假值（R6-D11）。
+
 ### 9. 字段验收标准
 
 - 每个指标必须有业务来源。
@@ -539,6 +662,7 @@ flowchart TD
 | 2026-06-07 | 增 | §6 | 补企业微信质检、设备管控两组业务专项指标 | analytics-6 |
 | 2026-06-07 | 改 | §7 | "高风险事件数"明确为 high+critical 合计并单列 critical；金额指标标注单位为分 | analytics-8/D6/D1 |
 | 2026-06-07 | 增 | §9 | 补销售服务/企微/设备管控/高风险口径/金额单位验收项 | analytics-1/6/8、D1 |
+| 2026-06-19 R6 全闭环 | 增 | §8B | 新增"真实聚合层ETL规格（承接§8A落地）"：给出券核销率、营收 revenue.net（六源/按 merchant/权威源 V075-V078）、供应链四项（库存余额/吧台消耗/盘点差异/存酒余额）三类指标的聚合口径（SQL 伪代码），明确按 currentMerchantScope/project_id 隔离注入；客流指标按 R6-D11 未接入前不渲染假值显示"数据源未接入"；补三类指标真实值+权限隔离验收 | `R6 全闭环(2026-06-19)`；承接 §8A P1-A；business-decision-log R6-D11（客流数据源）、R6-D13（V075/V078 权威源） |
 
 ---
 

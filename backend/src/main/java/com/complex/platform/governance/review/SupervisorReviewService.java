@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -25,11 +26,16 @@ public class SupervisorReviewService {
     private final SupervisorReviewRepository supervisorReviewRepository;
     private final AuditEventService auditEventService;
 
+    // specific_role 策略的"指定角色"以审批人须经角色持有的权限码表达（双轨收口 §24.3）。
+    // 默认沿用督导复核审批权限 governance.supervisor_review.approve（须来自角色，非临时授权），
+    // 从而把 specific_role 落为"按角色解析"而非旁路。
+    private static final String DEFAULT_SPECIFIC_ROLE_PERMISSION = APPROVE_PERMISSION;
+
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
-            new SupervisorReviewPolicyRecord("manual_release_l2", "manual_release", 0, 2, true, List.of("operator_note", "evidence_attachment"), "active", "specific_role"),
-            new SupervisorReviewPolicyRecord("bill_waiver_l3", "bill_waiver", 1, 3, true, List.of("reason", "evidence_attachment"), "active", "specific_role"),
-            new SupervisorReviewPolicyRecord("refund_l2", "refund", 1, 2, true, List.of("reason"), "active", "specific_role"),
-            new SupervisorReviewPolicyRecord("ar_ap_adjustment_l3", "ar_ap_adjustment", 1, 3, true, List.of("reason", "before_after"), "active", "specific_role"),
+            new SupervisorReviewPolicyRecord("manual_release_l2", "manual_release", 0, 2, true, List.of("operator_note", "evidence_attachment"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
+            new SupervisorReviewPolicyRecord("bill_waiver_l3", "bill_waiver", 1, 3, true, List.of("reason", "evidence_attachment"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
+            new SupervisorReviewPolicyRecord("refund_l2", "refund", 1, 2, true, List.of("reason"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
+            new SupervisorReviewPolicyRecord("ar_ap_adjustment_l3", "ar_ap_adjustment", 1, 3, true, List.of("reason", "before_after"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
             new SupervisorReviewPolicyRecord("contract_violation_l3", "contract_violation", 0, 3, true, List.of("violation_summary", "contract_snapshot"), "active", "two_levels_up"),
             new SupervisorReviewPolicyRecord("base_definition_violation_l3", "base_definition_violation", 0, 3, true, List.of("violation_summary", "definition_snapshot"), "active", "top_authority")
     );
@@ -76,13 +82,12 @@ public class SupervisorReviewService {
                     // The operator who triggered the reviewed action is recorded so the approver
                     // can never be the same person (segregation of duties / no self-approval).
                     String initiatedBy = authorizationService.currentActor().id();
-                    // REQ-69 逐级上提：按发起人 level_rank 与策略升级类型计算所需审批人 rank。
-                    // 仅当升级类型按 rank 且发起人职级已知（rank>0）时生效；否则回退既有 required_level（主管级）。
+                    // REQ-69 逐级上提 + 双轨收口（§24.3）：按发起人 level_rank 与策略升级类型计算所需审批人 rank。
+                    // 发起人无职级配置（rank=0）时不再静默降级为"仅主管级"，而是用安全保守 rank 下限收口。
                     ApprovalLevel approvalLevel = ApprovalLevel.fromCode(policy.approvalLevel());
                     int initiatorRank = authorizationService.currentActorLevelRank();
-                    Integer requiredApproverRank = (approvalLevel.rankBased() && initiatorRank > 0)
-                            ? approvalLevel.requiredApproverRank(initiatorRank)
-                            : null;
+                    Integer requiredApproverRank = resolveRequiredApproverRank(
+                            approvalLevel, initiatorRank, policy.requiredLevel());
                     SupervisorReviewDecisionRecord decision = new SupervisorReviewDecisionRecord(
                             "review_" + UUID.randomUUID(),
                             policy.policyCode(),
@@ -157,6 +162,32 @@ public class SupervisorReviewService {
                                     "reviewer management level rank is lower than the required approver rank");
                         }
                     }
+                    // 双轨收口的角色闸/范围闸仅在可解析角色与隔离键时强制；不可解析时回退既有 level 闸（向后兼容）。
+                    if (authorizationService.canResolveRoles()) {
+                        SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
+                        // §24.3 specific_role：rank 闸不适用（requiredApproverRank=null）时不旁路，
+                        // 改按角色解析——审批人必须通过其角色（非临时授权）持有指定审批权限。
+                        if (pending.requiredApproverRank() == null
+                                && policy != null
+                                && ApprovalLevel.SPECIFIC_ROLE.code().equals(policy.approvalLevel())
+                                && policy.requiredApproverPermission() != null
+                                && !authorizationService.holdsPermissionViaRole(reviewerId, policy.requiredApproverPermission())) {
+                            throw ApiException.forbidden(
+                                    "SUPERVISOR_ROLE_NOT_AUTHORIZED",
+                                    "reviewer does not hold the required approver role for this review");
+                        }
+                        // §24.3 同商户范围闸：发起人有商户隔离键时，审批人须同商户（或平台管理员越权）。
+                        Optional<String> initiatorMerchant = authorizationService.merchantIdOf(pending.initiatedBy());
+                        if (initiatorMerchant.isPresent()
+                                && !authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+                            Optional<String> reviewerMerchant = authorizationService.merchantIdOf(reviewerId);
+                            if (reviewerMerchant.isEmpty() || !reviewerMerchant.get().equals(initiatorMerchant.get())) {
+                                throw ApiException.forbidden(
+                                        "SUPERVISOR_MERCHANT_SCOPE_MISMATCH",
+                                        "reviewer must belong to the same merchant scope as the initiator");
+                            }
+                        }
+                    }
                     SupervisorReviewDecisionRecord result = new SupervisorReviewDecisionRecord(
                             id,
                             pending.policyCode(),
@@ -224,9 +255,7 @@ public class SupervisorReviewService {
         String initiatedBy = authorizationService.currentActor().id();
         ApprovalLevel approvalLevel = ApprovalLevel.fromCode(approvalLevelCode);
         int initiatorRank = authorizationService.currentActorLevelRank();
-        Integer requiredApproverRank = (approvalLevel.rankBased() && initiatorRank > 0)
-                ? approvalLevel.requiredApproverRank(initiatorRank)
-                : null;
+        Integer requiredApproverRank = resolveRequiredApproverRank(approvalLevel, initiatorRank, requiredLevel);
         SupervisorReviewDecisionRecord decision = new SupervisorReviewDecisionRecord(
                 "review_" + UUID.randomUUID(),
                 policyCode,
@@ -264,6 +293,40 @@ public class SupervisorReviewService {
                 .filter(policy -> policy.actionType().equals(actionType))
                 .min(Comparator.comparing(SupervisorReviewPolicyRecord::policyCode))
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REVIEW_ACTION", "unknown review action type"));
+    }
+
+    /** 审批时按 policy_code 复原策略（取 specific_role 角色权限）；未知策略返回 {@code null}（按非 specific_role 处理）。 */
+    private SupervisorReviewPolicyRecord findPolicyByCode(String policyCode) {
+        if (policyCode == null) {
+            return null;
+        }
+        return policies.stream()
+                .filter(policy -> policyCode.equals(policy.policyCode()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 双轨收口（§24.3）所需审批人 rank 计算：
+     * <ul>
+     *   <li>非按 rank（specific_role）→ {@code null}（由角色闸判定，不走 rank）；
+     *   <li>按 rank 且发起人职级已知（rank&gt;0）→ 按逐级上提算出的 rank；
+     *   <li>按 rank 但发起人无职级配置（rank=0）→ 不静默降级，改用安全保守 rank 下限。
+     * </ul>
+     */
+    private Integer resolveRequiredApproverRank(ApprovalLevel approvalLevel, int initiatorRank, int requiredLevel) {
+        if (!approvalLevel.rankBased()) {
+            return null;
+        }
+        if (initiatorRank > 0) {
+            return approvalLevel.requiredApproverRank(initiatorRank);
+        }
+        // 发起人无职级配置：仅在职级可解析（仓储可用）的真实部署里收口为安全保守 rank，
+        // 不再静默降级；在不可解析的轻量上下文回退既有 level 闸（rank=null），保持向后兼容。
+        if (!authorizationService.canResolveRoles()) {
+            return null;
+        }
+        return approvalLevel.conservativeRequiredApproverRank(requiredLevel);
     }
 
     private boolean isAlwaysBlocked(String actionType) {

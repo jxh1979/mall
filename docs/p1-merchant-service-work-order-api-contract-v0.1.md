@@ -145,3 +145,93 @@
 | 商户服务工单来源决策 | `docs/business-decision-log-v0.1.md#33-市场基准复核裁决` |
 | P0 合同与主体边界 | `docs/platform-governance-product-spec-v0.2.md` |
 | 本切片计划 | `docs/superpowers/plans/2026-06-14-p1-merchant-service-work-orders.md` |
+
+## 后端开发设计补齐（P1）`R6 全闭环(2026-06-19)`
+
+> 收口背景：本文件 §1-§9 仅固化了 API 契约层（请求/响应/状态/事件/测试用例），REQ-93 自标"后端未落地"——缺 `work_orders` 物理表结构、责任人/SLA 落库字段、派单/处理/关闭动作的服务端落地设计，以及与综合体统一异常链（F2）的衔接。本章在不改动 §1-§9 既有契约的前提下补齐后端开发设计，使契约可直接进入 Java 后端编码。物业工单（报修/投诉/整改/巡检）与 §1-§9 的商户服务工单同源同表，巡检类型为本章新增，状态 `done` 对应契约 §2 的 `resolved`（见下文映射）。
+
+### A.1 work_orders 主表
+
+承载 §2 状态机与 §4 字段，落库表 `work_orders`（与 §7 Anti-Patterns 一致，独立 `merchantservice` 子域，不并入平台治理合同表）。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | uuid | 主键 |
+| `work_order_no` | varchar | 工单号，业务可读，平台内唯一 |
+| `merchant_id` | uuid | 关联商户（必填，承接 §4.1） |
+| `space_id` | uuid | 关联空间/铺位，可空 |
+| `contract_id` | uuid | 关联合同，可空 |
+| `work_order_type` | varchar | `repair`（报修）/`complaint`（投诉）/`rectification`（整改）/`inspection`（巡检）/`service`（商户服务），CHECK 约束；`inspection` 为物业巡检工单（R6 新增，承接业务侧"巡检"工单类型） |
+| `priority` | varchar | `low`/`medium`/`high`/`critical` |
+| `status` | varchar | `created`/`assigned`/`processing`/`pending_merchant`/`resolved`/`closed`/`cancelled`，CHECK 约束（与 §2 一致） |
+| `title` | varchar(160) | 标题 |
+| `description` | text | 描述 |
+| `owner_department` | varchar | 责任部门，派单后写入 |
+| `owner_user_id` | uuid | 责任人，派单后写入 |
+| `reported_by_user_id` | uuid | 上报人 |
+| `reported_channel` | varchar | 来源渠道 |
+| `due_at` | timestamptz | SLA 到期时间（承接 §4.1 `due_at`） |
+| `sla_breached` | boolean | SLA 是否已超时，默认 false；处理/关闭或定时巡检时回写 |
+| `sla_breached_at` | timestamptz | 实际判定超时的时间，可空 |
+| `resolution` | text | 解决方案，关闭时写入 |
+| `satisfaction_score` | smallint | 满意度 1-5，可空 |
+| `assigned_at` | timestamptz | 派单时间，可空 |
+| `resolved_at` | timestamptz | 解决时间（状态进入 `resolved` 时回写，对应业务"完成 done"），可空 |
+| `closed_at` | timestamptz | 关闭时间，可空 |
+| `evidence_attachment_ids` | jsonb | 证据附件 ID 引用（仅引用，不存内容，与 §7 一致） |
+| `created_at` | timestamptz | 创建时间 |
+| `updated_at` | timestamptz | 更新时间 |
+
+索引：`idx_work_orders_merchant_status`、`idx_work_orders_owner_user`、`idx_work_orders_due_at`、`uq_work_orders_no`（唯一）。
+
+> 状态映射说明：业务侧口径"创建 created → 派单 assigned → 处理 processing → 完成 done → 关闭 closed"中的 **`done` = 契约 §2 的 `resolved`**（已解决待关闭）；`pending_merchant`（等商户）为商户服务/投诉类的中间态，巡检/报修类工单可不经过 `pending_merchant` 直接 `processing → resolved`。`done/已完成` 仅作 UI 文案，落库统一用 `resolved`，避免与 §2 状态机分叉。
+
+### A.2 work_order_actions 动作流水表（action ledger）
+
+落地 §7「主表 + action ledger 双写」，承载每次派单/处理/关闭的过程留痕。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | uuid | 主键 |
+| `work_order_id` | uuid | 工单 ID |
+| `action_type` | varchar | `created`/`assigned`/`action`/`closed`/`cancelled` |
+| `from_status` | varchar | 动作前状态，可空 |
+| `to_status` | varchar | 动作后状态 |
+| `operator_user_id` | uuid | 操作人 |
+| `operator_note` | text | 操作说明 |
+| `evidence_attachment_ids` | jsonb | 本次动作证据引用 |
+| `idempotency_key` | varchar | 幂等键（承接 §4 各动作幂等） |
+| `created_at` | timestamptz | 动作时间 |
+
+唯一约束：`uq_work_order_actions_idem(work_order_id, action_type, idempotency_key)`，落地 §6「幂等冲突」检测。
+
+### A.3 API 后端落地（与 §3 契约对齐）
+
+§3 五个端点的服务端行为：
+
+| 动作 | 端点（§3） | 后端落地 |
+|---|---|---|
+| 创建 | `POST .../work-orders` | 校验 §6 必填/枚举 → 生成 `work_order_no`、`status=created` → 写主表 + `created` 动作 → 发 `merchant_service.work_order.created` |
+| 派单 | `POST .../{id}/assign` | 校验非终态 → 写 `owner_department`/`owner_user_id`/`assigned_at`、`status=assigned` → 写 `assigned` 动作 → 发 `merchant_service.work_order.assigned` |
+| 处理 | `POST .../{id}/actions` | 校验 `target_status` 合法迁移 → 流转到 `processing`/`pending_merchant`/`resolved`（`resolved` 回写 `resolved_at`）→ 写 `action` 动作 → 发 `merchant_service.work_order.action_added` |
+| 关闭 | `POST .../{id}/close` | 校验有 `resolution`、满意度 1-5 → `status=closed`、写 `closed_at` → 写 `closed` 动作 → 发 `merchant_service.work_order.closed` |
+| 查询 | `GET .../work-orders` | 列表查询，按商户/状态/责任人/SLA 过滤 |
+
+SLA 落地：创建/派单时按 `priority` 与业务配置写 `due_at`；处理/关闭或后台定时任务比对 `now > due_at` 且未到终态时置 `sla_breached=true`、`sla_breached_at=now`，并可发失败链事件提示升级（升级本身仍按 §1「不包含 SLA 自动升级」留 P1+，本期仅打标）。
+
+### A.4 事件与 F2 统一异常链衔接
+
+- 成功/失败事件沿用 §5 既有命名（`merchant_service.work_order.*`），不另起名。
+- **与 F2 综合体统一异常链衔接**：报修/投诉/整改/巡检工单作为异常处置的承接载体之一，当工单由现场异常上报触发时，工单创建动作需携带来源异常单引用（`source_exception_id`，落在 `work_order_actions.evidence_attachment_ids` 同级的扩展或主表 `description` 结构化字段），并复用统一异常链的「第一处理人接单 → 处置 → 闭环」事件语义：工单 `assigned` 对应异常链接单、`resolved/closed` 对应异常闭环。异常链权威事件命名以 `operation-traceability-and-terminal-switch-prd §4.1` 为准，本工单域事件作为其下游消费方，不重复定义异常链事件名。
+
+### A.5 验收
+
+| 项 | 验收点 |
+|---|---|
+| 表落地 | `work_orders`、`work_order_actions` 两表迁移建成，含 CHECK 约束与唯一索引 |
+| 类型覆盖 | `work_order_type` 支持 `repair/complaint/rectification/inspection/service`，巡检工单可创建并流转 |
+| 状态闭环 | created→assigned→processing→resolved(=done)→closed 全链可走通，终态拒绝再修改（复用 §6/MS-UT-004） |
+| 责任人/SLA | 派单写责任部门/责任人；`due_at` 超时置 `sla_breached` 并留痕时间 |
+| 双写留痕 | 每次写操作主表 + `work_order_actions` 双写，幂等键去重（复用 MS-UT-006） |
+| F2 衔接 | 由异常上报触发的工单可回溯来源异常单，工单闭环回写异常链闭环语义 |
+| 不漂移 P0 | P1 工单后端不改动 P0 OpenAPI 契约（复用 MS-IT-003） |

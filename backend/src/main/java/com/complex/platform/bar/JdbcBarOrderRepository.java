@@ -137,13 +137,15 @@ final class JdbcBarOrderRepository {
                     id, order_item_id, order_id, bar_id, merchant_id, void_type, quantity,
                     amount_cent, was_delivered, return_to_stock, inventory_movement_id,
                     bill_id, bill_adjustment_id, reason, requested_by_user_id, approval_required,
-                    status, idempotency_key, evidence_attachment_ids, created_at
+                    status, idempotency_key, evidence_attachment_ids, created_at,
+                    reviewed_by_user_id, reviewed_at, review_reason
                 )
                 VALUES (
                     :id, :order_item_id, :order_id, :bar_id, :merchant_id, :void_type, :quantity,
                     :amount_cent, :was_delivered, :return_to_stock, :inventory_movement_id,
                     :bill_id, :bill_adjustment_id, :reason, :requested_by_user_id, :approval_required,
-                    :status, :idempotency_key, CAST(:evidence_attachment_ids AS jsonb), :created_at
+                    :status, :idempotency_key, CAST(:evidence_attachment_ids AS jsonb), :created_at,
+                    :reviewed_by_user_id, :reviewed_at, :review_reason
                 )
                 ON CONFLICT (order_item_id, idempotency_key) DO UPDATE SET
                     void_type = EXCLUDED.void_type,
@@ -156,9 +158,18 @@ final class JdbcBarOrderRepository {
                     bill_adjustment_id = EXCLUDED.bill_adjustment_id,
                     reason = EXCLUDED.reason,
                     status = EXCLUDED.status,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    reviewed_by_user_id = EXCLUDED.reviewed_by_user_id,
+                    reviewed_at = EXCLUDED.reviewed_at,
+                    review_reason = EXCLUDED.review_reason
                 """, parameterSource.orderItemVoidParameters(voidRecord));
         return voidRecord;
+    }
+
+    public Optional<BarOrderItemVoidRecord> findOrderItemVoidById(String id) {
+        return jdbcTemplate.query("""
+                SELECT * FROM bar_order_item_voids WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapOrderItemVoid).stream().findFirst();
     }
 
     public List<BarOrderItemVoidRecord> listOrderItemVoids(String orderId) {

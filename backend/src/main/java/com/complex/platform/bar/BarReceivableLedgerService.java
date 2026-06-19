@@ -33,4 +33,21 @@ interface BarReceivableLedgerService {
             String reason,
             List<String> evidenceAttachmentIds
     );
+
+    /**
+     * 延期项④：退菜退酒审批驳回时反向冲销已过账的退款应付。
+     * 原退款过账为 direction='payable'、source_type='refund' 的"应退/已退"项；驳回后该退款无效，
+     * 故过一条 direction='receivable'、source_type='refund' 的对冲项（"应退转应收/收回"语义），
+     * source_id=驳回冲销调整记录 id（与原退款项 source_id 不同），与 V008 唯一索引
+     * (direction, source_type, source_id) 对齐保持幂等，使财务台账退款净额归零。
+     */
+    String reverseRefundPayable(
+            BarBillRecord bill,
+            BarOrderRecord order,
+            String reversalAdjustmentId,
+            long refundAmountCent,
+            String idempotencyKey,
+            String reason,
+            List<String> evidenceAttachmentIds
+    );
 }

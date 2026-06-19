@@ -94,6 +94,35 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
         return item.id();
     }
 
+    @Override
+    public String reverseRefundPayable(
+            BarBillRecord bill,
+            BarOrderRecord order,
+            String reversalAdjustmentId,
+            long refundAmountCent,
+            String idempotencyKey,
+            String reason,
+            List<String> evidenceAttachmentIds
+    ) {
+        LocalDate today = LocalDate.now();
+        // 延期项④：驳回冲销过账为 direction='receivable'、source_type='refund' 的对冲应收项。
+        // source_id 取驳回冲销调整记录 id（与原退款应付项 source_id 不同），direction 亦不同，
+        // 与 V008 唯一索引 (direction, source_type, source_id) 对齐，冲销项与原退款项净额相抵。
+        ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
+                "bar-refund-reversal-" + reversalAdjustmentId,
+                "bar bill refund reversal (void rejected): " + bill.id() + " (" + reason + ")",
+                evidenceAttachmentIds == null ? List.of() : List.copyOf(evidenceAttachmentIds),
+                "receivable",
+                counterpartyId(bill, order),
+                "refund",
+                reversalAdjustmentId,
+                refundAmountCent,
+                today,
+                YearMonth.from(today).toString()
+        ));
+        return item.id();
+    }
+
     private String counterpartyId(BarBillRecord bill, BarOrderRecord order) {
         if (order.customerId() != null && !order.customerId().isBlank()) {
             return order.customerId();

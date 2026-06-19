@@ -295,6 +295,7 @@ class AmusementSafetyControllerTests {
                 "device_1",
                 "customer_1",
                 "high",
+                "accident",
                 "created",
                 "Guest slipped",
                 "Guest slipped near entrance",

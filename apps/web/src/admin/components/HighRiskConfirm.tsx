@@ -1,4 +1,6 @@
 import React from "react";
+import type { EffectivePermissionsState } from "../types";
+import { useCan } from "../security/Can";
 
 export type HighRiskConfirmProps = {
   /** 按钮文案，同时作为确认提示中的动作名 */
@@ -17,6 +19,15 @@ export type HighRiskConfirmProps = {
   irreversible?: boolean;
   /** 按钮样式类，默认复用 admin-secondary-button */
   className?: string;
+  /**
+   * 按钮级权限门控（可选）。传入后复用 useCan：无权限时按钮禁用且点击直接拦截，
+   * 不弹确认框、不发请求（fail-safe）。与 disabled 合并。
+   */
+  permissionsState?: EffectivePermissionsState;
+  /** 该动作所需权限码（与后端 requirePermission 对齐）。 */
+  permissions?: string[];
+  /** 无权限时的提示，默认“当前账号无此操作权限”。 */
+  deniedHint?: string;
 };
 
 const IRREVERSIBLE_HINT = "此操作不可逆，请确认证据齐备后再继续。";
@@ -35,11 +46,22 @@ export function HighRiskConfirm({
   disabled = false,
   irreversible = true,
   className = "admin-secondary-button",
+  permissionsState,
+  permissions = [],
+  deniedHint = "当前账号无此操作权限",
   ...rest
 }: HighRiskConfirmProps) {
   const testId = rest["data-testid"];
+  // 未传 permissionsState 时不做按钮级权限门控（保持既有调用方零行为变化）。
+  const allowed = useCan(permissionsState ?? { status: "loading" }, permissions);
+  const gated = permissionsState !== undefined;
+  const denied = gated && !allowed;
+  const blocked = disabled || denied;
 
   function handleClick() {
+    if (denied) {
+      return; // fail-safe：无权限直接拦截，不弹确认框、不发请求
+    }
     if (precheck && !precheck()) {
       return;
     }
@@ -53,7 +75,15 @@ export function HighRiskConfirm({
   }
 
   return (
-    <button type="button" className={className} disabled={disabled} data-testid={testId} onClick={handleClick}>
+    <button
+      type="button"
+      className={className}
+      disabled={blocked}
+      aria-disabled={blocked}
+      title={denied ? deniedHint : undefined}
+      data-testid={testId}
+      onClick={handleClick}
+    >
       {label}
     </button>
   );

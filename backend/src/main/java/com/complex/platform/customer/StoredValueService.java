@@ -68,7 +68,7 @@ public class StoredValueService {
      * succeeded，再调 {@link #settleTopup} 入账。
      */
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.stored_value.topup")
+    @GuardedAction(capability = "customer.stored_value.topup", permission = "customer.stored_value.topup")
     public PaymentIntentRecord topup(String customerId, String projectId, long amountCent,
                                      String channel, String idempotencyKey) {
         if (amountCent <= 0) {
@@ -89,7 +89,7 @@ public class StoredValueService {
      * 无支付（支付意图非 succeeded）则拒绝——保证不凭空加余额。
      */
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.stored_value.topup")
+    @GuardedAction(capability = "customer.stored_value.topup", permission = "customer.stored_value.topup")
     public CustomerStoredValueTransactionRecord settleTopup(String customerId, String projectId,
                                                             String paymentIntentId) {
         Instant now = now();
@@ -131,7 +131,7 @@ public class StoredValueService {
     // ============================================================
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.stored_value.consume")
+    @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
     public CustomerStoredValueTransactionRecord consume(String customerId, String projectId,
                                                         long amountCent, String reason, String idempotencyKey) {
         if (amountCent <= 0) {
@@ -165,7 +165,7 @@ public class StoredValueService {
     // ============================================================
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.stored_value.refund")
+    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
     public CustomerStoredValueTransactionRecord refund(String customerId, String projectId,
                                                        long amountCent, String reason, boolean closeAccount,
                                                        String idempotencyKey) {
@@ -211,7 +211,7 @@ public class StoredValueService {
     // ============================================================
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.stored_value.freeze")
+    @GuardedAction(capability = "customer.stored_value.freeze", permission = "customer.stored_value.freeze")
     public CustomerStoredValueAccountRecord freeze(String customerId, String projectId, String reason) {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId);
@@ -229,7 +229,7 @@ public class StoredValueService {
     }
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.stored_value.freeze")
+    @GuardedAction(capability = "customer.stored_value.freeze", permission = "customer.stored_value.freeze")
     public CustomerStoredValueAccountRecord unfreeze(String customerId, String projectId, String reason) {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId);

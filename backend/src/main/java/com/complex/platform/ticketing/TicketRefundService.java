@@ -7,15 +7,21 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
 public class TicketRefundService {
 
-    private final TicketingRepository repository;
+    // P0 清单#2：退款比例 basis points 分母（10000=100%）。
+    private static final long BASIS_POINTS_DENOMINATOR = 10_000L;
 
-    public TicketRefundService(TicketingRepository repository) {
+    private final TicketingRepository repository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public TicketRefundService(TicketingRepository repository, ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
+        this.eventPublisher = eventPublisher;
     }
 
     TicketRefundRecord requestRefund(TicketRefundRequest request) {
@@ -63,7 +69,24 @@ public class TicketRefundService {
                 line.id(), line.refundId(), line.orderId(), line.entitlementId(), line.entitlementType(), line.lineType(),
                 line.refundAmountCent(), line.remainingTimesBefore(), line.usedTimesBefore(), "approved", line.createdAt(), now
         )));
+        // P0 清单#2：退款审批通过（生效）→ 发积分冲减事件，customer 域按退款比例冲减原单已 confirmed 积分。
+        // 幂等键 source_doc=ticket_refund/refundId；无会员/未入账由 LoyaltyService 侧 noop。
+        publishPointsDeductRequested(approved);
         return approved;
+    }
+
+    private void publishPointsDeductRequested(TicketRefundRecord refund) {
+        TicketOrderRecord order = repository.findTicketOrderById(refund.targetId()).orElse(null);
+        if (order == null || order.amountCent() <= 0) {
+            return; // 无原单/原单金额非正：无法按比例冲减。
+        }
+        // 退款比例（basis points）= 退款额 / 原单额 × 10000，封顶 100%。
+        long ratioBp = Math.min(BASIS_POINTS_DENOMINATOR,
+                refund.refundAmountCent() * BASIS_POINTS_DENOMINATOR / order.amountCent());
+        if (ratioBp <= 0) {
+            return;
+        }
+        eventPublisher.publishEvent(new PointsDeductRequestedEvent(order.id(), refund.id(), ratioBp));
     }
 
     private void createRefundLines(TicketRefundRecord refund, TicketOrderRecord order, Instant now) {

@@ -44,19 +44,22 @@ public class AmusementService {
     private final AmusementMaintenanceService maintenanceService;
     private final AuthorizationService authorizationService;
     private final AmusementEntitlementGateway entitlementGateway;
+    private final AmusementSafetyRepository safetyRepository;
 
     public AmusementService(
             AmusementRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
-            AmusementEntitlementGateway entitlementGateway
+            AmusementEntitlementGateway entitlementGateway,
+            AmusementSafetyRepository safetyRepository
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.entitlementGateway = entitlementGateway;
+        this.safetyRepository = safetyRepository;
         this.bookingService = new AmusementBookingService(repository, idempotencyService, auditEventService, authorizationService);
         this.inspectionService = new AmusementInspectionService(repository, idempotencyService, auditEventService, authorizationService);
         this.maintenanceService = new AmusementMaintenanceService(repository, idempotencyService, auditEventService, authorizationService);
@@ -557,6 +560,7 @@ public class AmusementService {
                 enumOrDefault(actual.openStatus(), "open", PROJECT_STATUSES, "open_status"),
                 templateId,
                 actual.eligibilityRule() == null ? Map.of() : Map.copyOf(actual.eligibilityRule()),
+                trimToNull(actual.locationPointId()),
                 now,
                 now,
                 authorizationService.currentMerchantScope().orElse(null)
@@ -729,20 +733,34 @@ public class AmusementService {
         if (!entitlementGateway.consumeEntitlement(entitlement.id())) {
             throw ApiException.conflict("ENTITLEMENT_USED", "entitlement has no remaining times");
         }
+        String pointId = trimToNull(textFromMap(actual.businessContext(),
+                "location_point_id", "locationPointId", "point_id", "pointId"));
+        String deviceId = trimToNull(actual.deviceId());
+        // 清单#6 超容处置策略（§6.4/§7.18 + R6-D10）：硬上限阻断+软上限告警放行，均落
+        // amusement.incident.over_capacity 事件；处置模式后台可切换（block_hard 默认/warn_only 仅告警留痕不阻断）。
+        AmusementOverCapacityPolicy policy = repository.findOverCapacityPolicy(project.id());
         try {
             // §6.4 三维度取最小可放行余量：对已配置的受控维度（场次 / 点位·设备 / 项目安全上限）
             // 原子 check+increment，任一维度余量为 0 即拒绝（session_full / SESSION_CAPACITY_EXHAUSTED）；
             // 未配置维度跳过（无 capacity_config 退化为场次单维，向后兼容）。
-            String pointId = trimToNull(textFromMap(actual.businessContext(),
-                    "location_point_id", "locationPointId", "point_id", "pointId"));
             CapacityClaimResult claim = repository.claimCapacityAcrossDimensions(new CapacityClaimContext(
                     project.id(),
                     session.id(),
                     pointId,
-                    trimToNull(actual.deviceId()),
+                    deviceId,
                     project.capacity()
             ));
             if (!claim.claimed()) {
+                // 硬上限（安全容量）耗尽：无论处置模式均落 over_capacity incident + 发事件。
+                // 留痕与失败审计同语义（与既有 recordFailure 一致，同事务内尽力写入）。
+                recordOverCapacity(project, session, deviceId, "hard",
+                        claim.exhaustedDimension(), policy);
+                if (policy.isWarnOnly()) {
+                    // 仅告警留痕不阻断：硬上限亦放行（已落 incident+事件），不回补权益，继续核销。
+                    // 注意：warn_only 下容量维度未实际 +1（防超卖逻辑保持原子），仅作留痕放行。
+                    return repository.saveVerification(saveVerificationRecord(project, session, credential,
+                            deviceId, staffId, actual, now));
+                }
                 throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED",
                         "session capacity exhausted (dimension=" + claim.exhaustedDimension() + ")");
             }
@@ -751,18 +769,99 @@ public class AmusementService {
             entitlementGateway.reverseEntitlement(entitlement.id());
             throw exception;
         }
-        return repository.saveVerification(new AmusementVerificationRecord(
+        // 软上限（运营容量）告警：放行后若场次在场达到运营容量，落 over_capacity incident + 发事件（不阻断）。
+        if (policy.hasOperatingCapacity()) {
+            repository.findSessionById(session.id()).ifPresent(after -> {
+                if (after.usedCapacity() + after.lockedCapacity() >= policy.operatingCapacity()) {
+                    recordOverCapacity(project, session, deviceId, "soft", "operating_capacity", policy);
+                }
+            });
+        }
+        return repository.saveVerification(saveVerificationRecord(project, session, credential,
+                deviceId, staffId, actual, now));
+    }
+
+    private AmusementVerificationRecord saveVerificationRecord(
+            AmusementProjectRecord project,
+            AmusementSessionRecord session,
+            String credential,
+            String deviceId,
+            String staffId,
+            VerificationRequest actual,
+            Instant now
+    ) {
+        return new AmusementVerificationRecord(
                 "verification_" + slug(actual.idempotencyKey()),
                 project.id(),
                 session.id(),
                 credential,
-                trimToNull(actual.deviceId()),
+                deviceId,
                 staffId,
                 "success",
                 null,
                 List.of(),
                 now
+        );
+    }
+
+    /**
+     * 清单#6：超容（硬/软）落 over_capacity incident（复用 amusement_incidents 写入路径）+
+     * 发 amusement.incident.over_capacity 事件（复用既有 AuditEventService）。
+     *
+     * @param overType 超容类型：hard=安全容量（硬上限）/ soft=运营容量（软上限）
+     * @param dimension 触发维度（session / point_device / project_safety / operating_capacity）
+     */
+    private void recordOverCapacity(
+            AmusementProjectRecord project,
+            AmusementSessionRecord session,
+            String deviceId,
+            String overType,
+            String dimension,
+            AmusementOverCapacityPolicy policy
+    ) {
+        Instant now = Instant.now();
+        // 硬超容（block_hard 下阻断）严重度更高；软超容/仅告警留痕为 medium。
+        String severity = "hard".equals(overType) && !policy.isWarnOnly() ? "high" : "medium";
+        String incidentId = "ami_oc_" + slug(project.id() + ":" + session.id() + ":"
+                + overType + ":" + now.toEpochMilli());
+        AmusementIncidentRecord incident = safetyRepository.saveIncident(new AmusementIncidentRecord(
+                incidentId,
+                project.id(),
+                project.id(),
+                session.id(),
+                deviceId,
+                null,
+                severity,
+                "over_capacity",
+                "created",
+                "游乐超容（" + overType + "）",
+                "amusement over capacity: type=" + overType + ", dimension=" + dimension
+                        + ", disposal_mode=" + policy.disposalMode(),
+                "system",
+                "amusement_verification",
+                now,
+                null,
+                null,
+                List.of(),
+                now,
+                now,
+                authorizationService.currentMerchantScope().orElse(null)
         ));
+        auditEventService.recordSuccess(
+                "amusement.incident.over_capacity",
+                "amusement.verification.execute",
+                "amusement_incident",
+                incident.id(),
+                null,
+                null,
+                Map.of(
+                        "project_id", project.id(),
+                        "session_id", session.id(),
+                        "over_type", overType,
+                        "dimension", dimension,
+                        "disposal_mode", policy.disposalMode()
+                )
+        );
     }
 
     private boolean isAmusementEntitlementType(String entitlementType) {

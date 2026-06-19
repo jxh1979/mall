@@ -124,6 +124,19 @@ export function LegacyAppShell({
           </div>
         </Header>
         <Content className="content">
+          <Alert
+            className="status-alert"
+            data-testid="legacy-retired-banner"
+            type="warning"
+            showIcon
+            message="该控制台已退役（只读）"
+            description="写动作已统一迁移至管理后台/现场端执行。请前往「管理后台」完成核销、结账、库存等操作。"
+            action={(
+              <Button size="small" type="primary" data-testid="legacy-go-admin" onClick={() => window.location.assign("/admin")}>
+                前往管理后台
+              </Button>
+            )}
+          />
           {error ? <Alert className="status-alert" data-testid="global-error" type="error" message="后端数据读取失败" description={error} /> : null}
           {loading && !snapshot ? <div className="loading-state"><Spin size="large" /></div> : null}
           {children}

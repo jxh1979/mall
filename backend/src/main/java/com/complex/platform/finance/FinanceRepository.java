@@ -6,6 +6,72 @@ import java.util.List;
 import java.util.Optional;
 
 public interface FinanceRepository {
+
+    // ── P1#13 库存差异 → AR/AP（V108）─────────────────────────────────────────
+
+    /** 按 id 查库存差异（入账前校验存在 + 复核状态 + 幂等）。default 空实现兼容既有测试双子。 */
+    default Optional<InventoryVarianceRecord> findInventoryVarianceById(String id) {
+        return Optional.empty();
+    }
+
+    /** 回填库存差异已入账（posted_ar_ap_item_id），用于幂等防重复入账。default 空实现兼容既有测试双子。 */
+    default void markInventoryVariancePosted(String inventoryVarianceId, String arApItemId) {
+    }
+
+    // ── P1#14 综合体计费（V110）：营业额抽成 / 保证金 / CAM ───────────────────
+
+    /** 按 id 查营业额抽成规则。default 空实现兼容既有测试双子。 */
+    default Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
+        return Optional.empty();
+    }
+
+    /**
+     * 回流营业额取数：只读 integration_order_syncs，聚合该商户在 [from, to) 经营日窗口的回流 order 金额（分）。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return 0L;
+    }
+
+    /** 写一条保证金台账。default 空实现兼容既有测试双子。 */
+    default DepositLedgerRecord saveDepositLedger(DepositLedgerRecord ledger) {
+        return ledger;
+    }
+
+    /** 取该商户当前保证金余额（最新一行 balance_after_cent；无台账=0）。default 返回 0 兼容既有测试双子。 */
+    default long currentDepositBalance(String merchantId) {
+        return 0L;
+    }
+
+    /** 写一条 CAM 分摊行。default 空实现兼容既有测试双子。 */
+    default CamAllocationRecord saveCamAllocation(CamAllocationRecord allocation) {
+        return allocation;
+    }
+
+    // ── P2#④ CAM 年度 true-up（V118）：已预收归集 + 差额台账 ─────────────────────
+
+    /**
+     * 该商户在某 settlementPeriod 的 CAM 已预收合计（分）：按 cam_allocations.settlement_period 归集 allocated_amount_cent。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default long sumCamPrepaidByMerchantAndPeriod(String merchantId, String settlementPeriod) {
+        return 0L;
+    }
+
+    /** 标记某 settlementPeriod 既有 CAM 预收行已被 true-up 纳入对账（trued_up=TRUE，防重复）。default 空实现兼容测试双子。 */
+    default void markCamAllocationsTruedUp(String settlementPeriod) {
+    }
+
+    /** 写一条 CAM true-up 批次。default 原样返回兼容既有测试双子。 */
+    default CamTrueUpRunRecord saveCamTrueUpRun(CamTrueUpRunRecord run) {
+        return run;
+    }
+
+    /** 写一条 CAM true-up 逐户差额行。default 原样返回兼容既有测试双子。 */
+    default CamTrueUpLineRecord saveCamTrueUpLine(CamTrueUpLineRecord line) {
+        return line;
+    }
+
     ArApItemRecord saveArApItem(ArApItemRecord item);
 
     ArApItemSourceRecord saveArApItemSource(ArApItemSourceRecord source);
@@ -49,6 +115,19 @@ public interface FinanceRepository {
     List<ReconciliationDifferenceRecord> listReconciliationDifferences();
 
     ReconciliationDifferenceRecord saveReconciliationDifference(ReconciliationDifferenceRecord difference);
+
+    /** 按 id 查对账批次（创建差异前校验所属批次存在）。default 空实现避免破坏既有测试双子。 */
+    default Optional<ReconciliationBatchRecord> findReconciliationBatchById(String id) {
+        return Optional.empty();
+    }
+
+    /**
+     * 平台侧 expected 系统取数：以 business_ref 关联平台权威支付台账聚合应有金额（分）。
+     * 返回 0 表示无平台侧系统取数支撑（服务层据此拒绝纯手填差异）。default 返回 0 以兼容既有测试双子。
+     */
+    default long aggregatePlatformExpectedForBusinessRef(String businessRef) {
+        return 0L;
+    }
 
     // ── R5 T7：日结锁定 + 补录审批 + 多源汇总 ──────────────────────────────
 

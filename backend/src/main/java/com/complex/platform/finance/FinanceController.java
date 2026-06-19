@@ -9,9 +9,16 @@ import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
+import com.complex.platform.finance.dto.CamAllocationRequest;
+import com.complex.platform.finance.dto.CamTrueUpRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
+import com.complex.platform.finance.dto.DepositActionRequest;
+import com.complex.platform.finance.dto.InventoryVariancePostRequest;
+import com.complex.platform.finance.dto.TurnoverRentBillRequest;
+import java.util.List;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -114,10 +121,58 @@ public class FinanceController {
         return ApiResponse.ok(service.listReconciliationDifferences());
     }
 
+    @PostMapping("/reconciliation/differences")
+    public ApiResponse<ReconciliationDifferenceRecord> createReconciliationDifference(
+            @RequestBody ReconciliationDifferenceRequest request
+    ) {
+        authorizationService.requirePermission("finance.reconciliation.difference.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createReconciliationDifference(request));
+    }
+
     @PostMapping("/refunds")
     public ApiResponse<FinanceRefundRecord> createRefund(@RequestBody RefundRequest request) {
         authorizationService.requirePermission("finance.refund.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createRefund(request));
+    }
+
+    // ── P1#13 库存差异 → AR/AP ──────────────────────────────────────────────────
+
+    @PostMapping("/inventory-variances/post")
+    public ApiResponse<ArApItemRecord> postInventoryVariance(@RequestBody InventoryVariancePostRequest request) {
+        authorizationService.requirePermission("finance.inventory_variance.post");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.postInventoryVariance(request));
+    }
+
+    // ── P1#14 综合体计费：营业额抽成 / 保证金 / CAM ─────────────────────────────
+
+    @PostMapping("/turnover-rent/bills")
+    public ApiResponse<ArApItemRecord> billTurnoverRent(@RequestBody TurnoverRentBillRequest request) {
+        authorizationService.requirePermission("finance.turnover_rent.bill");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.billTurnoverRent(request));
+    }
+
+    @PostMapping("/deposits/actions")
+    public ApiResponse<DepositLedgerRecord> recordDepositAction(@RequestBody DepositActionRequest request) {
+        authorizationService.requirePermission("finance.deposit.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.recordDepositAction(request));
+    }
+
+    @PostMapping("/cam/allocations")
+    public ApiResponse<List<CamAllocationRecord>> allocateCam(@RequestBody CamAllocationRequest request) {
+        authorizationService.requirePermission("finance.cam.allocate");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.allocateCam(request));
+    }
+
+    @PostMapping("/cam/trueups")
+    public ApiResponse<CamTrueUpRunRecord> runCamTrueUp(@RequestBody CamTrueUpRequest request) {
+        authorizationService.requirePermission("finance.cam.trueup");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.runCamTrueUp(request));
     }
 }

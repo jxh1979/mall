@@ -6,6 +6,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.dto.CapabilitySwitchRequest;
 import com.complex.platform.terminal.dto.DeviceBindRequest;
+import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
@@ -30,6 +31,11 @@ public class TerminalDeviceService {
 
     private static final String BIND_PERMISSION = "terminal.device.bind";
     private static final String UNBIND_PERMISSION = "terminal.device.unbind";
+    private static final String LIFECYCLE_PERMISSION = "terminal.device.lifecycle";
+    // P0#9 设备生命周期：终态（不可再流转、拒绝任何业务动作/领用）。
+    private static final Set<String> TERMINAL_STATUSES = Set.of("scrapped", "blocked");
+    // P0#9：挂失/报废/送修/封禁设备拒绝领用（绑定）与高风险业务动作。
+    private static final Set<String> NON_OPERATIONAL_STATUSES = Set.of("lost", "scrapped", "repair", "blocked");
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> TERMINAL_TYPES = Set.of("staff_work_phone", "tablet", "kiosk");
@@ -45,15 +51,18 @@ public class TerminalDeviceService {
     private final TerminalDeviceRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+    private final MdmService mdmService;
 
     public TerminalDeviceService(
             TerminalDeviceRepository repository,
             IdempotencyService idempotencyService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            MdmService mdmService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
+        this.mdmService = mdmService;
     }
 
     @Transactional
@@ -97,6 +106,118 @@ public class TerminalDeviceService {
                 UNBIND_PERMISSION,
                 () -> unbind(id, request)
         );
+    }
+
+    // ── P0#9 设备生命周期状态机（送修 / 挂失 / 找回 / 报废） ────────────────────
+    @Transactional
+    public DeviceBindingResponse repairDevice(String id, DeviceLifecycleRequest request) {
+        return transitionLifecycle(
+                id, request, "repair", Set.of("bound", "returned"),
+                "terminal.device.repaired", "terminal.device.repair_failed");
+    }
+
+    @Transactional
+    public DeviceBindingResponse markDeviceLost(String id, DeviceLifecycleRequest request) {
+        return transitionLifecycle(
+                id, request, "lost", Set.of("bound", "returned", "repair", "unbound"),
+                "terminal.device.lost", "terminal.device.lost_failed");
+    }
+
+    @Transactional
+    public DeviceBindingResponse markDeviceFound(String id, DeviceLifecycleRequest request) {
+        return transitionLifecycle(
+                id, request, "found", Set.of("lost"),
+                "terminal.device.found", "terminal.device.found_failed");
+    }
+
+    @Transactional
+    public DeviceBindingResponse scrapDevice(String id, DeviceLifecycleRequest request) {
+        return transitionLifecycle(
+                id, request, "scrapped", Set.of("bound", "returned", "unbound", "repair", "lost", "found"),
+                "terminal.device.scrapped", "terminal.device.scrap_failed");
+    }
+
+    private DeviceBindingResponse transitionLifecycle(
+            String id,
+            DeviceLifecycleRequest request,
+            String targetStatus,
+            Set<String> allowedFrom,
+            String successEvent,
+            String failureEvent
+    ) {
+        String deviceId = requireText(id, "id");
+        return executeWrite(
+                "lifecycle:" + targetStatus + ":" + deviceId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                DeviceBindingResponse.class,
+                successEvent,
+                failureEvent,
+                LIFECYCLE_PERMISSION,
+                () -> applyLifecycle(id, request, targetStatus, allowedFrom, successEvent)
+        );
+    }
+
+    private DeviceBindingResponse applyLifecycle(
+            String id,
+            DeviceLifecycleRequest request,
+            String targetStatus,
+            Set<String> allowedFrom,
+            String eventType
+    ) {
+        DeviceLifecycleRequest actual = requireRequest(request);
+        String reason = requireText(actual.reason(), "reason");
+        TerminalDeviceRecord existing = repository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+        // 终态（scrapped/blocked）封锁：不可再流转。
+        if (TERMINAL_STATUSES.contains(existing.status())) {
+            throw ApiException.conflict("DEVICE_TERMINAL_STATUS",
+                    "device is in terminal status " + existing.status() + " and cannot transition");
+        }
+        if (!allowedFrom.contains(existing.status())) {
+            throw ApiException.conflict("INVALID_DEVICE_STATUS",
+                    "device status " + existing.status() + " cannot transition to " + targetStatus);
+        }
+        Instant now = Instant.now();
+        TerminalDeviceRecord updated = new TerminalDeviceRecord(
+                existing.id(),
+                existing.deviceId(),
+                existing.deviceCode(),
+                existing.terminalType(),
+                existing.bindingScope(),
+                existing.boundSpaceId(),
+                existing.mdmDeviceRef(),
+                existing.kioskMode(),
+                existing.merchantId(),
+                existing.venueId(),
+                existing.areaId(),
+                existing.locationPointId(),
+                firstNonBlank(actual.staffId(), existing.staffId()),
+                targetStatus,
+                existing.boundAt(),
+                existing.returnedAt(),
+                existing.unboundAt(),
+                existing.returnReason(),
+                existing.unbindReason(),
+                existing.createdAt(),
+                now
+        );
+        TerminalDeviceRecord saved = repository.save(updated);
+        // 挂失/报废/封禁：撤销 kiosk 凭证（设备被踢出）。
+        if (NON_OPERATIONAL_STATUSES.contains(targetStatus) && !"repair".equals(targetStatus)) {
+            revokeDeviceCredential(saved.deviceId(), now);
+        }
+        repository.saveStatusEvent(new TerminalDeviceStatusEventRecord(
+                "dev_evt_" + UUID.randomUUID().toString().replace("-", ""),
+                saved.id(),
+                saved.deviceCode(),
+                eventType,
+                saved.status(),
+                reason,
+                saved.staffId(),
+                now
+        ));
+        return toResponse(saved, null);
     }
 
     public PageResponse<TerminalCapabilitySwitchRecord> listCapabilitySwitches() {
@@ -273,6 +394,14 @@ public class TerminalDeviceService {
         if (kioskMode != null && (!"kiosk".equals(terminalType) || !KIOSK_MODES.contains(kioskMode))) {
             throw ApiException.badRequest("VALIDATION_FAILED", "kiosk_mode is invalid");
         }
+        // P0#9：挂失/报废/送修/封禁设备拒绝领用（重新绑定）——bind 走 device_id upsert，
+        //       若不拦截，报废设备会被静默复活。
+        repository.findByDeviceId(deviceId).ifPresent(existing -> {
+            if (NON_OPERATIONAL_STATUSES.contains(existing.status())) {
+                throw ApiException.conflict("INVALID_DEVICE_STATUS",
+                        "device is " + existing.status() + " and cannot be bound");
+            }
+        });
 
         Instant now = Instant.now();
         TerminalDeviceRecord record = new TerminalDeviceRecord(
@@ -377,6 +506,9 @@ public class TerminalDeviceService {
         String reason = requireText(actual.reason(), "reason");
         TerminalDeviceRecord existing = repository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "device not found"));
+        // P0#9 MDM 门控接入点（terminal 自身高风险端点·解绑）：开关开时未纳管硬拒绝；
+        //       blocked/lost 设备无论开关都硬拒绝（消除 requireManagedForHighRiskAction dead code）。
+        mdmService.requireManagedForHighRiskAction(existing.deviceId(), "terminal.device.unbind");
         if ("unbound".equals(existing.status())) {
             throw ApiException.conflict("INVALID_DEVICE_STATUS", "device is already unbound");
         }

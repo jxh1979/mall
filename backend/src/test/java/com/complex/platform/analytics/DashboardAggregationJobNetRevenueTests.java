@@ -158,6 +158,63 @@ class DashboardAggregationJobNetRevenueTests {
         assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("0");
     }
 
+    @Test
+    void redemptionRateIsVerifyDoneOverIssuedByMerchantAndPlatform() {
+        // 清单#18：券核销率 = 核销数/发放数。商户行用本商户口径，平台行用 Σ 口径；分母为 0 置 0（不除零）。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        // 核销：A=30、B=10；发放：A=120、B=40、C=50（C 当日只发放未核销）。
+        repository.verifyDone = orderedMap("merchant_a", "30", "merchant_b", "10");
+        repository.ticketIssued = orderedMap("merchant_a", "120", "merchant_b", "40", "merchant_c", "50");
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        String rate = DashboardAggregationJob.REDEMPTION_RATE;
+        // A: 30/120 = 0.2500；B: 10/40 = 0.2500；C: 0/50 = 0.0000。
+        assertThat(repository.upserts.get(rate + "|merchant_a")).isEqualByComparingTo("0.2500");
+        assertThat(repository.upserts.get(rate + "|merchant_b")).isEqualByComparingTo("0.2500");
+        assertThat(repository.upserts.get(rate + "|merchant_c")).isEqualByComparingTo("0.0000");
+        // 平台 Σ核销=40 / Σ发放=210 = 0.1905（HALF_UP 4 位）。
+        assertThat(repository.upserts.get(rate + "|platform")).isEqualByComparingTo("0.1905");
+    }
+
+    @Test
+    void redemptionRateIsZeroWhenNoIssuance() {
+        // 当日无发放：分母为 0，核销率置 0（不伪造、不除零）。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.verifyDone = orderedMap("merchant_a", "5");
+        repository.ticketIssued = Map.of();
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        // merchant_a 仅有核销无发放：分母 0 → 0；平台同理。
+        assertThat(repository.upserts.get(DashboardAggregationJob.REDEMPTION_RATE + "|merchant_a"))
+                .isEqualByComparingTo("0");
+        assertThat(repository.upserts.get(DashboardAggregationJob.REDEMPTION_RATE + "|platform"))
+                .isEqualByComparingTo("0");
+    }
+
+    @Test
+    void etlEmitsProjectSegmentRowsMirroringPlatformTotalsForSingleComplex() {
+        // ⑤ 集团多项目 ETL：refreshSnapshots 在 platform/merchant 维度之外，按 project_id 落 segment_type='project' 行。
+        // 单综合体默认全部归 DEFAULT_PROJECT_ID，project 口径值 = 平台口径合计（口径与现状一致，不伪造多 project）。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.ticketRevenue = new BigDecimal("100000");
+        repository.ticketRefund = new BigDecimal("10000");
+        repository.barRevenue = orderedMap("merchant_a", "80000", "merchant_b", "20000");
+        repository.barRefund = orderedMap("merchant_a", "5000");
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        String projectId = DashboardAggregationJob.DEFAULT_PROJECT_ID;
+        // project 口径 net == 平台口径 net == 185000（同一综合体合计，不漂移）。
+        assertThat(repository.upserts.get(netKey("project:" + projectId)))
+                .isEqualByComparingTo(repository.upserts.get(netKey("platform")))
+                .isEqualByComparingTo("185000");
+        // project 口径同时覆盖售票实付平台合计 100000。
+        assertThat(repository.upserts.get(DashboardAggregationJob.REVENUE_TICKET + "|project:" + projectId))
+                .isEqualByComparingTo("100000");
+    }
+
     private static Map<String, BigDecimal> orderedMap(String... keyValues) {
         Map<String, BigDecimal> map = new LinkedHashMap<>();
         for (int i = 0; i < keyValues.length; i += 2) {
@@ -174,10 +231,20 @@ class DashboardAggregationJobNetRevenueTests {
         private Map<String, BigDecimal> barRefund = Map.of();
         private Map<String, BigDecimal> ticketAllocated = Map.of();
         private Map<String, BigDecimal> ticketRefundByMerchant = Map.of();
+        private Map<String, BigDecimal> verifyDone = Map.of();
+        private Map<String, BigDecimal> ticketIssued = Map.of();
 
         @Override
         public void upsertMetricSnapshot(MetricSnapshotKey key, BigDecimal actualValue, String projectionMethod, Instant createdAt) {
-            String segment = "merchant".equals(key.segmentType()) ? key.segmentId() : "platform";
+            String segment;
+            if ("merchant".equals(key.segmentType())) {
+                segment = key.segmentId();
+            } else if ("project".equals(key.segmentType())) {
+                // ⑤ 集团多项目 ETL：project 口径单独成键，避免与平台口径互相覆盖。
+                segment = "project:" + key.segmentId();
+            } else {
+                segment = "platform";
+            }
             upserts.put(key.metricKey() + "|" + segment, actualValue);
         }
 
@@ -229,7 +296,12 @@ class DashboardAggregationJobNetRevenueTests {
 
         @Override
         public Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate) {
-            return Map.of();
+            return verifyDone;
+        }
+
+        @Override
+        public Map<String, BigDecimal> countTicketIssuedByMerchant(LocalDate businessDate) {
+            return ticketIssued;
         }
 
         @Override
@@ -250,6 +322,11 @@ class DashboardAggregationJobNetRevenueTests {
         @Override
         public BigDecimal countPendingReview() {
             return BigDecimal.ZERO;
+        }
+
+        @Override
+        public long countMerchantsWithEtlSnapshot(LocalDate businessDate) {
+            return 0L;
         }
 
         @Override

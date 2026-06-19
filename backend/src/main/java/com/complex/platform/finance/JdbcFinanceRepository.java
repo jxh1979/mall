@@ -294,16 +294,17 @@ class JdbcFinanceRepository implements FinanceRepository {
     public FinanceRefundRecord saveRefund(FinanceRefundRecord refund) {
         jdbcTemplate.update("""
                 INSERT INTO finance_refunds (
-                    id, target_id, refund_amount_cent, reason, refund_channel, status, created_at
+                    id, target_id, refund_amount_cent, reason, refund_channel, refund_direction, status, created_at
                 )
                 VALUES (
-                    :id, :target_id, :refund_amount_cent, :reason, :refund_channel, :status, :created_at
+                    :id, :target_id, :refund_amount_cent, :reason, :refund_channel, :refund_direction, :status, :created_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     target_id = EXCLUDED.target_id,
                     refund_amount_cent = EXCLUDED.refund_amount_cent,
                     reason = EXCLUDED.reason,
                     refund_channel = EXCLUDED.refund_channel,
+                    refund_direction = EXCLUDED.refund_direction,
                     status = EXCLUDED.status
                 """, refundParameters(refund));
         return refund;
@@ -340,7 +341,8 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public List<ReconciliationDifferenceRecord> listReconciliationDifferences() {
         return jdbcTemplate.query("""
-                SELECT id, batch_id, difference_type, business_ref, amount_cent, status, created_at
+                SELECT id, batch_id, difference_type, business_ref, amount_cent,
+                       expected_amount_cent, actual_amount_cent, source, status, created_at
                   FROM finance_reconciliation_differences
                  ORDER BY created_at DESC, id
                 """, this::mapReconciliationDifference);
@@ -350,19 +352,45 @@ class JdbcFinanceRepository implements FinanceRepository {
     public ReconciliationDifferenceRecord saveReconciliationDifference(ReconciliationDifferenceRecord difference) {
         jdbcTemplate.update("""
                 INSERT INTO finance_reconciliation_differences (
-                    id, batch_id, difference_type, business_ref, amount_cent, status, created_at
+                    id, batch_id, difference_type, business_ref, amount_cent,
+                    expected_amount_cent, actual_amount_cent, source, status, created_at
                 )
                 VALUES (
-                    :id, :batch_id, :difference_type, :business_ref, :amount_cent, :status, :created_at
+                    :id, :batch_id, :difference_type, :business_ref, :amount_cent,
+                    :expected_amount_cent, :actual_amount_cent, :source, :status, :created_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     batch_id = EXCLUDED.batch_id,
                     difference_type = EXCLUDED.difference_type,
                     business_ref = EXCLUDED.business_ref,
                     amount_cent = EXCLUDED.amount_cent,
+                    expected_amount_cent = EXCLUDED.expected_amount_cent,
+                    actual_amount_cent = EXCLUDED.actual_amount_cent,
+                    source = EXCLUDED.source,
                     status = EXCLUDED.status
                 """, reconciliationDifferenceParameters(difference));
         return difference;
+    }
+
+    @Override
+    public Optional<ReconciliationBatchRecord> findReconciliationBatchById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, batch_no, scope_type, scope_id, business_date, status, created_at
+                  FROM finance_reconciliation_batches
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapReconciliationBatch).stream().findFirst();
+    }
+
+    @Override
+    public long aggregatePlatformExpectedForBusinessRef(String businessRef) {
+        // 平台侧 expected 系统取数：以 business_ref 关联平台权威支付台账（ar_ap_payments.id），
+        // 聚合该笔的已登记金额作为平台侧应有值。无对应平台流水 → 返回 0（服务层据此判定无系统取数支撑）。
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0)
+                  FROM ar_ap_payments
+                 WHERE id = :business_ref
+                """, Map.of("business_ref", businessRef), Long.class);
+        return total == null ? 0L : total;
     }
 
     // ── R5 T7：日结锁定 + 补录审批 + 多源汇总 ──────────────────────────────
@@ -471,9 +499,24 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
-        // 第三方渠道售票回流：integration_order_syncs 中票务渠道回流。当前 business_type CHECK 仅 catering/retail，
-        // 票务回流维度尚未在该表区分（待财务/集成复核），故保守取 0 计数 0 金额，并不阻断锁定。
-        return DailyCloseSourceTotals.empty();
+        // P1#15：第三方渠道售票接入真实数据源。ticket_orders.sales_channel='channel'（V009 售票渠道枚举中的渠道售票，
+        // 区别于自营 admin/kiosk/miniapp/app/web）已支付(paid)，以 visit_date 为经营日；金额=实付分，count=单数。
+        // 退款（冲减当日净收入）：ticket_refunds 按渠道售票订单、created_at 落经营日窗口 [from, to) 归集为 refund_cent。
+        // 跨域只读：仅读 ticketing 域既有表，不改其写。
+        return aggregateTotals("""
+                SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
+                       (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
+                          FROM ticket_refunds r
+                          JOIN ticket_orders ro ON ro.id = r.target_id
+                         WHERE ro.sales_channel = 'channel'
+                           AND r.created_at >= :from
+                           AND r.created_at < :to) AS refund_cent,
+                       COUNT(*) AS order_count
+                  FROM ticket_orders o
+                 WHERE o.pay_status = 'paid'
+                   AND o.sales_channel = 'channel'
+                   AND o.visit_date = :business_date
+                """, businessDate, fromInclusive, toExclusive);
     }
 
     @Override
@@ -541,6 +584,226 @@ class JdbcFinanceRepository implements FinanceRepository {
                    AND created_at >= :from
                    AND created_at < :to
                 """, businessDate, fromInclusive, toExclusive);
+    }
+
+    // ── P1#13 库存差异 → AR/AP（V108）─────────────────────────────────────────
+
+    @Override
+    public Optional<InventoryVarianceRecord> findInventoryVarianceById(String id) {
+        return jdbcTemplate.query("""
+                SELECT v.id, v.stocktake_id, v.item_id, v.batch_no, v.book_qty, v.counted_qty,
+                       v.variance_qty, v.variance_amount_cent, v.reason, v.supplier_id,
+                       v.review_status, v.posted_ar_ap_item_id, s.merchant_id, v.created_at
+                  FROM inventory_variance v
+                  JOIN stocktake s ON s.id = v.stocktake_id
+                 WHERE v.id = :id
+                """, Map.of("id", id), this::mapInventoryVariance).stream().findFirst();
+    }
+
+    @Override
+    public void markInventoryVariancePosted(String inventoryVarianceId, String arApItemId) {
+        jdbcTemplate.update("""
+                UPDATE inventory_variance
+                   SET posted_ar_ap_item_id = :ar_ap_item_id,
+                       updated_at = now()
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", inventoryVarianceId)
+                .addValue("ar_ap_item_id", arApItemId));
+    }
+
+    private InventoryVarianceRecord mapInventoryVariance(ResultSet rs, int rowNumber) throws SQLException {
+        return new InventoryVarianceRecord(
+                rs.getString("id"),
+                rs.getString("stocktake_id"),
+                rs.getString("item_id"),
+                rs.getString("batch_no"),
+                rs.getBigDecimal("book_qty"),
+                rs.getBigDecimal("counted_qty"),
+                rs.getBigDecimal("variance_qty"),
+                rs.getLong("variance_amount_cent"),
+                rs.getString("reason"),
+                rs.getString("supplier_id"),
+                rs.getString("review_status"),
+                rs.getString("posted_ar_ap_item_id"),
+                rs.getString("merchant_id"),
+                nullableInstant(rs, "created_at"));
+    }
+
+    // ── P1#14 综合体计费（V110）：营业额抽成 / 保证金 / CAM ───────────────────
+
+    @Override
+    public Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, rule_name, rate_bps, min_amount_cent, max_amount_cent,
+                       effective_from, effective_to, status, created_at
+                  FROM turnover_rent_rules
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapTurnoverRentRule).stream().findFirst();
+    }
+
+    private TurnoverRentRuleRecord mapTurnoverRentRule(ResultSet rs, int rowNumber) throws SQLException {
+        return new TurnoverRentRuleRecord(
+                rs.getString("id"),
+                rs.getString("merchant_id"),
+                rs.getString("rule_name"),
+                rs.getInt("rate_bps"),
+                nullableLong(rs, "min_amount_cent"),
+                nullableLong(rs, "max_amount_cent"),
+                rs.getObject("effective_from", java.time.LocalDate.class),
+                rs.getObject("effective_to", java.time.LocalDate.class),
+                rs.getString("status"),
+                nullableInstant(rs, "created_at"));
+    }
+
+    @Override
+    public long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        // 回流营业额取数：只读 integration_order_syncs（第三方回流标准模型）。以 external_business_id 前缀关联商户口径
+        // 尚未在该表落商户列，故按 provider_code 关联商户的取数留待资料到位；当前以 provider_code=merchant 作为约定键，
+        // 取 order 类、synced 状态、created_at 落 [from, to) 的金额合计（分）。无数据=0。跨域只读，不改其写。
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0)
+                  FROM integration_order_syncs
+                 WHERE sync_type = 'order'
+                   AND status = 'synced'
+                   AND provider_code = :merchant_id
+                   AND created_at >= :from
+                   AND created_at < :to
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId)
+                .addValue("from", timestampWithTimeZone(fromInclusive))
+                .addValue("to", timestampWithTimeZone(toExclusive)), Long.class);
+        return total == null ? 0L : total;
+    }
+
+    @Override
+    public DepositLedgerRecord saveDepositLedger(DepositLedgerRecord ledger) {
+        jdbcTemplate.update("""
+                INSERT INTO deposit_ledger (
+                    id, merchant_id, action, amount_cent, balance_after_cent,
+                    ar_ap_item_id, reason, created_at
+                )
+                VALUES (
+                    :id, :merchant_id, :action, :amount_cent, :balance_after_cent,
+                    :ar_ap_item_id, :reason, :created_at
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", ledger.id())
+                .addValue("merchant_id", ledger.merchantId())
+                .addValue("action", ledger.action())
+                .addValue("amount_cent", ledger.amountCent())
+                .addValue("balance_after_cent", ledger.balanceAfterCent())
+                .addValue("ar_ap_item_id", ledger.arApItemId())
+                .addValue("reason", ledger.reason())
+                .addValue("created_at", timestampWithTimeZone(ledger.createdAt())));
+        return ledger;
+    }
+
+    @Override
+    public long currentDepositBalance(String merchantId) {
+        Long balance = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(
+                         (SELECT balance_after_cent
+                            FROM deposit_ledger
+                           WHERE merchant_id = :merchant_id
+                           ORDER BY created_at DESC, id DESC
+                           LIMIT 1), 0)
+                """, Map.of("merchant_id", merchantId), Long.class);
+        return balance == null ? 0L : balance;
+    }
+
+    @Override
+    public CamAllocationRecord saveCamAllocation(CamAllocationRecord allocation) {
+        jdbcTemplate.update("""
+                INSERT INTO cam_allocations (
+                    id, allocation_batch_id, merchant_id, period, total_amount_cent,
+                    weight_bps, allocated_amount_cent, ar_ap_item_id, created_at
+                )
+                VALUES (
+                    :id, :allocation_batch_id, :merchant_id, :period, :total_amount_cent,
+                    :weight_bps, :allocated_amount_cent, :ar_ap_item_id, :created_at
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", allocation.id())
+                .addValue("allocation_batch_id", allocation.allocationBatchId())
+                .addValue("merchant_id", allocation.merchantId())
+                .addValue("period", allocation.period())
+                .addValue("total_amount_cent", allocation.totalAmountCent())
+                .addValue("weight_bps", allocation.weightBps())
+                .addValue("allocated_amount_cent", allocation.allocatedAmountCent())
+                .addValue("ar_ap_item_id", allocation.arApItemId())
+                .addValue("created_at", timestampWithTimeZone(allocation.createdAt())));
+        return allocation;
+    }
+
+    @Override
+    public long sumCamPrepaidByMerchantAndPeriod(String merchantId, String settlementPeriod) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(allocated_amount_cent), 0)
+                  FROM cam_allocations
+                 WHERE merchant_id = :merchant_id
+                   AND settlement_period = :settlement_period
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId)
+                .addValue("settlement_period", settlementPeriod), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    @Override
+    public void markCamAllocationsTruedUp(String settlementPeriod) {
+        jdbcTemplate.update("""
+                UPDATE cam_allocations
+                   SET trued_up = TRUE
+                 WHERE settlement_period = :settlement_period
+                   AND trued_up = FALSE
+                """, new MapSqlParameterSource().addValue("settlement_period", settlementPeriod));
+    }
+
+    @Override
+    public CamTrueUpRunRecord saveCamTrueUpRun(CamTrueUpRunRecord run) {
+        jdbcTemplate.update("""
+                INSERT INTO cam_trueup_runs (
+                    id, settlement_period, actual_total_amount_cent, prepaid_total_amount_cent, status, created_at
+                )
+                VALUES (
+                    :id, :settlement_period, :actual_total_amount_cent, :prepaid_total_amount_cent, :status, :created_at
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", run.id())
+                .addValue("settlement_period", run.settlementPeriod())
+                .addValue("actual_total_amount_cent", run.actualTotalAmountCent())
+                .addValue("prepaid_total_amount_cent", run.prepaidTotalAmountCent())
+                .addValue("status", run.status())
+                .addValue("created_at", timestampWithTimeZone(run.createdAt())));
+        return run;
+    }
+
+    @Override
+    public CamTrueUpLineRecord saveCamTrueUpLine(CamTrueUpLineRecord line) {
+        jdbcTemplate.update("""
+                INSERT INTO cam_trueup_lines (
+                    id, run_id, merchant_id, weight_bps, actual_allocated_amount_cent,
+                    prepaid_amount_cent, diff_amount_cent, ar_ap_item_id, created_at
+                )
+                VALUES (
+                    :id, :run_id, :merchant_id, :weight_bps, :actual_allocated_amount_cent,
+                    :prepaid_amount_cent, :diff_amount_cent, :ar_ap_item_id, :created_at
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", line.id())
+                .addValue("run_id", line.runId())
+                .addValue("merchant_id", line.merchantId())
+                .addValue("weight_bps", line.weightBps())
+                .addValue("actual_allocated_amount_cent", line.actualAllocatedAmountCent())
+                .addValue("prepaid_amount_cent", line.prepaidAmountCent())
+                .addValue("diff_amount_cent", line.diffAmountCent())
+                .addValue("ar_ap_item_id", line.arApItemId())
+                .addValue("created_at", timestampWithTimeZone(line.createdAt())));
+        return line;
     }
 
     private DailyCloseSourceTotals aggregateTotals(
@@ -738,6 +1001,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("refund_amount_cent", refund.refundAmountCent())
                 .addValue("reason", refund.reason())
                 .addValue("refund_channel", refund.refundChannel())
+                .addValue("refund_direction", refund.refundDirection())
                 .addValue("status", refund.status())
                 .addValue("created_at", timestampWithTimeZone(refund.createdAt()));
     }
@@ -760,6 +1024,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("difference_type", difference.differenceType())
                 .addValue("business_ref", difference.businessRef())
                 .addValue("amount_cent", difference.amountCent())
+                .addValue("expected_amount_cent", difference.expectedAmountCent())
+                .addValue("actual_amount_cent", difference.actualAmountCent())
+                .addValue("source", difference.source())
                 .addValue("status", difference.status())
                 .addValue("created_at", timestampWithTimeZone(difference.createdAt()));
     }
@@ -816,9 +1083,17 @@ class JdbcFinanceRepository implements FinanceRepository {
                 resultSet.getString("difference_type"),
                 resultSet.getString("business_ref"),
                 resultSet.getLong("amount_cent"),
+                nullableLong(resultSet, "expected_amount_cent"),
+                nullableLong(resultSet, "actual_amount_cent"),
+                resultSet.getString("source"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at")
         );
+    }
+
+    private Long nullableLong(ResultSet resultSet, String column) throws SQLException {
+        long value = resultSet.getLong(column);
+        return resultSet.wasNull() ? null : value;
     }
 
 

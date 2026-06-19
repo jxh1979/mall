@@ -40,7 +40,7 @@ public class TerminalSwitchGuard {
             effective = repository.resolveEffectiveSwitch(terminalType, capabilityCode, scopes);
         } catch (RuntimeException exception) {
             // fail-closed：开关读取异常即拒绝，避免开关层故障导致受控能力放行。
-            reject(terminalType, capabilityCode, "switch_fetch_failed");
+            reject(terminalType, capabilityCode, "switch_fetch_failed", null);
             return; // unreachable，reject 必抛
         }
 
@@ -49,15 +49,37 @@ public class TerminalSwitchGuard {
             return;
         }
         if (!effective.get().enabled()) {
-            reject(terminalType, capabilityCode, "disabled");
+            reject(terminalType, capabilityCode, "disabled", effective.get());
         }
     }
 
-    private void reject(String terminalType, String capabilityCode, String reason) {
+    /**
+     * 写 terminal.access_rejected 留痕并抛 TERMINAL_DISABLED。
+     *
+     * <p>留痕 payload 含 PRD §6.3「终端开关后端拒绝铁律」要求的审计维度（scope_type / scope_id /
+     * business_system / module_code / device / terminal_type / capability / reason），以便审计
+     * 「谁在已关闭的端/模块上尝试了什么操作」。
+     *
+     * <p>失败语义：拒绝是失败事件，故 payload 显式带 {@code result=failure}（审计按失败过滤不再漏）。
+     * 注：审计列 event_result 由 evidence 模块 AuditEventService 写入；其 failure 重载仅允许 error_code
+     * 单字段 metadata，无法承载上述 scope 维度，故此处采用「带 result=failure 标记」的等价口径
+     * （见任务口径「recordFailure 或带 result=failure」），保留完整 scope payload。
+     *
+     * @param hit 命中的显式开关行（disabled 场景非空，可取其 scope_type/scope_id）；fail-closed 时为 null。
+     */
+    private void reject(String terminalType, String capabilityCode, String reason,
+            TerminalCapabilitySwitchRecord hit) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("terminal_type", terminalType);
-        payload.put("capability", capabilityCode);
-        payload.put("reason", reason);
+        // AuditEventService 用 Map.copyOf 持久化 metadata，含 null 值会抛 NPE，故仅在值非 null 时 put。
+        putIfPresent(payload, "terminal_type", terminalType);
+        putIfPresent(payload, "capability", capabilityCode);
+        putIfPresent(payload, "reason", reason);
+        putIfPresent(payload, "result", "failure");
+        putIfPresent(payload, "scope_type", hit != null ? hit.scopeType() : null);
+        putIfPresent(payload, "scope_id", hit != null ? hit.scopeId() : null);
+        putIfPresent(payload, "business_system", GateRequestContext.businessSystem());
+        putIfPresent(payload, "module_code", GateRequestContext.moduleCode());
+        putIfPresent(payload, "device", GateRequestContext.deviceId());
         try {
             auditEventService.recordSuccess(
                     EVENT,
@@ -73,5 +95,12 @@ public class TerminalSwitchGuard {
         }
         throw ApiException.forbidden("TERMINAL_DISABLED",
                 "terminal capability is disabled: " + capabilityCode);
+    }
+
+    /** 仅在值非 null 时写入 payload，避免下游 Map.copyOf 对 null 值抛 NPE 吞掉拒绝留痕。 */
+    private static void putIfPresent(Map<String, Object> map, String key, Object value) {
+        if (value != null) {
+            map.put(key, value);
+        }
     }
 }

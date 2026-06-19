@@ -105,6 +105,20 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     }
 
     @Override
+    public List<TerminalDeviceRecord> listDevicesByVenue(String venueId) {
+        // 商户面 scoped 读通道：按 terminal_devices.venue_id = token scope 过滤（AC-ISO-1，§4）。
+        return jdbcTemplate.query("""
+                SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
+                       mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
+                       staff_id, status, bound_at, returned_at, unbound_at, return_reason,
+                       unbind_reason, created_at, updated_at
+                  FROM terminal_devices
+                 WHERE venue_id = :venue_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("venue_id", venueId), this::mapDevice);
+    }
+
+    @Override
     public Optional<DeviceCredentialRecord> findDeviceCredentialByDeviceId(String deviceId) {
         return jdbcTemplate.query("""
                 SELECT device_id, token_sha256, status, created_at, updated_at

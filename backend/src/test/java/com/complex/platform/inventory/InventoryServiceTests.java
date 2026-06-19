@@ -22,6 +22,7 @@ import com.complex.platform.inventory.dto.PurchaseRequestCreate;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
+import com.complex.platform.inventory.dto.SavedBottleTransferRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
@@ -47,6 +48,7 @@ class InventoryServiceTests {
     private InMemoryAuditEventRepository auditEventRepository;
     private AuthorizationService authorizationService;
     private com.complex.platform.terminal.TerminalDeviceRepository terminalDeviceRepository;
+    private InMemoryTraceabilityRepository traceabilityRepository;
     private InventoryService service;
 
     private static final AccessActor ADMIN_ACTOR =
@@ -73,12 +75,14 @@ class InventoryServiceTests {
         com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard =
                 new com.complex.platform.gate.TerminalSwitchGuard(
                         terminalDeviceRepository, new AuditEventService(auditEventRepository));
+        traceabilityRepository = new InMemoryTraceabilityRepository();
         service = new InventoryService(
                 inventoryRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 authorizationService,
-                terminalSwitchGuard
+                terminalSwitchGuard,
+                new com.complex.platform.evidence.TraceabilityService(traceabilityRepository, authorizationService)
         );
     }
 
@@ -190,7 +194,9 @@ class InventoryServiceTests {
                 "customer_1",
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
-                Instant.now().plusSeconds(3600)
+                Instant.now().plusSeconds(3600),
+                "123456", "客人甲", null, null, null,
+                List.of("reg_photo"), null
         ));
 
         assertThatThrownBy(() -> service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
@@ -199,7 +205,8 @@ class InventoryServiceTests {
                 List.of(),
                 List.of(Map.of("quantity", 2)),
                 "13800138000",
-                "123456"
+                "123456",
+                "123456", "客人甲"
         )))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -216,7 +223,9 @@ class InventoryServiceTests {
                 "customer_1",
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Vodka", "unit", "bottle")),
-                Instant.now().plusSeconds(3600)
+                Instant.now().plusSeconds(3600),
+                "123456", "客人甲", null, null, null,
+                List.of("reg_photo"), null
         ));
         SavedBottleClaimRequest firstClaim = new SavedBottleClaimRequest(
                 "claim-once",
@@ -224,7 +233,8 @@ class InventoryServiceTests {
                 List.of(),
                 List.of(Map.of("quantity", 1)),
                 "13800138000",
-                "123456"
+                "123456",
+                "123456", "客人甲"
         );
 
         SavedBottleClaimRecord first = service.claimSavedBottle(savedBottle.id(), firstClaim);
@@ -235,7 +245,8 @@ class InventoryServiceTests {
                 List.of(),
                 List.of(Map.of("quantity", 1)),
                 "13800138000",
-                "123456"
+                "123456",
+                "123456", "客人甲"
         ));
 
         assertThat(second).isEqualTo(first);
@@ -286,6 +297,47 @@ class InventoryServiceTests {
                         "inventory.purchase_request_changed",
                         "operation_handover.created"
                 );
+        // P1#18 三层留痕接线：建交接链即建过程实例（process_type=inventory_delivery），消除孤岛。
+        assertThat(traceabilityRepository.instances).containsKey(handover.id());
+        assertThat(traceabilityRepository.instances.get(handover.id()).processType())
+                .isEqualTo("inventory_delivery");
+    }
+
+    @Test
+    void traceHandoverFullChainWritesThreeLayerProcessStepsAndCompletes() {
+        InventoryItemRecord item = createItem("trace-chain-item");
+        TraceHandoverChainView created = service.createTraceHandover(
+                new com.complex.platform.inventory.dto.TraceHandoverCreateRequest(
+                        "chain-create", "TRACE-CHAIN", item.id(), "device_chain", List.of()));
+        String handoverId = created.handover().id();
+
+        // 五段：out_verify(员工) → dispatch(机器人) → kitchen_receive → staff_pickup → deliver_customer。
+        service.scanTraceSegment(handoverId, new com.complex.platform.inventory.dto.TraceScanSegmentRequest(
+                "seg-out", "out_verify"));
+        service.reportRobotSegment(handoverId, new com.complex.platform.inventory.dto.TraceRobotReportRequest(
+                "seg-dispatch", "robot_task_1", "delivered", false));
+        service.scanTraceSegment(handoverId, new com.complex.platform.inventory.dto.TraceScanSegmentRequest(
+                "seg-kitchen", "kitchen_receive"));
+        service.scanTraceSegment(handoverId, new com.complex.platform.inventory.dto.TraceScanSegmentRequest(
+                "seg-pickup", "staff_pickup"));
+        TraceHandoverChainView done = service.scanTraceSegment(
+                handoverId, new com.complex.platform.inventory.dto.TraceScanSegmentRequest(
+                        "seg-deliver", "deliver_customer"));
+
+        assertThat(done.handover().overallStatus()).isEqualTo("completed");
+        // 三层留痕：过程实例收口 completed + 五段过程步骤入库（含机器人段 robot_callback）。
+        assertThat(traceabilityRepository.instances.get(handoverId).status()).isEqualTo("completed");
+        assertThat(traceabilityRepository.listStepsByInstance(handoverId))
+                .extracting(com.complex.platform.evidence.TraceabilityStepRecord::stepCode)
+                .containsExactlyInAnyOrder(
+                        "out_verify", "dispatch", "kitchen_receive", "staff_pickup", "deliver_customer");
+        assertThat(traceabilityRepository.listStepsByInstance(handoverId))
+                .filteredOn(s -> "dispatch".equals(s.stepCode()))
+                .singleElement()
+                .satisfies(s -> {
+                    assertThat(s.actorType()).isEqualTo("robot");
+                    assertThat(s.captureSource()).isEqualTo("robot_callback");
+                });
     }
 
     @Test
@@ -428,7 +480,8 @@ class InventoryServiceTests {
                 "saved-identity", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Whisky", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LABEL-XYZ", "张三", "13800138000", true, 100000L));
+                "LABEL-XYZ", "张三", "13800138000", true, 100000L,
+                List.of("reg_photo"), null));
 
         SavedBottleClaimRecord review = service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
                 "claim-mismatch", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "WRONG-LABEL"));
@@ -440,6 +493,133 @@ class InventoryServiceTests {
                 .containsExactly("pending_identity_review", 2);
     }
 
+    // P0#4(R6-D05): 散客（customer_id 可空）可存，登记三件套（姓名昵称+标签值+登记照片）落库。
+    @Test
+    void walkInGuestCanStoreBottleWithoutCustomerId() {
+        InventoryItemRecord item = createItem("walkin-item");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-walkin", null, List.of(), null /* 散客无 customer_id */, "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LBL-WALKIN", "散客张", "13800138000", null, null,
+                List.of("reg_photo_1"), "前台手填"));
+
+        assertThat(bottle.customerId()).isNull();
+        assertThat(bottle.status()).isEqualTo("stored");
+        assertThat(bottle.bottleLabelValue()).isEqualTo("LBL-WALKIN");
+        assertThat(bottle.customerNameOrNickname()).isEqualTo("散客张");
+        assertThat(bottle.registrationPhotoRefs()).containsExactly("reg_photo_1");
+        assertThat(bottle.manualNote()).isEqualTo("前台手填");
+    }
+
+    // P0#4: 登记缺标签值/姓名昵称/登记照片任一 → 拒。
+    @Test
+    void createSavedBottleRejectsWhenRegistrationMissing() {
+        InventoryItemRecord item = createItem("reg-missing");
+        assertThatThrownBy(() -> service.createSavedBottle(new SavedBottleRequest(
+                "saved-reg-miss", null, List.of(), null, "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                null, "散客张", null, null, null, List.of("reg_photo"), null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+
+        assertThatThrownBy(() -> service.createSavedBottle(new SavedBottleRequest(
+                "saved-reg-miss2", null, List.of(), null, "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LBL", "散客张", null, null, null, List.of() /* 无登记照片 */, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    // P0#4: 取酒核身——标签值+姓名昵称同时一致才出酒（正例）。
+    @Test
+    void claimWithMatchingLabelAndNicknameDispenses() {
+        InventoryItemRecord item = createItem("claim-id-ok");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-idok", null, List.of(), null, "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Rum", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LBL-OK", "李四", "13800138000", null, null, List.of("reg_photo"), null));
+
+        SavedBottleClaimRecord ok = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
+                "claim-ok", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
+                "LBL-OK", "李四"));
+        assertThat(ok.status()).isEqualTo("picked_up");
+    }
+
+    // P0#4: 取酒核身——姓名昵称不符即使标签值一致也进人工复核、不出酒（反例）。
+    @Test
+    void claimWithMismatchedNicknameEntersReview() {
+        InventoryItemRecord item = createItem("claim-id-bad");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-idbad", null, List.of(), null, "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Rum", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LBL-OK", "李四", "13800138000", null, null, List.of("reg_photo"), null));
+
+        SavedBottleClaimRecord review = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
+                "claim-name-bad", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
+                "LBL-OK", "王五"));
+        assertThat(review.status()).isEqualTo("pending_identity_review");
+        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().remainingQuantity())
+                .isEqualTo(2);
+    }
+
+    // P0#4: 转赠——原瓶 transferred、流水留痕、新瓶 stored 归受让人。
+    @Test
+    void transferSavedBottleReassignsToNewOwner() {
+        InventoryItemRecord item = createItem("transfer-item");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-transfer", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 3, "bottle_name", "Tequila", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LBL-TR", "原主", "13800138000", null, null, List.of("reg_photo"), null));
+
+        SavedBottleRecord newBottle = service.transferSavedBottle(bottle.id(), new SavedBottleTransferRequest(
+                "transfer-1", null, List.of("transfer_evidence"), "受赠人赵", "13900139000", "生日礼"));
+
+        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
+                .isEqualTo("transferred");
+        assertThat(newBottle.status()).isEqualTo("stored");
+        assertThat(newBottle.customerId()).isNull();
+        assertThat(newBottle.customerNameOrNickname()).isEqualTo("受赠人赵");
+        assertThat(newBottle.remainingQuantity()).isEqualTo(3);
+        assertThat(inventoryRepository.savedBottleTransfers).hasSize(1);
+        assertThat(inventoryRepository.savedBottleTransfers.getFirst().toNameOrNickname()).isEqualTo("受赠人赵");
+    }
+
+    // P0#4: 已转赠/非 stored 不可再转赠。
+    @Test
+    void transferRejectsWhenNotStored() {
+        InventoryItemRecord item = createItem("transfer-bad");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-transfer-bad", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Tequila", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LBL-TRB", "原主", null, null, null, List.of("reg_photo"), null));
+        service.transferSavedBottle(bottle.id(), new SavedBottleTransferRequest(
+                "transfer-bad-1", null, List.of(), "受赠人", null, null));
+
+        assertThatThrownBy(() -> service.transferSavedBottle(bottle.id(), new SavedBottleTransferRequest(
+                "transfer-bad-2", null, List.of(), "再受赠人", null, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_TRANSFERABLE");
+    }
+
+    // P0#4: 争议受理——stored 置 disputed。
+    @Test
+    void disputeSavedBottleMovesToDisputedState() {
+        InventoryItemRecord item = createItem("dispute-item");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-dispute", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Brandy", "unit", "bottle")),
+                Instant.now().plusSeconds(3600),
+                "LBL-DP", "客", null, null, null, List.of("reg_photo"), null));
+
+        SavedBottleRecord disputed = service.disputeSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "dispute-1", null, List.of(), "客人质疑酒量", List.of(), List.of()));
+        assertThat(disputed.status()).isEqualTo("disputed");
+    }
+
     // R5 T6: 高价值存酒作废缺视频（仅照片）→ 拒（双证据须分类）
     @Test
     void highValueSavedBottleCancelRejectsWhenVideoMissing() {
@@ -447,7 +627,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+                Instant.now().plusSeconds(3600), "LBL-HV", "客", null, true, 500000L,
+                List.of("reg_photo"), null));
 
         // 仅照片、缺视频 → 拒。
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -473,7 +654,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-wording", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+                Instant.now().plusSeconds(3600), "LBL-HVW", "客", null, true, 500000L,
+                List.of("reg_photo"), null));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-wording", null, List.of(), "broken", List.of(), List.of("att_video"))))
@@ -491,7 +673,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-approve", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+                Instant.now().plusSeconds(3600), "LBL-HVA", "客", null, true, 500000L,
+                List.of("reg_photo"), null));
 
         SavedBottleRecord frozen = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-approve", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
@@ -513,7 +696,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-reject", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+                Instant.now().plusSeconds(3600), "LBL-HVR", "客", null, true, 500000L,
+                List.of("reg_photo"), null));
 
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-reject", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
@@ -534,7 +718,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-non-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "House", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), null, null, null, false, 1000L));
+                Instant.now().plusSeconds(3600), "LBL-NHV", "客", null, false, 1000L,
+                List.of("reg_photo"), null));
 
         SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-non-hv", null, List.of(), "broken", List.of(), List.of()));
@@ -711,7 +896,9 @@ class InventoryServiceTests {
                 "customer_1",
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
-                Instant.now().plusSeconds(3600)
+                Instant.now().plusSeconds(3600),
+                "VERIFY-XYZ", "客人甲", null, null, null,
+                List.of("reg_photo"), null
         ));
 
         assertThatThrownBy(() -> service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
@@ -1284,6 +1471,15 @@ class InventoryServiceTests {
             return claim;
         }
 
+        final List<SavedBottleTransferRecord> savedBottleTransfers = new ArrayList<>();
+
+        @Override
+        public SavedBottleTransferRecord saveSavedBottleTransfer(SavedBottleTransferRecord transfer) {
+            savedBottleTransfers.removeIf(t -> t.id().equals(transfer.id()));
+            savedBottleTransfers.add(transfer);
+            return transfer;
+        }
+
         @Override
         public TraceHandoverRecord saveTraceHandover(TraceHandoverRecord handover) {
             traceHandovers.removeIf(h -> h.id().equals(handover.id()));
@@ -1402,8 +1598,97 @@ class InventoryServiceTests {
             return new ArrayList<>(highValueReviews.values());
         }
 
+        // P1#18：供应商资质/结算子表（本测试不触达，统一抛出）。
+        @Override public SupplierQualificationRecord saveSupplierQualification(SupplierQualificationRecord q) {
+            throw new UnsupportedOperationException("not needed");
+        }
+        @Override public List<SupplierQualificationRecord> listSupplierQualificationsBySupplier(String s) {
+            throw new UnsupportedOperationException("not needed");
+        }
+        @Override public List<SupplierQualificationRecord> listSupplierQualificationsByMerchant(String m) {
+            throw new UnsupportedOperationException("not needed");
+        }
+        @Override public List<SupplierQualificationRecord> listSupplierQualifications() {
+            throw new UnsupportedOperationException("not needed");
+        }
+        @Override public SupplierSettlementMethodRecord saveSupplierSettlementMethod(SupplierSettlementMethodRecord m) {
+            throw new UnsupportedOperationException("not needed");
+        }
+        @Override public List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsBySupplier(String s) {
+            throw new UnsupportedOperationException("not needed");
+        }
+        @Override public List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsByMerchant(String m) {
+            throw new UnsupportedOperationException("not needed");
+        }
+        @Override public List<SupplierSettlementMethodRecord> listSupplierSettlementMethods() {
+            throw new UnsupportedOperationException("not needed");
+        }
+
         private String balanceKey(String itemId, String locationId) {
             return itemId + ":" + locationId;
+        }
+    }
+
+    /** 三层留痕内存替身：仅承载交接流程接线所需的过程实例/步骤 upsert。 */
+    private static final class InMemoryTraceabilityRepository
+            implements com.complex.platform.evidence.TraceabilityRepository {
+        final Map<String, com.complex.platform.evidence.TraceabilityProcessInstanceRecord> instances =
+                new LinkedHashMap<>();
+        final Map<String, com.complex.platform.evidence.TraceabilityStepRecord> steps = new LinkedHashMap<>();
+        final Map<String, com.complex.platform.evidence.TraceabilityResponsibilityRecord> responsibilities =
+                new LinkedHashMap<>();
+
+        @Override
+        public com.complex.platform.evidence.TraceabilityProcessInstanceRecord saveProcessInstance(
+                com.complex.platform.evidence.TraceabilityProcessInstanceRecord record) {
+            instances.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public Optional<com.complex.platform.evidence.TraceabilityProcessInstanceRecord> findProcessInstanceById(
+                String id) {
+            return Optional.ofNullable(instances.get(id));
+        }
+
+        @Override
+        public List<com.complex.platform.evidence.TraceabilityProcessInstanceRecord> listProcessInstances(
+                String merchantScope) {
+            return new ArrayList<>(instances.values());
+        }
+
+        @Override
+        public com.complex.platform.evidence.TraceabilityStepRecord saveStep(
+                com.complex.platform.evidence.TraceabilityStepRecord record) {
+            steps.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public List<com.complex.platform.evidence.TraceabilityStepRecord> listStepsByInstance(
+                String processInstanceId) {
+            return steps.values().stream()
+                    .filter(s -> processInstanceId.equals(s.processInstanceId()))
+                    .toList();
+        }
+
+        @Override
+        public com.complex.platform.evidence.TraceabilityResponsibilityRecord saveResponsibility(
+                com.complex.platform.evidence.TraceabilityResponsibilityRecord record) {
+            responsibilities.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public Optional<com.complex.platform.evidence.TraceabilityResponsibilityRecord> findResponsibilityById(
+                String id) {
+            return Optional.ofNullable(responsibilities.get(id));
+        }
+
+        @Override
+        public List<com.complex.platform.evidence.TraceabilityResponsibilityRecord> listResponsibilities(
+                String merchantScope) {
+            return new ArrayList<>(responsibilities.values());
         }
     }
 }

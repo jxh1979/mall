@@ -37,6 +37,25 @@ final class GateRequestContext {
         return scopes;
     }
 
+    /** 当前请求的 business_system（X-Business-System 头），无=null。 */
+    static String businessSystem() {
+        return blankToNull(header("X-Business-System"));
+    }
+
+    /** 当前请求的 module_code（X-Module-Code 头），无=null。 */
+    static String moduleCode() {
+        return blankToNull(header("X-Module-Code"));
+    }
+
+    /** 当前请求的 device id（X-Device-Id 头），无=null。 */
+    static String deviceId() {
+        return blankToNull(header("X-Device-Id"));
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
     private static String header(String name) {
         HttpServletRequest request = currentRequest();
         if (request == null) {

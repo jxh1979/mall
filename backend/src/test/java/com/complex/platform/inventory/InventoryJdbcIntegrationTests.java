@@ -261,6 +261,74 @@ class InventoryJdbcIntegrationTests {
     }
 
     @Test
+    void migrationV112CreatesSupplierQualificationSettlementTablesSeedsAndPersists() {
+        // P1#18 子表存在 + 权限 seed。
+        assertThat(regclass("supplier_qualifications")).isEqualTo("supplier_qualifications");
+        assertThat(regclass("supplier_settlement_methods")).isEqualTo("supplier_settlement_methods");
+        assertThat(permissionCodes()).contains(
+                "inventory.supplier.qualification.manage",
+                "inventory.supplier.settlement.manage");
+        assertThat(platformAdminPermissionCodes()).contains(
+                "inventory.supplier.qualification.manage",
+                "inventory.supplier.settlement.manage");
+
+        jdbcTemplate.update("""
+                INSERT INTO inventory_suppliers (id, supplier_name, supplier_type, status, created_at, updated_at)
+                VALUES ('sup_q', 'Q Supplier', 'general', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+
+        // 资质 round-trip（含附件 JSONB + 有效期）。
+        repository.saveSupplierQualification(new SupplierQualificationRecord(
+                "qual_jdbc", "sup_q", "food_business_license", "FB-1", "市监局",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2030-01-01"),
+                List.of("att_a", "att_b"), "active", now, now, "m_a"));
+        assertThat(repository.listSupplierQualificationsBySupplier("sup_q"))
+                .extracting(SupplierQualificationRecord::id, SupplierQualificationRecord::qualificationType,
+                        SupplierQualificationRecord::attachmentIds)
+                .contains(tuple("qual_jdbc", "food_business_license", List.of("att_a", "att_b")));
+        assertThat(repository.listSupplierQualificationsByMerchant("m_a"))
+                .extracting(SupplierQualificationRecord::id).contains("qual_jdbc");
+
+        // 结算多档 round-trip（默认档 + 账期）。
+        repository.saveSupplierSettlementMethod(new SupplierSettlementMethodRecord(
+                "settle_jdbc", "sup_q", "monthly", 30, "spirit", true, "active", now, now, "m_a"));
+        assertThat(repository.listSupplierSettlementMethodsBySupplier("sup_q"))
+                .extracting(SupplierSettlementMethodRecord::id, SupplierSettlementMethodRecord::settlementMethod,
+                        SupplierSettlementMethodRecord::paymentTermDays, SupplierSettlementMethodRecord::isDefault)
+                .contains(tuple("settle_jdbc", "monthly", 30, true));
+        assertThat(repository.listSupplierSettlementMethodsByMerchant("m_a"))
+                .extracting(SupplierSettlementMethodRecord::id).contains("settle_jdbc");
+    }
+
+    @Test
+    void supplierQualificationCheckRejectsIllegalType() {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_suppliers (id, supplier_name, supplier_type, status, created_at, updated_at)
+                VALUES ('sup_qchk', 'QChk Supplier', 'general', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO supplier_qualifications (id, supplier_id, qualification_type)
+                VALUES ('qual_bad', 'sup_qchk', 'spaceship_permit')
+                """)).hasMessageContaining("chk_supplier_qual_type");
+    }
+
+    @Test
+    void supplierSettlementCheckRejectsIllegalMethod() {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_suppliers (id, supplier_name, supplier_type, status, created_at, updated_at)
+                VALUES ('sup_schk', 'SChk Supplier', 'general', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO supplier_settlement_methods (id, supplier_id, settlement_method)
+                VALUES ('settle_bad', 'sup_schk', 'barter')
+                """)).hasMessageContaining("chk_supplier_settle_method");
+    }
+
+    @Test
     void purchaseRequestStatusCheckAllowsLegacyCreatedAndRejectsIllegal() {
         // 现状写入值 'created' 须被 CHECK 接受（兼容历史/既有写入）。
         jdbcTemplate.update("""

@@ -613,6 +613,63 @@ P0 处理口径：
 }
 ```
 
+### 11.4A 企微违规规则码与命中表（wecom_risk_hits）
+
+> 修正(2026-06-19 R5业务HTML缺口审计 F6)：业务HTML #risk 要求识别"企业微信会话中的私单、私收款、辱骂、违规承诺、诱导私人微信"，且"会话每天归档后自动进入规则检查，疑似违规进复核队列"。代码核验：①命中表 `wecom_risk_hits` 在 migration **无 CREATE TABLE**（已 Grep 全库佐证不存在），但 §5.8/§5.10/§11.1 已多处把它当已存在对象引用（敏感词命中数、违规命中数、WeComRiskHit），存在引用悬空；②`analytics_risk_rules`（V017，rule_code UNIQUE）中**无任何企微违规规则码**（STAFF_PRIVATE_PAYMENT/私单/辱骂/诱导等 Grep 全部为空），§10.7 虽列出 STAFF_PRIVATE_PAYMENT/STAFF_PRIVATE_CONTACT/STAFF_BAD_ATTITUDE/STAFF_ILLEGAL_PROMISE 等规则码但未落库为可执行规则。本章把"规则码清单 + 命中表 + 命中→复核闭环"落为可编码口径，使采集（V087 真实）→规则检查→命中→复核这一链路完整。
+
+#### 11.4A.1 企微违规规则码清单（落 analytics_risk_rules）
+
+> 规则码与 §10.7 员工与沟通风控规则保持一致命名；本表给出业务HTML #risk 列举五类违规的权威规则码。每条规则码须 INSERT 进 `analytics_risk_rules`（rule_code + domain=`conversation`/`staff` + risk_level + enabled），P0 先以关键词/违规模式命中（AI 语义质检 V096 预留、默认关，见 §16.3）。
+
+| 规则码 | 违规类型（业务HTML #risk） | 风险等级 | 启停 |
+|---|---|---|---|
+| STAFF_PRIVATE_DEAL | 私单（绕过平台私下成交） | high | enabled |
+| STAFF_PRIVATE_PAYMENT | 私收款（个人收款、转账意图，与 §10.7 同码） | high | enabled |
+| ABUSE | 辱骂（辱骂、威胁、推诿等语义命中，对应 §10.7 STAFF_BAD_ATTITUDE） | suspicious | enabled |
+| ILLEGAL_PROMISE | 违规承诺（承诺无法履约或违规折扣，对应 §10.7 STAFF_ILLEGAL_PROMISE） | suspicious | enabled |
+| LURE_PRIVATE_WECHAT | 诱导私人微信（诱导加私人微信/手机号，对应 §10.7 STAFF_PRIVATE_CONTACT） | high | enabled |
+
+> 注：上表与 §10.7 是同一组规则在企微会话域的落地视角；§10.7 给风控规则总表，本表给业务HTML #risk 五类违规的规则码与等级，编码以 `analytics_risk_rules` 中的 rule_code 为唯一执行准绳。私单与私收款拆为两条规则码（STAFF_PRIVATE_DEAL 私下成交、STAFF_PRIVATE_PAYMENT 个人收款），辱骂/违规承诺/诱导私聊各一条，覆盖业务HTML #risk 全五类。
+
+#### 11.4A.2 命中表 `wecom_risk_hits`（待建，P0）
+
+> 该表此前被 §5.8/§5.10/§11.1 引用但在 migration 无定义（Grep 佐证），本节给可编码字段契约。命中由"每日归档会话进入规则检查"产生（见 §11.2 流程图 G 节点风险命中）。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| hit_id | uuid | 主键 |
+| conversation_id | uuid | 关联会话（V087 `wecom_conversations`） |
+| message_id | uuid nullable | 命中消息（V087 `wecom_messages`，可选指向具体证据消息） |
+| rule_code | varchar | 命中规则码（关联 analytics_risk_rules：STAFF_PRIVATE_DEAL/STAFF_PRIVATE_PAYMENT/ABUSE/ILLEGAL_PROMISE/LURE_PRIVATE_WECHAT 等） |
+| risk_level | varchar | 风险等级（notice/suspicious/high/critical，与 §10.2 D6 口径一致） |
+| matched_snippet | text | 命中片段；**按脱敏策略存储/展示**——一般展示按权限脱敏，不脱敏原文仅限最小授权+审批的取证/质检场景（合规 §4.3、§11.5 第 5 条） |
+| status | varchar | 处置状态：`open`→`reviewing`→`confirmed`/`dismissed`（命中初始 open，进复核 reviewing，确认违规 confirmed，误报驳回 dismissed） |
+| reviewer_id | uuid nullable | 复核人（进入复核/改判时写入，审计） |
+| project_id | uuid nullable | 综合体归属（预留，原始需求） |
+| created_at | timestamptz | 命中产生时间 |
+| updated_at | timestamptz | 状态更新时间 |
+
+#### 11.4A.3 命中→统一异常复核队列（与 F2 risk_alerts 衔接）
+
+- 命中（`wecom_risk_hits`，status=open）须进入**统一异常复核队列**，与 §10/F2 风控告警表 `analytics_risk_alerts`（V017，status: open→investigating→resolved/dismissed）衔接，标 **source_domain=wecom**（标识命中来源域为企微会话）。
+  > 代码核验：`analytics_risk_alerts`（V017）有 status（open/investigating/resolved/dismissed）但 Grep 未见 source_domain 字段，本期须补该列以区分企微违规来源；命中入队后复核动作在统一风控复核入口完成，对应业务HTML"疑似违规进复核队列"。
+- 命中状态机与告警状态机映射：`wecom_risk_hits.status` open（命中待入队）→ reviewing（进入复核队列/investigating）→ confirmed（确认违规，可联动处置）/ dismissed（误报驳回）。
+
+#### 11.4A.4 事件
+
+- `wecom.risk.hit_detected`：归档会话规则检查命中违规规则、产生命中记录时发出（载荷含 conversation_id/rule_code/risk_level）。
+- `wecom.risk.hit_reviewed`：命中被复核改判（confirmed/dismissed）时发出（载荷含 hit_id/reviewer_id/新状态）。
+  > 两事件须在 operation-traceability §4.1 权威字典登记后方可被分析 SQL/风控消费（D4：分析域只消费平台标准事件名）；§7.1 conversation 大类现已登记 `wecom.message_received`/`wecom.risk_hit`/`wecom.conversation_synced`，本两事件为其细化，须按 §4.1 收口登记。
+
+#### 11.4A.5 验收口径
+
+1. 向 `analytics_risk_rules` 录入上述企微违规规则码后，归档会话命中规则**产生 `wecom_risk_hits` 命中记录**并进入统一复核队列（status=open→reviewing），疑似违规可见、可复核。
+2. 命中被复核**确认违规（status=confirmed）后可关联处置**（与 analytics_risk_alerts 衔接，可生成工单/通知主管，并可联动 §10.7 员工沟通风控处置）。
+
+> **待业务确认**（修正 2026-06-19 R5业务HTML缺口审计 F6）：
+> - 各规则码（私单/私收款/辱骂/违规承诺/诱导私人微信）的判定阈值与样本语料（关键词集/违规模式/置信度阈值），决定 P0 关键词质检的召回与误报水平。
+> - 是否引入企微 AI 语义质检（V096 预留：能力开关 `wecom.ai_qc.enabled` 默认关、`wecom_messages.ai_qc_status`/`ai_qc_result` 预留字段）以提升辱骂/违规承诺等语义类违规的识别；开启后由谁配置厂商/本地 LLM 适配器。
+
 ### 11.5 企业微信会话留存合规
 
 > 修订说明（2026-06-07，依据 C3 / compliance §4 / phone-2 / business-decision-log §22）：现状口径"永久保存 + 不脱敏 + 管理者可查"只解决了"谁能看、看了留痕"，未解决"凭什么合法收集与无限期保存"。PIPL 要求存储期限为实现处理目的所必要的**最短**时间。本节把企微会话留存的合规要求落为可编码口径，作为 P0 合规阻断项，详细法律口径见《合规与个人信息保护要求》§4（C3）。

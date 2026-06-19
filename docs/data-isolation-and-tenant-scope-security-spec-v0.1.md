@@ -109,6 +109,35 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 
 该 plan 应对齐 `verify:tenant-isolation`（ISO-GAP-02）契约闸口，作为机审守卫与单测的回归底座。
 
+## 6A. 租户隔离机审闸口与越权台账（verify:tenant-isolation）
+
+> 修正(2026-06-19 R5业务HTML缺口审计 F8/F9/F10)：依据业务HTML/治理HTML「商户看不到其他商户 / 平台全局」，与本规格 §6 缺口登记——**ISO-GAP-02** 自认"无 `verify:tenant-isolation` 自动闸口；隔离靠人工/单测，机审基线只统计 OpenAPI auth context，验不到 DB 行级隔离（待建）"，**ISO-GAP-01** 自认权威安全 finding 台账"无跨租户越权 finding 系列"（手工补登待生成器纳管）。本章把"机审闸口 + 越权台账"补成可落地规格，闭合"机审可发现未隔离查询、越权请求被拒并留痕"。
+
+### 6A.1 CI 机审闸口（`verify:tenant-isolation`）
+
+闸口职责：扫描含 `merchant_id` / `project_id`（及 `organization_id` 等 scope 列，见 §1 语义）的表与查询，校验是否**强制注入 scope**，缺失即失败。
+
+- **扫描对象：**
+  - **表清单**：以 `domain-ownership-scope-audit-v0.1.csv` 为权威表清单（§8 双向绑定），逐表确认 scope_type/scope_source 已登记；新增带租户数据的表未登记 → 失败。
+  - **查询/Repository**：扫描访问上述表的查询（JPA/Repository/原生 SQL），校验 scope 谓词来自**安全 token 注入**（§2 权威约定：scope 绝不取请求参数）；存在未注入 scope 的读/写查询 → 失败。
+- **失败口径（fail-closed）：** 任一"应隔离表的查询缺 scope 注入""scope 来源为请求参数""新增表未在 CSV/§3 登记"→ 闸口判失败，阻断合入。
+- **白名单例外：** 平台全局参考表（如 `staff_levels`、`roles` NULL=平台全局）须显式登记为"无 scope/平台全局"，方可豁免行级 scope 注入校验，避免误报。
+- **与现有机审关系：** 现有机审基线只统计 OpenAPI auth context（验不到 DB 行级隔离），本闸口补 DB/查询级行级隔离校验，二者互补，不重复。
+
+### 6A.2 越权 finding 台账（证据留痕）
+
+- **台账落点：** 在权威安全 finding 台账（`security-scans/findings-register-v1.md` / `formal-security-baseline-v1.md`）补 `SEC-*-TENANT-ISOLATION-*` 系列条目（对齐 ISO-GAP-01），由生成器纳管，不再仅手工补登。
+- **每条 finding 记录证据：** 构造的越权请求（跨商户/跨项目读或写）、token 的真实 scope、请求体中尝试越权的 scope、实际结果（被拒/被忽略写入 token scope）、对应表与用例编号（AC-ISO-1/2/3/4，见 §4、§6 ISO-GAP-04 表清单）。
+- **机审发现项入台账：** `verify:tenant-isolation` 扫出的"未隔离查询/未登记表"也作为 finding 入台账并跟踪闭环，形成"机审发现 → 台账登记 → 修复 → 回归"链路。
+
+### 6A.3 验收
+
+- **越权被拒并留痕：** 构造跨商户、跨项目越权请求（读与写），读被隔离（看不到他人数据）、写被强制落 token 的 scope（请求体越权 scope 被忽略，见 §4 Given/When/Then），且每条用例在越权台账留下证据条目。
+- **机审可发现未隔离查询：** 故意引入一条"应隔离表缺 scope 注入"或"新增表未登记 CSV/§3"的变更，`verify:tenant-isolation` 必须判失败并阻断；修复后通过。
+- **回归底座对齐：** 验收用例集对齐 §6 ISO-GAP-04 表清单（V044–V061）与 AC-ISO-1/2/3/4 四条，作为机审与单测共用回归底座。
+
+> **待业务确认：** `verify:tenant-isolation` 机审闸口纳入哪条 CI 流水（避免与现有 gate 如 `verify:openapi-closure`、安全基线机审冲突或重复阻断），由治理/工程负责人裁定接入点与阻断级别。
+
 ## 7. V050 主管复核持久化数据模型（此前仅在 .sql，本规格补字段级文档）
 
 表 `supervisor_review_decisions`（V050 新建）：

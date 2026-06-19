@@ -50,4 +50,26 @@ public enum ApprovalLevel {
             case SPECIFIC_ROLE -> 0;
         };
     }
+
+    /**
+     * 双轨收口（platform-governance §24.3）：当发起人无职级配置（level_rank 未知 = 0）时，
+     * 不再静默降级为"仅按主管级"放行，而是返回一个安全保守的所需审批人 rank 下限——
+     * 以策略所需主管级（{@code requiredLevel}，0..3）推导，绝不弱于既有 rank 闸：
+     * <ul>
+     *   <li>{@link #TOP_AUTHORITY} → 顶级 {@link #MAX_RANK}；
+     *   <li>{@link #TWO_LEVELS_UP} / {@link #ONE_LEVEL_UP} → 以"假设发起人位于该主管级对应主职级"为下限，
+     *       即 {@code max(requiredLevel,1) * LEVEL_STEP} 再叠加升级步长，并夹到 {@link #MAX_RANK}；
+     *   <li>{@link #SPECIFIC_ROLE} → 0（不按 rank，由角色闸判定，调用方另行处理）。
+     * </ul>
+     * 这样"无职级配置"反而要求更高、更安全的审批人，而非旁路。
+     */
+    public int conservativeRequiredApproverRank(int requiredLevel) {
+        int floorRank = Math.max(requiredLevel, 1) * LEVEL_STEP;
+        return switch (this) {
+            case ONE_LEVEL_UP -> Math.min(floorRank + LEVEL_STEP, MAX_RANK);
+            case TWO_LEVELS_UP -> Math.min(floorRank + 2 * LEVEL_STEP, MAX_RANK);
+            case TOP_AUTHORITY -> MAX_RANK;
+            case SPECIFIC_ROLE -> 0;
+        };
+    }
 }

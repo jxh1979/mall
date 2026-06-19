@@ -1,0 +1,5 @@
+{
+  "note": "verify:tenant-isolation 已知缺口 baseline（棘轮底座）。闸口对此清单之外的新增 finding 硬失败；每条须在 security-scans/findings-register-v1.md tenant-isolation 小节有对应 SEC-*-TENANT-ISOLATION-* 证据；修复后从本清单与台账移除以收紧闸口。重建：node tools/verify-tenant-isolation.mjs --write-baseline。",
+  "generated_at_source": "static scan of Jdbc*Repository.java vs domain-ownership-scope-audit-v0.1.csv",
+  "known_findings": []
+}

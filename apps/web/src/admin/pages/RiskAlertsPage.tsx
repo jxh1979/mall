@@ -2,10 +2,14 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
+
+// 后端写权限码（AnalyticsController：/risk-alerts/{id}/resolve）
+const RISK_RESOLVE_PERMISSION = "analytics.risk_alert.manage";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, RiskAlertRow } from "../types";
 
@@ -50,7 +54,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds, result };
 }
 
-export function RiskAlertsPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function RiskAlertsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<RiskAlertRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [alertType, setAlertType] = React.useState("staff_behavior");
@@ -101,6 +105,18 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError }: AdminPa
     await runAction("risk_alert_created", request, () => api.post("/api/v1/analytics/risk-alerts", request));
   }
 
+  function validateResolve() {
+    if (!selected) {
+      setFormError(TEXT.noAlert);
+      return false;
+    }
+    if (!resolutionReason.trim()) {
+      setFormError(TEXT.reasonRequired);
+      return false;
+    }
+    return true;
+  }
+
   async function resolveAlert() {
     if (!selected) {
       setFormError(TEXT.noAlert);
@@ -143,7 +159,16 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError }: AdminPa
         </div>
         <div className="admin-form-row" data-testid="risk-alert-actions">
           <button type="button" data-testid="risk-alert-create" disabled={busyAction !== ""} onClick={() => void createAlert()}>{TEXT.create}</button>
-          <button type="button" data-testid="risk-alert-resolve" disabled={busyAction !== ""} onClick={() => void resolveAlert()}>{TEXT.resolve}</button>
+          <HighRiskConfirm
+            label={TEXT.resolve}
+            impact="预警将被置为已解决并写入审计留痕，下游统计与风险看板按此关闭。"
+            disabled={busyAction !== ""}
+            precheck={validateResolve}
+            onConfirm={() => void resolveAlert()}
+            permissionsState={effectivePermissions}
+            permissions={[RISK_RESOLVE_PERMISSION]}
+            data-testid="risk-alert-resolve"
+          />
         </div>
         <div className="admin-muted-action" data-testid="risk-alerts-boundary">{TEXT.boundary}</div>
         {formError ? <div data-testid="risk-alert-error" className="admin-inline-error">{formError}</div> : null}

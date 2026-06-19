@@ -116,6 +116,7 @@ final class AmusementMaintenanceService {
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
         checkProjectOwnership(projectId);
         String vendorId = requireText(actual.maintenanceVendorId(), "maintenance_vendor_id");
+        requireExistingVendor(vendorId);
         String result = enumValue(actual.result(), RESULTS, "result");
         String sourceTerminal = enumValue(actual.sourceTerminal(), SOURCE_TERMINALS, "source_terminal");
         String engineerName = trimToNull(actual.engineerName());
@@ -189,6 +190,26 @@ final class AmusementMaintenanceService {
                 now,
                 existing.createdAt(),
                 existing.merchantId()));
+    }
+
+    /**
+     * 检修单位存在性/可用性校验（amuse-3 / 设计 §6.6.1，审计 ④）：
+     * 检修单位须为供应链供应商主数据（inventory_suppliers）中真实存在的记录，避免软引用悬空。
+     * <ul>
+     *   <li>供应商不存在 → 拒绝（MAINTENANCE_VENDOR_NOT_FOUND）。</li>
+     *   <li>供应商已停用（status != active，paused/archived）→ 拒绝（MAINTENANCE_VENDOR_NOT_AVAILABLE）。</li>
+     * </ul>
+     * 注：供应商主表 supplier_type 无枚举收口（默认 'general'），文档口径 maintenance/service 与实际列名不一致，
+     * 强卡类别会误伤存量数据；故此处以「存在 + status=active」作为类别合适性的稳妥近似，不强卡 supplier_type 取值。
+     */
+    private void requireExistingVendor(String vendorId) {
+        String status = repository.findMaintenanceVendorStatus(vendorId)
+                .orElseThrow(() -> ApiException.badRequest(
+                        "MAINTENANCE_VENDOR_NOT_FOUND", "maintenance vendor does not exist in suppliers"));
+        if (!"active".equals(status)) {
+            throw ApiException.badRequest(
+                    "MAINTENANCE_VENDOR_NOT_AVAILABLE", "maintenance vendor is not active");
+        }
     }
 
     private AmusementMaintenanceRecord findRecord(String recordId) {

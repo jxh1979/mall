@@ -87,6 +87,19 @@
 ### 4.2 字段/配置
 - 会话留存策略：`retention_policy_code`、`retention_days`(或 permanent_with_basis)、`disposal_action`(archive/delete/anonymize)、`legal_basis`、`employee_notice_id`
 
+### 4.3 企微会话违规检测与处置闭环（P0）
+
+> 修正(2026-06-19 R5业务HTML缺口审计 F6)：业务HTML #risk 明确"企业微信会话中的私单、私收款、辱骂、违规承诺、诱导私人微信"应被识别，且"会话每天归档后自动进入规则检查，疑似违规进复核队列"。代码核验：采集侧 `wecom_conversations`/`wecom_messages`/`wecom_access_audits`/`wecom_retention_policies`（V087）真实落地，AI 质检接缝（V096：能力开关默认关 + `wecom_messages.ai_qc_status`/`ai_qc_result` 预留字段）亦在；但**违规判定为空壳**——命中表 `wecom_risk_hits` 在 migration 中无 CREATE TABLE（已 Grep 佐证全库无定义），`analytics_risk_rules`（V017，rule_code UNIQUE）中亦无任何企微违规规则码（STAFF_PRIVATE_PAYMENT/私单/辱骂/诱导等 Grep 全部为空）。即"采集真实、留存/审计真实，但违规命中→复核队列这一闭环缺失"。本小节把该缺口落为 P0 合规口径，规则码与命中表设计见 data-risk-ai-development-design《企微违规规则码与命中表(wecom_risk_hits)》章节。
+
+1. **数据流（合规口径）**：`wecom_conversations` 每日归档后自动进入规则检查（私单/私收款/辱骂/违规承诺/诱导私人微信等）→ 命中产生违规记录（命中表 `wecom_risk_hits`，待建）→ 命中进入统一异常复核队列（与 analytics_risk_alerts 衔接，标 source_domain=wecom），疑似违规由人工复核确认或驳回。这对应业务HTML"归档→规则检查→疑似违规进复核队列"。
+2. **留存/到期/脱敏/访问审计已有 V087，但违规判定为空壳**：留存策略（`wecom_retention_policies`）、可配置留存/到期处置（archive/delete/anonymize）、查看访问审计（`wecom_access_audits`）均已真实落地；但规则检查与命中记录这一层本期 P0 必须补齐，否则"识别私单/辱骂/诱导"等合规承诺仍只是口头，无任何命中数据与复核闭环。
+3. **不脱敏原文的合规边界（重申）**：会话原文查看须按权限控制；**不脱敏展示仅限有最小授权 + 审批的取证/质检场景**，普通展示场景敏感字段（手机号/证件/支付账号等）按权限脱敏；任何查看不脱敏原文均须写入访问审计（`wecom_access_audits` / `audit_events`）。违规命中样例（`matched_snippet`）展示同样遵循该脱敏策略，仅取证/质检授权场景方可见不脱敏原文。此为 §4.1 第 4 条与 §11.5 第 5 条的重申，避免补违规检测时绕开既有合规边界。
+4. **验收口径**：①向 `analytics_risk_rules` 录入企微违规规则码后，归档会话命中规则能产生命中记录并进入复核队列（疑似违规可见、可复核）；②查看命中原文（不脱敏）须最小授权 + 审批并写入访问审计记录（可举证"谁、何时、看了哪条会话原文"）。
+
+> **待业务确认**（修正 2026-06-19 R5业务HTML缺口审计 F6）：
+> - 企业微信授权配置由谁一次性完成（治理HTML列为待确认项；合规 §4 现状亦标"企微授权配置由谁完成"待定）。该授权直接决定每日归档采集与规则检查能否真实运转。**业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：企微授权配置责任人确认为**由系统管理员(superadmin)一次性配置授权与密钥，并指定岗位复核**（覆盖原 R6 默认"合规管理员"口径，改为 superadmin 配置 + 指定岗位复核）；此项不再为待定项。
+> - 规则误报的人工申诉流程：员工对被判定违规（如辱骂/诱导误判）的申诉入口、复核改判与改判后命中状态（confirmed→dismissed）的处置口径。
+
 ---
 
 ## 5. 员工私人手机设备凭证/设备检测合规（C4，关联报告 A6/phone-3）

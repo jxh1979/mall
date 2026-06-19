@@ -173,6 +173,9 @@ final class AmusementInspectionService {
         }
         String overall = enumOrDefault(actual.overallResult(), "pending_rectification", OVERALL_RESULTS, "overall_result");
         Instant now = Instant.now();
+        // V114 结构化补强：巡检人结构化落库；inspection_result 直接派生自 overall_result（同枚举域，便于看板/审计读结构化字段）；
+        // 异常标记：overall 非 pass 即异常，abnormal_note 取请求填报。
+        boolean abnormal = !"pass".equals(overall);
         return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 "inspection_" + slug(actual.idempotencyKey()),
                 projectId,
@@ -189,7 +192,11 @@ final class AmusementInspectionService {
                 trimToNull(actual.operatorNote()),
                 evidence(actual.evidenceAttachmentIds()),
                 now,
-                now
+                now,
+                trimToNull(actual.inspectorId()),
+                overall,
+                abnormal,
+                trimToNull(actual.abnormalNote())
         ));
     }
 
@@ -228,7 +235,11 @@ final class AmusementInspectionService {
                 trimToDefault(actual.comment(), existing.operatorNote()),
                 evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                 existing.createdAt(),
-                now
+                now,
+                existing.inspectorId(),
+                existing.inspectionResult(),
+                existing.abnormalFound(),
+                existing.abnormalNote()
         ));
     }
 
@@ -266,7 +277,11 @@ final class AmusementInspectionService {
                 trimToDefault(actual.comment(), existing.operatorNote()),
                 evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                 existing.createdAt(),
-                now
+                now,
+                existing.inspectorId(),
+                existing.inspectionResult(),
+                existing.abnormalFound(),
+                existing.abnormalNote()
         ));
     }
 
@@ -307,7 +322,12 @@ final class AmusementInspectionService {
                 trimToDefault(actual.comment(), existing.operatorNote()),
                 evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                 existing.createdAt(),
-                now
+                now,
+                existing.inspectorId(),
+                // 复检结论刷新结构化 inspection_result；pass 视为异常已消除。
+                result,
+                !"pass".equals(result),
+                existing.abnormalNote()
         ));
     }
 
@@ -320,6 +340,12 @@ final class AmusementInspectionService {
             throw ApiException.conflict("RECHECK_PASS_REQUIRED", "recheck pass is required before reopen approval");
         }
         Instant now = Instant.now();
+        // 断链修复（清单#18）：原"批准恢复营业"仅置 reopen_status=approved，不联动 amusement_projects.open_status，
+        // 导致"批准恢复营业却不恢复营业态"。此处补联动——批准后若项目仍处停业态（maintenance/closed），
+        // 用与检修线 confirmMaintenanceResume 一致的乐观锁 updateProjectOpenStatus 翻转为 open；
+        // 取舍：安全巡检审批是独立恢复路径（无需依赖独立检修单也能恢复），故对 maintenance 与 closed 均尝试恢复；
+        // 项目已处运营态（open/paused）则不强翻——避免与暂停线/检修线冲突（paused 为人工暂停，不由巡检审批顶替）。
+        reopenProjectIfBlocked(existing.projectId());
         return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 existing.id(),
                 existing.projectId(),
@@ -336,8 +362,26 @@ final class AmusementInspectionService {
                 trimToDefault(actual.reason(), existing.operatorNote()),
                 evidenceOrExisting(actual.evidenceAttachmentIds(), existing.evidenceAttachmentIds()),
                 existing.createdAt(),
-                now
+                now,
+                existing.inspectorId(),
+                existing.inspectionResult(),
+                existing.abnormalFound(),
+                existing.abnormalNote()
         ));
+    }
+
+    /**
+     * 批准恢复营业时联动项目营业态：仅当项目当前处于停业态（maintenance/closed）时翻转为 open，
+     * 与检修线 confirmMaintenanceResume 同口径（乐观锁 updateProjectOpenStatus(expected→new)）。
+     * 已处运营态（open/paused）不动；两线不冲突：检修线只翻 maintenance→open，巡检线在无独立检修单时亦可从 closed 恢复。
+     */
+    private void reopenProjectIfBlocked(String projectId) {
+        AmusementProjectRecord project = repository.findProjectById(projectId)
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+        String current = project.openStatus();
+        if ("maintenance".equals(current) || "closed".equals(current)) {
+            repository.updateProjectOpenStatus(projectId, current, "open");
+        }
     }
 
     private AmusementSafetyInspectionRecord findInspection(String inspectionId) {

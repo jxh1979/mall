@@ -1084,6 +1084,37 @@ sequenceDiagram
 - 酒吧内酒水消耗需要由酒吧系统写库存事件，票务记录权益使用事件。
 - 卡座预约入场名额不生成可转移的票务通票权益，不抵扣最低消费，不参与票务分账；超出卡座名额或进入其他酒吧必须按正常票务/入场规则处理。
 
+#### 10.4.1 存酒登记与取酒核身字段（契约对齐）<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：F4 存酒核身契约对齐，权威小节，bar-operations 设计指向本小节口径 -->
+
+存酒（saved bottle）虽不属于票务核心，但"取酒资格 / 取酒核身"会作为权益或事件被票务/终端引用，故在此统一登记契约口径，酒吧经营子系统（`bar-operations-development-design.md` §5.3 / §6.11 / §7.5）须与本小节一致。
+
+- **登记必填字段（缺任一被拒）**：
+  - `customer_name_or_nickname`：客户姓名或昵称（散客无会员时落此，作核身比对项之一）。
+  - `bottle_label_value`：瓶底标签数值（取酒核身的强制比对项）。
+  - `registration_photo_refs`（array）：登记时刻照片证据引用（区别于取酒/作废流水证据 `saved_bottle_movements.evidence_ref`）。
+  - `manual_note`：人工备注（区别于通用 `remark`）。
+  - `customer_phone`：客户手机号（散客核身主键之一）。
+- **`customer_id` 改为可空**：散客（无会员）允许存酒，核身改用 `customer_phone` + `customer_name_or_nickname` + `bottle_label_value`，外键指向 foundation `customers.id`，可空。
+- **取酒核身规则**：不再仅凭"手机号 + 验证码"。取酒必须比对 `bottle_label_value`（瓶底标签数值）**且** 比对 `customer_name_or_nickname`（姓名/昵称）通过，方可放行；原 `claim_by_phone` / `verification_code` 作为附加校验项保留。
+- **新增操作 `transferSavedBottle`（转赠）**：将存酒资产转赠给其他客户，原记录可直接更换客户归属或关闭旧记录并创建新记录，写转赠事件。
+- **新增状态 `disputed`（争议）及入口**：存酒归属/数量争议进入 `disputed`，提供争议登记入口，待人工/主管处置后流转。
+- **事件**：`saved_bottle.registered` / `saved_bottle.claimed` / `saved_bottle.transferred` / `saved_bottle.voided` / `saved_bottle.disputed`。
+
+**验收**：①登记缺 4 必填（`bottle_label_value` / `registration_photo_refs` / `customer_name_or_nickname` 任一缺失，含 `manual_note` / `customer_phone` 按业务必填校验）被拒；②取酒须"标签数值 + 姓名/昵称"比对通过方可放行；③散客（无 `customer_id`）可存酒。
+
+> **待业务确认**：散客（无 `customer_id`）存酒的上限/风控策略（单散客可存瓶数、有效期、高价值散客存酒是否强制升级核身）。
+>
+> **业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：散客存酒**不限瓶数**（取消原 R6 默认"单手机号≤3 瓶"上限），仅按**存期默认 90 天（后台可配）+ 到期提醒 + 作废须主管复核**管控；即散客存酒风控口径 = 不限瓶数 + 存期 90 天(后台可配) + 到期提醒 + 作废主管复核。
+
+**契约变更清单（待同步 `openapi-p0.json`）**：本小节字段口径需同步到契约 `SavedBottleRequest` / `SavedBottleClaimRequest`，详见下表（与 `openapi-p0.json` 的处理方式见本仓库 §15 变更日志及 openapi 文件处理说明）。
+
+| 契约 schema | 变更 | 字段 |
+|---|---|---|
+| `SavedBottleRequest` | 新增属性 | `customer_name_or_nickname`、`bottle_label_value`、`registration_photo_refs`（array）、`manual_note`、`customer_phone` |
+| `SavedBottleRequest` | required 调整 | 移除 `customer_id`（改可空）；required 含 `bottle_label_value`、`registration_photo_refs`、`customer_name_or_nickname` |
+| `SavedBottleClaimRequest` | 新增比对属性 | `bottle_label_value`、`customer_name_or_nickname`（保留原 `claim_by_phone` / `verification_code`） |
+| paths | 待评估 | `transferSavedBottle`（转赠）端点；对齐 `POST /api/v1/bar/saved-bottles/{id}/transfer` |
+
 ### 10.5 与游乐系统
 
 | 游乐业务 | 票务关系 |
@@ -1142,6 +1173,121 @@ sequenceDiagram
 - 跨商户越权核销。
 - 退款后继续核销。
 - 第三方回调金额或次数异常。
+
+## 10A. 积分入账引擎（earn）规格<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：F7 积分入账引擎规格，闭合"有表无引擎"(PTS-001 待编码)缺口 -->
+
+> 背景：积分底层表已落库（`customer_points_accounts` V009 / `customer_points_ledger` V025 / `customer_redemption_catalog_items` V025 / `customer_points_rules` V060 / `frozen_points`+过期字段 V089），但消费事件→积分入账的引擎仍为 `p0-implementation-task-list.md` §12A 的 PTS-001/002/003 待编码任务。本章把 earn（入账）规格落到设计层，消除"有表无引擎"的验收风险。本章为票务侧引擎口径权威，与 PTS-001 任务、foundation §6B.5 一致。
+
+### 10A.1 触发与计分
+
+- **触发事件**：消费 / 出票 / 核销事件 → 命中 `customer_points_rules` 计分。消费金额（实付金额）只是规则的**可配置条件之一**，不是唯一计分依据；规则可按动作类型、票种、商户/场地、时段等条件命中。
+- **计分金额口径**：按实付金额计分时，须明确含/不含赠送部分、不含已退部分（与 PTS-001 一致）。
+- 命中规则后写 `customer_points_ledger.change_type=earn`、更新 `customer_points_accounts.balance`，发 `points.earned` 事件。
+
+### 10A.2 退款冲减（deduct）
+
+- 订单退款 / 部分退款时，按比例（按金额）或按行（按已计积分行）`deduct` 冲减；写 `customer_points_ledger.change_type=deduct`，关联原入账记录，回扣 `customer_points_accounts.balance`，发 `points.deducted` 事件。
+
+### 10A.3 防超兑 / 并发
+
+- 兑换扣积分与扣库存（`customer_redemption_catalog_items.stock_quantity` / 供应链 `stock_movements`）须在同一事务内以**行锁或乐观锁**保护，禁止超兑、禁止负库存。
+- 高价值/可撤销场景走 `frozen_points` 冻结—回滚流程：发起兑换先冻结积分（`frozen_points`），成功提交再实扣，失败/超时回滚解冻。
+
+### 10A.4 幂等
+
+- 按来源单据幂等：以 `source_doc_type` + `source_doc_id` 去重，防消费事件重放导致重复入账/重复冲减。
+
+### 10A.5 事件
+
+- `points.earned`（入账）/ `points.deducted`（退款冲减/冲正）；兑换/过期事件 `points.redeemed` / `points.expired` 见 PTS-002/003。
+
+### 10A.6 统一表名权威源（废弃旧名）
+
+以**实际迁移表名为权威**，分析域/契约/文档统一引用，旧名废弃：
+
+| 权威表名（迁移来源） | 语义 | 废弃旧名 |
+|---|---|---|
+| `customer_points_accounts`（V009） | 积分账户（余额/等级/`frozen_points` V089） | — |
+| `customer_points_ledger`（V025） | 积分明细（earn/deduct/redeem_consume/expire/adjust） | — |
+| `customer_redemption_catalog_items`（V025/V060） | 可兑换礼物/目录（承接礼物语义） | `point_gifts` |
+| `customer_points_rules`（V060） | 积分规则引擎 | `points_rules` |
+| 兑换记录（明细 redeem_consume + 兑换表，V025/V060） | 兑换扣减/扣库存联动 | `point_redemptions` |
+
+> 注：字面 `points_rules` / `point_gifts` / `point_redemptions` 按 V060 收敛口径**不建表**，文档与契约引用须改为上表真实表名。
+
+### 10A.7 验收
+
+- **E2E**：下单 → 支付 → +积分（earn 入账写 ledger、更新 balance、发 `points.earned`）→ 退款 → 冲减（deduct 写 ledger、回扣 balance、发 `points.deducted`），同一来源单据重放不重复入账/冲减。
+- **并发**：并发兑换不超兑、不出现负库存；冻结—回滚在失败/超时后积分与库存均一致。
+
+> **待业务确认**：earn 触发点以"支付成功"还是"核销"为准（影响幂等键来源单据类型与计分时点；可能两者皆需，按规则条件区分）。
+
+## 10B. 防伪签名 P0 例外标注 + 积分审计接线 + 核销 reversed 态收口（R6 全闭环(2026-06-19)）
+
+> 背景（依据 R6 审计）：防伪二维码设计承诺"校验二维码签名"（§5.3 第 2 步、§6.2.3 防伪要求），但 P0 实现现状为 `signature_valid` 恒 NULL 且不阻断核销（见顶部 R7 横幅"signature_valid 恒 NULL"），形成"设计要求校验 vs 实现不校验"的误实现风险，且口径未在核销序列正文标注例外。同时，积分入账/冲减事件（§10A `points.earned`/`points.deducted`）只发业务事件，未进 `audit_events` 跨域审计时间线，审计断点；核销 `reversed` 态（§4.5）有状态枚举但缺状态机与冲正事件落点。本节就地收口三项，与 §5.3、§6.2.3、§10A、§4.5 对齐，引用 R6-D06（积分 earn）、R6-D13（revenue.net）。
+
+### 10B.1 防伪签名 P0/P1 例外标注（消除"设计要求校验 vs 实现不校验"误实现风险）
+
+**P0 防伪基线（不依赖 HMAC 数字签名，必须阻断）：**
+
+- P0 以"凭证哈希 + 刷新窗口锚点（`window_started_at`，V066）+ nonce 防重放 + 在线核验"为防伪基线，**不以 HMAC 数字签名为 P0 阻断条件**。
+- 截图/过刷新窗口：展示凭证按票种级 `refresh_interval_seconds`（V064，{30,60}）刷新，`expires_at` 与刷新窗口联动，**过窗口即失效、核销被拒**（事后核对维度 `window_valid`）。
+- 重放：`ticket_verifications.nonce` + 唯一索引 `uq_ticket_verifications_nonce(entitlement_id,nonce) WHERE status='success'`，**同一 nonce 第二次核销撞唯一键被拒**。
+- 在线核验：P0 不做离线核验，凭证原始值不落客户端。
+
+**P1 防伪增强（HMAC 签名版本化，`signature_valid` 阻断）：**
+
+- `ticket_credentials.signature_value`/`signature_version`（schema 已落，V066）+ `ticket_credential_verification_audits.signature_valid` 列**已就位但 P0 不写签名算法/校验逻辑**，`signature_valid` P0 恒 NULL（不参与阻断判定）。
+- HMAC-SHA256/EdDSA 签名生成与校验、密钥版本轮换、`signature_valid=false` 阻断核销并写风险事件，**列为 P1**（裁决降级，见顶部 R7 横幅第 1 条）。
+
+**口径修正（消除误实现风险）：**
+
+- §5.3 核销校验顺序第 2 步"防伪：校验二维码签名…"中的"签名"在 **P0 指哈希/刷新窗口/nonce 校验，不指 HMAC 数字签名**；HMAC 数字签名校验（`signature_valid` 阻断）为 P1。编码时不得因 §5.3/§6.2.3 出现"签名"字样而误把 HMAC 校验当 P0 必做，也不得把"P0 不校验 HMAC 签名"误读为"P0 无防伪"。
+- §6.2.3 防伪要求"签名不匹配…必须拒绝核销"在 P0 由"哈希不匹配/过刷新窗口/nonce 重放"承接拒绝；HMAC"签名不匹配"拒绝为 P1。
+
+**验收口径：**
+
+| 维度 | P0 验收（必过） | P1 验收（HMAC 上线后） |
+|---|---|---|
+| 截图/过窗口 | 过 `refresh_interval_seconds` 刷新窗口的二维码核销被拒（`window_valid=false`） | 同 P0 |
+| 重放 | 同一 nonce 第二次核销撞唯一键被拒 | 同 P0 |
+| 篡改载荷 | 凭证哈希不匹配被拒（`tamper_result=suspected_tampered`） | 额外校验 HMAC `signature_valid=false` 被拒 |
+| HMAC 签名 | `signature_valid` 恒 NULL，不参与阻断（不视为缺陷） | `signature_valid=false` 阻断核销并写风险事件 |
+
+### 10B.2 积分留痕接入 audit_events（跨域审计时间线可查，R6-D06）
+
+> 背景：§10A 积分入账/冲减只发 `points.earned`/`points.deducted` 业务事件，未进 `audit_events`，跨域审计（按客户/订单/操作追溯积分变动）时间线断。本小节把积分动作接入统一审计事件中心，与票务核销、退款等动作在同一审计时间线可查。
+
+- **接线**：`points.earned`（入账）/`points.deducted`（退款冲减/冲正）在写 `customer_points_ledger` 同事务内写入 `audit_events`，保证业务事件与审计留痕一致（同幂等键 `source_doc_type`+`source_doc_id`，§10A.4）。
+- **`audit_events` 枚举补齐**：
+  - `event_category` 补 `points` 类目（与现有 `ticketing`/`finance` 等并列）。
+  - `subject_type` 补 `points`（主体定位到 `customer_points_accounts`/`customer_points_ledger`）。
+- **审计字段最小集**：`event_category=points`、`event_type`∈{`points.earned`,`points.deducted`}、`subject_type=points`、`subject_id`（ledger 记录 id 或账户 id）、`customer_id`、`source_doc_type`/`source_doc_id`、`change_amount`（积分变动，正入账/负冲减）、`occurred_at`、`actor`（系统/操作人）。
+- **跨域时间线**：可按 `customer_id` 或 `source_doc_id`（订单/退款单）在 `audit_events` 串起"下单→支付→earn 入账→退款→deduct 冲减"全链路，与 §10A.7 E2E 一致。
+- 兑换/过期事件 `points.redeemed`/`points.expired`（PTS-002/003）同口径接入 `audit_events`，P0 先接 earn/deduct，redeem/expire 随 PTS-002/003 编码同步接入。
+
+> 与 R6-D13（`revenue.net`）边界：积分入账/冲减进 `audit_events` 仅作审计留痕与跨域追溯，**不并入 `revenue.net` 净收入**（与 V078 通票收入拆分"不并入 revenue.net"同口径，避免重复计净收入）。
+
+**验收口径：**
+
+- earn/deduct 写 ledger 成功后，`audit_events` 必有对应 `event_category=points`、`subject_type=points` 记录，且 `source_doc_*` 与 ledger 一致；同一来源单据重放不重复写审计（幂等）。
+- 按 `customer_id` 查 `audit_events` 可还原该客户积分变动完整时间线，与 `customer_points_ledger` 逐条对应。
+
+### 10B.3 核销 reversed 态收口（状态机 + 冲正事件，与退款联动）
+
+> 背景：§4.5 核销记录状态已含 `reversed`（已冲正），但状态机迁移与冲正事件落点未在本子系统正文显式收口。本小节补 `ticket_verifications`（核销记录）reversed 状态机与冲正事件 `verification.reversed`，与退款流程（§5.6）联动。
+
+- **状态机**：`success → reversed`。冲正时原核销记录 `status: success → reversed`，新建一条 `status=reversed` 的冲正记录指向原记录 id（与顶部 R7 横幅 V067 冲正实现一致：回滚 `used_times`、原记录置 `reversed`、新记录指向原 id）。`failed`/`preview_passed` 不可冲正（无成功扣次，无需冲正）。
+- **权益联动**：冲正回滚权益次数（§4.4 扣次规则"核销冲正：恢复次数…状态恢复为 unused 或 partially_used"），并生成结算冲正（§5.8）。
+- **冲正事件**：写 `verification.reversed`（核销冲正），载荷含原核销记录 id、冲正记录 id、`issued_entitlement_id`、回滚次数/人数、操作人、原因；同步进 `audit_events`（`event_category=ticketing`、`subject_type=verification`）。
+- **与退款联动（§5.6）**：退款涉及已核销权益且配置允许冲正时，退款流程触发核销冲正 → 写 `verification.reversed` → 回滚权益与结算 → 再走退款资金流；已核销权益默认不可退，仅在配置冲正+审批规则时联动（§5.6"已核销权益默认不可退，除非配置了冲正和审批规则"）。
+- **权限/接口**：冲正走 `POST /verifications/{id}/reverse`、权限 `ticket.verify.reverse`(high)（顶部 R7 横幅 V067），核销冲正列 P1 扩展（§12.2 第 4 项），P0 预留状态机与事件落点、不强制启用客人侧自助冲正。
+
+**验收口径：**
+
+- 冲正一条 `success` 核销：原记录 → `reversed`、新建 `reversed` 冲正记录指向原 id、权益次数/人数回滚、结算冲正生成、写 `verification.reversed` 且进 `audit_events`。
+- 对 `failed`/`preview_passed`/已 `reversed` 记录发起冲正：拒绝并提示不可冲正。
+- 退款联动：已核销权益按配置触发冲正后再退款，`verification.reversed` 与退款事件可在 `audit_events` 按 `source_doc_id` 串联。
 
 ## 11. Java 后端模块建议
 
@@ -1295,3 +1441,6 @@ com.complex.ticketing
 | 2026-06-07 | 注 | §6.2.3/PRD §12 | 确认 P0 不支持权益转赠，开发设计不引入转赠流程与 transfer_* 字段 | 与 PRD critic-12 裁决一致；finding critic-12 |
 | 2026-06-12 可编码收口 | 改 | §7 | 将旧管理端/核销端接口表头改为历史能力路径和历史权限参考；强调未进入 OpenAPI 与 operation 验收矩阵的能力不得开发 Controller、SDK/mock 或接口自动化 | 防止早期 `/api/admin/*`、`/api/verifications/*` 路径反向约束正式票务接口 |
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §7 | 票务历史能力路径必须能在 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md` 定位 exact path 或 operationId；否则只能按 P1/P2 补契约后开发 | 防止票务库存、渠道导入、凭证替换等历史能力绕过权限、事件、任务和样例准入追溯 |
+| 2026-06-19 R5业务HTML缺口审计 F4 | 增 | §10.4.1 | 新增"存酒登记与取酒核身字段（契约对齐）"小节：登记 4 必填、`customer_id` 可空（散客存酒）、取酒须比对瓶底标签数值+姓名/昵称、`transferSavedBottle` 转赠与 `disputed` 争议态、saved_bottle.* 五事件；附契约变更清单（待同步 openapi-p0.json） | F4 存酒核身契约对齐；bar-operations §5.3 指向本小节 |
+| 2026-06-19 R5业务HTML缺口审计 F7 | 增 | §10A | 新增"积分入账引擎（earn）规格"章节：触发/计分、退款冲减、防超兑并发（行锁/乐观锁+frozen_points 冻结回滚）、source_doc 幂等、points.earned/deducted 事件、统一表名权威源（customer_points_* 真实表，废弃 point_gifts/point_redemptions/points_rules 字面名） | F7 闭合"有表无引擎"(PTS-001 待编码) |
+| 2026-06-19 R6 全闭环 | 增 | §10B | 新增"防伪签名 P0 例外标注 + 积分审计接线 + 核销 reversed 态收口"章节：①§5.3/§6.2.3"签名"在 P0 指哈希/刷新窗口/nonce 校验、HMAC 数字签名(signature_valid 阻断)为 P1，给 P0/P1 各自验收口径，消除"设计要求校验 vs 实现不校验"误实现；②points.earned/deducted 接入 audit_events(event_category 补 points、subject_type 补 points)，跨域审计时间线可查，不并入 revenue.net；③核销 reversed 态补状态机(success→reversed)+冲正事件 verification.reversed，与退款联动 | R6 审计：防伪口径未标例外、积分未进 audit_events、reversed 态缺；引用 R6-D06/R6-D13 |

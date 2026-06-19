@@ -97,8 +97,8 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("finance-payment-reason").fill("客户部分付款");
     await page.getByTestId("finance-payment-submit").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("partial");
-    await page.getByTestId("finance-export").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("导出已留痕");
+    // 导出后端接口未就绪：按 P0 要求去除“假留痕”，按钮禁用并提示，不再伪造导出结果。
+    await expect(page.getByTestId("finance-export")).toBeDisabled();
   });
 
   test("ADM-MVP-06 integration adapter rejects plaintext secret and supports mock test", async ({ page }) => {

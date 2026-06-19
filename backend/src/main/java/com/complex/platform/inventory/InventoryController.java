@@ -20,7 +20,9 @@ import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
+import com.complex.platform.inventory.dto.SupplierQualificationRequest;
 import com.complex.platform.inventory.dto.SupplierReconciliationRequest;
+import com.complex.platform.inventory.dto.SupplierSettlementMethodRequest;
 import com.complex.platform.inventory.dto.SupplyContractApproveRequest;
 import com.complex.platform.inventory.dto.SupplyContractCreateRequest;
 import com.complex.platform.inventory.dto.WarehouseCreateRequest;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -44,6 +47,7 @@ public class InventoryController {
     private final SupplyContractService supplyContractService;
     private final PurchaseRequestService purchaseRequestService;
     private final WarehouseService warehouseService;
+    private final SupplierQualificationService supplierQualificationService;
     private final AuthorizationService authorizationService;
 
     public InventoryController(
@@ -51,12 +55,14 @@ public class InventoryController {
             SupplyContractService supplyContractService,
             PurchaseRequestService purchaseRequestService,
             WarehouseService warehouseService,
+            SupplierQualificationService supplierQualificationService,
             AuthorizationService authorizationService
     ) {
         this.service = service;
         this.supplyContractService = supplyContractService;
         this.purchaseRequestService = purchaseRequestService;
         this.warehouseService = warehouseService;
+        this.supplierQualificationService = supplierQualificationService;
         this.authorizationService = authorizationService;
     }
 
@@ -158,6 +164,28 @@ public class InventoryController {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.cancelSavedBottle(id, request));
+    }
+
+    // P0#4：存酒转赠（R6-D05）。
+    @PostMapping("/saved-bottles/{id}/transfer")
+    public ApiResponse<SavedBottleRecord> transferSavedBottle(
+            @PathVariable String id,
+            @RequestBody com.complex.platform.inventory.dto.SavedBottleTransferRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.transferSavedBottle(id, request));
+    }
+
+    // P0#4：存酒争议受理（disputed 入状态机）。
+    @PostMapping("/saved-bottles/{id}/dispute")
+    public ApiResponse<SavedBottleRecord> disputeSavedBottle(
+            @PathVariable String id,
+            @RequestBody SavedBottleCancelRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.disputeSavedBottle(id, request));
     }
 
     // ── R5 T6：库存域内高价值复核（saved_bottle_void/damage_report/stock_variance）──
@@ -361,5 +389,41 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.warehouse.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(warehouseService.createWarehouse(request));
+    }
+
+    // ── P1#18：供应商资质（进货查验） ─────────────────────────────────────────────
+    @GetMapping("/supplier-qualifications")
+    public ApiResponse<PageResponse<SupplierQualificationRecord>> listSupplierQualifications(
+            @RequestParam(name = "supplier_id", required = false) String supplierId
+    ) {
+        authorizationService.requirePermission("inventory.supplier.qualification.manage");
+        return ApiResponse.ok(supplierQualificationService.listQualifications(supplierId));
+    }
+
+    @PostMapping("/supplier-qualifications")
+    public ApiResponse<SupplierQualificationRecord> createSupplierQualification(
+            @RequestBody SupplierQualificationRequest request
+    ) {
+        authorizationService.requirePermission("inventory.supplier.qualification.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(supplierQualificationService.createQualification(request));
+    }
+
+    // ── P1#18：供应商结算多档/账期 ────────────────────────────────────────────────
+    @GetMapping("/supplier-settlement-methods")
+    public ApiResponse<PageResponse<SupplierSettlementMethodRecord>> listSupplierSettlementMethods(
+            @RequestParam(name = "supplier_id", required = false) String supplierId
+    ) {
+        authorizationService.requirePermission("inventory.supplier.settlement.manage");
+        return ApiResponse.ok(supplierQualificationService.listSettlementMethods(supplierId));
+    }
+
+    @PostMapping("/supplier-settlement-methods")
+    public ApiResponse<SupplierSettlementMethodRecord> createSupplierSettlementMethod(
+            @RequestBody SupplierSettlementMethodRequest request
+    ) {
+        authorizationService.requirePermission("inventory.supplier.settlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(supplierQualificationService.createSettlementMethod(request));
     }
 }

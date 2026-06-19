@@ -896,6 +896,62 @@ sequenceDiagram
 | 设备锁定 | 只能设备管理员处理 |
 | 离线状态 | 普通员工不可归还，主管可离线备注后待同步 |
 
+### 12.3 设备全生命周期状态机（维修/挂失/报废）补齐 `R6 全闭环(2026-06-19)`
+
+> 收口背景：§12.1/§12.2 仅覆盖"领用 checked_out / 归还 returned"两态与 §13.1 的 `locked`（远程锁定）。设备台账缺少**维修（repair）、挂失（lost）、报废（scrapped）**等非领用归还态的状态机与留痕，导致送修设备仍可被领用、挂失设备仍可承接业务动作、报废设备无终态封存。本节补齐设备台账全生命周期状态机、各动作 API/权限/事件/留痕，与既有领用归还、远程锁定、`device.checked_out`/`device.returned`/`device.locked` 事件衔接，不改动 §12.1/§12.2/§13 既有内容。
+
+#### 12.3.1 设备台账状态机
+
+```text
+in_use(领用中) ── 送修 ──> repair(维修中) ── 修复归还 ──> returned(已归还/可用)
+                              └── 无法修复 ──> scrapped(报废，终态)
+in_use/returned ── 挂失 ──> lost(挂失) ── 找回 ──> found(=returned 可用)
+                                        └── 确认丢失/无法找回 ──> scrapped(报废，终态)
+returned/可用 ── 领用 ──> in_use
+任意非终态 ── 报废审批 ──> scrapped(终态)
+```
+
+- `in_use`：已领用、当班使用中（对应 §12.1 `device.checked_out` 后状态）。
+- `returned`：已归还、在库可用（对应 §12.2 `device.returned`），可再次领用。
+- `repair`：送修中，**不可被领用、不可承接任何业务动作**；修复后回 `returned`，无法修复转 `scrapped`。
+- `lost`：挂失中，**拒绝一切业务动作与领用**；找回回 `found`（等同 `returned` 可用），确认丢失转 `scrapped`。
+- `scrapped`：报废终态，封存留痕，不可再流转、不可领用。
+- 与 §13.1 `locked`（远程锁定）正交：`locked` 是安全管控的临时叠加态，`repair/lost/scrapped` 是台账生命周期态；锁定中的设备送修需先由设备管理员处理锁定（与 §12.2「设备锁定」拦截一致）。
+
+#### 12.3.2 各动作 API / 权限 / 事件 / 留痕
+
+> 路径口径遵 §10 执行口径：正式 P0 接口落 `/api/v1/terminals` 域并先补 OpenAPI 再开发；下表为端侧能力需求与设备台账后端动作语义。
+
+| 动作 | 触发角色 | 能力/权限点 | 状态迁移 | 事件 | 留痕字段 |
+|---|---|---|---|---|---|
+| 领用 | 员工 | `terminal.device.checkout` | returned→in_use | `device.checked_out`（§15.1 既有） | 员工、设备、班次、区域、点位、时间 |
+| 归还 | 员工/主管 | `terminal.device.checkin` | in_use→returned | `device.returned`（§15.1 既有） | 待同步检查结果、归还人、时间 |
+| 送修 | 设备管理员/主管 | `terminal.device.repair` | in_use/returned→repair | `device.repaired`（**新增**，子类型 `sent`） | 维修单号、故障描述、送修人、维修单位、送修时间 |
+| 修复归还 | 设备管理员 | `terminal.device.repair` | repair→returned | `device.repaired`（**新增**，子类型 `fixed`） | 维修结果、修复时间、验收人 |
+| 挂失 | 员工/主管/设备管理员 | `terminal.device.lost` | in_use/returned→lost | `device.lost`（**新增**） | 挂失原因、最后持有人、最后点位、挂失时间、报案号（可空） |
+| 找回 | 设备管理员/主管 | `terminal.device.lost` | lost→found(=returned) | `device.lost`（**新增**，子类型 `found`） | 找回人、找回时间、设备完好性检查 |
+| 报废 | 设备管理员（主管审批） | `terminal.device.scrap` | repair/lost/in_use/returned→scrapped | `device.scrapped`（**新增**） | 报废原因（修复无效/确认丢失/到寿/损毁）、审批人、报废时间、数据清除确认 |
+
+- 新增事件 `device.repaired`、`device.lost`、`device.scrapped` 登记到 §15.1 Android 端事件名表的设备类事件区（`device.checked_out`/`device.returned`/`device.locked`/`device.policy_violation`/`device.permission_banned` 同族），命名沿用点+下划线风格，不另起命名（D4）。
+- 每次状态切换写 `local_audit_event`（§7.8）并上报事件中心，事件公共字段（§15.2）携带 `device_id`、操作人、时间、点位；**每状态切换必须留痕**，不得静默改台账状态。
+- 报废动作须叠加 §12.2/§13.1 的归还/数据清理：报废前完成待同步任务检查与本地敏感数据清理（数据清除确认入留痕）。
+
+#### 12.3.3 挂失设备拒绝业务动作 + 跨班次使用告警
+
+- **挂失/维修/报废设备拒绝业务动作**：设备处于 `lost`/`repair`/`scrapped` 时，端侧自检（§4.2 设备自检）与后端校验均拒绝领用、核销、点单、放行、结算等业务动作，命中时返回拒绝并写 `terminal.access_rejected`（§15.1 既有）+ 对应设备态事件，提示"设备已挂失/维修中/已报废，禁止业务操作"。
+- **挂失跨班次使用告警**：设备挂失后若仍被检测到登录/领用/扫码等使用行为（如挂失前的会话跨班次残留、被冒用），端侧与后端立即触发告警，写 `device.lost`（子类型 `usage_after_lost` 或 payload `alert=cross_shift_use`）并通知主管/设备管理员；挂失态会话强制失效，参照 §13.4 权限封禁/会话失效处置联动。
+
+#### 12.3.4 验收
+
+| 项 | 验收点 |
+|---|---|
+| 状态机闭环 | in_use→repair→returned/scrapped、lost→found/scrapped、报废终态不可再流转，全链可走通 |
+| 每态留痕 | 送修/修复/挂失/找回/报废每次状态切换均写 `local_audit_event` 并上报事件中心，留痕字段齐全 |
+| 拒绝业务动作 | `lost`/`repair`/`scrapped` 设备拒绝领用与一切业务动作，命中写 `terminal.access_rejected` + 设备态事件 |
+| 跨班次告警 | 挂失设备被检测到跨班次使用时触发告警事件并强制会话失效、通知主管 |
+| 事件命名 | `device.repaired`/`device.lost`/`device.scrapped` 登记 §15.1，遵 D4 点+下划线命名 |
+| 与既有不冲突 | 不改动 §12.1/§12.2 领用归还流程与 §13.1 远程锁定，`locked` 与生命周期态正交 |
+
 ## 13. MDM / Kiosk / 安全
 
 ### 13.1 设备管控策略
@@ -1042,6 +1098,81 @@ active(生效中)
 - 解封后若准入仍不达标（如设备仍越权/未受管），重新领用时被准入校验再次拦截。
 - 全流程写事件：`device.permission_banned`、`device.permission_ban_lifted`（含 `ban_id`、范围、操作人、时间），与 `STAFF_DEVICE_ABNORMAL` 关联同一事件链，便于后台审计。
 
+### 13.5 端侧设备凭证落地规格（Android）
+
+> 修正(2026-06-19 R5业务HTML缺口审计 F8/F9/F10)：依据业务HTML #staff「安装私人手机 App 时生成并绑定设备凭证（Keystore 设备公钥 / 不可逆设备指纹，不读 NFC）」「换手机先解绑旧再绑新」「Root/调试/异常自动失效进复核」。代码核验：后端员工三表（`staff_device_credentials` 等）已由 **V086** 落库，但端侧 `apps/android-terminal/.../MainActivity.kt` 仅有健康检查 Activity，**注册 / Keystore 指纹 / Root 检测 / 换机解绑重绑全部未落地**。本节补齐端侧落地规格，使"私人手机设备凭证绑定/换机/失效"可编码、可验收。本节为 §3.1、§13.1 私人手机条目的端侧实现细化，不重构既有内容。
+
+#### 13.5.1 Keystore 设备公钥生成 + 不可逆设备指纹（不读 NFC）
+
+- **安装期生成密钥对：** App 首次注册时在 **Android Keystore** 内生成一对非对称密钥（推荐 EC P-256，`setUserAuthenticationRequired` 视策略可选；尽量请求 `setIsStrongBoxBacked(true)`，无 StrongBox 时降级 TEE）。私钥**不可导出**，仅用于对挑战值/绑定请求签名。
+- **设备公钥指纹（`device_key_fingerprint`）：** 取公钥 DER 编码做 SHA-256，作为该手机的稳定身份标识。注册/绑定/校验全程只上送公钥与指纹，**不上送私钥**。
+- **不可逆设备指纹（`device_fingerprint_hash`）：** 由若干稳定且合规可取的设备属性（如 `Build` 型号、`ANDROID_ID`、应用安装实例 ID 等，**不含 IMEI/MAC/手机本机 NFC 唯一标识**）拼接后做不可逆哈希（SHA-256 + 应用侧盐）。**仅持久化哈希，不存原始属性**（PIPL 数据最小化，见 §13.1 末与合规文档 C4）。
+- **明确不读 NFC：** 私人手机身份**不读取手机本机 NFC 硬件唯一标识**（Android 不向普通 App 暴露稳定本机 NFC 标识，技术不可行，见 §3.1 / §9.2 phone-3/D8）。NFC 仅用于工作手机/一体机读取**外部**腕带/卡片，与本节身份绑定无关。
+
+#### 13.5.2 注册 → 后台审批 → 绑定 `staff_device_credentials`
+
+```text
+私人手机 App 注册
+  -> 生成 Keystore 密钥对 + device_key_fingerprint + device_fingerprint_hash
+  -> 采集 Root/调试检测结果 + PIPL 告知同意凭据（版本/时间/范围）
+  -> 提交注册（员工身份 + 公钥 + 指纹 + 检测结果 + 同意凭据）
+  -> 后台审批（人工/规则）
+     -> 通过：写 staff_device_credentials（status=bound），下发绑定回执
+     -> 拒绝：标记 rejected，App 显示原因，不进入可用态
+```
+
+- 注册请求由端侧用 Keystore 私钥对服务端挑战值签名，后端用上送公钥验签，确保公钥确由本机持有。
+- 绑定成功后 `staff_device_credentials` 记录该员工的有效凭证（公钥指纹 + 设备指纹哈希 + 绑定时间 + 状态）；**端侧仅缓存绑定状态摘要，不缓存原始标识**。
+- 后台审批前 App 处于"待审批"中间态，不得承担任何现场业务（与 §3.1、§13.1 私人手机边界一致）。
+
+#### 13.5.3 换机：先解绑旧凭证（supersedes 链）再绑新
+
+```text
+员工换新手机
+  -> 旧凭证 unbind（status: bound -> unbound，记录 unbound_at/unbind_reason=device_change）
+  -> 新机注册并审批通过 -> 新凭证 bound，写 supersedes 指向旧凭证 credential_id
+  -> 形成 supersedes 链（旧 <- 新），审计可回溯换机历史
+```
+
+- **强制顺序：先解绑旧、再绑新**；旧凭证不解绑则新凭证不予绑定（避免一员工多台有效私人手机并存）。
+- 新凭证落 `supersedes`（或等效 `superseded_by`）字段，形成换机链；解绑即删除/失效对应绑定凭据（PIPL 解绑删除，见 §13.1 末）。
+- 换机全程不复用旧 Keystore 私钥，新机重新生成密钥对。
+
+#### 13.5.4 Root / 调试 / 异常环境检测 → 凭证失效 → 进复核
+
+- **检测项：** Root（su/Magisk 特征、`ro.debuggable`）、开发者调试（USB 调试/可调试构建/附加调试器）、Keystore 完整性异常、`device_key_fingerprint` 或 `device_fingerprint_hash` 与已绑定值 **mismatch**。
+- **命中处置：** 命中任一项时端侧**立即将本机凭证置失效（invalidated）并停用 App 现场能力**，同时上报 `device_credential.invalidated`，后端将该 `staff_device_credentials` 记录置复核态进入**人工复核**（与 §13.4.1 `STAFF_DEVICE_ABNORMAL`、§13.1 私人手机条目联动）。
+- **恢复：** 复核确认环境恢复可信后方可重新绑定（走 §13.5.2 流程或解锁旧凭证），高风险（Root/指纹 mismatch）建议双人复核，不允许端侧自助解除。
+
+#### 13.5.5 端侧 UI 屏：注册 / 绑定 / 解绑 / 状态
+
+| UI 屏 | 内容 | 关键约束 |
+|---|---|---|
+| 注册屏 | 提交员工身份、PIPL 单独告知同意、触发密钥/指纹生成 | 未同意不得继续；显示"待审批"中间态 |
+| 绑定状态屏 | 展示当前绑定状态（待审批/已绑定/已解绑/已失效/已拒绝）、公钥指纹（脱敏后段）、绑定时间、所绑员工 | 状态以服务端为准，端侧只读展示 |
+| 解绑屏 | 发起换机解绑/离职注销解绑，填写原因 | 解绑后清除本地绑定缓存与对应密钥引用 |
+| 复核提示屏 | Root/调试/异常命中时显示失效原因与"进入复核"提示 | 失效态下屏蔽一切现场业务入口 |
+
+#### 13.5.6 事件：`device_credential.bound` / `unbound` / `invalidated`
+
+| 事件 | 触发 | 关键载荷 |
+|---|---|---|
+| `device_credential.bound` | 后台审批通过、新凭证绑定 | `credential_id`、`staff_id`、`device_key_fingerprint`、`supersedes`（换机时）、`bound_at` |
+| `device_credential.unbound` | 换机/离职解绑旧凭证 | `credential_id`、`staff_id`、`unbind_reason`（`device_change`/`offboarding`/`manual`）、`unbound_at` |
+| `device_credential.invalidated` | Root/调试/指纹 mismatch/异常命中 | `credential_id`、`staff_id`、`invalidate_reason`、`detected_signals`、`review_status=pending`、`invalidated_at` |
+
+- 三事件统一进事件中心，与 `STAFF_DEVICE_ABNORMAL` 风控链关联同一 `credential_id`，便于审计与复核回溯。
+- 事件载荷**仅含不可逆指纹/公钥指纹，不含原始标识**（PIPL）。
+
+#### 13.5.7 验收
+
+- **换机必须先解绑：** 构造"旧凭证未解绑即注册新机"用例，新凭证绑定被拒；按"解绑旧→新机审批通过→绑定并写 supersedes"可成功，且换机链可回溯。
+- **Root 设备失效进复核：** 在 Root/调试/指纹 mismatch 环境下，端侧凭证立即失效、现场能力被屏蔽、上报 `device_credential.invalidated`，后端记录进入人工复核态；未经复核不可恢复绑定。
+- **端侧可展示绑定状态：** 绑定状态屏能正确展示"待审批/已绑定/已解绑/已失效/已拒绝"，且状态值与后端 `staff_device_credentials` 一致。
+- **凭证两套互不串用：** 员工私人手机凭证（本节）与 kiosk 一体机 `terminal_device_credentials`(V011) 为不同实体，验收不得相互顶替（与本文首部 R5 标注一致）。
+
+> **待业务确认：** 商业 MDM 供应商选型未定（影响强管控落地）。本节为自有侧端侧凭证落地，可独立先行；强管控（受管态白名单/网站限制/远程清除）仍依赖外部 MDM 选型，按 §13.1.1 D10 收口"终端开关 + 人工准入代偿"过渡，纳管就绪后恢复硬禁用。
+
 ## 14. 端侧能力需求与正式 OpenAPI 补契约清单
 
 > 执行口径：下表保留为端侧能力清单和验收依赖。正式 Java 后端不得按 `/api/mobile/*` 直接实现新业务路径；必须先在 P0 OpenAPI 中定义对应 `/api/v1/{domain}` operation、权限、认证上下文、数据范围、允许终端、幂等和留痕事件，并进入 operation 验收矩阵和 OpenAPI 追溯附录。售票型一体机和非售票型一体机必须通过设备绑定、`kiosk_mode` 和能力开关区分职责。
@@ -1153,6 +1284,9 @@ active(生效中)
 | `device.policy_violation` | 应用/网站白名单或私装软件等策略违规命中 |
 | `device.permission_banned` | 权限封禁生效（phone-5，含 `ban_id`、范围、操作人、时间） |
 | `device.permission_ban_lifted` | 权限封禁解除（phone-5，解封审批通过或到期自动解封） |
+| `device.repaired` | 设备送修/修复归还（R6 全闭环(2026-06-19)，§12.3 设备生命周期；子类型 `sent`/`fixed`，带维修单号/故障/维修单位/操作人/时间） |
+| `device.lost` | 设备挂失/找回/挂失后跨班次使用告警（R6 全闭环(2026-06-19)，§12.3；子类型 `lost`/`found`/`usage_after_lost`，带挂失原因/最后持有人/最后点位/时间） |
+| `device.scrapped` | 设备报废终态（R6 全闭环(2026-06-19)，§12.3；带报废原因/审批人/数据清除确认/时间） |
 | `verification.qr.scanned` | 二维码扫描 |
 | `verification.nfc.read` | NFC 读取 |
 | `verification.previewed` | 核销预检 |

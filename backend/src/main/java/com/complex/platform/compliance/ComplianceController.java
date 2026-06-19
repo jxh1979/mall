@@ -10,6 +10,7 @@ import com.complex.platform.compliance.dto.ComplianceReminderScanRequest;
 import com.complex.platform.compliance.dto.ContractKeyDateRequest;
 import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
 import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
+import com.complex.platform.compliance.dto.WecomRiskHitReviewRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -96,6 +97,32 @@ public class ComplianceController {
         authorizationService.requirePermission(raw ? "wecom.view_raw" : "wecom.view");
         String viewerUserId = authorizationService.currentActor().id();
         return ApiResponse.ok(wecomConversationService.viewMessages(id, mode, viewerUserId, approvalRef));
+    }
+
+    // ---------------------------------------------------------------- P0#8 企微违规命中查询 / 复核处置
+
+    @GetMapping("/wecom/risk-hits")
+    public ApiResponse<PageResponse<WecomRiskHitRecord>> listWecomRiskHits(
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "conversation_id", required = false) String conversationId
+    ) {
+        authorizationService.requirePermission("wecom.risk_hit.view");
+        return ApiResponse.ok(wecomConversationService.listRiskHits(status, conversationId));
+    }
+
+    @PostMapping("/wecom/risk-hits/{id}/review")
+    public ApiResponse<WecomRiskHitRecord> reviewWecomRiskHit(
+            @PathVariable String id,
+            @RequestBody WecomRiskHitReviewRequest request
+    ) {
+        // 复核处置 reviewing/confirmed/dismissed：高敏操作，需 wecom.risk_hit.review。
+        authorizationService.requirePermission("wecom.risk_hit.review");
+        String reviewerId = authorizationService.currentActor().id();
+        return ApiResponse.ok(wecomConversationService.reviewRiskHit(
+                id,
+                request == null ? null : request.status(),
+                reviewerId,
+                request == null ? null : request.reviewNote()));
     }
 
     @GetMapping("/wecom/retention-policies")

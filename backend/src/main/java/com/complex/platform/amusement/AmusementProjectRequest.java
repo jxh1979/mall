@@ -11,6 +11,8 @@ public record AmusementProjectRequest(
         Integer capacity,
         String openStatus,
         String safetyTemplateId,
-        Map<String, Object> eligibilityRule
+        Map<String, Object> eligibilityRule,
+        // V114 清单#21：项目入口点位（可空）。
+        String locationPointId
 ) {
 }

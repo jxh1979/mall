@@ -14,6 +14,8 @@ public record IntegrationOrderSyncRequest(
         String status,
         Long amountCent,
         String currency,
+        String channel,
+        String externalChannelOrderId,
         Map<String, Object> providerPayload
 ) {
 }

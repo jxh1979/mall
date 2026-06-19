@@ -10,6 +10,8 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError }: AdminP
   const [username, setUsername] = React.useState("");
   const [role, setRole] = React.useState("BAR_MANAGER");
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("");
+  const [formError, setFormError] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -27,24 +29,36 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError }: AdminP
   );
 
   async function createUser() {
-    const created = await api.post<AccessUserRow>("/api/v1/access/users", {
-      username,
-      accountType: role.toLowerCase(),
-      status: "active",
-      organizationId: "org-1",
-      operatorNote: "后台手动录入工作人员",
-    });
-    let appliedTemplate: unknown = null;
-    if (selectedTemplateId) {
-      appliedTemplate = await api.post(`/api/v1/access/permission-templates/${selectedTemplateId}/apply`, {
-        targetUserIds: [created.id],
-        mode: "append",
-        operatorNote: "后台手动录入后应用权限模板",
+    setFormError("");
+    setGlobalError(null);
+    setSubmitting(true);
+    try {
+      const created = await api.post<AccessUserRow>("/api/v1/access/users", {
+        username,
+        accountType: role.toLowerCase(),
+        status: "active",
+        organizationId: "org-1",
+        operatorNote: "后台手动录入工作人员",
       });
+      let appliedTemplate: unknown = null;
+      if (selectedTemplateId) {
+        appliedTemplate = await api.post(`/api/v1/access/permission-templates/${selectedTemplateId}/apply`, {
+          targetUserIds: [created.id],
+          mode: "append",
+          operatorNote: "后台手动录入后应用权限模板",
+        });
+      }
+      setRows((current) => [...current, created]);
+      setActionResult({ action: selectedTemplateId ? "创建员工并赋权" : "创建员工", username: created.username, role, templateId: selectedTemplateId || null, appliedTemplate });
+      setUsername("");
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "创建员工失败";
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action: selectedTemplateId ? "创建员工并赋权" : "创建员工", status: "failed", message });
+    } finally {
+      setSubmitting(false);
     }
-    setRows((current) => [...current, created]);
-    setActionResult({ action: selectedTemplateId ? "创建员工并赋权" : "创建员工", username: created.username, role, templateId: selectedTemplateId || null, appliedTemplate });
-    setUsername("");
   }
 
   return (
@@ -58,8 +72,9 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError }: AdminP
             <option value="">暂不赋权</option>
             {templates.map((template) => <option key={template.id} value={template.id}>{template.templateName ?? template.name ?? template.id}</option>)}
           </select>
-          <button type="button" data-testid="access-user-create" onClick={() => void createUser()} disabled={!username.trim()}>新增员工并赋权</button>
+          <button type="button" data-testid="access-user-create" onClick={() => void createUser()} disabled={!username.trim() || submitting}>新增员工并赋权</button>
         </div>
+        {formError ? <div data-testid="access-users-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="access-users-table">
             <thead><tr><th>员工账号</th><th>岗位角色</th><th>状态</th></tr></thead>

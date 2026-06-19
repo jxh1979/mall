@@ -18,11 +18,28 @@ export type EffectivePermissionsState =
   | { status: "ready"; value: EffectivePermissions }
   | { status: "error" };
 
+// 导航业务域分组键（frontend-admin §4.3：菜单按业务域聚合，避免 30 项平铺）。
+export type AdminNavGroup =
+  | "overview"
+  | "ticketing"
+  | "bar"
+  | "amusement"
+  | "inventory"
+  | "finance"
+  | "governance"
+  | "integration"
+  | "access"
+  | "risk"
+  | "audit"
+  | "ops";
+
 export type AdminRoute = {
   pageId: string;
   label: string;
   route: string;
   module: string;
+  /** 导航业务域分组键；缺省时回落到 module 文案展示。 */
+  group?: AdminNavGroup;
   requiredPermissions: string[];
 };
 
@@ -38,6 +55,11 @@ export type AdminPageProps = {
   user: AdminUser;
   setActionResult: (value: unknown) => void;
   setGlobalError: (value: string | null) => void;
+  /**
+   * 当前账号的有效权限状态，供页面做按钮级权限门控（useCan / PermissionButton /
+   * HighRiskConfirm 的 permissionsState）。AdminApp 注入；缺省视为 loading（fail-safe）。
+   */
+  effectivePermissions: EffectivePermissionsState;
 };
 
 // T12 经营看板：以 metric_code 为权威键的指标 map（与后端 OverviewResponse 对齐）。
@@ -54,6 +76,20 @@ export type OverviewPayload = {
   scope: string | null;
   businessDate: string;
   metrics: Record<string, MetricValue>;
+};
+
+// P2 集团/跨项目汇总（R6-D13）：按 project 维 rollup（当前单综合体即单 project）。
+export type GroupProjectRollup = {
+  projectId: string;
+  projectName: string;
+  merchantCount: number;
+  metrics: Record<string, MetricValue>;
+};
+
+export type GroupOverviewPayload = {
+  asOf: string;
+  businessDate: string;
+  projects: GroupProjectRollup[];
 };
 
 export type AccessUserRow = {
@@ -146,6 +182,19 @@ export type BarTableRow = {
   guestLimit?: number;
   barId?: string;
   status?: string;
+};
+
+export type BarReservationRow = {
+  id: string;
+  barId?: string;
+  tableId?: string;
+  customerId?: string;
+  guestCount?: number;
+  allowedPassFreeGuestCount?: number;
+  depositStatus?: string;
+  status?: string;
+  reservedAt?: string;
+  createdAt?: string;
 };
 
 export type BarBillRow = {

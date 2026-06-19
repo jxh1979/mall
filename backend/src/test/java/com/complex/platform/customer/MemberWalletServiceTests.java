@@ -393,6 +393,7 @@ class MemberWalletServiceTests {
         @Override public List<CustomerBarReservationOptionResponse> listBarReservationOptions() { return List.of(); }
         @Override public Optional<com.complex.platform.bar.BarTableRecord> findActiveBarTableForReservation(String b, String t, String tt) { return Optional.empty(); }
         @Override public com.complex.platform.bar.BarReservationRecord saveCustomerBarReservation(com.complex.platform.bar.BarReservationRecord r) { return r; }
+        @Override public java.util.List<com.complex.platform.bar.BarDepositRuleRecord> listDepositRules(String barId) { return java.util.List.of(); }
 
         // V090 storedValue
         @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String cid, String pid) {

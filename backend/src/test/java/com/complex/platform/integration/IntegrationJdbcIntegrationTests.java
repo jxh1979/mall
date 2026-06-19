@@ -209,6 +209,8 @@ class IntegrationJdbcIntegrationTests {
                 "synced",
                 128800L,
                 "CNY",
+                "meituan",
+                "mt-jdbc-1",
                 Map.of("provider_private_status", "PAID"),
                 now,
                 now
@@ -274,6 +276,7 @@ class IntegrationJdbcIntegrationTests {
                 128700L,
                 100L,
                 "open",
+                "thirdparty",
                 "finance_1",
                 null,
                 Map.of("provider_private_status", "DIFF"),

@@ -295,6 +295,18 @@ stateDiagram-v2
 >
 > 放行余量 = min(场次余量, 点位/设备余量)；项目维度仅做"是否超安全上限"的旁路校验。任一受控维度 ≤ 0 拒绝。三维度均未配置时退化为场次维度。
 
+> **超容/争议口径对齐（P0）（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)）：**
+> 依据业务HTML #amusement「记录巡检、暂停、关闭、故障、超容和游客争议」列为 P0。代码核验：超容当前仅在 `JdbcAmusementRepository`（项目安全上限维 `context.projectSafetyCapacity() > 0` 的原子 check）报警/拒绝放行（失败原因 `session_full`），**不落 incident 事件**；`incident_type` 枚举（§7.15）原仅 `accident/fault/complaint/risk`，无独立 `over_capacity`，V024 迁移亦未列举 incident_type CHECK。本次对齐如下：
+> 1. **incident_type 增加 `over_capacity` 独立枚举**（见 §7.15），超容不再与 fault/risk 混并，可独立筛选与复核。
+> 2. **超容除报警外必须落 incident 事件**：触发项目安全上限维超容（或任一受控维度被超容性放行/扩容）时，除现有报警/拒绝外，必须落一条 `amusement.incident.over_capacity` 事件（见 §11），写入项目/场次/点位设备维度键、触发时容量与上限、来源终端，使其成为可后续复核的独立事件，而非仅瞬时告警。
+> 3. **游客争议（complaint）入口与状态机确认为 P0**：投诉/争议作为 `incident_type = complaint` 走 §5.7 事故状态机（reported→acknowledged→processing→…→resolved/closed），P0 必须有上报入口与可复核留痕；其工单深度处理可延后，但"可记录可复核"为 P0 口径（与 §2.1「P0 只记录与核销、人工放行、安全阻断相关的事件留痕」相比，本次把 over_capacity 与 complaint 的"记录+复核"上提为 P0）。
+> 4. **与 F2 统一异常责任链衔接**：超容/争议事件进入平台统一异常复核链时，`source_domain = amusement`（与第三方集成 F2 回流异常/对账差异同链区分来源域），便于跨域异常归集与责任留痕。
+> 5. **验收**：触发超容产生独立 `over_capacity` 事件（incident_type=over_capacity）并可在事件中心/事故中心按类型筛选复核；游客争议可上报并按事故状态机复核闭环。
+>
+> **待业务确认**：超容是否需要"阻断进一步放行"（达上限即硬阻断，与现有 `session_full` 拒绝一致）vs "仅告警 + 留痕"（允许主管扩容/人工放行但必落 over_capacity 事件）。两种口径对放行控制流影响不同，需业务拍板后再固化是否在安全上限维做硬阻断。
+>
+> **业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：超容处置确认为**默认 硬上限阻断 + 软上限告警放行（两类均落 `amusement.incident.over_capacity` 事件）**，且**处置模式后台可切换为"仅告警 + 留痕（不阻断）"**。即：处置模式后台可配，默认硬阻断（达硬上限即 `session_full` 拒绝）+ 软上限告警放行（允许放行但落事件），可切换为仅告警留痕（不阻断、必落事件）。此项不再为待定项。
+
 离线核销时（P1 预留，P0 不启用）：
 
 1. 安卓端使用本地权益摘要缓存。
@@ -369,6 +381,7 @@ stateDiagram-v2
 | allow_queue | boolean | 是否允许排队；P2 预留，P0 固定为 false |
 | allow_fast_pass | boolean | 是否允许快速通道；P2 预留，P0 固定为 false |
 | allow_offline_verify | boolean | 是否允许离线核销；P0 固定为 false |
+| location_point_id | uuid | **入口点位绑定（目标增补字段，R6 全闭环(2026-06-19)，收口审计 BP1）**：项目入口/检票点位，FK 关联点位主数据；现场核销、巡检按此点位归集与责任落点。真实迁移当前无此列，落地需新迁移，详见 §7.18 收口小节 |
 | created_at | timestamptz | 创建时间 |
 | updated_at | timestamptz | 更新时间 |
 
@@ -377,6 +390,7 @@ stateDiagram-v2
 - idx_amusement_project_merchant
 - idx_amusement_project_store_status
 - uk_amusement_project_code
+- idx_amusement_project_location_point（R6 入口点位增补，见 §7.18）
 
 ### 7.2 amusement_project_rule
 
@@ -666,7 +680,7 @@ stateDiagram-v2
 | project_id | uuid | 项目 ID |
 | session_id | uuid | 场次 ID，可为空 |
 | device_id | uuid | 设备 ID，可为空 |
-| incident_type | varchar(64) | accident、fault、complaint、risk |
+| incident_type | varchar(64) | accident、fault、complaint、risk、**over_capacity**（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)：业务HTML #amusement 把"超容"列为 P0 必记事件，原枚举无独立 over_capacity，超容仅在 `JdbcAmusementRepository` 项目安全上限维 check 后报警/拒绝放行而不落 incident。本次新增 `over_capacity` 独立枚举，使超容可作为独立可复核事件落库；CHECK 取值同步补 over_capacity） |
 | severity | varchar(32) | low、medium、high、critical |
 | status | varchar(32) | 事故状态 |
 | title | varchar(255) | 标题 |
@@ -685,6 +699,53 @@ stateDiagram-v2
 | content | text | 处理内容 |
 | operator_id | uuid | 操作人 |
 | created_at | timestamptz | 创建时间 |
+
+### 7.18 项目入口点位字段 + 巡检结构化（收口）`R6 全闭环(2026-06-19)`
+
+> 收口背景：本节统一收口两处长期以"目标增补字段（P0，尚未迁移）"散落标注的缺口——①§7.1 `amusement_project` 缺入口点位绑定列（承接收口审计 BP1），导致项目核销/巡检无法落到具体入口点位；②§7.13 `amusement_safety_inspections` 的巡检人 `inspector_id` 与单项巡检结果/异常长期只能在 `operator_note`/`items_json` 中非结构化留痕（§7.13/§7.14 已标注）。本节不改动 §7.13「真实列」现状描述，仅把两处增补口径收敛为一处可落地的迁移方案 + 事件 + 验收，落地需新迁移。
+
+#### 7.18.1 amusement_project.location_point_id 入口点位绑定（承接 BP1）
+
+| 增补列 | 类型 | 说明 |
+|---|---|---|
+| `location_point_id` | uuid | 项目入口/检票点位，FK 关联点位主数据；nullable（兼容存量项目，运营补绑后收紧）。现场核销（§7.7 `amusement_verification.location_point_id`，已存在）、巡检（见 7.18.2）按本列回归项目入口点位，形成"项目↔入口点位"一一定位 |
+
+- 用途：核销与巡检的点位责任落点统一到项目入口点位；BP1 审计要求项目入口可结构化定位。
+- 兼容：存量项目 `location_point_id` 可空，新建项目建议必填；与 §7.7/§7.9/§7.13.1（device/point）的 `location_point_id` 同口径关联点位主数据。
+
+#### 7.18.2 巡检 inspection 主表 inspector_id 结构化 + 巡检结果/异常字段
+
+承接 §7.13「目标增补字段」标注，把巡检人与巡检结果/异常从非结构化（`operator_note`/`items_json`）升为结构化主表列。**保留 §7.13 真实列现状描述不变**，下表为 `amusement_safety_inspections` 的目标增补列（落地需新迁移）：
+
+| 增补列 | 类型 | 说明 |
+|---|---|---|
+| `inspector_id` | uuid | 巡检人（结构化，非自由文本）；替代当前仅在 `operator_note`/`items_json` 留痕的方式，可按巡检人归集与追责 |
+| `location_point_id` | uuid | 巡检点位，可空；与 7.18.1 项目入口点位/设备点位对齐，巡检按点位归集 |
+| `inspection_result` | varchar(32) | 巡检结果枚举 `pass/fail/conditional_pass`（与 `overall_result` 对齐或替代其自由口径），CHECK 约束 |
+| `abnormal_flag` | boolean | 是否存在异常项，存在异常即阻断式暂停项目/场次（与 §5.6 巡检状态机、§6.6「巡检失败自动暂停」一致） |
+| `abnormal_note` | text | 异常说明（结构化字段，承载异常描述，替代散落在 `operator_note` 的自由文本） |
+| `abnormal_item_ids` | jsonb | 命中异常的巡检项 ID 列表（指向 §7.14 巡检项结构化拆表落地后的行，或 `items_json` 内项标识） |
+
+> 与既有列关系：`inspector_id`/`inspection_result`/`abnormal_*` 为增补结构化列，不删除真实迁移既有的 `overall_result`/`items_json`/`operator_note`；落地阶段以结构化列为查询/统计/追责口径，`items_json` 作为单项明细载体保留（与 §7.14 整表目标增补方向一致）。
+
+#### 7.18.3 事件
+
+- 沿用 §11 既有巡检事件命名 `amusement.safety_inspection.*`（权威命名见 §11 修订说明，不另起名）。结构化后：
+  - `amusement.safety_inspection.submitted`（提交巡检）payload 补 `inspector_id`、`location_point_id`、`inspection_result`、`abnormal_flag`。
+  - `amusement.safety_inspection.blocked`（巡检阻断）由 `abnormal_flag=true` 触发，携带 `abnormal_note`/`abnormal_item_ids`，并联动项目/场次暂停（§5.6/§6.6）。
+- 项目入口点位：核销/巡检事件 payload 的 `location_point_id` 回归 7.18.1 入口点位，使事件可按入口点位归集。
+
+#### 7.18.4 验收
+
+| 项 | 验收点 |
+|---|---|
+| 入口点位 | `amusement_project.location_point_id` 可落库并被核销/巡检引用；项目入口可结构化定位（BP1） |
+| 巡检人结构化 | 巡检主记录可按 `inspector_id` 归集与追责，不再依赖 `operator_note`/`items_json` 自由文本 |
+| 巡检结果/异常 | `inspection_result`/`abnormal_flag`/`abnormal_note` 可落库；存在异常时巡检 `blocked` 事件触发并自动暂停项目/场次 |
+| 事件可归集 | 巡检事件携带巡检人/点位/结果，可按巡检人、入口点位维度统计 |
+| 不破坏现状 | 不删除 §7.13 真实列与 `items_json`，增补列与既有列并存 |
+
+> **待业务确认**：①`location_point_id` 在 `amusement_project` 是否本期必填（涉及存量项目补绑工作量）；②巡检结果是否需 `conditional_pass`（有条件通过）态，或仅 `pass/fail` 二态即可；③`inspection_result` 是替代还是与 `overall_result` 并存（建议替代，避免两套结果口径）。
 
 ## 8. API 接口设计
 
@@ -903,6 +964,7 @@ stateDiagram-v2
 | amusement.safety_inspection.reopened | 主管确认检修/巡检结果（恢复营业前置确认） |
 | amusement.project.resumed | 项目/设备经主管确认后恢复营业（maintenance/abnormal → open） |
 | amusement.incident.reported | 上报事故 |
+| amusement.incident.over_capacity | 超容事件（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)：超容除报警/拒绝放行外必须落此独立事件，incident_type=over_capacity，携带项目/场次/点位设备维度键、触发容量与上限、source_domain=amusement，供后续复核，见 §6.4 超容/争议口径对齐） |
 | amusement.incident.closed | 关闭事故 |
 
 > 修订说明（2026-06-10 审计收口）：巡检相关事件统一采用 `amusement.safety_inspection.*` 命名，历史 `safety_check.*` / `amusement.safety_check.*` 仅作为旧文档别名，不得进入 OpenAPI、Flyway 迁移或事件中心实现。主管确认恢复统一写 `amusement.safety_inspection.reopened` 与 `amusement.project.resumed`。
@@ -1005,6 +1067,8 @@ stateDiagram-v2
 | 设备故障 | 关闭相关场次或项目 |
 | 检修未确认即尝试恢复 | 拒绝状态流转，保持 maintenance，写风险事件（5.1.1） |
 | 检修中产生核销 | 拒绝核销（project_not_allowed），记高风险信号 |
+| 超容触发 | 报警 + 拒绝放行（session_full）外，必须落 `amusement.incident.over_capacity` 独立事件（incident_type=over_capacity）供复核；是否硬阻断进一步放行待业务确认（修正(2026-06-19 R5业务HTML缺口审计 F11/F12)，见 §6.4） |
+| 游客争议/投诉 | 以 incident_type=complaint 上报并走事故状态机复核闭环（P0 记录+可复核，修正(2026-06-19 R5业务HTML缺口审计 F11/F12)） |
 | 事故上报 | 进入事故处理流程 |
 
 ## 14. P0/P1/P2 开发顺序
@@ -1133,3 +1197,4 @@ P0 完成时必须满足：
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §8 | 游乐 P0 接口必须同时对齐 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md`；未进入追溯附录不得生成 Controller、SDK/mock 或接口自动化 | 防止游乐核销、容量、状态、安全巡检和恢复审批遗漏权限、事件、终端或样例准入追溯 |
 | 2026-06-18 D6 字段口径统一 | 改 | §6.4/§7.4/§7.12/§7.13/§7.14 | 以真实迁移 V014 为准：容量计数列统一 `used_capacity`（弃用 `checked_in_count`）；`amusement_safety_inspections` 列出真实列并把 `session_id/device_id/inspector_id/reviewed_by` 标为「目标增补字段（P0，尚未迁移）」；`amusement_safety_inspection_items`、`amusement_safety_template_items`（含 `severity`）标为整表目标增补；与 `amusement-p0-safety-inspection-spec` §4 口径一致 | 消除文档「声称已存在」与真实迁移不符的假象（三方字段口径统一） |
 | 2026-06-18 D11 游乐现状标注 | 增 | 顶部横幅后 | 新增 D11 现状补强：①现场核销未校验票务权益 ②approveReopen 不联动 open_status、无项目级 pause/resume 端点 ③检修表/`/maintenance-records`/`/confirm-resume` 缺失 ④三维度容量仅场次单维（capacity_config/snapshot 未实现），每条写「现状→目标→候选验收口径（已升正式验收）」 | 让 §6/§7/§8/§16 中「声称已落地」但真实缺失的能力对齐真实迁移/代码 |
+| 2026-06-19 R5业务HTML缺口审计 F11 | 增/改 | §6.4/§7.15/§11/§13 | 超容/争议口径对齐(P0)：incident_type 增 over_capacity 独立枚举；超容除报警/拒绝外必须落 amusement.incident.over_capacity 事件；游客争议 complaint 入口+状态机确认 P0；与 F2 统一异常责任链衔接 source_domain=amusement；补验收与"硬阻断 vs 仅告警留痕"待业务确认 | 业务HTML #amusement 把超容/游客争议列 P0，但代码超容仅报警不落事件、incident_type 无 over_capacity（Grep 佐证：§7.15 枚举、JdbcAmusementRepository 安全上限维 check、V024 无 incident_type CHECK） |

@@ -112,6 +112,8 @@ final class JdbcIntegrationRowMapper {
                 resultSet.getString("status"),
                 resultSet.getLong("amount_cent"),
                 resultSet.getString("currency"),
+                resultSet.getString("channel"),
+                resultSet.getString("external_channel_order_id"),
                 readMap(resultSet.getString("provider_payload_json")),
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at")
@@ -168,6 +170,7 @@ final class JdbcIntegrationRowMapper {
                 resultSet.getLong("provider_amount_cent"),
                 resultSet.getLong("difference_amount_cent"),
                 resultSet.getString("status"),
+                resultSet.getString("source_domain"),
                 resultSet.getString("assigned_to_user_id"),
                 resultSet.getString("resolution_note"),
                 readMap(resultSet.getString("provider_payload_json")),

@@ -71,6 +71,81 @@ class WecomComplianceJdbcIntegrationTests {
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("raw", "approval_jdbc"));
     }
 
+    @Test
+    void migrationCreatesRiskHitsTableSeedsWecomRiskRulesAndAddsSourceDomain() {
+        // P0#8：命中表建表 + 企微违规规则码 seed（compliance 域）+ analytics_risk_alerts.source_domain 列。
+        assertThat(regclass("wecom_risk_hits")).isEqualTo("wecom_risk_hits");
+
+        // 五个企微违规规则码落库且启用（domain=compliance）。
+        List<String> ruleCodes = jdbcTemplate.queryForList("""
+                SELECT rule_code FROM analytics_risk_rules
+                 WHERE domain = 'compliance' AND enabled = true
+                 ORDER BY rule_code
+                """, String.class);
+        assertThat(ruleCodes).contains(
+                "STAFF_PRIVATE_DEAL", "STAFF_PRIVATE_PAYMENT", "ABUSE",
+                "ILLEGAL_PROMISE", "LURE_PRIVATE_WECHAT");
+
+        // 仓储读企微规则码（关键词来自 rule_config_json.keywords）。
+        assertThat(repository.findEnabledWecomRiskRules())
+                .extracting(WecomRiskRuleRecord::ruleCode)
+                .contains("LURE_PRIVATE_WECHAT", "STAFF_PRIVATE_PAYMENT");
+
+        // analytics_risk_alerts 新增可空 source_domain 列。
+        assertThat(columnExists("analytics_risk_alerts", "source_domain")).isTrue();
+
+        // 命中查询/复核权限落库且 platform_admin 拥有。
+        assertThat(permissionCodes()).contains("wecom.risk_hit.view", "wecom.risk_hit.review");
+        assertThat(platformAdminPermissionCodes()).contains("wecom.risk_hit.view", "wecom.risk_hit.review");
+    }
+
+    @Test
+    void persistsRiskHitAndEnqueuesAlertWithSourceDomainWecom() {
+        Instant now = Instant.parse("2026-06-19T00:00:00Z");
+        repository.saveConversation(new WecomConversationRecord(
+                "wcv_hit", "ext_hit", "proj_hit", "staff_hit", "cust_hit",
+                "active", LocalDate.parse("2026-12-31"), now, now));
+        repository.saveMessage(new WecomMessageRecord(
+                "wmsg_hit", "wcv_hit", "staff_hit", "wecom-raw:ref",
+                "加我私微", List.of("lure_private_contact"), false,
+                now, LocalDate.parse("2026-06-19"), now));
+
+        String alertId = repository.enqueueRiskAlert(new WecomRiskAlertEnqueue(
+                "ara_hit", "rule_wecom_lure_private_wechat", "high", "wecom_message", "wmsg_hit",
+                "WeCom compliance hit: LURE_PRIVATE_WECHAT", "wecom-hit:wmsg_hit:LURE_PRIVATE_WECHAT", now));
+        repository.saveRiskHit(new WecomRiskHitRecord(
+                "wrh_hit", "wcv_hit", "wmsg_hit", "LURE_PRIVATE_WECHAT", "high", "私微",
+                "open", null, null, "proj_hit", alertId, now, now));
+
+        assertThat(repository.findRiskHits("open", "wcv_hit"))
+                .singleElement()
+                .satisfies(hit -> {
+                    assertThat(hit.ruleCode()).isEqualTo("LURE_PRIVATE_WECHAT");
+                    assertThat(hit.status()).isEqualTo("open");
+                    assertThat(hit.alertId()).isEqualTo(alertId);
+                });
+        // 复核流转 open → confirmed。
+        repository.updateRiskHitReview("wrh_hit", "confirmed", "reviewer_jdbc", "确认");
+        assertThat(repository.findRiskHitById("wrh_hit"))
+                .get()
+                .satisfies(hit -> {
+                    assertThat(hit.status()).isEqualTo("confirmed");
+                    assertThat(hit.reviewerId()).isEqualTo("reviewer_jdbc");
+                });
+        // 入复核队列写孤岛 analytics_risk_alerts，source_domain=wecom。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT source_domain FROM analytics_risk_alerts WHERE id = ?", String.class, alertId))
+                .isEqualTo("wecom");
+    }
+
+    private boolean columnExists(String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM information_schema.columns
+                 WHERE table_name = ? AND column_name = ?
+                """, Integer.class, tableName, columnName);
+        return count != null && count > 0;
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }

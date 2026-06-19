@@ -48,6 +48,7 @@ final class JdbcAmusementRowMapper {
                 rs.getString("open_status"),
                 rs.getString("safety_template_id"),
                 readJson(rs.getString("eligibility_rule_json"), MAP_TYPE),
+                rs.getString("location_point_id"),
                 instant(rs, "created_at"),
                 instant(rs, "updated_at"),
                 rs.getString("merchant_id")
@@ -126,7 +127,11 @@ final class JdbcAmusementRowMapper {
                 rs.getString("operator_note"),
                 readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
                 instant(rs, "created_at"),
-                instant(rs, "updated_at")
+                instant(rs, "updated_at"),
+                rs.getString("inspector_id"),
+                rs.getString("inspection_result"),
+                rs.getBoolean("abnormal_found"),
+                rs.getString("abnormal_note")
         );
     }
 

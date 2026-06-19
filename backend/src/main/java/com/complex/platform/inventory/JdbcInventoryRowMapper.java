@@ -151,6 +151,38 @@ final class JdbcInventoryRowMapper {
         );
     }
 
+    SupplierQualificationRecord mapSupplierQualification(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SupplierQualificationRecord(
+                resultSet.getString("id"),
+                resultSet.getString("supplier_id"),
+                resultSet.getString("qualification_type"),
+                resultSet.getString("qualification_no"),
+                resultSet.getString("issued_by"),
+                resultSet.getObject("valid_from", java.time.LocalDate.class),
+                resultSet.getObject("valid_to", java.time.LocalDate.class),
+                readList(resultSet.getString("attachment_ids")),
+                resultSet.getString("status"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at"),
+                resultSet.getString("merchant_id")
+        );
+    }
+
+    SupplierSettlementMethodRecord mapSupplierSettlementMethod(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SupplierSettlementMethodRecord(
+                resultSet.getString("id"),
+                resultSet.getString("supplier_id"),
+                resultSet.getString("settlement_method"),
+                resultSet.getObject("payment_term_days", Integer.class),
+                resultSet.getString("applicable_category"),
+                resultSet.getBoolean("is_default"),
+                resultSet.getString("status"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at"),
+                resultSet.getString("merchant_id")
+        );
+    }
+
     InventoryStockBatchRecord mapStockBatch(ResultSet resultSet, int rowNumber) throws SQLException {
         return new InventoryStockBatchRecord(
                 resultSet.getString("id"),
@@ -244,7 +276,13 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("bottle_label_value"),
                 resultSet.getString("customer_name_or_nickname"),
                 resultSet.getString("customer_phone"),
-                resultSet.getString("customer_phone_hash")
+                resultSet.getString("customer_phone_hash"),
+                readList(resultSet.getString("registration_photo_refs")),
+                resultSet.getString("manual_note"),
+                instantOrNull(resultSet, "transferred_at"),
+                resultSet.getString("transfer_to_name_or_nickname"),
+                resultSet.getString("transfer_to_phone"),
+                resultSet.getString("transfer_to_phone_hash")
         );
     }
 

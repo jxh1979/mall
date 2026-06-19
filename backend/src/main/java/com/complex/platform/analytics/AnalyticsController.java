@@ -6,6 +6,7 @@ import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
+import com.complex.platform.analytics.AnalyticsRecords.GroupOverviewResponse;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantSummaryRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricAnomalyRecord;
@@ -76,6 +77,12 @@ public class AnalyticsController {
         return ApiResponse.ok(service.dashboardDomain(domain, authorizationService.currentMerchantScope()));
     }
 
+
+    @GetMapping("/group-overview")
+    public ApiResponse<GroupOverviewResponse> getGroupOverview() {
+        authorizationService.requirePermission("analytics.group.view");
+        return ApiResponse.ok(service.groupOverview());
+    }
 
     @GetMapping("/business-metric-snapshots")
     public ApiResponse<PageResponse<BusinessMetricSnapshotRecord>> listBusinessMetricSnapshots() {

@@ -37,8 +37,12 @@ public class MdmService {
     private static final String POLICY_MANAGE = "mdm.policy.manage";
     private static final String DEVICE_MANAGE = "mdm.device.manage";
     private static final String VIOLATION_VIEW = "mdm.violation.view";
+    private static final String VIOLATION_HANDLE = "mdm.violation.handle";
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
+
+    /** P0#9 处置类型（与 V107 chk_mdm_policy_violations_disposition 对齐）。 */
+    private static final Set<String> DISPOSITIONS = Set.of("acknowledged", "device_blocked", "dismissed");
 
     private static final Set<String> SCOPE_TYPES = Set.of("global", "project", "device_model");
     private static final Set<String> POLICY_STATUSES = Set.of("pending", "applied", "failed", "outdated");
@@ -213,13 +217,27 @@ public class MdmService {
         MdmDeviceManagementRecord device = mdmRepository.findDeviceManagement(id).orElse(null);
         String managementStatus = device == null ? "unmanaged" : device.managementStatus();
         boolean managed = "compliant".equals(managementStatus) || "enrolled".equals(managementStatus);
+        // P0#9：blocked（违规处置封禁）/ lost（挂失）为显式终止态，无论 MDM 开关如何都硬拒绝，
+        //       不走"开关关=代偿"口径——这是已发生的处置/事件，不可被代偿放行。
+        boolean hardBlocked = "blocked".equals(managementStatus) || "lost".equals(managementStatus);
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("device_id", id);
         payload.put("action_type", actionType);
         payload.put("mdm_enabled", enabled);
         payload.put("management_status", managementStatus);
-        payload.put("compensated", !enabled);
+        payload.put("compensated", !enabled && !hardBlocked);
+
+        if (hardBlocked) {
+            try {
+                auditEventService.recordSuccess(
+                        "device.policy_violation", DEVICE_MANAGE, "terminal_device", id, null, null, payload);
+            } catch (RuntimeException ignored) {
+                // 留痕失败不得掩盖拒绝结果
+            }
+            throw ApiException.forbidden("DEVICE_BLOCKED",
+                    "device is blocked or lost: " + id);
+        }
 
         if (enabled && !managed) {
             try {
@@ -268,6 +286,8 @@ public class MdmService {
                             now,
                             false,
                             null,
+                            null,
+                            null,
                             now
                     ));
                     // 违规即把设备纳管状态降级为 violation（若设备存在）。
@@ -278,6 +298,139 @@ public class MdmService {
                 },
                 record -> record.id()
         );
+    }
+
+    /**
+     * P0#9 服务端违规检测（白名单表参与判定）：对上报的 app 包名 / 站点域名逐一比对启用中的白名单，
+     * 未命中即产生 violation（unauthorized_app / non_whitelisted_site）并降级设备纳管状态。
+     *
+     * <p>与 {@link #reportPolicyViolation}（外部直接上报已判定的违规）互补：本方法把"判定"收口到服务端，
+     * 不再仅依赖外部 POST 上报结果。返回本次检测命中的违规清单（命中为空=全部合规）。
+     */
+    @Transactional
+    public MdmViolationDetectionResult detectViolations(
+            String idempotencyKey, String deviceId, List<String> appPackages, List<String> siteDomains) {
+        return executeWrite(
+                "detectMdmViolations:" + requireText(deviceId, "device_id"),
+                idempotencyKey,
+                Map.of(
+                        "device_id", deviceId,
+                        "apps", appPackages == null ? List.of() : appPackages,
+                        "sites", siteDomains == null ? List.of() : siteDomains),
+                MdmViolationDetectionResult.class,
+                "device.policy_violation",
+                "device.policy_violation_failed",
+                DEVICE_MANAGE,
+                "mdm_policy_violation",
+                () -> {
+                    String id = requireText(deviceId, "device_id");
+                    Instant now = Instant.now();
+                    List<MdmPolicyViolationRecord> detected = new java.util.ArrayList<>();
+                    if (appPackages != null) {
+                        for (String pkg : appPackages) {
+                            String packageName = trimToNull(pkg);
+                            if (packageName != null && !mdmRepository.isAppWhitelisted(packageName)) {
+                                detected.add(persistDetectedViolation(
+                                        id, "unauthorized_app", "non-whitelisted app: " + packageName, now));
+                            }
+                        }
+                    }
+                    if (siteDomains != null) {
+                        for (String site : siteDomains) {
+                            String domain = trimToNull(site);
+                            if (domain != null && !mdmRepository.isSiteWhitelisted(domain)) {
+                                detected.add(persistDetectedViolation(
+                                        id, "non_whitelisted_site", "non-whitelisted site: " + domain, now));
+                            }
+                        }
+                    }
+                    if (!detected.isEmpty()) {
+                        mdmRepository.findDeviceManagement(id).ifPresent(device ->
+                                mdmRepository.updateDeviceManagement(
+                                        id, "violation", device.policyStatus(), device.lastPolicySyncAt(), device.enrolledAt()));
+                    }
+                    return new MdmViolationDetectionResult(id, detected.size(), List.copyOf(detected));
+                },
+                result -> result.deviceId()
+        );
+    }
+
+    private MdmPolicyViolationRecord persistDetectedViolation(
+            String deviceId, String violationType, String detail, Instant now) {
+        return mdmRepository.saveViolation(new MdmPolicyViolationRecord(
+                "mdm_vio_" + UUID.randomUUID().toString().replace("-", ""),
+                deviceId,
+                violationType,
+                detail,
+                now,
+                false,
+                null,
+                null,
+                null,
+                now));
+    }
+
+    /**
+     * P0#9 违规处置闭环（受 mdm.violation.handle）：把 handled 置真并落处置类型。
+     * disposition=device_blocked 时联动：设备 management_status→blocked + 撤销设备凭证（消除"handled 无端点可置真"）。
+     */
+    @Transactional
+    public MdmPolicyViolationRecord handleViolation(String violationId, String disposition, String handledNote, String idempotencyKey) {
+        return executeWrite(
+                "handleMdmViolation:" + requireText(violationId, "violation_id"),
+                idempotencyKey,
+                Map.of("violation_id", violationId, "disposition", disposition == null ? "" : disposition),
+                MdmPolicyViolationRecord.class,
+                "mdm.violation.handled",
+                "mdm.violation.handle_failed",
+                VIOLATION_HANDLE,
+                "mdm_policy_violation",
+                () -> {
+                    String id = requireText(violationId, "violation_id");
+                    String chosen = requireText(disposition, "disposition");
+                    if (!DISPOSITIONS.contains(chosen)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "disposition is invalid");
+                    }
+                    MdmPolicyViolationRecord existing = mdmRepository.findViolationById(id)
+                            .orElseThrow(() -> ApiException.notFound("VIOLATION_NOT_FOUND", "violation not found"));
+                    if (existing.handled()) {
+                        throw ApiException.conflict("VIOLATION_ALREADY_HANDLED", "violation is already handled");
+                    }
+                    Instant now = Instant.now();
+                    Instant blockedAt = "device_blocked".equals(chosen) ? now : null;
+                    mdmRepository.markViolationHandled(id, chosen, trimToNull(handledNote), blockedAt);
+                    if ("device_blocked".equals(chosen)) {
+                        blockDeviceAndRevokeCredential(existing.deviceId(), now);
+                    }
+                    return new MdmPolicyViolationRecord(
+                            existing.id(),
+                            existing.deviceId(),
+                            existing.violationType(),
+                            existing.detail(),
+                            existing.occurredAt(),
+                            true,
+                            trimToNull(handledNote),
+                            chosen,
+                            blockedAt,
+                            existing.createdAt());
+                },
+                record -> record.id()
+        );
+    }
+
+    /** 封禁联动：设备纳管状态→blocked 并撤销设备凭证（凭证撤销=kiosk 端会被踢出）。 */
+    private void blockDeviceAndRevokeCredential(String deviceId, Instant now) {
+        mdmRepository.findDeviceManagement(deviceId).ifPresent(device ->
+                mdmRepository.updateDeviceManagement(
+                        deviceId, "blocked", device.policyStatus(), device.lastPolicySyncAt(), device.enrolledAt()));
+        terminalDeviceRepository.findDeviceCredentialByDeviceId(deviceId)
+                .filter(credential -> "active".equals(credential.status()))
+                .ifPresent(credential -> terminalDeviceRepository.saveDeviceCredential(new DeviceCredentialRecord(
+                        credential.deviceId(),
+                        credential.tokenSha256(),
+                        "revoked",
+                        credential.createdAt(),
+                        now)));
     }
 
     public PageResponse<MdmPolicyViolationRecord> listViolations(String deviceId) {

@@ -195,6 +195,7 @@ class IntegrationControllerTests {
                 new Endpoint("GET", "/api/v1/integration/reconciliation/differences", "integration.reconciliation.view", null),
                 new Endpoint("POST", "/api/v1/integration/reconciliation/differences", "integration.reconciliation.manage", differenceBody("difference-create")),
                 new Endpoint("POST", "/api/v1/integration/reconciliation/differences/difference_1/resolve", "integration.reconciliation.resolve", differenceResolveBody("difference-resolve")),
+                new Endpoint("POST", "/api/v1/integration/reconciliation/channel-auto", "integration.reconciliation.manage", channelReconcileBody("channel-recon")),
                 new Endpoint("GET", "/api/v1/integration/retail/skus", "integration.provider_adapter.view", null),
                 new Endpoint("GET", "/api/v1/integration/retry-tasks", "integration.retry.view", null),
                 new Endpoint("POST", "/api/v1/integration/retry-tasks", "integration.retry.manage", taskBody("retry-create")),
@@ -354,6 +355,21 @@ class IntegrationControllerTests {
                 """.formatted(idempotencyKey);
     }
 
+    private String channelReconcileBody(String idempotencyKey) {
+        return """
+                {
+                  "idempotency_key": "%s",
+                  "provider_code": "mock-provider",
+                  "business_type": "catering",
+                  "channel": "meituan",
+                  "period_start": "2026-06-14",
+                  "period_end": "2026-06-14",
+                  "dry_run": true,
+                  "expected_entries": []
+                }
+                """.formatted(idempotencyKey);
+    }
+
     private String differenceBody(String idempotencyKey) {
         return """
                 {
@@ -454,6 +470,8 @@ class IntegrationControllerTests {
                 "synced",
                 128800L,
                 "CNY",
+                "meituan",
+                "mt-channel-1",
                 Map.of("provider_private_status", "PAID"),
                 now,
                 now
@@ -513,6 +531,7 @@ class IntegrationControllerTests {
                 128700L,
                 100L,
                 status,
+                "platform",
                 "finance_1",
                 "resolved".equals(status) ? "confirmed platform amount" : null,
                 Map.of("provider_private_status", "DIFF"),

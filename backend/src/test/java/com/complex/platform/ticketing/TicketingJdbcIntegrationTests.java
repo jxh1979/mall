@@ -98,7 +98,7 @@ class TicketingJdbcIntegrationTests {
                 11900L,
                 12900L,
                 false,
-                "active",null,
+                "active",null,null,
                 now,
                 now
         ));
@@ -144,7 +144,7 @@ class TicketingJdbcIntegrationTests {
                 11900L,
                 12900L,
                 false,
-                "active",null,
+                "active",null,null,
                 now,
                 now
         ));
@@ -288,7 +288,7 @@ class TicketingJdbcIntegrationTests {
 
     private void seedIssuedEntitlementForStatusCheck(Instant now) {
         repository.saveTicketType(new TicketTypeRecord(
-                "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null, now, now));
+                "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null,null, now, now));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null,null, now, now));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
@@ -315,7 +315,7 @@ class TicketingJdbcIntegrationTests {
                 11900L,
                 12900L,
                 false,
-                "published",null,
+                "published",null,null,
                 now,
                 now
         ));
@@ -489,7 +489,7 @@ class TicketingJdbcIntegrationTests {
                 11900L,
                 12900L,
                 false,
-                "published",null,
+                "published",null,null,
                 now,
                 now
         ));
@@ -560,7 +560,7 @@ class TicketingJdbcIntegrationTests {
                 11900L,
                 12900L,
                 false,
-                "published",null,
+                "published",null,null,
                 now,
                 now
         ));

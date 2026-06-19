@@ -44,6 +44,9 @@ public class TicketCatalogService {
                 // R5 审计点②：validity_days 暂无创建入口（DTO 未扩展），保持 null=回退默认 1 天。
                 // 后续若需按票种配置有效期，再扩展 TicketTypeRequest + 此处赋值。
                 null,
+                // P1 清单#19：refresh_interval_seconds 暂无创建入口（DTO 未扩展），保持 null=回退默认 60 秒。
+                // 后续若需按票种配置刷新窗口，再扩展 TicketTypeRequest + 此处赋值（取值 {30,60}）。
+                null,
                 now,
                 now
         ));
@@ -153,6 +156,7 @@ public class TicketCatalogService {
                 current.stockRequired(),
                 "published",
                 current.validityDays(),
+                current.refreshIntervalSeconds(),
                 current.createdAt(),
                 now
         ));

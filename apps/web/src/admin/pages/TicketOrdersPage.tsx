@@ -2,9 +2,13 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
+import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
+
+// 后端写权限码（TicketingController：/ticketing/orders/{order_id}/issue）
+const TICKET_ISSUE_PERMISSION = "ticket.ticket.issue";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketVerificationRow } from "../types";
 
@@ -48,7 +52,7 @@ function selectedLabel(order: TicketOrderRow | undefined) {
   return order?.orderNo ?? order?.id ?? "-";
 }
 
-export function TicketOrdersPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function TicketOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [orders, setOrders] = React.useState<TicketOrderRow[]>([]);
   const [entitlements, setEntitlements] = React.useState<TicketIssuedEntitlementRow[]>([]);
   const [verifications, setVerifications] = React.useState<TicketVerificationRow[]>([]);
@@ -97,6 +101,14 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError }: Admin
     }
   }
 
+  function validateIssue() {
+    if (!selectedOrder) {
+      setFormError(TEXT.noOrder);
+      return false;
+    }
+    return true;
+  }
+
   async function issueOrder() {
     if (!selectedOrder) {
       setFormError(TEXT.noOrder);
@@ -133,7 +145,16 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError }: Admin
 
         <div className="admin-form-row" data-testid="ticket-order-actions">
           <input data-testid="ticket-entitlement-code" value={entitlementCode} onChange={(event) => setEntitlementCode(event.target.value)} placeholder={TEXT.entitlementCode} />
-          <button type="button" data-testid="ticket-order-issue" disabled={busyAction !== ""} onClick={() => void issueOrder()}>{TEXT.issue}</button>
+          <HighRiskConfirm
+            label={TEXT.issue}
+            impact="将对选中订单触发正式出票并写入审计留痕，出票后权益与核销随之生效。"
+            disabled={busyAction !== ""}
+            precheck={validateIssue}
+            onConfirm={() => void issueOrder()}
+            permissionsState={effectivePermissions}
+            permissions={[TICKET_ISSUE_PERMISSION]}
+            data-testid="ticket-order-issue"
+          />
           <button type="button" data-testid="ticket-verification-preview" disabled={busyAction !== ""} onClick={() => void previewVerification()}>{TEXT.preview}</button>
           <span className="admin-muted-action" data-testid="ticket-order-boundary">{TEXT.boundary}</span>
         </div>

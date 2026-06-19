@@ -151,6 +151,59 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 2. 财务日结只显示潜在影响金额，不自动改锁定日结。
 3. 经审批后进入应收应付或财务调整台账。
 
+## 6D. 库存差异→应收应付资金回写（stocktake/variance→AP）
+
+> 修正(2026-06-19 R5业务HTML缺口审计 F5)：本文 R7 横幅已自认"盘点/报损对账无 stocktake/variance 表或代码，库存差异→独立批次→应收应付链条未落地"。代码核验：migration 中 `stocktake` **零命中**；`variance` 仅作为子类型枚举 `stock_variance`（V085 `inventory_high_value_reviews.subject_type` CHECK、V094 注释）和指标字段 `variance_rate`（V037），**无 `CREATE TABLE inventory_variance/stocktake`**；`source_type=inventory_difference` 虽列于 §4.1 枚举，但无生成代码。本节补"库存差异→AR/AP 资金回写"完整链条。
+
+### 6D.1 业务问题
+
+- 报损、盘点差异、高价值酒水异常当前**不进财务台账**：缺 stocktake（盘点单）/inventory_variance（差异明细）承载表，`source_type=inventory_difference` 无生成代码，库存差异影响金额无法回写应收应付。
+- 结果：业务HTML #finance 要求的"核对采购入库、库存消耗、报损、盘点差异"在财务侧只能停留在差异提示，无法形成可追款/可付款/可入账的台账项。
+
+### 6D.2 表设计建议（待落地）
+
+| 表 | 用途 | 关键字段（建议） |
+|---|---|---|
+| `stocktake` 盘点单 | 一次盘点动作的主单 | `id`、`project_id`、`scope`（仓/区/点位）、`business_date`、`status`、`reviewer_id`、`created_by`、审计字段 |
+| `inventory_variance` 差异明细 | 盘点/报损差异逐项 | `id`、`stocktake_id`、`item_id`、`batch_id`、`qty_diff`（数量差）、`amount_diff_cent`（金额差，分）、`reason`（报损/盘亏/盘盈/异常）、`review_status`（差异生成/复核/入账/驳回）、`high_value_flag`、审计字段 |
+
+> 与既有结构衔接：高价值判定复用 `inventory_high_value_reviews`（V085，`subject_type IN ('damage_report','stock_variance','saved_bottle_void')`）与 V094 阈值字段，报损/盘点差异经域内复核后再桥接财务。
+
+### 6D.3 桥接：库存差异→ar_ap_items
+
+- 高价值报损 / 盘点差异经**主管复核**（`inventory_variance.review_status=入账`）后 →生成 `ar_ap_items`，`source_type=inventory_difference`，`source_id` 指向 `inventory_variance.id`。
+- 方向：损失类（盘亏/报损）按应付/调整分录登记；盘盈或回收类按应收/冲减登记（具体科目方向见待确认项）。
+- 来源明细写入 `ar_ap_item_sources`（关联库存差异），金额来自 `amount_diff_cent`，不得前端手填。
+
+### 6D.4 状态流转
+
+```
+差异生成（inventory_variance 创建）
+  → 复核（主管/高价值复核，inventory_high_value_reviews）
+    → 入账（生成 ar_ap_items，source_type=inventory_difference）
+    或 驳回（不入账，留痕原因）
+```
+
+- 入账前仅在财务日结显示潜在影响金额，不自动改锁定日结（承接 §6.3 现状口径）。
+
+### 6D.5 事件
+
+- `inventory.variance.posted_to_ap`：库存差异复核通过并生成应收应付/调整分录后发出，供日结、对账、台账下游订阅。
+
+### 6D.6 与供应链高价值复核 / V094 阈值衔接
+
+- 报损 / 盘点差异是否走高价值复核由 V094 阈值字段判定；超阈值进入 `inventory_high_value_reviews`（V085）域内复核。
+- 仅域内复核通过的高价值差异方可桥接财务入账，避免低于阈值的小额差异淹没台账。
+
+### 6D.7 验收
+
+- 高价值报损审批通过后，可在 AR/AP 台账查到对应**应付/调整分录**（`source_type=inventory_difference`，金额=差异金额）。
+- 存酒"已售未取"余额作为**预收/负债口径**登记（承接 F 审计"存酒余额→AR/AP 项"），标 **P1**：将 `saved_bottle` 已售未取余额作为平台对客负债，按预收/待履约口径登记入 AR/AP，履约（取酒）或核销后冲减。
+
+> 待业务确认：库存差异入账的会计科目方向——应付（对供应商/责任方的赔付义务）vs 损益调整（直接计入经营损益、不形成对外应付）。
+
+---
+
 ## 7. 权限与审计
 
 | 动作 | 权限 | 审计要求 |
@@ -203,11 +256,142 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 1. Given 财务人员导出台账，When 导出字段包含主体、金额、账龄和状态，Then 系统必须记录导出人、时间、筛选条件和文件摘要。
 2. Given 台账进入争议状态，When 争议关闭，Then 系统必须记录关闭结论、责任方、处理金额和附件。
 
+## 14. 综合体计费 AR/AP 开发设计（P1）
+
+> 新增说明（R6 全闭环(2026-06-19)，市场标杆审计后回填，只读核验真实迁移/代码后追加，未改代码）：相对成熟商场/综合体系统，"营业额租金/扣点（turnover rent）、保证金专项台账、CAM 公摊分摊"在全库迁移/字段层**零命中**（`turnover_rent`/`deposit_ledger`/`cam_allocations`/`true-up` 在 migration 与 docs 表设计层均无 `CREATE TABLE`，仅 `business-module-mature-system-gap-analysis.md` 以市场标杆口径提及）；§4.1 `source_type` 枚举亦无 `turnover_rent`/`cam` 取值。存酒"已售未取"负债当前仅 §6D.7 标 P1，未入 AR/AP 实链。本节承接产品口径 `finance-settlement-product-prd-v0.1.md §13`，补三类综合体计费的 AR/AP 落库与计费引擎开发设计。全部为 P1（CAM true-up 为 P2）。科目方向（entry 方向）引用决议 `business-decision-log` R6-D08（科目方向）。
+
+### 14.1 表设计建议（待落地）
+
+#### 14.1.1 `turnover_rent_rules` 营业额租金规则
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | uuid | 是 | 主键 |
+| `project_id` | uuid | 是 | 综合体项目 |
+| `contract_id` | uuid | 是 | 关联合同 |
+| `merchant_id` | uuid | 是 | 关联商户 |
+| `base_rent_cent` | bigint | 是 | 固定租金，单位分 |
+| `turnover_rate_bp` | int | 是 | 扣率（基点 bp，万分之一，避免浮点） |
+| `floor_rent_cent` | bigint | 否 | 保底租金，单位分（空=无保底） |
+| `cap_rent_cent` | bigint | 否 | 封顶抽成租金，单位分（空=无封顶） |
+| `calc_mode` | enum | 是 | `base_plus_turnover` 累加 / `greater_of` 取大 / `turnover_only` 纯抽成，默认 `base_plus_turnover`（R6-D08 配套，默认按合同摘要） |
+| `settlement_cycle` | enum | 是 | `monthly`/`quarterly`，默认 `monthly` |
+| `enabled` | boolean | 是 | 营业额回流开关，默认 `false`（第三方未接入前置灰，依决议日志 §2） |
+| 审计字段 | — | 是 | created_by/created_at/updated_by/updated_at/deleted_at |
+
+#### 14.1.2 `deposit_ledger` 保证金专项台账
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | uuid | 是 | 主键 |
+| `project_id` | uuid | 是 | 综合体项目 |
+| `contract_id` | uuid | 是 | 关联合同 |
+| `merchant_id` | uuid | 是 | 关联商户 |
+| `action_type` | enum | 是 | `charge` 收取 / `refund` 退还 / `offset` 抵扣 / `forfeit` 没收 |
+| `amount_cent` | bigint | 是 | 动作金额，单位分（恒正，方向由 action_type 决定） |
+| `balance_after_cent` | bigint | 是 | 动作后保证金余额，单位分（系统算，不前端填） |
+| `linked_ar_ap_item_id` | uuid | 否 | offset 时指向被抵扣的租金应收 `ar_ap_items.id` |
+| `reason` | text | 否 | 退还/没收/抵扣原因 |
+| `approval_status` | enum | 是 | `pending`/`approved`/`rejected`（没收/抵扣须审批，承接 §13.2 默认值） |
+| 审计字段 | — | 是 | created_by/created_at/updated_by/updated_at/deleted_at |
+
+> 余额硬规则：`balance_after = Σcharge − Σrefund − Σoffset − Σforfeit`，由系统算；退还/抵扣不得使余额为负。
+
+#### 14.1.3 `cam_allocations` CAM 公摊分摊
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | uuid | 是 | 主键 |
+| `project_id` | uuid | 是 | 综合体项目 |
+| `cost_pool_period` | varchar | 是 | 费用池周期标识（如 `2026-06`） |
+| `cost_pool_amount_cent` | bigint | 是 | 本周期物业/能源/公共费用池总额，单位分 |
+| `merchant_id` | uuid | 是 | 被分摊商户 |
+| `contract_id` | uuid | 否 | 关联合同 |
+| `alloc_basis` | enum | 是 | `lease_area` 建筑面积 / `agreed_ratio` 约定比例，默认 `lease_area` |
+| `alloc_weight_bp` | int | 是 | 该商户分摊权重（基点 bp） |
+| `allocated_amount_cent` | bigint | 是 | 分摊额=费用池×权重（系统算，尾差挂最大分摊方） |
+| `is_prepaid` | boolean | 是 | 是否周期预收（P1=true） |
+| `trueup_year` | int | 否 | 年度 true-up 归属年（P2 使用） |
+| `trueup_diff_cent` | bigint | 否 | true-up 差额（多退为负/少补为正，P2） |
+| 审计字段 | — | 是 | created_by/created_at/updated_by/updated_at/deleted_at |
+
+> §4.1 `ar_ap_items.source_type` 枚举须扩 `turnover_rent`、`cam`、`deposit`（落地时由 DB 任务细化 CHECK 约束）。
+
+### 14.2 营业额抽成计费引擎
+
+- 输入：第三方回流营业额（按 `merchant_id` + 结算周期聚合的净营业额，口径默认不含税、扣退款，对齐 `revenue.net`）+ `turnover_rent_rules`。
+- 计费：`抽成租金 = clamp(营业额×turnover_rate_bp/10000, floor_rent, cap_rent)`；最终应收按 `calc_mode` 取 `base+turnover` / `max(base, turnover)` / `turnover_only`。
+- 输出：生成 `ar_ap_items`，`source_type=turnover_rent`，`source_id` 指向回流营业额聚合批次；来源明细写 `ar_ap_item_sources`，金额不前端手填。
+- 门控：`turnover_rent_rules.enabled=false`（开关 off / 接口未接入）时引擎不产出应收，仅试算草稿不入账。
+- 周期内回流增量重算走 `ar_ap_adjustments`（增减抽成），不直接改已确认/锁定台账。
+
+### 14.3 保证金专项台账（收/退/抵扣/没收 → ar_ap 联动）
+
+- `charge`（收取）：登记 `deposit_ledger`，余额↑；不直接进损益，作平台对客负债/暂收口径（科目方向引用 R6-D08）。
+- `refund`（退还）：余额↓至 0；退还 ≤ 当前余额，存在欠费/未结抵扣时阻断或提示先抵扣。
+- `offset`（抵扣租金欠费）：审批通过后，`deposit_ledger` 余额↓，同时联动被抵扣租金 `ar_ap_items` 的 `amount_paid`↑/`amount_unpaid`↓（经 `linked_ar_ap_item_id` 关联），二者金额一致可对账。
+- `forfeit`（没收）：审批通过后余额↓，没收额按 R6-D08 科目方向转平台收入/应收冲销，生成对应 `ar_ap_items` 或调整分录并留痕。
+
+### 14.4 CAM 分摊 → 应收，年度 true-up 差额冲销
+
+- 周期预收（P1）：按 `cam_allocations` 各商户 `allocated_amount_cent` 生成 `ar_ap_items`，`source_type=cam`，`source_id` 指向 `cam_allocations.id`；各商户分摊额之和=费用池总额（尾差挂最大分摊方）。
+- 年度 true-up（P2）：年末按实际发生公共费用与已预收差额计 `trueup_diff_cent`，少补生成应收（正差额）、多退生成应付/退款（负差额），通过 `ar_ap_adjustments` 冲销并留痕。
+
+### 14.5 存酒"已售未取"→ 预收负债登记口径收口（承接 §6D.7 / F5）
+
+> 承接 R7 横幅、§6D.7 P1 与 R5 业务HTML缺口审计 F5："存酒余额→AR/AP 项"。本节明确 entry 方向并收口登记口径，科目方向引用决议 `business-decision-log` R6-D08（科目方向）。
+
+- 登记口径：`saved_bottle` 已售未取余额作为**平台对客负债（预收/待履约）**登记入 `ar_ap_items`，`source_type` 取 `deposit`（或落地时新增 `saved_bottle_liability` 专用枚举，DB 任务细化），`direction` 取负债侧。
+- **entry 方向（引用 R6-D08）**：售出（已售未取）时按"预收负债增加"登记（贷负债方向）；履约（取酒）或核销/作废（`saved_bottle_void`，对应 V085 `subject_type`）后按"负债减少/冲减"登记（借负债方向），余额随取酒进度冲减至 0。
+- 金额来自存酒已售未取余额对应金额，不前端手填；与酒吧账单 / 库存口径可对账。
+
+### 14.6 事件、状态流转、验收
+
+**事件**
+
+- `finance.turnover_rent.posted`：营业额抽成应收生成后发出（仅开关 on）。
+- `finance.deposit.action_posted`：保证金收/退/抵扣/没收动作完成后发出（含 action_type）。
+- `finance.cam.allocation_posted` / `finance.cam.trueup_posted`（P2）：CAM 周期分摊 / 年度 true-up 完成后发出。
+- `finance.saved_bottle_liability.posted` / `.released`：存酒负债登记 / 取酒核销冲减后发出。
+
+**状态流转**
+
+```
+营业额回流(开关on) → 抽成试算(草稿) → 财务确认(应收, source_type=turnover_rent) → 周期锁定
+保证金: charge → (offset 联动租金应收 / forfeit 转收入, 均审批) → refund(余额→0)
+CAM: 费用池归集 → 分摊预收应收(source_type=cam) → (P2)年度true-up多退少补
+存酒负债: 售出→预收负债登记 → 取酒/核销→负债冲减(R6-D08 方向)
+```
+
+**验收**
+
+- 高价值报损审批后入应付可查（承接 §6D.7）：`source_type=inventory_difference` 应付/调整分录可在台账查到，金额=差异金额。
+- 营业额抽成可对账：开关 on 时按规则生成 `source_type=turnover_rent` 应收，可关联合同/商户/周期，与回流营业额×扣率封顶保底口径一致；开关 off 不入账。
+- 保证金四动作余额自洽：余额=Σcharge−Σrefund−Σoffset−Σforfeit，offset 与被抵扣租金应收金额一致可对账。
+- CAM 分摊额之和=费用池总额（仅取整尾差），`source_type=cam` 可对账；P2 true-up 差额可生成多退少补。
+- 存酒已售未取负债登记后可查，取酒/核销后冲减至 0，entry 方向符合 R6-D08。
+
+### 14.7 待业务确认项（已写明 R6 建议默认值）
+
+| 待业务确认项 | R6 建议默认值 |
+|---|---|
+| 营业额扣率 / 保底 / 封顶取值 | 默认按合同摘要约定扣率；未约定则不启用抽成（只收固定租金） |
+| 抽成模式 `calc_mode` | 默认 `base_plus_turnover`（固定+抽成累加） |
+| 营业额口径 | 默认不含税净营业额、扣退款，对齐 `revenue.net` |
+| 保证金抵扣 / 没收触发 | 默认人工发起 + 财务/上级审批，不自动扣减 |
+| CAM 分摊权重 | 默认按租赁建筑面积占比，合同另约定比例时以合同为准 |
+| CAM true-up 周期 | 默认按年度（自然年）true-up，标 P2 |
+| 库存差异 / 存酒负债 entry 科目方向 | 引用 `business-decision-log` R6-D08（科目方向）；库存差异默认损益调整 vs 应付按 R6-D08 定，存酒按预收负债方向登记 |
+
+---
+
 ## 12. 引用
 
 | 主题 | 文档 |
 |---|---|
 | 财务产品口径 | `finance-settlement-product-prd-v0.1.md §10-§11` |
+| 综合体计费产品口径 | `finance-settlement-product-prd-v0.1.md §13`（R6 全闭环(2026-06-19)） |
+| 科目方向决议 | `business-decision-log` R6-D08（科目方向） |
 | P0 任务清单 | `p0-implementation-task-list.md §18` |
 | 主体绑定 | `business-entity-binding-development-design-v0.1.md` |
 | PM critic 验收 | `pm-critic-and-acceptance-criteria-20260610.md §3.1` |

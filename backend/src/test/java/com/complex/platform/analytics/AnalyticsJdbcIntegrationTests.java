@@ -192,6 +192,32 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void groupOverviewCountsDistinctMerchantsWithEtlSnapshotAndSeedsPermission() {
+        java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-15");
+        Instant now = Instant.parse("2026-06-15T05:00:00Z");
+        var keyA = new AnalyticsRecords.MetricSnapshotKey("revenue.bar", "bar", "daily", businessDate, "merchant", "merchant_grp_a");
+        var keyB = new AnalyticsRecords.MetricSnapshotKey("revenue.net", "finance", "daily", businessDate, "merchant", "merchant_grp_b");
+        var keyADup = new AnalyticsRecords.MetricSnapshotKey("verify.done", "ticketing", "daily", businessDate, "merchant", "merchant_grp_a");
+        repository.upsertMetricSnapshot(keyA, new java.math.BigDecimal("5000"), "etl_aggregate", now);
+        repository.upsertMetricSnapshot(keyB, new java.math.BigDecimal("9000"), "etl_aggregate", now);
+        repository.upsertMetricSnapshot(keyADup, new java.math.BigDecimal("12"), "etl_aggregate", now);
+
+        // 去重商户数：merchant_grp_a 出现两次（两指标）仍计 1，加 merchant_grp_b → 2。
+        assertThat(repository.countMerchantsWithEtlSnapshot(businessDate)).isEqualTo(2L);
+        // 无 ETL 商户快照的业务日 → 0（不伪造）。
+        assertThat(repository.countMerchantsWithEtlSnapshot(java.time.LocalDate.parse("2099-01-01"))).isZero();
+
+        // 集团总览权限已种入并授予平台管理员。
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM permissions WHERE permission_code = 'analytics.group.view' AND status = 'active'
+                """, Map.of(), Long.class)).isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM role_permissions
+                 WHERE role_id = 'role_platform_admin' AND permission_code = 'analytics.group.view'
+                """, Map.of(), Long.class)).isEqualTo(1L);
+    }
+
+    @Test
     void metricSnapshotUpsertIsIdempotentAndScopeIsolated() {
         java.time.LocalDate businessDate = java.time.LocalDate.parse("2026-06-16");
         Instant now = Instant.parse("2026-06-16T05:00:00Z");

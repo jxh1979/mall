@@ -2,6 +2,7 @@ package com.complex.platform.customer;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -174,11 +175,13 @@ class JdbcCustomerRepository implements CustomerRepository {
         jdbcTemplate.update("""
                 INSERT INTO customer_points_ledger (
                     id, customer_id, points_delta, balance_after, source_type,
-                    source_id, description, expire_at, remaining_points, expired, created_at
+                    source_id, description, expire_at, remaining_points, expired, created_at,
+                    change_type, status, source_doc_type, source_doc_id
                 )
                 VALUES (
                     :id, :customer_id, :points_delta, :balance_after, :source_type,
-                    :source_id, :description, :expire_at, :remaining_points, :expired, :created_at
+                    :source_id, :description, :expire_at, :remaining_points, :expired, :created_at,
+                    :change_type, :status, :source_doc_type, :source_doc_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     points_delta = EXCLUDED.points_delta,
@@ -188,7 +191,11 @@ class JdbcCustomerRepository implements CustomerRepository {
                     description = EXCLUDED.description,
                     expire_at = EXCLUDED.expire_at,
                     remaining_points = EXCLUDED.remaining_points,
-                    expired = EXCLUDED.expired
+                    expired = EXCLUDED.expired,
+                    change_type = EXCLUDED.change_type,
+                    status = EXCLUDED.status,
+                    source_doc_type = EXCLUDED.source_doc_type,
+                    source_doc_id = EXCLUDED.source_doc_id
                 """, pointsLedgerParameters(ledger));
         return ledger;
     }
@@ -197,7 +204,8 @@ class JdbcCustomerRepository implements CustomerRepository {
     public List<CustomerPointsLedgerRecord> listPointsLedgerByCustomerId(String customerId) {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
-                       source_id, description, expire_at, remaining_points, expired, created_at
+                       source_id, description, expire_at, remaining_points, expired, created_at,
+                       change_type, status, source_doc_type, source_doc_id
                   FROM customer_points_ledger
                  WHERE customer_id = :customer_id
                  ORDER BY created_at DESC, id DESC
@@ -208,11 +216,13 @@ class JdbcCustomerRepository implements CustomerRepository {
     public List<CustomerPointsLedgerRecord> listExpirableBatches(String customerId, Instant now) {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
-                       source_id, description, expire_at, remaining_points, expired, created_at
+                       source_id, description, expire_at, remaining_points, expired, created_at,
+                       change_type, status, source_doc_type, source_doc_id
                   FROM customer_points_ledger
                  WHERE customer_id = :customer_id
                    AND points_delta > 0
                    AND expired = FALSE
+                   AND status <> 'pending'
                    AND expire_at IS NOT NULL
                    AND expire_at <= :now
                    AND COALESCE(remaining_points, 0) > 0
@@ -224,11 +234,13 @@ class JdbcCustomerRepository implements CustomerRepository {
     public List<CustomerPointsLedgerRecord> listOpenBatches(String customerId) {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
-                       source_id, description, expire_at, remaining_points, expired, created_at
+                       source_id, description, expire_at, remaining_points, expired, created_at,
+                       change_type, status, source_doc_type, source_doc_id
                   FROM customer_points_ledger
                  WHERE customer_id = :customer_id
                    AND points_delta > 0
                    AND expired = FALSE
+                   AND status <> 'pending'
                    AND expire_at IS NOT NULL
                    AND COALESCE(remaining_points, 0) > 0
                  ORDER BY expire_at ASC, created_at ASC, id ASC
@@ -251,6 +263,52 @@ class JdbcCustomerRepository implements CustomerRepository {
                    SET remaining_points = :remaining
                  WHERE id = :id
                 """, Map.of("id", ledgerId, "remaining", remainingPoints));
+    }
+
+    @Override
+    public java.util.Optional<CustomerPointsLedgerRecord> findPointsLedgerBySourceDoc(
+            String sourceDocType, String sourceDocId, String changeType) {
+        return jdbcTemplate.query("""
+                SELECT id, customer_id, points_delta, balance_after, source_type,
+                       source_id, description, expire_at, remaining_points, expired, created_at,
+                       change_type, status, source_doc_type, source_doc_id
+                  FROM customer_points_ledger
+                 WHERE source_doc_type = :source_doc_type
+                   AND source_doc_id = :source_doc_id
+                   AND change_type = :change_type
+                 ORDER BY created_at ASC, id ASC
+                 LIMIT 1
+                """, Map.of(
+                "source_doc_type", sourceDocType,
+                "source_doc_id", sourceDocId,
+                "change_type", changeType), this::mapPointsLedger).stream().findFirst();
+    }
+
+    @Override
+    public List<CustomerPointsLedgerRecord> listPointsLedgerBySourceDoc(
+            String sourceDocType, String sourceDocId, String changeType) {
+        return jdbcTemplate.query("""
+                SELECT id, customer_id, points_delta, balance_after, source_type,
+                       source_id, description, expire_at, remaining_points, expired, created_at,
+                       change_type, status, source_doc_type, source_doc_id
+                  FROM customer_points_ledger
+                 WHERE source_doc_type = :source_doc_type
+                   AND source_doc_id = :source_doc_id
+                   AND change_type = :change_type
+                 ORDER BY created_at ASC, id ASC
+                """, Map.of(
+                "source_doc_type", sourceDocType,
+                "source_doc_id", sourceDocId,
+                "change_type", changeType), this::mapPointsLedger);
+    }
+
+    @Override
+    public void updatePointsLedgerStatus(String ledgerId, String status) {
+        jdbcTemplate.update("""
+                UPDATE customer_points_ledger
+                   SET status = :status
+                 WHERE id = :id
+                """, Map.of("id", ledgerId, "status", status));
     }
 
     @Override
@@ -365,6 +423,39 @@ class JdbcCustomerRepository implements CustomerRepository {
                 "table_id", tableId,
                 "table_type", tableType
         ), this::mapBarTable).stream().findFirst();
+    }
+
+    @Override
+    public List<BarDepositRuleRecord> listDepositRules(String barId) {
+        return jdbcTemplate.query("""
+                SELECT id, bar_id, merchant_id, scope_type, scope_id, mode,
+                       fixed_amount_cent, ratio_bps, cancel_free_before_minutes, enabled,
+                       created_at, updated_at
+                  FROM bar_deposit_rules
+                 WHERE bar_id = :bar_id AND enabled = TRUE
+                 ORDER BY scope_type DESC, created_at DESC, id
+                """, Map.of("bar_id", barId), this::mapDepositRule);
+    }
+
+    private BarDepositRuleRecord mapDepositRule(ResultSet resultSet, int rowNumber) throws SQLException {
+        Long fixedAmount = resultSet.getObject("fixed_amount_cent") == null
+                ? null : resultSet.getLong("fixed_amount_cent");
+        Integer ratioBps = resultSet.getObject("ratio_bps") == null
+                ? null : resultSet.getInt("ratio_bps");
+        return new BarDepositRuleRecord(
+                resultSet.getString("id"),
+                resultSet.getString("bar_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("scope_type"),
+                resultSet.getString("scope_id"),
+                resultSet.getString("mode"),
+                fixedAmount,
+                ratioBps,
+                resultSet.getInt("cancel_free_before_minutes"),
+                resultSet.getBoolean("enabled"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
+        );
     }
 
     @Override
@@ -540,7 +631,11 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("expire_at", timestampWithTimeZone(ledger.expireAt()))
                 .addValue("remaining_points", ledger.remainingPoints())
                 .addValue("expired", ledger.expired())
-                .addValue("created_at", timestampWithTimeZone(ledger.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(ledger.createdAt()))
+                .addValue("change_type", ledger.changeType())
+                .addValue("status", ledger.status())
+                .addValue("source_doc_type", ledger.sourceDocType())
+                .addValue("source_doc_id", ledger.sourceDocId());
     }
 
     private MapSqlParameterSource redemptionCatalogParameters(CustomerRedemptionCatalogItemRecord item) {
@@ -655,7 +750,11 @@ class JdbcCustomerRepository implements CustomerRepository {
                 nullableInstant(resultSet, "expire_at"),
                 remaining,
                 resultSet.getBoolean("expired"),
-                nullableInstant(resultSet, "created_at")
+                nullableInstant(resultSet, "created_at"),
+                resultSet.getString("change_type"),
+                resultSet.getString("status"),
+                resultSet.getString("source_doc_type"),
+                resultSet.getString("source_doc_id")
         );
     }
 

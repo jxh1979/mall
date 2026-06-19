@@ -27,11 +27,13 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_types (
                     id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
-                    holiday_price_cent, stock_required, status, validity_days, created_at, updated_at
+                    holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
+                    created_at, updated_at
                 )
                 VALUES (
                     :id, :ticket_name, :base_calendar_price_mode, :weekday_price_cent, :weekend_price_cent,
-                    :holiday_price_cent, :stock_required, :status, :validity_days, :created_at, :updated_at
+                    :holiday_price_cent, :stock_required, :status, :validity_days, :refresh_interval_seconds,
+                    :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_name = EXCLUDED.ticket_name,
@@ -42,6 +44,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     stock_required = EXCLUDED.stock_required,
                     status = EXCLUDED.status,
                     validity_days = EXCLUDED.validity_days,
+                    refresh_interval_seconds = EXCLUDED.refresh_interval_seconds,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketTypeParameters(ticketType));
         return ticketType;
@@ -51,7 +54,8 @@ class JdbcTicketingRepository implements TicketingRepository {
     public List<TicketTypeRecord> listTicketTypes() {
         return jdbcTemplate.query("""
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
-                       holiday_price_cent, stock_required, status, validity_days, created_at, updated_at
+                       holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
+                       created_at, updated_at
                   FROM ticket_types
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapTicketType);
@@ -61,7 +65,8 @@ class JdbcTicketingRepository implements TicketingRepository {
     public Optional<TicketTypeRecord> findTicketTypeById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
-                       holiday_price_cent, stock_required, status, validity_days, created_at, updated_at
+                       holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
+                       created_at, updated_at
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();

@@ -29,6 +29,7 @@ enum BarWriteOperation implements AuditedOperation {
     MERGE_BILLS("bar.bill.merged", "bar.bill.merge_failed", "bar.bill.split_merge", "bar_bill_operation"),
     CALCULATE_COMMISSION("bar.table_commission.calculated", "bar.table_commission.calculate_failed", "bar.table_commission.calculate", "bar_commission_calculation"),
     VOID_ORDER_ITEM("bar.order_item_voided", "bar.order_item_void_failed", "bar.order_item.void", "bar_order_item"),
+    DECIDE_ORDER_ITEM_VOID("bar.order_item_void_decided", "bar.order_item_void_decide_failed", "bar.order_item.void", "bar_order_item_void"),
     REOPEN_BILL("bar.bill_reopened", "bar.bill_reopen_failed", "bar.bill.reopen", "bar_bill"),
     MARK_PRODUCT_SOLD_OUT("bar.product_sold_out", "bar.product_sold_out_failed", "bar.product.sold_out", "bar_product"),
     ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill"),

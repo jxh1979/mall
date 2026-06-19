@@ -54,13 +54,35 @@ public class WecomConversationService {
 
     private static final Set<String> SCOPE_TYPES = Set.of("global", "project", "merchant");
     private static final Set<String> EXPIRY_ACTIONS = Set.of("archive", "delete", "anonymize");
+    // P0#8 命中状态：open→reviewing→confirmed/dismissed；查询过滤全集 / 复核可达目标态。
+    private static final Set<String> HIT_STATUSES = Set.of("open", "reviewing", "confirmed", "dismissed");
+    private static final Set<String> REVIEW_TARGET_STATUSES = Set.of("reviewing", "confirmed", "dismissed");
 
-    // 基础质检关键词 → risk_flags 规则码（P0 关键词命中；AI 语义质检 P2）。
-    private static final Map<String, List<String>> RISK_KEYWORDS = Map.of(
-            "private_deal", List.of("私单", "走私单", "线下交易"),
-            "private_payment", List.of("私收款", "私人收款", "转我", "扫我码", "私户"),
-            "lure_private_contact", List.of("加我微信", "私微", "私聊", "扫码加我"),
-            "abuse", List.of("辱骂", "傻", "滚")
+    private static final int MAX_SNIPPET_CHARS = 200;
+
+    // P0#8：企微违规规则码默认配置（兜底）。规则与关键词以 analytics_risk_rules（V106 seed）为准、后台可配；
+    // 仅当库内无 compliance 域启用规则时（如纯单测/未迁移环境）回退到此内置默认，保证 detectRiskFlags 行为不退化。
+    // 顺序即 risk_flags 输出顺序的稳定基线（私单/私收款/诱导私微/辱骂/违规承诺）。
+    private static final List<WecomRiskRuleRecord> DEFAULT_RISK_RULES = List.of(
+            new WecomRiskRuleRecord("rule_wecom_staff_private_deal", "STAFF_PRIVATE_DEAL", "high",
+                    List.of("私单", "走私单", "线下交易", "私下交易")),
+            new WecomRiskRuleRecord("rule_wecom_staff_private_payment", "STAFF_PRIVATE_PAYMENT", "critical",
+                    List.of("私收款", "私人收款", "转我", "扫我码", "私户", "转私户")),
+            new WecomRiskRuleRecord("rule_wecom_lure_private_wechat", "LURE_PRIVATE_WECHAT", "high",
+                    List.of("加我微信", "私微", "私聊", "扫码加我", "加我私", "加个微信")),
+            new WecomRiskRuleRecord("rule_wecom_abuse", "ABUSE", "high",
+                    List.of("辱骂", "傻", "滚", "骂")),
+            new WecomRiskRuleRecord("rule_wecom_illegal_promise", "ILLEGAL_PROMISE", "high",
+                    List.of("保证退款", "稳赚", "100%", "包过", "绝对没问题", "违规承诺"))
+    );
+
+    // 规则码 → risk_flags 标记码映射（向后兼容既有 wecom_messages.risk_flags / 既有测试断言的标记名）。
+    private static final Map<String, String> RULE_CODE_TO_FLAG = Map.of(
+            "STAFF_PRIVATE_DEAL", "private_deal",
+            "STAFF_PRIVATE_PAYMENT", "private_payment",
+            "LURE_PRIVATE_WECHAT", "lure_private_contact",
+            "ABUSE", "abuse",
+            "ILLEGAL_PROMISE", "illegal_promise"
     );
 
     private final WecomComplianceRepository repository;
@@ -156,6 +178,10 @@ public class WecomConversationService {
 
         int stored = 0;
         int flagged = 0;
+        int hits = 0;
+        // P0#8：本次同步生效的企微违规规则码（读 analytics_risk_rules，domain=compliance/enabled；
+        //   库内无规则时回退内置默认）。一次解析、整批复用。
+        List<WecomRiskRuleRecord> activeRules = resolveActiveRules();
         LocalDate latestRetentionUntil = conversation.retentionUntil();
         List<WecomConversationSyncRequest.Message> messages =
                 request.messages() == null ? List.of() : request.messages();
@@ -166,8 +192,9 @@ public class WecomConversationService {
             String content = message.content() == null ? "" : message.content();
             // 普通展示脱敏（手机号/身份证/银行卡等正则）。
             String redacted = PiiTextRedactor.redactAndTruncate(content, MAX_REDACTED_CHARS).value();
-            // 基础关键词质检（始终执行；行为不变，AI 不影响此结果）。
-            List<String> riskFlags = detectRiskFlags(content);
+            // P0#8 规则命中（按可配置规则码 + 关键词）。risk_flags 由命中规则派生（向后兼容既有标记）。
+            List<RuleMatch> matches = matchRules(content, activeRules);
+            List<String> riskFlags = riskFlagsFromMatches(matches);
             if (!riskFlags.isEmpty()) {
                 flagged++;
             }
@@ -181,8 +208,9 @@ public class WecomConversationService {
             if (latestRetentionUntil == null || retentionUntil.isAfter(latestRetentionUntil)) {
                 latestRetentionUntil = retentionUntil;
             }
+            String messageId = "wmsg_" + UUID.randomUUID();
             repository.saveMessage(new WecomMessageRecord(
-                    "wmsg_" + UUID.randomUUID(),
+                    messageId,
                     conversation.id(),
                     trimToNull(message.senderRef()),
                     // 原文以引用/密文形式落库（本期占位引用；真实密文待企微 SDK 对接）。
@@ -198,6 +226,8 @@ public class WecomConversationService {
                     aiQcResultJson(aiQc)
             ));
             stored++;
+            // P0#8 命中 → 写 wecom_risk_hits + 入复核队列（analytics_risk_alerts，source_domain=wecom）+ 事件。
+            hits += persistRiskHits(conversation, messageId, matches, now);
         }
 
         // 按最晚消息 + 策略 retention_days 推算会话留存到期。
@@ -222,7 +252,8 @@ public class WecomConversationService {
                 conversation.id(),
                 requestId(),
                 request.idempotencyKey(),
-                Map.of("messages_stored", stored, "flagged_for_review", flagged, "retention_days", retentionDays)
+                Map.of("messages_stored", stored, "flagged_for_review", flagged,
+                        "risk_hits", hits, "retention_days", retentionDays)
         );
         return new WecomSyncResult(conversation.id(), stored, flagged);
     }
@@ -427,23 +458,160 @@ public class WecomConversationService {
         return new WecomRetentionRunResult(archived, deleted, anonymized);
     }
 
-    // ----------------------------------------------------------------------------------------- 质检
+    // ----------------------------------------------------------------------------------------- 质检（规则码命中）
 
-    /** 基础关键词敏感命中（P0）；AI 语义质检 P2。 */
+    /**
+     * 企微违规规则码命中（P0#8）：读 analytics_risk_rules（domain=compliance、enabled）的关键词命中产出 risk_flags。
+     *
+     * <p>由硬编码 RISK_KEYWORDS 升级为读可配置规则码（库无规则时回退内置默认 {@link #DEFAULT_RISK_RULES}）；
+     * 返回值仍为既有 risk_flags 标记码集合（向后兼容 wecom_messages.risk_flags 与既有断言）。AI 语义质检独立并存。
+     */
     List<String> detectRiskFlags(String content) {
+        return riskFlagsFromMatches(matchRules(content, resolveActiveRules()));
+    }
+
+    /** 本次质检生效的企微违规规则码：库内 compliance 启用规则优先；为空则回退内置默认（不退化）。 */
+    private List<WecomRiskRuleRecord> resolveActiveRules() {
+        List<WecomRiskRuleRecord> rules = repository.findEnabledWecomRiskRules();
+        return rules == null || rules.isEmpty() ? DEFAULT_RISK_RULES : rules;
+    }
+
+    /** 单条消息按规则集命中（同一规则只记一次，取首个命中关键词作为脱敏片段证据）。 */
+    private List<RuleMatch> matchRules(String content, List<WecomRiskRuleRecord> rules) {
         if (content == null || content.isBlank()) {
             return List.of();
         }
-        LinkedHashSet<String> flags = new LinkedHashSet<>();
-        for (Map.Entry<String, List<String>> entry : RISK_KEYWORDS.entrySet()) {
-            for (String keyword : entry.getValue()) {
-                if (content.contains(keyword)) {
-                    flags.add(entry.getKey());
+        List<RuleMatch> matches = new ArrayList<>();
+        for (WecomRiskRuleRecord rule : rules) {
+            if (rule.keywords() == null) {
+                continue;
+            }
+            for (String keyword : rule.keywords()) {
+                if (keyword != null && !keyword.isBlank() && content.contains(keyword)) {
+                    matches.add(new RuleMatch(rule, keyword));
                     break;
                 }
             }
         }
+        return matches;
+    }
+
+    /** 命中规则 → risk_flags 标记码集合（保序去重，映射缺失时回退规则码小写，向后兼容）。 */
+    private List<String> riskFlagsFromMatches(List<RuleMatch> matches) {
+        LinkedHashSet<String> flags = new LinkedHashSet<>();
+        for (RuleMatch match : matches) {
+            flags.add(RULE_CODE_TO_FLAG.getOrDefault(
+                    match.rule().ruleCode(), match.rule().ruleCode().toLowerCase(Locale.ROOT)));
+        }
         return List.copyOf(flags);
+    }
+
+    /**
+     * P0#8 命中落地：每个命中规则 → 写 wecom_risk_hits（脱敏片段）+ 入复核队列
+     * （analytics_risk_alerts，source_domain=wecom，open）+ 事件 wecom.risk.hit_detected。返回命中条数。
+     */
+    private int persistRiskHits(
+            WecomConversationRecord conversation,
+            String messageId,
+            List<RuleMatch> matches,
+            Instant now
+    ) {
+        int created = 0;
+        for (RuleMatch match : matches) {
+            WecomRiskRuleRecord rule = match.rule();
+            String hitId = "wrh_" + UUID.randomUUID();
+            // 命中片段按既有 PiiTextRedactor 脱敏（普通展示口径），不落明文 PII。
+            String snippet = PiiTextRedactor.redactAndTruncate(
+                    match.keyword(), MAX_SNIPPET_CHARS).value();
+            // 入复核队列：写孤岛 analytics_risk_alerts，标 source_domain=wecom；幂等键=命中维度（消息×规则）。
+            String alertId = repository.enqueueRiskAlert(new WecomRiskAlertEnqueue(
+                    "ara_" + UUID.randomUUID(),
+                    rule.ruleId(),
+                    rule.riskLevel(),
+                    "wecom_message",
+                    messageId,
+                    "WeCom compliance hit: " + rule.ruleCode(),
+                    "wecom-hit:" + messageId + ":" + rule.ruleCode(),
+                    now));
+            repository.saveRiskHit(new WecomRiskHitRecord(
+                    hitId,
+                    conversation.id(),
+                    messageId,
+                    rule.ruleCode(),
+                    rule.riskLevel(),
+                    snippet,
+                    "open",
+                    null,
+                    null,
+                    conversation.projectId(),
+                    alertId,
+                    now,
+                    now));
+            auditEventService.recordSuccess(
+                    "wecom.risk.hit_detected",
+                    "wecom.sync",
+                    "wecom_risk_hit",
+                    hitId,
+                    requestId(),
+                    null,
+                    Map.of("rule_code", rule.ruleCode(), "risk_level", rule.riskLevel(),
+                            "conversation_id", conversation.id(), "alert_id", alertId));
+            created++;
+        }
+        return created;
+    }
+
+    // ----------------------------------------------------------------------------------------- 命中查询 / 复核处置
+
+    /** 查询企微违规命中（可按 status / conversationId 过滤；分页占位单页）。 */
+    public PageResponse<WecomRiskHitRecord> listRiskHits(String status, String conversationId) {
+        String resolvedStatus = trimToNull(status);
+        if (resolvedStatus != null && !HIT_STATUSES.contains(resolvedStatus)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "status must be one of open/reviewing/confirmed/dismissed");
+        }
+        List<WecomRiskHitRecord> hits = repository.findRiskHits(resolvedStatus, trimToNull(conversationId));
+        return new PageResponse<>(hits, 1, hits.size(), hits.size());
+    }
+
+    /**
+     * 复核处置命中：open→reviewing（领取）/ reviewing|open→confirmed（确认违规）/ dismissed（误报驳回）。
+     *
+     * @param targetStatus reviewing / confirmed / dismissed。
+     * @param reviewerId   复核处置人（必填，写命中 reviewer_id 与事件）。
+     */
+    public WecomRiskHitRecord reviewRiskHit(
+            String hitId, String targetStatus, String reviewerId, String reviewNote) {
+        String resolvedHitId = requireText(hitId, "hit_id");
+        String resolvedStatus = requireText(targetStatus, "status").toLowerCase(Locale.ROOT);
+        if (!REVIEW_TARGET_STATUSES.contains(resolvedStatus)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "status must be one of reviewing/confirmed/dismissed");
+        }
+        String resolvedReviewer = requireText(reviewerId, "reviewer_id");
+        WecomRiskHitRecord existing = repository.findRiskHitById(resolvedHitId)
+                .orElseThrow(() -> ApiException.notFound("WECOM_RISK_HIT_NOT_FOUND", "risk hit not found"));
+        // 终态（confirmed/dismissed）不可再流转，避免复核覆盖既有处置结论。
+        if ("confirmed".equals(existing.status()) || "dismissed".equals(existing.status())) {
+            throw ApiException.conflict("WECOM_RISK_HIT_ALREADY_RESOLVED",
+                    "risk hit already resolved as " + existing.status());
+        }
+        WecomRiskHitRecord updated = repository.updateRiskHitReview(
+                resolvedHitId, resolvedStatus, resolvedReviewer, trimToNull(reviewNote));
+        auditEventService.recordSuccess(
+                "wecom.risk.hit_reviewed",
+                "wecom.risk_hit.review",
+                "wecom_risk_hit",
+                resolvedHitId,
+                requestId(),
+                null,
+                Map.of("from_status", existing.status(), "to_status", resolvedStatus,
+                        "reviewer_id", resolvedReviewer, "rule_code", existing.ruleCode()));
+        return updated;
+    }
+
+    /** 命中规则 + 命中关键词（脱敏片段证据来源）。 */
+    private record RuleMatch(WecomRiskRuleRecord rule, String keyword) {
     }
 
     /**

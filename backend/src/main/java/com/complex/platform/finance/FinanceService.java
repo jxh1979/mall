@@ -10,9 +10,15 @@ import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
+import com.complex.platform.finance.dto.CamAllocationRequest;
+import com.complex.platform.finance.dto.CamTrueUpRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
+import com.complex.platform.finance.dto.DepositActionRequest;
+import com.complex.platform.finance.dto.InventoryVariancePostRequest;
+import com.complex.platform.finance.dto.TurnoverRentBillRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -33,13 +39,28 @@ public class FinanceService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final String CURRENCY_CNY = "CNY";
     private static final Set<String> DIRECTIONS = Set.of("receivable", "payable");
-    private static final Set<String> SOURCE_TYPES = Set.of("contract", "order", "refund", "manual", "settlement", "bar_bill");
+    // P1#13/#14：库存差异(inventory_difference) + 综合体计费三源(turnover_rent/cam/deposit) 入账来源。
+    private static final Set<String> SOURCE_TYPES = Set.of(
+            "contract", "order", "refund", "manual", "settlement", "bar_bill",
+            "inventory_difference", "turnover_rent", "cam", "deposit");
+    // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
+    private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
+    // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
+    private static final Set<String> DEPOSIT_ACTIONS = Set.of("collect", "refund", "deduct", "forfeit");
+    // P2#④ 退款方向统一维度（与 V118 chk_finance_refunds_direction 一致）。默认 original。
+    private static final Set<String> REFUND_DIRECTIONS = Set.of("original", "cash", "third_party", "mixed");
+    private static final String DEFAULT_REFUND_DIRECTION = "original";
+    private static final int BPS_DENOMINATOR = 10000;
     private static final Set<String> DAILY_CLOSE_SCOPES = Set.of("project", "merchant", "bar", "ticketing", "amusement");
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
     // R5 T7：六源（与 finance_daily_close_summaries.chk_fdcs_source 一致）。
     private static final List<String> DAILY_CLOSE_SOURCES = List.of(
             "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow");
     private static final Set<String> ADJUSTMENT_DECISIONS = Set.of("approve", "reject");
+    // P0#7 / R6-D07：对账差异四类枚举（与 V105 chk_frd_difference_type 一致）。
+    private static final Set<String> DIFFERENCE_TYPES = Set.of("amount", "count", "status", "missing");
+    // 取数来源：system=平台侧系统取数；manual=第三方侧未接入手工录入进复核（与 V105 chk_frd_source 一致）。
+    private static final Set<String> DIFFERENCE_SOURCES = Set.of("system", "manual");
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
@@ -47,6 +68,10 @@ public class FinanceService {
     private final AuthorizationService authorizationService;
     private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
     private final com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway;
+    // 跨模块闭环②a：MDM 高风险门控（terminal 模块 public 服务）。依赖方向 finance→terminal 无环
+    // （finance 已先引用 terminal.TerminalDeviceRepository 为证；terminal 不引用 finance）。
+    // 可为 null=门控未接（旧构造/兼容路径）。
+    private final com.complex.platform.terminal.MdmService mdmService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public FinanceService(
@@ -55,7 +80,8 @@ public class FinanceService {
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
             com.complex.platform.common.BusinessDayResolver businessDayResolver,
-            com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway
+            com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
+            com.complex.platform.terminal.MdmService mdmService
     ) {
         this.repository = repository;
         this.operations = operations;
@@ -63,6 +89,23 @@ public class FinanceService {
         this.authorizationService = authorizationService;
         this.businessDayResolver = businessDayResolver;
         this.paymentGateway = paymentGateway;
+        this.mdmService = mdmService;
+    }
+
+    /**
+     * 向后兼容构造：未提供支付渠道路由 / MDM 门控时，使用"开关关"语义占位路由且门控未接（mdmService=null）。
+     * 供既有单测构造（开关默认关，行为与生产默认一致）。
+     */
+    public FinanceService(
+            FinanceRepository repository,
+            AuditedOperationExecutor operations,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver,
+            com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway
+    ) {
+        this(repository, operations, auditEventService, authorizationService, businessDayResolver,
+                paymentGateway, null);
     }
 
     /**
@@ -77,7 +120,7 @@ public class FinanceService {
             com.complex.platform.common.BusinessDayResolver businessDayResolver
     ) {
         this(repository, operations, auditEventService, authorizationService, businessDayResolver,
-                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled());
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null);
     }
 
     public PageResponse<ArApItemRecord> listArApItems() {
@@ -264,6 +307,206 @@ public class FinanceService {
                     "RECONCILIATION_PLATFORM_ONLY",
                     "reconciliation data is platform-scoped and not available to merchant-scoped users");
         }
+    }
+
+    /**
+     * P0#7 / R6-D07：创建对账差异（强制化）。
+     * <ul>
+     *   <li>平台侧 expected 由系统取数（按 business_ref 聚合平台权威台账）——不接受请求体手填 expected。</li>
+     *   <li>source=system：以系统取数 expected 比对申报 actual，写差额；无系统取数支撑则拒绝。</li>
+     *   <li>source=manual：第三方侧未接入，允许录入 actual，但必须有平台侧系统取数支撑（否则纯手填→拒绝），
+     *       且强制状态 needs_review（进复核）。</li>
+     * </ul>
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.reconciliation.difference.create")
+    @Transactional
+    public ReconciliationDifferenceRecord createReconciliationDifference(ReconciliationDifferenceRequest request) {
+        return executeWrite(
+                "createReconciliationDifference",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ReconciliationDifferenceRecord.class,
+                "finance_reconciliation.difference_created",
+                "finance_reconciliation.difference_create_failed",
+                "finance.reconciliation.difference.create",
+                "finance_reconciliation_difference",
+                () -> createDifference(request));
+    }
+
+    private ReconciliationDifferenceRecord createDifference(ReconciliationDifferenceRequest request) {
+        // 对账差异为平台级数据，商户角色不得写。
+        requirePlatformReconciliationAccess();
+
+        ReconciliationDifferenceRequest actual = requireRequest(request);
+        String batchId = requireText(actual.batchId(), "batch_id");
+        String differenceType = requireEnum(actual.differenceType(), DIFFERENCE_TYPES, "difference_type");
+        String businessRef = requireText(actual.businessRef(), "business_ref");
+        String source = requireEnum(actual.source(), DIFFERENCE_SOURCES, "source");
+        long actualAmountCent = requirePositive(actual.actualAmountCent(), "actual_amount_cent");
+
+        // 校验批次存在（差异必须挂在已建对账批次下）。
+        repository.findReconciliationBatchById(batchId)
+                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_BATCH_NOT_FOUND", "reconciliation batch not found"));
+
+        // 平台侧 expected 一律系统取数（不接受请求体手填）。0=无系统取数支撑。
+        long expectedAmountCent = repository.aggregatePlatformExpectedForBusinessRef(businessRef);
+        if (expectedAmountCent <= 0) {
+            // 纯手填差异（无平台侧系统取数支撑）一律拒绝，无论 source。
+            throw ApiException.badRequest("RECONCILIATION_NO_SYSTEM_EXPECTED",
+                    "difference rejected: no platform-side system takings for business_ref " + businessRef
+                            + "; manual-only differences are not allowed");
+        }
+
+        // source=manual（第三方侧未接入）强制进复核；source=system 仍以系统取数与申报值比对，差额为 0 不应建差异。
+        long differenceAmountCent = Math.abs(expectedAmountCent - actualAmountCent);
+        String status;
+        if ("manual".equals(source)) {
+            status = "needs_review";
+        } else {
+            if (differenceAmountCent == 0) {
+                throw ApiException.badRequest("RECONCILIATION_NO_DIFFERENCE",
+                        "expected equals actual; no reconciliation difference to record");
+            }
+            status = "open";
+        }
+
+        Instant now = Instant.now();
+        ReconciliationDifferenceRecord saved = repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
+                "recon_diff_" + slug(batchId + "_" + actual.idempotencyKey()),
+                batchId,
+                differenceType,
+                businessRef,
+                differenceAmountCent,
+                expectedAmountCent,
+                actualAmountCent,
+                source,
+                status,
+                now));
+
+        // 留痕：executeWrite 已写 finance_reconciliation.difference_created（操作级）。
+        // 这里额外写一条带取数明细（expected/actual/source/status）的强制化留痕，便于审计平台侧系统取数来源，
+        // 与 summarizeDailyClose 额外发 finance.daily_close_summarized 的做法一致；复用既有 recordSuccess 不改签名。
+        auditEventService.recordSuccess(
+                "finance_reconciliation.difference_hardened",
+                "finance.reconciliation.difference.create",
+                "finance_reconciliation_difference",
+                saved.id(),
+                null,
+                actual.idempotencyKey(),
+                Map.of(
+                        "difference_type", differenceType,
+                        "source", source,
+                        "expected_amount_cent", expectedAmountCent,
+                        "actual_amount_cent", actualAmountCent,
+                        "status", status));
+        return saved;
+    }
+
+    // ── P1#13 库存差异 → AR/AP（R6-D08）─────────────────────────────────────────
+
+    /**
+     * 库存差异经复核入账：把 review_status='approved' 的 inventory_variance 行入账成 ar_ap_items。
+     * 科目方向（R6-D08）：
+     * <ul>
+     *   <li>报损 damage / 盘亏 shortage（variance_qty &lt; 0）→ 计损益，方向 receivable（向责任方/内部损益挂应收冲减口径）。</li>
+     *   <li>盘盈 overage（variance_qty &gt; 0）→ 冲成本，方向 payable（账面成本回冲）。</li>
+     *   <li>供应商责任 supplier_fault → 向供应商挂应付索赔 payable（counterparty=供应商）。</li>
+     * </ul>
+     * 已入账（posted_ar_ap_item_id 非空）幂等返回原台账项；未复核通过拒绝。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.inventory_variance.post", admissionAction = "finance.inventory_variance_post", objectType = "ar_ap_item")
+    @Transactional
+    public ArApItemRecord postInventoryVariance(InventoryVariancePostRequest request) {
+        return executeWrite(
+                "postInventoryVariance",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ArApItemRecord.class,
+                "finance_inventory_variance.posted",
+                "finance_inventory_variance.post_failed",
+                "finance.inventory_variance.post",
+                "ar_ap_item",
+                () -> postInventoryVarianceInternal(request));
+    }
+
+    // ── P1#14 营业额抽成计费 ─────────────────────────────────────────────────────
+
+    /**
+     * 营业额抽成计费引擎：按抽成规则 × 回流营业额生成应收 ar_ap_items(source_type='turnover_rent')。
+     * rent = clamp(turnover × rateBps / 10000, minAmountCent, maxAmountCent)；turnover 由回流营业额只读取数。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.turnover_rent.bill", admissionAction = "finance.turnover_rent_bill", objectType = "ar_ap_item")
+    @Transactional
+    public ArApItemRecord billTurnoverRent(TurnoverRentBillRequest request) {
+        return executeWrite(
+                "billTurnoverRent",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ArApItemRecord.class,
+                "finance_turnover_rent.billed",
+                "finance_turnover_rent.bill_failed",
+                "finance.turnover_rent.bill",
+                "ar_ap_item",
+                () -> billTurnoverRentInternal(request));
+    }
+
+    // ── P1#14 保证金四动作台账 ───────────────────────────────────────────────────
+
+    /** 保证金台账动作：collect 收取 / refund 退还 / deduct 抵扣 / forfeit 没收，维护运行余额。 */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.deposit.manage", admissionAction = "finance.deposit_action", objectType = "deposit_ledger")
+    @Transactional
+    public DepositLedgerRecord recordDepositAction(DepositActionRequest request) {
+        return executeWrite(
+                "recordDepositAction",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                DepositLedgerRecord.class,
+                "finance_deposit.action_recorded",
+                "finance_deposit.action_failed",
+                "finance.deposit.manage",
+                "deposit_ledger",
+                () -> recordDepositActionInternal(request));
+    }
+
+    // ── P1#14 CAM 权重分摊 ───────────────────────────────────────────────────────
+
+    /** CAM 公共区域维护费按权重分摊：逐商户生成应收 ar_ap_items(source_type='cam')，返回分摊明细。 */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.cam.allocate", admissionAction = "finance.cam_allocate", objectType = "cam_allocation")
+    @Transactional
+    public List<CamAllocationRecord> allocateCam(CamAllocationRequest request) {
+        @SuppressWarnings("unchecked")
+        List<CamAllocationRecord> result = executeWrite(
+                "allocateCam",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                (Class<List<CamAllocationRecord>>) (Class<?>) List.class,
+                "finance_cam.allocated",
+                "finance_cam.allocate_failed",
+                "finance.cam.allocate",
+                "cam_allocation",
+                () -> allocateCamInternal(request));
+        return result;
+    }
+
+    // ── P2#④ CAM 年度 true-up（多退少补）─────────────────────────────────────────
+
+    /**
+     * CAM 年度 true-up：对某 settlementPeriod 已预收做对账，
+     * 逐户「实际应摊 − 已预收」差额 → 少收补应收 / 多收退应付（source_type='cam'），返回批次明细。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.cam.trueup", admissionAction = "finance.cam_trueup", objectType = "cam_trueup_run")
+    @Transactional
+    public CamTrueUpRunRecord runCamTrueUp(CamTrueUpRequest request) {
+        return executeWrite(
+                "runCamTrueUp",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                CamTrueUpRunRecord.class,
+                "finance_cam.trued_up",
+                "finance_cam.trueup_failed",
+                "finance.cam.trueup",
+                "cam_trueup_run",
+                () -> runCamTrueUpInternal(request));
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.refund.create", admissionAction = "finance.refund", objectType = "finance_refund")
@@ -493,6 +736,9 @@ public class FinanceService {
     private ArApPaymentResponse registerPayment(String arApItemId, ArApPaymentRequest request) {
         ArApPaymentRequest actual = requireRequest(request);
         long amountCent = requirePositive(actual.amountCent(), "amount_cent");
+        // 跨模块闭环②a：登记收付款=资金动作高风险，接入 MDM 门控。
+        // 现场/工作机收款时请求携带 deviceId → 触发硬门控；后台台账类登记无设备上下文 → 留空安全跳过。
+        requireManagedDeviceForFinanceAction(actual.deviceId(), "finance.payment");
 
         // P0 fix: SELECT FOR UPDATE prevents concurrent reads from both seeing unpaid > 0
         // and both writing a payment, which would silently double-charge the ledger.
@@ -618,6 +864,9 @@ public class FinanceService {
 
     private PaymentIntentRecord createIntent(PaymentIntentRequest request) {
         PaymentIntentRequest actual = requireRequest(request);
+        // 跨模块闭环②a：支付意图创建=支付高风险动作，接入 MDM 门控。
+        // 现场/工作机发起时请求携带 deviceId → 触发硬门控；后台/服务端无设备上下文 → 留空安全跳过。
+        requireManagedDeviceForFinanceAction(actual.deviceId(), "finance.payment");
         Instant now = Instant.now();
         String businessOrderType = requireText(actual.businessOrderType(), "business_order_type");
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
@@ -670,10 +919,39 @@ public class FinanceService {
         ));
     }
 
+    /**
+     * 跨模块闭环②a：finance 高风险动作（支付意图/退款/高价值兑付）MDM 门控接入点。
+     *
+     * <p><b>门控语义（device 存在则强制、为空则安全跳过）</b>：相关请求 DTO
+     * （{@link RefundRequest}/{@link PaymentIntentRequest}/{@link ArApPaymentRequest}）已携带可空
+     * 操作设备标识 {@code deviceId}。按"device_id 存在则门控、不存在则安全跳过"接入（不伪造假值）：
+     * <ul>
+     *   <li><b>前台现场场景</b>（工作机/现场设备发起退款/收款）请求携带真实 deviceId →
+     *       <b>真实启用</b>硬门控：MdmService 开关开 + 设备未纳管/blocked/lost → 硬拒绝；</li>
+     *   <li><b>后台台账类场景</b>（服务端/后台财务操作）无设备上下文，deviceId 为 null/空 →
+     *       跳过门控，不阻断财务主链（这些操作本就无现场设备，跳过是正确语义而非占位）。</li>
+     * </ul>
+     * mdmService 为 null（旧兼容构造/未接门控路径）时整体跳过。
+     */
+    private void requireManagedDeviceForFinanceAction(String deviceId, String actionType) {
+        if (mdmService == null) {
+            return;
+        }
+        String id = trimToNull(deviceId);
+        if (id == null) {
+            // 后台台账类操作无现场设备上下文，安全跳过（不伪造假值）。
+            return;
+        }
+        mdmService.requireManagedForHighRiskAction(id, actionType);
+    }
+
     private FinanceRefundRecord refund(RefundRequest request) {
         RefundRequest actual = requireRequest(request);
         String targetId = requireText(actual.targetId(), "target_id");
         long refundAmountCent = requirePositive(actual.refundAmountCent(), "refund_amount_cent");
+        // 跨模块闭环②a：退款=高价值兑付高风险动作，接入 MDM 门控。
+        // 现场/工作机退款时请求携带 deviceId → 触发硬门控；后台台账类退款无设备上下文 → 留空安全跳过。
+        requireManagedDeviceForFinanceAction(actual.deviceId(), "finance.refund");
 
         // P1 fix: validate target payment exists
         ArApPaymentRecord payment = repository.findArApPaymentById(targetId)
@@ -706,15 +984,369 @@ public class FinanceService {
                 ? trimToDefault(actual.refundChannel(), "manual")
                 : trimToDefault(actual.refundChannel(), gw.gatewayProvider());
 
+        // P2#④ 统一退款方向维度：可空 → 默认 original（原路退回）；非空必须落在枚举内。
+        String refundDirection = optionalEnum(actual.refundDirection(), REFUND_DIRECTIONS, "refund_direction");
+        if (refundDirection == null) {
+            refundDirection = DEFAULT_REFUND_DIRECTION;
+        }
+
         return repository.saveRefund(new FinanceRefundRecord(
                 "refund_" + slug(actual.idempotencyKey()),
                 targetId,
                 refundAmountCent,
                 requireText(actual.reason(), "reason"),
                 refundChannel,
+                refundDirection,
                 "requested",
                 Instant.now()
         ));
+    }
+
+    // ── P1#13/#14 内部实现 ──────────────────────────────────────────────────────
+
+    private ArApItemRecord postInventoryVarianceInternal(InventoryVariancePostRequest request) {
+        InventoryVariancePostRequest actual = requireRequest(request);
+        String varianceId = requireText(actual.inventoryVarianceId(), "inventory_variance_id");
+        String counterpartyId = requireText(actual.counterpartyId(), "counterparty_id");
+
+        InventoryVarianceRecord variance = repository.findInventoryVarianceById(varianceId)
+                .orElseThrow(() -> ApiException.notFound("INVENTORY_VARIANCE_NOT_FOUND", "inventory variance not found"));
+        checkMerchantOwnership(variance.merchantId());
+
+        // 幂等：已入账直接返回原台账项，不重复生成。
+        if (variance.postedArApItemId() != null) {
+            return repository.findArApItemById(variance.postedArApItemId())
+                    .orElseThrow(() -> ApiException.conflict("INVENTORY_VARIANCE_ALREADY_POSTED",
+                            "inventory variance already posted but ledger item missing"));
+        }
+        // 只有复核通过的差异才能入账。
+        if (!"approved".equals(variance.reviewStatus())) {
+            throw ApiException.badRequest("INVENTORY_VARIANCE_NOT_APPROVED",
+                    "inventory variance must be reviewed (approved) before posting; current=" + variance.reviewStatus());
+        }
+        if (!INVENTORY_VARIANCE_REASONS.contains(variance.reason())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "inventory variance reason is invalid");
+        }
+        // R6-D08 科目方向：
+        //   supplier_fault → 向供应商挂应付索赔 payable；
+        //   overage（盘盈，冲成本）→ payable（账面成本回冲）；
+        //   damage/shortage（报损/盘亏，计损益）→ receivable。
+        String direction;
+        if ("supplier_fault".equals(variance.reason()) || "overage".equals(variance.reason())) {
+            direction = "payable";
+        } else {
+            direction = "receivable";
+        }
+        long amountCent = Math.abs(variance.varianceAmountCent());
+        if (amountCent <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "inventory variance amount must be non-zero to post");
+        }
+
+        ArApItemRecord saved = persistDerivedArApItem(
+                direction,
+                counterpartyId,
+                "inventory_difference",
+                variance.id(),
+                amountCent,
+                actual.idempotencyKey(),
+                variance.merchantId());
+        repository.markInventoryVariancePosted(variance.id(), saved.id());
+        return saved;
+    }
+
+    private ArApItemRecord billTurnoverRentInternal(TurnoverRentBillRequest request) {
+        TurnoverRentBillRequest actual = requireRequest(request);
+        String ruleId = requireText(actual.ruleId(), "rule_id");
+        LocalDate periodStart = requireDate(actual.periodStart(), "period_start");
+        LocalDate periodEnd = requireDate(actual.periodEnd(), "period_end");
+        LocalDate dueDate = requireDate(actual.dueDate(), "due_date");
+        if (periodEnd.isBefore(periodStart)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "period_end must not be before period_start");
+        }
+
+        TurnoverRentRuleRecord rule = repository.findTurnoverRentRuleById(ruleId)
+                .orElseThrow(() -> ApiException.notFound("TURNOVER_RENT_RULE_NOT_FOUND", "turnover rent rule not found"));
+        checkMerchantOwnership(rule.merchantId());
+        if (!"active".equals(rule.status())) {
+            throw ApiException.badRequest("TURNOVER_RENT_RULE_INACTIVE", "turnover rent rule is not active");
+        }
+
+        // 回流营业额只读取数：[periodStart 00:00 经营日起, periodEnd+1 经营日起) 半开窗口。
+        Instant from = businessDayResolver.startInstant(periodStart);
+        Instant to = businessDayResolver.startInstant(periodEnd.plusDays(1));
+        long turnover = repository.aggregateMerchantReflowTurnover(rule.merchantId(), from, to);
+
+        long rent = clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent());
+        if (rent <= 0) {
+            throw ApiException.badRequest("TURNOVER_RENT_ZERO",
+                    "computed turnover rent is zero (turnover=" + turnover + "); nothing to bill");
+        }
+        // 营业额抽成应收：counterparty=商户。
+        return persistDerivedArApItem(
+                "receivable",
+                rule.merchantId(),
+                "turnover_rent",
+                rule.id(),
+                rent,
+                actual.idempotencyKey(),
+                rule.merchantId());
+    }
+
+    /** rent = clamp(turnover × rateBps / 10000, min, max)。min/max 为 null 时不夹。 */
+    private long clampRent(long turnover, int rateBps, Long minAmountCent, Long maxAmountCent) {
+        long rent = Math.floorDiv(turnover * (long) rateBps, BPS_DENOMINATOR);
+        if (minAmountCent != null && rent < minAmountCent) {
+            rent = minAmountCent;
+        }
+        if (maxAmountCent != null && rent > maxAmountCent) {
+            rent = maxAmountCent;
+        }
+        return rent;
+    }
+
+    private DepositLedgerRecord recordDepositActionInternal(DepositActionRequest request) {
+        DepositActionRequest actual = requireRequest(request);
+        String merchantId = requireText(actual.merchantId(), "merchant_id");
+        checkMerchantOwnership(merchantId);
+        String action = requireEnum(actual.action(), DEPOSIT_ACTIONS, "action");
+        long amountCent = requirePositive(actual.amountCent(), "amount_cent");
+
+        long balance = repository.currentDepositBalance(merchantId);
+        long newBalance;
+        if ("collect".equals(action)) {
+            newBalance = balance + amountCent;
+        } else {
+            // refund / deduct / forfeit 均减少余额，不得超额（不可为负）。
+            if (amountCent > balance) {
+                throw ApiException.badRequest("DEPOSIT_INSUFFICIENT",
+                        "deposit action " + action + " amount " + amountCent + " exceeds balance " + balance);
+            }
+            newBalance = balance - amountCent;
+        }
+
+        // deduct/forfeit 联动生成应收（向商户索赔/没收入账）；collect/refund 不生成台账项。
+        String arApItemId = null;
+        if ("deduct".equals(action) || "forfeit".equals(action)) {
+            ArApItemRecord item = persistDerivedArApItem(
+                    "receivable",
+                    merchantId,
+                    "deposit",
+                    "deposit_" + action + "_" + slug(actual.idempotencyKey()),
+                    amountCent,
+                    actual.idempotencyKey(),
+                    merchantId);
+            arApItemId = item.id();
+        }
+
+        Instant now = Instant.now();
+        return repository.saveDepositLedger(new DepositLedgerRecord(
+                "deposit_" + slug(merchantId + "_" + actual.idempotencyKey()),
+                merchantId,
+                action,
+                amountCent,
+                newBalance,
+                arApItemId,
+                trimToNull(actual.reason()),
+                now));
+    }
+
+    private List<CamAllocationRecord> allocateCamInternal(CamAllocationRequest request) {
+        CamAllocationRequest actual = requireRequest(request);
+        String period = requireText(actual.period(), "period");
+        long totalAmountCent = requirePositive(actual.totalAmountCent(), "total_amount_cent");
+        LocalDate dueDate = requireDate(actual.dueDate(), "due_date");
+        List<CamAllocationRequest.CamShare> shares = actual.shares();
+        if (shares == null || shares.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "shares is required");
+        }
+        // 权重合计须为 10000（逐分守恒，避免分摊不足/超额）。
+        long totalWeight = 0;
+        for (CamAllocationRequest.CamShare share : shares) {
+            if (share.weightBps() == null || share.weightBps() < 0 || share.weightBps() > BPS_DENOMINATOR) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "weight_bps must be within [0, 10000]");
+            }
+            requireText(share.merchantId(), "merchant_id");
+            totalWeight += share.weightBps();
+        }
+        if (totalWeight != BPS_DENOMINATOR) {
+            throw ApiException.badRequest("CAM_WEIGHTS_NOT_FULL",
+                    "share weights must sum to 10000 bps; got " + totalWeight);
+        }
+
+        Instant now = Instant.now();
+        String batchId = "cam_batch_" + slug(actual.idempotencyKey());
+        List<CamAllocationRecord> result = new java.util.ArrayList<>();
+        long allocatedSoFar = 0;
+        for (int i = 0; i < shares.size(); i++) {
+            CamAllocationRequest.CamShare share = shares.get(i);
+            long allocated;
+            if (i == shares.size() - 1) {
+                // 末位归入剩余差额，保证逐分守恒。
+                allocated = totalAmountCent - allocatedSoFar;
+            } else {
+                allocated = Math.floorDiv(totalAmountCent * (long) share.weightBps(), BPS_DENOMINATOR);
+            }
+            allocatedSoFar += allocated;
+
+            String arApItemId = null;
+            if (allocated > 0) {
+                ArApItemRecord item = persistDerivedArApItem(
+                        "receivable",
+                        share.merchantId(),
+                        "cam",
+                        batchId + "_" + share.merchantId(),
+                        allocated,
+                        actual.idempotencyKey() + "_" + i,
+                        share.merchantId());
+                arApItemId = item.id();
+            }
+            result.add(repository.saveCamAllocation(new CamAllocationRecord(
+                    "cam_alloc_" + slug(batchId + "_" + share.merchantId()),
+                    batchId,
+                    share.merchantId(),
+                    period,
+                    totalAmountCent,
+                    share.weightBps(),
+                    allocated,
+                    arApItemId,
+                    now)));
+        }
+        return result;
+    }
+
+    private CamTrueUpRunRecord runCamTrueUpInternal(CamTrueUpRequest request) {
+        CamTrueUpRequest actual = requireRequest(request);
+        String settlementPeriod = requireText(actual.settlementPeriod(), "settlement_period");
+        long actualTotalAmountCent = requirePositive(actual.actualTotalAmountCent(), "actual_total_amount_cent");
+        requireDate(actual.dueDate(), "due_date");
+        List<CamTrueUpRequest.TrueUpShare> shares = actual.shares();
+        if (shares == null || shares.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "shares is required");
+        }
+        // 权重合计须为 10000（与 CAM 预收权重口径一致，逐分守恒）。
+        long totalWeight = 0;
+        for (CamTrueUpRequest.TrueUpShare share : shares) {
+            if (share.weightBps() == null || share.weightBps() < 0 || share.weightBps() > BPS_DENOMINATOR) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "weight_bps must be within [0, 10000]");
+            }
+            requireText(share.merchantId(), "merchant_id");
+            totalWeight += share.weightBps();
+        }
+        if (totalWeight != BPS_DENOMINATOR) {
+            throw ApiException.badRequest("CAM_WEIGHTS_NOT_FULL",
+                    "share weights must sum to 10000 bps; got " + totalWeight);
+        }
+
+        Instant now = Instant.now();
+        String runId = "cam_trueup_" + slug(settlementPeriod + "_" + actual.idempotencyKey());
+        List<CamTrueUpLineRecord> lines = new java.util.ArrayList<>();
+        long actualAllocatedSoFar = 0;
+        long prepaidTotal = 0;
+        for (int i = 0; i < shares.size(); i++) {
+            CamTrueUpRequest.TrueUpShare share = shares.get(i);
+            checkMerchantOwnership(share.merchantId());
+
+            long actualAllocated;
+            if (i == shares.size() - 1) {
+                // 末位归差额，保证实际应摊逐分守恒至 actualTotalAmountCent。
+                actualAllocated = actualTotalAmountCent - actualAllocatedSoFar;
+            } else {
+                actualAllocated = Math.floorDiv(actualTotalAmountCent * (long) share.weightBps(), BPS_DENOMINATOR);
+            }
+            actualAllocatedSoFar += actualAllocated;
+
+            // 该户该归属期已预收合计（来自 cam_allocations，按 settlement_period 归集）。
+            long prepaid = repository.sumCamPrepaidByMerchantAndPeriod(share.merchantId(), settlementPeriod);
+            prepaidTotal += prepaid;
+            long diff = actualAllocated - prepaid;
+
+            String arApItemId = null;
+            if (diff != 0) {
+                // diff>0 少收 → 补收应收；diff<0 多收 → 退还应付。金额取绝对值，方向区分多退少补。
+                String direction = diff > 0 ? "receivable" : "payable";
+                ArApItemRecord item = persistDerivedArApItem(
+                        direction,
+                        share.merchantId(),
+                        "cam",
+                        "cam_trueup_" + settlementPeriod + "_" + share.merchantId(),
+                        Math.abs(diff),
+                        actual.idempotencyKey() + "_trueup_" + i,
+                        share.merchantId());
+                arApItemId = item.id();
+            }
+
+            CamTrueUpLineRecord line = repository.saveCamTrueUpLine(new CamTrueUpLineRecord(
+                    "cam_trueup_line_" + slug(runId + "_" + share.merchantId()),
+                    runId,
+                    share.merchantId(),
+                    share.weightBps(),
+                    actualAllocated,
+                    prepaid,
+                    diff,
+                    arApItemId,
+                    now));
+            lines.add(line);
+        }
+
+        // 标记该归属期既有预收行已被本次 true-up 纳入对账（防重复 true-up）。
+        repository.markCamAllocationsTruedUp(settlementPeriod);
+
+        return repository.saveCamTrueUpRun(new CamTrueUpRunRecord(
+                runId,
+                settlementPeriod,
+                actualTotalAmountCent,
+                prepaidTotal,
+                "completed",
+                now,
+                lines));
+    }
+
+    /**
+     * 由派生计费/差异流程直接生成一条 ar_ap_items（不经请求体 createItem，但同样遵守锁定经营日硬拦截）。
+     * dueDate 取当日（经营日落账），sourceType ∈ SOURCE_TYPES。
+     */
+    private ArApItemRecord persistDerivedArApItem(
+            String direction,
+            String counterpartyId,
+            String sourceType,
+            String sourceId,
+            long amountCent,
+            String idempotencyKey,
+            String merchantId) {
+        LocalDate dueDate = LocalDate.now();
+        if (repository.lockedDailyCloseExistsForDate(dueDate)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "business date " + dueDate + " is locked; use the backfill adjustment workflow");
+        }
+        Instant now = Instant.now();
+        String slug = slug(sourceType + "_" + idempotencyKey);
+        String id = "arap_" + slug;
+        ArApItemRecord item = new ArApItemRecord(
+                id,
+                "ARAP" + now.toEpochMilli() + "-" + slug.substring(0, Math.min(12, slug.length())),
+                direction,
+                counterpartyId,
+                sourceType,
+                sourceId,
+                amountCent,
+                0L,
+                amountCent,
+                CURRENCY_CNY,
+                dueDate,
+                null,
+                "receivable".equals(direction) ? "pending_collection" : "pending_payment",
+                now,
+                now,
+                merchantId);
+        ArApItemRecord saved = repository.saveArApItem(item);
+        repository.saveArApItemSource(new ArApItemSourceRecord(
+                "arap_src_" + slug,
+                saved.id(),
+                sourceType,
+                sourceId,
+                amountCent,
+                now));
+        return saved;
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {
@@ -852,6 +1484,18 @@ public class FinanceService {
             return record.id();
         }
         if (value instanceof ArApAdjustmentRecord record) {
+            return record.id();
+        }
+        if (value instanceof ReconciliationDifferenceRecord record) {
+            return record.id();
+        }
+        if (value instanceof DepositLedgerRecord record) {
+            return record.id();
+        }
+        if (value instanceof CamAllocationRecord record) {
+            return record.id();
+        }
+        if (value instanceof CamTrueUpRunRecord record) {
             return record.id();
         }
         return null;

@@ -39,7 +39,31 @@ public interface AnalyticsRepository {
 
     List<MerchantHealthScoreRecord> listMerchantHealthScores();
 
+    /**
+     * 按商户 scope 列出商户健康分（analytics_merchant_health_scores.merchant_id = token scope）。
+     * 商户面数据：商户只能看到本商户的健康分。默认在内存过滤，JdbcAnalyticsRepository 用 SQL 谓词下推。
+     * 隔离闸口（AC-ISO-1）：提供 merchant_id 行级 scoped 读通道。
+     */
+    default List<MerchantHealthScoreRecord> listMerchantHealthScoresByMerchant(String merchantId) {
+        if (merchantId == null) return listMerchantHealthScores();
+        return listMerchantHealthScores().stream()
+                .filter(s -> merchantId.equals(s.merchantId()))
+                .toList();
+    }
+
     List<MerchantSummaryRecord> listAnalyticsMerchants();
+
+    /**
+     * 按商户 scope 列出商户经营摘要（analytics_merchant_summaries.merchant_id = token scope）。
+     * 商户面数据：商户只能看到本商户的经营摘要。默认在内存过滤，JdbcAnalyticsRepository 用 SQL 谓词下推。
+     * 隔离闸口（AC-ISO-1）：提供 merchant_id 行级 scoped 读通道。
+     */
+    default List<MerchantSummaryRecord> listAnalyticsMerchantsByMerchant(String merchantId) {
+        if (merchantId == null) return listAnalyticsMerchants();
+        return listAnalyticsMerchants().stream()
+                .filter(s -> merchantId.equals(s.merchantId()))
+                .toList();
+    }
 
     List<MetricAnomalyRecord> listMetricAnomalies();
 
@@ -132,6 +156,13 @@ public interface AnalyticsRepository {
     /** count ticket_verifications(status='success')——核销数；返回 merchantId(可 null) -> 计数。 */
     Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate);
 
+    /**
+     * 清单#18：券发放数——count issued_entitlements(created_at 落经营日窗口)，作为券核销率分母。
+     * 与核销数 countTicketVerificationSuccessByMerchant 同 merchant 维度，便于派生 redemption_rate=核销数/发放数。
+     * 返回 merchantId(可 null) -> 计数。
+     */
+    Map<String, BigDecimal> countTicketIssuedByMerchant(LocalDate businessDate);
+
     /** count customers(created_at 当日)——新增会员；无 merchant_id，仅平台口径。 */
     BigDecimal countNewMembers(LocalDate businessDate);
 
@@ -146,4 +177,39 @@ public interface AnalyticsRepository {
 
     /** count(supervisor_review_decisions pending) + count(analytics_risk_alerts open)——待复核；无 merchant_id，仅平台口径。 */
     BigDecimal countPendingReview();
+
+    // --- P2 集团/跨项目汇总（R6-D13）---
+
+    /**
+     * 某经营日有 ETL 商户口径快照（segment_type='merchant', projection_method='etl_aggregate'）的去重商户数。
+     * 作为集团总览"商户数"指标的真实来源（当日活跃于看板聚合的商户），无快照返回 0，不伪造。
+     */
+    long countMerchantsWithEtlSnapshot(LocalDate businessDate);
+
+    // --- ⑤ 集团多项目 ETL 维度（segment_type='project' 按 project_id 分组聚合）---
+
+    /**
+     * 列出某经营日有 ETL project 口径快照（segment_type='project', projection_method='etl_aggregate'）的去重 project_id。
+     * 集团总览据此产出 per-project rollup 行；单综合体 → 单 project_id，多综合体 → 多行真实 rollup。
+     * 无 project 口径快照返回空（调用方回退到平台口径单行，向后兼容），不伪造。
+     */
+    default List<String> listProjectIdsWithEtlSnapshot(LocalDate businessDate) {
+        return List.of();
+    }
+
+    /**
+     * 读取某经营日、某 project_id 的 ETL project 口径指标快照（segment_type='project', segment_id=projectId）。
+     * 返回 metric_key -> actual_value。与 {@link #readMetricSnapshots} 同口径，仅 segment 维度不同。
+     */
+    default Map<String, BigDecimal> readProjectMetricSnapshots(LocalDate businessDate, String projectId) {
+        return Map.of();
+    }
+
+    /**
+     * 某经营日、某 project_id 下有 ETL 商户口径快照的去重商户数（segment_type='merchant'，按 project 归属）。
+     * 单综合体默认全部商户归该综合体 → 等于 countMerchantsWithEtlSnapshot；多综合体按 project 归属拆分。
+     */
+    default long countMerchantsWithEtlSnapshotByProject(LocalDate businessDate, String projectId) {
+        return countMerchantsWithEtlSnapshot(businessDate);
+    }
 }

@@ -5,6 +5,9 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
+import { rowMatchesKeyword } from "../components/rowSearch";
+import { usePagedRows, TablePager } from "../components/TablePager";
+import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 
 const TEXT = {
@@ -72,6 +75,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError }:
   const [targetStatus, setTargetStatus] = React.useState("processing");
   const [resolution, setResolution] = React.useState("已维修完成并确认关闭");
   const [satisfactionScore, setSatisfactionScore] = React.useState("5");
+  const [query, setQuery] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -84,6 +88,16 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError }:
 
   const pendingCount = rows.filter(nonTerminal).length;
   const highPriorityCount = rows.filter((row) => ["high", "critical"].includes(row.priority ?? "")).length;
+
+  const filteredRows = rows.filter((row) => rowMatchesKeyword(row, query));
+  const sort = useSortedRows(filteredRows, {
+    title: (row) => row.title ?? row.id,
+    type: (row) => row.workOrderType,
+    priority: (row) => row.priority,
+    status: (row) => row.status,
+    dueAt: (row) => row.dueAt,
+  });
+  const paged = usePagedRows(sort.sorted, 10, `${query}:${sort.key}:${sort.direction}`);
 
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
     reload,
@@ -210,11 +224,18 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError }:
         </div>
         {formError ? <div data-testid="merchant-work-order-error" className="admin-inline-error">{formError}</div> : null}
 
+        <div className="admin-list-toolbar" data-testid="merchant-work-orders-filter">
+          <input data-testid="merchant-work-orders-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题 / 类型 / 优先级 / 状态 / 负责人" />
+          <span className="admin-muted-action" data-testid="merchant-work-orders-filter-count">匹配 {filteredRows.length} / {rows.length} 条</span>
+        </div>
+        {filteredRows.length === 0 ? (
+          <div className="admin-state admin-empty" data-testid="merchant-work-orders-filter-empty">无匹配工单</div>
+        ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="merchant-work-orders-table">
-            <thead><tr><th>{TEXT.select}</th><th>{TEXT.workOrderTitle}</th><th>{TEXT.type}</th><th>{TEXT.priority}</th><th>{TEXT.status}</th><th>{TEXT.ownerDepartment}</th><th>{TEXT.ownerUser}</th><th>{TEXT.dueAt}</th><th>{TEXT.evidenceLabel}</th></tr></thead>
+            <thead><tr><th>{TEXT.select}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-title" onClick={() => sort.toggle("title")}>{TEXT.workOrderTitle}{sort.indicator("title")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-type" onClick={() => sort.toggle("type")}>{TEXT.type}{sort.indicator("type")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-priority" onClick={() => sort.toggle("priority")}>{TEXT.priority}{sort.indicator("priority")}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-status" onClick={() => sort.toggle("status")}>{TEXT.status}{sort.indicator("status")}</th><th>{TEXT.ownerDepartment}</th><th>{TEXT.ownerUser}</th><th className="admin-sort-th" data-testid="merchant-work-orders-sort-dueAt" onClick={() => sort.toggle("dueAt")}>{TEXT.dueAt}{sort.indicator("dueAt")}</th><th>{TEXT.evidenceLabel}</th></tr></thead>
             <tbody>
-              {rows.map((row) => (
+              {paged.pageRows.map((row) => (
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.title ?? row.id}</td>
@@ -229,7 +250,9 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError }:
               ))}
             </tbody>
           </table>
+          <TablePager testid="merchant-work-orders-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
+        )}
       </AdminDataState>
     </section>
   );

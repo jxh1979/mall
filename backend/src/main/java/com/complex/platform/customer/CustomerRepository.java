@@ -1,5 +1,6 @@
 package com.complex.platform.customer;
 
+import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
 import java.time.Instant;
@@ -55,6 +56,9 @@ public interface CustomerRepository {
     List<CustomerBarReservationOptionResponse> listBarReservationOptions();
 
     Optional<BarTableRecord> findActiveBarTableForReservation(String barId, String tableId, String tableType);
+
+    // P0#3 订台定金：读 bar_deposit_rules（V073）按 bar 解析启用规则（scope_type DESC 优先）。
+    List<BarDepositRuleRecord> listDepositRules(String barId);
 
     BarReservationRecord saveCustomerBarReservation(BarReservationRecord reservation);
 
@@ -120,6 +124,25 @@ public interface CustomerRepository {
     /** 扣减获取批次剩余积分（兑换/扣减时 FIFO 消耗，使过期只清未用部分）。 */
     default void consumeBatchRemaining(String ledgerId, long remainingPoints) {
         throw new UnsupportedOperationException("consumeBatchRemaining not supported by this repository");
+    }
+
+    // ---- P0 清单#2 积分入账引擎（V100）：按业务单据幂等 + 履约/退款查账 ----
+
+    /** 按业务单据 + 变动类型查已存在的入账流水（幂等：命中即视为已入账，不重复写）。 */
+    default Optional<CustomerPointsLedgerRecord> findPointsLedgerBySourceDoc(
+            String sourceDocType, String sourceDocId, String changeType) {
+        return Optional.empty();
+    }
+
+    /** 列出某业务单据下指定变动类型的入账流水（履约转 confirmed / 退款按已 confirmed 比例 deduct 用）。 */
+    default List<CustomerPointsLedgerRecord> listPointsLedgerBySourceDoc(
+            String sourceDocType, String sourceDocId, String changeType) {
+        return List.of();
+    }
+
+    /** 把某条 pending 入账流水转为指定状态（履约：pending→confirmed）。 */
+    default void updatePointsLedgerStatus(String ledgerId, String status) {
+        throw new UnsupportedOperationException("updatePointsLedgerStatus not supported by this repository");
     }
 
     // ---- 会员忠诚度 第2部分（V090）：储值 / 付费会员 / 积分转赠 ----

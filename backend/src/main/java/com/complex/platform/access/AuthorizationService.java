@@ -214,6 +214,60 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     /**
+     * 是否具备角色/隔离键解析能力（仓储可用）。双轨收口的 specific_role 角色闸与同商户范围闸仅在可解析时强制，
+     * 在无仓储的轻量上下文（如部分单测/未接入环境）下回退既有 level 闸，避免误伤合法流程。
+     */
+    public boolean canResolveRoles() {
+        return accessRepository != null;
+    }
+
+    /**
+     * 角色解析（双轨收口 specific_role，platform-governance §24.3）：判断指定用户是否通过其角色
+     * （ROLE 来源，非临时授权/模板单发）持有某权限码，从而解析"指定角色"审批闸而非旁路。
+     *
+     * <p>语义对齐 {@link #computeEffectivePermissions}：DENY 优先（命中 DENY 即不持有）；GRANT 仅当来源为
+     * {@link AccessRepository.Source#ROLE} 且在有效期内才算"角色赋予"。平台管理员桥（wildcard）视为持有。
+     * 仓储为空或查询异常时安全保守地返回 {@code false}（不放行）。
+     */
+    public boolean holdsPermissionViaRole(String userId, String permissionCode) {
+        if (userId == null || permissionCode == null || accessRepository == null) {
+            return false;
+        }
+        try {
+            Instant checkedAt = Instant.now();
+            List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
+                    .filter(effect -> permissionCode.equals(effect.permissionCode()))
+                    .filter(effect -> isActive(effect, checkedAt))
+                    .toList();
+            if (active.stream().anyMatch(effect -> effect.effect() == AccessRepository.Effect.DENY)) {
+                return false;
+            }
+            return active.stream()
+                    .anyMatch(effect -> effect.effect() == AccessRepository.Effect.GRANT
+                            && effect.source() == AccessRepository.Source.ROLE);
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    /**
+     * 返回指定用户的隔离键 merchant_id（用于同商户范围闸），无则空。绝不抛错（查询异常→空）。
+     * 与 {@link #currentMerchantIdQuietly()} 对称，但面向"任意用户"（如审批记录的发起人）。
+     */
+    public Optional<String> merchantIdOf(String userId) {
+        if (userId == null || accessRepository == null) {
+            return Optional.empty();
+        }
+        try {
+            return accessRepository.findUserById(userId)
+                    .map(AccessUser::merchantId)
+                    .filter(merchantId -> merchantId != null && !merchantId.isBlank());
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Returns the merchant scope of the current caller.
      * Platform admins get Optional.empty() (no filter, sees everything).
      * Merchant users get Optional.of(merchantId).

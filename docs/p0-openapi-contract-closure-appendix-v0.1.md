@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 299 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 174 | 人工权限矩阵正文未覆盖 72 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 598 | 人工事件矩阵正文未覆盖 554 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 299 | 人工任务映射正文未逐项覆盖 293 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 179 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 386 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 233 | 人工权限矩阵正文未覆盖 130 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 772 | 人工事件矩阵正文未覆盖 728 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 386 | 人工任务映射正文未逐项覆盖 380 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 241 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -43,12 +43,18 @@
 | `amusement.group_booking.approve` | staff-token | project-amusement | 1 | approveAmusementGroupBooking | OpenAPI 补充，以本附录为准 |
 | `amusement.group_booking.manage` | staff-token | project-amusement | 2 | createAmusementGroupBooking, releaseAmusementGroupBooking | OpenAPI 补充，以本附录为准 |
 | `amusement.group_booking.view` | staff-token | project-amusement | 1 | listAmusementGroupBookings | OpenAPI 补充，以本附录为准 |
+| `amusement.incident.close` | staff-token | project-amusement | 1 | closeAmusementIncident | OpenAPI 补充，以本附录为准 |
+| `amusement.incident.create` | staff-token | project-amusement | 1 | createAmusementIncident | OpenAPI 补充，以本附录为准 |
+| `amusement.incident.process` | staff-token | project-amusement | 1 | addAmusementIncidentAction | OpenAPI 补充，以本附录为准 |
+| `amusement.incident.view` | staff-token | project-amusement | 1 | listAmusementIncidents | OpenAPI 补充，以本附录为准 |
 | `amusement.maintenance.confirm` | staff-token | project-amusement | 1 | confirmAmusementMaintenanceResume | OpenAPI 补充，以本附录为准 |
 | `amusement.maintenance.read` | staff-token | project-amusement | 2 | listAmusementMaintenanceRecords, getAmusementMaintenanceRecord | OpenAPI 补充，以本附录为准 |
 | `amusement.maintenance.submit` | staff-token | project-amusement-point | 1 | createAmusementMaintenanceRecord | OpenAPI 补充，以本附录为准 |
 | `amusement.project_entitlement.manage` | staff-token | project-amusement | 3 | listAmusementProjectEntitlements, createAmusementProjectEntitlement, removeAmusementProjectEntitlement | OpenAPI 补充，以本附录为准 |
 | `amusement.project.manage` | staff-token | project | 1 | createAmusementProjectRule | 已在权限矩阵正文出现 |
+| `amusement.queue.manage` | staff-token | project-amusement | 2 | createAmusementQueueEntry, changeAmusementQueueEntryStatus | OpenAPI 补充，以本附录为准 |
 | `amusement.queue.view` | staff-token | project | 1 | listAmusementQueueEntries | 已在权限矩阵正文出现 |
+| `amusement.reservation.manage` | staff-token | project-amusement | 2 | createAmusementReservation, changeAmusementReservationStatus | OpenAPI 补充，以本附录为准 |
 | `amusement.reservation.view` | staff-token | project | 1 | listAmusementReservations | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.approve_reopen` | staff-token | project-amusement | 1 | approveAmusementReopen | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.create` | staff-token | project-amusement | 1 | createAmusementSafetyInspection | 已在权限矩阵正文出现 |
@@ -56,6 +62,8 @@
 | `amusement.safety_inspection.rectify` | staff-token | project-amusement | 1 | rectifyAmusementSafetyInspection | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.submit` | staff-token | project-amusement | 1 | submitAmusementSafetyInspection | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.view` | staff-token | project-amusement | 2 | getAmusementOpenEligibility, listAmusementSafetyInspections | 已在权限矩阵正文出现 |
+| `amusement.safety_notice.manage` | staff-token | project-amusement | 1 | createAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
+| `amusement.safety_notice.view` | staff-token | project-amusement | 1 | listAmusementSafetyNotices | OpenAPI 补充，以本附录为准 |
 | `amusement.safety_template.manage` | staff-token | project-amusement | 1 | createAmusementSafetyTemplate | 已在权限矩阵正文出现 |
 | `amusement.safety_template.view` | staff-token | project-amusement | 1 | listAmusementSafetyTemplates | 已在权限矩阵正文出现 |
 | `amusement.session.manage` | staff-token | project, project-amusement | 4 | createAmusementProject, createAmusementSession, assignAmusementProjectSpace, listAmusementProjectsWithoutSpace | 已在权限矩阵正文出现 |
@@ -63,29 +71,46 @@
 | `amusement.verification.execute` | staff-token | project-amusement-point | 1 | createAmusementVerification | 已在权限矩阵正文出现 |
 | `amusement.verification.override` | staff-token | project-amusement, project-amusement-point | 2 | listAmusementManualOverrides, createAmusementManualOverride | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 1 | listAmusementVerifications | 已在权限矩阵正文出现 |
+| `amusement.waiver.acknowledge` | staff-token | project-amusement | 1 | acknowledgeAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
 | `analytics.dashboard.view` | staff-token | project | 7 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics | 已在权限矩阵正文出现 |
+| `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 7 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
 | `authenticated` | staff-token | current-session, self | 3 | logout, refreshToken, getEffectivePermissions | 已在权限矩阵正文出现 |
+| `bar.bill.adjust` | staff-token | project-bar-table | 1 | adjustBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.reopen` | staff-token | project-bar-table | 1 | reopenBarBill | OpenAPI 补充，以本附录为准 |
+| `bar.bill.split_merge` | staff-token | project-bar-table | 3 | listBarBillOperations, mergeBarBill, splitBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.tip` | staff-token | project-bar-table | 1 | addBarBillTip | OpenAPI 补充，以本附录为准 |
 | `bar.deposit_rule.manage` | staff-token | project-bar | 1 | createBarDepositRule | OpenAPI 补充，以本附录为准 |
 | `bar.entry.age_verify` | staff-token | project-bar | 1 | createBarAgeVerification | 已在权限矩阵正文出现 |
-| `bar.order_item.void` | staff-token | project-bar-table | 1 | voidBarOrderItem | OpenAPI 补充，以本附录为准 |
+| `bar.order_item.void` | staff-token | project-bar-table | 2 | voidBarOrderItem, decideBarOrderItemVoid | OpenAPI 补充，以本附录为准 |
 | `bar.order.create` | staff-token | project, project-bar-table | 7 | createBarOrder, createBarOrderBill, deliverBarOrder, addBarOrderItem, listBarProductionTickets, listBarProducts, createBarProduct | 已在权限矩阵正文出现 |
 | `bar.order.view` | staff-token | project-bar-table | 1 | listBarOrders | 已在权限矩阵正文出现 |
 | `bar.product.sold_out` | staff-token | project-bar-table | 1 | markBarProductSoldOut | OpenAPI 补充，以本附录为准 |
+| `bar.production_ticket.manage` | staff-token | project-bar-table | 1 | transitionBarProductionTicket | OpenAPI 补充，以本附录为准 |
+| `bar.production_ticket.view` | staff-token | project-bar-table | 1 | listBarProductionTicketEvents | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.create` | staff-token | project-bar | 1 | createBarReservation | 已在权限矩阵正文出现 |
 | `bar.reservation.manage` | staff-token | project-bar | 3 | payBarReservationDeposit, checkInBarReservationDeposit, cancelBarReservation | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.view` | staff-token | project-bar-table | 1 | listBarReservations | 已在权限矩阵正文出现 |
-| `bar.saved_bottle.manage` | staff-token | project-bar-customer | 4 | listSavedBottles, createSavedBottle, claimSavedBottle, cancelSavedBottle | 已在权限矩阵正文出现 |
+| `bar.saved_bottle.manage` | staff-token | project-bar-customer, project-bar-table | 6 | listSavedBottles, createSavedBottle, claimSavedBottle, cancelSavedBottle, disputeSavedBottle, transferSavedBottle | 已在权限矩阵正文出现 |
 | `bar.shift.close` | staff-token | project-bar-table | 1 | closeBarShift | OpenAPI 补充，以本附录为准 |
 | `bar.shift.manage` | staff-token | project-bar-table | 2 | listBarShifts, openBarShift | OpenAPI 补充，以本附录为准 |
 | `bar.table_commission.calculate` | staff-token | project-bar | 1 | calculateBarTableCommission | 已在权限矩阵正文出现 |
+| `bar.table_session.create` | staff-token | project-bar-table | 1 | createBarTableSession | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.merge` | staff-token | project-bar-table | 1 | mergeBarTableSession | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.renew` | staff-token | project-bar-table | 1 | renewBarTableSession | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.transfer` | staff-token | project-bar-table | 1 | transferBarTableSession | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.view` | staff-token | project-bar-table | 1 | listBarTableSessions | OpenAPI 补充，以本附录为准 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 1 | checkInBarReservationGuest | 已在权限矩阵正文出现 |
 | `bar.table.manage` | staff-token | project-bar, project-bar-table | 3 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace | 已在权限矩阵正文出现 |
 | `bar.table.open_close` | staff-token | project-bar | 1 | openBarTable | 已在权限矩阵正文出现 |
 | `bar.table.view` | staff-token | project-bar | 1 | listBarTables | 已在权限矩阵正文出现 |
+| `compliance.contract_key_date.manage` | staff-token | - | 1 | createContractKeyDate | OpenAPI 补充，以本附录为准 |
+| `compliance.contract_key_date.view` | staff-token | - | 1 | listContractKeyDates | OpenAPI 补充，以本附录为准 |
+| `compliance.expiry_item.manage` | staff-token | - | 1 | createComplianceExpiryItem | OpenAPI 补充，以本附录为准 |
+| `compliance.expiry_item.view` | staff-token | - | 1 | listComplianceExpiryItems | OpenAPI 补充，以本附录为准 |
+| `compliance.reminder.scan` | staff-token | - | 1 | scanComplianceReminders | OpenAPI 补充，以本附录为准 |
+| `compliance.reminder.view` | staff-token | - | 1 | listComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `contract.draft.manage` | staff-token | project-merchant | 1 | createContractDraft | 已在权限矩阵正文出现 |
 | `contract.lifecycle.approve` | staff-token | project-merchant | 1 | approveContract | 已在权限矩阵正文出现 |
 | `contract.view` | staff-token | project-merchant | 1 | listContracts | 已在权限矩阵正文出现 |
@@ -111,17 +136,23 @@
 | `evidence.timeline.view` | staff-token | project-object | 1 | getEvidenceTimeline | 已在权限矩阵正文出现 |
 | `finance.ar_ap.manage` | staff-token | project-entity | 1 | createArApItem | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | project-entity | 1 | listArApItems | 已在权限矩阵正文出现 |
+| `finance.cam.allocate` | staff-token | platform | 1 | allocateCam | OpenAPI 补充，以本附录为准 |
+| `finance.cam.trueup` | staff-token | platform | 1 | trueUpCam | OpenAPI 补充，以本附录为准 |
 | `finance.daily_close.lock` | staff-token | project-entity | 1 | createDailyClose | 已在权限矩阵正文出现 |
 | `finance.daily_close.manage` | staff-token | project-entity | 1 | listDailyCloseSummaries | OpenAPI 补充，以本附录为准 |
+| `finance.deposit.manage` | staff-token | platform | 1 | recordDepositAction | OpenAPI 补充，以本附录为准 |
+| `finance.inventory_variance.post` | staff-token | platform | 1 | postInventoryVariance | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.approve` | staff-token | project-entity | 1 | approveArApAdjustment | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.request` | staff-token | project-entity | 1 | requestArApAdjustment | OpenAPI 补充，以本附录为准 |
 | `finance.payment_intent.create` | staff-token | project-bar-table, project-order | 3 | createBarBillPayIntent, createPaymentIntent, createTicketOrderPayIntent | 已在权限矩阵正文出现 |
 | `finance.payment.register` | staff-token | project-bar-table, project-entity, project-order | 3 | settleBarBill, createArApPayment, confirmOfflinePayment | 已在权限矩阵正文出现 |
+| `finance.reconciliation.difference.create` | staff-token | platform | 1 | createFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.view` | staff-token | project | 1 | listReconciliationBatches | 已在权限矩阵正文出现 |
 | `finance.refund.create` | staff-token | project-order | 1 | createFinanceRefund | 已在权限矩阵正文出现 |
+| `finance.turnover_rent.bill` | staff-token | platform | 1 | billTurnoverRent | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.manage` | staff-token | project-space | 2 | createFloorPlanImport, publishFloorPlanImport | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.view` | staff-token | project-space | 2 | listFloorPlanImports, getFloorPlanImportDetails | OpenAPI 补充，以本附录为准 |
-| `floor_plan.manage` | staff-token | project-space | 1 | createFloorPlan | OpenAPI 补充，以本附录为准 |
+| `floor_plan.manage` | staff-token | -, project-space | 2 | createFloorPlan, saveFloorPlanShape | OpenAPI 补充，以本附录为准 |
 | `floor_plan.view` | staff-token | project-space | 2 | listFloorPlans, listFloorPlanShapes | OpenAPI 补充，以本附录为准 |
 | `governance.project.manage` | staff-token | project | 1 | createProject | 已在权限矩阵正文出现 |
 | `governance.project.view` | staff-token | project | 1 | listProjects | 已在权限矩阵正文出现 |
@@ -130,11 +161,17 @@
 | `governance.supervisor_review.approve` | staff-token | project-entity | 1 | approveSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.manage` | staff-token | project-entity | 1 | evaluateSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.view` | staff-token | project-entity | 1 | listSupervisorReviewPolicies | OpenAPI 补充，以本附录为准 |
+| `integration.compensation.manage` | staff-token | platform | 2 | createCompensationTask, resolveCompensationTask | OpenAPI 补充，以本附录为准 |
+| `integration.order_sync.manage` | staff-token | platform | 1 | createOrderSync | OpenAPI 补充，以本附录为准 |
 | `integration.provider_adapter.create` | staff-token | project-provider | 1 | createProviderAdapter | 已在权限矩阵正文出现 |
 | `integration.provider_adapter.production_ready` | staff-token | project-provider | 1 | markProviderAdapterProductionReady | 已在权限矩阵正文出现 |
 | `integration.provider_adapter.test` | staff-token | project-provider | 1 | testProviderAdapterMock | 已在权限矩阵正文出现 |
 | `integration.provider_adapter.update` | staff-token | project-provider | 1 | updateProviderAdapter | 已在权限矩阵正文出现 |
 | `integration.provider_adapter.view` | staff-token | project, project-provider | 16 | listIntegrationCompensationTasks, listIntegrationDevices, listIntegrationDeviceEvents, listIntegrationOfflineSyncBatches, listIntegrationOrderSyncs, listProviderAdapters, listIntegrationRetailSkus, listIntegrationRetryTasks, listRobotTaskEvents, listRobotTasks, listVideoCameras, listVoucherVerifications ... | 已在权限矩阵正文出现 |
+| `integration.reconciliation.manage` | staff-token | platform | 3 | createIntegrationReconciliationBatch, createIntegrationReconciliationDifference, runChannelAutoReconciliation | OpenAPI 补充，以本附录为准 |
+| `integration.reconciliation.resolve` | staff-token | platform | 1 | resolveIntegrationReconciliationDifference | OpenAPI 补充，以本附录为准 |
+| `integration.reconciliation.view` | staff-token | platform | 2 | listIntegrationReconciliationBatches, listIntegrationReconciliationDifferences | OpenAPI 补充，以本附录为准 |
+| `integration.retry.manage` | staff-token | platform | 2 | createRetryTask, runRetryTaskNow | OpenAPI 补充，以本附录为准 |
 | `integration.video.view` | staff-token | project | 1 | listIntegrationVideoAnchors | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.review` | staff-token | project-warehouse-bar | 1 | reviewTraceHandoverException | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.scan` | staff-token | project-warehouse-bar | 4 | scanTraceCodeHandover, createTraceHandover, scanTraceSegment, reportRobotSegment | OpenAPI 补充，以本附录为准 |
@@ -142,16 +179,27 @@
 | `inventory.purchase_request.manage` | staff-token | project | 1 | createPurchaseRequest | 已在权限矩阵正文出现 |
 | `inventory.purchase_request.view` | staff-token | project | 1 | listPurchaseRequests | 已在权限矩阵正文出现 |
 | `inventory.purchase.approve` | staff-token | project-warehouse-bar | 5 | approvePurchaseRequest, orderPurchaseRequest, arrivePurchaseRequest, receivePurchaseRequest, approveSupplyContract | OpenAPI 补充，以本附录为准 |
+| `inventory.risk_alert.view` | staff-token | warehouse | 1 | listInventoryRiskAlerts | OpenAPI 补充，以本附录为准 |
+| `inventory.risk.scan` | staff-token | warehouse | 1 | scanInventoryRiskAlerts | OpenAPI 补充，以本附录为准 |
 | `inventory.stock.adjust` | staff-token | project-warehouse | 1 | createStockAdjustment | 已在权限矩阵正文出现 |
+| `inventory.stock.batch.manage` | staff-token | warehouse | 1 | createInventoryStockBatch | OpenAPI 补充，以本附录为准 |
 | `inventory.stock.move` | staff-token | project, project-warehouse | 5 | createInventoryItem, createStockIn, createStockMovement, transferStockMovement, createTypedStockMovement | 已在权限矩阵正文出现 |
-| `inventory.stock.view` | staff-token | project, project-warehouse | 3 | listInventoryItems, listStockBalances, listStockMovements | 已在权限矩阵正文出现 |
+| `inventory.stock.view` | staff-token | project, project-warehouse, warehouse | 4 | listInventoryItems, listStockBalances, listStockMovements, listInventoryStockBatches | 已在权限矩阵正文出现 |
 | `inventory.supplier.manage` | staff-token | project | 1 | createInventorySupplier | 已在权限矩阵正文出现 |
+| `inventory.supplier.qualification.manage` | staff-token | supplier | 2 | listSupplierQualifications, createSupplierQualification | OpenAPI 补充，以本附录为准 |
+| `inventory.supplier.reconcile` | staff-token | supplier | 2 | listSupplierReconciliations, createSupplierReconciliation | OpenAPI 补充，以本附录为准 |
+| `inventory.supplier.settlement.manage` | staff-token | supplier | 2 | listSupplierSettlementMethods, createSupplierSettlementMethod | OpenAPI 补充，以本附录为准 |
 | `inventory.supplier.view` | staff-token | project | 1 | listInventorySuppliers | 已在权限矩阵正文出现 |
-| `inventory.supply_contract.manage` | staff-token | project-warehouse-bar | 1 | createSupplyContract | OpenAPI 补充，以本附录为准 |
-| `inventory.warehouse.manage` | staff-token | project-warehouse-bar | 1 | createWarehouse | OpenAPI 补充，以本附录为准 |
-| `mdm.device.manage` | staff-token | project-device | 2 | enrollMdmDevice, reportMdmPolicyViolation | OpenAPI 补充，以本附录为准 |
+| `inventory.supply_contract.manage` | staff-token | project-warehouse-bar, supplier | 2 | listSupplyContracts, createSupplyContract | OpenAPI 补充，以本附录为准 |
+| `inventory.warehouse.manage` | staff-token | project-warehouse-bar, warehouse | 2 | listWarehouses, createWarehouse | OpenAPI 补充，以本附录为准 |
+| `mdm.device.manage` | staff-token | -, project-device | 3 | enrollMdmDevice, reportMdmPolicyViolation, detectMdmViolations | OpenAPI 补充，以本附录为准 |
 | `mdm.policy.manage` | staff-token | project-device | 4 | listMdmAppWhitelist, upsertMdmAppWhitelist, listMdmSiteWhitelist, upsertMdmSiteWhitelist | OpenAPI 补充，以本附录为准 |
+| `mdm.violation.handle` | staff-token | - | 1 | handleMdmViolation | OpenAPI 补充，以本附录为准 |
 | `mdm.violation.view` | staff-token | project-device | 1 | listMdmPolicyViolations | OpenAPI 补充，以本附录为准 |
+| `merchant.billing.confirm` | staff-token | - | 1 | confirmMerchantBill | OpenAPI 补充，以本附录为准 |
+| `merchant.billing.dispute.submit` | staff-token | - | 1 | submitMerchantBillDispute | OpenAPI 补充，以本附录为准 |
+| `merchant.billing.dunning.record` | staff-token | - | 1 | recordMerchantBillDunning | OpenAPI 补充，以本附录为准 |
+| `merchant.billing.manage` | staff-token | - | 1 | createMerchantBill | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.view` | staff-token | project-merchant | 1 | listMerchantBills | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.manage` | staff-token | project, project-merchant | 2 | createMerchant, updateMerchant | 已在权限矩阵正文出现 |
 | `merchant.profile.view` | staff-token | project-merchant | 1 | listMerchants | 已在权限矩阵正文出现 |
@@ -160,12 +208,19 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-app, open-endpoint, project, project-device, public-project-bar | 17 | openAuthToken, getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent, receiveIntegrationTypedWebhook ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-app, open-endpoint, project, project-device, public-project-bar, self | 21 | openAuthToken, getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent, receiveIntegrationTypedWebhook ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
 | `public` | public | customer, none, public-project | 4 | login, customerPhoneLogin, listCustomerTicketProducts, getSystemHealth | 已在权限矩阵正文出现 |
+| `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.dismiss` | staff-token | platform | 1 | dismissRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.escalate` | staff-token | platform | 1 | escalateRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.report` | staff-token | platform | 1 | reportRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.resolve` | staff-token | platform | 1 | resolveRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.transfer` | staff-token | platform | 1 | transferRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.view` | staff-token | platform | 2 | searchRiskAlerts, getRiskAlertDetail | 已在权限矩阵正文出现 |
 | `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
 | `staff.device.review` | staff-token | project | 1 | approveStaffDeviceRebind | OpenAPI 补充，以本附录为准 |
 | `staff.device.revoke` | staff-token | project | 1 | revokeStaffDeviceCredential | OpenAPI 补充，以本附录为准 |
@@ -175,6 +230,7 @@
 | `staff.profile.view` | staff-token | project | 1 | listStaffProfiles | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 4 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks | 已在权限矩阵正文出现 |
+| `terminal.device.lifecycle` | staff-token | - | 4 | markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap | OpenAPI 补充，以本附录为准 |
 | `terminal.device.unbind` | staff-token | project-device | 1 | unbindDevice | 已在权限矩阵正文出现 |
 | `terminal.switch.manage` | staff-token | project-device | 1 | updateCapabilitySwitch | 已在权限矩阵正文出现 |
 | `terminal.switch.view` | staff-token | project-device | 1 | listCapabilitySwitches | 已在权限矩阵正文出现 |
@@ -192,12 +248,15 @@
 | `ticket.product.view` | staff-token | project | 1 | listTicketTypes | 已在权限矩阵正文出现 |
 | `ticket.refund.approve` | staff-token | project-order | 1 | approveTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 1 | requestTicketRefund | 已在权限矩阵正文出现 |
+| `ticket.refund.view` | staff-token | - | 1 | listTicketRefundLines | OpenAPI 补充，以本附录为准 |
 | `ticket.ticket.issue` | staff-token | project-order | 1 | issueTicket | 已在权限矩阵正文出现 |
 | `ticket.verify.reverse` | staff-token | project-point | 1 | reverseTicketVerification | OpenAPI 补充，以本附录为准 |
 | `ticket.verify.view` | staff-token | project | 1 | listIssuedEntitlements | 已在权限矩阵正文出现 |
 | `verification.execute` | staff-token | project-point | 2 | createTicketVerification, previewTicketVerification | 已在权限矩阵正文出现 |
 | `verification.view` | staff-token | project-merchant | 1 | listTicketVerifications | 已在权限矩阵正文出现 |
 | `wecom.retention.manage` | staff-token | platform | 2 | listWecomRetentionPolicies, upsertWecomRetentionPolicy | OpenAPI 补充，以本附录为准 |
+| `wecom.risk_hit.review` | staff-token | - | 1 | reviewWecomRiskHit | OpenAPI 补充，以本附录为准 |
+| `wecom.risk_hit.view` | staff-token | - | 1 | listWecomRiskHits | OpenAPI 补充，以本附录为准 |
 | `wecom.sync` | webhook-signature | open-endpoint | 1 | syncWecomConversation | OpenAPI 补充，以本附录为准 |
 | `wecom.view_raw` | staff-token | project | 1 | viewWecomConversationMessages | OpenAPI 补充，以本附录为准 |
 
@@ -235,6 +294,14 @@
 | `amusement.capacity_config.viewed` | success | `listAmusementCapacityConfigs` | `GET` | `/api/v1/amusement/projects/{id}/capacity-config` | AMU-游乐安全 | `amusement.capacity_config.manage` | 接口级事件，以本附录为准 |
 | `amusement.device_status.viewed` | success | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | AMU-游乐安全 | `amusement.device_status.view` | 接口级事件，以本附录为准 |
 | `amusement.device_status.viewed_failed` | failure | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | AMU-游乐安全 | `amusement.device_status.view` | 接口级事件，以本附录为准 |
+| `amusement.incident.action` | success | `addAmusementIncidentAction` | `POST` | `/api/v1/amusement/incidents/{incidentId}/actions` | AMU-游乐安全 | `amusement.incident.process` | 接口级事件，以本附录为准 |
+| `amusement.incident.action_failed` | failure | `addAmusementIncidentAction` | `POST` | `/api/v1/amusement/incidents/{incidentId}/actions` | AMU-游乐安全 | `amusement.incident.process` | 接口级事件，以本附录为准 |
+| `amusement.incident.close` | success | `closeAmusementIncident` | `POST` | `/api/v1/amusement/incidents/{incidentId}/close` | AMU-游乐安全 | `amusement.incident.close` | 接口级事件，以本附录为准 |
+| `amusement.incident.close_failed` | failure | `closeAmusementIncident` | `POST` | `/api/v1/amusement/incidents/{incidentId}/close` | AMU-游乐安全 | `amusement.incident.close` | 接口级事件，以本附录为准 |
+| `amusement.incident.create` | success | `createAmusementIncident` | `POST` | `/api/v1/amusement/incidents` | AMU-游乐安全 | `amusement.incident.create` | 接口级事件，以本附录为准 |
+| `amusement.incident.create_failed` | failure | `createAmusementIncident` | `POST` | `/api/v1/amusement/incidents` | AMU-游乐安全 | `amusement.incident.create` | 接口级事件，以本附录为准 |
+| `amusement.incident.list` | success | `listAmusementIncidents` | `GET` | `/api/v1/amusement/incidents` | AMU-游乐安全 | `amusement.incident.view` | 接口级事件，以本附录为准 |
+| `amusement.incident.list_failed` | failure | `listAmusementIncidents` | `GET` | `/api/v1/amusement/incidents` | AMU-游乐安全 | `amusement.incident.view` | 接口级事件，以本附录为准 |
 | `amusement.maintenance_record_failed` | failure | `createAmusementMaintenanceRecord` | `POST` | `/api/v1/amusement/maintenance-records` | AMU-游乐安全 | `amusement.maintenance.submit` | 接口级事件，以本附录为准 |
 | `amusement.maintenance_recorded` | success | `createAmusementMaintenanceRecord` | `POST` | `/api/v1/amusement/maintenance-records` | AMU-游乐安全 | `amusement.maintenance.submit` | 接口级事件，以本附录为准 |
 | `amusement.maintenance_resume_failed` | failure | `confirmAmusementMaintenanceResume` | `POST` | `/api/v1/amusement/maintenance-records/{id}/confirm-resume` | AMU-游乐安全 | `amusement.maintenance.confirm` | 接口级事件，以本附录为准 |
@@ -259,8 +326,16 @@
 | `amusement.project_space.assign_failed` | failure | `assignAmusementProjectSpace` | `PUT` | `/api/v1/amusement/projects/{id}/space` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
 | `amusement.project_space.assigned` | success | `assignAmusementProjectSpace` | `PUT` | `/api/v1/amusement/projects/{id}/space` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
 | `amusement.project.resumed` | success | `confirmAmusementMaintenanceResume` | `POST` | `/api/v1/amusement/maintenance-records/{id}/confirm-resume` | AMU-游乐安全 | `amusement.maintenance.confirm` | 接口级事件，以本附录为准 |
+| `amusement.queue_entry.create` | success | `createAmusementQueueEntry` | `POST` | `/api/v1/amusement/queue-entries` | AMU-游乐安全 | `amusement.queue.manage` | 接口级事件，以本附录为准 |
+| `amusement.queue_entry.create_failed` | failure | `createAmusementQueueEntry` | `POST` | `/api/v1/amusement/queue-entries` | AMU-游乐安全 | `amusement.queue.manage` | 接口级事件，以本附录为准 |
+| `amusement.queue_entry.status_change` | success | `changeAmusementQueueEntryStatus` | `POST` | `/api/v1/amusement/queue-entries/{id}/status` | AMU-游乐安全 | `amusement.queue.manage` | 接口级事件，以本附录为准 |
+| `amusement.queue_entry.status_change_failed` | failure | `changeAmusementQueueEntryStatus` | `POST` | `/api/v1/amusement/queue-entries/{id}/status` | AMU-游乐安全 | `amusement.queue.manage` | 接口级事件，以本附录为准 |
 | `amusement.queue.viewed` | success | `listAmusementQueueEntries` | `GET` | `/api/v1/amusement/queue-entries` | AMU-游乐安全 | `amusement.queue.view` | 接口级事件，以本附录为准 |
 | `amusement.queue.viewed_failed` | failure | `listAmusementQueueEntries` | `GET` | `/api/v1/amusement/queue-entries` | AMU-游乐安全 | `amusement.queue.view` | 接口级事件，以本附录为准 |
+| `amusement.reservation.create` | success | `createAmusementReservation` | `POST` | `/api/v1/amusement/reservations` | AMU-游乐安全 | `amusement.reservation.manage` | 接口级事件，以本附录为准 |
+| `amusement.reservation.create_failed` | failure | `createAmusementReservation` | `POST` | `/api/v1/amusement/reservations` | AMU-游乐安全 | `amusement.reservation.manage` | 接口级事件，以本附录为准 |
+| `amusement.reservation.status_change` | success | `changeAmusementReservationStatus` | `POST` | `/api/v1/amusement/reservations/{id}/status` | AMU-游乐安全 | `amusement.reservation.manage` | 接口级事件，以本附录为准 |
+| `amusement.reservation.status_change_failed` | failure | `changeAmusementReservationStatus` | `POST` | `/api/v1/amusement/reservations/{id}/status` | AMU-游乐安全 | `amusement.reservation.manage` | 接口级事件，以本附录为准 |
 | `amusement.reservation.viewed` | success | `listAmusementReservations` | `GET` | `/api/v1/amusement/reservations` | AMU-游乐安全 | `amusement.reservation.view` | 接口级事件，以本附录为准 |
 | `amusement.reservation.viewed_failed` | failure | `listAmusementReservations` | `GET` | `/api/v1/amusement/reservations` | AMU-游乐安全 | `amusement.reservation.view` | 接口级事件，以本附录为准 |
 | `amusement.safety_inspection.blocked` | failure | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | AMU-游乐安全 | `amusement.safety_inspection.submit` | 已在事件矩阵正文出现 |
@@ -275,6 +350,10 @@
 | `amusement.safety_inspection.submitted` | success | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | AMU-游乐安全 | `amusement.safety_inspection.submit` | 已在事件矩阵正文出现 |
 | `amusement.safety_inspection.view_failed` | failure | `listAmusementSafetyInspections` | `GET` | `/api/v1/amusement/safety-inspections` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
 | `amusement.safety_inspection.viewed` | success | `listAmusementSafetyInspections` | `GET` | `/api/v1/amusement/safety-inspections` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
+| `amusement.safety_notice.create` | success | `createAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices` | AMU-游乐安全 | `amusement.safety_notice.manage` | 接口级事件，以本附录为准 |
+| `amusement.safety_notice.create_failed` | failure | `createAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices` | AMU-游乐安全 | `amusement.safety_notice.manage` | 接口级事件，以本附录为准 |
+| `amusement.safety_notice.list` | success | `listAmusementSafetyNotices` | `GET` | `/api/v1/amusement/safety-notices` | AMU-游乐安全 | `amusement.safety_notice.view` | 接口级事件，以本附录为准 |
+| `amusement.safety_notice.list_failed` | failure | `listAmusementSafetyNotices` | `GET` | `/api/v1/amusement/safety-notices` | AMU-游乐安全 | `amusement.safety_notice.view` | 接口级事件，以本附录为准 |
 | `amusement.safety_template.change_failed` | failure | `createAmusementSafetyTemplate` | `POST` | `/api/v1/amusement/safety-templates` | AMU-游乐安全 | `amusement.safety_template.manage` | 接口级事件，以本附录为准 |
 | `amusement.safety_template.changed` | success | `createAmusementSafetyTemplate` | `POST` | `/api/v1/amusement/safety-templates` | AMU-游乐安全 | `amusement.safety_template.manage` | 接口级事件，以本附录为准 |
 | `amusement.safety_template.view_failed` | failure | `listAmusementSafetyTemplates` | `GET` | `/api/v1/amusement/safety-templates` | AMU-游乐安全 | `amusement.safety_template.view` | 接口级事件，以本附录为准 |
@@ -293,6 +372,8 @@
 | `amusement.verification_succeeded` | success | `createAmusementVerification` | `POST` | `/api/v1/amusement/verifications` | AMU-游乐安全 | `amusement.verification.execute` | 已在事件矩阵正文出现 |
 | `amusement.verification.view_failed` | failure | `listAmusementVerifications` | `GET` | `/api/v1/amusement/verifications` | AMU-游乐安全 | `amusement.verification.view` | 接口级事件，以本附录为准 |
 | `amusement.verification.viewed` | success | `listAmusementVerifications` | `GET` | `/api/v1/amusement/verifications` | AMU-游乐安全 | `amusement.verification.view` | 接口级事件，以本附录为准 |
+| `amusement.waiver.acknowledge` | success | `acknowledgeAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices/{noticeId}/acknowledgements` | AMU-游乐安全 | `amusement.waiver.acknowledge` | 接口级事件，以本附录为准 |
+| `amusement.waiver.acknowledge_failed` | failure | `acknowledgeAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices/{noticeId}/acknowledgements` | AMU-游乐安全 | `amusement.waiver.acknowledge` | 接口级事件，以本附录为准 |
 | `analytics_business_metric_snapshot.viewed.failure` | failure | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics_business_metric_snapshot.viewed.success` | success | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality_result.viewed` | success | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
@@ -307,6 +388,8 @@
 | `analytics.dashboard_domain.viewed` | success | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_view_failed` | failure | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_viewed` | success | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.group_overview.view_failed` | failure | `getGroupOverview` | `GET` | `/api/v1/analytics/group-overview` | ANA-风控分析 | `analytics.group.view` | 接口级事件，以本附录为准 |
+| `analytics.group_overview.viewed` | success | `getGroupOverview` | `GET` | `/api/v1/analytics/group-overview` | ANA-风控分析 | `analytics.group.view` | 接口级事件，以本附录为准 |
 | `analytics.merchant_health.viewed` | success | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.merchant_health.viewed_failed` | failure | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.merchant_summary.viewed` | success | `listAnalyticsMerchants` | `GET` | `/api/v1/analytics/merchants` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -335,14 +418,22 @@
 | `auth.token.refreshed` | success | `refreshToken` | `POST` | `/api/v1/auth/refresh` | AUTH-登录会话 | `authenticated` | 接口级事件，以本附录为准 |
 | `bar.age_verification.passed` | success | `createBarAgeVerification` | `POST` | `/api/v1/bar/age-verifications` | BAR-酒吧经营 | `bar.entry.age_verify` | 已在事件矩阵正文出现 |
 | `bar.age_verification.rejected` | failure | `createBarAgeVerification` | `POST` | `/api/v1/bar/age-verifications` | BAR-酒吧经营 | `bar.entry.age_verify` | 已在事件矩阵正文出现 |
+| `bar.bill_operation.list` | success | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
+| `bar.bill_operation.list_failed` | failure | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.bill_reopen_failed` | failure | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | BAR-酒吧经营 | `bar.bill.reopen` | 接口级事件，以本附录为准 |
 | `bar.bill_reopened` | success | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | BAR-酒吧经营 | `bar.bill.reopen` | 接口级事件，以本附录为准 |
 | `bar.bill_tip_added` | success | `addBarBillTip` | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | BAR-酒吧经营 | `bar.bill.tip` | 接口级事件，以本附录为准 |
 | `bar.bill_tip_failed` | failure | `addBarBillTip` | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | BAR-酒吧经营 | `bar.bill.tip` | 接口级事件，以本附录为准 |
+| `bar.bill.adjust` | success | `adjustBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/adjustments` | BAR-酒吧经营 | `bar.bill.adjust` | 接口级事件，以本附录为准 |
+| `bar.bill.adjust_failed` | failure | `adjustBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/adjustments` | BAR-酒吧经营 | `bar.bill.adjust` | 接口级事件，以本附录为准 |
 | `bar.bill.created` | success | `createBarOrderBill` | `POST` | `/api/v1/bar/orders/{order_id}/bill` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.bill.created_failed` | failure | `createBarOrderBill` | `POST` | `/api/v1/bar/orders/{order_id}/bill` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
+| `bar.bill.merge` | success | `mergeBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/merge` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
+| `bar.bill.merge_failed` | failure | `mergeBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/merge` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.bill.settle_failed` | failure | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | BAR-酒吧经营 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `bar.bill.settled` | success | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | BAR-酒吧经营 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `bar.bill.split` | success | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
+| `bar.bill.split_failed` | failure | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.deposit_rule.create_failed` | failure | `createBarDepositRule` | `POST` | `/api/v1/bar/deposit-rules` | BAR-酒吧经营 | `bar.deposit_rule.manage` | 接口级事件，以本附录为准 |
 | `bar.deposit_rule.created` | success | `createBarDepositRule` | `POST` | `/api/v1/bar/deposit-rules` | BAR-酒吧经营 | `bar.deposit_rule.manage` | 接口级事件，以本附录为准 |
 | `bar.order_create_failed` | failure | `createBarOrder` | `POST` | `/api/v1/bar/orders` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
@@ -350,6 +441,8 @@
 | `bar.order_deliver_failed` | failure | `deliverBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.order_delivered` | success | `deliverBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | BAR-酒吧经营 | `bar.order.create` | 已在事件矩阵正文出现 |
 | `bar.order_item_void_failed` | failure | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | BAR-酒吧经营 | `bar.order_item.void` | 接口级事件，以本附录为准 |
+| `bar.order_item_void.decide` | success | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | BAR-酒吧经营 | `bar.order_item.void` | 接口级事件，以本附录为准 |
+| `bar.order_item_void.decide_failed` | failure | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | BAR-酒吧经营 | `bar.order_item.void` | 接口级事件，以本附录为准 |
 | `bar.order_item_voided` | success | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | BAR-酒吧经营 | `bar.order_item.void` | 接口级事件，以本附录为准 |
 | `bar.order_item.created` | success | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.order_item.created_failed` | failure | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
@@ -361,6 +454,10 @@
 | `bar.product.created_failed` | failure | `createBarProduct` | `POST` | `/api/v1/bar/products` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.product.viewed` | success | `listBarProducts` | `GET` | `/api/v1/bar/products` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.product.viewed_failed` | failure | `listBarProducts` | `GET` | `/api/v1/bar/products` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
+| `bar.production_ticket_event.list` | success | `listBarProductionTicketEvents` | `GET` | `/api/v1/bar/production-tickets/{ticket_id}/events` | BAR-酒吧经营 | `bar.production_ticket.view` | 接口级事件，以本附录为准 |
+| `bar.production_ticket_event.list_failed` | failure | `listBarProductionTicketEvents` | `GET` | `/api/v1/bar/production-tickets/{ticket_id}/events` | BAR-酒吧经营 | `bar.production_ticket.view` | 接口级事件，以本附录为准 |
+| `bar.production_ticket.transition` | success | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | BAR-酒吧经营 | `bar.production_ticket.manage` | 接口级事件，以本附录为准 |
+| `bar.production_ticket.transition_failed` | failure | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | BAR-酒吧经营 | `bar.production_ticket.manage` | 接口级事件，以本附录为准 |
 | `bar.production_ticket.viewed` | success | `listBarProductionTickets` | `GET` | `/api/v1/bar/production-tickets` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.production_ticket.viewed_failed` | failure | `listBarProductionTickets` | `GET` | `/api/v1/bar/production-tickets` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.reservation_deposit_deduct_failed` | failure | `checkInBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/checkin` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
@@ -378,7 +475,11 @@
 | `bar.saved_bottle.cancelled` | success | `cancelSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.create_failed` | failure | `createSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.created` | success | `createSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles` | INV-库存存酒 | `bar.saved_bottle.manage` | 已在事件矩阵正文出现 |
+| `bar.saved_bottle.dispute` | success | `disputeSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/dispute` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
+| `bar.saved_bottle.dispute_failed` | failure | `disputeSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/dispute` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.pickup_failed` | failure | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
+| `bar.saved_bottle.transfer` | success | `transferSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/transfer` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
+| `bar.saved_bottle.transfer_failed` | failure | `transferSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/transfer` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.view_failed` | failure | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.viewed` | success | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.shift_close_failed` | failure | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | BAR-酒吧经营 | `bar.shift.close` | 接口级事件，以本附录为准 |
@@ -391,6 +492,16 @@
 | `bar.table_commission.calculated` | success | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | BAR-酒吧经营 | `bar.table_commission.calculate` | 已在事件矩阵正文出现 |
 | `bar.table_guest.checked_in` | success | `checkInBarReservationGuest` | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | BAR-酒吧经营 | `bar.table.guest_checkin` | 已在事件矩阵正文出现 |
 | `bar.table_guest.rejected` | failure | `checkInBarReservationGuest` | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | BAR-酒吧经营 | `bar.table.guest_checkin` | 已在事件矩阵正文出现 |
+| `bar.table_session.create` | success | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
+| `bar.table_session.create_failed` | failure | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
+| `bar.table_session.list` | success | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.view` | 接口级事件，以本附录为准 |
+| `bar.table_session.list_failed` | failure | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.view` | 接口级事件，以本附录为准 |
+| `bar.table_session.merge` | success | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | BAR-酒吧经营 | `bar.table_session.merge` | 接口级事件，以本附录为准 |
+| `bar.table_session.merge_failed` | failure | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | BAR-酒吧经营 | `bar.table_session.merge` | 接口级事件，以本附录为准 |
+| `bar.table_session.renew` | success | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | BAR-酒吧经营 | `bar.table_session.renew` | 接口级事件，以本附录为准 |
+| `bar.table_session.renew_failed` | failure | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | BAR-酒吧经营 | `bar.table_session.renew` | 接口级事件，以本附录为准 |
+| `bar.table_session.transfer` | success | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
+| `bar.table_session.transfer_failed` | failure | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `bar.table_space_backlog.view_failed` | failure | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space_backlog.viewed` | success | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space.assign_failed` | failure | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
@@ -405,6 +516,18 @@
 | `business_entity.changed` | success | `createBusinessEntity` | `POST` | `/api/v1/platform/business-entities` | GOV-平台治理 | `entity.binding.manage` | 接口级事件，以本附录为准 |
 | `business_entity.view_failed` | failure | `listBusinessEntities` | `GET` | `/api/v1/platform/business-entities` | GOV-平台治理 | `entity.binding.view` | 接口级事件，以本附录为准 |
 | `business_entity.viewed` | success | `listBusinessEntities` | `GET` | `/api/v1/platform/business-entities` | GOV-平台治理 | `entity.binding.view` | 接口级事件，以本附录为准 |
+| `compliance.contract_key_date.create` | success | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | P0-待归类 | `compliance.contract_key_date.manage` | 接口级事件，以本附录为准 |
+| `compliance.contract_key_date.create_failed` | failure | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | P0-待归类 | `compliance.contract_key_date.manage` | 接口级事件，以本附录为准 |
+| `compliance.contract_key_date.list` | success | `listContractKeyDates` | `GET` | `/api/v1/compliance/contract-key-dates` | P0-待归类 | `compliance.contract_key_date.view` | 接口级事件，以本附录为准 |
+| `compliance.contract_key_date.list_failed` | failure | `listContractKeyDates` | `GET` | `/api/v1/compliance/contract-key-dates` | P0-待归类 | `compliance.contract_key_date.view` | 接口级事件，以本附录为准 |
+| `compliance.expiry_item.create` | success | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | P0-待归类 | `compliance.expiry_item.manage` | 接口级事件，以本附录为准 |
+| `compliance.expiry_item.create_failed` | failure | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | P0-待归类 | `compliance.expiry_item.manage` | 接口级事件，以本附录为准 |
+| `compliance.expiry_item.list` | success | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | P0-待归类 | `compliance.expiry_item.view` | 接口级事件，以本附录为准 |
+| `compliance.expiry_item.list_failed` | failure | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | P0-待归类 | `compliance.expiry_item.view` | 接口级事件，以本附录为准 |
+| `compliance.reminder.list` | success | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | P0-待归类 | `compliance.reminder.view` | 接口级事件，以本附录为准 |
+| `compliance.reminder.list_failed` | failure | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | P0-待归类 | `compliance.reminder.view` | 接口级事件，以本附录为准 |
+| `compliance.reminder.scan` | success | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | P0-待归类 | `compliance.reminder.scan` | 接口级事件，以本附录为准 |
+| `compliance.reminder.scan_failed` | failure | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | P0-待归类 | `compliance.reminder.scan` | 接口级事件，以本附录为准 |
 | `contract.draft_save_failed` | failure | `createContractDraft` | `POST` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.draft.manage` | 接口级事件，以本附录为准 |
 | `contract.draft_saved` | success | `createContractDraft` | `POST` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.draft.manage` | 接口级事件，以本附录为准 |
 | `contract.lifecycle_change_failed` | failure | `approveContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | GOV-平台治理 | `contract.lifecycle.approve` | 接口级事件，以本附录为准 |
@@ -442,6 +565,14 @@
 | `customer.points_viewed` | success | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points.freeze_failed` | failure | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
 | `customer.points.frozen` | success | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
+| `customer.points.ledger_view_failed` | failure | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.ledger_viewed` | success | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.redeem` | success | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.redeem_failed` | failure | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.redemption_items_view_failed` | failure | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.redemption_items_viewed` | success | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.redemptions_view_failed` | failure | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.redemptions_viewed` | success | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points.unfreeze_failed` | failure | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
 | `customer.points.unfrozen` | success | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
 | `customer.stored_value_account_viewed` | success | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
@@ -478,6 +609,22 @@
 | `evidence.timeline_viewed` | success | `getEvidenceTimeline` | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | EVD-事件证据 | `evidence.timeline.view` | 接口级事件，以本附录为准 |
 | `evidence.upload_intent_created` | success | `createEvidenceAttachmentUploadIntent` | `POST` | `/api/v1/evidence/attachments/upload-intents` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
 | `evidence.upload_intent_failed` | failure | `createEvidenceAttachmentUploadIntent` | `POST` | `/api/v1/evidence/attachments/upload-intents` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
+| `exception.alert_view_failed` | failure | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
+| `exception.alert_viewed` | success | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
+| `exception.alerts_view_failed` | failure | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
+| `exception.alerts_viewed` | success | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
+| `exception.claim_failed` | failure | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | EVD-事件证据 | `risk_alert.claim` | 接口级事件，以本附录为准 |
+| `exception.claimed` | success | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | EVD-事件证据 | `risk_alert.claim` | 接口级事件，以本附录为准 |
+| `exception.dismiss_failed` | failure | `dismissRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | EVD-事件证据 | `risk_alert.dismiss` | 接口级事件，以本附录为准 |
+| `exception.dismissed` | success | `dismissRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | EVD-事件证据 | `risk_alert.dismiss` | 接口级事件，以本附录为准 |
+| `exception.escalate_failed` | failure | `escalateRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | EVD-事件证据 | `risk_alert.escalate` | 接口级事件，以本附录为准 |
+| `exception.escalated` | success | `escalateRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | EVD-事件证据 | `risk_alert.escalate` | 接口级事件，以本附录为准 |
+| `exception.report_failed` | failure | `reportRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts` | EVD-事件证据 | `risk_alert.report` | 接口级事件，以本附录为准 |
+| `exception.reported` | success | `reportRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts` | EVD-事件证据 | `risk_alert.report` | 接口级事件，以本附录为准 |
+| `exception.resolve_failed` | failure | `resolveRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | EVD-事件证据 | `risk_alert.resolve` | 接口级事件，以本附录为准 |
+| `exception.resolved` | success | `resolveRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | EVD-事件证据 | `risk_alert.resolve` | 接口级事件，以本附录为准 |
+| `exception.transfer_failed` | failure | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | EVD-事件证据 | `risk_alert.transfer` | 接口级事件，以本附录为准 |
+| `exception.transferred` | success | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | EVD-事件证据 | `risk_alert.transfer` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.create_failed` | failure | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.created` | success | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.manage` | 已在事件矩阵正文出现 |
 | `finance_ar_ap.view_failed` | failure | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
@@ -492,14 +639,26 @@
 | `finance_reconciliation.view_failed` | failure | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `openplatform.reconcile.execute` | 接口级事件，以本附录为准 |
 | `finance_refund.create_failed` | failure | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
 | `finance_refund.created` | success | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
+| `finance.cam.allocate_failed` | failure | `allocateCam` | `POST` | `/api/v1/finance/cam/allocations` | FIN-财务台账 | `finance.cam.allocate` | 接口级事件，以本附录为准 |
+| `finance.cam.allocated` | success | `allocateCam` | `POST` | `/api/v1/finance/cam/allocations` | FIN-财务台账 | `finance.cam.allocate` | 接口级事件，以本附录为准 |
+| `finance.cam.trued_up` | success | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | FIN-财务台账 | `finance.cam.trueup` | 接口级事件，以本附录为准 |
+| `finance.cam.trueup_failed` | failure | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | FIN-财务台账 | `finance.cam.trueup` | 接口级事件，以本附录为准 |
 | `finance.daily_close_summary.view_failed` | failure | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `finance.daily_close_summary.viewed` | success | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
+| `finance.deposit.action_failed` | failure | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | FIN-财务台账 | `finance.deposit.manage` | 接口级事件，以本附录为准 |
+| `finance.deposit.action_recorded` | success | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | FIN-财务台账 | `finance.deposit.manage` | 接口级事件，以本附录为准 |
+| `finance.inventory_variance.post_failed` | failure | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | FIN-财务台账 | `finance.inventory_variance.post` | 接口级事件，以本附录为准 |
+| `finance.inventory_variance.posted` | success | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | FIN-财务台账 | `finance.inventory_variance.post` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_approved` | success | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | FIN-财务台账 | `finance.locked_backfill.approve` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_decision_failed` | failure | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | FIN-财务台账 | `finance.locked_backfill.approve` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_request_failed` | failure | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | FIN-财务台账 | `finance.locked_backfill.request` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_requested` | success | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | FIN-财务台账 | `finance.locked_backfill.request` | 接口级事件，以本附录为准 |
 | `finance.reconciliation_batch.viewed` | success | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
 | `finance.reconciliation_batch.viewed_failed` | failure | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
+| `finance.reconciliation.difference_create_failed` | failure | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `finance.reconciliation.difference.create` | 接口级事件，以本附录为准 |
+| `finance.reconciliation.difference_created` | success | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `finance.reconciliation.difference.create` | 接口级事件，以本附录为准 |
+| `finance.turnover_rent.bill_failed` | failure | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | FIN-财务台账 | `finance.turnover_rent.bill` | 接口级事件，以本附录为准 |
+| `finance.turnover_rent.billed` | success | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | FIN-财务台账 | `finance.turnover_rent.bill` | 接口级事件，以本附录为准 |
 | `floor_plan.create_failed` | failure | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | P0-待归类 | `floor_plan.manage` | 接口级事件，以本附录为准 |
 | `floor_plan.created` | success | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | P0-待归类 | `floor_plan.manage` | 接口级事件，以本附录为准 |
 | `floor_plan.import_candidate_view_failed` | failure | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | P0-待归类 | `floor_plan.import.view` | 接口级事件，以本附录为准 |
@@ -512,6 +671,8 @@
 | `floor_plan.import_viewed` | success | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | P0-待归类 | `floor_plan.import.view` | 接口级事件，以本附录为准 |
 | `floor_plan.shape_view_failed` | failure | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | P0-待归类 | `floor_plan.view` | 接口级事件，以本附录为准 |
 | `floor_plan.shape_viewed` | success | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | P0-待归类 | `floor_plan.view` | 接口级事件，以本附录为准 |
+| `floor_plan.shape.save` | success | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | P0-待归类 | `floor_plan.manage` | 接口级事件，以本附录为准 |
+| `floor_plan.shape.save_failed` | failure | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | P0-待归类 | `floor_plan.manage` | 接口级事件，以本附录为准 |
 | `floor_plan.view_failed` | failure | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | P0-待归类 | `floor_plan.view` | 接口级事件，以本附录为准 |
 | `floor_plan.viewed` | success | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | P0-待归类 | `floor_plan.view` | 接口级事件，以本附录为准 |
 | `governance.supervisor_review.decide_failed` | failure | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | GOV-平台治理 | `governance.supervisor_review.approve` | 接口级事件，以本附录为准 |
@@ -520,6 +681,12 @@
 | `governance.supervisor_review.evaluated` | success | `evaluateSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/evaluate` | GOV-平台治理 | `governance.supervisor_review.manage` | 接口级事件，以本附录为准 |
 | `governance.supervisor_review.policies_view_failed` | failure | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `governance.supervisor_review.policies_viewed` | success | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
+| `integration.channel_reconciliation.execute_failed` | failure | `runChannelAutoReconciliation` | `POST` | `/api/v1/integration/reconciliation/channel-auto` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
+| `integration.channel_reconciliation.executed` | success | `runChannelAutoReconciliation` | `POST` | `/api/v1/integration/reconciliation/channel-auto` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
+| `integration.compensation_task.create_failed` | failure | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | INT-第三方集成 | `integration.compensation.manage` | 接口级事件，以本附录为准 |
+| `integration.compensation_task.created` | success | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | INT-第三方集成 | `integration.compensation.manage` | 接口级事件，以本附录为准 |
+| `integration.compensation_task.resolve_failed` | failure | `resolveCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks/{id}/resolve` | INT-第三方集成 | `integration.compensation.manage` | 接口级事件，以本附录为准 |
+| `integration.compensation_task.resolved` | success | `resolveCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks/{id}/resolve` | INT-第三方集成 | `integration.compensation.manage` | 接口级事件，以本附录为准 |
 | `integration.compensation_task.viewed` | success | `listIntegrationCompensationTasks` | `GET` | `/api/v1/integration/compensation-tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.compensation_task.viewed_failed` | failure | `listIntegrationCompensationTasks` | `GET` | `/api/v1/integration/compensation-tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.device_event.viewed` | success | `listIntegrationDeviceEvents` | `GET` | `/api/v1/integration/devices/events` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
@@ -528,10 +695,26 @@
 | `integration.device.viewed_failed` | failure | `listIntegrationDevices` | `GET` | `/api/v1/integration/devices` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.offline_sync_batch.viewed` | success | `listIntegrationOfflineSyncBatches` | `GET` | `/api/v1/integration/devices/offline-sync-batches` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.offline_sync_batch.viewed_failed` | failure | `listIntegrationOfflineSyncBatches` | `GET` | `/api/v1/integration/devices/offline-sync-batches` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
+| `integration.order_sync.create_failed` | failure | `createOrderSync` | `POST` | `/api/v1/integration/order-syncs` | INT-第三方集成 | `integration.order_sync.manage` | 接口级事件，以本附录为准 |
+| `integration.order_sync.created` | success | `createOrderSync` | `POST` | `/api/v1/integration/order-syncs` | INT-第三方集成 | `integration.order_sync.manage` | 接口级事件，以本附录为准 |
 | `integration.order_sync.viewed` | success | `listIntegrationOrderSyncs` | `GET` | `/api/v1/integration/order-syncs` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.order_sync.viewed_failed` | failure | `listIntegrationOrderSyncs` | `GET` | `/api/v1/integration/order-syncs` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_batch.create_failed` | failure | `createIntegrationReconciliationBatch` | `POST` | `/api/v1/integration/reconciliation/batches` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_batch.created` | success | `createIntegrationReconciliationBatch` | `POST` | `/api/v1/integration/reconciliation/batches` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_batch.view_failed` | failure | `listIntegrationReconciliationBatches` | `GET` | `/api/v1/integration/reconciliation/batches` | INT-第三方集成 | `integration.reconciliation.view` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_batch.viewed` | success | `listIntegrationReconciliationBatches` | `GET` | `/api/v1/integration/reconciliation/batches` | INT-第三方集成 | `integration.reconciliation.view` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_difference.create_failed` | failure | `createIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_difference.created` | success | `createIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences` | INT-第三方集成 | `integration.reconciliation.manage` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_difference.resolve_failed` | failure | `resolveIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences/{id}/resolve` | INT-第三方集成 | `integration.reconciliation.resolve` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_difference.resolved` | success | `resolveIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences/{id}/resolve` | INT-第三方集成 | `integration.reconciliation.resolve` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_difference.view_failed` | failure | `listIntegrationReconciliationDifferences` | `GET` | `/api/v1/integration/reconciliation/differences` | INT-第三方集成 | `integration.reconciliation.view` | 接口级事件，以本附录为准 |
+| `integration.reconciliation_difference.viewed` | success | `listIntegrationReconciliationDifferences` | `GET` | `/api/v1/integration/reconciliation/differences` | INT-第三方集成 | `integration.reconciliation.view` | 接口级事件，以本附录为准 |
 | `integration.retail_sku.viewed` | success | `listIntegrationRetailSkus` | `GET` | `/api/v1/integration/retail/skus` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.retail_sku.viewed_failed` | failure | `listIntegrationRetailSkus` | `GET` | `/api/v1/integration/retail/skus` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
+| `integration.retry_task.create_failed` | failure | `createRetryTask` | `POST` | `/api/v1/integration/retry-tasks` | INT-第三方集成 | `integration.retry.manage` | 接口级事件，以本附录为准 |
+| `integration.retry_task.created` | success | `createRetryTask` | `POST` | `/api/v1/integration/retry-tasks` | INT-第三方集成 | `integration.retry.manage` | 接口级事件，以本附录为准 |
+| `integration.retry_task.run_now` | success | `runRetryTaskNow` | `POST` | `/api/v1/integration/retry-tasks/{id}/run-now` | INT-第三方集成 | `integration.retry.manage` | 接口级事件，以本附录为准 |
+| `integration.retry_task.run_now_failed` | failure | `runRetryTaskNow` | `POST` | `/api/v1/integration/retry-tasks/{id}/run-now` | INT-第三方集成 | `integration.retry.manage` | 接口级事件，以本附录为准 |
 | `integration.retry_task.viewed` | success | `listIntegrationRetryTasks` | `GET` | `/api/v1/integration/retry-tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.retry_task.viewed_failed` | failure | `listIntegrationRetryTasks` | `GET` | `/api/v1/integration/retry-tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.robot_report_failed` | failure | `reportIntegrationRobotTaskEvent` | `POST` | `/api/v1/integration/robot/report` | INT-第三方集成 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -589,8 +772,16 @@
 | `inventory.purchase_status_changed` | success | `orderPurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | INV-库存存酒 | `inventory.purchase.approve` | 接口级事件，以本附录为准 |
 | `inventory.received` | success | `receivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/receive` | INV-库存存酒 | `inventory.purchase.approve` | 接口级事件，以本附录为准 |
 | `inventory.received_failed` | failure | `receivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/receive` | INV-库存存酒 | `inventory.purchase.approve` | 接口级事件，以本附录为准 |
+| `inventory.risk_alert.list` | success | `listInventoryRiskAlerts` | `GET` | `/api/v1/inventory/risk-alerts` | INV-库存存酒 | `inventory.risk_alert.view` | 接口级事件，以本附录为准 |
+| `inventory.risk_alert.list_failed` | failure | `listInventoryRiskAlerts` | `GET` | `/api/v1/inventory/risk-alerts` | INV-库存存酒 | `inventory.risk_alert.view` | 接口级事件，以本附录为准 |
+| `inventory.risk.scan` | success | `scanInventoryRiskAlerts` | `POST` | `/api/v1/inventory/risk-alerts/scan` | INV-库存存酒 | `inventory.risk.scan` | 接口级事件，以本附录为准 |
+| `inventory.risk.scan_failed` | failure | `scanInventoryRiskAlerts` | `POST` | `/api/v1/inventory/risk-alerts/scan` | INV-库存存酒 | `inventory.risk.scan` | 接口级事件，以本附录为准 |
 | `inventory.stock_balance.viewed` | success | `listStockBalances` | `GET` | `/api/v1/inventory/stock-balances` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
 | `inventory.stock_balance.viewed_failed` | failure | `listStockBalances` | `GET` | `/api/v1/inventory/stock-balances` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
+| `inventory.stock_batch.create` | success | `createInventoryStockBatch` | `POST` | `/api/v1/inventory/stock-batches` | INV-库存存酒 | `inventory.stock.batch.manage` | 接口级事件，以本附录为准 |
+| `inventory.stock_batch.create_failed` | failure | `createInventoryStockBatch` | `POST` | `/api/v1/inventory/stock-batches` | INV-库存存酒 | `inventory.stock.batch.manage` | 接口级事件，以本附录为准 |
+| `inventory.stock_batch.list` | success | `listInventoryStockBatches` | `GET` | `/api/v1/inventory/stock-batches` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
+| `inventory.stock_batch.list_failed` | failure | `listInventoryStockBatches` | `GET` | `/api/v1/inventory/stock-batches` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
 | `inventory.stock_movement_failed` | failure | `createStockMovement` | `POST` | `/api/v1/inventory/stock-movements` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.stock_movement.created` | success | `createTypedStockMovement` | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.stock_movement.created_failed` | failure | `createTypedStockMovement` | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
@@ -600,10 +791,26 @@
 | `inventory.stock_transfer.created_failed` | failure | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.supplier_change_failed` | failure | `createInventorySupplier` | `POST` | `/api/v1/inventory/suppliers` | INV-库存存酒 | `inventory.supplier.manage` | 接口级事件，以本附录为准 |
 | `inventory.supplier_changed` | success | `createInventorySupplier` | `POST` | `/api/v1/inventory/suppliers` | INV-库存存酒 | `inventory.supplier.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_qualification.create` | success | `createSupplierQualification` | `POST` | `/api/v1/inventory/supplier-qualifications` | INV-库存存酒 | `inventory.supplier.qualification.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_qualification.create_failed` | failure | `createSupplierQualification` | `POST` | `/api/v1/inventory/supplier-qualifications` | INV-库存存酒 | `inventory.supplier.qualification.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_qualification.list` | success | `listSupplierQualifications` | `GET` | `/api/v1/inventory/supplier-qualifications` | INV-库存存酒 | `inventory.supplier.qualification.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_qualification.list_failed` | failure | `listSupplierQualifications` | `GET` | `/api/v1/inventory/supplier-qualifications` | INV-库存存酒 | `inventory.supplier.qualification.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_reconciliation.create` | success | `createSupplierReconciliation` | `POST` | `/api/v1/inventory/supplier-reconciliations` | INV-库存存酒 | `inventory.supplier.reconcile` | 接口级事件，以本附录为准 |
+| `inventory.supplier_reconciliation.create_failed` | failure | `createSupplierReconciliation` | `POST` | `/api/v1/inventory/supplier-reconciliations` | INV-库存存酒 | `inventory.supplier.reconcile` | 接口级事件，以本附录为准 |
+| `inventory.supplier_reconciliation.list` | success | `listSupplierReconciliations` | `GET` | `/api/v1/inventory/supplier-reconciliations` | INV-库存存酒 | `inventory.supplier.reconcile` | 接口级事件，以本附录为准 |
+| `inventory.supplier_reconciliation.list_failed` | failure | `listSupplierReconciliations` | `GET` | `/api/v1/inventory/supplier-reconciliations` | INV-库存存酒 | `inventory.supplier.reconcile` | 接口级事件，以本附录为准 |
+| `inventory.supplier_settlement_method.create` | success | `createSupplierSettlementMethod` | `POST` | `/api/v1/inventory/supplier-settlement-methods` | INV-库存存酒 | `inventory.supplier.settlement.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_settlement_method.create_failed` | failure | `createSupplierSettlementMethod` | `POST` | `/api/v1/inventory/supplier-settlement-methods` | INV-库存存酒 | `inventory.supplier.settlement.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_settlement_method.list` | success | `listSupplierSettlementMethods` | `GET` | `/api/v1/inventory/supplier-settlement-methods` | INV-库存存酒 | `inventory.supplier.settlement.manage` | 接口级事件，以本附录为准 |
+| `inventory.supplier_settlement_method.list_failed` | failure | `listSupplierSettlementMethods` | `GET` | `/api/v1/inventory/supplier-settlement-methods` | INV-库存存酒 | `inventory.supplier.settlement.manage` | 接口级事件，以本附录为准 |
 | `inventory.supplier_view_failed` | failure | `listInventorySuppliers` | `GET` | `/api/v1/inventory/suppliers` | INV-库存存酒 | `inventory.supplier.view` | 接口级事件，以本附录为准 |
 | `inventory.supplier_viewed` | success | `listInventorySuppliers` | `GET` | `/api/v1/inventory/suppliers` | INV-库存存酒 | `inventory.supplier.view` | 接口级事件，以本附录为准 |
+| `inventory.supply_contract.list` | success | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | INV-库存存酒 | `inventory.supply_contract.manage` | 接口级事件，以本附录为准 |
+| `inventory.supply_contract.list_failed` | failure | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | INV-库存存酒 | `inventory.supply_contract.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.create_failed` | failure | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.created` | success | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
+| `inventory.warehouse.list` | success | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
+| `inventory.warehouse.list_failed` | failure | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.change_failed` | failure | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.changed` | success | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.view_failed` | failure | `listMdmAppWhitelist` | `GET` | `/api/v1/terminals/mdm/app-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
@@ -614,6 +821,10 @@
 | `mdm.site_whitelist.changed` | success | `upsertMdmSiteWhitelist` | `PUT` | `/api/v1/terminals/mdm/site-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.site_whitelist.view_failed` | failure | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.site_whitelist.viewed` | success | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.violation.detect` | success | `detectMdmViolations` | `POST` | `/api/v1/terminals/mdm/violations/detect` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
+| `mdm.violation.detect_failed` | failure | `detectMdmViolations` | `POST` | `/api/v1/terminals/mdm/violations/detect` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
+| `mdm.violation.handle` | success | `handleMdmViolation` | `POST` | `/api/v1/terminals/mdm/violations/{id}/handle` | TERM-终端设备 | `mdm.violation.handle` | 接口级事件，以本附录为准 |
+| `mdm.violation.handle_failed` | failure | `handleMdmViolation` | `POST` | `/api/v1/terminals/mdm/violations/{id}/handle` | TERM-终端设备 | `mdm.violation.handle` | 接口级事件，以本附录为准 |
 | `mdm.violation.view_failed` | failure | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
 | `mdm.violation.viewed` | success | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
 | `member.level_changed` | success | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
@@ -631,6 +842,14 @@
 | `merchant_service.createMerchantServiceWorkOrder.succeeded` | success | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.create` | 接口级事件，以本附录为准 |
 | `merchant_service.listMerchantServiceWorkOrders.failed` | failure | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
 | `merchant_service.listMerchantServiceWorkOrders.succeeded` | success | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
+| `merchant.billing.confirm` | success | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | P0-待归类 | `merchant.billing.confirm` | 接口级事件，以本附录为准 |
+| `merchant.billing.confirm_failed` | failure | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | P0-待归类 | `merchant.billing.confirm` | 接口级事件，以本附录为准 |
+| `merchant.billing.create` | success | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
+| `merchant.billing.create_failed` | failure | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
+| `merchant.billing.dispute.submit` | success | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | P0-待归类 | `merchant.billing.dispute.submit` | 接口级事件，以本附录为准 |
+| `merchant.billing.dispute.submit_failed` | failure | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | P0-待归类 | `merchant.billing.dispute.submit` | 接口级事件，以本附录为准 |
+| `merchant.billing.dunning.record` | success | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | P0-待归类 | `merchant.billing.dunning.record` | 接口级事件，以本附录为准 |
+| `merchant.billing.dunning.record_failed` | failure | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | P0-待归类 | `merchant.billing.dunning.record` | 接口级事件，以本附录为准 |
 | `merchant.update_failed` | failure | `createMerchant` | `POST` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.update_failed` | failure | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.updated` | success | `createMerchant` | `POST` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
@@ -738,8 +957,16 @@
 | `terminal.access_rejected` | failure | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.device.bind_failed` | failure | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.bound` | success | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
+| `terminal.device.found` | success | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.found_failed` | failure | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.lost` | success | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.lost_failed` | failure | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.repair` | success | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.repair_failed` | failure | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.returned` | success | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.returned_failed` | failure | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
+| `terminal.device.scrap` | success | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.scrap_failed` | failure | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.unbind_failed` | failure | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | TERM-终端设备 | `terminal.device.unbind` | 接口级事件，以本附录为准 |
 | `terminal.device.unbound` | success | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | TERM-终端设备 | `terminal.device.unbind` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_config_viewed` | success | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -789,6 +1016,8 @@
 | `ticket_refund.requested` | success | `requestTicketRefund` | `POST` | `/api/v1/ticketing/refunds` | TIC-票务权益 | `ticket.refund.request` | 接口级事件，以本附录为准 |
 | `ticket.issue_failed` | failure | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
 | `ticket.issued` | success | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
+| `ticket.refund_line.list` | success | `listTicketRefundLines` | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | TIC-票务权益 | `ticket.refund.view` | 接口级事件，以本附录为准 |
+| `ticket.refund_line.list_failed` | failure | `listTicketRefundLines` | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | TIC-票务权益 | `ticket.refund.view` | 接口级事件，以本附录为准 |
 | `ticket.verification_reverse_failed` | failure | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | TIC-票务权益 | `ticket.verify.reverse` | 接口级事件，以本附录为准 |
 | `ticket.verification_reversed` | success | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | TIC-票务权益 | `ticket.verify.reverse` | 接口级事件，以本附录为准 |
 | `verification.failed` | failure | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | TIC-票务权益 | `verification.execute` | 已在事件矩阵正文出现 |
@@ -805,6 +1034,10 @@
 | `wecom.retention_policy_set` | success | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | P0-待归类 | `wecom.retention.manage` | 接口级事件，以本附录为准 |
 | `wecom.retention_policy_view_failed` | failure | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | P0-待归类 | `wecom.retention.manage` | 接口级事件，以本附录为准 |
 | `wecom.retention_policy_viewed` | success | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | P0-待归类 | `wecom.retention.manage` | 接口级事件，以本附录为准 |
+| `wecom.risk_hit.list` | success | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | P0-待归类 | `wecom.risk_hit.view` | 接口级事件，以本附录为准 |
+| `wecom.risk_hit.list_failed` | failure | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | P0-待归类 | `wecom.risk_hit.view` | 接口级事件，以本附录为准 |
+| `wecom.risk_hit.review` | success | `reviewWecomRiskHit` | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | P0-待归类 | `wecom.risk_hit.review` | 接口级事件，以本附录为准 |
+| `wecom.risk_hit.review_failed` | failure | `reviewWecomRiskHit` | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | P0-待归类 | `wecom.risk_hit.review` | 接口级事件，以本附录为准 |
 
 ## 5. operationId 到任务、权限、事件、终端的追溯表
 
@@ -812,18 +1045,27 @@
 
 | 建议任务簇 | operationId | 方法 | 路径 | 摘要 | 权限 | 成功/失败事件 | 终端/调用通道 | 覆盖状态 |
 |---|---|---|---|---|---|---|---|---|
+| AMU-游乐安全 | `acknowledgeAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices/{noticeId}/acknowledgements` | 登记安全告知签字确认（免责确认） | `amusement.waiver.acknowledge` | `amusement.waiver.acknowledge` / `amusement.waiver.acknowledge_failed` | tablet, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `addAmusementIncidentAction` | `POST` | `/api/v1/amusement/incidents/{incidentId}/actions` | 添加事件处置动作/流转状态 | `amusement.incident.process` | `amusement.incident.action` / `amusement.incident.action_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `approveAmusementGroupBooking` | `POST` | `/api/v1/amusement/group-bookings/{id}/approve` | Approve P2 amusement group booking and lock capacity | `amusement.group_booking.approve` | `amusement_group_booking.approved.success` / `amusement_group_booking.approved.failure` | web | operation 级补充 |
 | AMU-游乐安全 | `approveAmusementReopen` | `POST` | `/api/v1/amusement/safety-inspections/{id}/approve-reopen` | 严重项恢复开放审批 | `amusement.safety_inspection.approve_reopen` | `amusement.safety_inspection.reopened` / `amusement.safety_inspection.reopen_rejected` | web | operation 级补充 |
 | AMU-游乐安全 | `assignAmusementProjectSpace` | `PUT` | `/api/v1/amusement/projects/{id}/space` | 游乐项目空间指派（回填） | `amusement.session.manage` | `amusement.project_space.assigned` / `amusement.project_space.assign_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `changeAmusementQueueEntryStatus` | `POST` | `/api/v1/amusement/queue-entries/{id}/status` | 变更游乐排队记录状态 | `amusement.queue.manage` | `amusement.queue_entry.status_change` / `amusement.queue_entry.status_change_failed` | tablet, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `changeAmusementReservationStatus` | `POST` | `/api/v1/amusement/reservations/{id}/status` | 变更游乐预约状态 | `amusement.reservation.manage` | `amusement.reservation.status_change` / `amusement.reservation.status_change_failed` | tablet, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `closeAmusementIncident` | `POST` | `/api/v1/amusement/incidents/{incidentId}/close` | 关闭游乐安全事件 | `amusement.incident.close` | `amusement.incident.close` / `amusement.incident.close_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `confirmAmusementMaintenanceResume` | `POST` | `/api/v1/amusement/maintenance-records/{id}/confirm-resume` | 主管确认恢复营业 | `amusement.maintenance.confirm` | `amusement.project.resumed` / `amusement.maintenance_resume_failed` | kiosk, web, mobile_admin | operation 级补充 |
 | AMU-游乐安全 | `createAmusementCapacityConfig` | `POST` | `/api/v1/amusement/projects/{id}/capacity-config` | 维护游乐点位设备并发容量配置 | `amusement.capacity_config.manage` | `amusement.capacity_config.changed` / `amusement.capacity_config.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `createAmusementGroupBooking` | `POST` | `/api/v1/amusement/group-bookings` | Create P2 amusement group or private booking request | `amusement.group_booking.manage` | `amusement_group_booking.created.success` / `amusement_group_booking.created.failure` | web | operation 级补充 |
+| AMU-游乐安全 | `createAmusementIncident` | `POST` | `/api/v1/amusement/incidents` | 上报游乐安全事件 | `amusement.incident.create` | `amusement.incident.create` / `amusement.incident.create_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `createAmusementMaintenanceRecord` | `POST` | `/api/v1/amusement/maintenance-records` | 提交游乐定期检修 | `amusement.maintenance.submit` | `amusement.maintenance_recorded` / `amusement.maintenance_record_failed` | kiosk, web, mobile_admin | operation 级补充 |
 | AMU-游乐安全 | `createAmusementManualOverride` | `POST` | `/api/v1/amusement/manual-overrides` | 游乐人工放行 | `amusement.verification.override` | `amusement.verification_overridden` / `amusement.verification_override_failed` | staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `createAmusementProject` | `POST` | `/api/v1/amusement/projects` | 维护游乐项目 | `amusement.session.manage` | `amusement.session.changed` / `amusement.session.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `createAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements` | 维护游乐项目可用权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `createAmusementProjectRule` | `POST` | `/api/v1/amusement/projects/{id}/rules` | 创建游乐项目规则 | `amusement.project.manage` | `amusement.project_rule.changed` / `amusement.project_rule.changed_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `createAmusementQueueEntry` | `POST` | `/api/v1/amusement/queue-entries` | 创建游乐排队记录 | `amusement.queue.manage` | `amusement.queue_entry.create` / `amusement.queue_entry.create_failed` | tablet, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `createAmusementReservation` | `POST` | `/api/v1/amusement/reservations` | 创建游乐预约 | `amusement.reservation.manage` | `amusement.reservation.create` / `amusement.reservation.create_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `createAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections` | 创建开放前安全巡检 | `amusement.safety_inspection.create` | `amusement.safety_inspection.created` / `amusement.safety_inspection.create_failed` | web, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `createAmusementSafetyNotice` | `POST` | `/api/v1/amusement/safety-notices` | 创建游乐安全告知/免责须知 | `amusement.safety_notice.manage` | `amusement.safety_notice.create` / `amusement.safety_notice.create_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `createAmusementSafetyTemplate` | `POST` | `/api/v1/amusement/safety-templates` | 维护巡检模板 | `amusement.safety_template.manage` | `amusement.safety_template.changed` / `amusement.safety_template.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `createAmusementSession` | `POST` | `/api/v1/amusement/sessions` | 维护游乐场次和容量 | `amusement.session.manage` | `amusement.session.changed` / `amusement.session.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `createAmusementVerification` | `POST` | `/api/v1/amusement/verifications` | 游乐权益核销 | `amusement.verification.execute` | `amusement.verification_succeeded` / `amusement.verification_failed` | staff_work_phone<br>device: verification-gate | operation 级补充 |
@@ -833,6 +1075,7 @@
 | AMU-游乐安全 | `listAmusementCapacityConfigs` | `GET` | `/api/v1/amusement/projects/{id}/capacity-config` | 查询游乐点位设备并发容量配置 | `amusement.capacity_config.manage` | `amusement.capacity_config.viewed` / `amusement.capacity_config.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | 查询游乐设备状态 | `amusement.device_status.view` | `amusement.device_status.viewed` / `amusement.device_status.viewed_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementGroupBookings` | `GET` | `/api/v1/amusement/group-bookings` | List P2 amusement group and private bookings | `amusement.group_booking.view` | `amusement_group_booking.viewed.success` / `amusement_group_booking.viewed.failure` | web | operation 级补充 |
+| AMU-游乐安全 | `listAmusementIncidents` | `GET` | `/api/v1/amusement/incidents` | 查询游乐安全事件列表 | `amusement.incident.view` | `amusement.incident.list` / `amusement.incident.list_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `listAmusementMaintenanceRecords` | `GET` | `/api/v1/amusement/maintenance-records` | 查询游乐定期检修记录 | `amusement.maintenance.read` | `amusement.maintenance.viewed` / `amusement.maintenance.view_failed` | kiosk, web, mobile_admin | operation 级补充 |
 | AMU-游乐安全 | `listAmusementManualOverrides` | `GET` | `/api/v1/amusement/manual-overrides` | 查询游乐人工放行 | `amusement.verification.override` | `amusement.manual_override.viewed` / `amusement.manual_override.view_failed` | web, tablet | operation 级补充 |
 | AMU-游乐安全 | `listAmusementProjectEntitlements` | `GET` | `/api/v1/amusement/projects/{id}/entitlements` | 查询游乐项目可用权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.viewed` / `amusement.project_entitlement.view_failed` | web | operation 级补充 |
@@ -841,6 +1084,7 @@
 | AMU-游乐安全 | `listAmusementQueueEntries` | `GET` | `/api/v1/amusement/queue-entries` | 查询游乐排队记录 | `amusement.queue.view` | `amusement.queue.viewed` / `amusement.queue.viewed_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementReservations` | `GET` | `/api/v1/amusement/reservations` | 查询游乐预约 | `amusement.reservation.view` | `amusement.reservation.viewed` / `amusement.reservation.viewed_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementSafetyInspections` | `GET` | `/api/v1/amusement/safety-inspections` | 查询安全巡检 | `amusement.safety_inspection.view` | `amusement.safety_inspection.viewed` / `amusement.safety_inspection.view_failed` | web, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `listAmusementSafetyNotices` | `GET` | `/api/v1/amusement/safety-notices` | 查询游乐安全告知列表 | `amusement.safety_notice.view` | `amusement.safety_notice.list` / `amusement.safety_notice.list_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `listAmusementSafetyTemplates` | `GET` | `/api/v1/amusement/safety-templates` | 查询巡检模板 | `amusement.safety_template.view` | `amusement.safety_template.viewed` / `amusement.safety_template.view_failed` | web, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `listAmusementSessions` | `GET` | `/api/v1/amusement/sessions` | 查询游乐场次和容量 | `amusement.session.view` | `amusement.session.viewed` / `amusement.session.view_failed` | web, staff_work_phone, kiosk | operation 级补充 |
 | AMU-游乐安全 | `listAmusementVerifications` | `GET` | `/api/v1/amusement/verifications` | 查询游乐核销记录 | `amusement.verification.view` | `amusement.verification.viewed` / `amusement.verification.view_failed` | web, tablet | operation 级补充 |
@@ -852,6 +1096,7 @@
 | ANA-风控分析 | `createRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts` | 创建风险alert | `analytics.risk_alert.manage` | `risk_alert.created` / `risk_alert.create_failed` | web | operation 级补充 |
 | ANA-风控分析 | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | Generate local LLM AI quality suggestion | `analytics.risk_alert.manage` | `analytics.ai_quality.local_llm_suggestion.created` / `analytics.ai_quality.local_llm_suggestion.failed` | web | operation 级补充 |
 | ANA-风控分析 | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | P0 经营看板下钻（按域） | `analytics.dashboard.view` | `analytics.dashboard_domain.viewed` / `analytics.dashboard_domain.view_failed` | web | operation 级补充 |
+| ANA-风控分析 | `getGroupOverview` | `GET` | `/api/v1/analytics/group-overview` | 集团总览视图 | `analytics.group.view` | `analytics.group_overview.viewed` / `analytics.group_overview.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | P0 经营总览 | `analytics.dashboard.view` | `analytics.dashboard_viewed` / `analytics.dashboard_view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `getRobotAnalytics` | `GET` | `/api/v1/analytics/robot` | 获取机器人经营分析 | `analytics.dashboard.view` | `analytics.robot.viewed` / `analytics.robot.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | 查询ai质检结果 | `analytics.risk_alert.view` | `analytics.ai_quality_result.viewed` / `analytics.ai_quality_result.viewed_failed` | web | operation 级补充 |
@@ -896,6 +1141,7 @@
 | AUTH-账号权限 | `updatePermissionTemplate` | `PUT` | `/api/v1/access/permission-templates/{id}` | 修改权限模板 | `access.permission_template.manage` | `permission_template.changed` / `permission_template.change_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `addBarBillTip` | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | 账单加小费 | `bar.bill.tip` | `bar.bill_tip_added` / `bar.bill_tip_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | 新增酒吧订单物品 | `bar.order.create` | `bar.order_item.created` / `bar.order_item.created_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `adjustBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/adjustments` | 对酒水账单应用调整 | `bar.bill.adjust` | `bar.bill.adjust` / `bar.bill.adjust_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | 卡座/桌台空间指派（回填） | `bar.table.manage` | `bar.table_space.assigned` / `bar.table_space.assign_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | 卡座销售提成计算 | `bar.table_commission.calculate` | `bar.table_commission.calculated` / `bar.table_commission.calculate_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | 订台取消/爽约（按时限退定金或没收） | `bar.reservation.manage` | `bar.reservation.cancelled` / `bar.reservation.cancel_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
@@ -910,20 +1156,31 @@
 | BAR-酒吧经营 | `createBarProduct` | `POST` | `/api/v1/bar/products` | 创建酒吧商品 | `bar.order.create` | `bar.product.created` / `bar.product.created_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `createBarReservation` | `POST` | `/api/v1/bar/reservations` | 订台或卡座预订 | `bar.reservation.create` | `bar.reservation.created` / `bar.reservation.create_failed` | web, tablet, miniapp, app, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `createBarTable` | `POST` | `/api/v1/bar/tables` | 创建桌台或卡座 | `bar.table.manage` | `bar.table.changed` / `bar.table.change_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | 创建酒水台位会话（开台） | `bar.table_session.create` | `bar.table_session.create` / `bar.table_session.create_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | 退菜退酒审批决策（通过/驳回） | `bar.order_item.void` | `bar.order_item_void.decide` / `bar.order_item_void.decide_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `deliverBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | 出酒或送达确认 | `bar.order.create` | `bar.order_delivered` / `bar.order_deliver_failed` | tablet, staff_work_phone | operation 级补充 |
+| BAR-酒吧经营 | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | 查询酒水账单拆并操作记录 | `bar.bill.split_merge` | `bar.bill_operation.list` / `bar.bill_operation.list_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarOrders` | `GET` | `/api/v1/bar/orders` | 查询酒吧订单 | `bar.order.view` | `bar.order.viewed` / `bar.order.view_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `listBarProductionTicketEvents` | `GET` | `/api/v1/bar/production-tickets/{ticket_id}/events` | 查询出品工单事件流 | `bar.production_ticket.view` | `bar.production_ticket_event.list` / `bar.production_ticket_event.list_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarProductionTickets` | `GET` | `/api/v1/bar/production-tickets` | 查询酒吧出品票据 | `bar.order.create` | `bar.production_ticket.viewed` / `bar.production_ticket.viewed_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarProducts` | `GET` | `/api/v1/bar/products` | 查询酒吧商品 | `bar.order.create` | `bar.product.viewed` / `bar.product.viewed_failed` | web, tablet, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `listBarReservations` | `GET` | `/api/v1/bar/reservations` | 查询酒吧预约 | `bar.reservation.view` | `bar.reservation.viewed` / `bar.reservation.view_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | 查询收银班次 | `bar.shift.manage` | `bar.shift.viewed` / `bar.shift.view_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTables` | `GET` | `/api/v1/bar/tables` | 查询桌台或卡座 | `bar.table.view` | `bar.table.viewed` / `bar.table.view_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | 查询酒水台位会话列表 | `bar.table_session.view` | `bar.table_session.list` / `bar.table_session.list_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | 未回填空间的卡座/桌台清单 | `bar.table.manage` | `bar.table_space_backlog.viewed` / `bar.table_space_backlog.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | 商品沽清/恢复 | `bar.product.sold_out` | `bar.product_sold_out` / `bar.product_sold_out_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `mergeBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/merge` | 合并酒水账单 | `bar.bill.split_merge` | `bar.bill.merge` / `bar.bill.merge_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | 合并酒水台位会话 | `bar.table_session.merge` | `bar.table_session.merge` / `bar.table_session.merge_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | 开班 | `bar.shift.manage` | `bar.shift_opened` / `bar.shift_open_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `openBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/open` | 开台 | `bar.table.open_close` | `bar.table.opened` / `bar.table.open_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `payBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | 订台定金支付 | `bar.reservation.manage` | `bar.reservation_deposit_paid` / `bar.reservation_deposit_pay_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
+| BAR-酒吧经营 | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | 续台（延长台位会话） | `bar.table_session.renew` | `bar.table_session.renew` / `bar.table_session.renew_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | 账单结清 | `finance.payment.register` | `bar.bill.settled` / `bar.bill.settle_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | 拆分酒水账单 | `bar.bill.split_merge` | `bar.bill.split` / `bar.bill.split_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table_session.transfer` / `bar.table_session.transfer_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | 流转出品工单状态 | `bar.production_ticket.manage` | `bar.production_ticket.transition` / `bar.production_ticket.transition_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | tablet, web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
@@ -939,12 +1196,16 @@
 | CUS-客人端 | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | 冻结会员积分账户 | `customer.points.freeze` | `customer.points.frozen` / `customer.points.freeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | 冻结会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.frozen` / `stored_value.frozen_failed` | web | operation 级补充 |
 | CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | web, miniapp, app | 已在任务映射正文出现 |
+| CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | 付费会员档位列表（客人端） | `not_applicable` | `customer.membership_plans_viewed` / `customer.membership_plans_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | 客人付费会员列表 | `customer.membership.view` | `customer.memberships_viewed` / `customer.memberships_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | 查询积分兑换商品目录 | `not_applicable` | `customer.points.redemption_items_viewed` / `customer.points.redemption_items_view_failed` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | 查询我的积分兑换记录 | `not_applicable` | `customer.points.redemptions_viewed` / `customer.points.redemptions_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | 会员等级配置列表 | `customer.loyalty.view` | `customer.member_levels_viewed` / `customer.member_levels_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listMembershipPlans` | `GET` | `/api/v1/loyalty/membership-plans` | 付费会员档位列表（后台） | `customer.membership.view` | `customer.membership_plans_admin_viewed` / `customer.membership_plans_admin_viewed_failed` | web | operation 级补充 |
+| CUS-客人端 | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | 提交积分兑换 | `not_applicable` | `customer.points.redeem` / `customer.points.redeem_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | 会员储值退卡/退余额（后台） | `customer.stored_value.refund` | `stored_value.refund` / `stored_value.refund_failed` | web | operation 级补充 |
 | CUS-客人端 | `saveMembershipPlan` | `POST` | `/api/v1/loyalty/membership-plans` | 保存付费会员档位（后台） | `customer.membership.manage` | `membership.plan_saved` / `membership.plan_saved_failed` | web | operation 级补充 |
 | CUS-客人端 | `savePointsTransferLimit` | `POST` | `/api/v1/loyalty/points-transfer-limits` | 保存积分转赠风控配置（后台） | `customer.points.transfer_limit` | `points.transfer_limit_saved` / `points.transfer_limit_saved_failed` | web | operation 级补充 |
@@ -956,24 +1217,38 @@
 | CUS/TIC-客人购票 | `getCustomerTicketQr` | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 我的动态二维码 | `not_applicable` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | 客人可购票种和票价 | `public` | `customer.ticket_products_viewed` / `customer.ticket_products_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | EVD-事件证据 | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | 关联证据附件到业务对象 | `evidence.attachment.create` | `evidence.attachment_bound` / `evidence.attachment_bind_failed` | web, staff_work_phone, tablet | operation 级补充 |
+| EVD-事件证据 | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | 认领风险预警 | `risk_alert.claim` | `exception.claimed` / `exception.claim_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `completeEvidenceAttachmentUpload` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | 完成上传确认 | `evidence.attachment.create` | `evidence.attachment_completed` / `evidence.attachment_complete_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | EVD-事件证据 | `createEvidenceAttachmentUploadIntent` | `POST` | `/api/v1/evidence/attachments/upload-intents` | 申请证据附件预签名上传 | `evidence.attachment.create` | `evidence.upload_intent_created` / `evidence.upload_intent_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | EVD-事件证据 | `createEvidenceEvents` | `POST` | `/api/v1/evidence/events` | 创建证据事件 | `evidence.event.create` | `evidence.events_reported` / `evidence.events_report_failed` | staff_work_phone, tablet, kiosk | operation 级补充 |
 | EVD-事件证据 | `createEvidenceReview` | `POST` | `/api/v1/evidence/reviews` | 风险或异常复核 | `evidence.review.create` | `evidence.review_created` / `evidence.review_create_failed` | web | operation 级补充 |
+| EVD-事件证据 | `dismissRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | 忽略关闭风险预警 | `risk_alert.dismiss` | `exception.dismissed` / `exception.dismiss_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `escalateRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | 升级风险预警 | `risk_alert.escalate` | `exception.escalated` / `exception.escalate_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `getEvidenceTimeline` | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | 业务时间线 | `evidence.timeline.view` | `evidence.timeline_viewed` / `evidence.timeline_view_failed` | web | operation 级补充 |
+| EVD-事件证据 | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | 查询风险预警详情 | `risk_alert.view` | `exception.alert_viewed` / `exception.alert_view_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | 事件查询 | `evidence.event.view` | `evidence.event_viewed` / `evidence.event_view_failed` | web | operation 级补充 |
+| EVD-事件证据 | `reportRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts` | 上报统一风险预警 | `risk_alert.report` | `exception.reported` / `exception.report_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `resolveRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | 关闭风险预警（需结论） | `risk_alert.resolve` | `exception.resolved` / `exception.resolve_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | 查询风险预警列表 | `risk_alert.view` | `exception.alerts_viewed` / `exception.alerts_view_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | 转交风险预警 | `risk_alert.transfer` | `exception.transferred` / `exception.transfer_failed` | web, mobile_admin | operation 级补充 |
+| FIN-财务台账 | `allocateCam` | `POST` | `/api/v1/finance/cam/allocations` | CAM 公共区域维护费按权重分摊 | `finance.cam.allocate` | `finance.cam.allocated` / `finance.cam.allocate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | 锁定后补录审批决定 | `finance.locked_backfill.approve` | `finance.locked_backfill_approved` / `finance.locked_backfill_decision_failed` | web, mobile_admin | operation 级补充 |
+| FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | 现金或 POS 线下收款确认 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | 手工新增应收应付台账项 | `finance.ar_ap.manage` | `finance_ar_ap.created` / `finance_ar_ap.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | 应收应付收付款登记 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | 日结锁定 | `finance.daily_close.lock` | `finance_daily_close.locked` / `finance_daily_close.lock_failed` | web | operation 级补充 |
+| FIN-财务台账 | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | 创建对账差异 | `finance.reconciliation.difference.create` | `finance.reconciliation.difference_created` / `finance.reconciliation.difference_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | 创建财务退款记录 | `finance.refund.create` | `finance_refund.created` / `finance_refund.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createPaymentIntent` | `POST` | `/api/v1/finance/payment-intents` | 创建聚合支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | web, tablet, kiosk, miniapp, app | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | 查询日结六源汇总 | `finance.daily_close.manage` | `finance.daily_close_summary.viewed` / `finance.daily_close_summary.view_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | 查询对账批次 | `finance.reconciliation.view` | `finance.reconciliation_batch.viewed` / `finance.reconciliation_batch.viewed_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `openplatform.reconcile.execute` | `finance_reconciliation.difference_found` / `finance_reconciliation.view_failed` | web | operation 级补充 |
+| FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
+| FIN-财务台账 | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | 保证金台账动作（收取/退还/抵扣/没收） | `finance.deposit.manage` | `finance.deposit.action_recorded` / `finance.deposit.action_failed` | web | operation 级补充 |
 | FIN-财务台账 | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | 锁定后补录审批申请 | `finance.locked_backfill.request` | `finance.locked_backfill_requested` / `finance.locked_backfill_request_failed` | web, mobile_admin | operation 级补充 |
+| FIN-财务台账 | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | CAM 年度 true-up 多退少补对账 | `finance.cam.trueup` | `finance.cam.trued_up` / `finance.cam.trueup_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | 合同审批流 | `contract.lifecycle.approve` | `contract.lifecycle_changed` / `contract.lifecycle_change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | 主管审批或驳回复核记录 | `governance.supervisor_review.approve` | `governance.supervisor_review.decided` / `governance.supervisor_review.decide_failed` | web | operation 级补充 |
 | GOV-平台治理 | `changeBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings/{id}/change` | 变更四类主体绑定 | `entity.binding.manage` | `entity_binding.changed` / `entity_binding.change_failed` | web | operation 级补充 |
@@ -992,12 +1267,19 @@
 | GOV-平台治理 | `listSpaces` | `GET` | `/api/v1/platform/spaces` | 查询场馆、区域、点位 | `governance.space.view` | `space.viewed` / `space.view_failed` | web, merchant_portal | operation 级补充 |
 | GOV-平台治理 | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | 查询主管复核与违规阻断策略 | `governance.supervisor_review.view` | `governance.supervisor_review.policies_viewed` / `governance.supervisor_review.policies_view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | 修改商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
+| INT-第三方集成 | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | 创建补偿任务 | `integration.compensation.manage` | `integration.compensation_task.created` / `integration.compensation_task.create_failed` | web | operation 级补充 |
+| INT-第三方集成 | `createIntegrationReconciliationBatch` | `POST` | `/api/v1/integration/reconciliation/batches` | 创建对账批次 | `integration.reconciliation.manage` | `integration.reconciliation_batch.created` / `integration.reconciliation_batch.create_failed` | web | operation 级补充 |
+| INT-第三方集成 | `createIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences` | 创建对账差异 | `integration.reconciliation.manage` | `integration.reconciliation_difference.created` / `integration.reconciliation_difference.create_failed` | web | operation 级补充 |
+| INT-第三方集成 | `createOrderSync` | `POST` | `/api/v1/integration/order-syncs` | 创建订单同步 | `integration.order_sync.manage` | `integration.order_sync.created` / `integration.order_sync.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createProviderAdapter` | `POST` | `/api/v1/integration/provider-adapters` | 创建供应商适配器占位或 mock adapter | `integration.provider_adapter.create` | `provider_adapter.created` / `provider_adapter.create_failed` | web | operation 级补充 |
+| INT-第三方集成 | `createRetryTask` | `POST` | `/api/v1/integration/retry-tasks` | 创建重试任务 | `integration.retry.manage` | `integration.retry_task.created` / `integration.retry_task.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationCompensationTasks` | `GET` | `/api/v1/integration/compensation-tasks` | 查询第三方集成补偿任务 | `integration.provider_adapter.view` | `integration.compensation_task.viewed` / `integration.compensation_task.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationDeviceEvents` | `GET` | `/api/v1/integration/devices/events` | 查询第三方集成设备事件 | `integration.provider_adapter.view` | `integration.device_event.viewed` / `integration.device_event.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationDevices` | `GET` | `/api/v1/integration/devices` | 查询第三方集成设备 | `integration.provider_adapter.view` | `integration.device.viewed` / `integration.device.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationOfflineSyncBatches` | `GET` | `/api/v1/integration/devices/offline-sync-batches` | 查询第三方集成离线批次 | `integration.provider_adapter.view` | `integration.offline_sync_batch.viewed` / `integration.offline_sync_batch.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationOrderSyncs` | `GET` | `/api/v1/integration/order-syncs` | 查询第三方集成订单syncs | `integration.provider_adapter.view` | `integration.order_sync.viewed` / `integration.order_sync.viewed_failed` | web | operation 级补充 |
+| INT-第三方集成 | `listIntegrationReconciliationBatches` | `GET` | `/api/v1/integration/reconciliation/batches` | 查询对账批次列表 | `integration.reconciliation.view` | `integration.reconciliation_batch.viewed` / `integration.reconciliation_batch.view_failed` | web | operation 级补充 |
+| INT-第三方集成 | `listIntegrationReconciliationDifferences` | `GET` | `/api/v1/integration/reconciliation/differences` | 查询对账差异列表 | `integration.reconciliation.view` | `integration.reconciliation_difference.viewed` / `integration.reconciliation_difference.view_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationRetailSkus` | `GET` | `/api/v1/integration/retail/skus` | 查询第三方集成零售SKU | `integration.provider_adapter.view` | `integration.retail_sku.viewed` / `integration.retail_sku.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationRetryTasks` | `GET` | `/api/v1/integration/retry-tasks` | 查询第三方集成retry任务 | `integration.provider_adapter.view` | `integration.retry_task.viewed` / `integration.retry_task.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationVideoAnchors` | `GET` | `/api/v1/integration/video-anchors` | 调阅视频点位时间锚点（敏感，写调阅审计） | `integration.video.view` | `integration.video_clip_viewed` / `integration.video_clip_view_failed` | web, mobile_admin | operation 级补充 |
@@ -1013,6 +1295,10 @@
 | INT-第三方集成 | `markProviderAdapterProductionReady` | `POST` | `/api/v1/integration/provider-adapters/{id}/mark-production-ready` | 标记供应商适配器生产就绪 | `integration.provider_adapter.production_ready` | `provider_adapter.production_ready_marked` / `provider_adapter.production_ready_failed` | web | operation 级补充 |
 | INT-第三方集成 | `receiveIntegrationTypedWebhook` | `POST` | `/api/v1/integration/{type}/webhook` | 第三方统一 webhook 入口（开关门控） | `not_applicable` | `integration.webhook_received` / `integration.webhook_rejected` | <br>channel: provider-webhook | operation 级补充 |
 | INT-第三方集成 | `reportIntegrationRobotTaskEvent` | `POST` | `/api/v1/integration/robot/report` | 机器人任务事件上报（被动留痕） | `not_applicable` | `integration.robot_reported` / `integration.robot_report_failed` | <br>channel: provider-webhook | operation 级补充 |
+| INT-第三方集成 | `resolveCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks/{id}/resolve` | 处理补偿任务 | `integration.compensation.manage` | `integration.compensation_task.resolved` / `integration.compensation_task.resolve_failed` | web | operation 级补充 |
+| INT-第三方集成 | `resolveIntegrationReconciliationDifference` | `POST` | `/api/v1/integration/reconciliation/differences/{id}/resolve` | 处理对账差异 | `integration.reconciliation.resolve` | `integration.reconciliation_difference.resolved` / `integration.reconciliation_difference.resolve_failed` | web | operation 级补充 |
+| INT-第三方集成 | `runChannelAutoReconciliation` | `POST` | `/api/v1/integration/reconciliation/channel-auto` | 渠道自动对账 | `integration.reconciliation.manage` | `integration.channel_reconciliation.executed` / `integration.channel_reconciliation.execute_failed` | web | operation 级补充 |
+| INT-第三方集成 | `runRetryTaskNow` | `POST` | `/api/v1/integration/retry-tasks/{id}/run-now` | 立即执行重试任务 | `integration.retry.manage` | `integration.retry_task.run_now` / `integration.retry_task.run_now_failed` | web | operation 级补充 |
 | INT-第三方集成 | `testProviderAdapterMock` | `POST` | `/api/v1/integration/provider-adapters/{id}/test-mock` | mock adapter 契约测试 | `integration.provider_adapter.test` | `provider_adapter.tested` / `provider_adapter.test_failed` | web | operation 级补充 |
 | INT-第三方集成 | `updateProviderAdapter` | `PUT` | `/api/v1/integration/provider-adapters/{id}` | 更新供应商适配器配置 | `integration.provider_adapter.update` | `open_mapping.changed` / `provider_adapter.update_failed` | web | operation 级补充 |
 | INV-库存存酒 | `approvePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/approve` | 采购单审批(created/submitted→approved/rejected) | `inventory.purchase.approve` | `inventory.purchase_status_changed` / `inventory.purchase_status_change_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
@@ -1021,30 +1307,44 @@
 | INV-库存存酒 | `cancelSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废) | `bar.saved_bottle.manage` | `bar.saved_bottle.cancelled` / `bar.saved_bottle.cancel_failed` | tablet, web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | 存酒领取 | `bar.saved_bottle.manage` | `bar.saved_bottle_picked_up` / `bar.saved_bottle.pickup_failed` | tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createInventoryItem` | `POST` | `/api/v1/inventory/items` | 创建库存物品 | `inventory.stock.move` | `inventory.item.created` / `inventory.item.created_failed` | web | operation 级补充 |
+| INV-库存存酒 | `createInventoryStockBatch` | `POST` | `/api/v1/inventory/stock-batches` | 创建库存批次 | `inventory.stock.batch.manage` | `inventory.stock_batch.create` / `inventory.stock_batch.create_failed` | web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `createInventorySupplier` | `POST` | `/api/v1/inventory/suppliers` | 创建供应商 | `inventory.supplier.manage` | `inventory.supplier_changed` / `inventory.supplier_change_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createPurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests` | 创建采购申请 | `inventory.purchase_request.manage` | `inventory.purchase_request_changed` / `inventory.purchase_request_change_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles` | 存酒登记 | `bar.saved_bottle.manage` | `bar.saved_bottle.created` / `bar.saved_bottle.create_failed` | tablet, web | operation 级补充 |
 | INV-库存存酒 | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | 盘点差异、报损、报溢 | `inventory.stock.adjust` | `inventory.counted` / `inventory.adjustment_failed` | web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createStockIn` | `POST` | `/api/v1/inventory/stock-in` | 入库 | `inventory.stock.move` | `inventory.inbound_confirmed` / `inventory.inbound_failed` | web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createStockMovement` | `POST` | `/api/v1/inventory/stock-movements` | 库存移动或扣减 | `inventory.stock.move` | `inventory.outbound_verified` / `inventory.stock_movement_failed` | web, staff_work_phone, tablet | operation 级补充 |
+| INV-库存存酒 | `createSupplierQualification` | `POST` | `/api/v1/inventory/supplier-qualifications` | 创建/更新供应商资质 | `inventory.supplier.qualification.manage` | `inventory.supplier_qualification.create` / `inventory.supplier_qualification.create_failed` | web | operation 级补充 |
+| INV-库存存酒 | `createSupplierReconciliation` | `POST` | `/api/v1/inventory/supplier-reconciliations` | 创建供应商对账单 | `inventory.supplier.reconcile` | `inventory.supplier_reconciliation.create` / `inventory.supplier_reconciliation.create_failed` | web | operation 级补充 |
+| INV-库存存酒 | `createSupplierSettlementMethod` | `POST` | `/api/v1/inventory/supplier-settlement-methods` | 创建/更新供应商结算档 | `inventory.supplier.settlement.manage` | `inventory.supplier_settlement_method.create` / `inventory.supplier_settlement_method.create_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts` | 创建供应合同(三模式) | `inventory.supply_contract.manage` | `supply_contract.created` / `supply_contract.create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `createTraceHandover` | `POST` | `/api/v1/inventory/trace-handovers` | 创建扫码交接任务(五段链) | `inventory.handover.scan` | `inventory.handover_created` / `inventory.handover_create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `createTypedStockMovement` | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | 创建typed库存流水 | `inventory.stock.move` | `inventory.stock_movement.created` / `inventory.stock_movement.created_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | 创建结构化库房(六类) | `inventory.warehouse.manage` | `inventory.warehouse.created` / `inventory.warehouse.create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `disputeSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/dispute` | 受理存酒争议 | `bar.saved_bottle.manage` | `bar.saved_bottle.dispute` / `bar.saved_bottle.dispute_failed` | tablet, web | operation 级补充 |
 | INV-库存存酒 | `listHighValueReviews` | `GET` | `/api/v1/inventory/high-value-reviews` | 查询库存域高价值复核单(报损/盘点差异/存酒作废) | `inventory.high_value.review` | `inventory.high_value_review.viewed` / `inventory.high_value_review.view_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventoryItems` | `GET` | `/api/v1/inventory/items` | 查询库存明细 | `inventory.stock.view` | `inventory.item.viewed` / `inventory.item.viewed_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listInventoryRiskAlerts` | `GET` | `/api/v1/inventory/risk-alerts` | 查询库存风险预警列表 | `inventory.risk_alert.view` | `inventory.risk_alert.list` / `inventory.risk_alert.list_failed` | web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `listInventoryStockBatches` | `GET` | `/api/v1/inventory/stock-batches` | 查询库存批次列表 | `inventory.stock.view` | `inventory.stock_batch.list` / `inventory.stock_batch.list_failed` | web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventorySuppliers` | `GET` | `/api/v1/inventory/suppliers` | 查询供应商 | `inventory.supplier.view` | `inventory.supplier_viewed` / `inventory.supplier_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listPurchaseRequests` | `GET` | `/api/v1/inventory/purchase-requests` | 查询采购申请 | `inventory.purchase_request.view` | `inventory.purchase_request_viewed` / `inventory.purchase_request_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | 查询存酒 | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `listStockBalances` | `GET` | `/api/v1/inventory/stock-balances` | 查询库存余额 | `inventory.stock.view` | `inventory.stock_balance.viewed` / `inventory.stock_balance.viewed_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listStockMovements` | `GET` | `/api/v1/inventory/stock-movements` | 查询库存流水 | `inventory.stock.view` | `inventory.stock_movement.viewed` / `inventory.stock_movement.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
+| INV-库存存酒 | `listSupplierQualifications` | `GET` | `/api/v1/inventory/supplier-qualifications` | 查询供应商资质列表 | `inventory.supplier.qualification.manage` | `inventory.supplier_qualification.list` / `inventory.supplier_qualification.list_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listSupplierReconciliations` | `GET` | `/api/v1/inventory/supplier-reconciliations` | 查询供应商对账列表 | `inventory.supplier.reconcile` | `inventory.supplier_reconciliation.list` / `inventory.supplier_reconciliation.list_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listSupplierSettlementMethods` | `GET` | `/api/v1/inventory/supplier-settlement-methods` | 查询供应商结算档列表 | `inventory.supplier.settlement.manage` | `inventory.supplier_settlement_method.list` / `inventory.supplier_settlement_method.list_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | 查询供应合同列表 | `inventory.supply_contract.manage` | `inventory.supply_contract.list` / `inventory.supply_contract.list_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | 查询库房列表 | `inventory.warehouse.manage` | `inventory.warehouse.list` / `inventory.warehouse.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `orderPurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | 采购单下单(approved→ordered) | `inventory.purchase.approve` | `inventory.purchase_status_changed` / `inventory.purchase_status_change_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `receivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/receive` | 采购单入库确认(arrived→received,生成入库流水) | `inventory.purchase.approve` | `inventory.received` / `inventory.received_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reportRobotSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | 机器人配送段上报(被动留痕,受第三方开关门控) | `inventory.handover.scan` | `inventory.handover_robot_reported` / `inventory.handover_robot_report_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewHighValue` | `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | 主管复核高价值动作(approve生效/reject回滚) | `inventory.high_value.review` | `inventory.high_value_review_decided` / `inventory.high_value_review_decide_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewTraceHandoverException` | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | 交接异常复核(缺口/重复/差异) | `inventory.handover.review` | `inventory.handover_exception_resolved` / `inventory.handover_exception_review_failed` | web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `scanInventoryRiskAlerts` | `POST` | `/api/v1/inventory/risk-alerts/scan` | 触发库存风险扫描 | `inventory.risk.scan` | `inventory.risk.scan` / `inventory.risk.scan_failed` | web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | 物品追踪码扫码交接 | `inventory.handover.scan` | `operation_handover.created` / `operation_handover.failed` | staff_work_phone, tablet | operation 级补充 |
 | INV-库存存酒 | `scanTraceSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/scan-segment` | 员工扫码交接分段(主动留痕) | `inventory.handover.scan` | `inventory.handover_segment_scanned` / `inventory.handover_segment_scan_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `transferSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/transfer` | 存酒整瓶转赠 | `bar.saved_bottle.manage` | `bar.saved_bottle.transfer` / `bar.saved_bottle.transfer_failed` | tablet, web | operation 级补充 |
 | INV-库存存酒 | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | 调拨库存流水 | `inventory.stock.move` | `inventory.stock_transfer.created` / `inventory.stock_transfer.created_failed` | web | operation 级补充 |
 | OPEN-开放平台 | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | 回调处理结果查询 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
 | OPEN-开放平台 | `openAuthToken` | `POST` | `/api/open/auth/token` | 开放平台获取令牌 | `not_applicable` | `open_auth.succeeded` / `open_auth.failed` | <br>channel: server-to-server | operation 级补充 |
@@ -1055,31 +1355,50 @@
 | P0-待归类 | `addMerchantServiceWorkOrderAction` | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | Append merchant service work order action | `merchant.service_work_order.process` | `merchant_service.addMerchantServiceWorkOrderAction.succeeded` / `merchant_service.addMerchantServiceWorkOrderAction.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `assignMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | Assign merchant service work order | `merchant.service_work_order.assign` | `merchant_service.assignMerchantServiceWorkOrder.succeeded` / `merchant_service.assignMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `closeMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | Close merchant service work order | `merchant.service_work_order.close` | `merchant_service.closeMerchantServiceWorkOrder.succeeded` / `merchant_service.closeMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
+| P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | 创建合同关键日期 | `compliance.contract_key_date.manage` | `compliance.contract_key_date.create` / `compliance.contract_key_date.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | 创建 P1/P2 商场平面图 | `floor_plan.manage` | `floor_plan.created` / `floor_plan.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports` | 创建 SVG 或标准 JSON 导入任务 | `floor_plan.import.manage` | `floor_plan.import_created` / `floor_plan.import_create_failed` | web | operation 级补充 |
+| P0-待归类 | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | 创建商户账单 | `merchant.billing.manage` | `merchant.billing.create` / `merchant.billing.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | Create merchant service work order | `merchant.service_work_order.create` | `merchant_service.createMerchantServiceWorkOrder.succeeded` / `merchant_service.createMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | 查询合规到期项列表 | `compliance.expiry_item.view` | `compliance.expiry_item.list` / `compliance.expiry_item.list_failed` | web | operation 级补充 |
+| P0-待归类 | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | 查询合规提醒列表 | `compliance.reminder.view` | `compliance.reminder.list` / `compliance.reminder.list_failed` | web | operation 级补充 |
+| P0-待归类 | `listContractKeyDates` | `GET` | `/api/v1/compliance/contract-key-dates` | 查询合同关键日期列表 | `compliance.contract_key_date.view` | `compliance.contract_key_date.list` / `compliance.contract_key_date.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | 查询平面图导入任务 | `floor_plan.import.view` | `floor_plan.import_viewed` / `floor_plan.import_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | 查询 P1/P2 商场平面图 | `floor_plan.view` | `floor_plan.viewed` / `floor_plan.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | 查询平面图正式区域 | `floor_plan.view` | `floor_plan.shape_viewed` / `floor_plan.shape_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | List merchant bills | `merchant.billing.view` | `merchant_billing.bill.viewed` / `merchant_billing.bill.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | 企微留存策略列表 | `wecom.retention.manage` | `wecom.retention_policy_viewed` / `wecom.retention_policy_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | 查询企微会话违规命中列表 | `wecom.risk_hit.view` | `wecom.risk_hit.list` / `wecom.risk_hit.list_failed` | web | operation 级补充 |
 | P0-待归类 | `publishFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | 发布平面图导入候选 | `floor_plan.import.manage` | `floor_plan.import_published` / `floor_plan.import_publish_failed` | web | operation 级补充 |
+| P0-待归类 | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | 记录账单催收 | `merchant.billing.dunning.record` | `merchant.billing.dunning.record` / `merchant.billing.dunning.record_failed` | web | operation 级补充 |
+| P0-待归类 | `reviewWecomRiskHit` | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | 复核处置企微违规命中 | `wecom.risk_hit.review` | `wecom.risk_hit.review` / `wecom.risk_hit.review_failed` | web | operation 级补充 |
+| P0-待归类 | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | 保存平面图图形 | `floor_plan.manage` | `floor_plan.shape.save` / `floor_plan.shape.save_failed` | web | operation 级补充 |
+| P0-待归类 | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | 触发合规提醒扫描 | `compliance.reminder.scan` | `compliance.reminder.scan` / `compliance.reminder.scan_failed` | web | operation 级补充 |
+| P0-待归类 | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | 提交账单争议 | `merchant.billing.dispute.submit` | `merchant.billing.dispute.submit` / `merchant.billing.dispute.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `syncWecomConversation` | `POST` | `/api/v1/compliance/wecom/conversations/sync` | 企微会话同步入站（PIPL 合规，开关门控） | `wecom.sync` | `wecom.conversation_synced` / `wecom.conversation_sync_failed` | <br>channel: provider-webhook | operation 级补充 |
 | P0-待归类 | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | 配置企微留存策略（默认180天） | `wecom.retention.manage` | `wecom.retention_policy_set` / `wecom.retention_policy_failed` | web | operation 级补充 |
 | P0-待归类 | `viewWecomConversationMessages` | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | 分级查看企微会话消息（脱敏/原文，原文需审批+审计） | `wecom.view_raw` | `wecom.raw_viewed` / `wecom.raw_view_failed` | web, mobile_admin | operation 级补充 |
 | SYS-系统健康 | `getSystemHealth` | `GET` | `/api/v1/system/health` | 健康检查 | `public` | `system.health_checked` / `system.health_check_failed` | web, mobile_admin<br>channel: monitoring | operation 级补充 |
 | SYS-系统健康 | `getSystemVersion` | `GET` | `/api/v1/system/version` | 版本和构建信息 | `system.version.view` | `system.version_viewed` / `system.version_view_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | 设备绑定 | `terminal.device.bind` | `terminal.device.bound` / `terminal.device.bind_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
+| TERM-终端设备 | `detectMdmViolations` | `POST` | `/api/v1/terminals/mdm/violations/detect` | 服务端检测设备违规 | `mdm.device.manage` | `mdm.violation.detect` / `mdm.violation.detect_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `enrollMdmDevice` | `POST` | `/api/v1/terminals/mdm/devices/enroll` | MDM 设备纳管/策略同步 | `mdm.device.manage` | `mdm.policy_checked` / `mdm.policy_check_failed` | web | operation 级补充 |
 | TERM-终端设备 | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | 一体机配置，含售票型与非售票型模式 | `not_applicable` | `terminal.kiosk_config_viewed` / `terminal.access_rejected` | kiosk | operation 级补充 |
 | TERM-终端设备 | `getTerminalOfflineEntitlements` | `GET` | `/api/v1/terminals/offline-entitlements` | 获取终端离线权益 | `terminal.device.bind` | `terminal.offline_entitlements.viewed` / `terminal.offline_entitlements.viewed_failed` | staff_work_phone, tablet, kiosk | operation 级补充 |
+| TERM-终端设备 | `handleMdmViolation` | `POST` | `/api/v1/terminals/mdm/violations/{id}/handle` | 违规处置闭环 | `mdm.violation.handle` | `mdm.violation.handle` / `mdm.violation.handle_failed` | web | operation 级补充 |
 | TERM-终端设备 | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | 一体机心跳 | `not_applicable` | `terminal.kiosk_heartbeat` / `terminal.kiosk_heartbeat_failed` | kiosk | operation 级补充 |
 | TERM-终端设备 | `listCapabilitySwitches` | `GET` | `/api/v1/terminals/capability-switches` | 查询端能力开关 | `terminal.switch.view` | `terminal_switch.viewed` / `terminal_switch.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `listMdmAppWhitelist` | `GET` | `/api/v1/terminals/mdm/app-whitelist` | 查询 MDM 应用白名单 | `mdm.policy.manage` | `mdm.app_whitelist.viewed` / `mdm.app_whitelist.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | 查询 MDM 设备违规留痕 | `mdm.violation.view` | `mdm.violation.viewed` / `mdm.violation.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | 查询 MDM 网站白名单 | `mdm.policy.manage` | `mdm.site_whitelist.viewed` / `mdm.site_whitelist.view_failed` | web | operation 级补充 |
+| TERM-终端设备 | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | 标记设备找回 | `terminal.device.lifecycle` | `terminal.device.found` / `terminal.device.found_failed` | web, mobile_admin | operation 级补充 |
+| TERM-终端设备 | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | 标记设备挂失 | `terminal.device.lifecycle` | `terminal.device.lost` / `terminal.device.lost_failed` | web, mobile_admin | operation 级补充 |
+| TERM-终端设备 | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | 设备送修 | `terminal.device.lifecycle` | `terminal.device.repair` / `terminal.device.repair_failed` | web, mobile_admin | operation 级补充 |
+| TERM-终端设备 | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | 设备报废 | `terminal.device.lifecycle` | `terminal.device.scrap` / `terminal.device.scrap_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | 上报 MDM 设备违规 | `mdm.device.manage` | `device.policy_violation` / `device.policy_violation_failed` | web | operation 级补充 |
 | TERM-终端设备 | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | 归还终端设备 | `terminal.device.bind` | `terminal.device.returned` / `terminal.device.returned_failed` | staff_work_phone, tablet, kiosk, web | operation 级补充 |
 | TERM-终端设备 | `syncTerminalTasks` | `POST` | `/api/v1/terminals/sync-tasks` | 同步终端任务 | `terminal.device.bind` | `terminal.sync_task.accepted` / `terminal.sync_task.accepted_failed` | staff_work_phone, tablet, kiosk | operation 级补充 |
@@ -1103,6 +1422,7 @@
 | TIC-票务权益 | `listIssuedEntitlements` | `GET` | `/api/v1/ticketing/issued-entitlements` | 查询已发放权益 | `ticket.verify.view` | `ticket_issued_entitlement.viewed` / `ticket_issued_entitlement.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketDynamicPricingRules` | `GET` | `/api/v1/ticketing/dynamic-pricing-rules` | List P2 ticket dynamic pricing rules | `ticket.dynamic_pricing.view` | `ticket_dynamic_pricing.viewed.success` / `ticket_dynamic_pricing.viewed.failure` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketPriceRules` | `GET` | `/api/v1/ticketing/price-rules` | 查询平日、周末、节假日及派生价规则 | `ticket.price_variant.view` | `ticket_price_variant.viewed` / `ticket_price_variant.view_failed` | web | operation 级补充 |
+| TIC-票务权益 | `listTicketRefundLines` | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | 查询退票明细行 | `ticket.refund.view` | `ticket.refund_line.list` / `ticket.refund_line.list_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | 票种查询 | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | 查询票核销记录 | `verification.view` | `verification.viewed` / `verification.view_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
 | TIC-票务权益 | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | 票务核销预览 | `verification.execute` | `verification.previewed` / `verification.failed` | staff_work_phone<br>device: verification-gate | operation 级补充 |

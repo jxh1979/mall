@@ -6,6 +6,11 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 final class IntegrationOrderSyncService {
@@ -107,9 +112,197 @@ final class IntegrationOrderSyncService {
         );
     }
 
+    /**
+     * 自动对账（P0#11）：从 order_syncs 标准模型自动比对平台侧期望明细，生成对账批次 + 差异。
+     *
+     * <p>差异口径衔接 finance 侧四类（amount/count/status/missing），并在 integration 侧自产
+     * duplicate（回流重复）补充；差异写既有 integration_reconciliation_differences 表，
+     * source_domain=thirdparty 标记，进异常复核。开关 off（适配器 webhook 关）→ 强制 dryRun，
+     * 不落库、不伪造对账数据。
+     */
+    ChannelReconciliationResult reconcileChannel(ChannelReconciliationRequest request) {
+        try {
+            ChannelReconciliationResult result = support.executeIdempotent(
+                    "reconcileIntegrationChannel:" + (request == null ? "null" : request.providerCode()),
+                    request == null ? null : request.idempotencyKey(),
+                    request,
+                    () -> reconcileChannelOnce(request),
+                    ChannelReconciliationResult.class
+            );
+            support.recordSuccess(
+                    "integration.channel_reconciliation.completed",
+                    "integration.reconciliation.manage",
+                    "integration_reconciliation_batch",
+                    result.batchId() == null ? "dry_run" : result.batchId(),
+                    request == null ? null : request.idempotencyKey(),
+                    java.util.Map.of(
+                            "dry_run", result.dryRun(),
+                            "difference_count", result.differenceCount())
+            );
+            return result;
+        } catch (RuntimeException exception) {
+            support.recordFailure(
+                    "integration.channel_reconciliation.failed",
+                    "integration.reconciliation.manage",
+                    "integration_reconciliation_batch",
+                    request == null ? "unknown" : request.providerCode(),
+                    request == null ? null : request.idempotencyKey(),
+                    support.errorCode(exception)
+            );
+            throw exception;
+        }
+    }
+
+    private ChannelReconciliationResult reconcileChannelOnce(ChannelReconciliationRequest request) {
+        validateChannelReconciliationRequest(request);
+        String channel = channel(request.channel());
+
+        // 开关解析：适配器 webhook 关 → 强制 dryRun（不伪造对账数据）。无适配器视为未接入 → 同样强制 dryRun。
+        boolean switchOn = repository.listProviderAdapters().stream()
+                .filter(adapter -> request.providerCode().equals(adapter.providerCode()))
+                .filter(adapter -> !"disabled".equals(adapter.status()))
+                .anyMatch(ProviderAdapterRecord::webhookEnabled);
+        boolean requestedDryRun = request.dryRun() != null && request.dryRun();
+        boolean dryRun = requestedDryRun || !switchOn;
+
+        // 第三方侧 actual：order_syncs 标准模型，限定 provider/business/channel 范围。
+        Map<String, List<IntegrationOrderSyncRecord>> actualByExternalId = new LinkedHashMap<>();
+        for (IntegrationOrderSyncRecord record : repository.listOrderSyncs()) {
+            if (!request.providerCode().equals(record.providerCode())
+                    || !request.businessType().equals(record.businessType())
+                    || !channel.equals(record.channel())) {
+                continue;
+            }
+            actualByExternalId
+                    .computeIfAbsent(record.externalBusinessId(), key -> new ArrayList<>())
+                    .add(record);
+        }
+
+        List<ChannelReconciliationRequest.ExpectedEntry> expected =
+                request.expectedEntries() == null ? List.of() : request.expectedEntries();
+        int expectedCount = expected.size();
+        int actualCount = actualByExternalId.values().stream().mapToInt(List::size).sum();
+
+        Instant now = clock.instant();
+        String batchId = "reconciliation_batch_" + UUID.randomUUID();
+        List<DiffDraft> drafts = new ArrayList<>();
+
+        for (ChannelReconciliationRequest.ExpectedEntry entry : expected) {
+            String externalId = requireTextValue(entry.externalBusinessId(), "expected_entry.external_business_id");
+            long expectedAmount = nonNegative(entry.amountCent(), "expected_entry.amount_cent");
+            int expectedOccurrences = entry.expectedCount() == null ? 1 : Math.max(1, entry.expectedCount());
+            List<IntegrationOrderSyncRecord> matches = actualByExternalId.remove(externalId);
+            if (matches == null || matches.isEmpty()) {
+                // missing：平台侧期望存在，第三方回流缺口。
+                drafts.add(new DiffDraft(externalId, "missing", expectedAmount, 0L, entry.meta()));
+                continue;
+            }
+            if (matches.size() > expectedOccurrences) {
+                // duplicate：回流重复（integration 侧自产口径，衔接统一异常链）。
+                drafts.add(new DiffDraft(externalId, "duplicate", expectedAmount,
+                        matches.get(0).amountCent(), entry.meta()));
+            }
+            IntegrationOrderSyncRecord actual = matches.get(0);
+            if (actual.amountCent() != expectedAmount) {
+                // amount：金额差异（衔接 finance amount 口径）。
+                drafts.add(new DiffDraft(externalId, "amount", expectedAmount, actual.amountCent(), entry.meta()));
+            } else if (entry.status() != null && !entry.status().equals(actual.status())) {
+                // status：状态差异（衔接 finance status 口径）。
+                drafts.add(new DiffDraft(externalId, "status", expectedAmount, actual.amountCent(), entry.meta()));
+            }
+        }
+        // 剩余 actual 未被任何期望匹配 → count（平台侧无对应取数，衔接 finance count 口径）。
+        for (Map.Entry<String, List<IntegrationOrderSyncRecord>> leftover : actualByExternalId.entrySet()) {
+            IntegrationOrderSyncRecord actual = leftover.getValue().get(0);
+            drafts.add(new DiffDraft(leftover.getKey(), "count", 0L, actual.amountCent(), null));
+            if (leftover.getValue().size() > 1) {
+                drafts.add(new DiffDraft(leftover.getKey(), "duplicate", 0L, actual.amountCent(), null));
+            }
+        }
+
+        long totalDifferenceCent = drafts.stream()
+                .mapToLong(draft -> Math.abs(draft.internalAmountCent() - draft.providerAmountCent()))
+                .sum();
+
+        if (dryRun) {
+            // 开关 off / dryRun：不落库，仅返回预览，绝不伪造对账数据。
+            return new ChannelReconciliationResult(
+                    null, true, expectedCount, actualCount, drafts.size(), totalDifferenceCent, List.of());
+        }
+
+        repository.saveReconciliationBatch(new ReconciliationBatchRecord(
+                batchId,
+                request.providerCode(),
+                request.businessType(),
+                request.periodStart(),
+                request.periodEnd(),
+                drafts.isEmpty() ? "matched" : "difference_found",
+                expectedCount,
+                actualCount,
+                drafts.size(),
+                totalDifferenceCent,
+                now,
+                now
+        ));
+        List<ReconciliationDifferenceRecord> persisted = new ArrayList<>();
+        for (DiffDraft draft : drafts) {
+            ReconciliationDifferenceRecord difference = new ReconciliationDifferenceRecord(
+                    "reconciliation_difference_" + UUID.randomUUID(),
+                    batchId,
+                    request.providerCode(),
+                    request.businessType(),
+                    draft.externalBusinessId(),
+                    draft.differenceType(),
+                    draft.internalAmountCent(),
+                    draft.providerAmountCent(),
+                    Math.abs(draft.internalAmountCent() - draft.providerAmountCent()),
+                    "open",
+                    "thirdparty", // 衔接统一异常链口径：第三方回流差异进异常复核。
+                    null,
+                    null,
+                    autoReconcilePayload(channel, draft),
+                    List.of(),
+                    now,
+                    now
+            );
+            persisted.add(repository.saveReconciliationDifference(difference));
+        }
+        return new ChannelReconciliationResult(
+                batchId, false, expectedCount, actualCount, drafts.size(), totalDifferenceCent, persisted);
+    }
+
+    private Map<String, Object> autoReconcilePayload(String channel, DiffDraft draft) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("channel", channel);
+        payload.put("origin", "auto_channel_reconciliation");
+        payload.put("difference_type", draft.differenceType());
+        if (draft.meta() != null && !draft.meta().isEmpty()) {
+            payload.put("expected_meta", Map.copyOf(draft.meta()));
+        }
+        return Map.copyOf(payload);
+    }
+
+    private record DiffDraft(
+            String externalBusinessId,
+            String differenceType,
+            long internalAmountCent,
+            long providerAmountCent,
+            Map<String, Object> meta
+    ) {
+    }
+
     private IntegrationOrderSyncRecord createOrderSyncOnce(IntegrationOrderSyncRequest request) {
         validateOrderSyncRequest(request);
         Instant now = clock.instant();
+        // 渠道语义解析（meituan/dianping/douyin/...，空值归一 unknown）。
+        String channel = channel(request.channel());
+        // mapPayload：把回流 payload 按渠道映射为标准订单/券核销投影，附入既有 provider_payload（不破坏原始信封）。
+        Map<String, Object> providerPayload = new LinkedHashMap<>(safeMap(request.providerPayload()));
+        ChannelMapping mapping = mapPayload(channel, request, providerPayload);
+        if (!mapping.projection().isEmpty()) {
+            providerPayload.put("standard_model", Map.copyOf(mapping.projection()));
+        }
+        providerPayload.put("channel_map_status", mapping.processStatus());
         IntegrationOrderSyncRecord record = new IntegrationOrderSyncRecord(
                 repository.findOrderSyncByProviderAndExternalId(
                                 request.providerCode(),
@@ -126,11 +319,110 @@ final class IntegrationOrderSyncService {
                 request.status(),
                 nonNegative(request.amountCent(), "amount_cent"),
                 currency(request.currency()),
-                safeMap(request.providerPayload()),
+                channel,
+                request.externalChannelOrderId(),
+                Map.copyOf(providerPayload),
                 now,
                 now
         );
         return repository.saveOrderSync(record);
+    }
+
+    // ── 回流渠道 payload → 标准订单/券核销模型映射（mapPayload，复用适配器投影框架口径）─────────
+    //
+    // 复用 IntegrationService.mapPayload 的口径（适配器 field_mapping 作 request_mapping，
+    // status_mapping 翻译供应商状态），但作用对象是 order_sync 标准模型而非 webhook 信封：
+    //   · 无匹配适配器 / 适配器 webhook 开关关 / 无 field_mapping → unmapped（开关 off 不伪造，仅占位标准字段）；
+    //   · 映射成功 → mapped，产出标准订单/券核销投影；
+    //   · 真实供应商字段未定 → 走 mock/占位映射（fallback），projection 标 mock=true。
+    //
+    // 签名校验骨架：渠道回流签名待厂商资料；此处预留校验钩子，资料未到时仅记录 signature_state=skeleton，不拦截。
+    private ChannelMapping mapPayload(String channel, IntegrationOrderSyncRequest request, Map<String, Object> payload) {
+        Optional<ProviderAdapterRecord> adapterOpt = repository.listProviderAdapters().stream()
+                .filter(adapter -> request.providerCode().equals(adapter.providerCode()))
+                .filter(adapter -> !"disabled".equals(adapter.status()))
+                .findFirst();
+        // 占位标准模型：渠道语义 + 标准业务字段对齐（即便开关 off / 无适配器也保留，便于自动对账取数）。
+        Map<String, Object> projection = new LinkedHashMap<>();
+        projection.put("channel", channel);
+        projection.put("sync_type", request.syncType());
+        projection.put("external_business_id", request.externalBusinessId());
+        projection.put("external_channel_order_id", request.externalChannelOrderId());
+        projection.put("amount_cent", nonNegative(request.amountCent(), "amount_cent"));
+        projection.put("status", request.status());
+        projection.put("signature_state", "skeleton"); // 渠道回流签名校验骨架（资料未到，不拦截）。
+
+        if (adapterOpt.isEmpty()) {
+            projection.put("mock", true);
+            return ChannelMapping.unmapped(projection);
+        }
+        ProviderAdapterRecord adapter = adapterOpt.get();
+        // 开关兜底：适配器 webhook 关 → 不做真实字段映射、不伪造对账数据，仅留占位标准字段。
+        if (!adapter.webhookEnabled()) {
+            projection.put("mock", true);
+            return ChannelMapping.unmapped(projection);
+        }
+        Map<String, Object> fieldMapping = adapter.fieldMapping();
+        if (fieldMapping == null || fieldMapping.isEmpty()) {
+            projection.put("mock", true);
+            return ChannelMapping.unmapped(projection);
+        }
+        try {
+            Object statusMappingRaw = fieldMapping.get("status_mapping");
+            for (Map.Entry<String, Object> entry : fieldMapping.entrySet()) {
+                String standardField = entry.getKey();
+                if ("status_mapping".equals(standardField)) {
+                    continue;
+                }
+                if (!(entry.getValue() instanceof String sourcePath)) {
+                    throw new IllegalArgumentException("invalid request_mapping entry for " + standardField);
+                }
+                Object mapped = resolvePath(payload, sourcePath);
+                if (mapped != null) {
+                    projection.put(standardField, mapped);
+                }
+            }
+            if (statusMappingRaw instanceof Map<?, ?> statusMapping
+                    && projection.get("status") instanceof String providerStatus) {
+                Object platformStatus = statusMapping.get(providerStatus);
+                if (platformStatus != null) {
+                    projection.put("status", platformStatus);
+                }
+            }
+            projection.put("mock", false);
+            return ChannelMapping.mapped(projection);
+        } catch (RuntimeException exception) {
+            projection.put("mock", true);
+            return ChannelMapping.unmapped(projection);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object resolvePath(Map<String, Object> payload, String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        Object current = payload;
+        for (String segment : path.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map)) {
+                return null;
+            }
+            current = ((Map<String, Object>) map).get(segment);
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
+    }
+
+    private record ChannelMapping(String processStatus, Map<String, Object> projection) {
+        static ChannelMapping mapped(Map<String, Object> projection) {
+            return new ChannelMapping("mapped", Map.copyOf(projection));
+        }
+
+        static ChannelMapping unmapped(Map<String, Object> projection) {
+            return new ChannelMapping("unmapped", Map.copyOf(projection));
+        }
     }
 
     private IntegrationTaskRecord createTaskOnce(String category, IntegrationTaskRequest request) {

@@ -82,11 +82,11 @@ class JdbcAmusementRepository implements AmusementRepository {
         jdbcTemplate.update("""
                 INSERT INTO amusement_projects (
                     id, project_name, capacity, open_status, safety_template_id,
-                    eligibility_rule_json, created_at, updated_at, merchant_id
+                    eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id
                 )
                 VALUES (
                     :id, :project_name, :capacity, :open_status, :safety_template_id,
-                    CAST(:eligibility_rule_json AS jsonb), :created_at, :updated_at, :merchant_id
+                    CAST(:eligibility_rule_json AS jsonb), :location_point_id, :created_at, :updated_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_name = EXCLUDED.project_name,
@@ -94,6 +94,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                     open_status = EXCLUDED.open_status,
                     safety_template_id = EXCLUDED.safety_template_id,
                     eligibility_rule_json = EXCLUDED.eligibility_rule_json,
+                    location_point_id = EXCLUDED.location_point_id,
                     updated_at = EXCLUDED.updated_at
                 """, projectParameters(project));
         return project;
@@ -103,7 +104,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementProjectRecord> listProjects() {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, created_at, updated_at, merchant_id
+                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id
                   FROM amusement_projects
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapProject);
@@ -113,7 +114,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementProjectRecord> listProjectsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, created_at, updated_at, merchant_id
+                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id
                   FROM amusement_projects
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -124,7 +125,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     public Optional<AmusementProjectRecord> findProjectById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, created_at, updated_at, merchant_id
+                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id
                   FROM amusement_projects
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapProject).stream().findFirst();
@@ -280,6 +281,22 @@ class JdbcAmusementRepository implements AmusementRepository {
                   FROM amusement_capacity_config
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapCapacityConfig).stream().findFirst();
+    }
+
+    @Override
+    public AmusementOverCapacityPolicy findOverCapacityPolicy(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT project_id, operating_capacity, disposal_mode, enabled
+                  FROM amusement_over_capacity_policy
+                 WHERE project_id = :project_id
+                """, Map.of("project_id", projectId),
+                (rs, n) -> new AmusementOverCapacityPolicy(
+                        rs.getString("project_id"),
+                        rs.getInt("operating_capacity"),
+                        rs.getString("disposal_mode"),
+                        rs.getBoolean("enabled")))
+                .stream().findFirst()
+                .orElseGet(() -> AmusementOverCapacityPolicy.disabled(projectId));
     }
 
     @Override
@@ -574,12 +591,14 @@ class JdbcAmusementRepository implements AmusementRepository {
                 INSERT INTO amusement_safety_inspections (
                     id, project_id, template_id, items_json, overall_result, inspection_status,
                     rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
-                    approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                    approved_at, operator_note, evidence_attachment_ids, created_at, updated_at,
+                    inspector_id, inspection_result, abnormal_found, abnormal_note
                 )
                 VALUES (
                     :id, :project_id, :template_id, CAST(:items_json AS jsonb), :overall_result, :inspection_status,
                     :rectification_status, :reopen_status, :inspected_at, :submitted_at, :rechecked_at,
-                    :approved_at, :operator_note, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    :approved_at, :operator_note, CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at,
+                    :inspector_id, :inspection_result, :abnormal_found, :abnormal_note
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     items_json = EXCLUDED.items_json,
@@ -593,7 +612,11 @@ class JdbcAmusementRepository implements AmusementRepository {
                     approved_at = EXCLUDED.approved_at,
                     operator_note = EXCLUDED.operator_note,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    inspector_id = EXCLUDED.inspector_id,
+                    inspection_result = EXCLUDED.inspection_result,
+                    abnormal_found = EXCLUDED.abnormal_found,
+                    abnormal_note = EXCLUDED.abnormal_note
                 """, safetyInspectionParameters(inspection));
         return inspection;
     }
@@ -603,7 +626,8 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
                        rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
-                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at,
+                       inspector_id, inspection_result, abnormal_found, abnormal_note
                   FROM amusement_safety_inspections
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapSafetyInspection);
@@ -614,7 +638,8 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
                        rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
-                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at,
+                       inspector_id, inspection_result, abnormal_found, abnormal_note
                   FROM amusement_safety_inspections
                  WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
                  ORDER BY created_at DESC, id
@@ -626,7 +651,8 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
                        rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
-                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at,
+                       inspector_id, inspection_result, abnormal_found, abnormal_note
                   FROM amusement_safety_inspections
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapSafetyInspection).stream().findFirst();
@@ -637,7 +663,8 @@ class JdbcAmusementRepository implements AmusementRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, template_id, items_json, overall_result, inspection_status,
                        rectification_status, reopen_status, inspected_at, submitted_at, rechecked_at,
-                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at
+                       approved_at, operator_note, evidence_attachment_ids, created_at, updated_at,
+                       inspector_id, inspection_result, abnormal_found, abnormal_note
                   FROM amusement_safety_inspections
                  WHERE project_id = :project_id
                  ORDER BY inspected_at DESC, created_at DESC, id
@@ -937,6 +964,15 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public Optional<String> findMaintenanceVendorStatus(String vendorId) {
+        // 检修单位复用供应链供应商主数据（inventory_suppliers）；存在性 = 是否查到行，可用性 = status。
+        return jdbcTemplate.query(
+                "SELECT status FROM inventory_suppliers WHERE id = :id",
+                Map.of("id", vendorId),
+                (rs, n) -> rs.getString("status")).stream().findFirst();
+    }
+
+    @Override
     public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
         int updated = jdbcTemplate.update("""
                 UPDATE amusement_projects
@@ -1124,6 +1160,7 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("open_status", project.openStatus())
                 .addValue("safety_template_id", project.safetyTemplateId())
                 .addValue("eligibility_rule_json", writeJson(project.eligibilityRule()))
+                .addValue("location_point_id", project.locationPointId())
                 .addValue("created_at", timestampWithTimeZone(project.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(project.updatedAt()))
                 .addValue("merchant_id", project.merchantId());
@@ -1197,7 +1234,11 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("operator_note", inspection.operatorNote())
                 .addValue("evidence_attachment_ids", writeJson(inspection.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(inspection.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(inspection.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(inspection.updatedAt()))
+                .addValue("inspector_id", inspection.inspectorId())
+                .addValue("inspection_result", inspection.inspectionResult())
+                .addValue("abnormal_found", inspection.abnormalFound())
+                .addValue("abnormal_note", inspection.abnormalNote());
     }
 
     private MapSqlParameterSource safetyActionParameters(AmusementSafetyActionRecord action) {

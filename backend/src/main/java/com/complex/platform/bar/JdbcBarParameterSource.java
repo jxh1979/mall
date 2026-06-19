@@ -228,7 +228,10 @@ final class JdbcBarParameterSource {
                 .addValue("status", voidRecord.status())
                 .addValue("idempotency_key", voidRecord.idempotencyKey())
                 .addValue("evidence_attachment_ids", writeJson(voidRecord.evidenceAttachmentIds()))
-                .addValue("created_at", timestampWithTimeZone(voidRecord.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(voidRecord.createdAt()))
+                .addValue("reviewed_by_user_id", voidRecord.reviewedByUserId())
+                .addValue("reviewed_at", timestampWithTimeZone(voidRecord.reviewedAt()))
+                .addValue("review_reason", voidRecord.reviewReason());
     }
 
     MapSqlParameterSource productionTicketParameters(BarProductionTicketRecord ticket) {

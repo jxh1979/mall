@@ -340,6 +340,8 @@ class MerchantServiceControllerTests {
                 "closed".equals(status) ? "Fixed and merchant confirmed" : null,
                 "closed".equals(status) ? 5 : null,
                 List.of("att-photo-1"),
+                false,
+                null,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T01:00:00Z")
         );

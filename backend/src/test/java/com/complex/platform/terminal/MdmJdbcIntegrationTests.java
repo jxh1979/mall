@@ -85,7 +85,7 @@ class MdmJdbcIntegrationTests {
     void violationInsertAndListByDevice() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveViolation(new MdmPolicyViolationRecord(
-                "mdm_vio_1", "device_x", "unauthorized_app", "com.evil", now, false, null, now));
+                "mdm_vio_1", "device_x", "unauthorized_app", "com.evil", now, false, null, null, null, now));
 
         List<MdmPolicyViolationRecord> rows = repository.listViolations("device_x");
         assertThat(rows).extracting(MdmPolicyViolationRecord::violationType).containsExactly("unauthorized_app");
@@ -143,6 +143,39 @@ class MdmJdbcIntegrationTests {
                    AND terminal_type = '*' AND scope_type = 'global' AND scope_id = 'global'
                 """, Boolean.class);
         assertThat(tablet).isFalse();
+    }
+
+    @Test
+    void v107AddsLifecycleStatusCheckAndDispositionColumns() {
+        // V107：terminal_devices.status CHECK + mdm_policy_violations 处置字段。
+        assertThat(columnExists("mdm_policy_violations", "disposition")).isTrue();
+        assertThat(columnExists("mdm_policy_violations", "blocked_at")).isTrue();
+
+        insertDevice("device_lifecycle");
+        // 合法生命周期态可写入。
+        jdbcTemplate.update(
+                "UPDATE terminal_devices SET status = 'scrapped' WHERE device_id = 'device_lifecycle'");
+        // management_status 新增枚举 blocked 可写入。
+        jdbcTemplate.update(
+                "UPDATE terminal_devices SET management_status = 'blocked' WHERE device_id = 'device_lifecycle'");
+
+        assertThat(permissionCodes()).contains("terminal.device.lifecycle", "mdm.violation.handle");
+
+        // 非法 status 被 CHECK 拒绝。注意：负向断言会令当前事务进入 aborted（25P02），
+        // 同一 @Transactional 事务内后续 SQL 会被忽略，故置于本方法所有合法操作之后。
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE terminal_devices SET status = 'bogus_status' WHERE device_id = 'device_lifecycle'"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void v107RejectsInvalidDispositionEnum() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveViolation(new MdmPolicyViolationRecord(
+                "mdm_vio_disp", "device_x", "other", "x", now, false, null, null, null, now));
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE mdm_policy_violations SET disposition = 'bogus' WHERE id = 'mdm_vio_disp'"))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

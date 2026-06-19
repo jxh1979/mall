@@ -1046,6 +1046,7 @@ body {
 
 .admin-sidebar nav button[aria-disabled="true"] {
   color: #94a3b8;
+  cursor: not-allowed;
 }
 
 .admin-sidebar nav button span {
@@ -1056,6 +1057,41 @@ body {
 .admin-sidebar nav button strong {
   color: #172033;
   font-size: 14px;
+}
+
+/* 两级可折叠分组导航（frontend-admin §4.3） */
+.admin-nav-group {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-sidebar nav button.admin-nav-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.admin-sidebar nav button.admin-nav-group-header span {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.admin-sidebar nav button.admin-nav-group-header small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.admin-nav-group-items {
+  display: grid;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid #e2e8f0;
+  margin-left: 6px;
 }
 
 .admin-main {
@@ -1325,4 +1361,56 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* 轻量内联 SVG 趋势图（MiniChart）与可排序表头 */
+.admin-sparkline,
+.admin-mini-bars {
+  display: block;
+  max-width: 100%;
+}
+
+.admin-kpi-card .admin-sparkline,
+.admin-kpi-card .admin-mini-bars {
+  margin-top: 4px;
+}
+
+.admin-chart-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 12px 0;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #dde6ef;
+  border-radius: 8px;
+}
+
+.admin-chart-block {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.admin-chart-block > span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.admin-sort-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.admin-sort-th:hover {
+  color: #2563eb;
+}
+
+.admin-list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
 }

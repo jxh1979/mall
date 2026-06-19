@@ -167,6 +167,19 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public List<MerchantHealthScoreRecord> listMerchantHealthScoresByMerchant(String merchantId) {
+        // 商户面 scoped 读通道：按 analytics_merchant_health_scores.merchant_id = token scope 过滤（AC-ISO-1，§4）。
+        if (merchantId == null) return listMerchantHealthScores();
+        return jdbcTemplate.query("""
+                SELECT merchant_id, score, score_level, risk_count, overdue_ar_amount_cents,
+                       last_reviewed_at, summary, created_at, updated_at
+                  FROM analytics_merchant_health_scores
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY score ASC, merchant_id
+                """, Map.of("merchant_id", merchantId), this::mapMerchantHealthScore);
+    }
+
+    @Override
     public List<MerchantSummaryRecord> listAnalyticsMerchants() {
         return jdbcTemplate.query("""
                 SELECT merchant_id, merchant_name, merchant_type, revenue_amount_cents,
@@ -175,6 +188,20 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM analytics_merchant_summaries
                  ORDER BY business_date DESC, revenue_amount_cents DESC, merchant_id
                 """, this::mapMerchantSummary);
+    }
+
+    @Override
+    public List<MerchantSummaryRecord> listAnalyticsMerchantsByMerchant(String merchantId) {
+        // 商户面 scoped 读通道：按 analytics_merchant_summaries.merchant_id = token scope 过滤（AC-ISO-1，§4）。
+        if (merchantId == null) return listAnalyticsMerchants();
+        return jdbcTemplate.query("""
+                SELECT merchant_id, merchant_name, merchant_type, revenue_amount_cents,
+                       order_count, risk_alert_count, settlement_status, business_date,
+                       created_at, updated_at
+                  FROM analytics_merchant_summaries
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY business_date DESC, revenue_amount_cents DESC, merchant_id
+                """, Map.of("merchant_id", merchantId), this::mapMerchantSummary);
     }
 
     @Override
@@ -608,6 +635,23 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, BigDecimal> countTicketIssuedByMerchant(LocalDate businessDate) {
+        // 清单#18：券发放数（核销率分母）——issued_entitlements 当日发放（created_at 落经营日窗口）按 merchant 分组计数，
+        // 与 countTicketVerificationSuccessByMerchant 同口径（merchant_id 可空：归入平台口径合计）。
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COUNT(*) AS total
+                  FROM issued_entitlements
+                 WHERE created_at >= :start
+                   AND created_at < :end
+                 GROUP BY merchant_id
+                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
+        );
+        return result;
+    }
+
+    @Override
     public BigDecimal countNewMembers(LocalDate businessDate) {
         BigDecimal value = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -662,6 +706,58 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT COUNT(*) FROM analytics_risk_alerts WHERE status = 'open'
                 """, new MapSqlParameterSource(), BigDecimal.class);
         return (reviews == null ? BigDecimal.ZERO : reviews).add(alerts == null ? BigDecimal.ZERO : alerts);
+    }
+
+    // --- P2 集团/跨项目汇总（R6-D13）---
+
+    @Override
+    public long countMerchantsWithEtlSnapshot(LocalDate businessDate) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(DISTINCT segment_id)
+                  FROM analytics_business_metric_snapshots
+                 WHERE business_date = :business_date
+                   AND period_type = 'daily'
+                   AND segment_type = 'merchant'
+                   AND projection_method = 'etl_aggregate'
+                   AND segment_id IS NOT NULL
+                """, new MapSqlParameterSource().addValue("business_date", businessDate), Long.class);
+        return count == null ? 0L : count;
+    }
+
+    // --- ⑤ 集团多项目 ETL 维度（segment_type='project' 按 project_id 分组）---
+
+    @Override
+    public List<String> listProjectIdsWithEtlSnapshot(LocalDate businessDate) {
+        return jdbcTemplate.query("""
+                SELECT DISTINCT segment_id
+                  FROM analytics_business_metric_snapshots
+                 WHERE business_date = :business_date
+                   AND period_type = 'daily'
+                   AND segment_type = 'project'
+                   AND projection_method = 'etl_aggregate'
+                   AND segment_id IS NOT NULL
+                 ORDER BY segment_id
+                """, new MapSqlParameterSource().addValue("business_date", businessDate),
+                (resultSet, rowNumber) -> resultSet.getString("segment_id"));
+    }
+
+    @Override
+    public Map<String, BigDecimal> readProjectMetricSnapshots(LocalDate businessDate, String projectId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("segment_id", projectId);
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT metric_key, actual_value
+                  FROM analytics_business_metric_snapshots
+                 WHERE business_date = :business_date
+                   AND period_type = 'daily'
+                   AND segment_type = 'project'
+                   AND segment_id = :segment_id
+                """, params, (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("actual_value"))
+        );
+        return result;
     }
 
     private MapSqlParameterSource dayRange(LocalDate businessDate) {

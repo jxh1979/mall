@@ -15,6 +15,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -22,16 +23,21 @@ public class TicketOrderService {
 
     private static final String CURRENCY_CNY = "CNY";
     private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel");
+    // P0 清单#2：积分入账基础分口径——每 1 元（100 分）实付折 1 基础分（倍率由 LoyaltyService 叠加）。
+    private static final long POINTS_PER_YUAN_CENT = 100L;
 
     private final TicketingRepository repository;
     private final TicketPricingService pricingService;
     private final AuthorizationService authorizationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
-                              AuthorizationService authorizationService) {
+                              AuthorizationService authorizationService,
+                              ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
         this.pricingService = pricingService;
         this.authorizationService = authorizationService;
+        this.eventPublisher = eventPublisher;
     }
 
     TicketOrderRecord createOrder(TicketOrderRequest request) {
@@ -166,7 +172,22 @@ public class TicketOrderService {
                 order.createdAt(),
                 Instant.now()
         ));
+        // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
+        // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额折算（每元 1 分）。
+        publishPointsEarnRequested(order);
         return issued;
+    }
+
+    private void publishPointsEarnRequested(TicketOrderRecord order) {
+        long basePoints = order.amountCent() / POINTS_PER_YUAN_CENT;
+        if (basePoints <= 0) {
+            return; // 实付不足 1 元：不产生基础分。
+        }
+        eventPublisher.publishEvent(new PointsEarnRequestedEvent(
+                order.id(),
+                order.customerId(),
+                basePoints,
+                null));
     }
 
     IssuedTicketResponse issueEntitlements(String ticketTypeId, TicketIssueRequest request) {

@@ -251,6 +251,7 @@ public class AmusementSafetyService {
                 trimToNull(request.deviceId()),
                 trimToNull(request.customerId()),
                 normalizeAllowed(request.severity(), "severity", SEVERITIES),
+                "accident",
                 "created",
                 requireText(request.title(), "title"),
                 requireText(request.description(), "description"),

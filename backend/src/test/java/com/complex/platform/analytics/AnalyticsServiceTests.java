@@ -150,6 +150,78 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void groupOverviewRollsUpPlatformEtlSnapshotsByProjectWithRealMerchantCount() {
+        // 平台口径净收入/客流/核销/风险 + 两个商户口径快照（用于商户数计数）。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "platform", null), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("traffic.amusement", "platform", null), new BigDecimal("42"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("verify.done", "platform", null), new BigDecimal("30"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("risk.pending_review", "platform", null), new BigDecimal("3"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_b"), new BigDecimal("9000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var group = service.groupOverview();
+
+        // 单综合体 → 单 project rollup（不伪造多 project）。
+        assertThat(group.projects()).hasSize(1);
+        var project = group.projects().get(0);
+        assertThat(project.projectId()).isEqualTo("project_1");
+        // 商户数 = 当日有 ETL 商户口径快照的去重商户数（真实计数）。
+        assertThat(project.merchantCount()).isEqualTo(2L);
+        // 关键指标按平台口径真实 rollup。
+        assertThat(project.metrics().get("revenue.net").value()).isEqualByComparingTo("120000");
+        assertThat(project.metrics().get("traffic.amusement").value()).isEqualByComparingTo("42");
+        assertThat(project.metrics().get("verify.done").value()).isEqualByComparingTo("30");
+        assertThat(project.metrics().get("risk.pending_review").value()).isEqualByComparingTo("3");
+    }
+
+    @Test
+    void groupOverviewReturnsHonestEmptyStateWhenNoEtlSnapshotExists() {
+        // 无任何 ETL 快照 → metrics 全 null + note，商户数 0，不伪造。
+        var group = service.groupOverview();
+
+        assertThat(group.projects()).hasSize(1);
+        var project = group.projects().get(0);
+        assertThat(project.merchantCount()).isZero();
+        assertThat(project.metrics().get("revenue.net").value()).isNull();
+        assertThat(project.metrics().get("revenue.net").note()).isNotBlank();
+    }
+
+    @Test
+    void groupOverviewReadsProjectSegmentRollupWhenEtlEmitsProjectDimension() {
+        // ⑤ 集团多项目 ETL：有 segment_type='project' 快照时，group-overview 按 project_id 产出 per-project rollup。
+        // 单综合体 → 单 project_1 行，值取 project 口径快照（与平台口径一致，口径不漂移、不伪造）。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("traffic.amusement", "project", "project_1"), new BigDecimal("42"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        // 商户口径快照用于真实商户数计数（不进 project 桶）。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var group = service.groupOverview();
+
+        assertThat(group.projects()).hasSize(1);
+        var project = group.projects().get(0);
+        assertThat(project.projectId()).isEqualTo("project_1");
+        assertThat(project.metrics().get("revenue.net").value()).isEqualByComparingTo("120000");
+        assertThat(project.metrics().get("traffic.amusement").value()).isEqualByComparingTo("42");
+    }
+
+    @Test
+    void groupOverviewReturnsMultipleRowsWhenEtlEmitsMultipleProjects() {
+        // ⑤ 多综合体：多个 project_id 的 project 口径快照 → group-overview 返回多行真实 rollup（不伪造、按 project 分组）。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_2"), new BigDecimal("88000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var group = service.groupOverview();
+
+        assertThat(group.projects()).hasSize(2);
+        assertThat(group.projects().stream().map(p -> p.projectId()))
+                .containsExactlyInAnyOrder("project_1", "project_2");
+        var p1 = group.projects().stream().filter(p -> p.projectId().equals("project_1")).findFirst().orElseThrow();
+        var p2 = group.projects().stream().filter(p -> p.projectId().equals("project_2")).findFirst().orElseThrow();
+        assertThat(p1.metrics().get("revenue.net").value()).isEqualByComparingTo("120000");
+        assertThat(p2.metrics().get("revenue.net").value()).isEqualByComparingTo("88000");
+    }
+
+    @Test
     void dashboardDomainFiltersByDomainAndIsScopeIsolated() {
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
 
@@ -765,6 +837,9 @@ class AnalyticsServiceTests {
             return Optional.ofNullable(etlBusinessDate);
         }
 
+        // project 口径快照：key = projectId，value = metricKey -> actual_value（与平台/商户口径分桶存储）。
+        private final Map<String, Map<String, BigDecimal>> projectSnapshots = new LinkedHashMap<>();
+
         @Override
         public void upsertMetricSnapshot(
                 com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey snapshotKey,
@@ -773,9 +848,24 @@ class AnalyticsServiceTests {
                 Instant createdAt
         ) {
             etlBusinessDate = snapshotKey.businessDate();
+            if ("project".equals(snapshotKey.segmentType())) {
+                projectSnapshots.computeIfAbsent(snapshotKey.segmentId(), ignored -> new LinkedHashMap<>())
+                        .put(snapshotKey.metricKey(), actualValue);
+                return;
+            }
             String scope = "merchant".equals(snapshotKey.segmentType()) ? snapshotKey.segmentId() : "__platform__";
             metricSnapshots.computeIfAbsent(scope, ignored -> new LinkedHashMap<>())
                     .put(snapshotKey.metricKey(), actualValue);
+        }
+
+        @Override
+        public List<String> listProjectIdsWithEtlSnapshot(LocalDate businessDate) {
+            return new ArrayList<>(projectSnapshots.keySet());
+        }
+
+        @Override
+        public Map<String, BigDecimal> readProjectMetricSnapshots(LocalDate businessDate, String projectId) {
+            return new LinkedHashMap<>(projectSnapshots.getOrDefault(projectId, Map.of()));
         }
 
         @Override
@@ -829,6 +919,11 @@ class AnalyticsServiceTests {
         }
 
         @Override
+        public Map<String, BigDecimal> countTicketIssuedByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
         public BigDecimal countNewMembers(LocalDate businessDate) {
             return BigDecimal.ZERO;
         }
@@ -846,6 +941,15 @@ class AnalyticsServiceTests {
         @Override
         public BigDecimal countPendingReview() {
             return BigDecimal.ZERO;
+        }
+
+        @Override
+        public long countMerchantsWithEtlSnapshot(LocalDate businessDate) {
+            // 内存模拟：非平台 scope 且有快照的去重商户数。
+            return metricSnapshots.entrySet().stream()
+                    .filter(e -> !"__platform__".equals(e.getKey()))
+                    .filter(e -> !e.getValue().isEmpty())
+                    .count();
         }
     }
 

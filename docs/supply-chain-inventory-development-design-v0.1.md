@@ -12,6 +12,13 @@
 > - **裁决（保留）**：供应合同三模式 + 采购周期完整流转 + 结构化库房三项本期 P0；高价值复核=库存域内自建；扫码交接=员工主动 + 机器人被动。**以上除扫码交接外均待后续排期落地。**
 > - **候选验收口径**：采购全状态可流转；交接逐段可追责且缺口进复核（已可验）；三模式合同可配置并卡控可采购范围（待落地）。
 
+<!-- 修正(2026-06-19 R5业务HTML缺口审计 F1/F3)：依据 business-system-map-for-operations-v0.1.html #supply 与 matrix-migration-claims.json -->
+> **⚠️ R5 漂移收口说明（2026-06-19，单一权威源裁定，紧随上方更早快照追加，不删除原横幅）**
+> 上方"零落地/保持开放"横幅为 R7（2026-06-19 早段）只读核验时的快照，部分结论已被随后落地的迁移覆盖，**不再作为验收依据**。本文档口径以 `backend/src/main/resources/db/migration` 实际迁移 + `docs/matrix-migration-claims.json`（2026-06-19）为**单一权威源**：
+> - **V085 已落地（`V085__supply_chain_t6.sql`）**：`supply_contracts` 三模式（platform_self_use/merchant_self_purchase/platform_purchase_distribution）+ approval_status/status + 可采购范围 JSONB 卡控；采购周期完整状态机（created/submitted→approved/rejected→ordered→expected→arrived→received，每步写事件 + 合同范围卡控 + received 生成入库流水）；`warehouses` 六类库房（main/bar/bar_counter/consumable/gift/saved_bottle）+ 余额挂 warehouse_id；库存域内高价值复核表（双证据照片+视频）。
+> - **V094 已落地（`V094__inventory_item_high_value_threshold.sql`）**：物料 `high_value_threshold_cents`（整数分，可空，null=不视高价值），报损/盘点差异判定=数量×单价≥阈值，命中进复核。
+> - **结论**：上方横幅中"供应合同三模式/采购周期/六类库房/高价值复核/高价值阈值仍零命中"的措辞为更早快照，**已被 V085/V094 覆盖；验收以最新 claims 为准**。唯一码主数据 `inventory_trace_codes` 经核验在迁移中**仍零命中**，确属未落地缺口，详见下方新增章节。
+
 > **本文档为什么新增（定位）：** 依据 finding **supply-1**（HIGH/omission）——供应链是用户原始需求点名的 P0 域、三种供应合同模式被反复列为"已拍板"，但全部文档此前只在产品口径层面用散文描述，没有任何一份开发设计给出供应商表、供应合同表、采购周期表、库房/批次/流水表的字段与状态定义，P0 编码任务清单也无对应任务，处于"有 PRD 无开发设计"状态，开发无法据此编码。本文对标 `bar-operations-development-design.md` 结构，把供应链域落到可编码的数据结构、状态机、流程、API、事件与 P0 编码任务。
 >
 > **依据基准：** 金额单位=整数分（D1）；状态枚举给中英映射、库数据库 CHECK 与之逐项对应（D7）；事件命名用唯一事件字典点+下划线风格、不另起命名（D4）；终端类型用 10 端权威表（D5）；开放平台对外路径/权限编码统一（D3）；技术栈=Java 21 + Spring Boot 4.x + PostgreSQL + Flyway（D10，2026-06-12 修订）。
@@ -867,6 +874,116 @@ P0 完成时必须能演示：
 | 自动补货预测 | 按历史消耗与季节性预测需求，自动生成补货建议 | 进阶 WMS/供应链预测能力 | 基于消耗历史输出补货建议量，可人工确认转采购申请 |
 
 > 说明：13A.1 的 FIFO/效期/单位换算与已落地的 `stock_batches`（`expire_at`/`cost_price`）、`items`（`unit`）字段衔接成本最低，建议 P1 优先；对账/应付需与 finance 域桥接，安全库存需补物品级阈值字段。13A.2 的 BOM/退货/评分/预测依赖前序台账与履约数据沉淀，列 P2。**以上均为规划级，本期不实现、不进 P0 验收。**
+
+<!-- 修正(2026-06-19 R5业务HTML缺口审计 F1/F3)：依据 business-system-map-for-operations-v0.1.html #supply 与 matrix-migration-claims.json -->
+## 13B. 平台唯一追溯码主数据（inventory_trace_codes）（F3，待建表，本期缺口）
+
+> 现状核验（2026-06-19）：`inventory_trace_codes` 在 `backend/src/main/resources/db/migration` 全量迁移中**零命中**，`matrix-migration-claims.json` 标记 R4-G1 DRIFT（"矩阵声称 inventory_trace_codes 表，迁移从未建；trace_code 仅为共用列"）。`items.is_traceable` 仅为布尔标记位，平台唯一二维码主数据无独立表、无生成/绑定流程，码—批次—物品三元溯源链未建模。本章给出表设计建议以收口 F3 缺口，待业务确认后进入排期。
+
+### 13B.1 业务依据（HTML #supply）
+
+对酒水、礼品、高价值物料、需追责耗材，平台生成或绑定**唯一二维码**：入库时贴码（inbound_label）或出库时打印码（outbound_print）；后续每段交接扫码均回查同一码主数据，实现"码—批次—物品"可追溯与逐段追责。
+
+### 13B.2 表设计建议：`inventory_trace_codes`（码主数据）
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | bigserial PK | 主键 |
+| code | varchar 唯一 | 平台唯一追溯码（二维码内容/编码），全局唯一约束 |
+| code_type | varchar | 码类型：`inbound_label`（入库贴码）/`outbound_print`（出库打印码） |
+| item_id | bigint FK items | 绑定物品（码—物品） |
+| batch_id | bigint FK stock_batches（可空） | 绑定批次（码—批次），出库打印码可在出库时绑定 |
+| status | varchar | 状态机：`generated`→`bound`→`handover`→`verified`/`voided` |
+| project_id | bigint（可空） | 综合体归属，与全域 project_id 口径一致 |
+| merchant_id | bigint（可空） | 商户归属（商户自采/分销场景） |
+| created_at / bound_at / voided_at | timestamptz | 生成/绑定/作废时间留痕 |
+
+> 状态机说明：`generated`（已生成未绑定）→`bound`（已绑定物品/批次）→`handover`（进入交接流转）→`verified`（交接终验通过）或 `voided`（作废）。金额无关；CHECK 约束逐项对应枚举（D7）。
+
+### 13B.3 与五段交接 `inventory_trace_handover_steps`（V074）的外键对齐
+
+`inventory_trace_handover_steps`（V074 五段链 out_verify/dispatch/kitchen_receive/staff_pickup/deliver_customer）每段扫码时引用 `inventory_trace_codes.code`（建议加 `trace_code_id` FK 或以 `code` 值关联），使每段交接可回查到唯一码主数据，缺口/重复/差异（step_status gap/duplicate/diff）落到具体码—批次—物品。
+
+### 13B.4 API（建议）
+
+- 生成：`POST /api/v1/inventory/trace-codes`（按物品/批次生成码，返回 code）
+- 绑定：`POST /api/v1/inventory/trace-codes/{id}/bind`（绑定 item_id/batch_id，status→bound）
+- 查询：`GET /api/v1/inventory/trace-codes/{code}`（回查码—批次—物品三元 + 交接段轨迹）
+- 作废：`POST /api/v1/inventory/trace-codes/{id}/void`（status→voided，留痕原因）
+
+### 13B.5 事件（建议，登记入 operation-traceability 权威字典）
+
+- `trace_code.generated`（生成）
+- `trace_code.bound`（绑定物品/批次）
+- `trace_code.voided`（作废）
+
+### 13B.6 验收口径
+
+- 五段交接每段扫码均可回查到同一 `inventory_trace_codes` 码主数据；
+- 码—批次—物品三元可追溯（任一端可反查另两端）；
+- 作废码不可再进入交接，重复扫码进 duplicate 复核。
+
+> **待业务确认**：①码体系是否复用现有二维码方案（沿用既有编码规则/扫码 SDK），还是新建独立码段；②主路径以"入库贴码（inbound_label）"为主还是"出库打印码（outbound_print）"为主，二者是否需同时支持及优先级。
+
+## 13C. 供应商资质/结算方式子表（收口）`R6 全闭环(2026-06-19)`
+
+> 收口背景：进货查验合规（C9，§5.1）要求入库时绑定供货方资质，§6.3 `supplier_qualifications` 已承载资质类型/编号/有效期/附件；但结算方式当前仅以 `inventory_suppliers.settlement_method`（单值 `prepay/cod/credit`）+ `default_payment_terms`（单值默认账期）表达，**一个供应商对不同品类/合同存在多种结算方式与多档账期**时无法落库。本章在不改动 §6.3 既有 `supplier_qualifications` 结构、不动 R5（D5/F1/F3）既有内容的前提下，①明确 `supplier_qualifications` 作为资质子表的收口口径并补 `status` 在途态；②新增 `supplier_settlement_methods` 结算方式子表，把供应商主表的单值结算降维到可多档配置的子表，承接进货查验与合同账期合规。
+
+### 13C.1 supplier_qualifications 资质子表（收口，复用 §6.3，仅补状态）
+
+§6.3 已建表，本节仅做收口对齐，**不重复定义已有字段**（`id/project_id/supplier_id/qualification_type/cert_no/valid_from/valid_to/attachment_refs`）。补充约定：
+
+| 补充项 | 说明 |
+|---|---|
+| `status`（建议补列） | `valid/expiring/expired/revoked`，进货查验时引用平台治理资质有效性结论回写；缺省 `valid`。到期预警/经营阻断仍由平台治理统一负责（§6.3 说明不变） |
+| 进货查验绑定 | `purchase_inspections`（§6.15）的 `supplier_qualification_refs` 引用本表 `id`，入库时校验对应资质 `valid_to >= 入库日` 且 `status≠expired/revoked`，否则按 C9 合规阻断不得确认入库 |
+
+> 说明：资质类型/编号/有效期/附件四要素 §6.3 已齐备，本期收口=补 `status` 在途态 + 明确与进货查验的强校验绑定，避免"资质过期仍可入库"的合规漏洞。
+
+### 13C.2 supplier_settlement_methods 结算方式子表（新增）
+
+把 `inventory_suppliers.settlement_method`（单值）降维到子表，支持一个供应商配置多档结算方式与账期。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | uuid | 主键 |
+| `project_id` | uuid | 归属综合体项目，nullable；随父供应商 `inventory_suppliers.project_id`（与 §6.2/§6.3 同口径） |
+| `supplier_id` | uuid | 供应商，FK `inventory_suppliers.id` |
+| `settlement_method` | varchar | `prepay`（预付）/`cod`（货到付款）/`credit`（账期），CHECK 约束，与 §6.1 `settlement_method` 枚举一致 |
+| `payment_terms` | varchar | 账期，如 `T+30`/`T+60`/`prepay`/`cod`（与 §6.4 `supply_contracts.payment_terms` 口径一致） |
+| `applicable_category` | varchar | 适用品类，可空；空=对该供应商全品类默认，非空时按 `supplier_category`（§6.1）细分 |
+| `is_default` | boolean | 是否该供应商默认结算方式，同一 `supplier_id` 仅一条 `is_default=true` |
+| `status` | varchar | `active/suspended`，停用的结算档不参与采购/合同选取 |
+| `created_at` / `updated_at` | timestamptz | 留痕 |
+
+索引：`idx_supplier_settlement_methods_supplier`、唯一约束 `uq_supplier_settlement_default(supplier_id) WHERE is_default`（部分唯一，保证唯一默认档）。
+
+> 兼容口径：`inventory_suppliers.settlement_method` 与 `default_payment_terms`（§6.1）**保留为冗余默认值**（向后兼容既有引用与列表展示），落库后等同于本子表中 `is_default=true` 的那一档；多档结算/合同账期改以本子表为准。采购申请（§6.5）/供应合同（§6.4）选取结算方式时优先读子表 active 档。
+
+### 13C.3 API（建议）
+
+- 资质：沿用供应商子资源，`GET/POST /api/v1/inventory/suppliers/{id}/qualifications`（列/增资质，§6.3 已规划口径下补 `status`）。
+- 结算方式：`GET/POST /api/v1/inventory/suppliers/{id}/settlement-methods`（列/增结算档）、`PATCH .../settlement-methods/{mid}`（改账期/停用/设默认）。
+- 进货查验校验：`purchase_inspections` 创建时后端联校资质 `status`/有效期（C9 阻断）。
+
+### 13C.4 状态
+
+| 对象 | 状态机 |
+|---|---|
+| 资质 `supplier_qualifications.status` | `valid → expiring → expired`（按有效期）/ `valid → revoked`（吊销）；过期/吊销资质进货查验阻断 |
+| 结算档 `supplier_settlement_methods.status` | `active ⇄ suspended`；suspended 不参与采购/合同选取 |
+
+### 13C.5 验收
+
+| 项 | 验收点 |
+|---|---|
+| 资质子表 | 资质类型/编号/有效期/附件四要素可落库（§6.3），`status` 在途态可回写 |
+| 进货查验合规 | 入库时校验绑定资质有效期与 `status`，过期/吊销资质按 C9 阻断入库 |
+| 结算多档 | 同一供应商可配置多条结算方式/账期，唯一默认档约束生效 |
+| 兼容 | 主表 `settlement_method`/`default_payment_terms` 与子表默认档一致，既有引用不破坏 |
+| 停用 | suspended 结算档不出现在采购/合同结算选取列表 |
+
+> **待业务确认**：①是否需在本期落 `supplier_qualifications.status` 列（涉及新迁移），还是继续只引用平台治理资质有效性结论而不在本表落状态；②结算方式是否需细到 `applicable_category` 维度，或本期先按供应商单档默认 + 合同账期覆盖即可。
 
 ## 14. 变更日志
 

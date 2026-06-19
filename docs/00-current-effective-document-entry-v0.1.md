@@ -135,6 +135,21 @@ npm run verify:production-evidence-crosslinks` |
 | 数据隔离与租户范围安全规格 | `docs/data-isolation-and-tenant-scope-security-spec-v0.1.md` |
 | 第三方短信通知与供应商字段映射占位 | `docs/third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md` |
 
+<!-- 修正(2026-06-19 R5业务HTML缺口审计 F1/F3)：依据 business-system-map-for-operations-v0.1.html #supply 与 matrix-migration-claims.json -->
+## 2.2 口径漂移收口登记（2026-06-19）
+
+本节登记"同期两份文档结论相反/口径漂移"项并给出单一权威结论，附加式登记不删除上文任一原有内容。权威源优先级：实际迁移（`backend/src/main/resources/db/migration`）+ `docs/matrix-migration-claims.json`（2026-06-19）> 代码 > PRD/开发设计散文。凡迁移已落地者，以代码/迁移为准；PRD 仍标更低优先级的口径需升级。
+
+| 漂移项 | 两方说法 | 单一权威结论 | 后续动作 |
+|---|---|---|---|
+| 供应链落地状态 | dev-design 顶部横幅"零落地/保持开放" vs claims"V085（供应合同三模式/采购周期/六类库房/高价值复核）、V094（高价值阈值）已落" | **以 claims/迁移为准：V085/V094 已落地**；横幅为更早快照 | dev-design 已就地追加 R5 收口说明（指向 V085/V094）；验收以最新 claims 为准 |
+| 班结/交班对账优先级 | bar PRD §10.1 标 P2（独立交班/班结对账 shift close / cash drawer） vs 代码 `V095__bar_shift_handover.sql` + `BarShiftService` 已落 | **以代码为准：已交付，PRD 口径需升级为 P0 已交付** | bar PRD §10.1 已就地追加收口说明（V095 落地 + 验收口径）；仍缺 G/W/T 验收 |
+| 游乐 incident 优先级 | 游乐 incident PRD 标 P0 vs 开发设计降为 P1 | **暂不裁定，待 F11 对齐** | 留待 F11 专项对齐 incident 口径，本次不改游乐文档 |
+| 商户级 revenue.net | 商户级 `revenue.net` REQ-81"保持开放" vs r5-aggregation"已落 V075/V078" | **待裁定，倾向以代码为准**（V075/V078 迁移已存在） | 留待裁定；倾向以 V075/V078 实际落地口径收口，需补对账硬约束确认 |
+| 核销表名 | `verification_records` vs `ticket_verifications` | **统一以实际迁移表名为权威**（以迁移中真实建表名为准，文档引用名需对齐） | 各引用文档对齐到实际迁移表名 |
+| 积分表名 | `points_*` vs `customer_points_*` | **统一以实际迁移表名为权威** | 各引用文档对齐到实际迁移表名 |
+| REQ-79 引用不建之表 | REQ-79 引用 `point_gifts`/`point_redemptions`（迁移未建） | **以实际迁移为权威：引用表不存在，需改引用为真实迁移表** | 修正 REQ-79 引用，去除对未建表的依赖 |
+
 ## 3. 当前有效文档阅读顺序
 
 ### 3.1 总控、产品负责人、项目负责人

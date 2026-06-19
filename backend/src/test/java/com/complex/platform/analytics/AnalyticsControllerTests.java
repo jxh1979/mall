@@ -78,6 +78,7 @@ class AnalyticsControllerTests {
         when(authorizationService.currentMerchantScope()).thenReturn(java.util.Optional.empty());
         when(service.overview(any())).thenReturn(overviewResponse());
         when(service.dashboardDomain(anyString(), any())).thenReturn(overviewResponse());
+        when(service.groupOverview()).thenReturn(groupOverviewResponse());
         when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
         when(service.listMerchantHealthScores()).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
         when(service.listAnalyticsMerchants()).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
@@ -99,6 +100,7 @@ class AnalyticsControllerTests {
             "GET,/api/v1/analytics/customer-intents,analytics.risk_alert.view",
             "GET,/api/v1/analytics/dashboards/p0-overview,analytics.dashboard.view",
             "GET,/api/v1/analytics/dashboards/bar,analytics.dashboard.view",
+            "GET,/api/v1/analytics/group-overview,analytics.group.view",
             "GET,/api/v1/analytics/business-metric-snapshots,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchant-health,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchants,analytics.dashboard.view",
@@ -183,6 +185,19 @@ class AnalyticsControllerTests {
                 null,
                 LocalDate.parse("2026-06-14"),
                 Map.of("revenue.ticket", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent"))
+        );
+    }
+
+    private AnalyticsRecords.GroupOverviewResponse groupOverviewResponse() {
+        return new AnalyticsRecords.GroupOverviewResponse(
+                now(),
+                LocalDate.parse("2026-06-14"),
+                List.of(new AnalyticsRecords.GroupProjectRollup(
+                        "project_1",
+                        "综合体（默认）",
+                        1L,
+                        Map.of("revenue.net", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent"))
+                ))
         );
     }
 

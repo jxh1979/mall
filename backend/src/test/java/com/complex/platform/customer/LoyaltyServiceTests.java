@@ -190,6 +190,95 @@ class LoyaltyServiceTests {
         assertThat(kept.levelPeriodStart()).isEqualTo(afterPeriod); // new period
     }
 
+    // ===================== P0 清单#2 积分入账引擎：earn→confirm→deduct =====================
+
+    /** E2E：支付入 pending（不计余额）→ 履约 confirm（计余额）→ 退款 deduct（按比例冲减已入账）。 */
+    @Test
+    void earnPendingThenConfirmThenDeductEndToEnd() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+
+        // 支付成功：写 pending，余额不变（pending 不可花）。
+        long pending = service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        assertThat(pending).isEqualTo(100);
+        assertThat(repo.points.get("c1").balance()).isZero();
+        assertThat(repo.pointsLedger).anyMatch(l -> "o1".equals(l.sourceDocId())
+                && "earn".equals(l.changeType()) && "pending".equals(l.status()));
+
+        // 履约（核销/完成）：转 confirmed，计入余额 + 保级进度。
+        long confirmed = service.confirmPoints("ticket_order", "o1");
+        assertThat(confirmed).isEqualTo(100);
+        assertThat(repo.points.get("c1").balance()).isEqualTo(100);
+        assertThat(repo.pointsLedger).anyMatch(l -> "o1".equals(l.sourceDocId())
+                && "earn".equals(l.changeType()) && "confirmed".equals(l.status()));
+
+        // 退款 60%：按已 confirmed 比例冲减 60 分，余额 40。
+        long deducted = service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 6000);
+        assertThat(deducted).isEqualTo(60);
+        assertThat(repo.points.get("c1").balance()).isEqualTo(40);
+        assertThat(repo.pointsLedger).anyMatch(l -> "r1".equals(l.sourceDocId())
+                && "deduct".equals(l.changeType()) && l.pointsDelta() == -60);
+    }
+
+    /** 幂等：earn / confirm / deduct 重放都不重复入账。 */
+    @Test
+    void earnConfirmDeductAreIdempotentOnReplay() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+
+        // earn 重放：第二次命中既有流水，不新增 earn 行。
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        assertThat(repo.pointsLedger.stream().filter(l -> "earn".equals(l.changeType())).count()).isEqualTo(1);
+
+        // confirm 重放：第二次为 noop，余额仍为 100（不二次加账）。
+        assertThat(service.confirmPoints("ticket_order", "o1")).isEqualTo(100);
+        assertThat(service.confirmPoints("ticket_order", "o1")).isZero();
+        assertThat(repo.points.get("c1").balance()).isEqualTo(100);
+
+        // deduct 重放：第二次返回既有冲减额，不二次冲减，余额仍为 40。
+        assertThat(service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 6000)).isEqualTo(60);
+        assertThat(service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 6000)).isEqualTo(60);
+        assertThat(repo.points.get("c1").balance()).isEqualTo(40);
+        assertThat(repo.pointsLedger.stream().filter(l -> "deduct".equals(l.changeType())).count()).isEqualTo(1);
+    }
+
+    /** 退款只冲减已 confirmed 部分：未履约（仍 pending）时 deduct 无可冲减。 */
+    @Test
+    void deductOnlyReversesConfirmedNotPending() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        // 未 confirm 即退款：confirmed=0，无可冲减。
+        long deducted = service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 10000);
+        assertThat(deducted).isZero();
+        assertThat(repo.points.get("c1").balance()).isZero();
+    }
+
+    /** 不超兑：deduct 受账户余额行锁口径约束，余额不足只冲减可用部分（不为负）。 */
+    @Test
+    void deductDoesNotOverReverseBelowZeroBalance() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        service.confirmPoints("ticket_order", "o1");
+        // 模拟期间已被花掉 80（余额 20），再全额退款应只冲减 20，不为负。
+        CustomerPointsAccountRecord acct = repo.points.get("c1");
+        repo.points.put("c1", new CustomerPointsAccountRecord(acct.id(), acct.customerId(), 20,
+                acct.level(), acct.recentSummary(), acct.frozenPoints(), acct.accountStatus(),
+                acct.levelPeriodStart(), acct.keepThresholdProgress(), acct.graceUntil(),
+                acct.lastCheckInDate(), acct.checkInStreak(), acct.createdAt(), acct.updatedAt()));
+        long deducted = service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 10000);
+        assertThat(deducted).isEqualTo(20);
+        assertThat(repo.points.get("c1").balance()).isZero();
+    }
+
     // ===================== In-memory repo =====================
 
     private static final class RecordingAudit implements AuditEventRepository {
@@ -257,6 +346,12 @@ class LoyaltyServiceTests {
 
         @Override
         public CustomerPointsLedgerRecord savePointsLedger(CustomerPointsLedgerRecord ledger) {
+            // 模拟 V100 幂等唯一索引 (source_doc_type, source_doc_id, change_type)：重复落账抛冲突。
+            if (ledger.sourceDocType() != null && ledger.sourceDocId() != null
+                    && findPointsLedgerBySourceDoc(ledger.sourceDocType(), ledger.sourceDocId(), ledger.changeType())
+                            .isPresent()) {
+                throw new IllegalStateException("duplicate ledger for source doc (unique index)");
+            }
             pointsLedger.add(ledger);
             return ledger;
         }
@@ -264,6 +359,34 @@ class LoyaltyServiceTests {
         @Override
         public List<CustomerPointsLedgerRecord> listPointsLedgerByCustomerId(String customerId) {
             return pointsLedger.stream().filter(l -> customerId.equals(l.customerId())).toList();
+        }
+
+        @Override
+        public java.util.Optional<CustomerPointsLedgerRecord> findPointsLedgerBySourceDoc(
+                String sourceDocType, String sourceDocId, String changeType) {
+            return pointsLedger.stream()
+                    .filter(l -> sourceDocType.equals(l.sourceDocType())
+                            && sourceDocId.equals(l.sourceDocId())
+                            && changeType.equals(l.changeType()))
+                    .findFirst();
+        }
+
+        @Override
+        public List<CustomerPointsLedgerRecord> listPointsLedgerBySourceDoc(
+                String sourceDocType, String sourceDocId, String changeType) {
+            return pointsLedger.stream()
+                    .filter(l -> sourceDocType.equals(l.sourceDocType())
+                            && sourceDocId.equals(l.sourceDocId())
+                            && changeType.equals(l.changeType()))
+                    .toList();
+        }
+
+        @Override
+        public void updatePointsLedgerStatus(String ledgerId, String status) {
+            replace(ledgerId, l -> new CustomerPointsLedgerRecord(l.id(), l.customerId(), l.pointsDelta(),
+                    l.balanceAfter(), l.sourceType(), l.sourceId(), l.description(), l.expireAt(),
+                    l.remainingPoints(), l.expired(), l.createdAt(), l.changeType(), status,
+                    l.sourceDocType(), l.sourceDocId()));
         }
 
         @Override
@@ -306,6 +429,11 @@ class LoyaltyServiceTests {
         public com.complex.platform.bar.BarReservationRecord saveCustomerBarReservation(
                 com.complex.platform.bar.BarReservationRecord reservation) {
             return reservation;
+        }
+
+        @Override
+        public java.util.List<com.complex.platform.bar.BarDepositRuleRecord> listDepositRules(String barId) {
+            return java.util.List.of();
         }
 
         @Override

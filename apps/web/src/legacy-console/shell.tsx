@@ -135,19 +135,30 @@ function normalizeSection(value: string | null | undefined): SectionKey | null {
   return sectionQueryValues.has(value as SectionKey) ? (value as SectionKey) : null;
 }
 
+// legacy 已退役：仅在显式 /legacy 前缀下进入（main.tsx 分流）。
+// 这里保留前缀，避免导航后 URL 丢失 /legacy 而在刷新时落入默认的 admin 壳。
+const LEGACY_PATH_PREFIX = "/legacy";
+
+function legacyBasePath(): string {
+  return window.location.pathname.startsWith(LEGACY_PATH_PREFIX) ? LEGACY_PATH_PREFIX : "/";
+}
+
 export function getInitialSectionFromLocation(): SectionKey {
   const url = new URL(window.location.href);
   const page = normalizeSection(url.searchParams.get("page"));
   if (page) return page;
   const hash = normalizeSection(url.hash.replace(/^#\/?/, ""));
   if (hash) return hash;
-  const pathSection = normalizeSection(url.pathname.replace(/^\/+|\/+$/g, ""));
+  const pathSection = normalizeSection(
+    url.pathname.replace(new RegExp(`^${LEGACY_PATH_PREFIX}`), "").replace(/^\/+|\/+$/g, ""),
+  );
   return pathSection ?? "dashboard";
 }
 
 export function sectionUrl(section: SectionKey) {
-  if (section === "dashboard") return "/";
-  return `/?page=${section}`;
+  const base = legacyBasePath();
+  if (section === "dashboard") return base;
+  return `${base}?page=${section}`;
 }
 
 export const menuItems: MenuProps["items"] = navigationGroups.map((group) => ({

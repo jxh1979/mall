@@ -12,6 +12,7 @@ import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.dto.CapabilitySwitchRequest;
 import com.complex.platform.terminal.dto.DeviceBindRequest;
+import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
@@ -39,10 +40,22 @@ class TerminalDeviceServiceTests {
         deviceRepository = new InMemoryTerminalDeviceRepository();
         idempotencyRepository = new InMemoryIdempotencyRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        // MDM 开关默认关（与 V088 显式 seed false 一致）：确保现有解绑测试走"代偿不阻断"口径。
+        deviceRepository.saveCapabilitySwitch(new TerminalCapabilitySwitchRecord(
+                "tcs_mdm_managed_work_devices_off", "*", MdmService.MDM_CAPABILITY, "global", "global",
+                false, null, java.time.Instant.parse("2026-06-14T00:00:00Z"),
+                java.time.Instant.parse("2026-06-14T00:00:00Z")));
+        MdmService mdmService = new MdmService(
+                new NoopMdmRepository(),
+                deviceRepository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                auditEventService);
         service = new TerminalDeviceService(
                 deviceRepository,
                 new IdempotencyService(idempotencyRepository, new ObjectMapper()),
-                new AuditEventService(auditEventRepository)
+                auditEventService,
+                mdmService
         );
     }
 
@@ -314,6 +327,67 @@ class TerminalDeviceServiceTests {
                 .isEqualTo("unbound");
     }
 
+    // ── P0#9 设备生命周期状态机测试 ───────────────────────────────────────────
+    @Test
+    void lostDeviceRejectsRebindAndWritesLostEvent() {
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-lost", "P0-LOST-1"));
+        DeviceBindingResponse lost = service.markDeviceLost(bound.id(), lifecycleRequest("lost-1", "stolen on shift"));
+
+        assertThat(lost.status()).isEqualTo("lost");
+        // 挂失设备拒绝重新领用（绑定）。
+        assertThatThrownBy(() -> service.bindDevice(bindRequest("rebind-lost", "P0-LOST-1")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_DEVICE_STATUS");
+        assertThat(deviceRepository.statusEvents)
+                .extracting(TerminalDeviceStatusEventRecord::eventType)
+                .contains("terminal.device.lost");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("terminal.device.lost");
+    }
+
+    @Test
+    void foundDeviceCanBeRebound() {
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-found", "P0-FOUND-1"));
+        service.markDeviceLost(bound.id(), lifecycleRequest("lost-found-1", "lost"));
+        DeviceBindingResponse found = service.markDeviceFound(bound.id(), lifecycleRequest("found-1", "recovered"));
+
+        assertThat(found.status()).isEqualTo("found");
+        // found 不是 NON_OPERATIONAL，可重新领用。
+        DeviceBindingResponse rebound = service.bindDevice(bindRequest("rebind-found", "P0-FOUND-1"));
+        assertThat(rebound.status()).isEqualTo("bound");
+    }
+
+    @Test
+    void scrappedDeviceIsTerminalAndRejectsFurtherTransitions() {
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-scrap", "P0-SCRAP-1"));
+        DeviceBindingResponse scrapped = service.scrapDevice(bound.id(), lifecycleRequest("scrap-1", "broken screen"));
+
+        assertThat(scrapped.status()).isEqualTo("scrapped");
+        // 终态封锁：不可再送修。
+        assertThatThrownBy(() -> service.repairDevice(bound.id(), lifecycleRequest("repair-after-scrap", "x")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DEVICE_TERMINAL_STATUS");
+        // 报废设备拒绝重新领用。
+        assertThatThrownBy(() -> service.bindDevice(bindRequest("rebind-scrap", "P0-SCRAP-1")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_DEVICE_STATUS");
+    }
+
+    @Test
+    void repairTransitionRejectedFromUnboundStatus() {
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-repair-bad", "P0-REPAIR-1"));
+        service.unbindDevice(bound.id(), new DeviceUnbindRequest("unbind-repair-1", "replaced", "unbind", List.of()));
+
+        assertThatThrownBy(() -> service.repairDevice(bound.id(), lifecycleRequest("repair-bad-1", "x")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_DEVICE_STATUS");
+    }
+
     @Test
     void updateCapabilitySwitchPersistsEnabledStateAndWritesAudit() {
         TerminalCapabilitySwitchRecord enabled = service.updateCapabilitySwitch("switch_ticketing", new CapabilitySwitchRequest(
@@ -505,6 +579,10 @@ class TerminalDeviceServiceTests {
                 "mdm-" + deviceId,
                 null
         );
+    }
+
+    private DeviceLifecycleRequest lifecycleRequest(String idempotencyKey, String reason) {
+        return new DeviceLifecycleRequest(idempotencyKey, "note", List.of(), "staff_1", reason);
     }
 
     private DeviceBindRequest kioskBindRequest(String idempotencyKey, String deviceId) {
@@ -700,6 +778,80 @@ class TerminalDeviceServiceTests {
         public KioskHeartbeatRecord saveKioskHeartbeat(KioskHeartbeatRecord record) {
             heartbeats.put(record.deviceId(), record);
             return record;
+        }
+    }
+
+    /** 门控用空 MDM 仓储：无纳管视图（findDeviceManagement 空），不参与生命周期测试主断言。 */
+    private static final class NoopMdmRepository implements MdmRepository {
+        @Override
+        public List<MdmAppWhitelistRecord> listAppWhitelist() {
+            return List.of();
+        }
+
+        @Override
+        public Optional<MdmAppWhitelistRecord> findAppWhitelistById(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public MdmAppWhitelistRecord saveAppWhitelist(MdmAppWhitelistRecord record) {
+            return record;
+        }
+
+        @Override
+        public boolean isAppWhitelisted(String packageName) {
+            return false;
+        }
+
+        @Override
+        public List<MdmSiteWhitelistRecord> listSiteWhitelist() {
+            return List.of();
+        }
+
+        @Override
+        public Optional<MdmSiteWhitelistRecord> findSiteWhitelistById(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public MdmSiteWhitelistRecord saveSiteWhitelist(MdmSiteWhitelistRecord record) {
+            return record;
+        }
+
+        @Override
+        public boolean isSiteWhitelisted(String domain) {
+            return false;
+        }
+
+        @Override
+        public Optional<MdmDeviceManagementRecord> findDeviceManagement(String deviceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void updateDeviceManagement(
+                String deviceId, String managementStatus, String policyStatus,
+                java.time.Instant lastPolicySyncAt, java.time.Instant enrolledAt) {
+        }
+
+        @Override
+        public MdmPolicyViolationRecord saveViolation(MdmPolicyViolationRecord record) {
+            return record;
+        }
+
+        @Override
+        public Optional<MdmPolicyViolationRecord> findViolationById(String id) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void markViolationHandled(
+                String id, String disposition, String handledNote, java.time.Instant blockedAt) {
+        }
+
+        @Override
+        public List<MdmPolicyViolationRecord> listViolations(String deviceId) {
+            return List.of();
         }
     }
 

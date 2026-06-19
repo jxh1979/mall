@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
-async function login(page: import("@playwright/test").Page, path = "/", username = "admin", password = "admin-pass") {
+async function login(page: import("@playwright/test").Page, path = "/legacy", username = "admin", password = "admin-pass") {
   await page.goto(path);
   await expect(page.getByTestId("login-view")).toBeVisible();
   await page.getByTestId("login-username").fill(username);
@@ -16,7 +16,10 @@ async function expectNoMaterialHorizontalOverflow(page: import("@playwright/test
   expect(overflow).toBeLessThanOrEqual(120);
 }
 
-test.describe("web admin UI acceptance", () => {
+// 三壳重构（P2）：legacy-console 已退役，默认壳改为 admin。
+// 这些 P0-UI-* 仍校验 legacy 控制台（含退役横幅下的只读浏览能力），
+// 入口从根路径 "/" 改为显式的 "/legacy" 前缀（根路径现进入 admin 壳）。
+test.describe("web legacy console (retired) UI acceptance", () => {
   test("P0-UI-01 login, query dashboard, visual checkpoint, logout", async ({ page }) => {
     await installMockApi(page);
     await login(page);
@@ -35,14 +38,14 @@ test.describe("web admin UI acceptance", () => {
 
   test("P0-UI-02 form validation blocks empty login", async ({ page }) => {
     await installMockApi(page);
-    await page.goto("/");
+    await page.goto("/legacy");
     await page.getByTestId("login-submit").click();
     await expect(page.locator(".ant-form-item-explain-error")).toHaveCount(2);
   });
 
   test("P0-UI-03 ticket issuing and P2 dynamic pricing container have real assertions", async ({ page }) => {
     await installMockApi(page);
-    await login(page, "/?page=ticketing");
+    await login(page, "/legacy?page=ticketing");
 
     await page.getByTestId("ticket-flow-form").locator('button[type="submit"]').click();
     await expect(page.getByTestId("action-result")).toContainText("TICKET-1000");
@@ -66,13 +69,13 @@ test.describe("web admin UI acceptance", () => {
 
   test("P1-UI-01 provider adapter creation and group booking release cover integration and cancel-like flows", async ({ page }) => {
     await installMockApi(page);
-    await login(page, "/?page=interfaces");
+    await login(page, "/legacy?page=interfaces");
 
     await expect(page.getByRole("cell", { name: "mock-video", exact: true })).toBeVisible();
     await page.getByTestId("provider-adapter-form").locator('button[type="submit"]').click();
     await expect(page.getByTestId("action-result")).toContainText("provider-2");
 
-    await login(page, "/?page=amusement");
+    await login(page, "/legacy?page=amusement");
     await expect(page.getByText("Team A")).toBeVisible();
     await page.locator('[data-testid^="release-group-booking-"]').first().click();
     await page.getByTestId("confirm-high-impact-ok").click();
@@ -81,7 +84,7 @@ test.describe("web admin UI acceptance", () => {
 
   test("P0-UI-04 permission and backend error state are visible", async ({ page }) => {
     await installMockApi(page, { forbiddenPath: "/api/v1/analytics/dashboards/p0-overview" });
-    await page.goto("/");
+    await page.goto("/legacy");
     await page.getByTestId("login-username").fill("admin");
     await page.getByTestId("login-password").fill("admin-pass");
     await page.getByTestId("login-submit").click();
@@ -92,7 +95,7 @@ test.describe("web admin UI acceptance", () => {
 
   test("P0-UI-05 empty state is explicit when business lists are empty", async ({ page }) => {
     await installMockApi(page, { empty: true });
-    await page.goto("/?page=ticketing");
+    await page.goto("/legacy?page=ticketing");
     await page.getByTestId("login-username").fill("admin");
     await page.getByTestId("login-password").fill("admin-pass");
     await page.getByTestId("login-submit").click();
@@ -123,7 +126,7 @@ test.describe("web admin UI acceptance", () => {
     await installMockApi(page, {
       user: { username: "finance-op", accountType: "finance_operator" },
     });
-    await login(page, "/?page=analytics", "finance-op");
+    await login(page, "/legacy?page=analytics", "finance-op");
 
     await expect(page.locator(".user-chip")).toHaveText("finance-op");
     await expect(page.getByText("\u7ecf\u8425\u5206\u6790").first()).toBeVisible();
@@ -135,7 +138,7 @@ test.describe("web admin UI acceptance", () => {
       user: { username: "merchant-op", accountType: "merchant_operator" },
       forbiddenPaths: ["/api/v1/analytics/dashboards/p0-overview"],
     });
-    await login(page, "/?page=ticketing", "merchant-op");
+    await login(page, "/legacy?page=ticketing", "merchant-op");
 
     await expect(page.locator(".user-chip")).toHaveText("merchant-op");
     await expect(page.getByTestId("global-error")).toContainText("403");
@@ -144,7 +147,7 @@ test.describe("web admin UI acceptance", () => {
 
   test("P0-UI-09 failed login stays on auth screen and surfaces backend reason", async ({ page }) => {
     await installMockApi(page, { authFailure: true });
-    await page.goto("/");
+    await page.goto("/legacy");
     await page.getByTestId("login-username").fill("admin");
     await page.getByTestId("login-password").fill("wrong-pass");
     await page.getByTestId("login-submit").click();
@@ -158,28 +161,30 @@ test.describe("web admin UI acceptance", () => {
     await installMockApi(page, {
       postErrorPaths: ["/api/v1/ticketing/dynamic-pricing-rules"],
     });
-    await login(page, "/?page=ticketing");
+    await login(page, "/legacy?page=ticketing");
 
     await page.getByTestId("dynamic-pricing-form").locator('button[type="submit"]').click();
     await expect(page.getByTestId("action-result")).toContainText("SERVER_ERROR");
     await expect(page.getByTestId("action-result")).toContainText("dynamic-pricing-rules");
   });
 
-  test("P0-UI-11 mobile bar critical path remains operable", async ({ page }) => {
+  test("P0-UI-11 mobile bar critical path redirects to admin (retired write)", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await installMockApi(page);
-    await login(page, "/?page=bar");
+    await login(page, "/legacy?page=bar");
 
-    await expect(page.getByRole("button", { name: "开台、点单、出账、支付" })).toBeVisible();
-    await page.getByTestId("bar-flow-form").locator('button[type="submit"]').click();
-    await expect(page.getByTestId("action-result")).toContainText("paid");
+    // legacy 已退役：酒吧结账支付（改变资金）不再在 legacy 直接执行，
+    // 提交后跳转到管理后台 /admin/bar/orders 执行（redirectToAdmin）。
+    await expect(page.getByRole("heading", { name: "酒吧开台、点单、结账" })).toBeVisible();
     await expectNoMaterialHorizontalOverflow(page);
+    await page.getByTestId("bar-flow-form").locator('button[type="submit"]').click();
+    await page.waitForURL("**/admin/bar/orders");
   });
 
   test("P0-UI-12 mobile amusement critical path remains operable", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await installMockApi(page);
-    await login(page, "/?page=amusement");
+    await login(page, "/legacy?page=amusement");
 
     await expect(page.getByRole("button", { name: "创建项目和场次" })).toBeVisible();
     await page.getByTestId("amusement-flow-form").locator('button[type="submit"]').click();
@@ -188,7 +193,7 @@ test.describe("web admin UI acceptance", () => {
   });
   test("P2-UI-13 platform governance topology shows group to venue relationships", async ({ page }) => {
     await installMockApi(page);
-    await login(page, "/?page=foundation");
+    await login(page, "/legacy?page=foundation");
 
     await expect(page.getByTestId("platform-topology-view")).toBeVisible();
     await expect(page.getByTestId("platform-topology-view")).toContainText("Platform Org");

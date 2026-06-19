@@ -78,14 +78,19 @@ public interface AdmissionFactRepository {
      *   <li>{@code amusement_incident} → amusement_incidents.project_id → amusement_projects.space_id（V084）。</li>
      *   <li>{@code amusement_group_booking} → amusement_group_bookings.project_id → amusement_projects.space_id（V084）。</li>
      * </ul>
-     * <p>仍未支持（无可用 对象→空间 映射或无 objectId）→ 返回 empty（无法解析 → over_space 放行）：
+     * <p>仍未支持（无可用 对象→空间 映射或无 objectId）→ 返回 empty：
      * {@code amusement_manual_override}（写接口首参非 String，objectId=null）、ticketing（verification /
      * ticket_refund / ticket_dynamic_pricing_rule）、finance（ar_ap_item / finance_refund / ...）、
      * inventory（saved_bottle / inventory_stock_adjustment）等无空间归属或非空间受控的对象。</p>
      *
+     * <p><b>P0 fail-closed 契约</b>：empty 是"不可解析到 space"的明确信号，<b>不再等于 over_space 放行</b>。
+     * 上层 {@link AdmissionGuard} 对配置了 over_space 策略却返回 empty 的场景一律保守进复核
+     * （非静默放行），由此消除原 silent pass fail-open。无空间归属的业务域按 V099 改走
+     * over_contract_scope。</p>
+     *
      * @param objectType 受控对象类型（GuardedAction.objectType）
      * @param objectId   受控对象 id
-     * @return 解析出的 space id；无法解析/数据不可得 → empty（放行）
+     * @return 解析出的 space id；无法解析/数据不可得 → empty（上层 over_space 保守进复核）
      */
     Optional<String> resolveSpaceId(String objectType, String objectId);
 }

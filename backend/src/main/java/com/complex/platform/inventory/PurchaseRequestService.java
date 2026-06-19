@@ -48,6 +48,7 @@ public class PurchaseRequestService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final SupplyContractService supplyContractService;
+    private final SupplierQualificationService supplierQualificationService;
     private final InventoryStockMovementService stockMovementService;
 
     public PurchaseRequestService(
@@ -55,13 +56,15 @@ public class PurchaseRequestService {
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
-            SupplyContractService supplyContractService
+            SupplyContractService supplyContractService,
+            SupplierQualificationService supplierQualificationService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.supplyContractService = supplyContractService;
+        this.supplierQualificationService = supplierQualificationService;
         this.stockMovementService = new InventoryStockMovementService(
                 repository, idempotencyService, auditEventService, authorizationService,
                 new InventoryHighValueReviewService(
@@ -92,6 +95,11 @@ public class PurchaseRequestService {
                     }
                     if (contractId != null) {
                         supplyContractService.requirePurchasable(contractId, current.itemId());
+                    }
+                    // P1#18 进货查验卡控（approve 步）：批准放行前校验供应商资质——
+                    // 须存在 active 资质且无任一资质过期，过期→阻断（仅 approved 决议时校验，rejected 不卡）。
+                    if ("approved".equals(decision) && current.supplierId() != null) {
+                        supplierQualificationService.requireQualified(current.supplierId());
                     }
                     String operator = authorizationService.currentActor().id();
                     Instant now = Instant.now();

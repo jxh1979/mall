@@ -61,7 +61,7 @@ public class MembershipService {
 
     /** 发起开通：创建一笔会员开通支付意图（status=created），返回支付意图。此时未生效。 */
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.membership.subscribe")
+    @GuardedAction(capability = "customer.membership.subscribe", permission = "customer.membership.subscribe")
     public PaymentIntentRecord subscribe(String customerId, String planId, String channel, String idempotencyKey) {
         requireCustomer(customerId);
         CustomerMembershipPlanRecord plan = requirePlan(planId);
@@ -78,7 +78,7 @@ public class MembershipService {
      * 无支付（支付意图非 succeeded）则拒绝——保证不凭空开通。
      */
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.membership.subscribe")
+    @GuardedAction(capability = "customer.membership.activate", permission = "customer.membership.subscribe")
     public CustomerMembershipRecord activate(String customerId, String planId, String projectId,
                                              String paymentIntentId, boolean autoRenew) {
         Instant now = now();
@@ -114,7 +114,7 @@ public class MembershipService {
     // ============================================================
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.membership.subscribe")
+    @GuardedAction(capability = "customer.membership.renew", permission = "customer.membership.subscribe")
     public CustomerMembershipRecord renew(String membershipId, String paymentIntentId) {
         Instant now = now();
         CustomerMembershipRecord membership = repository.findMembershipByIdForUpdate(membershipId)
@@ -209,7 +209,7 @@ public class MembershipService {
     // ============================================================
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.membership.subscribe")
+    @GuardedAction(capability = "customer.membership.cancel", permission = "customer.membership.subscribe")
     public CustomerMembershipRecord cancel(String membershipId, String reason) {
         Instant now = now();
         CustomerMembershipRecord membership = repository.findMembershipByIdForUpdate(membershipId)
@@ -271,7 +271,7 @@ public class MembershipService {
     // ============================================================
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.membership.manage")
+    @GuardedAction(capability = "customer.membership_plan.manage", permission = "customer.membership.manage")
     public CustomerMembershipPlanRecord savePlan(String id, String projectId, String planCode, String name,
             long priceCent, int durationDays, Map<String, Object> benefits, String status) {
         if (planCode == null || planCode.isBlank() || name == null || name.isBlank()) {

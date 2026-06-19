@@ -422,14 +422,18 @@ class JdbcInventoryRepository implements InventoryRepository {
                     remaining_quantity, unit, expire_at, status, evidence_attachment_ids,
                     created_at, updated_at, merchant_id,
                     is_high_value, high_value_threshold_cents, bottle_label_value,
-                    customer_name_or_nickname, customer_phone, customer_phone_hash
+                    customer_name_or_nickname, customer_phone, customer_phone_hash,
+                    registration_photo_refs, manual_note,
+                    transferred_at, transfer_to_name_or_nickname, transfer_to_phone, transfer_to_phone_hash
                 )
                 VALUES (
                     :id, :customer_id, :bar_project_id, :item_id, :bottle_name, :initial_quantity,
                     :remaining_quantity, :unit, :expire_at, :status, CAST(:evidence_attachment_ids AS jsonb),
                     :created_at, :updated_at, :merchant_id,
                     :is_high_value, :high_value_threshold_cents, :bottle_label_value,
-                    :customer_name_or_nickname, :customer_phone, :customer_phone_hash
+                    :customer_name_or_nickname, :customer_phone, :customer_phone_hash,
+                    CAST(:registration_photo_refs AS jsonb), :manual_note,
+                    :transferred_at, :transfer_to_name_or_nickname, :transfer_to_phone, :transfer_to_phone_hash
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
@@ -448,7 +452,13 @@ class JdbcInventoryRepository implements InventoryRepository {
                     bottle_label_value = EXCLUDED.bottle_label_value,
                     customer_name_or_nickname = EXCLUDED.customer_name_or_nickname,
                     customer_phone = EXCLUDED.customer_phone,
-                    customer_phone_hash = EXCLUDED.customer_phone_hash
+                    customer_phone_hash = EXCLUDED.customer_phone_hash,
+                    registration_photo_refs = EXCLUDED.registration_photo_refs,
+                    manual_note = EXCLUDED.manual_note,
+                    transferred_at = EXCLUDED.transferred_at,
+                    transfer_to_name_or_nickname = EXCLUDED.transfer_to_name_or_nickname,
+                    transfer_to_phone = EXCLUDED.transfer_to_phone,
+                    transfer_to_phone_hash = EXCLUDED.transfer_to_phone_hash
                 """, savedBottleParameters(savedBottle));
         return savedBottle;
     }
@@ -945,7 +955,53 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("bottle_label_value", savedBottle.bottleLabelValue())
                 .addValue("customer_name_or_nickname", savedBottle.customerNameOrNickname())
                 .addValue("customer_phone", savedBottle.customerPhone())
-                .addValue("customer_phone_hash", savedBottle.customerPhoneHash());
+                .addValue("customer_phone_hash", savedBottle.customerPhoneHash())
+                .addValue("registration_photo_refs", writeList(savedBottle.registrationPhotoRefs()))
+                .addValue("manual_note", savedBottle.manualNote())
+                .addValue("transferred_at", offset(savedBottle.transferredAt()))
+                .addValue("transfer_to_name_or_nickname", savedBottle.transferToNameOrNickname())
+                .addValue("transfer_to_phone", savedBottle.transferToPhone())
+                .addValue("transfer_to_phone_hash", savedBottle.transferToPhoneHash());
+    }
+
+    @Override
+    public SavedBottleTransferRecord saveSavedBottleTransfer(SavedBottleTransferRecord transfer) {
+        jdbcTemplate.update("""
+                INSERT INTO saved_bottle_transfers (
+                    id, saved_bottle_id, from_customer_id, from_name_or_nickname,
+                    to_name_or_nickname, to_phone, to_phone_hash, transfer_quantity,
+                    operator_id, status, evidence_attachment_ids, created_at
+                )
+                VALUES (
+                    :id, :saved_bottle_id, :from_customer_id, :from_name_or_nickname,
+                    :to_name_or_nickname, :to_phone, :to_phone_hash, :transfer_quantity,
+                    :operator_id, :status, CAST(:evidence_attachment_ids AS jsonb), :created_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    saved_bottle_id = EXCLUDED.saved_bottle_id,
+                    from_customer_id = EXCLUDED.from_customer_id,
+                    from_name_or_nickname = EXCLUDED.from_name_or_nickname,
+                    to_name_or_nickname = EXCLUDED.to_name_or_nickname,
+                    to_phone = EXCLUDED.to_phone,
+                    to_phone_hash = EXCLUDED.to_phone_hash,
+                    transfer_quantity = EXCLUDED.transfer_quantity,
+                    operator_id = EXCLUDED.operator_id,
+                    status = EXCLUDED.status,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
+                """, new MapSqlParameterSource()
+                .addValue("id", transfer.id())
+                .addValue("saved_bottle_id", transfer.savedBottleId())
+                .addValue("from_customer_id", transfer.fromCustomerId())
+                .addValue("from_name_or_nickname", transfer.fromNameOrNickname())
+                .addValue("to_name_or_nickname", transfer.toNameOrNickname())
+                .addValue("to_phone", transfer.toPhone())
+                .addValue("to_phone_hash", transfer.toPhoneHash())
+                .addValue("transfer_quantity", transfer.transferQuantity())
+                .addValue("operator_id", transfer.operatorId())
+                .addValue("status", transfer.status())
+                .addValue("evidence_attachment_ids", writeList(transfer.evidenceAttachmentIds()))
+                .addValue("created_at", offset(transfer.createdAt())));
+        return transfer;
     }
 
     private MapSqlParameterSource savedBottleClaimParameters(SavedBottleClaimRecord claim) {
@@ -1201,6 +1257,140 @@ class JdbcInventoryRepository implements InventoryRepository {
                   FROM inventory_high_value_reviews
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapHighValueReview);
+    }
+
+    // ── P1#18：供应商资质（进货查验） ─────────────────────────────────────────────
+    @Override
+    public SupplierQualificationRecord saveSupplierQualification(SupplierQualificationRecord qualification) {
+        jdbcTemplate.update("""
+                INSERT INTO supplier_qualifications (
+                    id, supplier_id, qualification_type, qualification_no, issued_by,
+                    valid_from, valid_to, attachment_ids, status, merchant_id, created_at, updated_at
+                )
+                VALUES (
+                    :id, :supplier_id, :qualification_type, :qualification_no, :issued_by,
+                    :valid_from, :valid_to, CAST(:attachment_ids AS jsonb), :status, :merchant_id, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    qualification_type = EXCLUDED.qualification_type,
+                    qualification_no = EXCLUDED.qualification_no,
+                    issued_by = EXCLUDED.issued_by,
+                    valid_from = EXCLUDED.valid_from,
+                    valid_to = EXCLUDED.valid_to,
+                    attachment_ids = EXCLUDED.attachment_ids,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", qualification.id())
+                .addValue("supplier_id", qualification.supplierId())
+                .addValue("qualification_type", qualification.qualificationType())
+                .addValue("qualification_no", qualification.qualificationNo())
+                .addValue("issued_by", qualification.issuedBy())
+                .addValue("valid_from", qualification.validFrom())
+                .addValue("valid_to", qualification.validTo())
+                .addValue("attachment_ids", writeList(qualification.attachmentIds()))
+                .addValue("status", qualification.status())
+                .addValue("merchant_id", qualification.merchantId())
+                .addValue("created_at", offset(qualification.createdAt()))
+                .addValue("updated_at", offset(qualification.updatedAt())));
+        return qualification;
+    }
+
+    @Override
+    public List<SupplierQualificationRecord> listSupplierQualificationsBySupplier(String supplierId) {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_id, qualification_type, qualification_no, issued_by,
+                       valid_from, valid_to, attachment_ids, status, merchant_id, created_at, updated_at
+                  FROM supplier_qualifications
+                 WHERE supplier_id = :supplier_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("supplier_id", supplierId), rowMapper::mapSupplierQualification);
+    }
+
+    @Override
+    public List<SupplierQualificationRecord> listSupplierQualificationsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_id, qualification_type, qualification_no, issued_by,
+                       valid_from, valid_to, attachment_ids, status, merchant_id, created_at, updated_at
+                  FROM supplier_qualifications
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSupplierQualification);
+    }
+
+    @Override
+    public List<SupplierQualificationRecord> listSupplierQualifications() {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_id, qualification_type, qualification_no, issued_by,
+                       valid_from, valid_to, attachment_ids, status, merchant_id, created_at, updated_at
+                  FROM supplier_qualifications
+                 ORDER BY created_at DESC, id
+                """, rowMapper::mapSupplierQualification);
+    }
+
+    // ── P1#18：供应商结算多档/账期 ────────────────────────────────────────────────
+    @Override
+    public SupplierSettlementMethodRecord saveSupplierSettlementMethod(SupplierSettlementMethodRecord method) {
+        jdbcTemplate.update("""
+                INSERT INTO supplier_settlement_methods (
+                    id, supplier_id, settlement_method, payment_term_days, applicable_category,
+                    is_default, status, merchant_id, created_at, updated_at
+                )
+                VALUES (
+                    :id, :supplier_id, :settlement_method, :payment_term_days, :applicable_category,
+                    :is_default, :status, :merchant_id, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    settlement_method = EXCLUDED.settlement_method,
+                    payment_term_days = EXCLUDED.payment_term_days,
+                    applicable_category = EXCLUDED.applicable_category,
+                    is_default = EXCLUDED.is_default,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", method.id())
+                .addValue("supplier_id", method.supplierId())
+                .addValue("settlement_method", method.settlementMethod())
+                .addValue("payment_term_days", method.paymentTermDays())
+                .addValue("applicable_category", method.applicableCategory())
+                .addValue("is_default", method.isDefault())
+                .addValue("status", method.status())
+                .addValue("merchant_id", method.merchantId())
+                .addValue("created_at", offset(method.createdAt()))
+                .addValue("updated_at", offset(method.updatedAt())));
+        return method;
+    }
+
+    @Override
+    public List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsBySupplier(String supplierId) {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_id, settlement_method, payment_term_days, applicable_category,
+                       is_default, status, merchant_id, created_at, updated_at
+                  FROM supplier_settlement_methods
+                 WHERE supplier_id = :supplier_id
+                 ORDER BY is_default DESC, created_at DESC, id
+                """, Map.of("supplier_id", supplierId), rowMapper::mapSupplierSettlementMethod);
+    }
+
+    @Override
+    public List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_id, settlement_method, payment_term_days, applicable_category,
+                       is_default, status, merchant_id, created_at, updated_at
+                  FROM supplier_settlement_methods
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY is_default DESC, created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSupplierSettlementMethod);
+    }
+
+    @Override
+    public List<SupplierSettlementMethodRecord> listSupplierSettlementMethods() {
+        return jdbcTemplate.query("""
+                SELECT id, supplier_id, settlement_method, payment_term_days, applicable_category,
+                       is_default, status, merchant_id, created_at, updated_at
+                  FROM supplier_settlement_methods
+                 ORDER BY is_default DESC, created_at DESC, id
+                """, rowMapper::mapSupplierSettlementMethod);
     }
 
     private String writeList(List<String> value) {

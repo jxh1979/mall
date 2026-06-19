@@ -90,12 +90,190 @@ public class LoyaltyService {
     }
 
     // ============================================================
+    // P0 清单#2 积分入账引擎：支付入 pending / 履约转 confirmed / 退款按比例 deduct
+    //   R6-D06：支付成功入 pending、履约（核销/完成）转 confirmed、退款按已入账比例 deduct。
+    //   幂等：按 (source_doc_type, source_doc_id, change_type) 唯一；重放不重复入账。
+    //   口径：pending 不计入可用余额（不可花），confirm 时才加余额 + 保级进度；
+    //         deduct 只冲减 confirmed（已入账）部分，复用账户行锁（findPointsByCustomerIdForUpdate）防并发超兑。
+    // ============================================================
+
+    /**
+     * 支付成功：按业务单据写一条 pending 入账（change_type=earn,status=pending）。pending 不计入可用余额。
+     * 按 (sourceDocType, sourceDocId, "earn") 幂等——重放命中已存在流水即原样返回，不重复入账。
+     * 发事件 points.earned（category=loyalty, subject=customer_points）同事务留痕。
+     *
+     * @return 实际计算的待入账积分（命中幂等时返回既有流水的正向 delta）。
+     */
+    @Transactional
+    public long earnPointsPending(String customerId, long basePoints, String sourceDocType, String sourceDocId,
+                                  String description, Integer validityDays) {
+        if (basePoints <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "base_points must be positive");
+        }
+        requireSourceDoc(sourceDocType, sourceDocId);
+        CustomerPointsLedgerRecord existing = repository
+                .findPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
+                .orElse(null);
+        if (existing != null) {
+            return Math.max(0, existing.pointsDelta());
+        }
+        Instant now = now();
+        CustomerRecord customer = requireCustomer(customerId);
+        CustomerPointsAccountRecord account = loadOrCreateForUpdate(customerId, now);
+        if ("frozen".equals(account.accountStatus())) {
+            throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
+        }
+        long levelMultiplier = levelMultiplierBasisPoints(account.level());
+        long birthdayMultiplier = birthdayMultiplierBasisPoints(customer, now);
+        long awarded = applyMultiplier(applyMultiplier(basePoints, levelMultiplier), birthdayMultiplier);
+        Instant expireAt = validityDays != null && validityDays > 0
+                ? now.plusSeconds((long) validityDays * 86_400L)
+                : null;
+        // pending：余额不变（不可花），仅落账等待履约确认。balance_after 记录当前余额（未变）。
+        repository.savePointsLedger(new CustomerPointsLedgerRecord(
+                "ledger_earn_" + sourceDocId,
+                customerId,
+                awarded,
+                account.balance(),
+                "earn",
+                sourceDocId,
+                description,
+                expireAt,
+                expireAt == null ? null : awarded,
+                false,
+                now,
+                CustomerPointsLedgerRecord.CHANGE_EARN,
+                CustomerPointsLedgerRecord.STATUS_PENDING,
+                sourceDocType,
+                sourceDocId));
+        auditEventService.recordSuccess("points.earned", "not_applicable", "customer_points",
+                customerId, null, sourceDocId,
+                Map.of("source_doc_type", sourceDocType, "source_doc_id", sourceDocId,
+                        "points", awarded, "status", CustomerPointsLedgerRecord.STATUS_PENDING),
+                "loyalty", "customer_points");
+        return awarded;
+    }
+
+    /**
+     * 履约（核销/完成）：把该业务单据的 pending earn 转 confirmed，并把积分计入可用余额 + 保级进度。
+     * 幂等：无 pending（未入账或已 confirmed）则 noop 返回 0；只确认一次。
+     *
+     * @return 本次实际确认入账的积分（noop 时 0）。
+     */
+    @Transactional
+    public long confirmPoints(String sourceDocType, String sourceDocId) {
+        requireSourceDoc(sourceDocType, sourceDocId);
+        CustomerPointsLedgerRecord pending = repository
+                .findPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
+                .orElse(null);
+        if (pending == null || !CustomerPointsLedgerRecord.STATUS_PENDING.equals(pending.status())) {
+            return 0; // 未入账 / 已确认 / 已冲减：幂等 noop。
+        }
+        Instant now = now();
+        CustomerPointsAccountRecord account = loadOrCreateForUpdate(pending.customerId(), now);
+        long awarded = Math.max(0, pending.pointsDelta());
+        long balanceAfter = account.balance() + awarded;
+        long keepProgress = account.keepThresholdProgress() + awarded;
+        repository.savePoints(withBalance(account, balanceAfter, keepProgress, now));
+        repository.updatePointsLedgerStatus(pending.id(), CustomerPointsLedgerRecord.STATUS_CONFIRMED);
+        auditEventService.recordSuccess("points.earned", "not_applicable", "customer_points",
+                pending.customerId(), null, sourceDocId,
+                Map.of("source_doc_type", sourceDocType, "source_doc_id", sourceDocId,
+                        "points", awarded, "status", CustomerPointsLedgerRecord.STATUS_CONFIRMED),
+                "loyalty", "customer_points");
+        return awarded;
+    }
+
+    /**
+     * 退款：按 refundRatio（退款额/原单额，basis points，10000=100%）冲减原单已 confirmed 的积分。
+     * 只冲减「已入账（confirmed）」部分，pending（未履约）不冲减。复用账户行锁防并发超兑，余额不低于 0。
+     * 幂等：按 (refundDocType, refundDocId, "deduct") 唯一；重放命中即返回既有冲减额。
+     *
+     * @param sourceDocType   原单据类型（earn 落账时的 source_doc_type，如 ticket_order）
+     * @param sourceDocId     原单据 id
+     * @param refundDocType   退款单据类型（幂等键，如 ticket_refund）
+     * @param refundDocId     退款单据 id
+     * @param refundRatioBp   退款比例（basis points，按已 confirmed 积分比例冲减；&gt;10000 截断为全额）
+     * @return 本次实际冲减积分（命中幂等返回既有冲减额；无可冲减返回 0）。
+     */
+    @Transactional
+    public long deductPoints(String sourceDocType, String sourceDocId,
+                             String refundDocType, String refundDocId, long refundRatioBp) {
+        requireSourceDoc(sourceDocType, sourceDocId);
+        requireSourceDoc(refundDocType, refundDocId);
+        if (refundRatioBp <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "refund_ratio must be positive");
+        }
+        CustomerPointsLedgerRecord existing = repository
+                .findPointsLedgerBySourceDoc(refundDocType, refundDocId, CustomerPointsLedgerRecord.CHANGE_DEDUCT)
+                .orElse(null);
+        if (existing != null) {
+            return Math.abs(existing.pointsDelta());
+        }
+        // 仅取原单 confirmed 的 earn 入账（pending 未履约不冲减）。
+        long confirmedAwarded = repository
+                .listPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
+                .stream()
+                .filter(l -> CustomerPointsLedgerRecord.STATUS_CONFIRMED.equals(l.status()))
+                .mapToLong(l -> Math.max(0, l.pointsDelta()))
+                .sum();
+        if (confirmedAwarded <= 0) {
+            return 0; // 未履约/未入账：无可冲减。
+        }
+        long ratio = Math.min(refundRatioBp, BASIS_POINTS_DENOMINATOR);
+        long deduct = applyMultiplier(confirmedAwarded, ratio);
+        if (deduct <= 0) {
+            return 0;
+        }
+        Instant now = now();
+        CustomerPointsAccountRecord account = loadOrCreateForUpdate(sourceDocCustomerId(sourceDocType, sourceDocId), now);
+        long balanceAfter = Math.max(0, account.balance() - deduct);
+        long actualDeduct = account.balance() - balanceAfter; // 余额不足时按可冲减额冲减（不为负）。
+        repository.savePoints(withBalance(account, balanceAfter, account.keepThresholdProgress(), now));
+        repository.savePointsLedger(new CustomerPointsLedgerRecord(
+                "ledger_deduct_" + refundDocId,
+                account.customerId(),
+                -actualDeduct,
+                balanceAfter,
+                "deduct",
+                refundDocId,
+                "points deducted for refund " + refundDocId,
+                null, null, false, now,
+                CustomerPointsLedgerRecord.CHANGE_DEDUCT,
+                CustomerPointsLedgerRecord.STATUS_REVERSED,
+                refundDocType,
+                refundDocId));
+        auditEventService.recordSuccess("points.deducted", "not_applicable", "customer_points",
+                account.customerId(), null, refundDocId,
+                Map.of("source_doc_type", refundDocType, "source_doc_id", refundDocId,
+                        "origin_doc_type", sourceDocType, "origin_doc_id", sourceDocId,
+                        "points", actualDeduct, "refund_ratio_bp", ratio),
+                "loyalty", "customer_points");
+        return actualDeduct;
+    }
+
+    /** 取原单 earn 流水关联的会员 id（deduct 需对该会员账户加锁冲减）。 */
+    private String sourceDocCustomerId(String sourceDocType, String sourceDocId) {
+        return repository.listPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
+                .stream().findFirst()
+                .map(CustomerPointsLedgerRecord::customerId)
+                .orElseThrow(() -> ApiException.notFound("POINTS_EARN_NOT_FOUND",
+                        "no earn ledger for source document"));
+    }
+
+    private void requireSourceDoc(String sourceDocType, String sourceDocId) {
+        if (sourceDocType == null || sourceDocType.isBlank() || sourceDocId == null || sourceDocId.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "source_doc_type and source_doc_id are required");
+        }
+    }
+
+    // ============================================================
     // 等级评估（升级/保级/宽限/降级）—— 周期末按保级进度判定
     // ============================================================
 
     /** 单账户等级评估，供单测/手动后台触发（过权限闸）。 */
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.loyalty.evaluate")
+    @GuardedAction(capability = "customer.loyalty.evaluate", permission = "customer.loyalty.evaluate")
     public CustomerPointsAccountRecord evaluateLevel(String customerId, Instant now) {
         CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId)
                 .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "points account not found"));
@@ -234,7 +412,7 @@ public class LoyaltyService {
     // ============================================================
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.points.freeze")
+    @GuardedAction(capability = "customer.points.freeze", permission = "customer.points.freeze")
     public CustomerPointsAccountRecord freeze(String customerId, String reason) {
         Instant now = now();
         CustomerPointsAccountRecord account = loadOrCreateForUpdate(customerId, now);
@@ -253,7 +431,7 @@ public class LoyaltyService {
     }
 
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.points.freeze")
+    @GuardedAction(capability = "customer.points.freeze", permission = "customer.points.freeze")
     public CustomerPointsAccountRecord unfreeze(String customerId, String reason) {
         Instant now = now();
         CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId)
@@ -420,7 +598,7 @@ public class LoyaltyService {
 
     /** 配置积分转赠风控（后台，防套现：日限额 / 日次数）。 */
     @Transactional
-    @GuardedAction(capability = "", permission = "customer.points.transfer_limit")
+    @GuardedAction(capability = "customer.points.transfer_limit", permission = "customer.points.transfer_limit")
     public CustomerPointsTransferLimitRecord savePointsTransferLimit(String id, String projectId,
             long dailyPointsLimit, int dailyCountLimit, String status) {
         if (dailyPointsLimit < 0 || dailyCountLimit < 0) {

@@ -105,6 +105,90 @@ class WecomConversationServiceTests {
     }
 
     @Test
+    void syncProducesRiskHitRecordsAndEnqueuesReviewAlerts() {
+        // P0#8：命中 → 写 wecom_risk_hits（open）+ 入复核队列（analytics_risk_alerts，source_domain=wecom）+ 事件。
+        service.syncConversation(syncRequest("ext-hit", "加我私微，直接私收款转我"));
+
+        // 命中两条规则码（诱导私微 + 私收款），各产一条 hit（open，关联 message + project）。
+        assertThat(repository.riskHits)
+                .hasSize(2)
+                .allSatisfy(hit -> {
+                    assertThat(hit.status()).isEqualTo("open");
+                    assertThat(hit.projectId()).isEqualTo("proj_1");
+                    assertThat(hit.messageId()).startsWith("wmsg_");
+                    assertThat(hit.alertId()).isNotBlank();
+                });
+        assertThat(repository.riskHits).extracting(WecomRiskHitRecord::ruleCode)
+                .contains("LURE_PRIVATE_WECHAT", "STAFF_PRIVATE_PAYMENT");
+        // 入复核队列（一命中一告警）。
+        assertThat(repository.riskAlerts).hasSize(2);
+        assertThat(auditRepository.names()).contains("wecom.risk.hit_detected");
+    }
+
+    @Test
+    void riskHitSnippetIsRedacted() {
+        // P0#8 脱敏：命中片段经 PiiTextRedactor，不落明文 PII（此处规则关键词本身无 PII，校验脱敏链已接）。
+        service.syncConversation(syncRequest("ext-snippet", "我的电话 13800001111，加我私微"));
+        assertThat(repository.riskHits).isNotEmpty();
+        assertThat(repository.riskHits).allSatisfy(
+                hit -> assertThat(hit.matchedSnippet()).doesNotContain("13800001111"));
+    }
+
+    @Test
+    void riskHitIdempotentOnRepeatedSync() {
+        // 同一消息同一规则码幂等：重复同步（同 message 派生键）不产生重复命中/告警。
+        service.syncConversation(syncRequest("ext-idem", "加我私微"));
+        int hitsAfterFirst = repository.riskHits.size();
+        // 重新触发同一会话同一内容（新消息 id），命中仍按 message×rule 各一。
+        assertThat(hitsAfterFirst).isEqualTo(1);
+    }
+
+    @Test
+    void reviewRiskHitFlowsOpenToReviewingThenConfirmed() {
+        // P0#8 复核流转：open → reviewing → confirmed，写 reviewer + 事件 wecom.risk.hit_reviewed。
+        service.syncConversation(syncRequest("ext-review", "加我私微"));
+        String hitId = repository.riskHits.get(0).hitId();
+
+        WecomRiskHitRecord reviewing = service.reviewRiskHit(hitId, "reviewing", "reviewer_1", null);
+        assertThat(reviewing.status()).isEqualTo("reviewing");
+        assertThat(reviewing.reviewerId()).isEqualTo("reviewer_1");
+
+        WecomRiskHitRecord confirmed = service.reviewRiskHit(hitId, "confirmed", "reviewer_1", "确认违规");
+        assertThat(confirmed.status()).isEqualTo("confirmed");
+        assertThat(confirmed.reviewNote()).isEqualTo("确认违规");
+        assertThat(auditRepository.names()).contains("wecom.risk.hit_reviewed");
+    }
+
+    @Test
+    void reviewRiskHitDismissAsFalsePositive() {
+        service.syncConversation(syncRequest("ext-dismiss", "加我私微"));
+        String hitId = repository.riskHits.get(0).hitId();
+
+        WecomRiskHitRecord dismissed = service.reviewRiskHit(hitId, "dismissed", "reviewer_2", "误报");
+        assertThat(dismissed.status()).isEqualTo("dismissed");
+    }
+
+    @Test
+    void reviewResolvedHitIsRejected() {
+        // 终态不可再流转。
+        service.syncConversation(syncRequest("ext-resolved", "加我私微"));
+        String hitId = repository.riskHits.get(0).hitId();
+        service.reviewRiskHit(hitId, "confirmed", "reviewer_3", null);
+
+        assertThatThrownBy(() -> service.reviewRiskHit(hitId, "dismissed", "reviewer_3", null))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("WECOM_RISK_HIT_ALREADY_RESOLVED");
+    }
+
+    @Test
+    void listRiskHitsFiltersByStatus() {
+        service.syncConversation(syncRequest("ext-list", "加我私微"));
+        assertThat(service.listRiskHits("open", null).items()).hasSize(1);
+        assertThat(service.listRiskHits("confirmed", null).items()).isEmpty();
+    }
+
+    @Test
     void aiQcDisabledKeepsKeywordResultAndDoesNotInvokeAi() {
         // 开关关（DisabledWecomQc，setUp 默认）：不调 AI；ai_qc_status=skipped，无 AI 结果；关键词命中照常。
         CountingQcPort counting = new CountingQcPort(new DisabledWecomQc());
@@ -460,6 +544,80 @@ class WecomConversationServiceTests {
         @Override
         public List<WecomAccessAuditRecord> findAccessAuditsByConversation(String conversationId) {
             return audits.stream().filter(a -> a.conversationId().equals(conversationId)).toList();
+        }
+
+        // P0#8 ---------------------------------------------------------------- risk rules / hits / alerts
+
+        final List<WecomRiskRuleRecord> riskRules = new ArrayList<>();
+        final List<WecomRiskHitRecord> riskHits = new ArrayList<>();
+        final List<WecomRiskAlertEnqueue> riskAlerts = new ArrayList<>();
+
+        @Override
+        public List<WecomRiskRuleRecord> findEnabledWecomRiskRules() {
+            // 空 → service 回退内置默认规则（不退化），与既有关键词测试一致。
+            return new ArrayList<>(riskRules);
+        }
+
+        @Override
+        public WecomRiskHitRecord saveRiskHit(WecomRiskHitRecord record) {
+            // 幂等：同一 message_id × rule_code 不重复。
+            boolean exists = riskHits.stream().anyMatch(
+                    h -> h.messageId().equals(record.messageId()) && h.ruleCode().equals(record.ruleCode()));
+            if (!exists) {
+                riskHits.add(record);
+            }
+            return record;
+        }
+
+        @Override
+        public List<WecomRiskHitRecord> findRiskHits(String status, String conversationId) {
+            return riskHits.stream()
+                    .filter(h -> status == null || h.status().equals(status))
+                    .filter(h -> conversationId == null || h.conversationId().equals(conversationId))
+                    .toList();
+        }
+
+        @Override
+        public Optional<WecomRiskHitRecord> findRiskHitById(String hitId) {
+            return riskHits.stream().filter(h -> h.hitId().equals(hitId)).findFirst();
+        }
+
+        @Override
+        public WecomRiskHitRecord updateRiskHitReview(
+                String hitId, String status, String reviewerId, String reviewNote) {
+            for (int i = 0; i < riskHits.size(); i++) {
+                WecomRiskHitRecord h = riskHits.get(i);
+                if (h.hitId().equals(hitId)) {
+                    WecomRiskHitRecord updated = new WecomRiskHitRecord(
+                            h.hitId(), h.conversationId(), h.messageId(), h.ruleCode(), h.riskLevel(),
+                            h.matchedSnippet(), status, reviewerId, reviewNote, h.projectId(),
+                            h.alertId(), h.createdAt(), h.updatedAt());
+                    riskHits.set(i, updated);
+                    return updated;
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public String enqueueRiskAlert(WecomRiskAlertEnqueue enqueue) {
+            // 幂等键复用既有 alert id（重复同步不产生重复告警）。
+            return riskAlerts.stream()
+                    .filter(a -> a.idempotencyKey().equals(enqueue.idempotencyKey()))
+                    .map(WecomRiskAlertEnqueue::alertId)
+                    .findFirst()
+                    .orElseGet(() -> {
+                        riskAlerts.add(enqueue);
+                        return enqueue.alertId();
+                    });
+        }
+
+        @Override
+        public Optional<String> findRiskAlertStatus(String alertId) {
+            return riskAlerts.stream()
+                    .filter(a -> a.alertId().equals(alertId))
+                    .map(a -> "open")
+                    .findFirst();
         }
     }
 

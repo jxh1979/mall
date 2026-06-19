@@ -1,5 +1,6 @@
 package com.complex.platform.customer;
 
+import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
 import com.complex.platform.common.api.ApiException;
@@ -534,6 +535,18 @@ public class CustomerService {
                         throw ApiException.badRequest("VALIDATION_FAILED", "guest_count exceeds table capacity");
                     }
                     Instant now = Instant.now();
+                    // P0#3 订台定金（V073 bar_deposit_rules，对齐 BarEntryService）：按 bar 读启用规则，
+                    // table_type 优先于 bar。无匹配规则或计算额 ≤0 → 0/not_required（向后兼容）；
+                    // 否则 pending（待支付）。比例模式按卡座低消 minConsumptionCent × ratioBps/10000。
+                    BarDepositRuleRecord rule = resolveDepositRule(barId, table);
+                    long depositAmountCent = rule == null ? 0L : computeDepositAmount(rule, table);
+                    String depositStatus;
+                    if (rule == null || depositAmountCent <= 0L) {
+                        depositAmountCent = 0L;
+                        depositStatus = "not_required";
+                    } else {
+                        depositStatus = "pending";
+                    }
                     return repository.saveCustomerBarReservation(new BarReservationRecord(
                             "reservation_" + slug(key),
                             barId,
@@ -543,8 +556,8 @@ public class CustomerService {
                             actual.reservationTime() == null ? now : actual.reservationTime(),
                             guestCount,
                             table.allowedPassFreeGuestCount(),
-                            0L,
-                            "not_required",
+                            depositAmountCent,
+                            depositStatus,
                             "miniapp",
                             null,
                             "reserved",
@@ -557,6 +570,34 @@ public class CustomerService {
                     ));
                 }
         );
+    }
+
+    /** P0#3：scope 优先级 table_type > bar；listDepositRules 已按 scope_type DESC 返回（对齐 BarEntryService）。 */
+    private BarDepositRuleRecord resolveDepositRule(String barId, BarTableRecord table) {
+        List<BarDepositRuleRecord> rules = repository.listDepositRules(barId);
+        BarDepositRuleRecord barScoped = null;
+        for (BarDepositRuleRecord rule : rules) {
+            if ("table_type".equals(rule.scopeType()) && rule.scopeId() != null
+                    && rule.scopeId().equals(table.tableType())) {
+                return rule;
+            }
+            if ("bar".equals(rule.scopeType()) && barScoped == null) {
+                barScoped = rule;
+            }
+        }
+        return barScoped;
+    }
+
+    /** P0#3：fixed=固定额；min_consumption_ratio=卡座低消 × ratioBps/10000（对齐 BarEntryService）。 */
+    private long computeDepositAmount(BarDepositRuleRecord rule, BarTableRecord table) {
+        if ("fixed".equals(rule.mode())) {
+            return rule.fixedAmountCent() == null ? 0L : Math.max(0L, rule.fixedAmountCent());
+        }
+        if ("min_consumption_ratio".equals(rule.mode())) {
+            int ratioBps = rule.ratioBps() == null ? 0 : rule.ratioBps();
+            return Math.max(0L, table.minConsumptionCent() * ratioBps / 10_000L);
+        }
+        return 0L;
     }
 
     /** 解析客人 token → customerId（鉴权失败抛 401）。供储值/付费会员/积分转赠等客人端动作复用。 */

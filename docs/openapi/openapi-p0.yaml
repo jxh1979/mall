@@ -877,6 +877,65 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    post:
+      tags:
+        - amusement
+      operationId: createAmusementQueueEntry
+      summary: 创建游乐排队记录
+      x-auth-context: staff-token
+      x-permission: amusement.queue.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed: &a1
+        - tablet
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: amusement.queue_entry.create
+      x-audit-event-failure: amusement.queue_entry.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: &a2
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                project_id:
+                  type: string
+                  description: 所属项目 ID。
+                  maxLength: 64
+                session_id:
+                  type: string
+                  description: 场次 ID。
+                  maxLength: 64
+                customer_id:
+                  type: string
+                  description: 客户 ID。
+                  maxLength: 64
+                queue_no:
+                  type: string
+                  description: 排队号。
+                  maxLength: 255
+                status:
+                  type: string
+                  description: 初始状态。
+                  maxLength: 255
+      responses: &a3
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/reservations:
     get:
       tags:
@@ -899,6 +958,46 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    post:
+      tags:
+        - amusement
+      operationId: createAmusementReservation
+      summary: 创建游乐预约
+      x-auth-context: staff-token
+      x-permission: amusement.reservation.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.reservation.create
+      x-audit-event-failure: amusement.reservation.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                project_id:
+                  type: string
+                  description: 所属项目 ID。
+                  maxLength: 64
+                session_id:
+                  type: string
+                  description: 场次 ID。
+                  maxLength: 64
+                customer_id:
+                  type: string
+                  description: 客户 ID。
+                  maxLength: 64
+                reservation_status:
+                  type: string
+                  description: 预约状态。
+                  maxLength: 255
+      responses: *a3
   /api/v1/amusement/safety-inspections:
     get:
       tags:
@@ -2797,6 +2896,68 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    post:
+      tags:
+        - finance
+      operationId: createFinanceReconciliationDifference
+      summary: 创建对账差异
+      x-auth-context: staff-token
+      x-permission: finance.reconciliation.difference.create
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.reconciliation.difference_created
+      x-audit-event-failure: finance.reconciliation.difference_create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - batch_id
+                - difference_type
+                - business_ref
+                - source
+              properties:
+                idempotency_key: *a2
+                operator_note: &a4
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids: &a11
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                batch_id:
+                  type: string
+                  description: 对账批次 ID。
+                  maxLength: 64
+                difference_type:
+                  type: string
+                  description: 差异类型。
+                  maxLength: 255
+                business_ref:
+                  type: string
+                  description: 业务引用。
+                  maxLength: 255
+                source:
+                  type: string
+                  description: 差异来源。
+                  enum:
+                    - system
+                    - manual
+                actual_amount_cent:
+                  type: integer
+                  description: 实际金额（source=manual 时填写）。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+      responses: *a3
   /api/v1/finance/refunds:
     post:
       tags:
@@ -3060,6 +3221,76 @@ paths:
           schema:
             type: string
             maxLength: 64
+    post:
+      tags:
+        - floor-plan
+      operationId: saveFloorPlanShape
+      summary: 保存平面图图形
+      x-auth-context: staff-token
+      x-permission: floor_plan.manage
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: floor_plan.shape.save
+      x-audit-event-failure: floor_plan.shape.save_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 平面图 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                shape_id:
+                  type: string
+                  description: 图形 ID。
+                  maxLength: 64
+                shape_type:
+                  type: string
+                  description: 图形类型。
+                  maxLength: 255
+                ref_type:
+                  type: string
+                  description: 引用对象类型。
+                  maxLength: 255
+                ref_id:
+                  type: string
+                  description: 引用对象 ID。
+                  maxLength: 64
+                label:
+                  type: string
+                  description: 图形标签。
+                  maxLength: 255
+                z_index:
+                  type: integer
+                  description: 叠放层级。
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                polygon_points:
+                  type: array
+                  description: 多边形顶点列表。
+                  items:
+                    type: object
+                    additionalProperties: true
+                    description: 顶点坐标 FloorPlanPoint（x/y）。
+      responses: *a3
   /api/v1/integration/compensation-tasks:
     get:
       tags:
@@ -3082,6 +3313,71 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    post:
+      tags:
+        - integration
+      operationId: createCompensationTask
+      summary: 创建补偿任务
+      x-auth-context: staff-token
+      x-permission: integration.compensation.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.compensation_task.created
+      x-audit-event-failure: integration.compensation_task.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - provider_code
+                - task_type
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: &a5
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                provider_code:
+                  type: string
+                  description: 渠道编码。
+                  maxLength: 255
+                task_type:
+                  type: string
+                  description: 任务类型。
+                  maxLength: 255
+                business_type:
+                  type: string
+                  description: 业务类型。
+                  maxLength: 255
+                external_business_id:
+                  type: string
+                  description: 外部业务 ID。
+                  maxLength: 255
+                status:
+                  type: string
+                  description: 初始状态。
+                  maxLength: 255
+                max_retry_count:
+                  type: integer
+                  description: 最大重试次数。
+                next_retry_at:
+                  type: string
+                  format: date-time
+                  description: 下次重试时间。
+                payload:
+                  type: object
+                  additionalProperties: true
+                  description: 任务载荷。
+      responses: *a3
   /api/v1/integration/devices:
     get:
       tags:
@@ -3170,6 +3466,77 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    post:
+      tags:
+        - integration
+      operationId: createOrderSync
+      summary: 创建订单同步
+      x-auth-context: staff-token
+      x-permission: integration.order_sync.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.order_sync.created
+      x-audit-event-failure: integration.order_sync.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - provider_code
+                - business_type
+                - external_business_id
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a5
+                provider_code:
+                  type: string
+                  description: 渠道编码。
+                  maxLength: 255
+                business_type:
+                  type: string
+                  description: 业务类型。
+                  maxLength: 255
+                sync_type:
+                  type: string
+                  description: 同步类型。
+                  maxLength: 255
+                external_business_id:
+                  type: string
+                  description: 外部业务 ID。
+                  maxLength: 255
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                amount_cent:
+                  type: integer
+                  description: 金额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                currency:
+                  type: string
+                  description: 币种。
+                  maxLength: 255
+                channel:
+                  type: string
+                  description: 渠道。
+                  maxLength: 255
+                external_channel_order_id:
+                  type: string
+                  description: 外部渠道订单号。
+                  maxLength: 255
+                provider_payload:
+                  type: object
+                  additionalProperties: true
+                  description: 渠道原始载荷。
+      responses: *a3
   /api/v1/integration/provider-adapters:
     get:
       tags:
@@ -3470,6 +3837,66 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    post:
+      tags:
+        - integration
+      operationId: createRetryTask
+      summary: 创建重试任务
+      x-auth-context: staff-token
+      x-permission: integration.retry.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.retry_task.created
+      x-audit-event-failure: integration.retry_task.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - provider_code
+                - task_type
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a5
+                provider_code:
+                  type: string
+                  description: 渠道编码。
+                  maxLength: 255
+                task_type:
+                  type: string
+                  description: 任务类型。
+                  maxLength: 255
+                business_type:
+                  type: string
+                  description: 业务类型。
+                  maxLength: 255
+                external_business_id:
+                  type: string
+                  description: 外部业务 ID。
+                  maxLength: 255
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                max_retry_count:
+                  type: integer
+                  description: 最大重试次数。
+                next_retry_at:
+                  type: string
+                  format: date-time
+                  description: 下次重试时间。
+                payload:
+                  type: object
+                  additionalProperties: true
+                  description: 任务载荷。
+      responses: *a3
   /api/v1/integration/robot/task-events:
     get:
       tags:
@@ -6242,6 +6669,75 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    post:
+      tags:
+        - merchant-billing
+      operationId: createMerchantBill
+      summary: 创建商户账单
+      x-auth-context: staff-token
+      x-permission: merchant.billing.manage
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.billing.create
+      x-audit-event-failure: merchant.billing.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - merchant_id
+              properties:
+                idempotency_key: *a2
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                merchant_id:
+                  type: string
+                  description: 商户 ID。
+                  maxLength: 64
+                ar_ap_item_id:
+                  type: string
+                  description: 关联 AR/AP 条目 ID。
+                  maxLength: 64
+                bill_period_start:
+                  type: string
+                  format: date
+                  description: 账期起。
+                bill_period_end:
+                  type: string
+                  format: date
+                  description: 账期止。
+                due_date:
+                  type: string
+                  format: date
+                  description: 应收到期日。
+                total_amount_cent:
+                  type: integer
+                  description: 账单总额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                source_type:
+                  type: string
+                  description: 来源类型。
+                  maxLength: 255
+                source_id:
+                  type: string
+                  description: 来源 ID。
+                  maxLength: 64
+                lines:
+                  type: array
+                  description: 账单明细行。
+                  items:
+                    type: object
+                    additionalProperties: true
+                    description: 账单明细行 MerchantBillLineRequest。
+      responses: *a3
   /api/v1/platform/supervisor-review-policies:
     get:
       tags:
@@ -6737,6 +7233,26 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    get:
+      tags:
+        - inventory
+      operationId: listSupplyContracts
+      summary: 查询供应合同列表
+      x-auth-context: staff-token
+      x-permission: inventory.supply_contract.manage
+      x-data-scope: supplier
+      x-terminal-allowed: &a6
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: inventory.supply_contract.list
+      x-audit-event-failure: inventory.supply_contract.list_failed
+      responses: &a7
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/supply-contracts/{id}/approve:
     post:
       tags:
@@ -6866,6 +7382,19 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+    get:
+      tags:
+        - inventory
+      operationId: listWarehouses
+      summary: 查询库房列表
+      x-auth-context: staff-token
+      x-permission: inventory.warehouse.manage
+      x-data-scope: warehouse
+      x-terminal-allowed: *a6
+      x-idempotency-required: false
+      x-audit-event-success: inventory.warehouse.list
+      x-audit-event-failure: inventory.warehouse.list_failed
+      responses: *a7
   /api/v1/staff/registrations:
     post:
       tags:
@@ -8657,7 +9186,7 @@ paths:
       x-auth-context: staff-token
       requestBody:
         $ref: "#/components/requestBodies/BarShiftOpenRequest"
-      responses: &a1
+      responses:
         "200":
           $ref: "#/components/responses/Success"
         "400":
@@ -8686,7 +9215,3194 @@ paths:
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
       requestBody:
         $ref: "#/components/requestBodies/BarShiftCloseRequest"
-      responses: *a1
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/evidence/risk-alerts:
+    post:
+      tags:
+        - evidence
+      operationId: reportRiskAlert
+      summary: 上报统一风险预警
+      x-auth-context: staff-token
+      x-permission: risk_alert.report
+      x-data-scope: platform
+      x-terminal-allowed: &a8
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: exception.reported
+      x-audit-event-failure: exception.report_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - source_domain
+                - alert_type
+                - risk_level
+                - summary
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: &a10
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                source_domain:
+                  type: string
+                  description: 来源业务域。
+                  maxLength: 255
+                source_ref:
+                  type: string
+                  description: 来源业务引用 ID。
+                  maxLength: 255
+                alert_type:
+                  type: string
+                  description: 预警类型。
+                  maxLength: 255
+                risk_level:
+                  type: string
+                  description: 风险等级。
+                  maxLength: 255
+                summary:
+                  type: string
+                  description: 预警摘要。
+                  maxLength: 255
+                project_id:
+                  type: string
+                  description: 所属项目 ID（可空）。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 上报原因。
+                  maxLength: 4000
+                evidence_refs:
+                  type: array
+                  description: 证据引用列表。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses: *a3
+    get:
+      tags:
+        - evidence
+      operationId: searchRiskAlerts
+      summary: 查询风险预警列表
+      x-auth-context: staff-token
+      x-permission: risk_alert.view
+      x-data-scope: platform
+      x-terminal-allowed: *a8
+      x-idempotency-required: false
+      x-audit-event-success: exception.alerts_viewed
+      x-audit-event-failure: exception.alerts_view_failed
+      parameters:
+        - name: source_domain
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 按来源业务域过滤。
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+          description: 按状态过滤。
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 按项目过滤。
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+          description: 返回条数上限。
+      responses: *a7
+  /api/v1/evidence/risk-alerts/{alert_id}:
+    get:
+      tags:
+        - evidence
+      operationId: getRiskAlertDetail
+      summary: 查询风险预警详情
+      x-auth-context: staff-token
+      x-permission: risk_alert.view
+      x-data-scope: platform
+      x-terminal-allowed: *a8
+      x-idempotency-required: false
+      x-audit-event-success: exception.alert_viewed
+      x-audit-event-failure: exception.alert_view_failed
+      parameters: &a9
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 风险预警 ID。
+      responses: *a7
+  /api/v1/evidence/risk-alerts/{alert_id}/claim:
+    post:
+      tags:
+        - evidence
+      operationId: claimRiskAlert
+      summary: 认领风险预警
+      x-auth-context: staff-token
+      x-permission: risk_alert.claim
+      x-data-scope: platform
+      x-terminal-allowed: *a8
+      x-idempotency-required: true
+      x-audit-event-success: exception.claimed
+      x-audit-event-failure: exception.claim_failed
+      parameters: *a9
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a10
+                target_handler_id:
+                  type: string
+                  description: 目标处理人用户 ID（transfer/escalate 必填）。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 操作原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/evidence/risk-alerts/{alert_id}/transfer:
+    post:
+      tags:
+        - evidence
+      operationId: transferRiskAlert
+      summary: 转交风险预警
+      x-auth-context: staff-token
+      x-permission: risk_alert.transfer
+      x-data-scope: platform
+      x-terminal-allowed: *a8
+      x-idempotency-required: true
+      x-audit-event-success: exception.transferred
+      x-audit-event-failure: exception.transfer_failed
+      parameters: *a9
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - target_handler_id
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a10
+                target_handler_id:
+                  type: string
+                  description: 目标处理人用户 ID（transfer/escalate 必填）。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 操作原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/evidence/risk-alerts/{alert_id}/escalate:
+    post:
+      tags:
+        - evidence
+      operationId: escalateRiskAlert
+      summary: 升级风险预警
+      x-auth-context: staff-token
+      x-permission: risk_alert.escalate
+      x-data-scope: platform
+      x-terminal-allowed: *a8
+      x-idempotency-required: true
+      x-audit-event-success: exception.escalated
+      x-audit-event-failure: exception.escalate_failed
+      parameters: *a9
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - target_handler_id
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a10
+                target_handler_id:
+                  type: string
+                  description: 目标处理人用户 ID（transfer/escalate 必填）。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 操作原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/evidence/risk-alerts/{alert_id}/resolve:
+    post:
+      tags:
+        - evidence
+      operationId: resolveRiskAlert
+      summary: 关闭风险预警（需结论）
+      x-auth-context: staff-token
+      x-permission: risk_alert.resolve
+      x-data-scope: platform
+      x-terminal-allowed: *a8
+      x-idempotency-required: true
+      x-audit-event-success: exception.resolved
+      x-audit-event-failure: exception.resolve_failed
+      parameters: *a9
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - resolution_conclusion
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a10
+                resolution_conclusion:
+                  type: string
+                  description: 处置结论。
+                  maxLength: 4000
+                reason:
+                  type: string
+                  description: 处置原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/evidence/risk-alerts/{alert_id}/dismiss:
+    post:
+      tags:
+        - evidence
+      operationId: dismissRiskAlert
+      summary: 忽略关闭风险预警
+      x-auth-context: staff-token
+      x-permission: risk_alert.dismiss
+      x-data-scope: platform
+      x-terminal-allowed: *a8
+      x-idempotency-required: true
+      x-audit-event-success: exception.dismissed
+      x-audit-event-failure: exception.dismiss_failed
+      parameters: *a9
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a10
+                target_handler_id:
+                  type: string
+                  description: 目标处理人用户 ID（transfer/escalate 必填）。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 操作原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/finance/cam/allocations:
+    post:
+      tags:
+        - finance
+      operationId: allocateCam
+      summary: CAM 公共区域维护费按权重分摊
+      x-auth-context: staff-token
+      x-permission: finance.cam.allocate
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.cam.allocated
+      x-audit-event-failure: finance.cam.allocate_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - period
+                - total_amount_cent
+                - due_date
+                - shares
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a11
+                period:
+                  type: string
+                  description: 计费周期标识。
+                  maxLength: 255
+                total_amount_cent:
+                  type: integer
+                  description: 待分摊总额。（单位：分，禁止浮点）
+                  minimum: 0
+                  maximum: 999999999999
+                due_date:
+                  type: string
+                  format: date
+                  description: 应收到期日。
+                shares:
+                  type: array
+                  description: 分摊明细列表。
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - merchant_id
+                      - weight_bps
+                    properties:
+                      merchant_id:
+                        type: string
+                        description: 商户 ID。
+                        maxLength: 64
+                      weight_bps:
+                        type: integer
+                        description: 分摊权重（基点，万分比）。
+                        minimum: 0
+      responses: *a3
+  /api/v1/finance/cam/trueups:
+    post:
+      tags:
+        - finance
+      operationId: trueUpCam
+      summary: CAM 年度 true-up 多退少补对账
+      x-auth-context: staff-token
+      x-permission: finance.cam.trueup
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.cam.trued_up
+      x-audit-event-failure: finance.cam.trueup_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - settlement_period
+                - actual_total_amount_cent
+                - due_date
+                - shares
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a11
+                settlement_period:
+                  type: string
+                  description: 结算周期标识。
+                  maxLength: 255
+                actual_total_amount_cent:
+                  type: integer
+                  description: 实际总额。（单位：分，禁止浮点）
+                  minimum: 0
+                  maximum: 999999999999
+                due_date:
+                  type: string
+                  format: date
+                  description: 应收/应退到期日。
+                shares:
+                  type: array
+                  description: 分摊明细列表。
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - merchant_id
+                      - weight_bps
+                    properties:
+                      merchant_id:
+                        type: string
+                        description: 商户 ID。
+                        maxLength: 64
+                      weight_bps:
+                        type: integer
+                        description: 分摊权重（基点）。
+                        minimum: 0
+      responses: *a3
+  /api/v1/finance/deposits/actions:
+    post:
+      tags:
+        - finance
+      operationId: recordDepositAction
+      summary: 保证金台账动作（收取/退还/抵扣/没收）
+      x-auth-context: staff-token
+      x-permission: finance.deposit.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.deposit.action_recorded
+      x-audit-event-failure: finance.deposit.action_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - merchant_id
+                - action
+                - amount_cent
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a11
+                merchant_id:
+                  type: string
+                  description: 商户 ID。
+                  maxLength: 64
+                action:
+                  type: string
+                  description: 保证金动作。
+                  enum:
+                    - collect
+                    - refund
+                    - deduct
+                    - forfeit
+                amount_cent:
+                  type: integer
+                  description: 动作金额。（单位：分，禁止浮点）
+                  minimum: 0
+                  maximum: 999999999999
+                reason:
+                  type: string
+                  description: 动作原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/finance/inventory-variances/post:
+    post:
+      tags:
+        - finance
+      operationId: postInventoryVariance
+      summary: 库存差异复核入账为 AR/AP
+      x-auth-context: staff-token
+      x-permission: finance.inventory_variance.post
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.inventory_variance.posted
+      x-audit-event-failure: finance.inventory_variance.post_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - inventory_variance_id
+                - counterparty_id
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a11
+                inventory_variance_id:
+                  type: string
+                  description: 库存差异记录 ID。
+                  maxLength: 64
+                counterparty_id:
+                  type: string
+                  description: 责任方/对手方 ID。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/finance/turnover-rent/bills:
+    post:
+      tags:
+        - finance
+      operationId: billTurnoverRent
+      summary: 营业额抽成计费生成应收
+      x-auth-context: staff-token
+      x-permission: finance.turnover_rent.bill
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.turnover_rent.billed
+      x-audit-event-failure: finance.turnover_rent.bill_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - rule_id
+                - period_start
+                - period_end
+                - due_date
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a11
+                rule_id:
+                  type: string
+                  description: 抽成规则 ID。
+                  maxLength: 64
+                period_start:
+                  type: string
+                  format: date
+                  description: 计费周期起。
+                period_end:
+                  type: string
+                  format: date
+                  description: 计费周期止。
+                due_date:
+                  type: string
+                  format: date
+                  description: 应收到期日。
+      responses: *a3
+  /api/v1/integration/reconciliation/batches:
+    get:
+      tags:
+        - integration
+      operationId: listIntegrationReconciliationBatches
+      summary: 查询对账批次列表
+      x-auth-context: staff-token
+      x-permission: integration.reconciliation.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: integration.reconciliation_batch.viewed
+      x-audit-event-failure: integration.reconciliation_batch.view_failed
+      responses: *a7
+    post:
+      tags:
+        - integration
+      operationId: createIntegrationReconciliationBatch
+      summary: 创建对账批次
+      x-auth-context: staff-token
+      x-permission: integration.reconciliation.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.reconciliation_batch.created
+      x-audit-event-failure: integration.reconciliation_batch.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - provider_code
+                - business_type
+                - period_start
+                - period_end
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a5
+                provider_code:
+                  type: string
+                  description: 渠道/供应商编码。
+                  maxLength: 255
+                business_type:
+                  type: string
+                  description: 业务类型。
+                  maxLength: 255
+                period_start:
+                  type: string
+                  format: date
+                  description: 对账周期起。
+                period_end:
+                  type: string
+                  format: date
+                  description: 对账周期止。
+                expected_count:
+                  type: integer
+                  description: 应对账笔数。
+                actual_count:
+                  type: integer
+                  description: 实际笔数。
+                difference_count:
+                  type: integer
+                  description: 差异笔数。
+                total_difference_cent:
+                  type: integer
+                  description: 差异总额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+      responses: *a3
+  /api/v1/integration/reconciliation/differences:
+    get:
+      tags:
+        - integration
+      operationId: listIntegrationReconciliationDifferences
+      summary: 查询对账差异列表
+      x-auth-context: staff-token
+      x-permission: integration.reconciliation.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: integration.reconciliation_difference.viewed
+      x-audit-event-failure: integration.reconciliation_difference.view_failed
+      responses: *a7
+    post:
+      tags:
+        - integration
+      operationId: createIntegrationReconciliationDifference
+      summary: 创建对账差异
+      x-auth-context: staff-token
+      x-permission: integration.reconciliation.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.reconciliation_difference.created
+      x-audit-event-failure: integration.reconciliation_difference.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - batch_id
+                - provider_code
+                - business_type
+                - external_business_id
+                - difference_type
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a5
+                batch_id:
+                  type: string
+                  description: 对账批次 ID。
+                  maxLength: 64
+                provider_code:
+                  type: string
+                  description: 渠道编码。
+                  maxLength: 255
+                business_type:
+                  type: string
+                  description: 业务类型。
+                  maxLength: 255
+                external_business_id:
+                  type: string
+                  description: 外部业务 ID。
+                  maxLength: 255
+                difference_type:
+                  type: string
+                  description: 差异类型。
+                  maxLength: 255
+                internal_amount_cent:
+                  type: integer
+                  description: 内部金额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                provider_amount_cent:
+                  type: integer
+                  description: 渠道金额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                difference_amount_cent:
+                  type: integer
+                  description: 差异金额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                assigned_to_user_id:
+                  type: string
+                  description: 分派处理人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/integration/reconciliation/differences/{id}/resolve:
+    post:
+      tags:
+        - integration
+      operationId: resolveIntegrationReconciliationDifference
+      summary: 处理对账差异
+      x-auth-context: staff-token
+      x-permission: integration.reconciliation.resolve
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.reconciliation_difference.resolved
+      x-audit-event-failure: integration.reconciliation_difference.resolve_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 对账差异 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - status
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a5
+                operator_user_id:
+                  type: string
+                  description: 处理人用户 ID。
+                  maxLength: 64
+                status:
+                  type: string
+                  description: 目标状态。
+                  maxLength: 255
+                resolution_note:
+                  type: string
+                  description: 处理说明。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/integration/reconciliation/channel-auto:
+    post:
+      tags:
+        - integration
+      operationId: runChannelAutoReconciliation
+      summary: 渠道自动对账
+      x-auth-context: staff-token
+      x-permission: integration.reconciliation.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.channel_reconciliation.executed
+      x-audit-event-failure: integration.channel_reconciliation.execute_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - provider_code
+                - business_type
+                - channel
+                - period_start
+                - period_end
+                - expected_entries
+              properties:
+                idempotency_key: *a2
+                provider_code:
+                  type: string
+                  description: 渠道编码。
+                  maxLength: 255
+                business_type:
+                  type: string
+                  description: 业务类型。
+                  maxLength: 255
+                channel:
+                  type: string
+                  description: 渠道。
+                  maxLength: 255
+                period_start:
+                  type: string
+                  format: date
+                  description: 对账周期起。
+                period_end:
+                  type: string
+                  format: date
+                  description: 对账周期止。
+                dry_run:
+                  type: boolean
+                  description: 试运行标志。
+                expected_entries:
+                  type: array
+                  description: 期望对账明细。
+                  items:
+                    type: object
+                    additionalProperties: true
+                    required:
+                      - external_business_id
+                    properties:
+                      external_business_id:
+                        type: string
+                        description: 外部业务 ID。
+                        maxLength: 255
+                      amount_cent:
+                        type: integer
+                        description: 金额。（单位：分，禁止浮点）
+                        minimum: -999999999999
+                        maximum: 999999999999
+                      status:
+                        type: string
+                        description: 状态。
+                        maxLength: 255
+                      expected_count:
+                        type: integer
+                        description: 期望笔数。
+                      meta:
+                        type: object
+                        additionalProperties: true
+                        description: 附加元数据。
+      responses: *a3
+  /api/v1/integration/compensation-tasks/{id}/resolve:
+    post:
+      tags:
+        - integration
+      operationId: resolveCompensationTask
+      summary: 处理补偿任务
+      x-auth-context: staff-token
+      x-permission: integration.compensation.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.compensation_task.resolved
+      x-audit-event-failure: integration.compensation_task.resolve_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 补偿任务 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - status
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a5
+                operator_user_id:
+                  type: string
+                  description: 处理人用户 ID。
+                  maxLength: 64
+                status:
+                  type: string
+                  description: 目标状态。
+                  maxLength: 255
+                resolution_note:
+                  type: string
+                  description: 处理说明。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/integration/retry-tasks/{id}/run-now:
+    post:
+      tags:
+        - integration
+      operationId: runRetryTaskNow
+      summary: 立即执行重试任务
+      x-auth-context: staff-token
+      x-permission: integration.retry.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: integration.retry_task.run_now
+      x-audit-event-failure: integration.retry_task.run_now_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 重试任务 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                action:
+                  type: string
+                  description: 执行动作。
+                  maxLength: 255
+                reason:
+                  type: string
+                  description: 执行原因。
+                  maxLength: 4000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses: *a3
+  /api/v1/bar/table-sessions:
+    get:
+      tags:
+        - bar
+      operationId: listBarTableSessions
+      summary: 查询酒水台位会话列表
+      x-auth-context: staff-token
+      x-permission: bar.table_session.view
+      x-data-scope: project-bar-table
+      x-terminal-allowed: &a12
+        - tablet
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.table_session.list
+      x-audit-event-failure: bar.table_session.list_failed
+      responses: *a7
+    post:
+      tags:
+        - bar
+      operationId: createBarTableSession
+      summary: 创建酒水台位会话（开台）
+      x-auth-context: staff-token
+      x-permission: bar.table_session.create
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.table_session.create
+      x-audit-event-failure: bar.table_session.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: &a13
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                bar_id:
+                  type: string
+                  description: 吧台 ID。
+                  maxLength: 64
+                merchant_id:
+                  type: string
+                  description: 商户 ID。
+                  maxLength: 64
+                business_date:
+                  type: string
+                  format: date
+                  description: 营业日。
+                table_id:
+                  type: string
+                  description: 台位 ID。
+                  maxLength: 64
+                reservation_id:
+                  type: string
+                  description: 关联预订 ID。
+                  maxLength: 64
+                customer_id:
+                  type: string
+                  description: 客户 ID。
+                  maxLength: 64
+                guest_count:
+                  type: integer
+                  description: 客数。
+                sales_staff_id:
+                  type: string
+                  description: 销售员 ID。
+                  maxLength: 64
+                service_staff_id:
+                  type: string
+                  description: 服务员 ID。
+                  maxLength: 64
+                opened_by_user_id:
+                  type: string
+                  description: 开台操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/bar/table-sessions/{session_id}/merge:
+    post:
+      tags:
+        - bar
+      operationId: mergeBarTableSession
+      summary: 合并酒水台位会话
+      x-auth-context: staff-token
+      x-permission: bar.table_session.merge
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.table_session.merge
+      x-audit-event-failure: bar.table_session.merge_failed
+      parameters: &a14
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 台位会话 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a13
+                merged_session_id:
+                  type: string
+                  description: 被合并会话 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 合并原因。
+                  maxLength: 4000
+                requested_by_user_id:
+                  type: string
+                  description: 发起人。
+                  maxLength: 64
+                primary_session_version:
+                  type: integer
+                  description: 主会话版本号。
+                merged_session_version:
+                  type: integer
+                  description: 被合并会话版本号。
+      responses: *a3
+  /api/v1/bar/table-sessions/{session_id}/renew:
+    post:
+      tags:
+        - bar
+      operationId: renewBarTableSession
+      summary: 续台（延长台位会话）
+      x-auth-context: staff-token
+      x-permission: bar.table_session.renew
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.table_session.renew
+      x-audit-event-failure: bar.table_session.renew_failed
+      parameters: *a14
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a13
+                renewed_until:
+                  type: string
+                  format: date-time
+                  description: 续台至时间。
+                additional_min_consumption_cent:
+                  type: integer
+                  description: 追加最低消费。（单位：分，禁止浮点）
+                  minimum: 0
+                  maximum: 999999999999
+                additional_deposit_amount_cent:
+                  type: integer
+                  description: 追加押金。（单位：分，禁止浮点）
+                  minimum: 0
+                  maximum: 999999999999
+                additional_service_fee_cent:
+                  type: integer
+                  description: 追加服务费。（单位：分，禁止浮点）
+                  minimum: 0
+                  maximum: 999999999999
+                reason:
+                  type: string
+                  description: 续台原因。
+                  maxLength: 4000
+                requested_by_user_id:
+                  type: string
+                  description: 发起人。
+                  maxLength: 64
+                session_version:
+                  type: integer
+                  description: 会话版本号。
+      responses: *a3
+  /api/v1/bar/table-sessions/{session_id}/transfer:
+    post:
+      tags:
+        - bar
+      operationId: transferBarTableSession
+      summary: 转台（台位会话转移）
+      x-auth-context: staff-token
+      x-permission: bar.table_session.transfer
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.table_session.transfer
+      x-audit-event-failure: bar.table_session.transfer_failed
+      parameters: *a14
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - target_table_id
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a13
+                target_table_id:
+                  type: string
+                  description: 目标台位 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 转台原因。
+                  maxLength: 4000
+                requested_by_user_id:
+                  type: string
+                  description: 发起人。
+                  maxLength: 64
+                session_version:
+                  type: integer
+                  description: 会话版本号。
+      responses: *a3
+  /api/v1/bar/bills/{bill_id}/operations:
+    get:
+      tags:
+        - bar
+      operationId: listBarBillOperations
+      summary: 查询酒水账单拆并操作记录
+      x-auth-context: staff-token
+      x-permission: bar.bill.split_merge
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: false
+      x-audit-event-success: bar.bill_operation.list
+      x-audit-event-failure: bar.bill_operation.list_failed
+      parameters: &a15
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 酒水账单 ID。
+      responses: *a7
+  /api/v1/bar/bills/{bill_id}/adjustments:
+    post:
+      tags:
+        - bar
+      operationId: adjustBarBill
+      summary: 对酒水账单应用调整
+      x-auth-context: staff-token
+      x-permission: bar.bill.adjust
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.bill.adjust
+      x-audit-event-failure: bar.bill.adjust_failed
+      parameters: *a15
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a13
+                adjustment_type:
+                  type: string
+                  description: 调整类型。
+                  maxLength: 255
+                amount_cent:
+                  type: integer
+                  description: 调整金额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                reason:
+                  type: string
+                  description: 调整原因。
+                  maxLength: 4000
+                requested_by_user_id:
+                  type: string
+                  description: 发起人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/bar/bills/{bill_id}/merge:
+    post:
+      tags:
+        - bar
+      operationId: mergeBarBill
+      summary: 合并酒水账单
+      x-auth-context: staff-token
+      x-permission: bar.bill.split_merge
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.bill.merge
+      x-audit-event-failure: bar.bill.merge_failed
+      parameters: *a15
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a13
+                merged_bill_id:
+                  type: string
+                  description: 被合并账单 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 合并原因。
+                  maxLength: 4000
+                requested_by_user_id:
+                  type: string
+                  description: 发起人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/bar/bills/{bill_id}/split:
+    post:
+      tags:
+        - bar
+      operationId: splitBarBill
+      summary: 拆分酒水账单
+      x-auth-context: staff-token
+      x-permission: bar.bill.split_merge
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.bill.split
+      x-audit-event-failure: bar.bill.split_failed
+      parameters: *a15
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a13
+                split_amount_cent:
+                  type: integer
+                  description: 拆出金额。（单位：分，禁止浮点）
+                  minimum: 0
+                  maximum: 999999999999
+                reason:
+                  type: string
+                  description: 拆分原因。
+                  maxLength: 4000
+                requested_by_user_id:
+                  type: string
+                  description: 发起人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/bar/order-item-voids/{void_id}/decision:
+    post:
+      tags:
+        - bar
+      operationId: decideBarOrderItemVoid
+      summary: 退菜退酒审批决策（通过/驳回）
+      x-auth-context: staff-token
+      x-permission: bar.order_item.void
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.order_item_void.decide
+      x-audit-event-failure: bar.order_item_void.decide_failed
+      parameters:
+        - name: void_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 退菜退酒申请 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - decision
+              properties:
+                idempotency_key: *a2
+                decision:
+                  type: string
+                  description: 审批结论。
+                  enum:
+                    - approved
+                    - rejected
+                reason:
+                  type: string
+                  description: 决策原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/bar/production-tickets/{ticket_id}/events:
+    get:
+      tags:
+        - bar
+      operationId: listBarProductionTicketEvents
+      summary: 查询出品工单事件流
+      x-auth-context: staff-token
+      x-permission: bar.production_ticket.view
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: false
+      x-audit-event-success: bar.production_ticket_event.list
+      x-audit-event-failure: bar.production_ticket_event.list_failed
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 出品工单 ID。
+      responses: *a7
+  /api/v1/bar/production-tickets/{ticket_id}/transition:
+    post:
+      tags:
+        - bar
+      operationId: transitionBarProductionTicket
+      summary: 流转出品工单状态
+      x-auth-context: staff-token
+      x-permission: bar.production_ticket.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a12
+      x-idempotency-required: true
+      x-audit-event-success: bar.production_ticket.transition
+      x-audit-event-failure: bar.production_ticket.transition_failed
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 出品工单 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - target_status
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a13
+                target_status:
+                  type: string
+                  description: 目标状态。
+                  maxLength: 255
+                station_code:
+                  type: string
+                  description: 出品工位编码。
+                  maxLength: 255
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 流转原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/amusement/queue-entries/{id}/status:
+    post:
+      tags:
+        - amusement
+      operationId: changeAmusementQueueEntryStatus
+      summary: 变更游乐排队记录状态
+      x-auth-context: staff-token
+      x-permission: amusement.queue.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.queue_entry.status_change
+      x-audit-event-failure: amusement.queue_entry.status_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 排队记录 ID。
+      requestBody: &a16
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                action:
+                  type: string
+                  description: 状态动作。
+                  maxLength: 255
+                reason:
+                  type: string
+                  description: 原因。
+                  maxLength: 4000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses: *a3
+  /api/v1/amusement/reservations/{id}/status:
+    post:
+      tags:
+        - amusement
+      operationId: changeAmusementReservationStatus
+      summary: 变更游乐预约状态
+      x-auth-context: staff-token
+      x-permission: amusement.reservation.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.reservation.status_change
+      x-audit-event-failure: amusement.reservation.status_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 预约记录 ID。
+      requestBody: *a16
+      responses: *a3
+  /api/v1/amusement/incidents:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementIncidents
+      summary: 查询游乐安全事件列表
+      x-auth-context: staff-token
+      x-permission: amusement.incident.view
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: false
+      x-audit-event-success: amusement.incident.list
+      x-audit-event-failure: amusement.incident.list_failed
+      responses: *a7
+    post:
+      tags:
+        - amusement
+      operationId: createAmusementIncident
+      summary: 上报游乐安全事件
+      x-auth-context: staff-token
+      x-permission: amusement.incident.create
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.incident.create
+      x-audit-event-failure: amusement.incident.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: &a17
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                project_id:
+                  type: string
+                  description: 所属项目 ID。
+                  maxLength: 64
+                amusement_project_id:
+                  type: string
+                  description: 游乐项目 ID。
+                  maxLength: 64
+                session_id:
+                  type: string
+                  description: 场次 ID。
+                  maxLength: 64
+                device_id:
+                  type: string
+                  description: 设备 ID。
+                  maxLength: 64
+                customer_id:
+                  type: string
+                  description: 客户 ID。
+                  maxLength: 64
+                severity:
+                  type: string
+                  description: 严重程度。
+                  maxLength: 255
+                title:
+                  type: string
+                  description: 事件标题。
+                  maxLength: 255
+                description:
+                  type: string
+                  description: 事件描述。
+                  maxLength: 4000
+                reported_by_user_id:
+                  type: string
+                  description: 上报人。
+                  maxLength: 64
+                reported_channel:
+                  type: string
+                  description: 上报渠道。
+                  maxLength: 255
+                occurred_at:
+                  type: string
+                  format: date-time
+                  description: 发生时间。
+      responses: *a3
+  /api/v1/amusement/incidents/{incidentId}/actions:
+    post:
+      tags:
+        - amusement
+      operationId: addAmusementIncidentAction
+      summary: 添加事件处置动作/流转状态
+      x-auth-context: staff-token
+      x-permission: amusement.incident.process
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.incident.action
+      x-audit-event-failure: amusement.incident.action_failed
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 安全事件 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a17
+                target_status:
+                  type: string
+                  description: 目标状态。
+                  maxLength: 255
+                operator_user_id:
+                  type: string
+                  description: 处置人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/amusement/incidents/{incidentId}/close:
+    post:
+      tags:
+        - amusement
+      operationId: closeAmusementIncident
+      summary: 关闭游乐安全事件
+      x-auth-context: staff-token
+      x-permission: amusement.incident.close
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.incident.close
+      x-audit-event-failure: amusement.incident.close_failed
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 安全事件 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a17
+                resolution:
+                  type: string
+                  description: 处置结论。
+                  maxLength: 4000
+                closed_by_user_id:
+                  type: string
+                  description: 关闭人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/amusement/safety-notices:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementSafetyNotices
+      summary: 查询游乐安全告知列表
+      x-auth-context: staff-token
+      x-permission: amusement.safety_notice.view
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: false
+      x-audit-event-success: amusement.safety_notice.list
+      x-audit-event-failure: amusement.safety_notice.list_failed
+      responses: *a7
+    post:
+      tags:
+        - amusement
+      operationId: createAmusementSafetyNotice
+      summary: 创建游乐安全告知/免责须知
+      x-auth-context: staff-token
+      x-permission: amusement.safety_notice.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.safety_notice.create
+      x-audit-event-failure: amusement.safety_notice.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a17
+                project_id:
+                  type: string
+                  description: 所属项目 ID。
+                  maxLength: 64
+                amusement_project_id:
+                  type: string
+                  description: 游乐项目 ID。
+                  maxLength: 64
+                notice_type:
+                  type: string
+                  description: 告知类型。
+                  maxLength: 255
+                title:
+                  type: string
+                  description: 标题。
+                  maxLength: 255
+                content_version:
+                  type: string
+                  description: 内容版本。
+                  maxLength: 255
+                content_text:
+                  type: string
+                  description: 告知正文。
+                  maxLength: 4000
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                effective_from:
+                  type: string
+                  format: date-time
+                  description: 生效起。
+                effective_to:
+                  type: string
+                  format: date-time
+                  description: 生效止。
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/amusement/safety-notices/{noticeId}/acknowledgements:
+    post:
+      tags:
+        - amusement
+      operationId: acknowledgeAmusementSafetyNotice
+      summary: 登记安全告知签字确认（免责确认）
+      x-auth-context: staff-token
+      x-permission: amusement.waiver.acknowledge
+      x-data-scope: project-amusement
+      x-terminal-allowed: *a1
+      x-idempotency-required: true
+      x-audit-event-success: amusement.waiver.acknowledge
+      x-audit-event-failure: amusement.waiver.acknowledge_failed
+      parameters:
+        - name: noticeId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 安全告知 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a17
+                project_id:
+                  type: string
+                  description: 所属项目 ID。
+                  maxLength: 64
+                amusement_project_id:
+                  type: string
+                  description: 游乐项目 ID。
+                  maxLength: 64
+                session_id:
+                  type: string
+                  description: 场次 ID。
+                  maxLength: 64
+                customer_id:
+                  type: string
+                  description: 客户 ID。
+                  maxLength: 64
+                visitor_name:
+                  type: string
+                  description: 游客姓名。
+                  maxLength: 255
+                signer_name:
+                  type: string
+                  description: 签署人姓名。
+                  maxLength: 255
+                acknowledgement_method:
+                  type: string
+                  description: 确认方式。
+                  maxLength: 255
+                content_version:
+                  type: string
+                  description: 内容版本。
+                  maxLength: 255
+                content_hash:
+                  type: string
+                  description: 内容哈希。
+                  maxLength: 255
+                acknowledged_at:
+                  type: string
+                  format: date-time
+                  description: 确认时间。
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/inventory/risk-alerts:
+    get:
+      tags:
+        - inventory
+      operationId: listInventoryRiskAlerts
+      summary: 查询库存风险预警列表
+      x-auth-context: staff-token
+      x-permission: inventory.risk_alert.view
+      x-data-scope: warehouse
+      x-terminal-allowed: &a18
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: inventory.risk_alert.list
+      x-audit-event-failure: inventory.risk_alert.list_failed
+      responses: *a7
+  /api/v1/inventory/risk-alerts/scan:
+    post:
+      tags:
+        - inventory
+      operationId: scanInventoryRiskAlerts
+      summary: 触发库存风险扫描
+      x-auth-context: staff-token
+      x-permission: inventory.risk.scan
+      x-data-scope: warehouse
+      x-terminal-allowed: *a18
+      x-idempotency-required: true
+      x-audit-event-success: inventory.risk.scan
+      x-audit-event-failure: inventory.risk.scan_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                expiry_warning_days:
+                  type: integer
+                  description: 临期预警天数阈值。
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/inventory/stock-batches:
+    get:
+      tags:
+        - inventory
+      operationId: listInventoryStockBatches
+      summary: 查询库存批次列表
+      x-auth-context: staff-token
+      x-permission: inventory.stock.view
+      x-data-scope: warehouse
+      x-terminal-allowed: *a18
+      x-idempotency-required: false
+      x-audit-event-success: inventory.stock_batch.list
+      x-audit-event-failure: inventory.stock_batch.list_failed
+      responses: *a7
+    post:
+      tags:
+        - inventory
+      operationId: createInventoryStockBatch
+      summary: 创建库存批次
+      x-auth-context: staff-token
+      x-permission: inventory.stock.batch.manage
+      x-data-scope: warehouse
+      x-terminal-allowed: *a18
+      x-idempotency-required: true
+      x-audit-event-success: inventory.stock_batch.create
+      x-audit-event-failure: inventory.stock_batch.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: &a19
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                item_id:
+                  type: string
+                  description: 物料 ID。
+                  maxLength: 64
+                location_id:
+                  type: string
+                  description: 库位 ID。
+                  maxLength: 64
+                batch_no:
+                  type: string
+                  description: 批次号。
+                  maxLength: 255
+                supplier_id:
+                  type: string
+                  description: 供应商 ID。
+                  maxLength: 64
+                quantity:
+                  type: integer
+                  description: 数量。
+                expire_at:
+                  type: string
+                  format: date-time
+                  description: 过期时间。
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+      responses: *a3
+  /api/v1/inventory/supplier-qualifications:
+    get:
+      tags:
+        - inventory
+      operationId: listSupplierQualifications
+      summary: 查询供应商资质列表
+      x-auth-context: staff-token
+      x-permission: inventory.supplier.qualification.manage
+      x-data-scope: supplier
+      x-terminal-allowed: *a6
+      x-idempotency-required: false
+      x-audit-event-success: inventory.supplier_qualification.list
+      x-audit-event-failure: inventory.supplier_qualification.list_failed
+      parameters:
+        - name: supplier_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 按供应商过滤。
+      responses: *a7
+    post:
+      tags:
+        - inventory
+      operationId: createSupplierQualification
+      summary: 创建/更新供应商资质
+      x-auth-context: staff-token
+      x-permission: inventory.supplier.qualification.manage
+      x-data-scope: supplier
+      x-terminal-allowed: *a6
+      x-idempotency-required: true
+      x-audit-event-success: inventory.supplier_qualification.create
+      x-audit-event-failure: inventory.supplier_qualification.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - qualification_type
+              properties:
+                idempotency_key: *a2
+                supplier_id:
+                  type: string
+                  description: 供应商 ID。
+                  maxLength: 64
+                qualification_type:
+                  type: string
+                  description: 资质类型。
+                  maxLength: 255
+                qualification_no:
+                  type: string
+                  description: 资质编号。
+                  maxLength: 255
+                issued_by:
+                  type: string
+                  description: 发证机构。
+                  maxLength: 255
+                valid_from:
+                  type: string
+                  format: date
+                  description: 有效期起。
+                valid_to:
+                  type: string
+                  format: date
+                  description: 有效期止。
+                attachment_ids:
+                  type: array
+                  description: 资质附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+      responses: *a3
+  /api/v1/inventory/supplier-reconciliations:
+    get:
+      tags:
+        - inventory
+      operationId: listSupplierReconciliations
+      summary: 查询供应商对账列表
+      x-auth-context: staff-token
+      x-permission: inventory.supplier.reconcile
+      x-data-scope: supplier
+      x-terminal-allowed: *a6
+      x-idempotency-required: false
+      x-audit-event-success: inventory.supplier_reconciliation.list
+      x-audit-event-failure: inventory.supplier_reconciliation.list_failed
+      responses: *a7
+    post:
+      tags:
+        - inventory
+      operationId: createSupplierReconciliation
+      summary: 创建供应商对账单
+      x-auth-context: staff-token
+      x-permission: inventory.supplier.reconcile
+      x-data-scope: supplier
+      x-terminal-allowed: *a6
+      x-idempotency-required: true
+      x-audit-event-success: inventory.supplier_reconciliation.create
+      x-audit-event-failure: inventory.supplier_reconciliation.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a19
+                supplier_id:
+                  type: string
+                  description: 供应商 ID。
+                  maxLength: 64
+                period_start:
+                  type: string
+                  format: date
+                  description: 对账周期起。
+                period_end:
+                  type: string
+                  format: date
+                  description: 对账周期止。
+                expected_amount_cent:
+                  type: integer
+                  description: 应对账金额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                actual_amount_cent:
+                  type: integer
+                  description: 实际金额。（单位：分，禁止浮点）
+                  minimum: -999999999999
+                  maximum: 999999999999
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/inventory/supplier-settlement-methods:
+    get:
+      tags:
+        - inventory
+      operationId: listSupplierSettlementMethods
+      summary: 查询供应商结算档列表
+      x-auth-context: staff-token
+      x-permission: inventory.supplier.settlement.manage
+      x-data-scope: supplier
+      x-terminal-allowed: *a6
+      x-idempotency-required: false
+      x-audit-event-success: inventory.supplier_settlement_method.list
+      x-audit-event-failure: inventory.supplier_settlement_method.list_failed
+      parameters:
+        - name: supplier_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 按供应商过滤。
+      responses: *a7
+    post:
+      tags:
+        - inventory
+      operationId: createSupplierSettlementMethod
+      summary: 创建/更新供应商结算档
+      x-auth-context: staff-token
+      x-permission: inventory.supplier.settlement.manage
+      x-data-scope: supplier
+      x-terminal-allowed: *a6
+      x-idempotency-required: true
+      x-audit-event-success: inventory.supplier_settlement_method.create
+      x-audit-event-failure: inventory.supplier_settlement_method.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - settlement_method
+              properties:
+                idempotency_key: *a2
+                supplier_id:
+                  type: string
+                  description: 供应商 ID。
+                  maxLength: 64
+                settlement_method:
+                  type: string
+                  description: 结算方式。
+                  maxLength: 255
+                payment_term_days:
+                  type: integer
+                  description: 账期天数。
+                applicable_category:
+                  type: string
+                  description: 适用品类。
+                  maxLength: 255
+                is_default:
+                  type: boolean
+                  description: 是否默认。
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+      responses: *a3
+  /api/v1/inventory/saved-bottles/{id}/dispute:
+    post:
+      tags:
+        - inventory
+      operationId: disputeSavedBottle
+      summary: 受理存酒争议
+      x-auth-context: staff-token
+      x-permission: bar.saved_bottle.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed: &a20
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.saved_bottle.dispute
+      x-audit-event-failure: bar.saved_bottle.dispute_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 存酒记录 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a19
+                reason:
+                  type: string
+                  description: 争议原因。
+                  maxLength: 4000
+                photo_attachment_ids:
+                  type: array
+                  description: 照片附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+                video_attachment_ids:
+                  type: array
+                  description: 视频附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses: *a3
+  /api/v1/inventory/saved-bottles/{id}/transfer:
+    post:
+      tags:
+        - inventory
+      operationId: transferSavedBottle
+      summary: 存酒整瓶转赠
+      x-auth-context: staff-token
+      x-permission: bar.saved_bottle.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed: *a20
+      x-idempotency-required: true
+      x-audit-event-success: bar.saved_bottle.transfer
+      x-audit-event-failure: bar.saved_bottle.transfer_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 存酒记录 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a19
+                to_name_or_nickname:
+                  type: string
+                  description: 受赠人姓名/昵称。
+                  maxLength: 255
+                to_phone:
+                  type: string
+                  description: 受赠人电话。
+                  maxLength: 255
+                reason:
+                  type: string
+                  description: 转赠原因。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/compliance/contract-key-dates:
+    get:
+      tags:
+        - compliance
+      operationId: listContractKeyDates
+      summary: 查询合同关键日期列表
+      x-auth-context: staff-token
+      x-permission: compliance.contract_key_date.view
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: compliance.contract_key_date.list
+      x-audit-event-failure: compliance.contract_key_date.list_failed
+      responses: *a7
+    post:
+      tags:
+        - compliance
+      operationId: createContractKeyDate
+      summary: 创建合同关键日期
+      x-auth-context: staff-token
+      x-permission: compliance.contract_key_date.manage
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: compliance.contract_key_date.create
+      x-audit-event-failure: compliance.contract_key_date.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: &a21
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                contract_id:
+                  type: string
+                  description: 合同 ID。
+                  maxLength: 64
+                merchant_id:
+                  type: string
+                  description: 商户 ID。
+                  maxLength: 64
+                date_type:
+                  type: string
+                  description: 日期类型。
+                  maxLength: 255
+                title:
+                  type: string
+                  description: 标题。
+                  maxLength: 255
+                due_date:
+                  type: string
+                  format: date
+                  description: 关键日期。
+                reminder_days:
+                  type: array
+                  description: 提前提醒天数列表。
+                  items:
+                    type: integer
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                owner_user_id:
+                  type: string
+                  description: 责任人。
+                  maxLength: 64
+                source_type:
+                  type: string
+                  description: 来源类型。
+                  maxLength: 255
+                human_confirmed:
+                  type: boolean
+                  description: 是否人工确认。
+      responses: *a3
+  /api/v1/compliance/expiry-items:
+    get:
+      tags:
+        - compliance
+      operationId: listComplianceExpiryItems
+      summary: 查询合规到期项列表
+      x-auth-context: staff-token
+      x-permission: compliance.expiry_item.view
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: compliance.expiry_item.list
+      x-audit-event-failure: compliance.expiry_item.list_failed
+      responses: *a7
+    post:
+      tags:
+        - compliance
+      operationId: createComplianceExpiryItem
+      summary: 创建合规到期项
+      x-auth-context: staff-token
+      x-permission: compliance.expiry_item.manage
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: compliance.expiry_item.create
+      x-audit-event-failure: compliance.expiry_item.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids: *a21
+                subject_type:
+                  type: string
+                  description: 主体类型。
+                  maxLength: 255
+                subject_id:
+                  type: string
+                  description: 主体 ID。
+                  maxLength: 64
+                merchant_id:
+                  type: string
+                  description: 商户 ID。
+                  maxLength: 64
+                item_type:
+                  type: string
+                  description: 到期项类型。
+                  maxLength: 255
+                item_name:
+                  type: string
+                  description: 到期项名称。
+                  maxLength: 255
+                document_no:
+                  type: string
+                  description: 证照编号。
+                  maxLength: 255
+                issuing_authority:
+                  type: string
+                  description: 发证机构。
+                  maxLength: 255
+                valid_from:
+                  type: string
+                  format: date
+                  description: 有效期起。
+                valid_to:
+                  type: string
+                  format: date
+                  description: 有效期止。
+                reminder_days:
+                  type: array
+                  description: 提前提醒天数列表。
+                  items:
+                    type: integer
+                expiry_action:
+                  type: string
+                  description: 到期动作。
+                  maxLength: 255
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                owner_user_id:
+                  type: string
+                  description: 责任人。
+                  maxLength: 64
+                source_type:
+                  type: string
+                  description: 来源类型。
+                  maxLength: 255
+                human_confirmed:
+                  type: boolean
+                  description: 是否人工确认。
+      responses: *a3
+  /api/v1/compliance/reminders:
+    get:
+      tags:
+        - compliance
+      operationId: listComplianceReminders
+      summary: 查询合规提醒列表
+      x-auth-context: staff-token
+      x-permission: compliance.reminder.view
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: compliance.reminder.list
+      x-audit-event-failure: compliance.reminder.list_failed
+      responses: *a7
+  /api/v1/compliance/reminders/scan:
+    post:
+      tags:
+        - compliance
+      operationId: scanComplianceReminders
+      summary: 触发合规提醒扫描
+      x-auth-context: staff-token
+      x-permission: compliance.reminder.scan
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: compliance.reminder.scan
+      x-audit-event-failure: compliance.reminder.scan_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                scan_date:
+                  type: string
+                  format: date
+                  description: 扫描基准日。
+                default_lookahead_days:
+                  type: integer
+                  description: 默认前瞻天数。
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/compliance/wecom/risk-hits:
+    get:
+      tags:
+        - compliance
+      operationId: listWecomRiskHits
+      summary: 查询企微会话违规命中列表
+      x-auth-context: staff-token
+      x-permission: wecom.risk_hit.view
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: wecom.risk_hit.list
+      x-audit-event-failure: wecom.risk_hit.list_failed
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+          description: 按处置状态过滤。
+        - name: conversation_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 按会话过滤。
+      responses: *a7
+  /api/v1/compliance/wecom/risk-hits/{id}/review:
+    post:
+      tags:
+        - compliance
+      operationId: reviewWecomRiskHit
+      summary: 复核处置企微违规命中
+      x-auth-context: staff-token
+      x-permission: wecom.risk_hit.review
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: wecom.risk_hit.review
+      x-audit-event-failure: wecom.risk_hit.review_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 企微违规命中 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  description: 目标处置状态。
+                  enum:
+                    - reviewing
+                    - confirmed
+                    - dismissed
+                review_note:
+                  type: string
+                  description: 复核说明。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/terminals/devices/{id}/found:
+    post:
+      tags:
+        - terminals
+      operationId: markTerminalDeviceFound
+      summary: 标记设备找回
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.found
+      x-audit-event-failure: terminal.device.found_failed
+      parameters: &a22
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                staff_id:
+                  type: string
+                  description: 关联员工 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 流转原因；进入留痕事件。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/terminals/devices/{id}/lost:
+    post:
+      tags:
+        - terminals
+      operationId: markTerminalDeviceLost
+      summary: 标记设备挂失
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.lost
+      x-audit-event-failure: terminal.device.lost_failed
+      parameters: *a22
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                staff_id:
+                  type: string
+                  description: 关联员工 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 流转原因；进入留痕事件。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/terminals/devices/{id}/repair:
+    post:
+      tags:
+        - terminals
+      operationId: markTerminalDeviceRepair
+      summary: 设备送修
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.repair
+      x-audit-event-failure: terminal.device.repair_failed
+      parameters: *a22
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                staff_id:
+                  type: string
+                  description: 关联员工 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 流转原因；进入留痕事件。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/terminals/devices/{id}/scrap:
+    post:
+      tags:
+        - terminals
+      operationId: markTerminalDeviceScrap
+      summary: 设备报废
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.scrap
+      x-audit-event-failure: terminal.device.scrap_failed
+      parameters: *a22
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                staff_id:
+                  type: string
+                  description: 关联员工 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 流转原因；进入留痕事件。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/terminals/mdm/violations/detect:
+    post:
+      tags:
+        - terminals
+      operationId: detectMdmViolations
+      summary: 服务端检测设备违规
+      x-auth-context: staff-token
+      x-permission: mdm.device.manage
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: mdm.violation.detect
+      x-audit-event-failure: mdm.violation.detect_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - device_id
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+                device_id:
+                  type: string
+                  description: 设备 ID。
+                  maxLength: 64
+                app_packages:
+                  type: array
+                  description: 应用包名列表。
+                  items:
+                    type: string
+                    maxLength: 64
+                site_domains:
+                  type: array
+                  description: 访问域名列表。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses: *a3
+  /api/v1/terminals/mdm/violations/{id}/handle:
+    post:
+      tags:
+        - terminals
+      operationId: handleMdmViolation
+      summary: 违规处置闭环
+      x-auth-context: staff-token
+      x-permission: mdm.violation.handle
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: mdm.violation.handle
+      x-audit-event-failure: mdm.violation.handle_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: MDM 违规记录 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - disposition
+              properties:
+                idempotency_key: *a2
+                operator_note: *a4
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+                disposition:
+                  type: string
+                  description: 处置动作。
+                  enum:
+                    - acknowledged
+                    - device_blocked
+                    - dismissed
+                handled_note:
+                  type: string
+                  description: 处置说明。
+                  maxLength: 4000
+      responses: *a3
+  /api/v1/merchant-billing/bills/{id}/confirm:
+    post:
+      tags:
+        - merchant-billing
+      operationId: confirmMerchantBill
+      summary: 确认商户账单
+      x-auth-context: staff-token
+      x-permission: merchant.billing.confirm
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.billing.confirm
+      x-audit-event-failure: merchant.billing.confirm_failed
+      parameters: &a23
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 商户账单 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/merchant-billing/bills/{id}/disputes:
+    post:
+      tags:
+        - merchant-billing
+      operationId: submitMerchantBillDispute
+      summary: 提交账单争议
+      x-auth-context: staff-token
+      x-permission: merchant.billing.dispute.submit
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.billing.dispute.submit
+      x-audit-event-failure: merchant.billing.dispute.submit_failed
+      parameters: *a23
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+                reason_code:
+                  type: string
+                  description: 争议原因码。
+                  maxLength: 255
+                description:
+                  type: string
+                  description: 争议说明。
+                  maxLength: 4000
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/merchant-billing/bills/{id}/dunning-records:
+    post:
+      tags:
+        - merchant-billing
+      operationId: recordMerchantBillDunning
+      summary: 记录账单催收
+      x-auth-context: staff-token
+      x-permission: merchant.billing.dunning.record
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.billing.dunning.record
+      x-audit-event-failure: merchant.billing.dunning.record_failed
+      parameters: *a23
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key: *a2
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                dunning_channel:
+                  type: string
+                  description: 催收渠道。
+                  maxLength: 255
+                message_template:
+                  type: string
+                  description: 催收模板。
+                  maxLength: 255
+                status:
+                  type: string
+                  description: 状态。
+                  maxLength: 255
+                sent_at:
+                  type: string
+                  format: date-time
+                  description: 发送时间。
+                operator_user_id:
+                  type: string
+                  description: 操作人。
+                  maxLength: 64
+      responses: *a3
+  /api/v1/customer/points/ledger:
+    get:
+      tags:
+        - customer
+      operationId: getCustomerPointsLedger
+      summary: 查询积分流水
+      x-auth-context: customer-token
+      x-permission: not_applicable
+      x-data-scope: self
+      x-terminal-allowed: &a24
+        - app
+        - miniapp
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.points.ledger_viewed
+      x-audit-event-failure: customer.points.ledger_view_failed
+      responses: *a7
+  /api/v1/customer/points/redemption-items:
+    get:
+      tags:
+        - customer
+      operationId: listCustomerPointsRedemptionItems
+      summary: 查询积分兑换商品目录
+      x-auth-context: customer-token
+      x-permission: not_applicable
+      x-data-scope: self
+      x-terminal-allowed: *a24
+      x-idempotency-required: false
+      x-audit-event-success: customer.points.redemption_items_viewed
+      x-audit-event-failure: customer.points.redemption_items_view_failed
+      responses: *a7
+  /api/v1/customer/points/redemptions:
+    get:
+      tags:
+        - customer
+      operationId: listCustomerPointsRedemptions
+      summary: 查询我的积分兑换记录
+      x-auth-context: customer-token
+      x-permission: not_applicable
+      x-data-scope: self
+      x-terminal-allowed: *a24
+      x-idempotency-required: false
+      x-audit-event-success: customer.points.redemptions_viewed
+      x-audit-event-failure: customer.points.redemptions_view_failed
+      responses: *a7
+    post:
+      tags:
+        - customer
+      operationId: redeemCustomerPoints
+      summary: 提交积分兑换
+      x-auth-context: customer-token
+      x-permission: not_applicable
+      x-data-scope: self
+      x-terminal-allowed: *a24
+      x-idempotency-required: true
+      x-audit-event-success: customer.points.redeem
+      x-audit-event-failure: customer.points.redeem_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - catalog_item_id
+                - quantity
+              properties:
+                idempotency_key: *a2
+                catalog_item_id:
+                  type: string
+                  description: 兑换商品 ID。
+                  maxLength: 64
+                quantity:
+                  type: integer
+                  description: 兑换数量。
+                  minimum: 1
+                source_terminal:
+                  type: string
+                  description: 来源终端。
+                  maxLength: 255
+      responses: *a3
+  /api/v1/analytics/group-overview:
+    get:
+      tags:
+        - analytics
+      operationId: getGroupOverview
+      summary: 集团总览视图
+      x-auth-context: staff-token
+      x-permission: analytics.group.view
+      x-data-scope: group
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.group_overview.viewed
+      x-audit-event-failure: analytics.group_overview.view_failed
+      responses: *a7
+  /api/v1/ticketing/refunds/{refund_id}/lines:
+    get:
+      tags:
+        - ticketing
+      operationId: listTicketRefundLines
+      summary: 查询退票明细行
+      x-auth-context: staff-token
+      x-permission: ticket.refund.view
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: ticket.refund_line.list
+      x-audit-event-failure: ticket.refund_line.list_failed
+      parameters:
+        - name: refund_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 退票单 ID。
+      responses: *a7
 components:
   securitySchemes:
     BearerAuth:
@@ -12205,12 +15921,15 @@ components:
           maxLength: 128
     SavedBottleRequest:
       type: object
-      description: 请求载荷 `SavedBottleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
+      description: 请求载荷 `SavedBottleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id
+        改为可空（散客存酒），登记必填补 bottle_label_value/registration_photo_refs/customer_name_or_nickname。
       additionalProperties: false
       required:
-        - customer_id
         - bar_id
         - items
+        - bottle_label_value
+        - registration_photo_refs
+        - customer_name_or_nickname
       properties:
         idempotency_key:
           type: string
@@ -12245,6 +15964,30 @@ components:
           type: string
           description: "`expire_at` 时间字段；使用 ISO 8601 格式。"
           format: date-time
+        customer_name_or_nickname:
+          type: string
+          description: 客户姓名或昵称；散客无 customer_id 时落此，作取酒核身比对项之一。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          maxLength: 128
+        bottle_label_value:
+          type: string
+          description: 瓶底标签数值；登记必填，取酒核身的强制比对项。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          maxLength: 128
+        registration_photo_refs:
+          type: array
+          description: 登记时刻照片证据引用列表；登记必填，区别于取酒/作废流水证据。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          items:
+            type: string
+            maxLength: 256
+          maxItems: 50
+        manual_note:
+          type: string
+          description: 人工备注；区别于通用备注。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          maxLength: 1000
+        customer_phone:
+          type: string
+          description: 客户手机号；散客核身主键之一，保存和展示必须遵守脱敏规则。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          maxLength: 20
+          pattern: ^\+?[0-9]{6,20}$
     SavedBottleClaimRequest:
       type: object
       description: 请求载荷 `SavedBottleClaimRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -12281,6 +16024,14 @@ components:
         verification_code:
           type: string
           description: SavedBottleClaimRequest.verification_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          maxLength: 128
+        bottle_label_value:
+          type: string
+          description: 瓶底标签数值比对项；取酒核身必须比对本值。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          maxLength: 128
+        customer_name_or_nickname:
+          type: string
+          description: 姓名/昵称比对项；取酒核身必须比对本值（与 bottle_label_value 同时通过），不止手机号+验证码。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
           maxLength: 128
     StockAdjustmentRequest:
       type: object
@@ -15941,7 +19692,7 @@ components:
         - bar_id
         - cashier_user_id
       properties:
-        idempotency_key: &a2
+        idempotency_key:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复开班/班结或重复入账。
           maxLength: 128
@@ -15980,7 +19731,10 @@ components:
       required:
         - declared_cash_cent
       properties:
-        idempotency_key: *a2
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复开班/班结或重复入账。
+          maxLength: 128
         declared_cash_cent:
           type: integer
           description: 班结实点现金（含备用金），单位分；不得使用浮点数。

@@ -199,6 +199,13 @@ public class IntegrationController {
         return ApiResponse.ok(service.resolveReconciliationDifference(id, request));
     }
 
+    @PostMapping("/reconciliation/channel-auto")
+    public ApiResponse<ChannelReconciliationResult> reconcileChannel(@RequestBody ChannelReconciliationRequest request) {
+        authorizationService.requirePermission(RECONCILIATION_MANAGE_PERMISSION);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reconcileChannel(request));
+    }
+
     @PostMapping("/{type}/webhook")
     public ApiResponse<WebhookAcceptedResponse> receiveTypedWebhook(
             @PathVariable String type,

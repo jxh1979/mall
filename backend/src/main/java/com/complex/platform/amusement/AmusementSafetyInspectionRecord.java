@@ -20,6 +20,11 @@ public record AmusementSafetyInspectionRecord(
         String operatorNote,
         List<String> evidenceAttachmentIds,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        // V114 结构化补强：巡检人 + 结构化巡检结论 + 异常标记/说明（沿用增补口径，与既有 overall_result/operator_note 并存）。
+        String inspectorId,
+        String inspectionResult,
+        boolean abnormalFound,
+        String abnormalNote
 ) {
 }
