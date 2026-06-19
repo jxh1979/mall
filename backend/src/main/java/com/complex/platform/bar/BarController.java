@@ -11,6 +11,7 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -295,6 +296,22 @@ public class BarController {
         authorizationService.requirePermission("bar.table.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTable(request));
+    }
+
+    @GetMapping("/tables/without-space")
+    public ApiResponse<PageResponse<BarTableSpaceBacklogRecord>> listTablesWithoutSpace() {
+        authorizationService.requirePermission("bar.table.manage");
+        return ApiResponse.ok(service.listTablesWithoutSpace());
+    }
+
+    @PutMapping("/tables/{table_id}/space")
+    public ApiResponse<BarTableSpaceAssignmentRecord> assignTableSpace(
+            @PathVariable("table_id") String tableId,
+            @RequestBody(required = false) BarTableSpaceAssignmentRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.assignTableSpace(tableId, request));
     }
 
     @PostMapping("/tables/{table_id}/open")

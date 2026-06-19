@@ -112,6 +112,34 @@ public class BarTableSessionService {
         ));
     }
 
+    BarTableSpaceAssignmentRecord assignTableSpace(String tableId, BarTableSpaceAssignmentRequest request) {
+        BarTableSpaceAssignmentRequest actual = requireRequest(request);
+        String id = requireText(tableId, "table_id");
+        String spaceId = requireText(actual.spaceId(), "space_id");
+        BarTableRecord table = repository.findTableById(id)
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+        checkMerchantOwnership(table.merchantId());
+        // 空间必须存在；且若属于某商户，必须与桌台同商户（不可指派到他商户空间，currentMerchantScope 隔离）。
+        String spaceMerchant = repository.findSpaceMerchant(spaceId)
+                .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "space not found"));
+        if (!spaceMerchant.isBlank() && table.merchantId() != null && !spaceMerchant.equals(table.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+        }
+        // 再以调用方商户范围兜底校验（防止桌台 merchant_id 为空时被越权指派他商户空间）。
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !spaceMerchant.isBlank() && !scope.get().equals(spaceMerchant)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+        }
+        if (repository.assignTableSpace(id, spaceId) == 0) {
+            throw ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found");
+        }
+        return new BarTableSpaceAssignmentRecord(id, spaceId, Instant.now());
+    }
+
+    java.util.List<BarTableSpaceBacklogRecord> listTablesWithoutSpace() {
+        return repository.listTablesWithoutSpace(authorizationService.currentMerchantScope());
+    }
+
     BarTableSessionAdjustmentRecord transferTableSession(String sessionId, BarTableTransferRequest request) {
         BarTableTransferRequest actual = requireRequest(request);
         BarTableSessionRecord session = requireOpenTableSession(sessionId);

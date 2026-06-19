@@ -14,6 +14,15 @@ public interface BarRepository {
     /** R5 T15：按吧台解析一张台位用于赠饮 0 元单落 FK（无可靠台位来源时的兜底；无台位则跳过落单）。 */
     Optional<BarTableRecord> findFirstTableByBar(String barId);
 
+    /** 处理清单 #8：设置 bar_tables.space_id（空间指派/回填），返回受影响行数。 */
+    int assignTableSpace(String tableId, String spaceId);
+
+    /** 处理清单 #8：解析空间所属商户（spaces.merchant_id），用于跨商户校验；空间不存在返回 empty。 */
+    Optional<String> findSpaceMerchant(String spaceId);
+
+    /** 处理清单 #8：列出 space_id 为空、待运营回填的卡座/桌台（按商户范围过滤）。 */
+    List<BarTableSpaceBacklogRecord> listTablesWithoutSpace(Optional<String> merchantScope);
+
     BarReservationRecord saveReservation(BarReservationRecord reservation);
 
     List<BarReservationRecord> listReservations(Optional<String> merchantScope);

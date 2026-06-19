@@ -91,6 +91,49 @@ final class JdbcBarCatalogRepository {
                 """, Map.of("bar_id", barId), rowMapper::mapTable).stream().findFirst();
     }
 
+    public int assignTableSpace(String tableId, String spaceId) {
+        return jdbcTemplate.update("""
+                UPDATE bar_tables
+                   SET space_id = :space_id,
+                       updated_at = NOW()
+                 WHERE id = :id
+                """, Map.of("id", tableId, "space_id", spaceId));
+    }
+
+    public Optional<String> findSpaceMerchant(String spaceId) {
+        // spaces.merchant_id 可能为 NULL（平台/共享空间）；用 query 区分「空间不存在」与「存在但 merchant 为空」。
+        List<String> rows = jdbcTemplate.query(
+                "SELECT COALESCE(merchant_id, '') FROM spaces WHERE id = :id",
+                Map.of("id", spaceId),
+                (rs, n) -> rs.getString(1));
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    public List<BarTableSpaceBacklogRecord> listTablesWithoutSpace(Optional<String> merchantScope) {
+        String base = """
+                SELECT id, bar_id, merchant_id, table_code, table_name, status
+                  FROM bar_tables
+                 WHERE space_id IS NULL
+                """;
+        if (merchantScope.isEmpty()) {
+            return jdbcTemplate.query(base + " ORDER BY created_at DESC, id", JdbcBarCatalogRepository::mapBacklog);
+        }
+        return jdbcTemplate.query(
+                base + " AND merchant_id = :merchant_id ORDER BY created_at DESC, id",
+                Map.of("merchant_id", merchantScope.get()),
+                JdbcBarCatalogRepository::mapBacklog);
+    }
+
+    private static BarTableSpaceBacklogRecord mapBacklog(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new BarTableSpaceBacklogRecord(
+                rs.getString("id"),
+                rs.getString("bar_id"),
+                rs.getString("merchant_id"),
+                rs.getString("table_code"),
+                rs.getString("table_name"),
+                rs.getString("status"));
+    }
+
     public BarReservationRecord saveReservation(BarReservationRecord reservation) {
         jdbcTemplate.update("""
                 INSERT INTO bar_reservations (

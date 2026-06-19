@@ -8352,7 +8352,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-      responses: &a2
+      responses:
         "200":
           $ref: "#/components/responses/Page"
         "403":
@@ -8377,7 +8377,7 @@ paths:
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
       requestBody:
         $ref: "#/components/requestBodies/AmusementProjectEntitlementRequest"
-      responses: &a1
+      responses:
         "200":
           $ref: "#/components/responses/Success"
         "400":
@@ -8409,7 +8409,17 @@ paths:
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
       requestBody:
         $ref: "#/components/requestBodies/StatusChangeRequest"
-      responses: *a1
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/projects/{id}/capacity-config:
     get:
       tags:
@@ -8427,7 +8437,13 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-      responses: *a2
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - amusement
@@ -8446,7 +8462,17 @@ paths:
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
       requestBody:
         $ref: "#/components/requestBodies/AmusementCapacityConfigRequest"
-      responses: *a1
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/capacity-config/{configId}/disable:
     post:
       tags:
@@ -8466,7 +8492,109 @@ paths:
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
       requestBody:
         $ref: "#/components/requestBodies/StatusChangeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/tables/{table_id}/space:
+    put:
+      tags:
+        - bar
+      operationId: assignBarTableSpace
+      summary: 卡座/桌台空间指派（回填）
+      description: "处理清单 #8：设 bar_tables.space_id（运营录入/回填）。bar_tables 无可派生源，无法 SQL 自动回填；over_space
+        判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
+      x-permission: bar.table.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table_space.assigned
+      x-audit-event-failure: bar.table_space.assign_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+          description: TableId 路径参数；必须引用当前数据范围内存在且允许访问的记录。
+      requestBody:
+        $ref: "#/components/requestBodies/BarTableSpaceAssignmentRequest"
+      responses: &a1
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/tables/without-space:
+    get:
+      tags:
+        - bar
+      operationId: listBarTablesWithoutSpace
+      summary: 未回填空间的卡座/桌台清单
+      description: "处理清单 #8：列出 space_id 为空、待运营回填的桌台，便于核对（over_space 对这些桌台关联账单不生效，保守放行）。"
+      x-permission: bar.table.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-audit-event-success: bar.table_space_backlog.viewed
+      x-audit-event-failure: bar.table_space_backlog.view_failed
+      x-auth-context: staff-token
+      responses: &a2
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/projects/{id}/space:
+    put:
+      tags:
+        - amusement
+      operationId: assignAmusementProjectSpace
+      summary: 游乐项目空间指派（回填）
+      description: "处理清单 #8：设 amusement_projects.space_id（运营录入/回填）。amusement_projects 无可派生源，无法 SQL 自动回填；over_space
+        判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
+      x-permission: amusement.session.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.project_space.assigned
+      x-audit-event-failure: amusement.project_space.assign_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: Id 路径参数；必须引用当前数据范围内存在且允许访问的记录。
+      requestBody:
+        $ref: "#/components/requestBodies/AmusementProjectSpaceAssignmentRequest"
       responses: *a1
+  /api/v1/amusement/projects/without-space:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementProjectsWithoutSpace
+      summary: 未回填空间的游乐项目清单
+      description: "处理清单 #8：列出 space_id 为空、待运营回填的项目，便于核对（over_space 对这些项目相关受控对象不生效，保守放行）。"
+      x-permission: amusement.session.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-audit-event-success: amusement.project_space_backlog.viewed
+      x-audit-event-failure: amusement.project_space_backlog.view_failed
+      x-auth-context: staff-token
+      responses: *a2
 components:
   securitySchemes:
     BearerAuth:
@@ -9634,6 +9762,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StatusChangeRequest"
+    BarTableSpaceAssignmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarTableSpaceAssignmentRequest"
+    AmusementProjectSpaceAssignmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementProjectSpaceAssignmentRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -15544,15 +15684,15 @@ components:
       required:
         - entitlement_type
       properties:
-        idempotency_key: &a3
+        idempotency_key:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复绑定或重复录入容量配置。
           maxLength: 128
-        operator_note: &a4
+        operator_note:
           type: string
           description: 操作备注；用于解释运营配置变更原因，进入审计留痕。
           maxLength: 1000
-        evidence_attachment_ids: &a5
+        evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定审批、说明或现场凭证。
           items:
@@ -15571,9 +15711,21 @@ components:
       required:
         - max_concurrent
       properties:
-        idempotency_key: *a3
-        operator_note: *a4
-        evidence_attachment_ids: *a5
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复绑定或重复录入容量配置。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；用于解释运营配置变更原因，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定审批、说明或现场凭证。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
         location_point_id:
           type: string
           description: 点位 ID；与 device_id 至少配置其一。
@@ -15594,6 +15746,46 @@ components:
         enabled:
           type: boolean
           description: 是否启用（省略默认 true）；停用后该配置不再参与三维容量校验。
+    BarTableSpaceAssignmentRequest:
+      type: object
+      description: "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space
+        对该桌台关联账单（bar_bill→table_id→space_id）真实生效。bar_tables 无可派生源，无法 SQL 自动回填，须运营录入。"
+      additionalProperties: false
+      required:
+        - space_id
+      properties:
+        idempotency_key: &a3
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复指派或重复入账。
+          maxLength: 128
+        operator_note: &a4
+          type: string
+          description: 操作备注；用于解释人工录入/回填判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids: &a5
+          type: array
+          description: 证据附件 ID 列表；用于绑定空间归属说明、审批或现场凭证。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        space_id: &a6
+          type: string
+          description: 目标空间 ID（spaces.id）；必须存在且属于同一商户，否则拒绝（跨商户禁止）。
+          maxLength: 64
+    AmusementProjectSpaceAssignmentRequest:
+      type: object
+      description: "请求载荷 `AmusementProjectSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 amusement_projects.space_id。录入后
+        AdmissionGuard over_space 对该项目相关受控对象（inspection/maintenance_record/incident/group_booking 经
+        project_id→space_id）真实生效。amusement_projects 无可派生源，无法 SQL 自动回填，须运营录入。"
+      additionalProperties: false
+      required:
+        - space_id
+      properties:
+        idempotency_key: *a3
+        operator_note: *a4
+        evidence_attachment_ids: *a5
+        space_id: *a6
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

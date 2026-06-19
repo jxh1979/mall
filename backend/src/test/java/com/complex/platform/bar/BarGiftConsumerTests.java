@@ -148,6 +148,21 @@ class BarGiftConsumerTests {
         }
 
         @Override
+        public int assignTableSpace(String tableId, String spaceId) {
+            return tables.containsKey(tableId) ? 1 : 0;
+        }
+
+        @Override
+        public Optional<String> findSpaceMerchant(String spaceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<BarTableSpaceBacklogRecord> listTablesWithoutSpace(Optional<String> merchantScope) {
+            return List.of();
+        }
+
+        @Override
         public BarOrderRecord saveOrder(BarOrderRecord order) {
             orders.put(order.id(), order);
             return order;

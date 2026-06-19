@@ -16,6 +16,7 @@ enum BarWriteOperation implements AuditedOperation {
     CREATE_DEPOSIT_RULE("bar.deposit_rule.created", "bar.deposit_rule.create_failed", "bar.deposit_rule.manage", "bar_deposit_rule"),
     CHECK_IN_RESERVATION_GUEST("bar.table_guest.checked_in", "bar.table_guest.rejected", "bar.table.guest_checkin", "bar_table_guest_checkin"),
     CREATE_TABLE("bar.table.changed", "bar.table.change_failed", "bar.table.manage", "bar_table"),
+    ASSIGN_TABLE_SPACE("bar.table_space.assigned", "bar.table_space.assign_failed", "bar.table.manage", "bar_table"),
     OPEN_TABLE("bar.table.opened", "bar.table.open_failed", "bar.table.open_close", "bar_table"),
     CREATE_TABLE_SESSION("bar.table_session.created", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
     TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),

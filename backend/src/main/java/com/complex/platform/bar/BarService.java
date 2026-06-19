@@ -266,6 +266,27 @@ public class BarService {
         );
     }
 
+    public PageResponse<BarTableSpaceBacklogRecord> listTablesWithoutSpace() {
+        return operations.readPage(
+                BarReadOperation.LIST_TABLES_WITHOUT_SPACE,
+                tableSessionService::listTablesWithoutSpace
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.manage")
+    @Transactional
+    public BarTableSpaceAssignmentRecord assignTableSpace(String tableId, BarTableSpaceAssignmentRequest request) {
+        String id = operations.requireText(tableId, "table_id");
+        return operations.executeWrite(
+                "assignBarTableSpace:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarTableSpaceAssignmentRecord.class,
+                BarWriteOperation.ASSIGN_TABLE_SPACE,
+                () -> tableSessionService.assignTableSpace(id, request)
+        );
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "bar.table.open_close")
     @Transactional
     public BarTableRecord openTable(String tableId, OpenBarTableRequest request) {

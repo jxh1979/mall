@@ -131,6 +131,51 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public int assignProjectSpace(String projectId, String spaceId) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_projects
+                   SET space_id = :space_id,
+                       updated_at = NOW()
+                 WHERE id = :id
+                """, Map.of("id", projectId, "space_id", spaceId));
+    }
+
+    @Override
+    public Optional<String> findSpaceMerchant(String spaceId) {
+        // spaces.merchant_id 可能为 NULL（平台/共享空间）；用 query 区分「空间不存在」与「存在但 merchant 为空」。
+        List<String> rows = jdbcTemplate.query(
+                "SELECT COALESCE(merchant_id, '') FROM spaces WHERE id = :id",
+                Map.of("id", spaceId),
+                (rs, n) -> rs.getString(1));
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
+    public List<AmusementProjectSpaceBacklogRecord> listProjectsWithoutSpace(Optional<String> merchantScope) {
+        String base = """
+                SELECT id, project_name, open_status, merchant_id
+                  FROM amusement_projects
+                 WHERE space_id IS NULL
+                """;
+        if (merchantScope.isEmpty()) {
+            return jdbcTemplate.query(base + " ORDER BY created_at DESC, id", (rs, n) ->
+                    new AmusementProjectSpaceBacklogRecord(
+                            rs.getString("id"),
+                            rs.getString("project_name"),
+                            rs.getString("open_status"),
+                            rs.getString("merchant_id")));
+        }
+        return jdbcTemplate.query(
+                base + " AND merchant_id = :merchant_id ORDER BY created_at DESC, id",
+                Map.of("merchant_id", merchantScope.get()),
+                (rs, n) -> new AmusementProjectSpaceBacklogRecord(
+                        rs.getString("id"),
+                        rs.getString("project_name"),
+                        rs.getString("open_status"),
+                        rs.getString("merchant_id")));
+    }
+
+    @Override
     public List<String> listProjectEntitlementTypes(String projectId) {
         return jdbcTemplate.queryForList("""
                 SELECT entitlement_type

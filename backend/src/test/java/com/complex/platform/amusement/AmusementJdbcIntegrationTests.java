@@ -31,6 +31,9 @@ class AmusementJdbcIntegrationTests {
     @Autowired
     private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.gate.AdmissionFactRepository admissionFactRepository;
+
     @Test
     void migrationCreatesAmusementTablesAndSeedsPermissions() {
         assertThat(regclass("amusement_safety_templates")).isEqualTo("amusement_safety_templates");
@@ -316,6 +319,46 @@ class AmusementJdbcIntegrationTests {
                 .containsExactly(5, false);
         assertThat(repository.listCapacityConfigs("project_jdbc"))
                 .extracting(AmusementCapacityConfigRecord::id).contains("amcap_jdbc");
+    }
+
+    @Test
+    void assignProjectSpaceBackfillDrivesOverSpaceResolutionEndToEnd() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        // 空间归属 merchant_space_8（spaces.merchant_id）。
+        jdbcTemplate.update("""
+                INSERT INTO spaces (id, project_id, merchant_id, space_name, space_type, polygon_points, status, created_at, updated_at)
+                VALUES ('space_amuse_8', NULL, 'merchant_space_8', 'Zone 8', 'amusement_zone', '[]'::jsonb, 'active', NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        repository.saveSafetyTemplate(new AmusementSafetyTemplateRecord(
+                "template_space_8", "Daily Opening 8",
+                List.of(Map.of("name", "restraint", "required", true)),
+                LocalDate.parse("2026-06-14"), "active", List.of(), now, now, "merchant_space_8"));
+        repository.saveProject(new AmusementProjectRecord(
+                "project_space_8", "Space8 Coaster", 2, "open", "template_space_8", Map.of(), now, now, "merchant_space_8"));
+        repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
+                "inspection_space_8", "project_space_8", "template_space_8",
+                List.of(Map.of("name", "restraint", "result", "pass")),
+                "pass", "submitted", "none", "not_required",
+                now, now, null, null, "passed", List.of(), now, now));
+
+        // 回填前：项目出现在「未回填空间」清单；inspection 无法解析到 space（over_space 保守放行）。
+        assertThat(repository.listProjectsWithoutSpace(java.util.Optional.of("merchant_space_8")))
+                .extracting(AmusementProjectSpaceBacklogRecord::id)
+                .contains("project_space_8");
+        assertThat(admissionFactRepository.resolveSpaceId("inspection", "inspection_space_8")).isEmpty();
+
+        // 指派/回填 space_id。
+        assertThat(repository.findSpaceMerchant("space_amuse_8")).contains("merchant_space_8");
+        assertThat(repository.assignProjectSpace("project_space_8", "space_amuse_8")).isEqualTo(1);
+
+        // 回填后：inspection 经 project_id → amusement_projects.space_id 解析到该 space（over_space 真实生效）。
+        assertThat(admissionFactRepository.resolveSpaceId("inspection", "inspection_space_8"))
+                .contains("space_amuse_8");
+        // 项目不再出现在「未回填空间」清单。
+        assertThat(repository.listProjectsWithoutSpace(java.util.Optional.of("merchant_space_8")))
+                .extracting(AmusementProjectSpaceBacklogRecord::id)
+                .doesNotContain("project_space_8");
     }
 
     private String regclass(String tableName) {

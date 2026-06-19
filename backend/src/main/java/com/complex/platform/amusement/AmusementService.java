@@ -127,6 +127,56 @@ public class AmusementService {
         );
     }
 
+    public PageResponse<AmusementProjectSpaceBacklogRecord> listProjectsWithoutSpace() {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        return readPage(
+                "amusement.project_space_backlog.viewed",
+                "amusement.project_space_backlog.view_failed",
+                "amusement.session.manage",
+                "amusement_project",
+                () -> repository.listProjectsWithoutSpace(scope)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.session.manage")
+    @Transactional
+    public AmusementProjectSpaceAssignmentRecord assignProjectSpace(String projectId, AmusementProjectSpaceAssignmentRequest request) {
+        String id = requireText(projectId, "project_id");
+        return executeWrite(
+                "assignAmusementProjectSpace:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementProjectSpaceAssignmentRecord.class,
+                "amusement.project_space.assigned",
+                "amusement.project_space.assign_failed",
+                "amusement.session.manage",
+                "amusement_project",
+                () -> assignProjectSpaceInternal(id, request)
+        );
+    }
+
+    private AmusementProjectSpaceAssignmentRecord assignProjectSpaceInternal(String projectId, AmusementProjectSpaceAssignmentRequest request) {
+        AmusementProjectSpaceAssignmentRequest actual = requireRequest(request);
+        String spaceId = requireText(actual.spaceId(), "space_id");
+        AmusementProjectRecord project = repository.findProjectById(projectId)
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+        checkProjectOwnership(projectId);
+        // 空间必须存在；若属于某商户，必须与项目同商户（不可指派他商户空间，currentMerchantScope 隔离）。
+        String spaceMerchant = repository.findSpaceMerchant(spaceId)
+                .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "space not found"));
+        if (!spaceMerchant.isBlank() && project.merchantId() != null && !spaceMerchant.equals(project.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+        }
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !spaceMerchant.isBlank() && !scope.get().equals(spaceMerchant)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "space belongs to another merchant");
+        }
+        if (repository.assignProjectSpace(projectId, spaceId) == 0) {
+            throw ApiException.notFound("PROJECT_NOT_FOUND", "project not found");
+        }
+        return new AmusementProjectSpaceAssignmentRecord(projectId, spaceId, Instant.now());
+    }
+
     public AmusementOpenEligibilityResponse getOpenEligibility(String projectId) {
         String id = requireText(projectId, "project_id");
         checkProjectOwnership(id);
@@ -876,6 +926,9 @@ public class AmusementService {
     private String businessId(Object response) {
         if (response instanceof AmusementProjectRecord record) {
             return record.id();
+        }
+        if (response instanceof AmusementProjectSpaceAssignmentRecord record) {
+            return record.projectId();
         }
         if (response instanceof AmusementSessionRecord record) {
             return record.id();

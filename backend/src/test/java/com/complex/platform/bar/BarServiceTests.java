@@ -135,6 +135,60 @@ class BarServiceTests {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // 处理清单 #8：bar_tables 空间指派/回填（over_space 依赖 space_id）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void assignTableSpaceSetsSpaceIdAndIsReadableForBacklog() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "table-space-assign", "create", List.of(), "bar_1", "VIP S", "card_seat", 50000L, 2, "active"));
+        barRepository.registerSpace("space_a", "merchant_a");
+
+        // 回填前：出现在「未回填空间」清单。
+        assertThat(service.listTablesWithoutSpace().items())
+                .extracting(BarTableSpaceBacklogRecord::id)
+                .contains(table.id());
+
+        BarTableSpaceAssignmentRecord assigned = service.assignTableSpace(table.id(),
+                new BarTableSpaceAssignmentRequest("assign-key", "space_a", "运营回填", List.of()));
+        assertThat(assigned.spaceId()).isEqualTo("space_a");
+        // 回读 bar_tables.space_id 命中目标空间。
+        assertThat(barRepository.tableSpaceId(table.id())).isEqualTo("space_a");
+        // 回填后：不再出现在「未回填空间」清单。
+        assertThat(service.listTablesWithoutSpace().items())
+                .extracting(BarTableSpaceBacklogRecord::id)
+                .doesNotContain(table.id());
+    }
+
+    @Test
+    void assignTableSpaceRejectsCrossMerchantSpaceWithForbiddenError() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "table-space-cross", "create", List.of(), "bar_1", "VIP X", "card_seat", 50000L, 2, "active"));
+        barRepository.registerSpace("space_b", "merchant_b");
+
+        assertThatThrownBy(() -> service.assignTableSpace(table.id(),
+                new BarTableSpaceAssignmentRequest("assign-cross", "space_b", null, List.of())))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void assignTableSpaceRejectsMissingSpaceWithNotFoundError() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "table-space-missing", "create", List.of(), "bar_1", "VIP M", "card_seat", 50000L, 2, "active"));
+
+        assertThatThrownBy(() -> service.assignTableSpace(table.id(),
+                new BarTableSpaceAssignmentRequest("assign-missing", "space_ghost", null, List.of())))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SPACE_NOT_FOUND");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // P1-2: by-ID writes verify resource ownership
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -2439,6 +2493,42 @@ class BarServiceTests {
         @Override
         public Optional<BarTableRecord> findFirstTableByBar(String barId) {
             return tables.values().stream().filter(t -> barId.equals(t.barId())).findFirst();
+        }
+
+        // 处理清单 #8：内存版空间映射（spaceId -> merchantId；空串表示无商户/共享空间）。
+        private final Map<String, String> spaceMerchants = new LinkedHashMap<>();
+        private final Map<String, String> tableSpaceIds = new LinkedHashMap<>();
+
+        void registerSpace(String spaceId, String merchantId) {
+            spaceMerchants.put(spaceId, merchantId == null ? "" : merchantId);
+        }
+
+        String tableSpaceId(String tableId) {
+            return tableSpaceIds.get(tableId);
+        }
+
+        @Override
+        public int assignTableSpace(String tableId, String spaceId) {
+            if (!tables.containsKey(tableId)) {
+                return 0;
+            }
+            tableSpaceIds.put(tableId, spaceId);
+            return 1;
+        }
+
+        @Override
+        public Optional<String> findSpaceMerchant(String spaceId) {
+            return Optional.ofNullable(spaceMerchants.get(spaceId));
+        }
+
+        @Override
+        public List<BarTableSpaceBacklogRecord> listTablesWithoutSpace(Optional<String> merchantScope) {
+            return tables.values().stream()
+                    .filter(t -> tableSpaceIds.get(t.id()) == null)
+                    .filter(t -> merchantScope.isEmpty() || merchantScope.get().equals(t.merchantId()))
+                    .map(t -> new BarTableSpaceBacklogRecord(
+                            t.id(), t.barId(), t.merchantId(), t.tableCode(), t.tableName(), t.status()))
+                    .toList();
         }
 
         @Override

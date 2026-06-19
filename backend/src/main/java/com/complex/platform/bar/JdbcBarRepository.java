@@ -47,6 +47,21 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public int assignTableSpace(String tableId, String spaceId) {
+        return catalog.assignTableSpace(tableId, spaceId);
+    }
+
+    @Override
+    public Optional<String> findSpaceMerchant(String spaceId) {
+        return catalog.findSpaceMerchant(spaceId);
+    }
+
+    @Override
+    public List<BarTableSpaceBacklogRecord> listTablesWithoutSpace(Optional<String> merchantScope) {
+        return catalog.listTablesWithoutSpace(merchantScope);
+    }
+
+    @Override
     public BarReservationRecord saveReservation(BarReservationRecord reservation) {
         return catalog.saveReservation(reservation);
     }

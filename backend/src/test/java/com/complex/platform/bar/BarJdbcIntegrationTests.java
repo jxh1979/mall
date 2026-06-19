@@ -39,6 +39,9 @@ class BarJdbcIntegrationTests {
     @Autowired
     private com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
+    @Autowired
+    private com.complex.platform.gate.AdmissionFactRepository admissionFactRepository;
+
     @Test
     void aggregateBarRefundCentSumsRefundAdjustmentsWithinBusinessDayWindowAndExcludesWaiver() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
@@ -583,6 +586,43 @@ class BarJdbcIntegrationTests {
                         BarTableSessionAdjustmentRecord::additionalServiceFeeCent
                 )
                 .contains(tuple("adjustment_jdbc", "renew", 20000L, 1000L));
+    }
+
+    @Test
+    void assignTableSpaceBackfillDrivesOverSpaceResolutionEndToEnd() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO spaces (id, project_id, merchant_id, space_name, space_type, polygon_points, status, created_at, updated_at)
+                VALUES ('space_bar_8', NULL, 'merchant_bar_8', 'Bar Zone 8', 'bar_zone', '[]'::jsonb, 'active', NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        repository.saveTable(new BarTableRecord(
+                "table_space_8", "bar_space_8", "merchant_bar_8", "T-SP8", "Space8", "card_seat",
+                6, 2, 50000L, "CNY", "active", now, now));
+        repository.saveOrder(new BarOrderRecord(
+                "order_space_8", "bar_space_8", "merchant_bar_8", "table_space_8", null, "customer_8",
+                "staff", "created", 10000L, "CNY", "web", "device_1", "staff_sales", now, now));
+        repository.saveBill(new BarBillRecord(
+                "bill_space_8", "BILL-SP8", "order_space_8", "bar_space_8", "merchant_bar_8",
+                "table_space_8", null, 10000L, 0L, 0L, 10000L, 0L, "CNY", "unpaid", "open",
+                "staff_sales", "sales", now, now, false, null, null, null, 0, 0L));
+
+        // 回填前：桌台出现在「未回填空间」清单；bar_bill 无法解析到 space（over_space 保守放行）。
+        assertThat(repository.listTablesWithoutSpace(Optional.of("merchant_bar_8")))
+                .extracting(BarTableSpaceBacklogRecord::id)
+                .contains("table_space_8");
+        assertThat(admissionFactRepository.resolveSpaceId("bar_bill", "bill_space_8")).isEmpty();
+
+        // 指派/回填 space_id。
+        assertThat(repository.findSpaceMerchant("space_bar_8")).contains("merchant_bar_8");
+        assertThat(repository.assignTableSpace("table_space_8", "space_bar_8")).isEqualTo(1);
+
+        // 回填后：bar_bill 经 table_id → bar_tables.space_id 解析到该 space（over_space 真实生效）。
+        assertThat(admissionFactRepository.resolveSpaceId("bar_bill", "bill_space_8"))
+                .contains("space_bar_8");
+        assertThat(repository.listTablesWithoutSpace(Optional.of("merchant_bar_8")))
+                .extracting(BarTableSpaceBacklogRecord::id)
+                .doesNotContain("table_space_8");
     }
 
     private String regclass(String tableName) {

@@ -20,6 +20,15 @@ public interface AmusementRepository {
 
     Optional<AmusementProjectRecord> findProjectById(String id);
 
+    /** 处理清单 #8：设置 amusement_projects.space_id（空间指派/回填），返回受影响行数。 */
+    int assignProjectSpace(String projectId, String spaceId);
+
+    /** 处理清单 #8：解析空间所属商户（spaces.merchant_id），用于跨商户校验；空间不存在返回 empty。 */
+    Optional<String> findSpaceMerchant(String spaceId);
+
+    /** 处理清单 #8：列出 space_id 为空、待运营回填的项目（按商户范围过滤）。 */
+    List<AmusementProjectSpaceBacklogRecord> listProjectsWithoutSpace(Optional<String> merchantScope);
+
     /**
      * 返回该项目已配置的可用权益类型绑定（amusement_project_entitlements）。
      * 为空表示该项目无绑定配置——核销时回退按「entitlement_type 为游乐类」放行（V082 注释、向后兼容）。

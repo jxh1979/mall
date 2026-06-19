@@ -97,6 +97,60 @@ class AmusementServiceTests {
                 .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 处理清单 #8：amusement_projects 空间指派/回填（over_space 依赖 space_id）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void assignProjectSpaceSetsSpaceIdAndIsReadableForBacklog() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementSafetyTemplateRecord template = createTemplate("space-assign");
+        AmusementProjectRecord project = createProject("space-assign", template.id(), "open", 2);
+        amusementRepository.registerSpace("space_a", "merchant_a");
+
+        // 回填前：出现在「未回填空间」清单。
+        assertThat(service.listProjectsWithoutSpace().items())
+                .extracting(AmusementProjectSpaceBacklogRecord::id)
+                .contains(project.id());
+
+        AmusementProjectSpaceAssignmentRecord assigned = service.assignProjectSpace(project.id(),
+                new AmusementProjectSpaceAssignmentRequest("assign-key", "space_a", "运营回填", List.of()));
+        assertThat(assigned.spaceId()).isEqualTo("space_a");
+        // 回读 amusement_projects.space_id 命中目标空间。
+        assertThat(amusementRepository.projectSpaceId(project.id())).isEqualTo("space_a");
+        // 回填后：不再出现在「未回填空间」清单。
+        assertThat(service.listProjectsWithoutSpace().items())
+                .extracting(AmusementProjectSpaceBacklogRecord::id)
+                .doesNotContain(project.id());
+    }
+
+    @Test
+    void assignProjectSpaceRejectsCrossMerchantSpaceWithForbiddenError() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementSafetyTemplateRecord template = createTemplate("space-cross");
+        AmusementProjectRecord project = createProject("space-cross", template.id(), "open", 2);
+        amusementRepository.registerSpace("space_b", "merchant_b");
+
+        assertThatThrownBy(() -> service.assignProjectSpace(project.id(),
+                new AmusementProjectSpaceAssignmentRequest("assign-cross", "space_b", null, List.of())))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void assignProjectSpaceRejectsMissingSpaceWithNotFoundError() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementSafetyTemplateRecord template = createTemplate("space-missing");
+        AmusementProjectRecord project = createProject("space-missing", template.id(), "open", 2);
+
+        assertThatThrownBy(() -> service.assignProjectSpace(project.id(),
+                new AmusementProjectSpaceAssignmentRequest("assign-missing", "space_ghost", null, List.of())))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SPACE_NOT_FOUND");
+    }
+
     @Test
     void getOpenEligibilityRejectsCrossMerchantProject() {
         TestSecurityActors.asMerchantUser("merchant_a");
@@ -1270,6 +1324,42 @@ class AmusementServiceTests {
         @Override
         public Optional<AmusementProjectRecord> findProjectById(String id) {
             return Optional.ofNullable(projects.get(id));
+        }
+
+        // 处理清单 #8：内存版空间映射（spaceId -> merchantId；空串表示无商户/共享空间）。
+        private final Map<String, String> spaceMerchants = new LinkedHashMap<>();
+        private final Map<String, String> projectSpaceIds = new LinkedHashMap<>();
+
+        void registerSpace(String spaceId, String merchantId) {
+            spaceMerchants.put(spaceId, merchantId == null ? "" : merchantId);
+        }
+
+        String projectSpaceId(String projectId) {
+            return projectSpaceIds.get(projectId);
+        }
+
+        @Override
+        public int assignProjectSpace(String projectId, String spaceId) {
+            if (!projects.containsKey(projectId)) {
+                return 0;
+            }
+            projectSpaceIds.put(projectId, spaceId);
+            return 1;
+        }
+
+        @Override
+        public Optional<String> findSpaceMerchant(String spaceId) {
+            return Optional.ofNullable(spaceMerchants.get(spaceId));
+        }
+
+        @Override
+        public List<AmusementProjectSpaceBacklogRecord> listProjectsWithoutSpace(Optional<String> merchantScope) {
+            return projects.values().stream()
+                    .filter(p -> projectSpaceIds.get(p.id()) == null)
+                    .filter(p -> merchantScope.isEmpty() || merchantScope.get().equals(p.merchantId()))
+                    .map(p -> new AmusementProjectSpaceBacklogRecord(
+                            p.id(), p.projectName(), p.openStatus(), p.merchantId()))
+                    .toList();
         }
 
         @Override

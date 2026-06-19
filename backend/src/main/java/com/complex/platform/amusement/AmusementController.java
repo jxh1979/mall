@@ -10,6 +10,7 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -58,6 +59,22 @@ public class AmusementController {
         authorizationService.requirePermission("amusement.session.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createProject(request));
+    }
+
+    @GetMapping("/projects/without-space")
+    public ApiResponse<PageResponse<AmusementProjectSpaceBacklogRecord>> listProjectsWithoutSpace() {
+        authorizationService.requirePermission("amusement.session.manage");
+        return ApiResponse.ok(service.listProjectsWithoutSpace());
+    }
+
+    @PutMapping("/projects/{id}/space")
+    public ApiResponse<AmusementProjectSpaceAssignmentRecord> assignProjectSpace(
+            @PathVariable String id,
+            @RequestBody(required = false) AmusementProjectSpaceAssignmentRequest request
+    ) {
+        authorizationService.requirePermission("amusement.session.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.assignProjectSpace(id, request));
     }
 
     @GetMapping("/projects/{id}/open-eligibility")

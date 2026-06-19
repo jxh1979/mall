@@ -47,6 +47,7 @@ public class BarOperationExecutor {
 
     private String businessId(Object value) {
         if (value instanceof BarTableRecord record) return record.id();
+        if (value instanceof BarTableSpaceAssignmentRecord record) return record.tableId();
         if (value instanceof BarTableSessionRecord record) return record.id();
         if (value instanceof BarTableSessionAdjustmentRecord record) return record.id();
         if (value instanceof BarReservationRecord record) return record.id();
