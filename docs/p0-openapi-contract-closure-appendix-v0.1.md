@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 254 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 150 | 人工权限矩阵正文未覆盖 48 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 508 | 人工事件矩阵正文未覆盖 465 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 254 | 人工任务映射正文未逐项覆盖 248 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 149 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 261 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 153 | 人工权限矩阵正文未覆盖 51 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 522 | 人工事件矩阵正文未覆盖 478 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 261 | 人工任务映射正文未逐项覆盖 255 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 153 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -128,6 +128,9 @@
 | `inventory.supplier.view` | staff-token | project | 1 | listInventorySuppliers | 已在权限矩阵正文出现 |
 | `inventory.supply_contract.manage` | staff-token | project-warehouse-bar | 1 | createSupplyContract | OpenAPI 补充，以本附录为准 |
 | `inventory.warehouse.manage` | staff-token | project-warehouse-bar | 1 | createWarehouse | OpenAPI 补充，以本附录为准 |
+| `mdm.device.manage` | staff-token | project-device | 2 | enrollMdmDevice, reportMdmPolicyViolation | OpenAPI 补充，以本附录为准 |
+| `mdm.policy.manage` | staff-token | project-device | 4 | listMdmAppWhitelist, upsertMdmAppWhitelist, listMdmSiteWhitelist, upsertMdmSiteWhitelist | OpenAPI 补充，以本附录为准 |
+| `mdm.violation.view` | staff-token | project-device | 1 | listMdmPolicyViolations | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.view` | staff-token | project-merchant | 1 | listMerchantBills | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.manage` | staff-token | project, project-merchant | 2 | createMerchant, updateMerchant | 已在权限矩阵正文出现 |
 | `merchant.profile.view` | staff-token | project-merchant | 1 | listMerchants | 已在权限矩阵正文出现 |
@@ -369,6 +372,8 @@
 | `customer.ticket_order.created` | success | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_view_failed` | failure | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_viewed` | success | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
+| `device.policy_violation` | success | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
+| `device.policy_violation_failed` | failure | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
 | `entity_binding.change_failed` | failure | `changeBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings/{id}/change` | GOV-平台治理 | `entity.binding.manage` | 接口级事件，以本附录为准 |
 | `entity_binding.change_failed` | failure | `createBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings` | GOV-平台治理 | `entity.binding.manage` | 接口级事件，以本附录为准 |
 | `entity_binding.changed` | success | `changeBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings/{id}/change` | GOV-平台治理 | `entity.binding.manage` | 已在事件矩阵正文出现 |
@@ -515,6 +520,18 @@
 | `inventory.supplier_viewed` | success | `listInventorySuppliers` | `GET` | `/api/v1/inventory/suppliers` | INV-库存存酒 | `inventory.supplier.view` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.create_failed` | failure | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.created` | success | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
+| `mdm.app_whitelist.change_failed` | failure | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.app_whitelist.changed` | success | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.app_whitelist.view_failed` | failure | `listMdmAppWhitelist` | `GET` | `/api/v1/terminals/mdm/app-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.app_whitelist.viewed` | success | `listMdmAppWhitelist` | `GET` | `/api/v1/terminals/mdm/app-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.policy_check_failed` | failure | `enrollMdmDevice` | `POST` | `/api/v1/terminals/mdm/devices/enroll` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
+| `mdm.policy_checked` | success | `enrollMdmDevice` | `POST` | `/api/v1/terminals/mdm/devices/enroll` | TERM-终端设备 | `mdm.device.manage` | 已在事件矩阵正文出现 |
+| `mdm.site_whitelist.change_failed` | failure | `upsertMdmSiteWhitelist` | `PUT` | `/api/v1/terminals/mdm/site-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.site_whitelist.changed` | success | `upsertMdmSiteWhitelist` | `PUT` | `/api/v1/terminals/mdm/site-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.site_whitelist.view_failed` | failure | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.site_whitelist.viewed` | success | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
+| `mdm.violation.view_failed` | failure | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
+| `mdm.violation.viewed` | success | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.view_failed` | failure | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.viewed` | success | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_service.addMerchantServiceWorkOrderAction.failed` | failure | `addMerchantServiceWorkOrderAction` | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | P0-待归类 | `merchant.service_work_order.process` | 接口级事件，以本附录为准 |
@@ -920,14 +937,21 @@
 | SYS-系统健康 | `getSystemHealth` | `GET` | `/api/v1/system/health` | 健康检查 | `public` | `system.health_checked` / `system.health_check_failed` | web, mobile_admin<br>channel: monitoring | operation 级补充 |
 | SYS-系统健康 | `getSystemVersion` | `GET` | `/api/v1/system/version` | 版本和构建信息 | `system.version.view` | `system.version_viewed` / `system.version_view_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | 设备绑定 | `terminal.device.bind` | `terminal.device.bound` / `terminal.device.bind_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
+| TERM-终端设备 | `enrollMdmDevice` | `POST` | `/api/v1/terminals/mdm/devices/enroll` | MDM 设备纳管/策略同步 | `mdm.device.manage` | `mdm.policy_checked` / `mdm.policy_check_failed` | web | operation 级补充 |
 | TERM-终端设备 | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | 一体机配置，含售票型与非售票型模式 | `not_applicable` | `terminal.kiosk_config_viewed` / `terminal.access_rejected` | kiosk | operation 级补充 |
 | TERM-终端设备 | `getTerminalOfflineEntitlements` | `GET` | `/api/v1/terminals/offline-entitlements` | 获取终端离线权益 | `terminal.device.bind` | `terminal.offline_entitlements.viewed` / `terminal.offline_entitlements.viewed_failed` | staff_work_phone, tablet, kiosk | operation 级补充 |
 | TERM-终端设备 | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | 一体机心跳 | `not_applicable` | `terminal.kiosk_heartbeat` / `terminal.kiosk_heartbeat_failed` | kiosk | operation 级补充 |
 | TERM-终端设备 | `listCapabilitySwitches` | `GET` | `/api/v1/terminals/capability-switches` | 查询端能力开关 | `terminal.switch.view` | `terminal_switch.viewed` / `terminal_switch.view_failed` | web | operation 级补充 |
+| TERM-终端设备 | `listMdmAppWhitelist` | `GET` | `/api/v1/terminals/mdm/app-whitelist` | 查询 MDM 应用白名单 | `mdm.policy.manage` | `mdm.app_whitelist.viewed` / `mdm.app_whitelist.view_failed` | web | operation 级补充 |
+| TERM-终端设备 | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | 查询 MDM 设备违规留痕 | `mdm.violation.view` | `mdm.violation.viewed` / `mdm.violation.view_failed` | web | operation 级补充 |
+| TERM-终端设备 | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | 查询 MDM 网站白名单 | `mdm.policy.manage` | `mdm.site_whitelist.viewed` / `mdm.site_whitelist.view_failed` | web | operation 级补充 |
+| TERM-终端设备 | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | 上报 MDM 设备违规 | `mdm.device.manage` | `device.policy_violation` / `device.policy_violation_failed` | web | operation 级补充 |
 | TERM-终端设备 | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | 归还终端设备 | `terminal.device.bind` | `terminal.device.returned` / `terminal.device.returned_failed` | staff_work_phone, tablet, kiosk, web | operation 级补充 |
 | TERM-终端设备 | `syncTerminalTasks` | `POST` | `/api/v1/terminals/sync-tasks` | 同步终端任务 | `terminal.device.bind` | `terminal.sync_task.accepted` / `terminal.sync_task.accepted_failed` | staff_work_phone, tablet, kiosk | operation 级补充 |
 | TERM-终端设备 | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | 设备解绑 | `terminal.device.unbind` | `terminal.device.unbound` / `terminal.device.unbind_failed` | web | operation 级补充 |
 | TERM-终端设备 | `updateCapabilitySwitch` | `PUT` | `/api/v1/terminals/capability-switches/{id}` | 修改端能力开关 | `terminal.switch.manage` | `terminal_switch.changed` / `terminal_switch.change_failed` | web | operation 级补充 |
+| TERM-终端设备 | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | 新增或更新 MDM 应用白名单 | `mdm.policy.manage` | `mdm.app_whitelist.changed` / `mdm.app_whitelist.change_failed` | web | operation 级补充 |
+| TERM-终端设备 | `upsertMdmSiteWhitelist` | `PUT` | `/api/v1/terminals/mdm/site-whitelist/{id}` | 新增或更新 MDM 网站白名单 | `mdm.policy.manage` | `mdm.site_whitelist.changed` / `mdm.site_whitelist.change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `approveTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | 退款审批 | `ticket.refund.approve` | `ticket_refund.approved` / `ticket_refund.approve_failed` | web | operation 级补充 |
 | TIC-票务权益 | `bindTicketTypeEntitlement` | `POST` | `/api/v1/ticketing/ticket-types/{id}/entitlements` | 绑定票类型权益 | `ticket.product.manage` | `ticket_product_entitlement.bound` / `ticket_product_entitlement.bound_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates` | 创建权益模板 | `ticket.entitlement.manage` | `ticket_entitlement_template.changed` / `ticket_entitlement_template.changed_failed` | web | operation 级补充 |

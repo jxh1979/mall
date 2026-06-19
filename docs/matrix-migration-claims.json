@@ -492,8 +492,50 @@
       "req": "REQ-55",
       "table": "terminal_devices",
       "column": "management_status",
-      "expected": "absent",
-      "note": "R5: MDM 自有侧字段 management_status/policy_status/last_policy_sync_at/device_credential_hash 缺失；MDM 阻断依赖外部商业 MDM，不计闭环"
+      "expected": "present",
+      "note": "V088 R5 T9 MDM 自有侧落地（裁决⑨）：纳管字段已加（CHECK 枚举 unmanaged/enrolled/compliant/violation）。MDM 开关 managed_work_devices 默认关——开关关时未纳管禁用由终端开关+人工准入代偿（与 p0-action-event-evidence §3.1/D10 收口一致，mdm.policy_checked 标 compensated），开关开时 MdmService 硬禁用未纳管设备高风险动作并写 device.policy_violation"
+    },
+    {
+      "req": "REQ-55",
+      "table": "terminal_devices",
+      "column": "policy_status",
+      "expected": "present",
+      "note": "V088 MDM 策略状态（CHECK pending/applied/failed/outdated）"
+    },
+    {
+      "req": "REQ-55",
+      "table": "terminal_devices",
+      "column": "last_policy_sync_at",
+      "expected": "present",
+      "note": "V088 MDM 最近策略同步时间"
+    },
+    {
+      "req": "REQ-55",
+      "table": "terminal_devices",
+      "column": "enrolled_at",
+      "expected": "present",
+      "note": "V088 MDM 纳管时间"
+    },
+    {
+      "req": "REQ-55",
+      "table": "mdm_app_whitelist",
+      "column": "package_name",
+      "expected": "present",
+      "note": "V088 预装/允许 app 白名单（scope 全局/项目/设备型号 + enabled；受 mdm.policy.manage）"
+    },
+    {
+      "req": "REQ-55",
+      "table": "mdm_site_whitelist",
+      "column": "domain",
+      "expected": "present",
+      "note": "V088 网站白名单（scope + enabled；受 mdm.policy.manage）"
+    },
+    {
+      "req": "REQ-55",
+      "table": "mdm_policy_violations",
+      "column": "violation_type",
+      "expected": "present",
+      "note": "V088 设备违规留痕（私装软件/访问非白名单/绕过企微/Root 等，CHECK 枚举）；reportPolicyViolation 写 mdm_policy_violations + device.policy_violation 事件"
     },
     {
       "req": "REQ-56",

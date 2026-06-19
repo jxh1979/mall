@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 254 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 261 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -275,6 +275,13 @@
 | compliance | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | `viewWecomConversationMessages` | 分级查看企微会话消息（脱敏/原文，原文需审批+审计） | `-` | `wecom.view_raw` | `staff-token` | `project` | web, mobile_admin | 否 | `wecom.raw_viewed` | `wecom.raw_view_failed` |
 | compliance | `GET` | `/api/v1/compliance/wecom/retention-policies` | `listWecomRetentionPolicies` | 企微留存策略列表 | `-` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.retention_policy_viewed` | `wecom.retention_policy_view_failed` |
 | compliance | `POST` | `/api/v1/compliance/wecom/retention-policies` | `upsertWecomRetentionPolicy` | 配置企微留存策略（默认180天） | `object` | `wecom.retention.manage` | `staff-token` | `platform` | web | 是 | `wecom.retention_policy_set` | `wecom.retention_policy_failed` |
+| terminals | `GET` | `/api/v1/terminals/mdm/app-whitelist` | `listMdmAppWhitelist` | 查询 MDM 应用白名单 | `-` | `mdm.policy.manage` | `staff-token` | `project-device` | web | 否 | `mdm.app_whitelist.viewed` | `mdm.app_whitelist.view_failed` |
+| terminals | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | `upsertMdmAppWhitelist` | 新增或更新 MDM 应用白名单 | `MdmAppWhitelistRequest` | `mdm.policy.manage` | `staff-token` | `project-device` | web | 是 | `mdm.app_whitelist.changed` | `mdm.app_whitelist.change_failed` |
+| terminals | `GET` | `/api/v1/terminals/mdm/site-whitelist` | `listMdmSiteWhitelist` | 查询 MDM 网站白名单 | `-` | `mdm.policy.manage` | `staff-token` | `project-device` | web | 否 | `mdm.site_whitelist.viewed` | `mdm.site_whitelist.view_failed` |
+| terminals | `PUT` | `/api/v1/terminals/mdm/site-whitelist/{id}` | `upsertMdmSiteWhitelist` | 新增或更新 MDM 网站白名单 | `MdmSiteWhitelistRequest` | `mdm.policy.manage` | `staff-token` | `project-device` | web | 是 | `mdm.site_whitelist.changed` | `mdm.site_whitelist.change_failed` |
+| terminals | `POST` | `/api/v1/terminals/mdm/devices/enroll` | `enrollMdmDevice` | MDM 设备纳管/策略同步 | `MdmDeviceEnrollRequest` | `mdm.device.manage` | `staff-token` | `project-device` | web | 是 | `mdm.policy_checked` | `mdm.policy_check_failed` |
+| terminals | `GET` | `/api/v1/terminals/mdm/violations` | `listMdmPolicyViolations` | 查询 MDM 设备违规留痕 | `-` | `mdm.violation.view` | `staff-token` | `project-device` | web | 否 | `mdm.violation.viewed` | `mdm.violation.view_failed` |
+| terminals | `POST` | `/api/v1/terminals/mdm/violations` | `reportMdmPolicyViolation` | 上报 MDM 设备违规 | `MdmPolicyViolationRequest` | `mdm.device.manage` | `staff-token` | `project-device` | web | 是 | `device.policy_violation` | `device.policy_violation_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -342,5 +349,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 254 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 261 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

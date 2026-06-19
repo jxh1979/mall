@@ -10238,6 +10238,355 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/terminals/mdm/app-whitelist": {
+      "get": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "listMdmAppWhitelist",
+        "summary": "查询 MDM 应用白名单",
+        "x-permission": "mdm.policy.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "mdm.app_whitelist.viewed",
+        "x-audit-event-failure": "mdm.app_whitelist.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/terminals/mdm/app-whitelist/{id}": {
+      "put": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "upsertMdmAppWhitelist",
+        "summary": "新增或更新 MDM 应用白名单",
+        "x-permission": "mdm.policy.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "mdm.app_whitelist.changed",
+        "x-audit-event-failure": "mdm.app_whitelist.change_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "白名单条目 ID；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MdmAppWhitelistRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "MDM 应用白名单已保存；data 对齐 MdmAppWhitelistRecord。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/MdmAppWhitelistRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/terminals/mdm/site-whitelist": {
+      "get": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "listMdmSiteWhitelist",
+        "summary": "查询 MDM 网站白名单",
+        "x-permission": "mdm.policy.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "mdm.site_whitelist.viewed",
+        "x-audit-event-failure": "mdm.site_whitelist.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/terminals/mdm/site-whitelist/{id}": {
+      "put": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "upsertMdmSiteWhitelist",
+        "summary": "新增或更新 MDM 网站白名单",
+        "x-permission": "mdm.policy.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "mdm.site_whitelist.changed",
+        "x-audit-event-failure": "mdm.site_whitelist.change_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "白名单条目 ID；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MdmSiteWhitelistRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "MDM 网站白名单已保存；data 对齐 MdmSiteWhitelistRecord。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/MdmSiteWhitelistRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/terminals/mdm/devices/enroll": {
+      "post": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "enrollMdmDevice",
+        "summary": "MDM 设备纳管/策略同步",
+        "x-permission": "mdm.device.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "mdm.policy_checked",
+        "x-audit-event-failure": "mdm.policy_check_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MdmDeviceEnrollRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "设备纳管/策略同步结果；data 对齐 MdmDeviceManagementRecord。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/MdmDeviceManagementRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/terminals/mdm/violations": {
+      "get": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "listMdmPolicyViolations",
+        "summary": "查询 MDM 设备违规留痕",
+        "x-permission": "mdm.violation.view",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "mdm.violation.viewed",
+        "x-audit-event-failure": "mdm.violation.view_failed",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "按设备过滤；缺省返回全部。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "terminals"
+        ],
+        "operationId": "reportMdmPolicyViolation",
+        "summary": "上报 MDM 设备违规",
+        "x-permission": "mdm.device.manage",
+        "x-data-scope": "project-device",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "device.policy_violation",
+        "x-audit-event-failure": "device.policy_violation_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MdmPolicyViolationRequest"
+        },
+        "responses": {
+          "200": {
+            "description": "违规已留痕；data 对齐 MdmPolicyViolationRecord。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/MdmPolicyViolationRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -11763,6 +12112,46 @@
             "example": {
               "idempotency_key": "staff_notice_ack_20260618_000001",
               "consent": true
+            }
+          }
+        }
+      },
+      "MdmAppWhitelistRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MdmAppWhitelistRequest"
+            }
+          }
+        }
+      },
+      "MdmSiteWhitelistRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MdmSiteWhitelistRequest"
+            }
+          }
+        }
+      },
+      "MdmDeviceEnrollRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MdmDeviceEnrollRequest"
+            }
+          }
+        }
+      },
+      "MdmPolicyViolationRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MdmPolicyViolationRequest"
             }
           }
         }
@@ -18268,6 +18657,449 @@
           "decline": {
             "type": "boolean",
             "description": "true 表示拒绝（declined）。"
+          }
+        }
+      },
+      "MdmAppWhitelistRequest": {
+        "type": "object",
+        "description": "R5 T9 MDM 自有侧：预装/允许 app 白名单新增或更新请求（受 mdm.policy.manage）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "package_name"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "nullable": true,
+            "description": "操作备注。",
+            "maxLength": 500
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "证据附件 ID 列表。"
+          },
+          "package_name": {
+            "type": "string",
+            "description": "Android 应用包名。",
+            "maxLength": 255
+          },
+          "app_label": {
+            "type": "string",
+            "nullable": true,
+            "description": "应用展示名。",
+            "maxLength": 255
+          },
+          "scope_type": {
+            "type": "string",
+            "description": "作用域类型。",
+            "enum": [
+              "global",
+              "project",
+              "device_model"
+            ]
+          },
+          "scope_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "作用域 ID；global 时为 global。",
+            "maxLength": 128
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用该白名单条目。"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "变更原因。",
+            "maxLength": 500
+          }
+        }
+      },
+      "MdmAppWhitelistRecord": {
+        "type": "object",
+        "description": "MDM app 白名单条目。",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "package_name",
+          "scope_type",
+          "scope_id",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "package_name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "app_label": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 255
+          },
+          "scope_type": {
+            "type": "string",
+            "enum": [
+              "global",
+              "project",
+              "device_model"
+            ]
+          },
+          "scope_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MdmSiteWhitelistRequest": {
+        "type": "object",
+        "description": "R5 T9 MDM 自有侧：允许访问网站域名白名单新增或更新请求（受 mdm.policy.manage）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "domain"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "domain": {
+            "type": "string",
+            "description": "允许访问域名。",
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 255
+          },
+          "scope_type": {
+            "type": "string",
+            "enum": [
+              "global",
+              "project",
+              "device_model"
+            ]
+          },
+          "scope_id": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 128
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          }
+        }
+      },
+      "MdmSiteWhitelistRecord": {
+        "type": "object",
+        "description": "MDM 网站白名单条目。",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "domain",
+          "scope_type",
+          "scope_id",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "domain": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 255
+          },
+          "scope_type": {
+            "type": "string",
+            "enum": [
+              "global",
+              "project",
+              "device_model"
+            ]
+          },
+          "scope_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MdmDeviceEnrollRequest": {
+        "type": "object",
+        "description": "R5 T9 MDM 自有侧：设备纳管/策略同步请求（受 mdm.device.manage）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "device_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "device_id": {
+            "type": "string",
+            "description": "terminal_devices.device_id。",
+            "maxLength": 128
+          },
+          "policy_status": {
+            "type": "string",
+            "nullable": true,
+            "description": "策略下发结果；缺省 applied。",
+            "enum": [
+              "pending",
+              "applied",
+              "failed",
+              "outdated"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          }
+        }
+      },
+      "MdmDeviceManagementRecord": {
+        "type": "object",
+        "description": "MDM 设备纳管视图（terminal_devices 纳管字段投影）。",
+        "additionalProperties": false,
+        "required": [
+          "device_id",
+          "management_status"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "terminal_type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32
+          },
+          "management_status": {
+            "type": "string",
+            "enum": [
+              "unmanaged",
+              "enrolled",
+              "compliant",
+              "violation"
+            ]
+          },
+          "policy_status": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "pending",
+              "applied",
+              "failed",
+              "outdated"
+            ]
+          },
+          "last_policy_sync_at": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "enrolled_at": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          }
+        }
+      },
+      "MdmPolicyViolationRequest": {
+        "type": "object",
+        "description": "R5 T9 MDM 自有侧：设备策略违规上报请求（受 mdm.device.manage）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "device_id",
+          "violation_type"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "device_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "violation_type": {
+            "type": "string",
+            "enum": [
+              "unauthorized_app",
+              "non_whitelisted_site",
+              "wecom_bypass",
+              "root_detected",
+              "policy_sync_failed",
+              "other"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000
+          }
+        }
+      },
+      "MdmPolicyViolationRecord": {
+        "type": "object",
+        "description": "MDM 设备违规留痕条目。",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "device_id",
+          "violation_type",
+          "occurred_at",
+          "handled",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "device_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "violation_type": {
+            "type": "string",
+            "enum": [
+              "unauthorized_app",
+              "non_whitelisted_site",
+              "wecom_bypass",
+              "root_detected",
+              "policy_sync_failed",
+              "other"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "handled": {
+            "type": "boolean"
+          },
+          "handled_note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }
