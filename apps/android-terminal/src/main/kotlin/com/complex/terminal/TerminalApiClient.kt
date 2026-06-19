@@ -95,20 +95,26 @@ class TerminalApiClient(
   fun confirmAmusementMaintenanceResume(
     recordId: String,
     request: AmusementMaintenanceResumeRequest,
-  ): AmusementMaintenanceRecord =
-    post("/api/v1/amusement/maintenance-records/${urlEncode(recordId)}/confirm-resume", request)
+  ): AmusementMaintenanceRecord {
+    val recordSeg = urlEncode(recordId)
+    return post("/api/v1/amusement/maintenance-records/${recordSeg}/confirm-resume", request)
+  }
 
   // 酒吧一体机/平板：点酒下单
   fun createBarOrder(request: BarOrderRequest): BarOrderRecord =
     post("/api/v1/bar/orders", request)
 
   // 酒吧账单：创建支付意图
-  fun createBarPaymentIntent(billId: String, request: PaymentIntentRequest): PaymentIntentRecord =
-    post("/api/v1/bar/bills/${urlEncode(billId)}/pay-intents", request)
+  fun createBarPaymentIntent(billId: String, request: PaymentIntentRequest): PaymentIntentRecord {
+    val billSeg = urlEncode(billId)
+    return post("/api/v1/bar/bills/${billSeg}/pay-intents", request)
+  }
 
   // 酒吧账单：结算
-  fun settleBarBill(billId: String, request: BarBillSettleRequest): BarBillRecord =
-    post("/api/v1/bar/bills/${urlEncode(billId)}/settle", request)
+  fun settleBarBill(billId: String, request: BarBillSettleRequest): BarBillRecord {
+    val billSeg = urlEncode(billId)
+    return post("/api/v1/bar/bills/${billSeg}/settle", request)
+  }
 
   // 员工设备凭证：绑定
   fun bindStaffDeviceCredential(request: StaffDeviceBindRequest): StaffDeviceCredentialRecord =
@@ -118,19 +124,25 @@ class TerminalApiClient(
   fun approveStaffDeviceRebind(
     credentialId: String,
     request: StaffDeviceRebindDecisionRequest,
-  ): StaffDeviceCredentialRecord =
-    post("/api/v1/staff/device-credentials/${urlEncode(credentialId)}/approve-rebind", request)
+  ): StaffDeviceCredentialRecord {
+    val credentialSeg = urlEncode(credentialId)
+    return post("/api/v1/staff/device-credentials/${credentialSeg}/approve-rebind", request)
+  }
 
   // 员工设备凭证：完整性上报
   fun reportStaffDeviceIntegrity(
     credentialId: String,
     request: StaffDeviceIntegrityReportRequest,
-  ): StaffDeviceCredentialRecord =
-    post("/api/v1/staff/device-credentials/${urlEncode(credentialId)}/report-integrity", request)
+  ): StaffDeviceCredentialRecord {
+    val credentialSeg = urlEncode(credentialId)
+    return post("/api/v1/staff/device-credentials/${credentialSeg}/report-integrity", request)
+  }
 
   // 票务核销冲正
-  fun reverseVerification(verificationId: String, request: VerificationReverseRequest): VerificationResponse =
-    post("/api/v1/ticketing/verifications/${urlEncode(verificationId)}/reverse", request)
+  fun reverseVerification(verificationId: String, request: VerificationReverseRequest): VerificationResponse {
+    val verificationSeg = urlEncode(verificationId)
+    return post("/api/v1/ticketing/verifications/${verificationSeg}/reverse", request)
+  }
 
   inline fun <reified T> get(path: String): T {
     val builder = HttpRequest.newBuilder()
