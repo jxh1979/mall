@@ -170,6 +170,57 @@ public class BarService {
     }
 
     @Transactional
+    public BarReservationRecord payReservationDeposit(String reservationId, BarReservationDepositActionRequest request) {
+        String id = operations.requireText(reservationId, "reservation_id");
+        return operations.executeWrite(
+                "payBarReservationDeposit:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarReservationRecord.class,
+                BarWriteOperation.PAY_RESERVATION_DEPOSIT,
+                () -> entryService.payDeposit(id, request)
+        );
+    }
+
+    @Transactional
+    public BarReservationRecord checkInReservationDeposit(String reservationId, BarReservationDepositActionRequest request) {
+        String id = operations.requireText(reservationId, "reservation_id");
+        return operations.executeWrite(
+                "checkInBarReservationDeposit:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarReservationRecord.class,
+                BarWriteOperation.CHECK_IN_RESERVATION_DEPOSIT,
+                () -> entryService.checkInDeposit(id, request)
+        );
+    }
+
+    @Transactional
+    public BarReservationRecord cancelReservation(String reservationId, BarReservationCancelRequest request) {
+        String id = operations.requireText(reservationId, "reservation_id");
+        return operations.executeWrite(
+                "cancelBarReservation:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarReservationRecord.class,
+                BarWriteOperation.CANCEL_RESERVATION,
+                () -> entryService.cancelReservation(id, request)
+        );
+    }
+
+    @Transactional
+    public BarDepositRuleRecord createDepositRule(BarDepositRuleRequest request) {
+        return operations.executeWrite(
+                "createBarDepositRule",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarDepositRuleRecord.class,
+                BarWriteOperation.CREATE_DEPOSIT_RULE,
+                () -> entryService.createDepositRule(request)
+        );
+    }
+
+    @Transactional
     public BarTableGuestCheckinRecord checkInReservationGuest(String reservationId, VerificationRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
         return operations.executeWrite(

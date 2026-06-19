@@ -52,7 +52,7 @@ class BarServiceTests {
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
-        BarEntryService entryService = new BarEntryService(barRepository, authorizationService);
+        BarEntryService entryService = new BarEntryService(barRepository, authorizationService, auditEventService);
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
@@ -222,6 +222,124 @@ class BarServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("bar.table_guest.checked_in", "bar.table_guest.rejected");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // R5 T16 — 订台定金闭环
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void createReservationComputesRatioDepositPendingFromMinConsumption() {
+        // 规则 min_consumption_ratio、ratio=30%、桌台低消 1000 元(=100000分) → 定金 300 元(=30000分)、status=pending（非0）。
+        service.createDepositRule(new BarDepositRuleRequest(
+                "deposit-rule-ratio", "rule", List.of(), "bar_t16",
+                "bar", "bar_t16", "min_consumption_ratio", null, 3000, 60));
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "table-t16-ratio", "create table", List.of(), "bar_t16",
+                "VIP RATIO", "card_seat", 100000L, 2, "active"));
+        BarReservationRecord reservation = service.createReservation(new BarReservationRequest(
+                "resv-t16-ratio", "create reservation", List.of(), "bar_t16",
+                table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null));
+
+        assertThat(reservation.depositAmountCent()).isEqualTo(30000L);
+        assertThat(reservation.depositStatus()).isEqualTo("pending");
+        assertThat(reservation.depositIntentId()).isNotNull();
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("bar.reservation_deposit_required");
+    }
+
+    @Test
+    void createReservationComputesFixedDepositPending() {
+        service.createDepositRule(new BarDepositRuleRequest(
+                "deposit-rule-fixed", "rule", List.of(), "bar_t16f",
+                "bar", "bar_t16f", "fixed", 20000L, null, 30));
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "table-t16-fixed", "create table", List.of(), "bar_t16f",
+                "VIP FIXED", "card_seat", 100000L, 2, "active"));
+        BarReservationRecord reservation = service.createReservation(new BarReservationRequest(
+                "resv-t16-fixed", "create reservation", List.of(), "bar_t16f",
+                table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null));
+
+        assertThat(reservation.depositAmountCent()).isEqualTo(20000L);
+        assertThat(reservation.depositStatus()).isEqualTo("pending");
+    }
+
+    @Test
+    void createReservationWithoutRuleKeepsBackwardCompatibleNotRequired() {
+        BarReservationRecord reservation = createReservation("resv-t16-none", "bar_norule", 2);
+        assertThat(reservation.depositAmountCent()).isEqualTo(0L);
+        assertThat(reservation.depositStatus()).isEqualTo("not_required");
+        assertThat(reservation.depositIntentId()).isNull();
+    }
+
+    @Test
+    void payDepositThenCheckInSettlesAsDeducted() {
+        BarReservationRecord reservation = reservationWithFixedDeposit("settle", 20000L, 30);
+
+        BarReservationRecord paid = service.payReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("pay-settle", "pay", List.of(), "aggregate_pay"));
+        assertThat(paid.depositStatus()).isEqualTo("paid");
+        assertThat(paid.depositPaidAt()).isNotNull();
+
+        BarReservationRecord checkedIn = service.checkInReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("checkin-settle", "checkin", List.of(), null));
+        assertThat(checkedIn.depositStatus()).isEqualTo("settled");
+        assertThat(checkedIn.depositSettlement()).isEqualTo("deducted");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("bar.reservation_deposit_paid", "bar.reservation_deposit_deducted");
+    }
+
+    @Test
+    void cancelBeforeFreeWindowRefundsDeposit() {
+        // 免没收时限 30 分钟，预约在远未来 → 取消属早于时限 → 退定金 refunded。
+        BarReservationRecord reservation = reservationWithFixedDeposit("refund", 20000L, 30);
+        service.payReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("pay-refund", "pay", List.of(), "aggregate_pay"));
+
+        BarReservationRecord cancelled = service.cancelReservation(reservation.id(),
+                new BarReservationCancelRequest("cancel-refund", "cancel", List.of(), false, "customer"));
+        assertThat(cancelled.status()).isEqualTo("cancelled");
+        assertThat(cancelled.depositSettlement()).isEqualTo("refunded");
+        assertThat(cancelled.depositStatus()).isEqualTo("settled");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("bar.reservation_deposit_refunded");
+    }
+
+    @Test
+    void noShowForfeitsDeposit() {
+        BarReservationRecord reservation = reservationWithFixedDeposit("forfeit", 20000L, 30);
+        service.payReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("pay-forfeit", "pay", List.of(), "aggregate_pay"));
+
+        BarReservationRecord cancelled = service.cancelReservation(reservation.id(),
+                new BarReservationCancelRequest("cancel-forfeit", "no-show", List.of(), true, "no_show"));
+        assertThat(cancelled.depositSettlement()).isEqualTo("forfeited");
+        assertThat(cancelled.depositStatus()).isEqualTo("settled");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("bar.reservation_deposit_forfeited");
+    }
+
+    @Test
+    void payDepositRejectsWhenNotPending() {
+        BarReservationRecord reservation = createReservation("resv-t16-nopay", "bar_norule", 2);
+        assertThatThrownBy(() -> service.payReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("pay-bad", "pay", List.of(), "aggregate_pay")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_DEPOSIT_NOT_PAYABLE");
+    }
+
+    private BarReservationRecord reservationWithFixedDeposit(String key, long fixedAmountCent, int freeMinutes) {
+        service.createDepositRule(new BarDepositRuleRequest(
+                "deposit-rule-" + key, "rule", List.of(), "bar_" + key,
+                "bar", "bar_" + key, "fixed", fixedAmountCent, null, freeMinutes));
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "table-" + key, "create table", List.of(), "bar_" + key,
+                "VIP " + key, "card_seat", 100000L, 2, "active"));
+        return service.createReservation(new BarReservationRequest(
+                "resv-" + key, "create reservation", List.of(), "bar_" + key,
+                table.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
     }
 
     @Test
@@ -1662,6 +1780,7 @@ class BarServiceTests {
     private static final class InMemoryBarRepository implements BarRepository {
         private final Map<String, BarTableRecord> tables = new LinkedHashMap<>();
         private final Map<String, BarReservationRecord> reservations = new LinkedHashMap<>();
+        private final Map<String, BarDepositRuleRecord> depositRules = new LinkedHashMap<>();
         private final Map<String, BarProductRecord> products = new LinkedHashMap<>();
         private final Map<String, BarOrderRecord> orders = new LinkedHashMap<>();
         private final Map<String, BarOrderItemRecord> orderItems = new LinkedHashMap<>();
@@ -1715,6 +1834,20 @@ class BarServiceTests {
         @Override
         public Optional<BarReservationRecord> findReservationById(String id) {
             return Optional.ofNullable(reservations.get(id));
+        }
+
+        @Override
+        public BarDepositRuleRecord saveDepositRule(BarDepositRuleRecord rule) {
+            depositRules.put(rule.id(), rule);
+            return rule;
+        }
+
+        @Override
+        public List<BarDepositRuleRecord> listDepositRules(String barId) {
+            return depositRules.values().stream()
+                    .filter(r -> r.enabled() && barId.equals(r.barId()))
+                    .sorted((a, b) -> b.scopeType().compareTo(a.scopeType()))
+                    .toList();
         }
 
         @Override

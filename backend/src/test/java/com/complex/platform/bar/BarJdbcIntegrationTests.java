@@ -1,6 +1,7 @@
 package com.complex.platform.bar;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import java.time.Instant;
@@ -88,8 +89,39 @@ class BarJdbcIntegrationTests {
                 "bar.table_session.create",
                 "bar.table_session.transfer",
                 "bar.table_session.merge",
-                "bar.table_session.renew"
+                "bar.table_session.renew",
+                "bar.reservation.manage",
+                "bar.deposit_rule.manage"
         );
+    }
+
+    @Test
+    void migrationCreatesDepositRuleTableAndReservationDepositColumns() {
+        assertThat(regclass("bar_deposit_rules")).isEqualTo("bar_deposit_rules");
+        assertThat(columnNames("bar_reservations")).contains(
+                "deposit_intent_id", "deposit_paid_at", "deposit_settlement");
+        assertThat(permissionCodes()).contains("bar.reservation.manage", "bar.deposit_rule.manage");
+    }
+
+    @Test
+    void depositRuleRoundTripAndReservationDepositStatusCheckEnforced() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveDepositRule(new BarDepositRuleRecord(
+                "deposit_rule_jdbc", "bar_jdbc_d", null, "bar", "bar_jdbc_d",
+                "min_consumption_ratio", null, 3000, 60, true, now, now));
+        assertThat(repository.listDepositRules("bar_jdbc_d"))
+                .extracting(BarDepositRuleRecord::id, BarDepositRuleRecord::mode, BarDepositRuleRecord::ratioBps)
+                .contains(tuple("deposit_rule_jdbc", "min_consumption_ratio", 3000));
+
+        repository.saveTable(new BarTableRecord(
+                "table_jdbc_d", "bar_jdbc_d", null, "T-D", "VIP D", "card_seat",
+                6, 2, 100000L, "CNY", "active", now, now));
+        // 非法 deposit_status 必须被 CHECK 约束拒绝。
+        assertThatThrownBy(() -> repository.saveReservation(new BarReservationRecord(
+                "reservation_jdbc_bad", "bar_jdbc_d", null, "table_jdbc_d", null,
+                now.plusSeconds(3600), 2, 2, 100L, "bogus_status", "staff", null,
+                "reserved", "web", null, List.of(), now, now, null)))
+                .isInstanceOf(Exception.class);
     }
 
     @Test

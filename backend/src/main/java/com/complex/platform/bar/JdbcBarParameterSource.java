@@ -52,7 +52,26 @@ final class JdbcBarParameterSource {
                 .addValue("evidence_attachment_ids", writeJson(reservation.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(reservation.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(reservation.updatedAt()))
-                .addValue("deposit_rule", reservation.depositRule());
+                .addValue("deposit_rule", reservation.depositRule())
+                .addValue("deposit_intent_id", reservation.depositIntentId())
+                .addValue("deposit_paid_at", timestampWithTimeZone(reservation.depositPaidAt()))
+                .addValue("deposit_settlement", reservation.depositSettlement());
+    }
+
+    MapSqlParameterSource depositRuleParameters(BarDepositRuleRecord rule) {
+        return new MapSqlParameterSource()
+                .addValue("id", rule.id())
+                .addValue("bar_id", rule.barId())
+                .addValue("merchant_id", rule.merchantId())
+                .addValue("scope_type", rule.scopeType())
+                .addValue("scope_id", rule.scopeId())
+                .addValue("mode", rule.mode())
+                .addValue("fixed_amount_cent", rule.fixedAmountCent())
+                .addValue("ratio_bps", rule.ratioBps())
+                .addValue("cancel_free_before_minutes", rule.cancelFreeBeforeMinutes())
+                .addValue("enabled", rule.enabled())
+                .addValue("created_at", timestampWithTimeZone(rule.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
     }
 
     MapSqlParameterSource checkinParameters(BarTableGuestCheckinRecord checkin) {

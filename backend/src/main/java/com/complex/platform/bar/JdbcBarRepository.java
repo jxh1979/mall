@@ -62,6 +62,16 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public BarDepositRuleRecord saveDepositRule(BarDepositRuleRecord rule) {
+        return catalog.saveDepositRule(rule);
+    }
+
+    @Override
+    public List<BarDepositRuleRecord> listDepositRules(String barId) {
+        return catalog.listDepositRules(barId);
+    }
+
+    @Override
     public int countGuestCheckins(String reservationId) {
         return catalog.countGuestCheckins(reservationId);
     }

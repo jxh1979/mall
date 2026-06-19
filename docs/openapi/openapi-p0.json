@@ -8170,6 +8170,176 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/bar/reservations/{id}/pay-deposit": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "payBarReservationDeposit",
+        "summary": "订台定金支付",
+        "x-permission": "bar.reservation.manage",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "kiosk",
+          "tablet",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.reservation_deposit_paid",
+        "x-audit-event-failure": "bar.reservation_deposit_pay_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarReservationDepositActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/reservations/{id}/checkin": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "checkInBarReservationDeposit",
+        "summary": "订台到店核销（定金转抵扣进账单）",
+        "x-permission": "bar.reservation.manage",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "kiosk",
+          "tablet",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.reservation_deposit_deducted",
+        "x-audit-event-failure": "bar.reservation_deposit_deduct_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarReservationDepositActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/reservations/{id}/cancel": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "cancelBarReservation",
+        "summary": "订台取消/爽约（按时限退定金或没收）",
+        "x-permission": "bar.reservation.manage",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "kiosk",
+          "tablet",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.reservation.cancelled",
+        "x-audit-event-failure": "bar.reservation.cancel_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarReservationCancelRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/deposit-rules": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "createBarDepositRule",
+        "summary": "创建订台定金规则（固定额/按低消比例）",
+        "x-permission": "bar.deposit_rule.manage",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "kiosk",
+          "tablet",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.deposit_rule.created",
+        "x-audit-event-failure": "bar.deposit_rule.create_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarDepositRuleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -9505,6 +9675,55 @@
               "idempotency_key": "arap_adj_decide_20260630_000001",
               "decision": "approve",
               "operator_note": "经财务复核同意补录"
+            }
+          }
+        }
+      },
+      "BarReservationDepositActionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarReservationDepositActionRequest"
+            },
+            "example": {
+              "idempotency_key": "bar_deposit_pay_20260618_000001",
+              "channel": "aggregate_pay",
+              "operator_note": "前台收取订台定金"
+            }
+          }
+        }
+      },
+      "BarReservationCancelRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarReservationCancelRequest"
+            },
+            "example": {
+              "idempotency_key": "bar_resv_cancel_20260618_000001",
+              "no_show": false,
+              "reason": "顾客主动取消"
+            }
+          }
+        }
+      },
+      "BarDepositRuleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarDepositRuleRequest"
+            },
+            "example": {
+              "idempotency_key": "bar_deposit_rule_20260618_000001",
+              "bar_id": "bar_a",
+              "scope_type": "bar",
+              "scope_id": "bar_a",
+              "mode": "min_consumption_ratio",
+              "ratio_bps": 3000,
+              "cancel_free_before_minutes": 60
             }
           }
         }
@@ -15489,6 +15708,153 @@
               "reject"
             ],
             "maxLength": 32
+          }
+        }
+      },
+      "BarReservationDepositActionRequest": {
+        "type": "object",
+        "description": "请求载荷 `BarReservationDepositActionRequest`；订台定金支付/到店核销动作。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交必须返回同一处理结果。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注；进入审计留痕。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "channel": {
+            "type": "string",
+            "description": "定金支付渠道（聚合支付/现金/POS 等）。",
+            "enum": [
+              "aggregate_pay",
+              "cash",
+              "pos",
+              "bank_transfer",
+              "other"
+            ]
+          }
+        }
+      },
+      "BarReservationCancelRequest": {
+        "type": "object",
+        "description": "请求载荷 `BarReservationCancelRequest`；订台取消/爽约，按免没收时限决定退定金或没收。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交必须返回同一处理结果。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注；进入审计留痕。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "no_show": {
+            "type": "boolean",
+            "description": "是否爽约；true 表示爽约，定金直接没收。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "取消原因。",
+            "maxLength": 500
+          }
+        }
+      },
+      "BarDepositRuleRequest": {
+        "type": "object",
+        "description": "请求载荷 `BarDepositRuleRequest`；订台定金规则（固定额或按低消比例）。",
+        "additionalProperties": false,
+        "required": [
+          "bar_id",
+          "mode"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交必须返回同一处理结果。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注；进入审计留痕。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "bar_id": {
+            "type": "string",
+            "description": "酒吧唯一标识；必须引用当前数据范围内存在的记录。",
+            "maxLength": 64
+          },
+          "scope_type": {
+            "type": "string",
+            "description": "规则作用域类型；table_type/time_slot 优先于 bar。",
+            "enum": [
+              "bar",
+              "table_type",
+              "time_slot"
+            ]
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "作用域标识（如桌型代码或吧台 ID）。",
+            "maxLength": 64
+          },
+          "mode": {
+            "type": "string",
+            "description": "定金计算模式。",
+            "enum": [
+              "fixed",
+              "min_consumption_ratio"
+            ]
+          },
+          "fixed_amount_cent": {
+            "type": "integer",
+            "description": "固定定金金额（分）；mode=fixed 必填。",
+            "minimum": 0,
+            "maximum": 999999999
+          },
+          "ratio_bps": {
+            "type": "integer",
+            "description": "按低消比例基点（3000=30%）；mode=min_consumption_ratio 必填。",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "cancel_free_before_minutes": {
+            "type": "integer",
+            "description": "取消免没收时限（分钟）。",
+            "minimum": 0,
+            "maximum": 100000000
           }
         }
       }

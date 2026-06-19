@@ -58,7 +58,31 @@ final class JdbcBarRowMapper {
                 readStringList(resultSet.getString("evidence_attachment_ids")),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
-                resultSet.getString("deposit_rule")
+                resultSet.getString("deposit_rule"),
+                resultSet.getString("deposit_intent_id"),
+                nullableInstant(resultSet, "deposit_paid_at"),
+                resultSet.getString("deposit_settlement")
+        );
+    }
+
+    BarDepositRuleRecord mapDepositRule(ResultSet resultSet, int rowNumber) throws SQLException {
+        Long fixedAmount = resultSet.getObject("fixed_amount_cent") == null
+                ? null : resultSet.getLong("fixed_amount_cent");
+        Integer ratioBps = resultSet.getObject("ratio_bps") == null
+                ? null : resultSet.getInt("ratio_bps");
+        return new BarDepositRuleRecord(
+                resultSet.getString("id"),
+                resultSet.getString("bar_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("scope_type"),
+                resultSet.getString("scope_id"),
+                resultSet.getString("mode"),
+                fixedAmount,
+                ratioBps,
+                resultSet.getInt("cancel_free_before_minutes"),
+                resultSet.getBoolean("enabled"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
         );
     }
 

@@ -2575,99 +2575,6 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-  /api/v1/finance/daily-closes/{id}/summaries:
-    get:
-      tags:
-        - finance
-      operationId: listDailyCloseSummaries
-      summary: 查询日结六源汇总
-      description: 返回日结锁定时按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流六源聚合的金额、退款、计数；商户角色仅见自身 scope。
-      x-permission: finance.daily_close.manage
-      x-data-scope: project-entity
-      x-terminal-allowed:
-        - web
-        - mobile_admin
-      x-idempotency-required: false
-      x-audit-event-success: finance.daily_close_summary.viewed
-      x-audit-event-failure: finance.daily_close_summary.view_failed
-      parameters:
-        - $ref: "#/components/parameters/Id"
-          description: 日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/finance/ar-ap-adjustments:
-    post:
-      tags:
-        - finance
-      operationId: requestArApAdjustment
-      summary: 锁定后补录审批申请
-      description: 对已锁定日结的应收应付台账发起补录申请（pending），由上级审批通过后才真正写入金额变动。
-      x-permission: finance.locked_backfill.request
-      x-data-scope: project-entity
-      x-terminal-allowed:
-        - web
-        - mobile_admin
-      x-idempotency-required: true
-      x-audit-event-success: finance.locked_backfill_requested
-      x-audit-event-failure: finance.locked_backfill_request_failed
-      requestBody:
-        $ref: "#/components/requestBodies/ArApAdjustmentRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/finance/ar-ap-adjustments/{id}/approve:
-    post:
-      tags:
-        - finance
-      operationId: approveArApAdjustment
-      summary: 锁定后补录审批决定
-      description: 上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。
-      x-permission: finance.locked_backfill.approve
-      x-data-scope: project-entity
-      x-terminal-allowed:
-        - web
-        - mobile_admin
-      x-idempotency-required: true
-      x-audit-event-success: finance.locked_backfill_approved
-      x-audit-event-failure: finance.locked_backfill_decision_failed
-      parameters:
-        - $ref: "#/components/parameters/Id"
-          description: 补录工单 id；必须按 OpenAPI 类型、枚举和必填规则校验。
-      requestBody:
-        $ref: "#/components/requestBodies/ArApAdjustmentDecisionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/finance/payment-intents:
     post:
       tags:
@@ -3318,7 +3225,8 @@ paths:
         - integration
       operationId: reportIntegrationRobotTaskEvent
       summary: 机器人任务事件上报（被动留痕）
-      description: "R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。"
+      description: R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17
+        交接。真实回流闭环待厂商资料 + 开关开启后交付。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -3345,7 +3253,8 @@ paths:
         - integration
       operationId: listIntegrationVideoAnchors
       summary: 调阅视频点位时间锚点（敏感，写调阅审计）
-      description: "R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer + approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。"
+      description: R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer +
+        approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。
       x-permission: integration.video.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3375,7 +3284,10 @@ paths:
         - integration
       operationId: receiveIntegrationTypedWebhook
       summary: 第三方统一 webhook 入口（开关门控）
-      description: "R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。"
+      description: R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook
+        入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用
+        TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping
+        占位空、process_status=accepted），不伪造对账。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -5769,7 +5681,8 @@ paths:
         - access
       operationId: getEffectivePermissions
       summary: 查询当前账号有效权限集
-      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先 + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
+      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先
+        + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
       x-permission: authenticated
       x-data-scope: self
       x-terminal-allowed:
@@ -5843,6 +5756,220 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/finance/daily-closes/{id}/summaries:
+    get:
+      tags:
+        - finance
+      operationId: listDailyCloseSummaries
+      summary: 查询日结六源汇总
+      description: 返回日结锁定时按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流六源聚合的金额、退款、计数；商户角色仅见自身 scope。
+      x-permission: finance.daily_close.manage
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: finance.daily_close_summary.viewed
+      x-audit-event-failure: finance.daily_close_summary.view_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/finance/ar-ap-adjustments:
+    post:
+      tags:
+        - finance
+      operationId: requestArApAdjustment
+      summary: 锁定后补录审批申请
+      description: 对已锁定日结的应收应付台账发起补录申请（pending），由上级审批通过后才真正写入金额变动。
+      x-permission: finance.locked_backfill.request
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: finance.locked_backfill_requested
+      x-audit-event-failure: finance.locked_backfill_request_failed
+      requestBody:
+        $ref: "#/components/requestBodies/ArApAdjustmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/finance/ar-ap-adjustments/{id}/approve:
+    post:
+      tags:
+        - finance
+      operationId: approveArApAdjustment
+      summary: 锁定后补录审批决定
+      description: 上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。
+      x-permission: finance.locked_backfill.approve
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: finance.locked_backfill_approved
+      x-audit-event-failure: finance.locked_backfill_decision_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 补录工单 id；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/ArApAdjustmentDecisionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/reservations/{id}/pay-deposit:
+    post:
+      tags:
+        - bar
+      operationId: payBarReservationDeposit
+      summary: 订台定金支付
+      x-permission: bar.reservation.manage
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+        - kiosk
+        - tablet
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: bar.reservation_deposit_paid
+      x-audit-event-failure: bar.reservation_deposit_pay_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarReservationDepositActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/reservations/{id}/checkin:
+    post:
+      tags:
+        - bar
+      operationId: checkInBarReservationDeposit
+      summary: 订台到店核销（定金转抵扣进账单）
+      x-permission: bar.reservation.manage
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+        - kiosk
+        - tablet
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: bar.reservation_deposit_deducted
+      x-audit-event-failure: bar.reservation_deposit_deduct_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarReservationDepositActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/reservations/{id}/cancel:
+    post:
+      tags:
+        - bar
+      operationId: cancelBarReservation
+      summary: 订台取消/爽约（按时限退定金或没收）
+      x-permission: bar.reservation.manage
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+        - kiosk
+        - tablet
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: bar.reservation.cancelled
+      x-audit-event-failure: bar.reservation.cancel_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarReservationCancelRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/deposit-rules:
+    post:
+      tags:
+        - bar
+      operationId: createBarDepositRule
+      summary: 创建订台定金规则（固定额/按低消比例）
+      x-permission: bar.deposit_rule.manage
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+        - kiosk
+        - tablet
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: bar.deposit_rule.created
+      x-audit-event-failure: bar.deposit_rule.create_failed
+      requestBody:
+        $ref: "#/components/requestBodies/BarDepositRuleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -6052,15 +6179,6 @@ components:
             business_context:
               scenario: ticket_checkin
               ticket_id: ticket_inst_000001
-    VerificationReverse:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/VerificationReverseRequest"
-          example:
-            idempotency_key: reverse_20260618_000001
-            reason: 误核销，需冲正回滚核销次数
     ProviderAdapter:
       required: true
       content:
@@ -6435,27 +6553,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/DailyCloseRequest"
-    ArApAdjustmentRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ArApAdjustmentRequest"
-          example:
-            idempotency_key: arap_adj_20260630_000001
-            ar_ap_item_id: arap_late_invoice_001
-            adjustment_amount_cent: 5000
-            reason: 锁定后到票补录差额
-    ArApAdjustmentDecisionRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ArApAdjustmentDecisionRequest"
-          example:
-            idempotency_key: arap_adj_decide_20260630_000001
-            decision: approve
-            operator_note: 经财务复核同意补录
     EvidenceAttachmentUploadIntentRequest:
       required: true
       content:
@@ -6724,6 +6821,70 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StaffLevelAssignmentRequest"
+    VerificationReverse:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/VerificationReverseRequest"
+          example:
+            idempotency_key: reverse_20260618_000001
+            reason: 误核销，需冲正回滚核销次数
+    ArApAdjustmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ArApAdjustmentRequest"
+          example:
+            idempotency_key: arap_adj_20260630_000001
+            ar_ap_item_id: arap_late_invoice_001
+            adjustment_amount_cent: 5000
+            reason: 锁定后到票补录差额
+    ArApAdjustmentDecisionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ArApAdjustmentDecisionRequest"
+          example:
+            idempotency_key: arap_adj_decide_20260630_000001
+            decision: approve
+            operator_note: 经财务复核同意补录
+    BarReservationDepositActionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarReservationDepositActionRequest"
+          example:
+            idempotency_key: bar_deposit_pay_20260618_000001
+            channel: aggregate_pay
+            operator_note: 前台收取订台定金
+    BarReservationCancelRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarReservationCancelRequest"
+          example:
+            idempotency_key: bar_resv_cancel_20260618_000001
+            no_show: false
+            reason: 顾客主动取消
+    BarDepositRuleRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarDepositRuleRequest"
+          example:
+            idempotency_key: bar_deposit_rule_20260618_000001
+            bar_id: bar_a
+            scope_type: bar
+            scope_id: bar_a
+            mode: min_consumption_ratio
+            ratio_bps: 3000
+            cancel_free_before_minutes: 60
   responses:
     Success:
       description: 统一成功响应
@@ -7081,21 +7242,6 @@ components:
           additionalProperties: true
           description: 核销业务上下文；用于区分通票、权益、酒水领取、卡座入场等场景。
       description: 核销请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
-    VerificationReverseRequest:
-      type: object
-      required:
-        - idempotency_key
-        - reason
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键；同一冲正重试必须复用。
-          maxLength: 128
-        reason:
-          type: string
-          description: 核销冲正原因；必填，留痕可追溯。
-          maxLength: 1000
-      description: 核销冲正请求体。字段必须与 OpenAPI、后端 DTO、前端请求保持一致。
     ProviderAdapter:
       type: object
       required:
@@ -9638,71 +9784,6 @@ components:
         force_close:
           type: boolean
           description: DailyCloseRequest.force_close 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
-    ArApAdjustmentRequest:
-      type: object
-      description: 请求载荷 `ArApAdjustmentRequest`（R5 T7 锁定后补录审批申请）；字段、必填项和枚举用于生成 DTO、校验和契约测试。
-      additionalProperties: false
-      required:
-        - ar_ap_item_id
-        - adjustment_amount_cent
-        - reason
-      properties:
-        idempotency_key:
-          type: string
-          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复入账。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定补录凭证。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-        ar_ap_item_id:
-          type: string
-          description: 目标应收应付台账项 id；必须为已锁定（locked_day_close_id 非空）的台账项。
-          maxLength: 64
-        adjustment_amount_cent:
-          type: integer
-          format: int64
-          description: 补录变动额（整数分，带符号；正=增、负=减）；不得为 0。
-        reason:
-          type: string
-          description: 补录原因；必填，进入审计留痕。
-          maxLength: 255
-    ArApAdjustmentDecisionRequest:
-      type: object
-      description: 请求载荷 `ArApAdjustmentDecisionRequest`（R5 T7 补录审批决定）；字段、必填项和枚举用于生成 DTO、校验和契约测试。
-      additionalProperties: false
-      required:
-        - decision
-      properties:
-        idempotency_key:
-          type: string
-          description: 操作幂等键；重复提交时必须返回同一处理结果。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 审批备注；进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定审批凭证。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-        decision:
-          type: string
-          description: 审批决定；approve 才把金额变动入账，reject 不改账。
-          enum:
-            - approve
-            - reject
-          maxLength: 32
     EvidenceAttachmentUploadIntentRequest:
       type: object
       description: 请求载荷 `EvidenceAttachmentUploadIntentRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -11436,6 +11517,200 @@ components:
           type: string
           maxLength: 1000
           description: 职级薪资分配.salary_detail 字段；测试必须覆盖缺失、错类型和越界场景。
+    VerificationReverseRequest:
+      type: object
+      required:
+        - idempotency_key
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键；同一冲正重试必须复用。
+          maxLength: 128
+        reason:
+          type: string
+          description: 核销冲正原因；必填，留痕可追溯。
+          maxLength: 1000
+    ArApAdjustmentRequest:
+      type: object
+      description: 请求载荷 `ArApAdjustmentRequest`（R5 T7 锁定后补录审批申请）；字段、必填项和枚举用于生成 DTO、校验和契约测试。
+      additionalProperties: false
+      required:
+        - ar_ap_item_id
+        - adjustment_amount_cent
+        - reason
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定补录凭证。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        ar_ap_item_id:
+          type: string
+          description: 目标应收应付台账项 id；必须为已锁定（locked_day_close_id 非空）的台账项。
+          maxLength: 64
+        adjustment_amount_cent:
+          type: integer
+          format: int64
+          description: 补录变动额（整数分，带符号；正=增、负=减）；不得为 0。
+        reason:
+          type: string
+          description: 补录原因；必填，进入审计留痕。
+          maxLength: 255
+    ArApAdjustmentDecisionRequest:
+      type: object
+      description: 请求载荷 `ArApAdjustmentDecisionRequest`（R5 T7 补录审批决定）；字段、必填项和枚举用于生成 DTO、校验和契约测试。
+      additionalProperties: false
+      required:
+        - decision
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 审批备注；进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定审批凭证。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        decision:
+          type: string
+          description: 审批决定；approve 才把金额变动入账，reject 不改账。
+          enum:
+            - approve
+            - reject
+          maxLength: 32
+    BarReservationDepositActionRequest:
+      type: object
+      description: 请求载荷 `BarReservationDepositActionRequest`；订台定金支付/到店核销动作。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交必须返回同一处理结果。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        channel:
+          type: string
+          description: 定金支付渠道（聚合支付/现金/POS 等）。
+          enum:
+            - aggregate_pay
+            - cash
+            - pos
+            - bank_transfer
+            - other
+    BarReservationCancelRequest:
+      type: object
+      description: 请求载荷 `BarReservationCancelRequest`；订台取消/爽约，按免没收时限决定退定金或没收。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交必须返回同一处理结果。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        no_show:
+          type: boolean
+          description: 是否爽约；true 表示爽约，定金直接没收。
+        reason:
+          type: string
+          description: 取消原因。
+          maxLength: 500
+    BarDepositRuleRequest:
+      type: object
+      description: 请求载荷 `BarDepositRuleRequest`；订台定金规则（固定额或按低消比例）。
+      additionalProperties: false
+      required:
+        - bar_id
+        - mode
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交必须返回同一处理结果。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        bar_id:
+          type: string
+          description: 酒吧唯一标识；必须引用当前数据范围内存在的记录。
+          maxLength: 64
+        scope_type:
+          type: string
+          description: 规则作用域类型；table_type/time_slot 优先于 bar。
+          enum:
+            - bar
+            - table_type
+            - time_slot
+        scope_id:
+          type: string
+          description: 作用域标识（如桌型代码或吧台 ID）。
+          maxLength: 64
+        mode:
+          type: string
+          description: 定金计算模式。
+          enum:
+            - fixed
+            - min_consumption_ratio
+        fixed_amount_cent:
+          type: integer
+          description: 固定定金金额（分）；mode=fixed 必填。
+          minimum: 0
+          maximum: 999999999
+        ratio_bps:
+          type: integer
+          description: 按低消比例基点（3000=30%）；mode=min_consumption_ratio 必填。
+          minimum: 0
+          maximum: 100000
+        cancel_free_before_minutes:
+          type: integer
+          description: 取消免没收时限（分钟）。
+          minimum: 0
+          maximum: 100000000
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

@@ -97,13 +97,15 @@ final class JdbcBarCatalogRepository {
                     id, bar_id, merchant_id, table_id, customer_id, reserved_at, guest_count,
                     allowed_pass_free_guest_count, deposit_amount_cent, deposit_status,
                     order_source, sales_staff_id, status, created_terminal, device_id,
-                    evidence_attachment_ids, created_at, updated_at, deposit_rule
+                    evidence_attachment_ids, created_at, updated_at, deposit_rule,
+                    deposit_intent_id, deposit_paid_at, deposit_settlement
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :customer_id, :reserved_at, :guest_count,
                     :allowed_pass_free_guest_count, :deposit_amount_cent, :deposit_status,
                     :order_source, :sales_staff_id, :status, :created_terminal, :device_id,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :deposit_rule
+                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :deposit_rule,
+                    :deposit_intent_id, :deposit_paid_at, :deposit_settlement
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -122,9 +124,48 @@ final class JdbcBarCatalogRepository {
                     device_id = EXCLUDED.device_id,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     updated_at = EXCLUDED.updated_at,
-                    deposit_rule = EXCLUDED.deposit_rule
+                    deposit_rule = EXCLUDED.deposit_rule,
+                    deposit_intent_id = EXCLUDED.deposit_intent_id,
+                    deposit_paid_at = EXCLUDED.deposit_paid_at,
+                    deposit_settlement = EXCLUDED.deposit_settlement
                 """, parameterSource.reservationParameters(reservation));
         return reservation;
+    }
+
+    public BarDepositRuleRecord saveDepositRule(BarDepositRuleRecord rule) {
+        jdbcTemplate.update("""
+                INSERT INTO bar_deposit_rules (
+                    id, bar_id, merchant_id, scope_type, scope_id, mode,
+                    fixed_amount_cent, ratio_bps, cancel_free_before_minutes, enabled,
+                    created_at, updated_at
+                )
+                VALUES (
+                    :id, :bar_id, :merchant_id, :scope_type, :scope_id, :mode,
+                    :fixed_amount_cent, :ratio_bps, :cancel_free_before_minutes, :enabled,
+                    :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    bar_id = EXCLUDED.bar_id,
+                    merchant_id = EXCLUDED.merchant_id,
+                    scope_type = EXCLUDED.scope_type,
+                    scope_id = EXCLUDED.scope_id,
+                    mode = EXCLUDED.mode,
+                    fixed_amount_cent = EXCLUDED.fixed_amount_cent,
+                    ratio_bps = EXCLUDED.ratio_bps,
+                    cancel_free_before_minutes = EXCLUDED.cancel_free_before_minutes,
+                    enabled = EXCLUDED.enabled,
+                    updated_at = EXCLUDED.updated_at
+                """, parameterSource.depositRuleParameters(rule));
+        return rule;
+    }
+
+    public List<BarDepositRuleRecord> listDepositRules(String barId) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM bar_deposit_rules
+                 WHERE bar_id = :bar_id AND enabled = TRUE
+                 ORDER BY scope_type DESC, created_at DESC, id
+                """, Map.of("bar_id", barId), rowMapper::mapDepositRule);
     }
 
     public List<BarReservationRecord> listReservations(Optional<String> merchantScope) {

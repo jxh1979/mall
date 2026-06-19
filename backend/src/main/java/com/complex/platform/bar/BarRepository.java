@@ -20,6 +20,16 @@ public interface BarRepository {
 
     Optional<BarReservationRecord> findReservationById(String id);
 
+    /** R5 T16：保存订台定金规则。 */
+    default BarDepositRuleRecord saveDepositRule(BarDepositRuleRecord rule) {
+        return rule;
+    }
+
+    /** R5 T16：按吧台列启用中的定金规则（scope_type 倒序，table_type/time_slot 优先于 bar）。 */
+    default List<BarDepositRuleRecord> listDepositRules(String barId) {
+        return List.of();
+    }
+
     int countGuestCheckins(String reservationId);
 
     BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin);

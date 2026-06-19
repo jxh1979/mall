@@ -195,6 +195,45 @@ public class BarController {
         return ApiResponse.ok(service.createReservation(request));
     }
 
+    @PostMapping("/reservations/{id}/pay-deposit")
+    public ApiResponse<BarReservationRecord> payReservationDeposit(
+            @PathVariable String id,
+            @RequestBody(required = false) BarReservationDepositActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.reservation.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.payReservationDeposit(id, request));
+    }
+
+    @PostMapping("/reservations/{id}/checkin")
+    public ApiResponse<BarReservationRecord> checkInReservationDeposit(
+            @PathVariable String id,
+            @RequestBody(required = false) BarReservationDepositActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.reservation.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.checkInReservationDeposit(id, request));
+    }
+
+    @PostMapping("/reservations/{id}/cancel")
+    public ApiResponse<BarReservationRecord> cancelReservation(
+            @PathVariable String id,
+            @RequestBody(required = false) BarReservationCancelRequest request
+    ) {
+        authorizationService.requirePermission("bar.reservation.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.cancelReservation(id, request));
+    }
+
+    @PostMapping("/deposit-rules")
+    public ApiResponse<BarDepositRuleRecord> createDepositRule(
+            @RequestBody(required = false) BarDepositRuleRequest request
+    ) {
+        authorizationService.requirePermission("bar.deposit_rule.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createDepositRule(request));
+    }
+
     @PostMapping("/reservations/{id}/check-in-guest")
     public ApiResponse<BarTableGuestCheckinRecord> checkInReservationGuest(
             @PathVariable String id,

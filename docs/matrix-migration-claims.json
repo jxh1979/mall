@@ -84,6 +84,19 @@
       "note": "V063 A4: 订台定金规则字段已落"
     },
     {
+      "req": "REQ-26",
+      "table": "bar_deposit_rules",
+      "expected": "present",
+      "note": "V073 R5 T16: 订台定金规则表已落（固定额/按低消比例 + 取消免没收时限）"
+    },
+    {
+      "req": "REQ-26",
+      "table": "bar_reservations",
+      "column": "deposit_settlement",
+      "expected": "present",
+      "note": "V073 R5 T16: 订台定金抵扣/退/没收结算字段已落（定金闭环已落地）"
+    },
+    {
       "req": "REQ-08",
       "table": "ticket_credentials",
       "column": "refresh_interval_seconds",
