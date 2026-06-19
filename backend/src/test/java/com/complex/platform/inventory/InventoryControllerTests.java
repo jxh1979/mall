@@ -314,6 +314,16 @@ class InventoryControllerTests {
         }
 
         @Bean
+        SupplyContractService supplyContractService() {
+            return Mockito.mock(SupplyContractService.class);
+        }
+
+        @Bean
+        WarehouseService warehouseService() {
+            return Mockito.mock(WarehouseService.class);
+        }
+
+        @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
         }

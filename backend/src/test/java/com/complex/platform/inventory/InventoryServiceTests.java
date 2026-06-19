@@ -320,6 +320,7 @@ class InventoryServiceTests {
                 0,
                 2,
                 Instant.parse("2026-06-14T00:00:00Z"),
+                null,
                 null
         ));
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
@@ -330,6 +331,7 @@ class InventoryServiceTests {
                 0,
                 0,
                 Instant.parse("2026-06-14T00:00:00Z"),
+                null,
                 null
         ));
         service.createStockBatch(new InventoryStockBatchRequest(
@@ -660,6 +662,7 @@ class InventoryServiceTests {
                 0,
                 0,
                 Instant.parse("2026-06-14T00:00:00Z"),
+                null,
                 null
         ));
         // 请求体包含伪造的 operatorUserId
@@ -908,19 +911,20 @@ class InventoryServiceTests {
                     existing.reservedQuantity(),
                     existing.availableQuantity() - qty,
                     Instant.now(),
-                    existing.merchantId()
+                    existing.merchantId(),
+                    existing.warehouseId()
             ));
             return 1;
         }
 
         // P0-1: 原子增加库存余额（INSERT ON CONFLICT DO UPDATE 语义）
         @Override
-        public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId) {
+        public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId) {
             String key = balanceKey(itemId, locationId);
             StockBalanceRecord existing = balances.get(key);
             if (existing == null) {
                 balances.put(key, new StockBalanceRecord(
-                        newId, itemId, locationId, qty, 0, qty, Instant.now(), merchantId));
+                        newId, itemId, locationId, qty, 0, qty, Instant.now(), merchantId, warehouseId));
             } else {
                 balances.put(key, new StockBalanceRecord(
                         existing.id(),
@@ -930,7 +934,8 @@ class InventoryServiceTests {
                         existing.reservedQuantity(),
                         existing.availableQuantity() + qty,
                         Instant.now(),
-                        existing.merchantId()
+                        existing.merchantId(),
+                        warehouseId == null ? existing.warehouseId() : warehouseId
                 ));
             }
         }
@@ -1101,6 +1106,51 @@ class InventoryServiceTests {
                     "robot_task_ref", robotTaskRef == null ? "" : robotTaskRef,
                     "event_type", eventType == null ? "" : eventType,
                     "handover_id", handoverId == null ? "" : handoverId));
+        }
+
+        // R5 T6：供应合同 + 库房 in-memory 存储。
+        final Map<String, SupplyContractRecord> supplyContracts = new LinkedHashMap<>();
+        final Map<String, WarehouseRecord> warehouses = new LinkedHashMap<>();
+
+        @Override
+        public SupplyContractRecord saveSupplyContract(SupplyContractRecord contract) {
+            supplyContracts.put(contract.id(), contract);
+            return contract;
+        }
+
+        @Override
+        public Optional<SupplyContractRecord> findSupplyContractByIdForUpdate(String id) {
+            return Optional.ofNullable(supplyContracts.get(id));
+        }
+
+        @Override
+        public List<SupplyContractRecord> listSupplyContracts() {
+            return new ArrayList<>(supplyContracts.values());
+        }
+
+        @Override
+        public List<SupplyContractRecord> listSupplyContractsByMerchant(String merchantId) {
+            return supplyContracts.values().stream()
+                    .filter(c -> merchantId.equals(c.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public WarehouseRecord saveWarehouse(WarehouseRecord warehouse) {
+            warehouses.put(warehouse.id(), warehouse);
+            return warehouse;
+        }
+
+        @Override
+        public List<WarehouseRecord> listWarehouses() {
+            return new ArrayList<>(warehouses.values());
+        }
+
+        @Override
+        public List<WarehouseRecord> listWarehousesByMerchant(String merchantId) {
+            return warehouses.values().stream()
+                    .filter(w -> merchantId.equals(w.merchantId()))
+                    .toList();
         }
 
         private String balanceKey(String itemId, String locationId) {

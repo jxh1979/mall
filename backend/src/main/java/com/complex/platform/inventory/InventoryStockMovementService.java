@@ -269,9 +269,14 @@ final class InventoryStockMovementService {
 
     // P0-1: 原子增加余额，消除 read-modify-write 竞态
     private void increaseBalance(String itemId, String locationId, int quantity) {
+        increaseBalance(itemId, locationId, quantity, null);
+    }
+
+    // R5 T6：可携带结构化库房 warehouse_id（入库确认时挂库房；其余场景传 null）。
+    private void increaseBalance(String itemId, String locationId, int quantity, String warehouseId) {
         String balanceId = "balance_" + slug(itemId + ":" + locationId);
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
-        repository.atomicIncreaseStockBalance(itemId, locationId, quantity, balanceId, merchantId);
+        repository.atomicIncreaseStockBalance(itemId, locationId, quantity, balanceId, merchantId, warehouseId);
     }
 
     // P0-1: 原子减少余额，消除 read-modify-write 竞态

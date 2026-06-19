@@ -76,7 +76,43 @@ final class JdbcInventoryRowMapper {
                 resultSet.getInt("reserved_quantity"),
                 resultSet.getInt("available_quantity"),
                 instant(resultSet, "updated_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                resultSet.getString("warehouse_id")
+        );
+    }
+
+    SupplyContractRecord mapSupplyContract(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SupplyContractRecord(
+                resultSet.getString("id"),
+                resultSet.getString("contract_no"),
+                resultSet.getString("supplier_id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("contract_mode"),
+                resultSet.getString("supply_scope"),
+                resultSet.getString("price_terms"),
+                resultSet.getObject("payment_term_days", Integer.class),
+                resultSet.getObject("valid_from", java.time.LocalDate.class),
+                resultSet.getObject("valid_to", java.time.LocalDate.class),
+                resultSet.getString("summary"),
+                readList(resultSet.getString("purchasable_scope")),
+                resultSet.getString("approval_status"),
+                resultSet.getString("status"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
+    WarehouseRecord mapWarehouse(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new WarehouseRecord(
+                resultSet.getString("id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("warehouse_type"),
+                resultSet.getString("name"),
+                resultSet.getString("status"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
         );
     }
 

@@ -72,7 +72,7 @@ public interface InventoryRepository {
     // P0-1: 原子库存余额操作，消除竞态条件
     int atomicDecreaseStockBalance(String itemId, String locationId, int qty);
 
-    void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId);
+    void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId);
 
     // P0-2: 行锁读取，消除 claimSavedBottle 竞态
     Optional<SavedBottleRecord> findSavedBottleByIdForUpdate(String id);
@@ -95,4 +95,19 @@ public interface InventoryRepository {
     List<SupplierReconciliationRecord> listSupplierReconciliationsByMerchant(String merchantId);
 
     List<SavedBottleRecord> listSavedBottlesByMerchant(String merchantId);
+
+    // R5 T6：供应合同三模式 + 结构化库房。
+    SupplyContractRecord saveSupplyContract(SupplyContractRecord contract);
+
+    Optional<SupplyContractRecord> findSupplyContractByIdForUpdate(String id);
+
+    List<SupplyContractRecord> listSupplyContracts();
+
+    List<SupplyContractRecord> listSupplyContractsByMerchant(String merchantId);
+
+    WarehouseRecord saveWarehouse(WarehouseRecord warehouse);
+
+    List<WarehouseRecord> listWarehouses();
+
+    List<WarehouseRecord> listWarehousesByMerchant(String merchantId);
 }

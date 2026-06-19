@@ -11,6 +11,7 @@ public record StockBalanceRecord(
         int reservedQuantity,
         int availableQuantity,
         Instant updatedAt,
-        @JsonIgnore String merchantId
+        @JsonIgnore String merchantId,
+        String warehouseId
 ) {
 }

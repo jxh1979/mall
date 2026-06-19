@@ -421,16 +421,44 @@
     {
       "req": "REQ-28",
       "table": "supply_contracts",
-      "column": null,
-      "expected": "absent",
-      "note": "R5: 供应合同三模式表 supply_contracts/contract_mode 迁移零命中；设计 §6.2 有设计无实现。R5 裁决：本期 P0 建表(三模式+采购周期完整流转+结构化库房)"
+      "column": "contract_mode",
+      "expected": "present",
+      "note": "R5 T6 第1部分已落地（V085）：supply_contracts 三模式(platform_self_use/merchant_self_purchase/platform_purchase_distribution) + approval_status(draft/approved/rejected) + status(active/suspended/expired) + project_id/merchant_id 隔离；SupplyContractService 接服务(建/审批/范围卡控/隔离)"
+    },
+    {
+      "req": "REQ-28",
+      "table": "supply_contracts",
+      "column": "purchasable_scope",
+      "expected": "present",
+      "note": "V085：可采购范围 JSONB，审批后卡控"
     },
     {
       "req": "REQ-27",
       "table": "warehouses",
-      "column": null,
-      "expected": "absent",
-      "note": "R5: 库房类型表未建，inventory_stock_balances.location_id 为自由文本；采购周期 inventory_purchase_requests 仅'申请'create，无审批/到货/入库流转"
+      "column": "warehouse_type",
+      "expected": "present",
+      "note": "R5 T6 第1部分已落地（V085）：warehouses 六类(main/bar/bar_counter/consumable/gift/saved_bottle) + status(active/archived)；WarehouseService 接服务(CRUD + balances 挂 warehouse_id 可写)"
+    },
+    {
+      "req": "REQ-27",
+      "table": "inventory_stock_balances",
+      "column": "warehouse_id",
+      "expected": "present",
+      "note": "V085：余额挂结构化库房 warehouse_id(FK warehouses)"
+    },
+    {
+      "req": "REQ-27",
+      "table": "inventory_purchase_request_events",
+      "column": "to_status",
+      "expected": "present",
+      "note": "R5 T6（V085 一次性建表）：采购周期留痕事件表 + inventory_purchase_requests 状态机扩列(supply_contract_id/approved_by/ordered_at/actual_arrival_date/received_at/received_by)+CHECK。表已建；采购周期状态机服务留后续代理（代理2）"
+    },
+    {
+      "req": "REQ-27",
+      "table": "inventory_high_value_reviews",
+      "column": "review_status",
+      "expected": "present",
+      "note": "R5 T6（V085 一次性建表）：库存域内高价值复核表(subject_type/review_status + photo/video attachment JSONB)。表已建；复核服务留后续代理（代理3）"
     },
     {
       "req": "REQ-54",

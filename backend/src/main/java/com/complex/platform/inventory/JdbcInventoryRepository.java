@@ -139,7 +139,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public Optional<StockBalanceRecord> findStockBalance(String itemId, String locationId) {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
                   FROM inventory_stock_balances
                  WHERE item_id = :item_id
                    AND location_id = :location_id
@@ -150,16 +150,17 @@ class JdbcInventoryRepository implements InventoryRepository {
     public StockBalanceRecord saveStockBalance(StockBalanceRecord balance) {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_balances (
-                    id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
+                    id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
                 )
                 VALUES (
-                    :id, :item_id, :location_id, :quantity, :reserved_quantity, :available_quantity, :updated_at, :merchant_id
+                    :id, :item_id, :location_id, :quantity, :reserved_quantity, :available_quantity, :updated_at, :merchant_id, :warehouse_id
                 )
                 ON CONFLICT (item_id, location_id) DO UPDATE SET
                     quantity = EXCLUDED.quantity,
                     reserved_quantity = EXCLUDED.reserved_quantity,
                     available_quantity = EXCLUDED.available_quantity,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    warehouse_id = EXCLUDED.warehouse_id
                 """, stockBalanceParameters(balance));
         return balance;
     }
@@ -167,7 +168,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<StockBalanceRecord> listStockBalances() {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
                   FROM inventory_stock_balances
                  ORDER BY updated_at DESC, id
                 """, rowMapper::mapStockBalance);
@@ -578,19 +579,23 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     // P0-1: 原子增加库存，INSERT ON CONFLICT 保证幂等
     @Override
-    public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId) {
+    public void atomicIncreaseStockBalance(String itemId, String locationId, int qty, String newId, String merchantId, String warehouseId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("id", newId)
                 .addValue("item_id", itemId)
                 .addValue("location_id", locationId)
                 .addValue("qty", qty)
-                .addValue("merchant_id", merchantId);
+                .addValue("merchant_id", merchantId)
+                .addValue("warehouse_id", warehouseId);
+        // R5 T6：余额挂结构化库房 warehouse_id（可空）。COALESCE 保证仅在新值非空时覆盖既有挂载，
+        // 避免后续不带库房的入库把已挂载的库房抹掉。
         jdbcTemplate.update("""
-                INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, merchant_id, updated_at)
-                VALUES (:id, :item_id, :location_id, :qty, 0, :qty, :merchant_id, NOW())
+                INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, merchant_id, warehouse_id, updated_at)
+                VALUES (:id, :item_id, :location_id, :qty, 0, :qty, :merchant_id, :warehouse_id, NOW())
                 ON CONFLICT (item_id, location_id) DO UPDATE SET
                     quantity = inventory_stock_balances.quantity + EXCLUDED.quantity,
                     available_quantity = inventory_stock_balances.available_quantity + EXCLUDED.available_quantity,
+                    warehouse_id = COALESCE(EXCLUDED.warehouse_id, inventory_stock_balances.warehouse_id),
                     updated_at = NOW()
                 """, params);
     }
@@ -643,7 +648,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<StockBalanceRecord> listStockBalancesByMerchant(String merchantId) {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
                   FROM inventory_stock_balances
                  WHERE merchant_id = :merchant_id
                  ORDER BY updated_at DESC, id
@@ -760,7 +765,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("reserved_quantity", balance.reservedQuantity())
                 .addValue("available_quantity", balance.availableQuantity())
                 .addValue("updated_at", offset(balance.updatedAt()))
-                .addValue("merchant_id", balance.merchantId());
+                .addValue("merchant_id", balance.merchantId())
+                .addValue("warehouse_id", balance.warehouseId());
     }
 
     private MapSqlParameterSource stockBatchParameters(InventoryStockBatchRecord batch) {
@@ -923,6 +929,148 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("reason", exception.reason())
                 .addValue("created_at", offset(exception.createdAt()))
                 .addValue("reviewed_at", offset(exception.reviewedAt()));
+    }
+
+    // ── R5 T6：供应合同三模式 ──────────────────────────────────────────────────
+    @Override
+    public SupplyContractRecord saveSupplyContract(SupplyContractRecord contract) {
+        jdbcTemplate.update("""
+                INSERT INTO supply_contracts (
+                    id, contract_no, supplier_id, project_id, merchant_id, contract_mode,
+                    supply_scope, price_terms, payment_term_days, valid_from, valid_to, summary,
+                    purchasable_scope, approval_status, status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :contract_no, :supplier_id, :project_id, :merchant_id, :contract_mode,
+                    :supply_scope, :price_terms, :payment_term_days, :valid_from, :valid_to, :summary,
+                    CAST(:purchasable_scope AS jsonb), :approval_status, :status, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    contract_no = EXCLUDED.contract_no,
+                    supplier_id = EXCLUDED.supplier_id,
+                    project_id = EXCLUDED.project_id,
+                    merchant_id = EXCLUDED.merchant_id,
+                    contract_mode = EXCLUDED.contract_mode,
+                    supply_scope = EXCLUDED.supply_scope,
+                    price_terms = EXCLUDED.price_terms,
+                    payment_term_days = EXCLUDED.payment_term_days,
+                    valid_from = EXCLUDED.valid_from,
+                    valid_to = EXCLUDED.valid_to,
+                    summary = EXCLUDED.summary,
+                    purchasable_scope = EXCLUDED.purchasable_scope,
+                    approval_status = EXCLUDED.approval_status,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, supplyContractParameters(contract));
+        return contract;
+    }
+
+    @Override
+    public Optional<SupplyContractRecord> findSupplyContractByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, contract_no, supplier_id, project_id, merchant_id, contract_mode,
+                       supply_scope, price_terms, payment_term_days, valid_from, valid_to, summary,
+                       purchasable_scope, approval_status, status, created_at, updated_at
+                  FROM supply_contracts
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapSupplyContract).stream().findFirst();
+    }
+
+    @Override
+    public List<SupplyContractRecord> listSupplyContracts() {
+        return jdbcTemplate.query("""
+                SELECT id, contract_no, supplier_id, project_id, merchant_id, contract_mode,
+                       supply_scope, price_terms, payment_term_days, valid_from, valid_to, summary,
+                       purchasable_scope, approval_status, status, created_at, updated_at
+                  FROM supply_contracts
+                 ORDER BY created_at DESC, id
+                """, rowMapper::mapSupplyContract);
+    }
+
+    @Override
+    public List<SupplyContractRecord> listSupplyContractsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, contract_no, supplier_id, project_id, merchant_id, contract_mode,
+                       supply_scope, price_terms, payment_term_days, valid_from, valid_to, summary,
+                       purchasable_scope, approval_status, status, created_at, updated_at
+                  FROM supply_contracts
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapSupplyContract);
+    }
+
+    private MapSqlParameterSource supplyContractParameters(SupplyContractRecord contract) {
+        return new MapSqlParameterSource()
+                .addValue("id", contract.id())
+                .addValue("contract_no", contract.contractNo())
+                .addValue("supplier_id", contract.supplierId())
+                .addValue("project_id", contract.projectId())
+                .addValue("merchant_id", contract.merchantId())
+                .addValue("contract_mode", contract.contractMode())
+                .addValue("supply_scope", contract.supplyScope())
+                .addValue("price_terms", contract.priceTerms())
+                .addValue("payment_term_days", contract.paymentTermDays())
+                .addValue("valid_from", contract.validFrom())
+                .addValue("valid_to", contract.validTo())
+                .addValue("summary", contract.summary())
+                .addValue("purchasable_scope", writeList(contract.purchasableScope()))
+                .addValue("approval_status", contract.approvalStatus())
+                .addValue("status", contract.status())
+                .addValue("created_at", offset(contract.createdAt()))
+                .addValue("updated_at", offset(contract.updatedAt()));
+    }
+
+    // ── R5 T6：结构化库房 ─────────────────────────────────────────────────────
+    @Override
+    public WarehouseRecord saveWarehouse(WarehouseRecord warehouse) {
+        jdbcTemplate.update("""
+                INSERT INTO warehouses (
+                    id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :merchant_id, :warehouse_type, :name, :status, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    project_id = EXCLUDED.project_id,
+                    merchant_id = EXCLUDED.merchant_id,
+                    warehouse_type = EXCLUDED.warehouse_type,
+                    name = EXCLUDED.name,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, warehouseParameters(warehouse));
+        return warehouse;
+    }
+
+    @Override
+    public List<WarehouseRecord> listWarehouses() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                  FROM warehouses
+                 ORDER BY created_at DESC, id
+                """, rowMapper::mapWarehouse);
+    }
+
+    @Override
+    public List<WarehouseRecord> listWarehousesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                  FROM warehouses
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapWarehouse);
+    }
+
+    private MapSqlParameterSource warehouseParameters(WarehouseRecord warehouse) {
+        return new MapSqlParameterSource()
+                .addValue("id", warehouse.id())
+                .addValue("project_id", warehouse.projectId())
+                .addValue("merchant_id", warehouse.merchantId())
+                .addValue("warehouse_type", warehouse.warehouseType())
+                .addValue("name", warehouse.name())
+                .addValue("status", warehouse.status())
+                .addValue("created_at", offset(warehouse.createdAt()))
+                .addValue("updated_at", offset(warehouse.updatedAt()));
     }
 
     private String writeList(List<String> value) {

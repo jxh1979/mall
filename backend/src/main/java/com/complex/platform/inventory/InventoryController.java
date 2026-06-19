@@ -16,6 +16,9 @@ import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.inventory.dto.SupplierReconciliationRequest;
+import com.complex.platform.inventory.dto.SupplyContractApproveRequest;
+import com.complex.platform.inventory.dto.SupplyContractCreateRequest;
+import com.complex.platform.inventory.dto.WarehouseCreateRequest;
 import com.complex.platform.inventory.dto.TraceExceptionReviewRequest;
 import com.complex.platform.inventory.dto.TraceHandoverCreateRequest;
 import com.complex.platform.inventory.dto.TraceRobotReportRequest;
@@ -33,10 +36,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class InventoryController {
 
     private final InventoryService service;
+    private final SupplyContractService supplyContractService;
+    private final WarehouseService warehouseService;
     private final AuthorizationService authorizationService;
 
-    public InventoryController(InventoryService service, AuthorizationService authorizationService) {
+    public InventoryController(
+            InventoryService service,
+            SupplyContractService supplyContractService,
+            WarehouseService warehouseService,
+            AuthorizationService authorizationService
+    ) {
         this.service = service;
+        this.supplyContractService = supplyContractService;
+        this.warehouseService = warehouseService;
         this.authorizationService = authorizationService;
     }
 
@@ -235,5 +247,43 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.handover.review");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewException(id, request));
+    }
+
+    // ── R5 T6：供应合同三模式 ──────────────────────────────────────────────────
+    @GetMapping("/supply-contracts")
+    public ApiResponse<PageResponse<SupplyContractRecord>> listSupplyContracts() {
+        authorizationService.requirePermission("inventory.supply_contract.manage");
+        return ApiResponse.ok(supplyContractService.listSupplyContracts());
+    }
+
+    @PostMapping("/supply-contracts")
+    public ApiResponse<SupplyContractRecord> createSupplyContract(@RequestBody SupplyContractCreateRequest request) {
+        authorizationService.requirePermission("inventory.supply_contract.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(supplyContractService.createSupplyContract(request));
+    }
+
+    @PostMapping("/supply-contracts/{id}/approve")
+    public ApiResponse<SupplyContractRecord> approveSupplyContract(
+            @PathVariable String id,
+            @RequestBody SupplyContractApproveRequest request
+    ) {
+        authorizationService.requirePermission("inventory.purchase.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(supplyContractService.approveSupplyContract(id, request));
+    }
+
+    // ── R5 T6：结构化库房 ─────────────────────────────────────────────────────
+    @GetMapping("/warehouses")
+    public ApiResponse<PageResponse<WarehouseRecord>> listWarehouses() {
+        authorizationService.requirePermission("inventory.warehouse.manage");
+        return ApiResponse.ok(warehouseService.listWarehouses());
+    }
+
+    @PostMapping("/warehouses")
+    public ApiResponse<WarehouseRecord> createWarehouse(@RequestBody WarehouseCreateRequest request) {
+        authorizationService.requirePermission("inventory.warehouse.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(warehouseService.createWarehouse(request));
     }
 }

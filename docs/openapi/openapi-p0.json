@@ -8713,6 +8713,297 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/inventory/supply-contracts": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "createSupplyContract",
+        "summary": "创建供应合同(三模式)",
+        "x-permission": "inventory.supply_contract.manage",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "supply_contract.created",
+        "x-audit-event-failure": "supply_contract.create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "supplier_id",
+                  "project_id",
+                  "contract_mode"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键",
+                    "maxLength": 128
+                  },
+                  "supplier_id": {
+                    "type": "string",
+                    "description": "供应商 id（inventory_suppliers）",
+                    "maxLength": 64
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "description": "综合体项目 id",
+                    "maxLength": 64
+                  },
+                  "merchant_id": {
+                    "type": "string",
+                    "description": "商户 id；商户自采必填，平台管理员可显式指定",
+                    "maxLength": 64
+                  },
+                  "contract_mode": {
+                    "type": "string",
+                    "description": "三模式",
+                    "enum": [
+                      "platform_self_use",
+                      "merchant_self_purchase",
+                      "platform_purchase_distribution"
+                    ]
+                  },
+                  "supply_scope": {
+                    "type": "string",
+                    "description": "供货范围",
+                    "maxLength": 2000
+                  },
+                  "price_terms": {
+                    "type": "string",
+                    "description": "价格口径摘要",
+                    "maxLength": 2000
+                  },
+                  "payment_term_days": {
+                    "type": "integer",
+                    "description": "账期天数"
+                  },
+                  "valid_from": {
+                    "type": "string",
+                    "description": "有效期起",
+                    "format": "date"
+                  },
+                  "valid_to": {
+                    "type": "string",
+                    "description": "有效期止",
+                    "format": "date"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "description": "合同核心摘要",
+                    "maxLength": 2000
+                  },
+                  "purchasable_scope": {
+                    "type": "array",
+                    "description": "可采购物料 id 列表（审批后卡控）",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/supply-contracts/{id}/approve": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "approveSupplyContract",
+        "summary": "审批供应合同(draft→approved/rejected)",
+        "x-permission": "inventory.purchase.approve",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "supply_contract.approved",
+        "x-audit-event-failure": "supply_contract.approve_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "审批结论",
+                    "enum": [
+                      "approved",
+                      "rejected"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "审批意见",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/warehouses": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "createWarehouse",
+        "summary": "创建结构化库房(六类)",
+        "x-permission": "inventory.warehouse.manage",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.warehouse.created",
+        "x-audit-event-failure": "inventory.warehouse.create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "project_id",
+                  "warehouse_type",
+                  "name"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键",
+                    "maxLength": 128
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "description": "综合体项目 id",
+                    "maxLength": 64
+                  },
+                  "merchant_id": {
+                    "type": "string",
+                    "description": "商户 id；商户上下文强制本商户",
+                    "maxLength": 64
+                  },
+                  "warehouse_type": {
+                    "type": "string",
+                    "description": "库房六类",
+                    "enum": [
+                      "main",
+                      "bar",
+                      "bar_counter",
+                      "consumable",
+                      "gift",
+                      "saved_bottle"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "库房名称",
+                    "maxLength": 120
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "库房状态",
+                    "enum": [
+                      "active",
+                      "archived"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
