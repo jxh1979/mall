@@ -117,4 +117,11 @@ public interface InventoryRepository {
     List<WarehouseRecord> listWarehouses();
 
     List<WarehouseRecord> listWarehousesByMerchant(String merchantId);
+
+    // R5 T6：库存域内高价值复核（inventory_high_value_reviews）。
+    InventoryHighValueReviewRecord saveHighValueReview(InventoryHighValueReviewRecord review);
+
+    Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id);
+
+    List<InventoryHighValueReviewRecord> listHighValueReviews();
 }

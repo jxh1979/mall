@@ -277,6 +277,21 @@ final class JdbcInventoryRowMapper {
         );
     }
 
+    InventoryHighValueReviewRecord mapHighValueReview(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new InventoryHighValueReviewRecord(
+                resultSet.getString("id"),
+                resultSet.getString("subject_type"),
+                resultSet.getString("subject_id"),
+                readList(resultSet.getString("photo_attachment_ids")),
+                readList(resultSet.getString("video_attachment_ids")),
+                resultSet.getString("review_status"),
+                resultSet.getString("reviewer_user_id"),
+                resultSet.getString("reason"),
+                instant(resultSet, "created_at"),
+                instantOrNull(resultSet, "reviewed_at")
+        );
+    }
+
     private List<String> readList(String value) {
         if (value == null || value.isBlank()) {
             return List.of();

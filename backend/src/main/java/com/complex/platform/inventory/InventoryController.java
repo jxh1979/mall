@@ -12,7 +12,9 @@ import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestApproveRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
 import com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest;
+import com.complex.platform.inventory.dto.HighValueReviewDecisionRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest;
+import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
@@ -146,6 +148,33 @@ public class InventoryController {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.claimSavedBottle(id, request));
+    }
+
+    @PostMapping("/saved-bottles/{id}/cancel")
+    public ApiResponse<SavedBottleRecord> cancelSavedBottle(
+            @PathVariable String id,
+            @RequestBody SavedBottleCancelRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.cancelSavedBottle(id, request));
+    }
+
+    // ── R5 T6：库存域内高价值复核（saved_bottle_void/damage_report/stock_variance）──
+    @GetMapping("/high-value-reviews")
+    public ApiResponse<PageResponse<InventoryHighValueReviewRecord>> listHighValueReviews() {
+        authorizationService.requirePermission("inventory.high_value.review");
+        return ApiResponse.ok(service.listHighValueReviews());
+    }
+
+    @PostMapping("/high-value-reviews/{id}/review")
+    public ApiResponse<InventoryHighValueReviewRecord> reviewHighValue(
+            @PathVariable String id,
+            @RequestBody HighValueReviewDecisionRequest request
+    ) {
+        authorizationService.requirePermission("inventory.high_value.review");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reviewHighValue(id, request));
     }
 
     @PostMapping("/stock-adjustments")

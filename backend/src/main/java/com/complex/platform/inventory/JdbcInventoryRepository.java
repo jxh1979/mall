@@ -1131,6 +1131,63 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("updated_at", offset(warehouse.updatedAt()));
     }
 
+    // ── R5 T6：库存域内高价值复核（inventory_high_value_reviews） ─────────────────
+    @Override
+    public InventoryHighValueReviewRecord saveHighValueReview(InventoryHighValueReviewRecord review) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_high_value_reviews (
+                    id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
+                    review_status, reviewer_user_id, reason, created_at, reviewed_at
+                )
+                VALUES (
+                    :id, :subject_type, :subject_id,
+                    CAST(:photo_attachment_ids AS jsonb), CAST(:video_attachment_ids AS jsonb),
+                    :review_status, :reviewer_user_id, :reason, :created_at, :reviewed_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    subject_type = EXCLUDED.subject_type,
+                    subject_id = EXCLUDED.subject_id,
+                    photo_attachment_ids = EXCLUDED.photo_attachment_ids,
+                    video_attachment_ids = EXCLUDED.video_attachment_ids,
+                    review_status = EXCLUDED.review_status,
+                    reviewer_user_id = EXCLUDED.reviewer_user_id,
+                    reason = EXCLUDED.reason,
+                    reviewed_at = EXCLUDED.reviewed_at
+                """, new MapSqlParameterSource()
+                .addValue("id", review.id())
+                .addValue("subject_type", review.subjectType())
+                .addValue("subject_id", review.subjectId())
+                .addValue("photo_attachment_ids", writeList(review.photoAttachmentIds()))
+                .addValue("video_attachment_ids", writeList(review.videoAttachmentIds()))
+                .addValue("review_status", review.reviewStatus())
+                .addValue("reviewer_user_id", review.reviewerUserId())
+                .addValue("reason", review.reason())
+                .addValue("created_at", offset(review.createdAt()))
+                .addValue("reviewed_at", offset(review.reviewedAt())));
+        return review;
+    }
+
+    @Override
+    public Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
+                       review_status, reviewer_user_id, reason, created_at, reviewed_at
+                  FROM inventory_high_value_reviews
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapHighValueReview).stream().findFirst();
+    }
+
+    @Override
+    public List<InventoryHighValueReviewRecord> listHighValueReviews() {
+        return jdbcTemplate.query("""
+                SELECT id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
+                       review_status, reviewer_user_id, reason, created_at, reviewed_at
+                  FROM inventory_high_value_reviews
+                 ORDER BY created_at DESC, id
+                """, rowMapper::mapHighValueReview);
+    }
+
     private String writeList(List<String> value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);

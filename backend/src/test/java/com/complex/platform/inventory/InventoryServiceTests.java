@@ -437,28 +437,35 @@ class InventoryServiceTests {
                 .containsExactly("pending_identity_review", 2);
     }
 
-    // A1/REQ-32: 高价值存酒作废必须照片+视频双证据
+    // R5 T6: 高价值存酒作废缺视频（仅照片）→ 拒（双证据须分类）
     @Test
-    void highValueSavedBottleCancelRequiresDoubleEvidence() {
+    void highValueSavedBottleCancelRejectsWhenVideoMissing() {
         InventoryItemRecord item = createItem("hv-cancel");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
                 Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
 
+        // 仅照片、缺视频 → 拒。
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
-                "cancel-hv-1", null, List.of("att_photo"), "broken")))
+                "cancel-hv-1", null, List.of(), "broken", List.of("att_photo"), List.of())))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("HIGH_VALUE_EVIDENCE_REQUIRED"));
 
-        SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
-                "cancel-hv-2", null, List.of("att_photo", "att_video"), "broken"));
-        assertThat(cancelled.status()).isEqualTo("cancelled");
+        // 照片+视频双证据 → 不直接作废：建 pending 复核 + 存酒置中间态 disputed_frozen。
+        SavedBottleRecord frozen = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-2", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
+        assertThat(frozen.status()).isEqualTo("disputed_frozen");
+        assertThat(inventoryRepository.listHighValueReviews()).hasSize(1);
+        InventoryHighValueReviewRecord review = inventoryRepository.listHighValueReviews().getFirst();
+        assertThat(review.reviewStatus()).isEqualTo("pending");
+        assertThat(review.subjectType()).isEqualTo("saved_bottle_void");
+        assertThat(review.subjectId()).isEqualTo(bottle.id());
     }
 
-    // C4 §3 路径B: 文案与实现对齐 —— 附件<2 抛错，message 含"附件数≥2"且不含"supervisor review"
+    // R5 T6: 高价值缺照片（仅视频）→ 拒，message 含证据文案且不含 supervisor review
     @Test
-    void highValueVoidWithFewerThanTwoAttachmentsThrowsWithAttachmentWording() {
+    void highValueVoidRejectsWhenPhotoMissingWithEvidenceWording() {
         InventoryItemRecord item = createItem("hv-wording");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-wording", null, List.of(), "customer_1", "bar_1",
@@ -466,31 +473,60 @@ class InventoryServiceTests {
                 Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
-                "cancel-hv-wording", null, List.of("att_photo"), "broken")))
+                "cancel-hv-wording", null, List.of(), "broken", List.of(), List.of("att_video"))))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.code()).isEqualTo("HIGH_VALUE_EVIDENCE_REQUIRED");
-                    assertThat(e.getMessage()).contains("附件数≥2");
+                    assertThat(e.getMessage()).contains("照片+视频双证据");
                     assertThat(e.getMessage()).doesNotContain("supervisor review");
                 });
     }
 
-    // C4 §3 路径B: 附件=2 作废成功（行为不变，回归保护）
+    // R5 T6: 双证据 → pending → 主管 approve 后存酒 cancelled
     @Test
-    void highValueVoidWithTwoAttachmentsSucceeds() {
-        InventoryItemRecord item = createItem("hv-two");
+    void highValueVoidApproveCancelsBottle() {
+        InventoryItemRecord item = createItem("hv-approve");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
-                "saved-hv-two", null, List.of(), "customer_1", "bar_1",
+                "saved-hv-approve", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
                 Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
 
-        SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
-                "cancel-hv-two", null, List.of("att_photo", "att_video"), "broken"));
-        assertThat(cancelled.status()).isEqualTo("cancelled");
+        SavedBottleRecord frozen = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-approve", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
+        assertThat(frozen.status()).isEqualTo("disputed_frozen");
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+
+        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+                new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                        "review-approve", "approved", "confirmed"));
+        assertThat(decided.reviewStatus()).isEqualTo("approved");
+        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
+                .isEqualTo("cancelled");
     }
 
-    // C4 §3 路径B: 非高价值无附件可作废（回归保护）
+    // R5 T6: 主管 reject → 存酒保留（维持 disputed_frozen，不作废）
     @Test
-    void nonHighValueVoidIgnoresAttachmentRule() {
+    void highValueVoidRejectKeepsBottle() {
+        InventoryItemRecord item = createItem("hv-reject");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv-reject", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), null, null, null, true, 500000L));
+
+        service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-reject", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+
+        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+                new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                        "review-reject", "rejected", "insufficient"));
+        assertThat(decided.reviewStatus()).isEqualTo("rejected");
+        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
+                .isEqualTo("disputed_frozen");
+    }
+
+    // R5 T6: 非高价值无证据可直接作废（向后兼容回归保护）
+    @Test
+    void nonHighValueVoidIgnoresEvidenceRuleAndCancelsDirectly() {
         InventoryItemRecord item = createItem("non-hv");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-non-hv", null, List.of(), "customer_1", "bar_1",
@@ -498,8 +534,9 @@ class InventoryServiceTests {
                 Instant.now().plusSeconds(3600), null, null, null, false, 1000L));
 
         SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
-                "cancel-non-hv", null, List.of(), "broken"));
+                "cancel-non-hv", null, List.of(), "broken", List.of(), List.of()));
         assertThat(cancelled.status()).isEqualTo("cancelled");
+        assertThat(inventoryRepository.listHighValueReviews()).isEmpty();
     }
 
     // P1-3: verificationCode 不可缺失
@@ -1173,6 +1210,24 @@ class InventoryServiceTests {
             return warehouses.values().stream()
                     .filter(w -> merchantId.equals(w.merchantId()))
                     .toList();
+        }
+
+        final Map<String, InventoryHighValueReviewRecord> highValueReviews = new LinkedHashMap<>();
+
+        @Override
+        public InventoryHighValueReviewRecord saveHighValueReview(InventoryHighValueReviewRecord review) {
+            highValueReviews.put(review.id(), review);
+            return review;
+        }
+
+        @Override
+        public Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id) {
+            return Optional.ofNullable(highValueReviews.get(id));
+        }
+
+        @Override
+        public List<InventoryHighValueReviewRecord> listHighValueReviews() {
+            return new ArrayList<>(highValueReviews.values());
         }
 
         private String balanceKey(String itemId, String locationId) {

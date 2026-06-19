@@ -532,6 +532,9 @@ class SupplyChainT6ServiceTests {
         @Override public List<InventoryRiskAlertRecord> listRiskAlertsByMerchant(String m) { throw nyi(); }
         @Override public List<SupplierReconciliationRecord> listSupplierReconciliationsByMerchant(String m) { throw nyi(); }
         @Override public List<SavedBottleRecord> listSavedBottlesByMerchant(String m) { throw nyi(); }
+        @Override public InventoryHighValueReviewRecord saveHighValueReview(InventoryHighValueReviewRecord r) { throw nyi(); }
+        @Override public Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id) { throw nyi(); }
+        @Override public List<InventoryHighValueReviewRecord> listHighValueReviews() { throw nyi(); }
 
         private static UnsupportedOperationException nyi() {
             return new UnsupportedOperationException("not needed for T6 service tests");

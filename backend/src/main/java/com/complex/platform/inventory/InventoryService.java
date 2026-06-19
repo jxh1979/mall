@@ -57,6 +57,7 @@ public class InventoryService {
     private final AuthorizationService authorizationService;
     private final InventoryStockMovementService stockMovementService;
     private final TerminalSwitchGuard terminalSwitchGuard;
+    private final InventoryHighValueReviewService highValueReviewService;
 
     public InventoryService(
             InventoryRepository repository,
@@ -71,6 +72,8 @@ public class InventoryService {
         this.authorizationService = authorizationService;
         this.terminalSwitchGuard = terminalSwitchGuard;
         this.stockMovementService = new InventoryStockMovementService(
+                repository, idempotencyService, auditEventService, authorizationService);
+        this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService);
     }
 
@@ -337,8 +340,21 @@ public class InventoryService {
         );
     }
 
-    /** A1/REQ-32：存酒作废。高价值存酒必须提供照片+视频双证据（>=2 附件）方可作废。
-     * 主管复核由 r5-spec-T6 库存域内自建 inventory_high_value_reviews 承载（最终态）；本处仅校验照片+视频双证据（附件数≥2）。 */
+    /**
+     * A1/REQ-32 + R5 T6：存酒作废（库存域内高价值复核闭环）。
+     *
+     * <p><b>高价值</b>存酒作废<b>不直接生效</b>：要求<b>照片 + 视频双证据</b>（{@code photoAttachmentIds} 与
+     * {@code videoAttachmentIds} 各非空，真正区分类型，替换旧"附件数≥2 不分类型"弱校验）；命中后建库存域内高价值
+     * 复核单（{@code inventory_high_value_reviews}，pending，subject_type=saved_bottle_void、subject_id=存酒 id），
+     * 并把存酒置中间态 {@code disputed_frozen}（待主管复核冻结，不直接 cancelled）。主管经
+     * {@link InventoryHighValueReviewService#review} approve 后存酒才真正置 {@code cancelled}；reject 则维持
+     * {@code disputed_frozen}（不作废）。
+     *
+     * <p><b>非高价值</b>作废维持<b>直接 cancel</b>（向后兼容，无证据要求）。
+     *
+     * <p>中间态选用 {@code disputed_frozen}（V061 既有状态："争议冻结/待人工复核"语义，已在可作废源态集内），
+     * 因本期无新迁移、{@code saved_bottles.status} CHECK 不含 pending_review。
+     */
     @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_cancel", objectType = "saved_bottle")
     @Transactional
     public SavedBottleRecord cancelSavedBottle(String savedBottleId, SavedBottleCancelRequest request) {
@@ -361,17 +377,36 @@ public class InventoryService {
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                                 "saved bottle does not belong to your merchant");
                     }
-                    if (!List.of("stored", "pending_identity_review", "disputed_frozen").contains(savedBottle.status())) {
+                    if (!List.of("stored", "pending_identity_review").contains(savedBottle.status())) {
                         throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLABLE", "saved bottle is not cancellable");
                     }
-                    if (savedBottle.isHighValue() && safeList(actual.evidenceAttachmentIds()).size() < 2) {
-                        throw ApiException.badRequest("HIGH_VALUE_EVIDENCE_REQUIRED",
-                                "高价值存酒作废需照片+视频双证据（附件数≥2）；主管复核见 T6 库存域内复核（inventory_high_value_reviews）");
+                    if (savedBottle.isHighValue()) {
+                        // 高价值：双证据（照片+视频各非空）→ 建 pending 复核单 + 存酒置中间态 disputed_frozen（不直接作废）。
+                        highValueReviewService.createPending(
+                                actual.idempotencyKey(),
+                                InventoryHighValueReviewService.SUBJECT_SAVED_BOTTLE_VOID,
+                                savedBottle.id(),
+                                actual.photoAttachmentIds(),
+                                actual.videoAttachmentIds());
+                        return repository.saveSavedBottle(
+                                savedBottleWith(savedBottle, "disputed_frozen", savedBottle.remainingQuantity(), Instant.now()));
                     }
+                    // 非高价值：直接 cancel（向后兼容）。
                     return repository.saveSavedBottle(
                             savedBottleWith(savedBottle, "cancelled", savedBottle.remainingQuantity(), Instant.now()));
                 }
         );
+    }
+
+    /** 暴露给 Controller：列高价值复核单 + approve/reject。 */
+    public PageResponse<InventoryHighValueReviewRecord> listHighValueReviews() {
+        return highValueReviewService.listHighValueReviews();
+    }
+
+    @Transactional
+    public InventoryHighValueReviewRecord reviewHighValue(
+            String reviewId, com.complex.platform.inventory.dto.HighValueReviewDecisionRequest request) {
+        return highValueReviewService.review(reviewId, request);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.adjust", admissionAction = "inventory.stock_adjust", objectType = "inventory_stock_adjustment")
@@ -1144,6 +1179,9 @@ public class InventoryService {
             return view.handover().id();
         }
         if (response instanceof TraceHandoverExceptionRecord record) {
+            return record.id();
+        }
+        if (response instanceof InventoryHighValueReviewRecord record) {
             return record.id();
         }
         return "unknown";

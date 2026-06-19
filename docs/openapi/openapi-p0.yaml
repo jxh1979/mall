@@ -4044,6 +4044,163 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/inventory/saved-bottles/{id}/cancel:
+    post:
+      tags:
+        - inventory
+        - bar
+      operationId: cancelSavedBottle
+      summary: 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废)
+      x-permission: bar.saved_bottle.manage
+      x-data-scope: project-bar-customer
+      x-terminal-allowed:
+        - tablet
+        - web
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: bar.saved_bottle.cancelled
+      x-audit-event-failure: bar.saved_bottle.cancel_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                reason:
+                  type: string
+                  description: 作废原因
+                  maxLength: 255
+                operator_note:
+                  type: string
+                  description: 操作备注
+                  maxLength: 255
+                photo_attachment_ids:
+                  type: array
+                  description: 照片证据 id 列表(高价值作废必填且非空)
+                  items:
+                    type: string
+                    maxLength: 64
+                video_attachment_ids:
+                  type: array
+                  description: 视频证据 id 列表(高价值作废必填且非空)
+                  items:
+                    type: string
+                    maxLength: 64
+                evidence_attachment_ids:
+                  type: array
+                  description: 综合证据附件 id 列表(兼容字段;不再单独作为放行判据)
+                  items:
+                    type: string
+                    maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/inventory/high-value-reviews:
+    get:
+      tags:
+        - inventory
+      operationId: listHighValueReviews
+      summary: 查询库存域高价值复核单(报损/盘点差异/存酒作废)
+      x-permission: inventory.high_value.review
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - web
+        - tablet
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: inventory.high_value_review.viewed
+      x-audit-event-failure: inventory.high_value_review.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/inventory/high-value-reviews/{id}/review:
+    post:
+      tags:
+        - inventory
+      operationId: reviewHighValue
+      summary: 主管复核高价值动作(approve生效/reject回滚)
+      x-permission: inventory.high_value.review
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - web
+        - tablet
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: inventory.high_value_review_decided
+      x-audit-event-failure: inventory.high_value_review_decide_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - decision
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                decision:
+                  type: string
+                  description: 复核裁决
+                  enum:
+                    - approved
+                    - rejected
+                reason:
+                  type: string
+                  description: 复核结论/原因
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/inventory/stock-adjustments:
     post:
       tags:
