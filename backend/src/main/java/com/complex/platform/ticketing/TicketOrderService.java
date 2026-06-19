@@ -214,9 +214,10 @@ public class TicketOrderService {
                         validTo,
                         now,
                         now,
-                        // R5 T5：核销人数。票种/binding(TicketTypeEntitlementRecord) 当前无人数字段（已 grep 确认），
-                        // 故 num_people 默认 1。TODO 多人票 num_people>1 来源待票种配置（后续：binding/票种加人数字段后填充）。
-                        1
+                        // R5 TODO#1：核销人数来源——票种该权益绑定(binding) 的 num_people。
+                        // binding 默认 1（单人票，向后兼容）；联合票/多人票 binding 配 >1 即随之生效。
+                        // 核销时 verified_people = entitlement.numPeople()（接 R5 T5）。
+                        binding.numPeople()
                 );
                 repository.saveIssuedEntitlement(entitlement);
                 responses.add(new IssuedEntitlementResponse(entitlementCode));

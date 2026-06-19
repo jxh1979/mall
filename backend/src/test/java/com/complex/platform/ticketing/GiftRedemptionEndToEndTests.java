@@ -77,6 +77,42 @@ class GiftRedemptionEndToEndTests {
         assertThat(deliverEvents).isEqualTo(1);
     }
 
+    // R5 TODO#2：gift_drink 模板配 bar_item_ref=item_X → 核销 → 事件 itemRef=item_X →
+    // BarGiftConsumer 对 item_X 走 redeem_consume 扣减（接 T15）。
+    @Test
+    void giftDrinkWithBarItemRefDecreasesStockViaRedeemConsume() {
+        String suffix = Long.toString(System.nanoTime());
+        String barId = "bar_t15_" + suffix;
+        seedBarTable(barId);
+        String itemId = "item_" + suffix;
+        seedStockItem(itemId, 5);
+        String code = "gift-code-" + suffix;
+        seedGiftEntitlement(code, barId, 1, itemId);
+
+        var response = verificationService.createVerification(new VerificationRequest(
+                "req-" + suffix, "qr", code, "device_t15", barId, Map.of("source", "test")));
+        assertThat(response.status()).isEqualTo("success");
+
+        BarGiftRedemptionRecord redemption =
+                barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow();
+        // 模板配了 bar_item_ref → itemRef 透传、实际扣减、movement 回填、note 标注扣减成功。
+        assertThat(redemption.itemRef()).isEqualTo(itemId);
+        assertThat(redemption.inventoryMovementId()).isNotNull();
+        assertThat(redemption.note()).contains("stock decreased via redeem_consume");
+
+        // 库存从 5 扣到 4（redeem_consume 扣 1）。
+        Integer available = jdbcTemplate.queryForObject(
+                "SELECT available_quantity FROM inventory_stock_balances WHERE item_id = ? AND location_id = 'default'",
+                Integer.class, itemId);
+        assertThat(available).isEqualTo(4);
+
+        // redeem_consume 流水落地，关联本赠饮单。
+        Integer movements = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM inventory_stock_movements WHERE item_id = ? AND movement_type = 'redeem_consume'",
+                Integer.class, itemId);
+        assertThat(movements).isEqualTo(1);
+    }
+
     @Test
     void repeatedGiftDrinkVerificationsRemainIdempotentPerVerification() {
         String suffix = Long.toString(System.nanoTime());
@@ -125,11 +161,29 @@ class GiftRedemptionEndToEndTests {
                 """, "table_" + barId, barId, "TC_" + barId, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
     }
 
+    private void seedStockItem(String itemId, int quantity) {
+        Instant now = Instant.now();
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        jdbcTemplate.update("""
+                INSERT INTO inventory_items (id, item_name, item_type, unit, status, created_at, updated_at)
+                VALUES (?, 'Gift Drink Item', 'beverage', 'cup', 'active', ?, ?)
+                """, itemId, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity,
+                    available_quantity, updated_at)
+                VALUES (?, ?, 'default', ?, 0, ?, ?)
+                """, "bal_" + itemId, itemId, quantity, quantity, ts);
+    }
+
     private void seedGiftEntitlement(String code, String barId) {
         seedGiftEntitlement(code, barId, 1);
     }
 
     private void seedGiftEntitlement(String code, String barId, int totalTimes) {
+        seedGiftEntitlement(code, barId, totalTimes, null);
+    }
+
+    private void seedGiftEntitlement(String code, String barId, int totalTimes, String barItemRef) {
         Instant now = Instant.now();
         java.sql.Timestamp ts = java.sql.Timestamp.from(now);
         String typeId = "tt_" + code;
@@ -139,11 +193,12 @@ class GiftRedemptionEndToEndTests {
                     created_at, updated_at)
                 VALUES (?, 'Gift Type', 'fixed', FALSE, 'active', ?, ?)
                 """, typeId, ts, ts);
+        // R5 TODO#2：模板配 bar_item_ref（可空）——赠饮→吧台 SKU 映射来源。
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
-                    default_value_cent, status, created_at, updated_at)
-                VALUES (?, 'Gift Drink', 'gift_drink', ?, 0, 'active', ?, ?)
-                """, templateId, totalTimes, ts, ts);
+                    default_value_cent, status, bar_item_ref, created_at, updated_at)
+                VALUES (?, 'Gift Drink', 'gift_drink', ?, 0, 'active', ?, ?, ?)
+                """, templateId, totalTimes, barItemRef, ts, ts);
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code,        // id
                 code,                 // entitlementCode

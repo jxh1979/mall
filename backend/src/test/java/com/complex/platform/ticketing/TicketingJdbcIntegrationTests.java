@@ -108,7 +108,7 @@ class TicketingJdbcIntegrationTests {
                 "entry",
                 2,
                 9900L,
-                "active",null,null,null,
+                "active",null,null,null,null,
                 now,
                 now
         ));
@@ -154,7 +154,7 @@ class TicketingJdbcIntegrationTests {
                 "entry",
                 2,
                 9900L,
-                "active",null,null,null,
+                "active",null,null,null,null,
                 now,
                 now
         ));
@@ -166,6 +166,7 @@ class TicketingJdbcIntegrationTests {
                 2,
                 9900L,
                 "default",
+                1,
                 now,
                 now
         ));
@@ -287,7 +288,7 @@ class TicketingJdbcIntegrationTests {
         repository.saveTicketType(new TicketTypeRecord(
                 "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null, now, now));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
-                "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null, now, now));
+                "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null,null, now, now));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
                 "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",
@@ -367,7 +368,7 @@ class TicketingJdbcIntegrationTests {
                 "entry",
                 1,
                 7900L,
-                "active",null,null,null,
+                "active",null,null,null,null,
                 now,
                 now
         ));

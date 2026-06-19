@@ -44,6 +44,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("merchant_id", template.merchantId())
                 .addValue("venue_id", template.venueId())
                 .addValue("point_id", template.pointId())
+                .addValue("bar_item_ref", template.barItemRef())
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
     }
@@ -57,6 +58,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("total_times", entitlement.totalTimes())
                 .addValue("value_amount_cent", entitlement.valueAmountCent())
                 .addValue("effective_rule", entitlement.effectiveRule())
+                .addValue("num_people", entitlement.numPeople())
                 .addValue("created_at", timestampWithTimeZone(entitlement.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(entitlement.updatedAt()));
     }

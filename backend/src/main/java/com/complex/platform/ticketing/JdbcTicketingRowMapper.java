@@ -53,6 +53,7 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("merchant_id"),
                 resultSet.getString("venue_id"),
                 resultSet.getString("point_id"),
+                resultSet.getString("bar_item_ref"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")
         );
@@ -67,6 +68,7 @@ final class JdbcTicketingRowMapper {
                 resultSet.getInt("total_times"),
                 nullableLong(resultSet, "value_amount_cent"),
                 resultSet.getString("effective_rule"),
+                resultSet.getInt("num_people"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")
         );

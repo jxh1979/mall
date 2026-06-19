@@ -105,6 +105,9 @@ public class TicketCatalogService {
                 null,
                 null,
                 null,
+                // R5 TODO#2：赠饮→吧台 SKU 映射（bar_item_ref）暂无创建入口（DTO 未扩展），保持 null。
+                // 为空时赠饮核销跳过库存扣减并标注；运营配置入口（扩展 EntitlementTemplateRequest）为后续工作。
+                null,
                 now,
                 now
         ));
@@ -125,6 +128,9 @@ public class TicketCatalogService {
                 positiveOrDefault(actual.totalTimes(), template.defaultTotalTimes(), "total_times"),
                 actual.valueAmountCent() == null ? template.defaultValueCent() : actual.valueAmountCent(),
                 trimToNull(actual.effectiveRule()),
+                // R5 TODO#1：每份核销人数（num_people）暂无创建入口（DTO 未扩展），默认 1（单人票，向后兼容）。
+                // 多人票/联合票配 >1 的运营配置入口（扩展 TicketTypeEntitlementRequest）为后续工作。
+                1,
                 now,
                 now
         ));

@@ -72,11 +72,11 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (
                     id, name, entitlement_type, default_total_times, default_value_cent,
-                    status, merchant_id, venue_id, point_id, created_at, updated_at
+                    status, merchant_id, venue_id, point_id, bar_item_ref, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
-                    :status, :merchant_id, :venue_id, :point_id, :created_at, :updated_at
+                    :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -87,6 +87,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     merchant_id = EXCLUDED.merchant_id,
                     venue_id = EXCLUDED.venue_id,
                     point_id = EXCLUDED.point_id,
+                    bar_item_ref = EXCLUDED.bar_item_ref,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.entitlementTemplateParameters(template));
         return template;
@@ -96,7 +97,7 @@ class JdbcTicketingRepository implements TicketingRepository {
     public List<EntitlementTemplateRecord> listEntitlementTemplates() {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
-                       status, merchant_id, venue_id, point_id, created_at, updated_at
+                       status, merchant_id, venue_id, point_id, bar_item_ref, created_at, updated_at
                   FROM entitlement_templates
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapEntitlementTemplate);
@@ -106,7 +107,7 @@ class JdbcTicketingRepository implements TicketingRepository {
     public Optional<EntitlementTemplateRecord> findEntitlementTemplateById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
-                       status, merchant_id, venue_id, point_id, created_at, updated_at
+                       status, merchant_id, venue_id, point_id, bar_item_ref, created_at, updated_at
                   FROM entitlement_templates
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapEntitlementTemplate).stream().findFirst();
@@ -117,11 +118,11 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_type_entitlements (
                     id, ticket_type_id, entitlement_template_id, quantity, total_times,
-                    value_amount_cent, effective_rule, created_at, updated_at
+                    value_amount_cent, effective_rule, num_people, created_at, updated_at
                 )
                 VALUES (
                     :id, :ticket_type_id, :entitlement_template_id, :quantity, :total_times,
-                    :value_amount_cent, :effective_rule, :created_at, :updated_at
+                    :value_amount_cent, :effective_rule, :num_people, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -130,6 +131,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     total_times = EXCLUDED.total_times,
                     value_amount_cent = EXCLUDED.value_amount_cent,
                     effective_rule = EXCLUDED.effective_rule,
+                    num_people = EXCLUDED.num_people,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketTypeEntitlementParameters(entitlement));
         return entitlement;
@@ -139,7 +141,7 @@ class JdbcTicketingRepository implements TicketingRepository {
     public List<TicketTypeEntitlementRecord> listTicketTypeEntitlements(String ticketTypeId) {
         return jdbcTemplate.query("""
                 SELECT id, ticket_type_id, entitlement_template_id, quantity, total_times,
-                       value_amount_cent, effective_rule, created_at, updated_at
+                       value_amount_cent, effective_rule, num_people, created_at, updated_at
                   FROM ticket_type_entitlements
                  WHERE ticket_type_id = :ticket_type_id
                  ORDER BY created_at ASC, id

@@ -203,6 +203,36 @@ class TicketingServiceTests {
                 .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(1);
     }
 
+    // R5 TODO#1：binding.num_people=4 → 出票权益 num_people=4 → 核销 verified_people=4（端到端，接 T5）。
+    @Test
+    void issueAndVerifyPropagateNumPeopleFromBinding() {
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_np4", "Group Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
+                false, "published", null, now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_np4", "Group Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now));
+        // binding 配 num_people=4（多人票/联合票运营配置；本期通过仓储直配，创建 DTO 透传为后续工作）。
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_np4", "tt_np4", "tpl_np4", 1, 1, 9900L, "default", 4, now, now));
+
+        IssuedTicketResponse issued = service.issueTicketTypeDirectly("tt_np4", new TicketIssueRequest(
+                "np4-issue", "issue", List.of(), "order_np4", "manual", List.of("qr")));
+        String code = issued.issuedEntitlements().getFirst().entitlementCode();
+        // 出票权益 num_people 随 binding 写入（替换此前默认 1）。
+        assertThat(ticketingRepository.findIssuedEntitlementByCode(code))
+                .get().extracting(IssuedEntitlementRecord::numPeople).isEqualTo(4);
+
+        service.createVerification(new VerificationRequest(
+                "np4-verify", "qr", code, "dev_1", "gate_1", Map.of()));
+        // 核销 verified_people 随权益 num_people 生效。
+        assertThat(ticketingRepository.verifications.values())
+                .filteredOn(v -> "success".equals(v.status()))
+                .singleElement()
+                .extracting(VerificationRecord::verifiedPeople)
+                .isEqualTo(4);
+    }
+
     // R5 T5：核销冲正回滚 used_times，原记录置 reversed，新建 reversed 记录指向原记录。
     @Test
     void reverseVerificationRollsBackUsedTimesAndMarksOriginalReversed() {
@@ -1466,14 +1496,14 @@ class TicketingServiceTests {
                     false, "published", null, now, now));
             ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                     "tpl_a", "Entry A", "entry", 1, 9900L, "active",
-                    "mch_a", "venue_a", "gate_a", now, now));
+                    "mch_a", "venue_a", "gate_a", null, now, now));
             ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                     "tpl_b", "Entry B", "entry", 1, 9900L, "active",
-                    "mch_b", "venue_b", "gate_b", now, now));
+                    "mch_b", "venue_b", "gate_b", null, now, now));
             ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                    "link_a", "tt_union", "tpl_a", 1, 1, 9900L, "default", now, now));
+                    "link_a", "tt_union", "tpl_a", 1, 1, 9900L, "default", 1, now, now));
             ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                    "link_b", "tt_union", "tpl_b", 1, 1, 9900L, "default", now, now));
+                    "link_b", "tt_union", "tpl_b", 1, 1, 9900L, "default", 1, now, now));
 
             service.issueTicketTypeDirectly("tt_union", new TicketIssueRequest(
                     "union-issue", "issue", List.of(), "order_union", "manual", List.of("qr")));
@@ -1515,9 +1545,9 @@ class TicketingServiceTests {
                     false, "published", null, now, now));
             ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                     "tpl_fb", "Entry FB", "entry", 1, 9900L, "active",
-                    null, null, null, now, now));
+                    null, null, null, null, now, now));
             ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                    "link_fb", "tt_fb", "tpl_fb", 1, 1, 9900L, "default", now, now));
+                    "link_fb", "tt_fb", "tpl_fb", 1, 1, 9900L, "default", 1, now, now));
 
             service.issueTicketTypeDirectly("tt_fb", new TicketIssueRequest(
                     "fb-issue", "issue", List.of(), "order_fb", "manual", List.of("qr")));
@@ -1541,9 +1571,9 @@ class TicketingServiceTests {
                 "tt_v30", "30d Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
                 false, "published", 30, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
-                "tpl_v30", "Entry V30", "entry", 1, 9900L, "active", null, null, null, now, now));
+                "tpl_v30", "Entry V30", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                "link_v30", "tt_v30", "tpl_v30", 1, 1, 9900L, "default", now, now));
+                "link_v30", "tt_v30", "tpl_v30", 1, 1, 9900L, "default", 1, now, now));
 
         Instant before30 = Instant.now();
         service.issueTicketTypeDirectly("tt_v30", new TicketIssueRequest(
@@ -1559,9 +1589,9 @@ class TicketingServiceTests {
                 "tt_vnull", "Default Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
                 false, "published", null, now, now));
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
-                "tpl_vnull", "Entry Vnull", "entry", 1, 9900L, "active", null, null, null, now, now));
+                "tpl_vnull", "Entry Vnull", "entry", 1, 9900L, "active", null, null, null, null, now, now));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
-                "link_vnull", "tt_vnull", "tpl_vnull", 1, 1, 9900L, "default", now, now));
+                "link_vnull", "tt_vnull", "tpl_vnull", 1, 1, 9900L, "default", 1, now, now));
         service.issueTicketTypeDirectly("tt_vnull", new TicketIssueRequest(
                 "vnull-issue", "issue", List.of(), "order_vnull", "manual", List.of("qr")));
         IssuedEntitlementRecord entNull = ticketingRepository.issuedEntitlements.values().stream()

@@ -367,7 +367,21 @@
       "table": "issued_entitlements",
       "column": "num_people",
       "expected": "present",
-      "note": "R5 T5 多人票已落（V067）：发放时记录核销人数 num_people（多人/联合票>1，普通票默认 1）。注：num_people>1 来源待票种/binding 配置（当前 binding 无人数字段，发放默认 1），TODO 见 TicketOrderService.issueEntitlements"
+      "note": "R5 T5 多人票已落（V067）：发放时记录核销人数 num_people。R5 TODO#1 来源已接通（V076）：num_people=ticket_type_entitlements.num_people（binding 级），多人/联合票 binding 配 >1，普通票默认 1，向后兼容；发放写入见 TicketOrderService.issueEntitlements。运营创建 DTO 透传为后续工作"
+    },
+    {
+      "req": "REQ-05",
+      "table": "ticket_type_entitlements",
+      "column": "num_people",
+      "expected": "present",
+      "note": "R5 TODO#1 多人票核销人数来源已落（V076）：binding 级每份核销人数，默认 1（向后兼容），多人/联合票配 >1；发放时写入 issued_entitlements.num_people。运营创建 DTO(TicketTypeEntitlementRequest) 透传为后续工作"
+    },
+    {
+      "req": "REQ-06",
+      "table": "entitlement_templates",
+      "column": "bar_item_ref",
+      "expected": "present",
+      "note": "R5 TODO#2 赠饮→吧台 SKU 映射来源已落（V076）：gift_drink 模板指向吧台商品/库存 item（可空）；核销发 ticket.gift_verified 时取此作 itemRef，BarGiftConsumer 据此对该 item 走 redeem_consume 扣减，未配置则跳过扣减并标注。运营创建 DTO(EntitlementTemplateRequest) 透传为后续工作"
     },
     {
       "req": "REQ-06",

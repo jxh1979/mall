@@ -20,10 +20,9 @@ import org.springframework.stereotype.Component;
  *
  * <p><b>幂等</b>：bar_gift_redemptions 的 verification_id 唯一键保证一次核销至多一单；重复事件即跳过。
  *
- * <p><b>赠饮→吧台 SKU 映射来源结论</b>：当前 issued_entitlement / 票种 / 权益模板均无 itemRef/商品引用字段
- * （无可靠映射来源），故事件 itemRef=null。本期落地形态：链路全打通（0 元单+出品+事件+桥表），
- * 实际库存扣减在 itemRef 可解析时执行；缺源时跳过扣减并在 redemption.note 标注。
- * TODO 赠饮→吧台 SKU 映射待票种/权益模板配置后接通实际扣减。
+ * <p><b>赠饮→吧台 SKU 映射来源结论</b>：来源为权益模板 entitlement_templates.bar_item_ref（R5 TODO#2 已接通）。
+ * gift_drink 模板配置 bar_item_ref 后，事件携带该 itemRef，下游对该 item 走 redeem_consume 扣减；
+ * 模板未配置(itemRef=null)时跳过扣减并在 redemption.note 标注（向后兼容）。运营配置入口（创建 DTO 透传）为后续工作。
  *
  * <p>成本归平台：赠饮单 amount=0，不计商户应收（finance 应收链路按金额 0 自然不产生应收）。
  */
