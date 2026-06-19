@@ -65,6 +65,12 @@ class AmusementControllerTests {
         when(service.createProject(any(AmusementProjectRequest.class))).thenReturn(project());
         when(service.getOpenEligibility("project_1")).thenReturn(new AmusementOpenEligibilityResponse("project_1", null, true, List.of()));
         when(service.createProjectRule(eq("project_1"), any(AmusementProjectRuleRequest.class))).thenReturn(projectRule());
+        when(service.listProjectEntitlements("project_1")).thenReturn(new PageResponse<>(List.of(projectEntitlement()), 1, 50, 1));
+        when(service.createProjectEntitlement(eq("project_1"), any(AmusementProjectEntitlementRequest.class))).thenReturn(projectEntitlement());
+        when(service.deleteProjectEntitlement(eq("project_1"), eq("amusement_pass"), any())).thenReturn(projectEntitlement());
+        when(service.listCapacityConfigs("project_1")).thenReturn(new PageResponse<>(List.of(capacityConfig()), 1, 50, 1));
+        when(service.createCapacityConfig(eq("project_1"), any(AmusementCapacityConfigRequest.class))).thenReturn(capacityConfig());
+        when(service.disableCapacityConfig(eq("amcap_1"), any())).thenReturn(capacityConfig());
         when(service.listQueueEntries()).thenReturn(new PageResponse<>(List.of(queueEntry()), 1, 50, 1));
         when(service.createQueueEntry(any(AmusementQueueEntryRequest.class))).thenReturn(queueEntry());
         when(service.changeQueueEntryStatus(eq("queue_1"), any(StatusChangeRequest.class))).thenReturn(calledQueueEntry());
@@ -98,6 +104,12 @@ class AmusementControllerTests {
             "POST,/api/v1/amusement/projects,amusement.session.manage",
             "GET,/api/v1/amusement/projects/project_1/open-eligibility,amusement.safety_inspection.view",
             "POST,/api/v1/amusement/projects/project_1/rules,amusement.project.manage",
+            "GET,/api/v1/amusement/projects/project_1/entitlements,amusement.project_entitlement.manage",
+            "POST,/api/v1/amusement/projects/project_1/entitlements,amusement.project_entitlement.manage",
+            "POST,/api/v1/amusement/projects/project_1/entitlements/amusement_pass/remove,amusement.project_entitlement.manage",
+            "GET,/api/v1/amusement/projects/project_1/capacity-config,amusement.capacity_config.manage",
+            "POST,/api/v1/amusement/projects/project_1/capacity-config,amusement.capacity_config.manage",
+            "POST,/api/v1/amusement/capacity-config/amcap_1/disable,amusement.capacity_config.manage",
             "GET,/api/v1/amusement/queue-entries,amusement.queue.view",
             "POST,/api/v1/amusement/queue-entries,amusement.queue.manage",
             "POST,/api/v1/amusement/queue-entries/queue_1/status,amusement.queue.manage",
@@ -141,6 +153,10 @@ class AmusementControllerTests {
             "/api/v1/amusement/manual-overrides",
             "/api/v1/amusement/projects",
             "/api/v1/amusement/projects/project_1/rules",
+            "/api/v1/amusement/projects/project_1/entitlements",
+            "/api/v1/amusement/projects/project_1/entitlements/amusement_pass/remove",
+            "/api/v1/amusement/projects/project_1/capacity-config",
+            "/api/v1/amusement/capacity-config/amcap_1/disable",
             "/api/v1/amusement/queue-entries",
             "/api/v1/amusement/queue-entries/queue_1/status",
             "/api/v1/amusement/reservations",
@@ -183,6 +199,15 @@ class AmusementControllerTests {
             return "{" + idempotency + """
                     "rule_type":"safety_notice","rule_value":"operator briefing required","effective_from":"2026-06-14","blocking":true}
                     """;
+        }
+        if (path.endsWith("/remove") || path.endsWith("/disable")) {
+            return "{" + idempotency + "\"action\":\"remove\",\"reason\":\"operator config change\"}";
+        }
+        if (path.endsWith("/entitlements")) {
+            return "{" + idempotency + "\"entitlement_type\":\"amusement_pass\",\"operator_note\":\"bind pass\"}";
+        }
+        if (path.endsWith("/capacity-config")) {
+            return "{" + idempotency + "\"device_id\":\"gate_1\",\"max_concurrent\":3,\"operator_note\":\"point capacity\"}";
         }
         if (path.contains("queue-entries") && path.endsWith("/status")) {
             return "{" + idempotency + "\"action\":\"called\",\"reason\":\"notify customer\",\"evidence_attachment_ids\":[\"att_queue\"]}";
@@ -235,6 +260,15 @@ class AmusementControllerTests {
     private AmusementProjectRecord project() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new AmusementProjectRecord("project_1", "Roller Coaster", 2, "open", "template_1", Map.of("min_age", 12), now, now, null);
+    }
+
+    private AmusementProjectEntitlementRecord projectEntitlement() {
+        return new AmusementProjectEntitlementRecord("ament_1", "project_1", "amusement_pass", Instant.parse("2026-06-14T00:00:00Z"));
+    }
+
+    private AmusementCapacityConfigRecord capacityConfig() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new AmusementCapacityConfigRecord("amcap_1", "project_1", null, "gate_1", 3, "", true, now, now);
     }
 
     private AmusementSessionRecord session() {

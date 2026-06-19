@@ -54,6 +54,29 @@ final class JdbcAmusementRowMapper {
         );
     }
 
+    AmusementProjectEntitlementRecord mapProjectEntitlement(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementProjectEntitlementRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("entitlement_type"),
+                instant(rs, "created_at")
+        );
+    }
+
+    AmusementCapacityConfigRecord mapCapacityConfig(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementCapacityConfigRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("location_point_id"),
+                rs.getString("device_id"),
+                rs.getInt("max_concurrent"),
+                rs.getString("effective_session_pattern"),
+                rs.getBoolean("enabled"),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
     AmusementProjectRuleRecord mapProjectRule(ResultSet rs, int rowNum) throws SQLException {
         return new AmusementProjectRuleRecord(
                 rs.getString("id"),

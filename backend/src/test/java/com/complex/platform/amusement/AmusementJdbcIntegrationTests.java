@@ -71,9 +71,13 @@ class AmusementJdbcIntegrationTests {
                 "amusement.verification.view",
                 "amusement.verification.execute"
         );
+        assertThat(regclass("amusement_capacity_config")).isEqualTo("amusement_capacity_config");
+        assertThat(regclass("amusement_project_entitlements")).isEqualTo("amusement_project_entitlements");
         assertThat(platformAdminPermissionCodes()).contains(
                 "amusement.verification.override",
                 "amusement.session.manage",
+                "amusement.capacity_config.manage",
+                "amusement.project_entitlement.manage",
                 "amusement.project.manage",
                 "amusement.queue.manage",
                 "amusement.reservation.manage",
@@ -287,6 +291,31 @@ class AmusementJdbcIntegrationTests {
                 .get()
                 .extracting(AmusementGroupBookingRecord::bookingType, AmusementGroupBookingRecord::bookingStatus)
                 .containsExactly("private", "pending_approval");
+
+        // 清单#6：项目↔权益绑定 CRUD（amusement_project_entitlements）。
+        repository.saveProjectEntitlement(new AmusementProjectEntitlementRecord(
+                "ament_jdbc", "project_jdbc", "amusement_pass", now));
+        repository.saveProjectEntitlement(new AmusementProjectEntitlementRecord(
+                "ament_jdbc_dup", "project_jdbc", "amusement_pass", now)); // 幂等：同 type 不重复
+        assertThat(repository.listProjectEntitlementTypes("project_jdbc")).containsExactly("amusement_pass");
+        assertThat(repository.listProjectEntitlements("project_jdbc"))
+                .extracting(AmusementProjectEntitlementRecord::entitlementType).containsExactly("amusement_pass");
+        assertThat(repository.deleteProjectEntitlement("project_jdbc", "amusement_pass")).isTrue();
+        assertThat(repository.listProjectEntitlementTypes("project_jdbc")).isEmpty();
+
+        // 清单#6：点位/设备并发容量配置 CRUD（amusement_capacity_config）。
+        repository.saveCapacityConfig(new AmusementCapacityConfigRecord(
+                "amcap_jdbc", "project_jdbc", null, "device_1", 3, "", true, now, now));
+        assertThat(repository.findCapacityConfigById("amcap_jdbc"))
+                .get().extracting(AmusementCapacityConfigRecord::maxConcurrent, AmusementCapacityConfigRecord::enabled)
+                .containsExactly(3, true);
+        repository.saveCapacityConfig(new AmusementCapacityConfigRecord(
+                "amcap_jdbc", "project_jdbc", null, "device_1", 5, "", false, now, now)); // upsert 改值+停用
+        assertThat(repository.findCapacityConfigById("amcap_jdbc"))
+                .get().extracting(AmusementCapacityConfigRecord::maxConcurrent, AmusementCapacityConfigRecord::enabled)
+                .containsExactly(5, false);
+        assertThat(repository.listCapacityConfigs("project_jdbc"))
+                .extracting(AmusementCapacityConfigRecord::id).contains("amcap_jdbc");
     }
 
     private String regclass(String tableName) {

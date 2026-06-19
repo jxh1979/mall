@@ -26,6 +26,24 @@ public interface AmusementRepository {
      */
     List<String> listProjectEntitlementTypes(String projectId);
 
+    /** 写入/更新项目可用权益类型绑定（amusement_project_entitlements）。按 (project_id, entitlement_type) 唯一幂等。 */
+    AmusementProjectEntitlementRecord saveProjectEntitlement(AmusementProjectEntitlementRecord entitlement);
+
+    /** 列出项目全部权益类型绑定明细（管理端读取，含 id/created_at）。 */
+    List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId);
+
+    /** 删除项目某权益类型绑定（停用）；返回是否删除成功。 */
+    boolean deleteProjectEntitlement(String projectId, String entitlementType);
+
+    /** 写入/更新点位/设备并发容量配置（amusement_capacity_config）。按 id 幂等 upsert。 */
+    AmusementCapacityConfigRecord saveCapacityConfig(AmusementCapacityConfigRecord config);
+
+    /** 列出项目全部点位/设备并发容量配置明细（管理端读取）。 */
+    List<AmusementCapacityConfigRecord> listCapacityConfigs(String projectId);
+
+    /** 按 id 查询容量配置（用于归属隔离校验与停用）。 */
+    Optional<AmusementCapacityConfigRecord> findCapacityConfigById(String id);
+
     AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule);
 
     List<AmusementProjectRuleRecord> listActiveBlockingProjectRules(String projectId);

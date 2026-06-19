@@ -141,6 +141,103 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public AmusementProjectEntitlementRecord saveProjectEntitlement(AmusementProjectEntitlementRecord entitlement) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_project_entitlements (
+                    id, project_id, entitlement_type, created_at
+                )
+                VALUES (:id, :project_id, :entitlement_type, :created_at)
+                ON CONFLICT (project_id, entitlement_type) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", entitlement.id())
+                .addValue("project_id", entitlement.projectId())
+                .addValue("entitlement_type", entitlement.entitlementType())
+                .addValue("created_at", timestampWithTimeZone(entitlement.createdAt())));
+        // 返回库内权威记录（命中既有绑定时取既有 id/created_at，保证幂等可观测）。
+        return findProjectEntitlement(entitlement.projectId(), entitlement.entitlementType()).orElse(entitlement);
+    }
+
+    private Optional<AmusementProjectEntitlementRecord> findProjectEntitlement(String projectId, String entitlementType) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, entitlement_type, created_at
+                  FROM amusement_project_entitlements
+                 WHERE project_id = :project_id AND entitlement_type = :entitlement_type
+                """, Map.of("project_id", projectId, "entitlement_type", entitlementType),
+                rowMapper::mapProjectEntitlement).stream().findFirst();
+    }
+
+    @Override
+    public List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, entitlement_type, created_at
+                  FROM amusement_project_entitlements
+                 WHERE project_id = :project_id
+                 ORDER BY entitlement_type
+                """, Map.of("project_id", projectId), rowMapper::mapProjectEntitlement);
+    }
+
+    @Override
+    public boolean deleteProjectEntitlement(String projectId, String entitlementType) {
+        int deleted = jdbcTemplate.update("""
+                DELETE FROM amusement_project_entitlements
+                 WHERE project_id = :project_id AND entitlement_type = :entitlement_type
+                """, Map.of("project_id", projectId, "entitlement_type", entitlementType));
+        return deleted > 0;
+    }
+
+    @Override
+    public AmusementCapacityConfigRecord saveCapacityConfig(AmusementCapacityConfigRecord config) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_capacity_config (
+                    id, project_id, location_point_id, device_id, max_concurrent,
+                    effective_session_pattern, enabled, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :location_point_id, :device_id, :max_concurrent,
+                    :effective_session_pattern, :enabled, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    location_point_id = EXCLUDED.location_point_id,
+                    device_id = EXCLUDED.device_id,
+                    max_concurrent = EXCLUDED.max_concurrent,
+                    effective_session_pattern = EXCLUDED.effective_session_pattern,
+                    enabled = EXCLUDED.enabled,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", config.id())
+                .addValue("project_id", config.projectId())
+                .addValue("location_point_id", config.locationPointId())
+                .addValue("device_id", config.deviceId())
+                .addValue("max_concurrent", config.maxConcurrent())
+                .addValue("effective_session_pattern", config.effectiveSessionPattern())
+                .addValue("enabled", config.enabled())
+                .addValue("created_at", timestampWithTimeZone(config.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(config.updatedAt())));
+        return findCapacityConfigById(config.id()).orElse(config);
+    }
+
+    @Override
+    public List<AmusementCapacityConfigRecord> listCapacityConfigs(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, location_point_id, device_id, max_concurrent,
+                       effective_session_pattern, enabled, created_at, updated_at
+                  FROM amusement_capacity_config
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), rowMapper::mapCapacityConfig);
+    }
+
+    @Override
+    public Optional<AmusementCapacityConfigRecord> findCapacityConfigById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, location_point_id, device_id, max_concurrent,
+                       effective_session_pattern, enabled, created_at, updated_at
+                  FROM amusement_capacity_config
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapCapacityConfig).stream().findFirst();
+    }
+
+    @Override
     public AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule) {
         jdbcTemplate.update("""
                 INSERT INTO amusement_project_rules (

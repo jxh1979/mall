@@ -76,6 +76,61 @@ public class AmusementController {
         return ApiResponse.ok(service.createProjectRule(id, request));
     }
 
+    @GetMapping("/projects/{id}/entitlements")
+    public ApiResponse<PageResponse<AmusementProjectEntitlementRecord>> listProjectEntitlements(@PathVariable String id) {
+        authorizationService.requirePermission("amusement.project_entitlement.manage");
+        return ApiResponse.ok(service.listProjectEntitlements(id));
+    }
+
+    @PostMapping("/projects/{id}/entitlements")
+    public ApiResponse<AmusementProjectEntitlementRecord> createProjectEntitlement(
+            @PathVariable String id,
+            @RequestBody(required = false) AmusementProjectEntitlementRequest request
+    ) {
+        authorizationService.requirePermission("amusement.project_entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createProjectEntitlement(id, request));
+    }
+
+    @PostMapping("/projects/{id}/entitlements/{entitlementType}/remove")
+    public ApiResponse<AmusementProjectEntitlementRecord> removeProjectEntitlement(
+            @PathVariable String id,
+            @PathVariable String entitlementType,
+            @RequestBody(required = false) com.complex.platform.ticketing.dto.StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("amusement.project_entitlement.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.deleteProjectEntitlement(
+                id, entitlementType, request == null ? null : request.idempotencyKey()));
+    }
+
+    @GetMapping("/projects/{id}/capacity-config")
+    public ApiResponse<PageResponse<AmusementCapacityConfigRecord>> listCapacityConfigs(@PathVariable String id) {
+        authorizationService.requirePermission("amusement.capacity_config.manage");
+        return ApiResponse.ok(service.listCapacityConfigs(id));
+    }
+
+    @PostMapping("/projects/{id}/capacity-config")
+    public ApiResponse<AmusementCapacityConfigRecord> createCapacityConfig(
+            @PathVariable String id,
+            @RequestBody(required = false) AmusementCapacityConfigRequest request
+    ) {
+        authorizationService.requirePermission("amusement.capacity_config.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createCapacityConfig(id, request));
+    }
+
+    @PostMapping("/capacity-config/{configId}/disable")
+    public ApiResponse<AmusementCapacityConfigRecord> disableCapacityConfig(
+            @PathVariable String configId,
+            @RequestBody(required = false) com.complex.platform.ticketing.dto.StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("amusement.capacity_config.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.disableCapacityConfig(
+                configId, request == null ? null : request.idempotencyKey()));
+    }
+
     @GetMapping("/queue-entries")
     public ApiResponse<PageResponse<AmusementQueueEntryRecord>> listQueueEntries() {
         authorizationService.requirePermission("amusement.queue.view");

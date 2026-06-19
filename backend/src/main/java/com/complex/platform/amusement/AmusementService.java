@@ -185,6 +185,105 @@ public class AmusementService {
         );
     }
 
+    public PageResponse<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId) {
+        String id = requireText(projectId, "project_id");
+        checkProjectOwnership(id);
+        return readPage(
+                "amusement.project_entitlement.viewed",
+                "amusement.project_entitlement.view_failed",
+                "amusement.project_entitlement.manage",
+                "amusement_project_entitlement",
+                () -> repository.listProjectEntitlements(id)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.manage")
+    @Transactional
+    public AmusementProjectEntitlementRecord createProjectEntitlement(String projectId, AmusementProjectEntitlementRequest request) {
+        String id = requireText(projectId, "project_id");
+        return executeWrite(
+                "createAmusementProjectEntitlement:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementProjectEntitlementRecord.class,
+                "amusement.project_entitlement.changed",
+                "amusement.project_entitlement.change_failed",
+                "amusement.project_entitlement.manage",
+                "amusement_project_entitlement",
+                () -> createProjectEntitlementInternal(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.project_entitlement.manage")
+    @Transactional
+    public AmusementProjectEntitlementRecord deleteProjectEntitlement(String projectId, String entitlementType, String idempotencyKey) {
+        String id = requireText(projectId, "project_id");
+        String type = requireText(entitlementType, "entitlement_type");
+        return executeWrite(
+                "deleteAmusementProjectEntitlement:" + id + ":" + type,
+                idempotencyKey,
+                Map.of("project_id", id, "entitlement_type", type),
+                AmusementProjectEntitlementRecord.class,
+                "amusement.project_entitlement.changed",
+                "amusement.project_entitlement.change_failed",
+                "amusement.project_entitlement.manage",
+                "amusement_project_entitlement",
+                () -> {
+                    checkProjectOwnership(id);
+                    if (!repository.deleteProjectEntitlement(id, type)) {
+                        throw ApiException.notFound("PROJECT_ENTITLEMENT_NOT_FOUND", "project entitlement binding not found");
+                    }
+                    return new AmusementProjectEntitlementRecord("removed", id, type, Instant.now());
+                }
+        );
+    }
+
+    public PageResponse<AmusementCapacityConfigRecord> listCapacityConfigs(String projectId) {
+        String id = requireText(projectId, "project_id");
+        checkProjectOwnership(id);
+        return readPage(
+                "amusement.capacity_config.viewed",
+                "amusement.capacity_config.view_failed",
+                "amusement.capacity_config.manage",
+                "amusement_capacity_config",
+                () -> repository.listCapacityConfigs(id)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.capacity_config.manage")
+    @Transactional
+    public AmusementCapacityConfigRecord createCapacityConfig(String projectId, AmusementCapacityConfigRequest request) {
+        String id = requireText(projectId, "project_id");
+        return executeWrite(
+                "createAmusementCapacityConfig:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementCapacityConfigRecord.class,
+                "amusement.capacity_config.changed",
+                "amusement.capacity_config.change_failed",
+                "amusement.capacity_config.manage",
+                "amusement_capacity_config",
+                () -> createCapacityConfigInternal(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.capacity_config.manage")
+    @Transactional
+    public AmusementCapacityConfigRecord disableCapacityConfig(String configId, String idempotencyKey) {
+        String id = requireText(configId, "config_id");
+        return executeWrite(
+                "disableAmusementCapacityConfig:" + id,
+                idempotencyKey,
+                Map.of("config_id", id),
+                AmusementCapacityConfigRecord.class,
+                "amusement.capacity_config.changed",
+                "amusement.capacity_config.change_failed",
+                "amusement.capacity_config.manage",
+                "amusement_capacity_config",
+                () -> disableCapacityConfigInternal(id)
+        );
+    }
+
     public PageResponse<AmusementQueueEntryRecord> listQueueEntries() {
         return bookingService.listQueueEntries();
     }
@@ -463,6 +562,69 @@ public class AmusementService {
         ));
     }
 
+    private AmusementProjectEntitlementRecord createProjectEntitlementInternal(String projectId, AmusementProjectEntitlementRequest request) {
+        AmusementProjectEntitlementRequest actual = requireRequest(request);
+        repository.findProjectById(projectId)
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+        checkProjectOwnership(projectId);
+        String entitlementType = requireText(actual.entitlementType(), "entitlement_type");
+        // 仅允许绑定游乐类权益类型（与核销在线校验 §6.4/§12.1 口径一致）。
+        if (!isAmusementEntitlementType(entitlementType)) {
+            throw ApiException.badRequest("ENTITLEMENT_NOT_AMUSEMENT", "entitlement_type must be an amusement entitlement type");
+        }
+        return repository.saveProjectEntitlement(new AmusementProjectEntitlementRecord(
+                "ament_" + slug(actual.idempotencyKey()),
+                projectId,
+                entitlementType,
+                Instant.now()
+        ));
+    }
+
+    private AmusementCapacityConfigRecord createCapacityConfigInternal(String projectId, AmusementCapacityConfigRequest request) {
+        AmusementCapacityConfigRequest actual = requireRequest(request);
+        repository.findProjectById(projectId)
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+        checkProjectOwnership(projectId);
+        String pointId = trimToNull(actual.locationPointId());
+        String deviceId = trimToNull(actual.deviceId());
+        if (pointId == null && deviceId == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "location_point_id or device_id is required");
+        }
+        int maxConcurrent = nonNegativeOrDefault(actual.maxConcurrent(), -1, "max_concurrent");
+        if (actual.maxConcurrent() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "max_concurrent is required");
+        }
+        Instant now = Instant.now();
+        return repository.saveCapacityConfig(new AmusementCapacityConfigRecord(
+                "amcap_" + slug(actual.idempotencyKey()),
+                projectId,
+                pointId,
+                deviceId,
+                maxConcurrent,
+                trimToDefault(actual.effectiveSessionPattern(), ""),
+                actual.enabled() == null || actual.enabled(),
+                now,
+                now
+        ));
+    }
+
+    private AmusementCapacityConfigRecord disableCapacityConfigInternal(String configId) {
+        AmusementCapacityConfigRecord existing = repository.findCapacityConfigById(configId)
+                .orElseThrow(() -> ApiException.notFound("CAPACITY_CONFIG_NOT_FOUND", "capacity config not found"));
+        checkProjectOwnership(existing.projectId());
+        return repository.saveCapacityConfig(new AmusementCapacityConfigRecord(
+                existing.id(),
+                existing.projectId(),
+                existing.locationPointId(),
+                existing.deviceId(),
+                existing.maxConcurrent(),
+                existing.effectiveSessionPattern(),
+                false,
+                existing.createdAt(),
+                Instant.now()
+        ));
+    }
+
     private AmusementVerificationRecord createVerificationInternal(VerificationRequest request) {
         VerificationRequest actual = requireRequest(request);
         String credential = requireText(actual.credentialPayload(), "credential_payload");
@@ -725,6 +887,12 @@ public class AmusementService {
             return record.id();
         }
         if (response instanceof AmusementProjectRuleRecord record) {
+            return record.id();
+        }
+        if (response instanceof AmusementProjectEntitlementRecord record) {
+            return record.id();
+        }
+        if (response instanceof AmusementCapacityConfigRecord record) {
             return record.id();
         }
         if (response instanceof AmusementVerificationRecord record) {

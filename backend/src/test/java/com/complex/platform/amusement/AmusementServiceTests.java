@@ -494,6 +494,127 @@ class AmusementServiceTests {
     }
 
     @Test
+    void capacityConfigEndpointEnforcesPointDeviceDimensionAfterCreate() {
+        // 清单#6：通过 capacity-config 端点录入点位/设备并发上限后，核销三维容量按配置立即生效。
+        AmusementProjectRecord project = createProject("cfg-ep", createTemplate("cfg-ep-tpl").id(), "open", 100);
+        submitPassingInspection(project, "cfg-ep");
+        AmusementSessionRecord session = createSession("cfg-ep-session", project.id(), 100, "open");
+        registerAmusementEntitlement("credential-cfg-1", 1);
+        registerAmusementEntitlement("credential-cfg-2", 1);
+
+        AmusementCapacityConfigRecord config = service.createCapacityConfig(project.id(),
+                new AmusementCapacityConfigRequest("cfg-ep-key", "note", List.of(), null, "gate_1", 1, null, null));
+        assertThat(config.maxConcurrent()).isEqualTo(1);
+        assertThat(config.enabled()).isTrue();
+        assertThat(service.listCapacityConfigs(project.id()).items()).hasSize(1);
+
+        assertThat(service.createVerification(verification("v-cfg-1", project.id(), session.id(), "credential-cfg-1"))
+                .verificationResult()).isEqualTo("success");
+        // 点位/设备维已满(1/1)，场次仍有余 → 录入即生效，第二次被拒。
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-cfg-2", project.id(), session.id(), "credential-cfg-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+    }
+
+    @Test
+    void disableCapacityConfigStopsEnforcingPointDeviceDimension() {
+        AmusementProjectRecord project = createProject("cfg-dis", createTemplate("cfg-dis-tpl").id(), "open", 100);
+        submitPassingInspection(project, "cfg-dis");
+        AmusementSessionRecord session = createSession("cfg-dis-session", project.id(), 100, "open");
+        registerAmusementEntitlement("credential-dis-1", 1);
+        registerAmusementEntitlement("credential-dis-2", 1);
+
+        AmusementCapacityConfigRecord config = service.createCapacityConfig(project.id(),
+                new AmusementCapacityConfigRequest("cfg-dis-key", null, List.of(), null, "gate_1", 1, null, true));
+        assertThat(service.createVerification(verification("v-dis-1", project.id(), session.id(), "credential-dis-1"))
+                .verificationResult()).isEqualTo("success");
+
+        // 停用后该维度不再受控 → 第二次场次仍有余即放行。
+        AmusementCapacityConfigRecord disabled = service.disableCapacityConfig(config.id(), "cfg-dis-disable-key");
+        assertThat(disabled.enabled()).isFalse();
+        assertThat(service.createVerification(verification("v-dis-2", project.id(), session.id(), "credential-dis-2"))
+                .verificationResult()).isEqualTo("success");
+    }
+
+    @Test
+    void capacityConfigRequiresPointOrDeviceAndMaxConcurrent() {
+        AmusementProjectRecord project = createProject("cfg-val", createTemplate("cfg-val-tpl").id(), "open", 5);
+        assertThatThrownBy(() -> service.createCapacityConfig(project.id(),
+                new AmusementCapacityConfigRequest("cfg-val-a", null, List.of(), null, null, 3, null, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        assertThatThrownBy(() -> service.createCapacityConfig(project.id(),
+                new AmusementCapacityConfigRequest("cfg-val-b", null, List.of(), null, "gate_1", null, null, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void capacityConfigRejectsCrossMerchantProject() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementProjectRecord project = createProject("cfg-xm", createTemplate("cfg-xm-tpl").id(), "open", 5);
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.createCapacityConfig(project.id(),
+                new AmusementCapacityConfigRequest("cfg-xm-key", null, List.of(), null, "gate_1", 1, null, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void projectEntitlementEndpointTightensVerificationBinding() {
+        // 清单#6：录入项目↔权益绑定后，核销收紧——未绑定的游乐类权益不再回退放行。
+        AmusementProjectRecord project = projectWithTemplate("ent-ep");
+        submitPassingInspection(project, "ent-ep");
+        AmusementSessionRecord session = createSession("ent-ep-session", project.id(), 5, "open");
+        // 绑定 amusement_pass；注册的是 amusement_single（默认）→ 收紧后被拒。
+        AmusementProjectEntitlementRecord binding = service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-ep-key", "note", List.of(), "amusement_pass"));
+        assertThat(binding.entitlementType()).isEqualTo("amusement_pass");
+        assertThat(service.listProjectEntitlements(project.id()).items()).hasSize(1);
+        registerAmusementEntitlement("credential-ent-1", 1);
+
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-ent-1", project.id(), session.id(), "credential-ent-1")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_NOT_FOR_PROJECT");
+        // 权益未被白扣（绑定校验在消费前）。
+        assertThat(entitlementGateway.usedTimes("credential-ent-1")).isEqualTo(0);
+    }
+
+    @Test
+    void projectEntitlementEndpointAllowsMatchingBoundType() {
+        AmusementProjectRecord project = projectWithTemplate("ent-ok");
+        submitPassingInspection(project, "ent-ok");
+        AmusementSessionRecord session = createSession("ent-ok-session", project.id(), 5, "open");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-ok-key", null, List.of(), "amusement_single"));
+        registerAmusementEntitlement("credential-ent-ok", 1);
+
+        assertThat(service.createVerification(verification("v-ent-ok", project.id(), session.id(), "credential-ent-ok"))
+                .verificationResult()).isEqualTo("success");
+    }
+
+    @Test
+    void removeProjectEntitlementRestoresFallback() {
+        AmusementProjectRecord project = projectWithTemplate("ent-rm");
+        submitPassingInspection(project, "ent-rm");
+        AmusementSessionRecord session = createSession("ent-rm-session", project.id(), 5, "open");
+        service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-rm-key", null, List.of(), "amusement_pass"));
+        service.deleteProjectEntitlement(project.id(), "amusement_pass", "ent-rm-del-key");
+        assertThat(service.listProjectEntitlements(project.id()).items()).isEmpty();
+        registerAmusementEntitlement("credential-ent-rm", 1);
+
+        // 解绑后无任何绑定 → 回退按游乐类放行（向后兼容）。
+        assertThat(service.createVerification(verification("v-ent-rm", project.id(), session.id(), "credential-ent-rm"))
+                .verificationResult()).isEqualTo("success");
+    }
+
+    @Test
+    void projectEntitlementRejectsNonAmusementType() {
+        AmusementProjectRecord project = projectWithTemplate("ent-bad");
+        assertThatThrownBy(() -> service.createProjectEntitlement(project.id(),
+                new AmusementProjectEntitlementRequest("ent-bad-key", null, List.of(), "ticket_single")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_NOT_AMUSEMENT");
+    }
+
+    @Test
     void manualOverrideRequiresReasonAndRecordsOverride() {
         AmusementProjectRecord project = projectWithTemplate("override");
         AmusementSessionRecord session = createSession("override-session", project.id(), 1, "open");
@@ -1042,6 +1163,8 @@ class AmusementServiceTests {
         private final Map<String, AmusementMaintenanceRecord> maintenanceRecords = new LinkedHashMap<>();
         private final List<AmusementSafetyActionRecord> safetyActions = new ArrayList<>();
         private final Map<String, List<String>> projectEntitlementTypes = new LinkedHashMap<>();
+        private final Map<String, AmusementProjectEntitlementRecord> projectEntitlements = new LinkedHashMap<>();
+        private final Map<String, AmusementCapacityConfigRecord> capacityConfigs = new LinkedHashMap<>();
         // §6.4 三维度容量：点位/设备维容量配置（key=projectId|pointId|deviceId）与维度快照在场计数。
         private final Map<String, Integer> pointDeviceCapacityConfig = new LinkedHashMap<>();
         private final Map<String, Integer> snapshotOccupied = new LinkedHashMap<>();
@@ -1089,6 +1212,59 @@ class AmusementServiceTests {
         @Override
         public List<String> listProjectEntitlementTypes(String projectId) {
             return new ArrayList<>(projectEntitlementTypes.getOrDefault(projectId, List.of()));
+        }
+
+        @Override
+        public AmusementProjectEntitlementRecord saveProjectEntitlement(AmusementProjectEntitlementRecord entitlement) {
+            List<String> types = projectEntitlementTypes.computeIfAbsent(entitlement.projectId(), key -> new ArrayList<>());
+            if (!types.contains(entitlement.entitlementType())) {
+                types.add(entitlement.entitlementType());
+            }
+            projectEntitlements.put(entitlement.projectId() + "|" + entitlement.entitlementType(), entitlement);
+            return entitlement;
+        }
+
+        @Override
+        public List<AmusementProjectEntitlementRecord> listProjectEntitlements(String projectId) {
+            return projectEntitlements.values().stream()
+                    .filter(record -> projectId.equals(record.projectId()))
+                    .sorted(java.util.Comparator.comparing(AmusementProjectEntitlementRecord::entitlementType))
+                    .toList();
+        }
+
+        @Override
+        public boolean deleteProjectEntitlement(String projectId, String entitlementType) {
+            boolean removed = projectEntitlements.remove(projectId + "|" + entitlementType) != null;
+            List<String> types = projectEntitlementTypes.get(projectId);
+            if (types != null) {
+                types.remove(entitlementType);
+            }
+            return removed;
+        }
+
+        @Override
+        public AmusementCapacityConfigRecord saveCapacityConfig(AmusementCapacityConfigRecord config) {
+            capacityConfigs.put(config.id(), config);
+            // 录入后即生效：启用的点位/设备配置同步到 claim 受控夹具；停用则移除。
+            String key = pointDeviceKey(config.projectId(), config.locationPointId(), config.deviceId());
+            if (config.enabled()) {
+                pointDeviceCapacityConfig.put(key, config.maxConcurrent());
+            } else {
+                pointDeviceCapacityConfig.remove(key);
+            }
+            return config;
+        }
+
+        @Override
+        public List<AmusementCapacityConfigRecord> listCapacityConfigs(String projectId) {
+            return capacityConfigs.values().stream()
+                    .filter(record -> projectId.equals(record.projectId()))
+                    .toList();
+        }
+
+        @Override
+        public Optional<AmusementCapacityConfigRecord> findCapacityConfigById(String id) {
+            return Optional.ofNullable(capacityConfigs.get(id));
         }
 
         @Override
