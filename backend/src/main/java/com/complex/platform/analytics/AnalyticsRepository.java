@@ -79,6 +79,12 @@ public interface AnalyticsRepository {
     /** Σ ticket_orders.amount_cent（pay_status='paid'）——售票收入；ticket_orders 无 merchant_id，仅平台口径。 */
     BigDecimal sumTicketRevenueCents(LocalDate businessDate);
 
+    /**
+     * RC1②：Σ ticket_refunds.refund_amount_cent——自营售票退款（按 created_at 落经营日窗口，与 T7 日结口径一致）；
+     * ticket_refunds 无 merchant_id，仅平台口径。用于 revenue.net 派生时冲减自营售票收入。
+     */
+    BigDecimal sumTicketRefundCents(LocalDate businessDate);
+
     /** Σ bar_bill_settlements.settlement_amount_cent——酒吧收入；返回 merchantId(可 null) -> 金额。 */
     Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate);
 

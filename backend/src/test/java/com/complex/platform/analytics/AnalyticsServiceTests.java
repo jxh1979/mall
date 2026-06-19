@@ -784,6 +784,11 @@ class AnalyticsServiceTests {
         }
 
         @Override
+        public BigDecimal sumTicketRefundCents(LocalDate businessDate) {
+            return BigDecimal.ZERO;
+        }
+
+        @Override
         public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
             return Map.of();
         }

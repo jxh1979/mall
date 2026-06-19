@@ -88,6 +88,33 @@ class FinanceBarReceivableLedgerServiceTests {
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("bar_bill", bill.id(), bill.payableAmountCent()));
     }
 
+    @Test
+    void refundPostsPayableRefundItemToArApLedger() {
+        BarBillRecord bill = bill();
+        BarOrderRecord order = order();
+
+        String itemId = service.createRefundPayable(
+                bill,
+                order,
+                "bill_adjustment_refund_1",
+                30000L,
+                "refund-key-1",
+                "customer complaint refund after checkout",
+                List.of("att_refund")
+        );
+
+        assertThat(itemId).isNotBlank();
+        // RC1①：退款过账为 direction=payable、source_type=refund、source_id=退款调整记录 id、amount=退款额。
+        assertThat(financeRepository.listArApItems())
+                .extracting(
+                        ArApItemRecord::direction,
+                        ArApItemRecord::sourceType,
+                        ArApItemRecord::sourceId,
+                        ArApItemRecord::amountCent)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                        "payable", "refund", "bill_adjustment_refund_1", 30000L));
+    }
+
     private BarBillRecord bill() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new BarBillRecord(

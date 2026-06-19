@@ -31,6 +31,8 @@ public class DashboardAggregationJob {
     static final String REVENUE_TICKET = "revenue.ticket";      // 收入
     static final String REVENUE_BAR = "revenue.bar";            // 收入
     static final String REVENUE_BAR_REFUND = "revenue.bar_refund"; // 收入·酒吧退款（冲减 net，待确认#2）
+    static final String REVENUE_TICKET_REFUND = "revenue.ticket_refund"; // 收入·自营售票退款（冲减 net）
+    static final String REVENUE_NET = "revenue.net";            // 收入·平台净收入（派生：售票+酒吧−退款，第三方不计）
     // 待确认项#1：通票售票收入的业态拆分展示口径（不并入 net，仅展示）。
     static final String REVENUE_TICKET_BAR_SHARE = "revenue.ticket_bar_share";             // 收入·通票酒吧分摊
     static final String REVENUE_TICKET_AMUSEMENT_SHARE = "revenue.ticket_amusement_share"; // 收入·通票游乐分摊
@@ -80,6 +82,20 @@ public class DashboardAggregationJob {
         // 收入·酒吧退款（待确认#2）：bar_bill_adjustments(adjustment_type='refund') 按 refunded_at 落经营日窗口，
         // 单列 revenue.bar_refund（不改写 revenue.bar 实收口径），net 派生时扣减；免单 waiver 不计入（已在更低结算实收体现）。
         upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate), now);
+
+        // RC1②：收入·自营售票退款（ticket_refunds 无 merchant_id → 仅平台口径，与 revenue.ticket 同口径）。
+        BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate));
+        BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate));
+        upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate, ticketRefund, now);
+
+        // RC1② 统一净收入 revenue.net（派生指标，财务确认口径 2026-06-18）：
+        //   net = 自营售票实付(revenue.ticket) + 酒吧实收(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
+        //   第三方回流不计入平台净收入；退款按经营日（BusinessDayResolver）窗口冲减当日。
+        //   商户口径（行级）：源表无 merchant_id 的售票分量不可归商户，故商户 net = 该商户酒吧实收 − 该商户酒吧退款；
+        //   平台口径：售票分量（平台维度）+ 全商户酒吧实收 − 售票退款 − 全商户酒吧退款。
+        Map<String, BigDecimal> barRevenue = repository.sumBarRevenueCentsByMerchant(businessDate);
+        Map<String, BigDecimal> barRefund = repository.sumBarRefundCentsByMerchant(businessDate);
+        upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund, now);
 
         // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
@@ -145,6 +161,56 @@ public class DashboardAggregationJob {
                 PROJECTION_ETL,
                 now
         );
+    }
+
+    /**
+     * RC1②：派生并 upsert 平台净收入 revenue.net（按 merchant 行级 + 平台口径）。
+     * 商户行：net = 酒吧实收 − 酒吧退款（售票分量无 merchant_id 不可归商户）。
+     * 平台行：net = 售票实付 + Σ酒吧实收 − 售票退款 − Σ酒吧退款。第三方回流不计入。
+     */
+    private void upsertNetRevenue(
+            LocalDate businessDate,
+            BigDecimal ticketRevenue,
+            BigDecimal ticketRefund,
+            Map<String, BigDecimal> barRevenueByMerchant,
+            Map<String, BigDecimal> barRefundByMerchant,
+            Instant now
+    ) {
+        // 商户行级 net：仅含本商户酒吧实收 − 本商户酒吧退款。
+        java.util.Set<String> merchantIds = new java.util.LinkedHashSet<>();
+        merchantIds.addAll(barRevenueByMerchant.keySet());
+        merchantIds.addAll(barRefundByMerchant.keySet());
+        BigDecimal barRevenueTotal = BigDecimal.ZERO;
+        BigDecimal barRefundTotal = BigDecimal.ZERO;
+        for (String merchantId : merchantIds) {
+            BigDecimal revenue = nonNull(barRevenueByMerchant.get(merchantId));
+            BigDecimal refund = nonNull(barRefundByMerchant.get(merchantId));
+            barRevenueTotal = barRevenueTotal.add(revenue);
+            barRefundTotal = barRefundTotal.add(refund);
+            if (merchantId != null && !merchantId.isBlank()) {
+                repository.upsertMetricSnapshot(
+                        new MetricSnapshotKey(REVENUE_NET, "finance", PERIOD_DAILY, businessDate, SEGMENT_MERCHANT, merchantId),
+                        revenue.subtract(refund),
+                        PROJECTION_ETL,
+                        now
+                );
+            }
+        }
+        // 平台行级 net：售票实付 + Σ酒吧实收 − 售票退款 − Σ酒吧退款（第三方回流不计）。
+        BigDecimal platformNet = nonNull(ticketRevenue)
+                .add(barRevenueTotal)
+                .subtract(nonNull(ticketRefund))
+                .subtract(barRefundTotal);
+        repository.upsertMetricSnapshot(
+                new MetricSnapshotKey(REVENUE_NET, "finance", PERIOD_DAILY, businessDate, SEGMENT_PLATFORM, null),
+                platformNet,
+                PROJECTION_ETL,
+                now
+        );
+    }
+
+    private BigDecimal nonNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private LocalDate today() {

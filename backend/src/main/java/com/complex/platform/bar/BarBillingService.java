@@ -204,6 +204,21 @@ public class BarBillingService {
             }
             afterPayable = beforePayable - amount;
             refundedAt = Instant.now();
+            // RC1①：退款过账到 finance ar_ap 台账（direction=payable, source_type=refund），表示"应退/已退"。
+            // 同事务执行：过账失败抛出 → 回滚整个退款（账单减项 + 调整记录），保证财务台账强一致。
+            BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
+                    .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
+            String refundAdjustmentId =
+                    "bill_adjustment_" + billSlug(bill.id() + ":" + type + ":" + actual.idempotencyKey());
+            arApItemId = receivableLedgerService.createRefundPayable(
+                    bill,
+                    refundOrder,
+                    refundAdjustmentId,
+                    amount,
+                    requireText(actual.idempotencyKey(), "idempotency_key"),
+                    reason,
+                    safeList(actual.evidenceAttachmentIds())
+            );
         } else if ("on_account".equals(type)) {
             if (amount != 0L) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "on_account amount_cent must be zero");

@@ -1397,6 +1397,15 @@ class BarServiceTests {
                 )
                 .containsExactly("refund", 30000L, 128800L, 98800L, "applied");
         assertThat(adjustment.refundedAt()).isNotNull();
+
+        // RC1①：退款过账到 finance ar_ap 台账（direction=payable, source_type=refund），
+        // source_id=退款调整记录 id，金额=退款额；调整记录上回填 arApItemId（强一致联动）。
+        assertThat(receivableLedgerService.refundPayables).hasSize(1);
+        CapturedRefundPayable posted = receivableLedgerService.refundPayables.get(0);
+        assertThat(posted.billId()).isEqualTo(bill.id());
+        assertThat(posted.refundAmountCent()).isEqualTo(30000L);
+        assertThat(posted.adjustmentId()).isEqualTo(adjustment.id());
+        assertThat(adjustment.arApItemId()).isEqualTo("arap_refund_" + adjustment.id());
     }
 
     @Test
@@ -2301,6 +2310,41 @@ class BarServiceTests {
             commissionPayables.add(commission.id());
             return "arap_commission_" + commission.id();
         }
+
+        private final List<CapturedRefundPayable> refundPayables = new ArrayList<>();
+
+        @Override
+        public String createRefundPayable(
+                BarBillRecord bill,
+                BarOrderRecord order,
+                String adjustmentId,
+                long refundAmountCent,
+                String idempotencyKey,
+                String reason,
+                List<String> evidenceAttachmentIds
+        ) {
+            refundPayables.add(new CapturedRefundPayable(
+                    bill.id(),
+                    order.id(),
+                    adjustmentId,
+                    refundAmountCent,
+                    idempotencyKey,
+                    reason,
+                    List.copyOf(evidenceAttachmentIds)
+            ));
+            return "arap_refund_" + adjustmentId;
+        }
+    }
+
+    private record CapturedRefundPayable(
+            String billId,
+            String orderId,
+            String adjustmentId,
+            long refundAmountCent,
+            String idempotencyKey,
+            String reason,
+            List<String> evidenceAttachmentIds
+    ) {
     }
 
     private record CapturedReceivableRequest(

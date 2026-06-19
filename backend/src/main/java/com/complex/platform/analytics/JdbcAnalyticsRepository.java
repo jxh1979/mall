@@ -393,6 +393,18 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public BigDecimal sumTicketRefundCents(LocalDate businessDate) {
+        // RC1②：自营售票退款，ticket_refunds 以 created_at 落经营日窗口 [start, end)（与 T7 aggregateOfficialTicket 口径一致）。
+        BigDecimal value = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(refund_amount_cent), 0)
+                  FROM ticket_refunds
+                 WHERE created_at >= :start
+                   AND created_at < :end
+                """, dayRange(businessDate), BigDecimal.class);
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    @Override
     public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         jdbcTemplate.query("""
