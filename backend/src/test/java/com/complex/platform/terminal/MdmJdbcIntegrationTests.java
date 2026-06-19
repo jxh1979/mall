@@ -110,6 +110,24 @@ class MdmJdbcIntegrationTests {
     }
 
     @Test
+    void v097SeedsCameraScanAndNativeClientSwitchesDefaultOff() {
+        // V097：摄像头扫码（#2）+ 微信小程序/原生 App 客户端（#3）能力开关，显式 seed enabled=false（默认关）。
+        Boolean cameraScan = jdbcTemplate.queryForObject("""
+                SELECT enabled FROM terminal_capability_switches
+                 WHERE capability_code = 'terminal.camera_scan.enabled'
+                   AND terminal_type = '*' AND scope_type = 'global' AND scope_id = 'global'
+                """, Boolean.class);
+        assertThat(cameraScan).isFalse();
+
+        Boolean nativeClient = jdbcTemplate.queryForObject("""
+                SELECT enabled FROM terminal_capability_switches
+                 WHERE capability_code = 'customer.native_client.enabled'
+                   AND terminal_type = '*' AND scope_type = 'global' AND scope_id = 'global'
+                """, Boolean.class);
+        assertThat(nativeClient).isFalse();
+    }
+
+    @Test
     void checkRejectsInvalidWhitelistScopeType() {
         assertThatThrownBy(() -> jdbcTemplate.update("""
                 INSERT INTO mdm_app_whitelist (id, package_name, scope_type, scope_id, enabled, created_at, updated_at)
