@@ -5,12 +5,21 @@ import "./styles.css";
 import LegacyConsoleApp from "./legacy-console/LegacyConsoleApp";
 
 const AdminApp = React.lazy(() => import("./admin/AdminApp"));
+const CustomerApp = React.lazy(() => import("./customer/CustomerApp"));
 
 function RootApp(): React.ReactElement {
   if (window.location.pathname.startsWith("/admin")) {
     return (
       <React.Suspense fallback={<div className="loading-state">加载完整后台...</div>}>
         <AdminApp />
+      </React.Suspense>
+    );
+  }
+
+  if (window.location.pathname.startsWith("/customer")) {
+    return (
+      <React.Suspense fallback={<div className="loading-state">加载客人端...</div>}>
+        <CustomerApp />
       </React.Suspense>
     );
   }
