@@ -20,6 +20,12 @@ public interface AmusementRepository {
 
     Optional<AmusementProjectRecord> findProjectById(String id);
 
+    /**
+     * 返回该项目已配置的可用权益类型绑定（amusement_project_entitlements）。
+     * 为空表示该项目无绑定配置——核销时回退按「entitlement_type 为游乐类」放行（V082 注释、向后兼容）。
+     */
+    List<String> listProjectEntitlementTypes(String projectId);
+
     AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule);
 
     List<AmusementProjectRuleRecord> listActiveBlockingProjectRules(String projectId);

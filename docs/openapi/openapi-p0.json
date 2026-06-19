@@ -1665,7 +1665,16 @@
         ],
         "operationId": "createAmusementVerification",
         "summary": "游乐权益核销",
+        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→扣场次容量→留痕。失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(场次容量耗尽，已消费权益回补)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。",
         "x-permission": "amusement.verification.execute",
+        "x-failure-codes": [
+          "TICKET_NOT_FOUND",
+          "ENTITLEMENT_EXPIRED",
+          "ENTITLEMENT_USED",
+          "ENTITLEMENT_NOT_AMUSEMENT",
+          "ENTITLEMENT_NOT_FOR_PROJECT",
+          "SESSION_CAPACITY_EXHAUSTED"
+        ],
         "x-data-scope": "project-amusement-point",
         "x-terminal-allowed": [
           "staff_work_phone"

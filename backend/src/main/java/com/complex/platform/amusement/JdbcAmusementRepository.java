@@ -131,6 +131,16 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public List<String> listProjectEntitlementTypes(String projectId) {
+        return jdbcTemplate.queryForList("""
+                SELECT entitlement_type
+                  FROM amusement_project_entitlements
+                 WHERE project_id = :project_id
+                 ORDER BY entitlement_type
+                """, Map.of("project_id", projectId), String.class);
+    }
+
+    @Override
     public AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule) {
         jdbcTemplate.update("""
                 INSERT INTO amusement_project_rules (

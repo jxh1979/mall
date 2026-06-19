@@ -34,6 +34,7 @@ class AmusementServiceTests {
 
     private InMemoryAmusementRepository amusementRepository;
     private InMemoryAuditEventRepository auditEventRepository;
+    private InMemoryAmusementEntitlementGateway entitlementGateway;
     private AmusementService service;
     private AuthorizationService authorizationService;
 
@@ -41,14 +42,21 @@ class AmusementServiceTests {
     void setUp() {
         amusementRepository = new InMemoryAmusementRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        entitlementGateway = new InMemoryAmusementEntitlementGateway();
         authorizationService = new AuthorizationService(mock(AccessRepository.class));
         TestSecurityActors.asPlatformAdmin();
         service = new AmusementService(
                 amusementRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                authorizationService
+                authorizationService,
+                entitlementGateway
         );
+    }
+
+    /** 注册一张有效的游乐权益（active、无有效期限制、剩余 times 次、type 默认 amusement_single）。 */
+    private void registerAmusementEntitlement(String credentialPayload, int totalTimes) {
+        entitlementGateway.register(credentialPayload, "amusement_single", "active", null, null, totalTimes);
     }
 
     @AfterEach
@@ -291,6 +299,8 @@ class AmusementServiceTests {
         AmusementProjectRecord fullProject = projectWithTemplate("full");
         submitPassingInspection(fullProject, "full");
         AmusementSessionRecord fullSession = createSession("full-session", fullProject.id(), 1, "open");
+        registerAmusementEntitlement("credential-3", 1);
+        registerAmusementEntitlement("credential-4", 1);
         service.createVerification(verification("verify-full-first", fullProject.id(), fullSession.id(), "credential-3"));
 
         assertThatThrownBy(() -> service.createVerification(verification(
@@ -323,6 +333,7 @@ class AmusementServiceTests {
         AmusementProjectRecord project = projectWithTemplate("verify-success");
         submitPassingInspection(project, "verify-success");
         AmusementSessionRecord session = createSession("verify-session", project.id(), 2, "open");
+        registerAmusementEntitlement("credential-success", 3);
         VerificationRequest request = verification("verify-once", project.id(), session.id(), "credential-success");
 
         AmusementVerificationRecord first = service.createVerification(request);
@@ -334,10 +345,84 @@ class AmusementServiceTests {
                 .get()
                 .extracting(AmusementSessionRecord::usedCapacity)
                 .isEqualTo(1);
+        // 权益只消费一次（幂等命中第二次不重复扣 used_times）。
+        assertThat(entitlementGateway.usedTimes("credential-success")).isEqualTo(1);
         assertThat(amusementRepository.verifications).hasSize(1);
         assertThat(auditEventRepository.events)
                 .filteredOn(event -> "amusement.verification_succeeded".equals(event.eventName()))
                 .hasSize(1);
+    }
+
+    @Test
+    void verificationRejectsMissingExpiredUsedUpNonAmusementAndUnboundEntitlement() {
+        AmusementProjectRecord project = projectWithTemplate("entitlement-checks");
+        submitPassingInspection(project, "entitlement-checks");
+        AmusementSessionRecord session = createSession("entitlement-session", project.id(), 10, "open");
+
+        // 1) 无权益 → ticket_not_found（凭证查不到票务权益）。
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-no-entitlement", project.id(), session.id(), "credential-missing")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("TICKET_NOT_FOUND");
+
+        // 2) 过期权益 → entitlement_expired（validTo 在过去）。
+        entitlementGateway.register("credential-expired", "amusement_single", "active",
+                null, Instant.parse("2000-01-01T00:00:00Z"), 1);
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-expired", project.id(), session.id(), "credential-expired")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_EXPIRED");
+
+        // 3) 次数用尽权益 → entitlement_used（remaining=0）。
+        entitlementGateway.register("credential-usedup", "amusement_single", "active", null, null, 0);
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-usedup", project.id(), session.id(), "credential-usedup")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_USED");
+
+        // 4) 非游乐类权益 → entitlement_not_amusement（如赠饮 gift_drink）。
+        entitlementGateway.register("credential-gift", "gift_drink", "active", null, null, 1);
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-gift", project.id(), session.id(), "credential-gift")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_NOT_AMUSEMENT");
+        // 非游乐类被拒后不得消费权益。
+        assertThat(entitlementGateway.usedTimes("credential-gift")).isEqualTo(0);
+
+        // 5) 项目配了绑定但该权益 type 不在内 → entitlement_not_for_project。
+        amusementRepository.bindProjectEntitlementType(project.id(), "amusement_pass");
+        entitlementGateway.register("credential-other-type", "amusement_single", "active", null, null, 1);
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-unbound", project.id(), session.id(), "credential-other-type")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_NOT_FOR_PROJECT");
+    }
+
+    @Test
+    void verificationPassesAmusementEntitlementWhenProjectHasNoBindingFallback() {
+        AmusementProjectRecord project = projectWithTemplate("fallback");
+        submitPassingInspection(project, "fallback");
+        AmusementSessionRecord session = createSession("fallback-session", project.id(), 5, "open");
+        // 项目无绑定配置 → 回退按「游乐类」放行（向后兼容）。
+        registerAmusementEntitlement("credential-fallback", 2);
+
+        AmusementVerificationRecord record = service.createVerification(verification(
+                "verify-fallback", project.id(), session.id(), "credential-fallback"));
+
+        assertThat(record.verificationResult()).isEqualTo("success");
+        assertThat(entitlementGateway.usedTimes("credential-fallback")).isEqualTo(1);
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(1);
+    }
+
+    @Test
+    void verificationPassesWhenEntitlementBoundToProject() {
+        AmusementProjectRecord project = projectWithTemplate("bound");
+        submitPassingInspection(project, "bound");
+        AmusementSessionRecord session = createSession("bound-session", project.id(), 5, "open");
+        amusementRepository.bindProjectEntitlementType(project.id(), "amusement_single");
+        registerAmusementEntitlement("credential-bound", 2);
+
+        AmusementVerificationRecord record = service.createVerification(verification(
+                "verify-bound", project.id(), session.id(), "credential-bound"));
+
+        assertThat(record.verificationResult()).isEqualTo("success");
+        assertThat(entitlementGateway.usedTimes("credential-bound")).isEqualTo(1);
     }
 
     @Test
@@ -527,6 +612,7 @@ class AmusementServiceTests {
                 .get()
                 .extracting(AmusementSessionRecord::lockedCapacity)
                 .isEqualTo(2);
+        registerAmusementEntitlement("credential-group-locked", 1);
         assertThatThrownBy(() -> service.createVerification(verification(
                         "verify-group-locked",
                         project.id(),
@@ -536,6 +622,8 @@ class AmusementServiceTests {
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        // 容量耗尽时已消费的权益被回补（补偿回滚），used_times 回到 0。
+        assertThat(entitlementGateway.usedTimes("credential-group-locked")).isEqualTo(0);
 
         AmusementGroupBookingRecord released = service.releaseGroupBooking(
                 booking.id(),
@@ -547,6 +635,7 @@ class AmusementServiceTests {
                 .get()
                 .extracting(AmusementSessionRecord::lockedCapacity)
                 .isEqualTo(0);
+        registerAmusementEntitlement("credential-after-release", 1);
         assertThat(service.createVerification(verification(
                 "verify-group-after-release",
                 project.id(),
@@ -620,6 +709,7 @@ class AmusementServiceTests {
         AmusementProjectRecord project = projectWithTemplate("group-capacity");
         submitPassingInspection(project, "group-capacity");
         AmusementSessionRecord session = createSession("group-capacity-session", project.id(), 2, "open");
+        registerAmusementEntitlement("credential-before-lock", 1);
         service.createVerification(verification("verify-before-group-lock", project.id(), session.id(), "credential-before-lock"));
 
         AmusementGroupBookingRecord booking = service.createGroupBooking(new AmusementGroupBookingRequest(
@@ -883,6 +973,11 @@ class AmusementServiceTests {
         private final Map<String, AmusementGroupBookingRecord> groupBookings = new LinkedHashMap<>();
         private final Map<String, AmusementMaintenanceRecord> maintenanceRecords = new LinkedHashMap<>();
         private final List<AmusementSafetyActionRecord> safetyActions = new ArrayList<>();
+        private final Map<String, List<String>> projectEntitlementTypes = new LinkedHashMap<>();
+
+        void bindProjectEntitlementType(String projectId, String entitlementType) {
+            projectEntitlementTypes.computeIfAbsent(projectId, key -> new ArrayList<>()).add(entitlementType);
+        }
 
         @Override
         public AmusementSafetyTemplateRecord saveSafetyTemplate(AmusementSafetyTemplateRecord template) {
@@ -909,6 +1004,11 @@ class AmusementServiceTests {
         @Override
         public List<AmusementProjectRecord> listProjects() {
             return new ArrayList<>(projects.values());
+        }
+
+        @Override
+        public List<String> listProjectEntitlementTypes(String projectId) {
+            return new ArrayList<>(projectEntitlementTypes.getOrDefault(projectId, List.of()));
         }
 
         @Override
@@ -1342,5 +1442,73 @@ class AmusementServiceTests {
             return event;
         }
 
+    }
+
+    /** 内存版游乐权益端口：按 credentialPayload 索引票务权益，支持消费/回补，用于核销校验测试。 */
+    private static final class InMemoryAmusementEntitlementGateway implements AmusementEntitlementGateway {
+        private final Map<String, FakeEntitlement> byCredential = new LinkedHashMap<>();
+        private final Map<String, FakeEntitlement> byId = new LinkedHashMap<>();
+
+        void register(String credentialPayload, String entitlementType, String status,
+                      Instant validFrom, Instant validTo, int totalTimes) {
+            FakeEntitlement entitlement = new FakeEntitlement(
+                    "ent_" + UUID.randomUUID(), entitlementType, status, validFrom, validTo, totalTimes);
+            byCredential.put(credentialPayload, entitlement);
+            byId.put(entitlement.id, entitlement);
+        }
+
+        @Override
+        public Optional<AmusementEntitlementView> findEntitlementByCredential(String credentialPayload) {
+            FakeEntitlement entitlement = byCredential.get(credentialPayload);
+            if (entitlement == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new AmusementEntitlementView(
+                    entitlement.id, entitlement.entitlementType, entitlement.status,
+                    entitlement.validFrom, entitlement.validTo, entitlement.totalTimes - entitlement.usedTimes));
+        }
+
+        @Override
+        public boolean consumeEntitlement(String entitlementId) {
+            FakeEntitlement entitlement = byId.get(entitlementId);
+            if (entitlement == null || entitlement.usedTimes >= entitlement.totalTimes) {
+                return false;
+            }
+            entitlement.usedTimes++;
+            return true;
+        }
+
+        @Override
+        public void reverseEntitlement(String entitlementId) {
+            FakeEntitlement entitlement = byId.get(entitlementId);
+            if (entitlement != null && entitlement.usedTimes > 0) {
+                entitlement.usedTimes--;
+            }
+        }
+
+        int usedTimes(String credentialPayload) {
+            FakeEntitlement entitlement = byCredential.get(credentialPayload);
+            return entitlement == null ? -1 : entitlement.usedTimes;
+        }
+
+        private static final class FakeEntitlement {
+            private final String id;
+            private final String entitlementType;
+            private final String status;
+            private final Instant validFrom;
+            private final Instant validTo;
+            private final int totalTimes;
+            private int usedTimes;
+
+            private FakeEntitlement(String id, String entitlementType, String status,
+                                    Instant validFrom, Instant validTo, int totalTimes) {
+                this.id = id;
+                this.entitlementType = entitlementType;
+                this.status = status;
+                this.validFrom = validFrom;
+                this.validTo = validTo;
+                this.totalTimes = totalTimes;
+            }
+        }
     }
 }

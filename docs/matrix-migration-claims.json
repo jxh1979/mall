@@ -557,6 +557,13 @@
       "column": "space_id",
       "expected": "present",
       "note": "V080 第二阶段（待确认#4）：合同-空间租赁关联表（contract_id,space_id PK），驱动 AdmissionGuard over_space 真实判定（object→space 经 resolveSpaceId，当前仅 merchant_service_work_order 可解析；space 不在生效合同 contract_spaces 内→命中；不可解析→放行）"
+    },
+    {
+      "req": "REQ-46",
+      "table": "amusement_project_entitlements",
+      "column": "entitlement_type",
+      "expected": "present",
+      "note": "V082 第二阶段（游乐现场核销 P0 断点修复）：项目↔权益类型绑定（project_id+entitlement_type uq），驱动 AmusementService.createVerification 校验「权益绑定本项目」（设计 §6.4 步骤 2/4、§12.1）。核销现已识别票务权益→校验(存在/active/有效期/剩余次数/游乐类/绑定本项目)→消费票务权益(used_times+1)→扣场次容量。回退口径：项目无绑定配置时退化为按游乐类(entitlement_type 以 amusement 开头)放行（向后兼容，TODO 运营配绑定后收紧）"
     }
   ]
 }

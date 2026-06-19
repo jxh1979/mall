@@ -32,6 +32,10 @@ public class AmusementService {
     private static final Set<String> OVERRIDE_TYPES = Set.of("allow", "deny", "pause", "resume");
     private static final Set<String> RULE_TYPES = Set.of("age", "height", "weight", "capacity", "safety_notice", "manual");
 
+    // 游乐权益类前缀（§6.4/§12.1：游乐只消费票务生成的游乐权益）。
+    // entitlement_type 以 "amusement" 开头视为游乐类（amusement_single / amusement_pass / 游乐通票等）。
+    private static final String AMUSEMENT_ENTITLEMENT_TYPE_PREFIX = "amusement";
+
     private final AmusementRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
@@ -39,17 +43,20 @@ public class AmusementService {
     private final AmusementInspectionService inspectionService;
     private final AmusementMaintenanceService maintenanceService;
     private final AuthorizationService authorizationService;
+    private final AmusementEntitlementGateway entitlementGateway;
 
     public AmusementService(
             AmusementRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            AmusementEntitlementGateway entitlementGateway
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.entitlementGateway = entitlementGateway;
         this.bookingService = new AmusementBookingService(repository, idempotencyService, auditEventService, authorizationService);
         this.inspectionService = new AmusementInspectionService(repository, idempotencyService, auditEventService, authorizationService);
         this.maintenanceService = new AmusementMaintenanceService(repository, idempotencyService, auditEventService, authorizationService);
@@ -480,8 +487,44 @@ public class AmusementService {
         if (!eligibility.allowed()) {
             throw ApiException.conflict("SAFETY_BLOCKED", "safety gate blocked amusement verification");
         }
-        if (!repository.incrementSessionUsedCapacityIfAvailable(session.id())) {
-            throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED", "session capacity exhausted");
+
+        // §6.4 步骤 2/3：识别票/权益实例 → 在线校验（存在、active、有效期、剩余次数、游乐类、绑定本项目）。
+        AmusementEntitlementView entitlement = entitlementGateway.findEntitlementByCredential(credential)
+                .orElseThrow(() -> ApiException.notFound("TICKET_NOT_FOUND", "ticket entitlement not found"));
+        if (!"active".equals(entitlement.status())) {
+            throw ApiException.conflict("ENTITLEMENT_USED", "entitlement is not active");
+        }
+        Instant now = Instant.now();
+        if ((entitlement.validFrom() != null && now.isBefore(entitlement.validFrom()))
+                || (entitlement.validTo() != null && now.isAfter(entitlement.validTo()))) {
+            throw ApiException.conflict("ENTITLEMENT_EXPIRED", "entitlement is not within validity window");
+        }
+        if (entitlement.remainingTimes() <= 0) {
+            throw ApiException.conflict("ENTITLEMENT_USED", "entitlement has no remaining times");
+        }
+        if (!isAmusementEntitlementType(entitlement.entitlementType())) {
+            throw ApiException.conflict("ENTITLEMENT_NOT_AMUSEMENT", "entitlement is not an amusement entitlement");
+        }
+        // 绑定本项目：该权益 type 在 amusement_project_entitlements 内。
+        // 回退口径（V082 向后兼容）：项目无任何绑定配置时，仅按「游乐类」放行（上方已校验）。
+        List<String> boundTypes = repository.listProjectEntitlementTypes(project.id());
+        if (!boundTypes.isEmpty() && !boundTypes.contains(entitlement.entitlementType())) {
+            throw ApiException.conflict("ENTITLEMENT_NOT_FOR_PROJECT", "entitlement is not bound to this project");
+        }
+
+        // §6.4 步骤 4/6：先消费票务权益（原子扣 used_times），再扣场次容量。
+        // 顺序与回滚：权益扣减失败不扣容量；容量扣减失败则回补权益（补偿），保证两者一致。
+        if (!entitlementGateway.consumeEntitlement(entitlement.id())) {
+            throw ApiException.conflict("ENTITLEMENT_USED", "entitlement has no remaining times");
+        }
+        try {
+            if (!repository.incrementSessionUsedCapacityIfAvailable(session.id())) {
+                throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED", "session capacity exhausted");
+            }
+        } catch (RuntimeException exception) {
+            // 容量扣减失败：回补已消费的权益，避免权益被白扣。
+            entitlementGateway.reverseEntitlement(entitlement.id());
+            throw exception;
         }
         return repository.saveVerification(new AmusementVerificationRecord(
                 "verification_" + slug(actual.idempotencyKey()),
@@ -493,8 +536,13 @@ public class AmusementService {
                 "success",
                 null,
                 List.of(),
-                Instant.now()
+                now
         ));
+    }
+
+    private boolean isAmusementEntitlementType(String entitlementType) {
+        return entitlementType != null
+                && entitlementType.trim().toLowerCase(Locale.ROOT).startsWith(AMUSEMENT_ENTITLEMENT_TYPE_PREFIX);
     }
 
     private AmusementManualOverrideRecord createManualOverrideInternal(AmusementManualOverrideRequest request) {
