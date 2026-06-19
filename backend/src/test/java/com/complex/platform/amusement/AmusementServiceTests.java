@@ -656,6 +656,148 @@ class AmusementServiceTests {
                 .contains("amusement.group_booking.approve_failed");
     }
 
+    @Test
+    void maintenanceRecordPersistsStructuredFieldsAndKeepsProjectInMaintenance() {
+        AmusementSafetyTemplateRecord template = createTemplate("maint-pass");
+        AmusementProjectRecord project = createProject("maint-pass", template.id(), "maintenance", 2);
+
+        AmusementMaintenanceRecord record = service.createMaintenanceRecord(new AmusementMaintenanceRecordRequest(
+                "maint-pass-create",
+                project.id(),
+                "device_1",
+                "point_1",
+                "supplier_maint_1",
+                "engineer_1",
+                "张工",
+                Instant.parse("2026-06-18T02:00:00Z"),
+                "pass",
+                null,
+                "kiosk"
+        ));
+
+        assertThat(record)
+                .extracting(
+                        AmusementMaintenanceRecord::projectId,
+                        AmusementMaintenanceRecord::deviceId,
+                        AmusementMaintenanceRecord::locationPointId,
+                        AmusementMaintenanceRecord::maintenanceVendorId,
+                        AmusementMaintenanceRecord::engineerName,
+                        AmusementMaintenanceRecord::result,
+                        AmusementMaintenanceRecord::sourceTerminal,
+                        AmusementMaintenanceRecord::status
+                )
+                .containsExactly(project.id(), "device_1", "point_1", "supplier_maint_1", "张工", "pass", "kiosk", "pending_confirm");
+        // 提交检修不联动 open_status，仍保持 maintenance。
+        assertThat(amusementRepository.findProjectById(project.id()))
+                .get().extracting(AmusementProjectRecord::openStatus).isEqualTo("maintenance");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.maintenance_recorded");
+    }
+
+    @Test
+    void confirmResumeRejectsFailedMaintenanceAndKeepsProjectInMaintenance() {
+        AmusementSafetyTemplateRecord template = createTemplate("maint-fail");
+        AmusementProjectRecord project = createProject("maint-fail", template.id(), "maintenance", 2);
+
+        AmusementMaintenanceRecord record = service.createMaintenanceRecord(new AmusementMaintenanceRecordRequest(
+                "maint-fail-create",
+                project.id(),
+                "device_1",
+                "point_1",
+                "supplier_maint_1",
+                "engineer_1",
+                "李工",
+                Instant.parse("2026-06-18T02:00:00Z"),
+                "fail",
+                "限位器异常",
+                "kiosk"
+        ));
+
+        assertThatThrownBy(() -> service.confirmMaintenanceResume(
+                        record.id(),
+                        new AmusementMaintenanceResumeRequest("maint-fail-confirm", "supervisor_1", "尝试恢复")
+                ))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("MAINTENANCE_NOT_PASSED");
+
+        assertThat(amusementRepository.findProjectById(project.id()))
+                .get().extracting(AmusementProjectRecord::openStatus).isEqualTo("maintenance");
+        assertThat(amusementRepository.findMaintenanceRecordById(record.id()))
+                .get().extracting(AmusementMaintenanceRecord::status).isEqualTo("submitted");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.maintenance_resume_failed");
+    }
+
+    @Test
+    void confirmResumeRejectsWhenProjectNotInMaintenance() {
+        AmusementSafetyTemplateRecord template = createTemplate("maint-open");
+        AmusementProjectRecord project = createProject("maint-open", template.id(), "open", 2);
+
+        AmusementMaintenanceRecord record = service.createMaintenanceRecord(new AmusementMaintenanceRecordRequest(
+                "maint-open-create",
+                project.id(),
+                "device_1",
+                "point_1",
+                "supplier_maint_1",
+                "engineer_1",
+                "王工",
+                Instant.parse("2026-06-18T02:00:00Z"),
+                "pass",
+                null,
+                "kiosk"
+        ));
+
+        assertThatThrownBy(() -> service.confirmMaintenanceResume(
+                        record.id(),
+                        new AmusementMaintenanceResumeRequest("maint-open-confirm", "supervisor_1", "恢复")
+                ))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("PROJECT_NOT_IN_MAINTENANCE");
+
+        assertThat(amusementRepository.findProjectById(project.id()))
+                .get().extracting(AmusementProjectRecord::openStatus).isEqualTo("open");
+    }
+
+    @Test
+    void confirmResumeOnPassRestoresProjectOpenStatusAndEmitsResumedEvent() {
+        AmusementSafetyTemplateRecord template = createTemplate("maint-resume");
+        AmusementProjectRecord project = createProject("maint-resume", template.id(), "maintenance", 2);
+
+        AmusementMaintenanceRecord record = service.createMaintenanceRecord(new AmusementMaintenanceRecordRequest(
+                "maint-resume-create",
+                project.id(),
+                "device_1",
+                "point_1",
+                "supplier_maint_1",
+                "engineer_1",
+                "赵工",
+                Instant.parse("2026-06-18T02:00:00Z"),
+                "pass",
+                null,
+                "kiosk"
+        ));
+
+        AmusementMaintenanceRecord confirmed = service.confirmMaintenanceResume(
+                record.id(),
+                new AmusementMaintenanceResumeRequest("maint-resume-confirm", "supervisor_1", "检修合格恢复")
+        );
+
+        assertThat(confirmed.status()).isEqualTo("confirmed");
+        assertThat(confirmed.supervisorConfirmedBy()).isEqualTo("supervisor_1");
+        assertThat(confirmed.confirmedAt()).isNotNull();
+        assertThat(confirmed.resumeBusinessAt()).isNotNull();
+        // 联动 open_status：maintenance → open。
+        assertThat(amusementRepository.findProjectById(project.id()))
+                .get().extracting(AmusementProjectRecord::openStatus).isEqualTo("open");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement.maintenance_recorded", "amusement.project.resumed");
+    }
+
     private AmusementProjectRecord projectWithTemplate(String key) {
         AmusementSafetyTemplateRecord template = createTemplate(key + "-template");
         return createProject(key, template.id(), "open", 2);
@@ -739,6 +881,7 @@ class AmusementServiceTests {
         private final Map<String, AmusementQueueEntryRecord> queueEntries = new LinkedHashMap<>();
         private final Map<String, AmusementReservationRecord> reservations = new LinkedHashMap<>();
         private final Map<String, AmusementGroupBookingRecord> groupBookings = new LinkedHashMap<>();
+        private final Map<String, AmusementMaintenanceRecord> maintenanceRecords = new LinkedHashMap<>();
         private final List<AmusementSafetyActionRecord> safetyActions = new ArrayList<>();
 
         @Override
@@ -1120,6 +1263,48 @@ class AmusementServiceTests {
             return reservations.values().stream()
                     .filter(r -> projects.containsKey(r.projectId()) && merchantId.equals(projects.get(r.projectId()).merchantId()))
                     .toList();
+        }
+
+        @Override
+        public AmusementMaintenanceRecord saveMaintenanceRecord(AmusementMaintenanceRecord record) {
+            maintenanceRecords.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public List<AmusementMaintenanceRecord> listMaintenanceRecords() {
+            return new ArrayList<>(maintenanceRecords.values());
+        }
+
+        @Override
+        public List<AmusementMaintenanceRecord> listMaintenanceRecordsByMerchant(String merchantId) {
+            return maintenanceRecords.values().stream()
+                    .filter(m -> projects.containsKey(m.projectId()) && merchantId.equals(projects.get(m.projectId()).merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public Optional<AmusementMaintenanceRecord> findMaintenanceRecordById(String id) {
+            return Optional.ofNullable(maintenanceRecords.get(id));
+        }
+
+        @Override
+        public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
+            AmusementProjectRecord project = projects.get(projectId);
+            if (project == null || !expectedCurrentStatus.equals(project.openStatus())) {
+                return false;
+            }
+            projects.put(projectId, new AmusementProjectRecord(
+                    project.id(),
+                    project.projectName(),
+                    project.capacity(),
+                    newStatus,
+                    project.safetyTemplateId(),
+                    project.eligibilityRule(),
+                    project.createdAt(),
+                    Instant.now(),
+                    project.merchantId()));
+            return true;
         }
     }
 

@@ -216,6 +216,37 @@ public class AmusementController {
         return ApiResponse.ok(service.submitSafetyInspection(id, request));
     }
 
+    @GetMapping("/maintenance-records")
+    public ApiResponse<PageResponse<AmusementMaintenanceRecord>> listMaintenanceRecords() {
+        authorizationService.requirePermission("amusement.maintenance.read");
+        return ApiResponse.ok(service.listMaintenanceRecords());
+    }
+
+    @GetMapping("/maintenance-records/{id}")
+    public ApiResponse<AmusementMaintenanceRecord> getMaintenanceRecord(@PathVariable String id) {
+        authorizationService.requirePermission("amusement.maintenance.read");
+        return ApiResponse.ok(service.getMaintenanceRecord(id));
+    }
+
+    @PostMapping("/maintenance-records")
+    public ApiResponse<AmusementMaintenanceRecord> createMaintenanceRecord(
+            @RequestBody(required = false) AmusementMaintenanceRecordRequest request
+    ) {
+        authorizationService.requirePermission("amusement.maintenance.submit");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createMaintenanceRecord(request));
+    }
+
+    @PostMapping("/maintenance-records/{id}/confirm-resume")
+    public ApiResponse<AmusementMaintenanceRecord> confirmMaintenanceResume(
+            @PathVariable String id,
+            @RequestBody(required = false) AmusementMaintenanceResumeRequest request
+    ) {
+        authorizationService.requirePermission("amusement.maintenance.confirm");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.confirmMaintenanceResume(id, request));
+    }
+
     @GetMapping("/safety-templates")
     public ApiResponse<PageResponse<AmusementSafetyTemplateRecord>> listSafetyTemplates() {
         authorizationService.requirePermission("amusement.safety_template.view");

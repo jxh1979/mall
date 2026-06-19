@@ -198,8 +198,8 @@
       "req": "REQ-48",
       "table": "amusement_maintenance_record",
       "column": null,
-      "expected": "absent",
-      "note": "R3: 检修单表未建（恢复营业审批落在 amusement_safety_inspections）"
+      "expected": "present",
+      "note": "V081：检修单表已建（检修单位复用供应商/工程师/结果/异常/来源终端/点位结构化留痕 + 主管确认恢复营业联动 amusement_projects.open_status maintenance→open，设计 §5.1.1/§7.14a/§8.7.1）"
     },
     {
       "req": "REQ-23",

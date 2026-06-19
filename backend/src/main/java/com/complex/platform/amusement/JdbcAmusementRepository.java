@@ -575,6 +575,83 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public AmusementMaintenanceRecord saveMaintenanceRecord(AmusementMaintenanceRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_maintenance_record (
+                    id, project_id, device_id, location_point_id, maintenance_vendor_id,
+                    engineer_id, engineer_name, maintenance_at, result, exception_note,
+                    source_terminal, status, supervisor_confirmed_by, confirmed_at,
+                    resume_business_at, merchant_id, created_at
+                )
+                VALUES (
+                    :id, :project_id, :device_id, :location_point_id, :maintenance_vendor_id,
+                    :engineer_id, :engineer_name, :maintenance_at, :result, :exception_note,
+                    :source_terminal, :status, :supervisor_confirmed_by, :confirmed_at,
+                    :resume_business_at, :merchant_id, :created_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    supervisor_confirmed_by = EXCLUDED.supervisor_confirmed_by,
+                    confirmed_at = EXCLUDED.confirmed_at,
+                    resume_business_at = EXCLUDED.resume_business_at
+                """, maintenanceRecordParameters(record));
+        return record;
+    }
+
+    @Override
+    public List<AmusementMaintenanceRecord> listMaintenanceRecords() {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, device_id, location_point_id, maintenance_vendor_id,
+                       engineer_id, engineer_name, maintenance_at, result, exception_note,
+                       source_terminal, status, supervisor_confirmed_by, confirmed_at,
+                       resume_business_at, merchant_id, created_at
+                  FROM amusement_maintenance_record
+                 ORDER BY created_at DESC, id
+                """, rowMapper::mapMaintenanceRecord);
+    }
+
+    @Override
+    public List<AmusementMaintenanceRecord> listMaintenanceRecordsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, device_id, location_point_id, maintenance_vendor_id,
+                       engineer_id, engineer_name, maintenance_at, result, exception_note,
+                       source_terminal, status, supervisor_confirmed_by, confirmed_at,
+                       resume_business_at, merchant_id, created_at
+                  FROM amusement_maintenance_record
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapMaintenanceRecord);
+    }
+
+    @Override
+    public Optional<AmusementMaintenanceRecord> findMaintenanceRecordById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, device_id, location_point_id, maintenance_vendor_id,
+                       engineer_id, engineer_name, maintenance_at, result, exception_note,
+                       source_terminal, status, supervisor_confirmed_by, confirmed_at,
+                       resume_business_at, merchant_id, created_at
+                  FROM amusement_maintenance_record
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapMaintenanceRecord).stream().findFirst();
+    }
+
+    @Override
+    public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_projects
+                   SET open_status = :new_status,
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND open_status = :expected_status
+                """, new MapSqlParameterSource()
+                .addValue("id", projectId)
+                .addValue("expected_status", expectedCurrentStatus)
+                .addValue("new_status", newStatus)
+                .addValue("updated_at", timestampWithTimeZone(Instant.now())));
+        return updated == 1;
+    }
+
+    @Override
     public AmusementGroupBookingRecord saveGroupBooking(AmusementGroupBookingRecord booking) {
         jdbcTemplate.update("""
                 INSERT INTO amusement_group_bookings (
@@ -749,6 +826,27 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("created_at", timestampWithTimeZone(project.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(project.updatedAt()))
                 .addValue("merchant_id", project.merchantId());
+    }
+
+    private MapSqlParameterSource maintenanceRecordParameters(AmusementMaintenanceRecord record) {
+        return new MapSqlParameterSource()
+                .addValue("id", record.id())
+                .addValue("project_id", record.projectId())
+                .addValue("device_id", record.deviceId())
+                .addValue("location_point_id", record.locationPointId())
+                .addValue("maintenance_vendor_id", record.maintenanceVendorId())
+                .addValue("engineer_id", record.engineerId())
+                .addValue("engineer_name", record.engineerName())
+                .addValue("maintenance_at", timestampWithTimeZone(record.maintenanceAt()))
+                .addValue("result", record.result())
+                .addValue("exception_note", record.exceptionNote())
+                .addValue("source_terminal", record.sourceTerminal())
+                .addValue("status", record.status())
+                .addValue("supervisor_confirmed_by", record.supervisorConfirmedBy())
+                .addValue("confirmed_at", timestampWithTimeZone(record.confirmedAt()))
+                .addValue("resume_business_at", timestampWithTimeZone(record.resumeBusinessAt()))
+                .addValue("merchant_id", record.merchantId())
+                .addValue("created_at", timestampWithTimeZone(record.createdAt()));
     }
 
     private MapSqlParameterSource projectRuleParameters(AmusementProjectRuleRecord rule) {

@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 227 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 231 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -43,6 +43,10 @@
 | amusement | `POST` | `/api/v1/amusement/group-bookings/{id}/release` | `releaseAmusementGroupBooking` | Release P2 amusement group booking and free locked capacity | `AmusementGroupBookingReleaseRequest` | `amusement.group_booking.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement_group_booking.released.success` | `amusement_group_booking.released.failure` |
 | amusement | `GET` | `/api/v1/amusement/manual-overrides` | `listAmusementManualOverrides` | 查询游乐人工放行 | `-` | `amusement.verification.override` | `staff-token` | `project-amusement` | web, tablet | 否 | `amusement.manual_override.viewed` | `amusement.manual_override.view_failed` |
 | amusement | `POST` | `/api/v1/amusement/manual-overrides` | `createAmusementManualOverride` | 游乐人工放行 | `AmusementManualOverrideRequest` | `amusement.verification.override` | `staff-token` | `project-amusement-point` | staff_work_phone | 是 | `amusement.verification_overridden` | `amusement.verification_override_failed` |
+| amusement | `GET` | `/api/v1/amusement/maintenance-records` | `listAmusementMaintenanceRecords` | 查询游乐定期检修记录 | `-` | `amusement.maintenance.read` | `staff-token` | `project-amusement` | kiosk, web, mobile_admin | 否 | `amusement.maintenance.viewed` | `amusement.maintenance.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/maintenance-records` | `createAmusementMaintenanceRecord` | 提交游乐定期检修 | `AmusementMaintenanceRecordRequest` | `amusement.maintenance.submit` | `staff-token` | `project-amusement-point` | kiosk, web, mobile_admin | 是 | `amusement.maintenance_recorded` | `amusement.maintenance_record_failed` |
+| amusement | `GET` | `/api/v1/amusement/maintenance-records/{id}` | `getAmusementMaintenanceRecord` | 查询游乐定期检修记录详情 | `-` | `amusement.maintenance.read` | `staff-token` | `project-amusement` | kiosk, web, mobile_admin | 否 | `amusement.maintenance.viewed` | `amusement.maintenance.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/maintenance-records/{id}/confirm-resume` | `confirmAmusementMaintenanceResume` | 主管确认恢复营业 | `AmusementMaintenanceResumeRequest` | `amusement.maintenance.confirm` | `staff-token` | `project-amusement` | kiosk, web, mobile_admin | 是 | `amusement.project.resumed` | `amusement.maintenance_resume_failed` |
 | amusement | `GET` | `/api/v1/amusement/projects` | `listAmusementProjects` | 查询游乐项目 | `-` | `amusement.session.view` | `staff-token` | `project-amusement` | web, staff_work_phone, kiosk | 否 | `amusement.session.viewed` | `amusement.session.view_failed` |
 | amusement | `POST` | `/api/v1/amusement/projects` | `createAmusementProject` | 维护游乐项目 | `AmusementProjectRequest` | `amusement.session.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.session.changed` | `amusement.session.change_failed` |
 | amusement | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | `getAmusementOpenEligibility` | 查询项目或场次安全与容量准入 | `-` | `amusement.safety_inspection.view` | `staff-token` | `project-amusement` | web, staff_work_phone, kiosk | 否 | `amusement.open_eligibility.viewed` | `amusement.open_eligibility.blocked` |
@@ -315,5 +319,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 227 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 231 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

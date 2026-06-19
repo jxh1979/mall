@@ -196,6 +196,28 @@ final class JdbcAmusementRowMapper {
         );
     }
 
+    AmusementMaintenanceRecord mapMaintenanceRecord(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementMaintenanceRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("device_id"),
+                rs.getString("location_point_id"),
+                rs.getString("maintenance_vendor_id"),
+                rs.getString("engineer_id"),
+                rs.getString("engineer_name"),
+                instant(rs, "maintenance_at"),
+                rs.getString("result"),
+                rs.getString("exception_note"),
+                rs.getString("source_terminal"),
+                rs.getString("status"),
+                rs.getString("supervisor_confirmed_by"),
+                instant(rs, "confirmed_at"),
+                instant(rs, "resume_business_at"),
+                instant(rs, "created_at"),
+                rs.getString("merchant_id")
+        );
+    }
+
     private Instant instant(ResultSet rs, String column) throws SQLException {
         OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
         return value == null ? null : value.toInstant();

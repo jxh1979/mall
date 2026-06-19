@@ -37,6 +37,7 @@ public class AmusementService {
     private final AuditEventService auditEventService;
     private final AmusementBookingService bookingService;
     private final AmusementInspectionService inspectionService;
+    private final AmusementMaintenanceService maintenanceService;
     private final AuthorizationService authorizationService;
 
     public AmusementService(
@@ -51,6 +52,7 @@ public class AmusementService {
         this.authorizationService = authorizationService;
         this.bookingService = new AmusementBookingService(repository, idempotencyService, auditEventService, authorizationService);
         this.inspectionService = new AmusementInspectionService(repository, idempotencyService, auditEventService, authorizationService);
+        this.maintenanceService = new AmusementMaintenanceService(repository, idempotencyService, auditEventService, authorizationService);
     }
 
     public PageResponse<AmusementDeviceStatusRecord> listDeviceStatuses() {
@@ -262,6 +264,26 @@ public class AmusementService {
     @Transactional
     public AmusementSafetyInspectionRecord approveReopen(String inspectionId, StatusChangeRequest request) {
         return inspectionService.approveReopen(inspectionId, request);
+    }
+
+    public PageResponse<AmusementMaintenanceRecord> listMaintenanceRecords() {
+        return maintenanceService.listMaintenanceRecords();
+    }
+
+    public AmusementMaintenanceRecord getMaintenanceRecord(String recordId) {
+        return maintenanceService.getMaintenanceRecord(recordId);
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.maintenance.submit")
+    @Transactional
+    public AmusementMaintenanceRecord createMaintenanceRecord(AmusementMaintenanceRecordRequest request) {
+        return maintenanceService.createMaintenanceRecord(request);
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.maintenance.confirm", admissionAction = "amusement.reopen", objectType = "amusement_maintenance_record")
+    @Transactional
+    public AmusementMaintenanceRecord confirmMaintenanceResume(String recordId, AmusementMaintenanceResumeRequest request) {
+        return maintenanceService.confirmMaintenanceResume(recordId, request);
     }
 
     public PageResponse<AmusementSafetyTemplateRecord> listSafetyTemplates() {

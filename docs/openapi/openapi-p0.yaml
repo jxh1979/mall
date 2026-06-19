@@ -635,6 +635,118 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       description: 用于查询游乐人工放行。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+  /api/v1/amusement/maintenance-records:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementMaintenanceRecords
+      summary: 查询游乐定期检修记录
+      x-permission: amusement.maintenance.read
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - kiosk
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: amusement.maintenance.viewed
+      x-audit-event-failure: amusement.maintenance.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      description: 用于查询游乐定期检修记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+    post:
+      tags:
+        - amusement
+      operationId: createAmusementMaintenanceRecord
+      summary: 提交游乐定期检修
+      x-permission: amusement.maintenance.submit
+      x-data-scope: project-amusement-point
+      x-terminal-allowed:
+        - kiosk
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: amusement.maintenance_recorded
+      x-audit-event-failure: amusement.maintenance_record_failed
+      requestBody:
+        $ref: "#/components/requestBodies/AmusementMaintenanceRecordRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/amusement/maintenance-records/{id}:
+    get:
+      tags:
+        - amusement
+      operationId: getAmusementMaintenanceRecord
+      summary: 查询游乐定期检修记录详情
+      x-permission: amusement.maintenance.read
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - kiosk
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: amusement.maintenance.viewed
+      x-audit-event-failure: amusement.maintenance.view_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 检修记录唯一标识；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/amusement/maintenance-records/{id}/confirm-resume:
+    post:
+      tags:
+        - amusement
+      operationId: confirmAmusementMaintenanceResume
+      summary: 主管确认恢复营业
+      x-permission: amusement.maintenance.confirm
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - kiosk
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: amusement.project.resumed
+      x-audit-event-failure: amusement.maintenance_resume_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 检修记录唯一标识；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/AmusementMaintenanceResumeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/amusement/projects:
     get:
       tags:
@@ -6673,6 +6785,34 @@ components:
               - att_photo_001
             evidence_attachment_ids:
               - att_photo_001
+    AmusementMaintenanceRecordRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementMaintenanceRecordRequest"
+          example:
+            idempotency_key: amu_maint_20260618_000001
+            project_id: project_roller_coaster
+            device_id: device_kiosk_01
+            location_point_id: point_a01
+            maintenance_vendor_id: supplier_maint_01
+            engineer_id: engineer_001
+            engineer_name: 张工
+            maintenance_at: "2026-06-18T10:00:00+08:00"
+            result: pass
+            exception_note: ""
+            source_terminal: kiosk
+    AmusementMaintenanceResumeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementMaintenanceResumeRequest"
+          example:
+            idempotency_key: amu_maint_resume_20260618_000001
+            supervisor_confirmed_by: staff_supervisor_01
+            remark: 检修合格，确认恢复营业
     OfflinePaymentConfirmRequest:
       required: true
       content:
@@ -9608,6 +9748,94 @@ components:
         reason:
           type: string
           description: 操作原因；审批、撤销、退款、解绑、冲正、整改等高风险动作必须填写。
+          maxLength: 1000
+    AmusementMaintenanceRecordRequest:
+      type: object
+      description: 请求载荷 `AmusementMaintenanceRecordRequest`；提交游乐定期检修，检修单位/工程师/结果/异常说明/来源终端/点位结构化留痕（设计 §7.14a/§8.7.1）。
+      additionalProperties: false
+      required:
+        - project_id
+        - maintenance_vendor_id
+        - maintenance_at
+        - result
+        - source_terminal
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        project_id:
+          type: string
+          description: 项目唯一标识；必须引用当前数据范围内存在且允许访问的记录。
+          maxLength: 64
+        device_id:
+          type: string
+          description: 设备 ID（一体机/游乐设备），可为空。
+          maxLength: 128
+        location_point_id:
+          type: string
+          description: 点位 ID，可为空。
+          maxLength: 64
+        maintenance_vendor_id:
+          type: string
+          description: 检修单位，引用供应链供应商主数据（supplier_category ∈ {maintenance, service}）。
+          maxLength: 64
+        engineer_id:
+          type: string
+          description: 执行工程师 ID，可为空（外部工程师无账号时留空）。
+          maxLength: 64
+        engineer_name:
+          type: string
+          description: 工程师姓名（文本留痕，外部工程师场景必填）。
+          maxLength: 128
+        maintenance_at:
+          type: string
+          format: date-time
+          description: 检修时间。
+        result:
+          type: string
+          description: 检修结果；必须使用后端枚举取值。
+          enum:
+            - pass
+            - fail
+          maxLength: 16
+        exception_note:
+          type: string
+          description: 异常说明（result=fail 必填）。
+          maxLength: 2000
+        source_terminal:
+          type: string
+          description: 来源终端类型，取 D5 10 端枚举（一体机=kiosk，授权平板=tablet 等）。
+          enum:
+            - app
+            - miniapp
+            - web
+            - tablet
+            - staff_work_phone
+            - staff_private_phone
+            - merchant_portal
+            - merchant_app
+            - kiosk
+            - mobile_admin
+          maxLength: 32
+    AmusementMaintenanceResumeRequest:
+      type: object
+      description: 请求载荷 `AmusementMaintenanceResumeRequest`；主管确认恢复营业，result=pass 方可调用，触发 maintenance→open（设计 §5.1.1/§8.7.1）。
+      additionalProperties: false
+      required:
+        - supervisor_confirmed_by
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        supervisor_confirmed_by:
+          type: string
+          description: 主管确认人 ID（确认恢复营业的主管）。
+          maxLength: 64
+        remark:
+          type: string
+          description: 操作备注；用于解释主管确认判断，进入审计留痕。
           maxLength: 1000
     AmusementSafetyTemplateRequest:
       type: object

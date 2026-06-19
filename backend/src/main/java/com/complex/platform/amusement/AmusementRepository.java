@@ -105,4 +105,18 @@ public interface AmusementRepository {
     List<AmusementReservationRecord> listReservationsByMerchant(String merchantId);
 
     Optional<AmusementReservationRecord> findReservationById(String id);
+
+    AmusementMaintenanceRecord saveMaintenanceRecord(AmusementMaintenanceRecord record);
+
+    List<AmusementMaintenanceRecord> listMaintenanceRecords();
+
+    List<AmusementMaintenanceRecord> listMaintenanceRecordsByMerchant(String merchantId);
+
+    Optional<AmusementMaintenanceRecord> findMaintenanceRecordById(String id);
+
+    /**
+     * 联动项目 open_status（设计 §5.1.1：主管确认检修恢复后 maintenance → open）。
+     * 仅当当前 open_status 等于 expectedCurrentStatus 时更新，避免并发误流转；返回是否更新成功。
+     */
+    boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus);
 }
