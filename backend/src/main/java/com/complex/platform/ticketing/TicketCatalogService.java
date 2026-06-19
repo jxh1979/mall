@@ -41,6 +41,9 @@ public class TicketCatalogService {
                 actual.holidayPriceCent(),
                 actual.stockRequired() != null && actual.stockRequired(),
                 trimToDefault(actual.status(), "active"),
+                // R5 审计点②：validity_days 暂无创建入口（DTO 未扩展），保持 null=回退默认 1 天。
+                // 后续若需按票种配置有效期，再扩展 TicketTypeRequest + 此处赋值。
+                null,
                 now,
                 now
         ));
@@ -97,6 +100,11 @@ public class TicketCatalogService {
                 positiveOrDefault(actual.defaultTotalTimes(), 1, "default_total_times"),
                 nonNegativeOrDefault(actual.defaultValueCent(), 0L, "default_value_cent"),
                 trimToDefault(actual.status(), "active"),
+                // R5 审计点②：模板归属（merchant/venue/point）暂无创建入口（DTO 未扩展），保持 null。
+                // 为空时发放回退出票方商户；联合通票各模板归属配置入口为后续工作。
+                null,
+                null,
+                null,
                 now,
                 now
         ));
@@ -137,6 +145,7 @@ public class TicketCatalogService {
                 current.holidayPriceCent(),
                 current.stockRequired(),
                 "published",
+                current.validityDays(),
                 current.createdAt(),
                 now
         ));

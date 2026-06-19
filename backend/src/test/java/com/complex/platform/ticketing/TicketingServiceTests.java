@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1452,6 +1453,120 @@ class TicketingServiceTests {
         } finally {
             TestSecurityActors.clear();
         }
+    }
+
+    @Test
+    void unionPassEntitlementsInheritPerTemplateMerchantVenuePointNotIssuer() {
+        // R5 审计点②：联合通票两个模板分属商户 A/B，出票后两权益各归属各自模板（非出票方）。
+        TestSecurityActors.asMerchantUser("mch_issuer");
+        try {
+            Instant now = Instant.now();
+            ticketingRepository.saveTicketType(new TicketTypeRecord(
+                    "tt_union", "Union Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
+                    false, "published", null, now, now));
+            ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                    "tpl_a", "Entry A", "entry", 1, 9900L, "active",
+                    "mch_a", "venue_a", "gate_a", now, now));
+            ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                    "tpl_b", "Entry B", "entry", 1, 9900L, "active",
+                    "mch_b", "venue_b", "gate_b", now, now));
+            ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                    "link_a", "tt_union", "tpl_a", 1, 1, 9900L, "default", now, now));
+            ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                    "link_b", "tt_union", "tpl_b", 1, 1, 9900L, "default", now, now));
+
+            service.issueTicketTypeDirectly("tt_union", new TicketIssueRequest(
+                    "union-issue", "issue", List.of(), "order_union", "manual", List.of("qr")));
+
+            List<IssuedEntitlementRecord> issued = ticketingRepository.issuedEntitlements.values().stream()
+                    .filter(e -> "order_union".equals(e.orderId()))
+                    .toList();
+            assertThat(issued).hasSize(2);
+            assertThat(issued).filteredOn(e -> "tpl_a".equals(e.entitlementTemplateId()))
+                    .singleElement()
+                    .satisfies(e -> {
+                        assertThat(e.merchantId()).isEqualTo("mch_a");
+                        assertThat(e.venueId()).isEqualTo("venue_a");
+                        assertThat(e.pointId()).isEqualTo("gate_a");
+                    });
+            assertThat(issued).filteredOn(e -> "tpl_b".equals(e.entitlementTemplateId()))
+                    .singleElement()
+                    .satisfies(e -> {
+                        assertThat(e.merchantId()).isEqualTo("mch_b");
+                        assertThat(e.venueId()).isEqualTo("venue_b");
+                        assertThat(e.pointId()).isEqualTo("gate_b");
+                    });
+            // 不得统一为出票方 mch_issuer
+            assertThat(issued).extracting(IssuedEntitlementRecord::merchantId)
+                    .doesNotContain("mch_issuer");
+        } finally {
+            TestSecurityActors.clear();
+        }
+    }
+
+    @Test
+    void entitlementFallsBackToIssuerMerchantWhenTemplateMerchantNull() {
+        // R5 审计点②：模板 merchant_id 为空时回退出票方（向后兼容既有单模板票）。
+        TestSecurityActors.asMerchantUser("mch_issuer_fb");
+        try {
+            Instant now = Instant.now();
+            ticketingRepository.saveTicketType(new TicketTypeRecord(
+                    "tt_fb", "Single Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
+                    false, "published", null, now, now));
+            ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                    "tpl_fb", "Entry FB", "entry", 1, 9900L, "active",
+                    null, null, null, now, now));
+            ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                    "link_fb", "tt_fb", "tpl_fb", 1, 1, 9900L, "default", now, now));
+
+            service.issueTicketTypeDirectly("tt_fb", new TicketIssueRequest(
+                    "fb-issue", "issue", List.of(), "order_fb", "manual", List.of("qr")));
+
+            IssuedEntitlementRecord issued = ticketingRepository.issuedEntitlements.values().stream()
+                    .filter(e -> "order_fb".equals(e.orderId()))
+                    .findFirst().orElseThrow();
+            assertThat(issued.merchantId()).isEqualTo("mch_issuer_fb");
+            assertThat(issued.venueId()).isNull();
+            assertThat(issued.pointId()).isNull();
+        } finally {
+            TestSecurityActors.clear();
+        }
+    }
+
+    @Test
+    void validToUsesTicketTypeValidityDaysWithFallbackToOneDay() {
+        // R5 审计点②：票种 validity_days=30 → valid_to=now+30天；为空回退 now+1天。
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_v30", "30d Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
+                false, "published", 30, now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_v30", "Entry V30", "entry", 1, 9900L, "active", null, null, null, now, now));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_v30", "tt_v30", "tpl_v30", 1, 1, 9900L, "default", now, now));
+
+        Instant before30 = Instant.now();
+        service.issueTicketTypeDirectly("tt_v30", new TicketIssueRequest(
+                "v30-issue", "issue", List.of(), "order_v30", "manual", List.of("qr")));
+        IssuedEntitlementRecord ent30 = ticketingRepository.issuedEntitlements.values().stream()
+                .filter(e -> "order_v30".equals(e.orderId())).findFirst().orElseThrow();
+        long days30 = ChronoUnit.DAYS.between(ent30.validFrom(), ent30.validTo());
+        assertThat(days30).isEqualTo(30);
+        assertThat(ent30.validTo()).isAfter(before30.plus(29, ChronoUnit.DAYS));
+
+        // validity_days 为空 → 回退 1 天
+        ticketingRepository.saveTicketType(new TicketTypeRecord(
+                "tt_vnull", "Default Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
+                false, "published", null, now, now));
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_vnull", "Entry Vnull", "entry", 1, 9900L, "active", null, null, null, now, now));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
+                "link_vnull", "tt_vnull", "tpl_vnull", 1, 1, 9900L, "default", now, now));
+        service.issueTicketTypeDirectly("tt_vnull", new TicketIssueRequest(
+                "vnull-issue", "issue", List.of(), "order_vnull", "manual", List.of("qr")));
+        IssuedEntitlementRecord entNull = ticketingRepository.issuedEntitlements.values().stream()
+                .filter(e -> "order_vnull".equals(e.orderId())).findFirst().orElseThrow();
+        assertThat(ChronoUnit.SECONDS.between(entNull.validFrom(), entNull.validTo())).isEqualTo(86_400);
     }
 
     private TicketTypeRecord createTicketType(String key) {

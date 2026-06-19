@@ -36,6 +36,7 @@ final class JdbcTicketingRowMapper {
                 nullableLong(resultSet, "holiday_price_cent"),
                 resultSet.getBoolean("stock_required"),
                 resultSet.getString("status"),
+                nullableInteger(resultSet, "validity_days"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")
         );
@@ -49,6 +50,9 @@ final class JdbcTicketingRowMapper {
                 resultSet.getInt("default_total_times"),
                 resultSet.getLong("default_value_cent"),
                 resultSet.getString("status"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("venue_id"),
+                resultSet.getString("point_id"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")
         );
@@ -257,6 +261,11 @@ final class JdbcTicketingRowMapper {
 
     private Long nullableLong(ResultSet resultSet, String columnName) throws SQLException {
         long value = resultSet.getLong(columnName);
+        return resultSet.wasNull() ? null : value;
+    }
+
+    private Integer nullableInteger(ResultSet resultSet, String columnName) throws SQLException {
+        int value = resultSet.getInt(columnName);
         return resultSet.wasNull() ? null : value;
     }
 

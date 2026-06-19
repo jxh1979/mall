@@ -8,6 +8,7 @@ import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -174,12 +175,25 @@ public class TicketOrderService {
         if (bindings.isEmpty()) {
             throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED", "ticket type has no entitlement templates");
         }
+        // R5 审计点②：加载票种以读取有效期天数（此前未加载，valid_to 恒为 now+1 天）。
+        TicketTypeRecord ticketType = repository.findTicketTypeById(ticketTypeId)
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
         Instant now = Instant.now();
-        String merchantId = resolveMerchantId();
+        // R5 审计点②：有效期按票种 validity_days 计算；为空回退默认 1 天（向后兼容）。
+        Instant validTo = ticketType.validityDays() != null
+                ? now.plus(ticketType.validityDays(), ChronoUnit.DAYS)
+                : now.plusSeconds(86_400);
+        // 出票方商户，仅作为模板未配置归属时的回退（保证既有单模板票仍可用）。
+        String issuerMerchantId = resolveMerchantId();
         List<IssuedEntitlementResponse> responses = new ArrayList<>();
         for (TicketTypeEntitlementRecord binding : bindings) {
             EntitlementTemplateRecord template = repository.findEntitlementTemplateById(binding.entitlementTemplateId())
                     .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "entitlement template not found"));
+            // R5 审计点②：权益按各自模板归属（联合通票各模板可分属不同商户/场地/点位）。
+            // 模板 merchant_id 为空时回退出票方，venue/point 直接取模板（可空）。
+            String merchantId = template.merchantId() != null ? template.merchantId() : issuerMerchantId;
+            String venueId = template.venueId();
+            String pointId = template.pointId();
             for (int i = 0; i < binding.quantity(); i++) {
                 String entitlementCode = "P0-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
                 IssuedEntitlementRecord entitlement = new IssuedEntitlementRecord(
@@ -190,14 +204,14 @@ public class TicketOrderService {
                         template.id(),
                         template.entitlementType(),
                         merchantId,
-                        null,
-                        null,
+                        venueId,
+                        pointId,
                         binding.totalTimes(),
                         0,
                         binding.valueAmountCent(),
                         "active",
                         now,
-                        now.plusSeconds(86_400),
+                        validTo,
                         now,
                         now,
                         // R5 T5：核销人数。票种/binding(TicketTypeEntitlementRecord) 当前无人数字段（已 grep 确认），

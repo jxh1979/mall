@@ -28,6 +28,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("holiday_price_cent", ticketType.holidayPriceCent())
                 .addValue("stock_required", ticketType.stockRequired())
                 .addValue("status", ticketType.status())
+                .addValue("validity_days", ticketType.validityDays())
                 .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()));
     }
@@ -40,6 +41,9 @@ final class JdbcTicketingParameterSource {
                 .addValue("default_total_times", template.defaultTotalTimes())
                 .addValue("default_value_cent", template.defaultValueCent())
                 .addValue("status", template.status())
+                .addValue("merchant_id", template.merchantId())
+                .addValue("venue_id", template.venueId())
+                .addValue("point_id", template.pointId())
                 .addValue("created_at", timestampWithTimeZone(template.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(template.updatedAt()));
     }

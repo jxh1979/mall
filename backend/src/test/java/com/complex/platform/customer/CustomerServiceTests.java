@@ -116,6 +116,7 @@ class CustomerServiceTests {
                 12900L,
                 false,
                 "published",
+                null,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         )), 1, 50, 1));
