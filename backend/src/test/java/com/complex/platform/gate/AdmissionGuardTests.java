@@ -247,12 +247,73 @@ class AdmissionGuardTests {
     @Test
     void overSpacePassesThroughWhenObjectTypeNotResolvable() {
         // objectType 无 对象→空间 映射（resolveSpaceId 返回 empty）→ 放行，绝不阻断。
+        // ar_ap_item 等 finance/ticketing 对象无空间归属，V084 后仍不解析。
         when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
                 policy("over_space", "block", 2)));
         when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
-        when(factRepo.resolveSpaceId("bar_bill", "b1")).thenReturn(Optional.empty());
+        when(factRepo.resolveSpaceId("ar_ap_item", "a1")).thenReturn(Optional.empty());
+
+        assertThatCode(() -> guard.check("finance.locked_backfill", "ar_ap_item", "a1"))
+                .doesNotThrowAnyException();
+        verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void overSpaceBarBillResolvedAndLeasedPassesThrough() {
+        // V084：bar_bill 解析到 space（bar_bills.table_id→bar_tables.space_id），且在合同租赁内 → 放行。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("bar_bill", "b1")).thenReturn(Optional.of("sp_bar"));
+        when(factRepo.isOverSpaceForMerchant("m1", "sp_bar")).thenReturn(false);
 
         assertThatCode(() -> guard.check("bar.bill_waiver", "bar_bill", "b1")).doesNotThrowAnyException();
+        verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void overSpaceBarBillResolvedButNotLeasedBlocks() {
+        // V084：bar_bill 解析到 space 但不在合同租赁内 → 越界命中 → block。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("bar_bill", "b1")).thenReturn(Optional.of("sp_bar"));
+        when(factRepo.isOverSpaceForMerchant("m1", "sp_bar")).thenReturn(true);
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_bar_space"));
+
+        assertThatThrownBy(() -> guard.check("bar.bill_waiver", "bar_bill", "b1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+    }
+
+    @Test
+    void overSpaceAmusementInspectionResolvedButNotLeasedBlocks() {
+        // V084：inspection 经 project_id 解析到 amusement_projects.space_id，不在合同租赁内 → block。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("inspection", "ins1")).thenReturn(Optional.of("sp_amuse"));
+        when(factRepo.isOverSpaceForMerchant("m1", "sp_amuse")).thenReturn(true);
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_amuse_space"));
+
+        assertThatThrownBy(() -> guard.check("amusement.reopen", "inspection", "ins1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+    }
+
+    @Test
+    void overSpaceAmusementGroupBookingResolvedAndLeasedPassesThrough() {
+        // V084：amusement_group_booking 经 project_id 解析到 space，在合同租赁内 → 放行。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("amusement_group_booking", "gb1")).thenReturn(Optional.of("sp_amuse"));
+        when(factRepo.isOverSpaceForMerchant("m1", "sp_amuse")).thenReturn(false);
+
+        assertThatCode(() -> guard.check("amusement.group_booking_approve",
+                "amusement_group_booking", "gb1")).doesNotThrowAnyException();
         verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
     }
 

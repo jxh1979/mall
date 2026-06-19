@@ -32,8 +32,10 @@ import org.springframework.stereotype.Component;
  *       查 actor 商户的生效合同（approved + 日期覆盖今天）的 allowed_business_scope（V080），
  *       不含该业务域 → 命中；scope 为空 [] → 视为“未配置=不限”放行（保守不误伤，可后台收紧）；
  *       无生效合同 → 命中（与 expired 语义一致）。数据源 contracts（V010 + V080）。</li>
- *   <li><b>over_space</b>：先按 objectType 解析 objectId→space（当前仅
- *       {@code merchant_service_work_order}→merchant_service_work_orders.space_id 可解析，V022），
+ *   <li><b>over_space</b>：先按 objectType 解析 objectId→space（V084 扩大覆盖面：
+ *       {@code merchant_service_work_order}→work_orders.space_id（V022）；{@code bar_bill}→
+ *       bar_bills.table_id→bar_tables.space_id；{@code inspection}/{@code amusement_maintenance_record}/
+ *       {@code amusement_incident}/{@code amusement_group_booking}→各自 project_id→amusement_projects.space_id），
  *       再查该 space 是否在 actor 商户生效合同的 contract_spaces（V080）租赁内，不在 → 命中。
  *       objectType 不支持解析 / 解析不到 space → 放行（不阻断）。数据源 contract_spaces + contracts。</li>
  * </ul>

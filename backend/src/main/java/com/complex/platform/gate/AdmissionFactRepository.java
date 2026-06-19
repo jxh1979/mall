@@ -69,12 +69,19 @@ public interface AdmissionFactRepository {
     /**
      * 按 objectType/objectId 解析对象所属空间 id（over_space 用）。
      *
-     * <p>当前仅支持有直连 space_id 列的对象类型：</p>
+     * <p>已支持解析的受控对象类型（V084 扩大覆盖面）：</p>
      * <ul>
-     *   <li>{@code merchant_service_work_order} → merchant_service_work_orders.space_id（V022）。</li>
+     *   <li>{@code merchant_service_work_order} → merchant_service_work_orders.space_id（V022 直连）。</li>
+     *   <li>{@code bar_bill}（objectId=bill_id）→ bar_bills.table_id → bar_tables.space_id（V084 多级）。</li>
+     *   <li>{@code inspection} → amusement_safety_inspections.project_id → amusement_projects.space_id（V084）。</li>
+     *   <li>{@code amusement_maintenance_record} → amusement_maintenance_record.project_id → amusement_projects.space_id（V084）。</li>
+     *   <li>{@code amusement_incident} → amusement_incidents.project_id → amusement_projects.space_id（V084）。</li>
+     *   <li>{@code amusement_group_booking} → amusement_group_bookings.project_id → amusement_projects.space_id（V084）。</li>
      * </ul>
-     * <p>其余对象类型（bar_bill / amusement_* / inspection / verification / ticket_* / finance_* /
-     * ar_ap_* 等）无 对象→空间 直连映射 → 返回 empty（无法解析 → over_space 放行）。</p>
+     * <p>仍未支持（无可用 对象→空间 映射或无 objectId）→ 返回 empty（无法解析 → over_space 放行）：
+     * {@code amusement_manual_override}（写接口首参非 String，objectId=null）、ticketing（verification /
+     * ticket_refund / ticket_dynamic_pricing_rule）、finance（ar_ap_item / finance_refund / ...）、
+     * inventory（saved_bottle / inventory_stock_adjustment）等无空间归属或非空间受控的对象。</p>
      *
      * @param objectType 受控对象类型（GuardedAction.objectType）
      * @param objectId   受控对象 id

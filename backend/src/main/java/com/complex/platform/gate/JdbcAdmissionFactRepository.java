@@ -121,10 +121,49 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
         if (objectType == null || objectType.isBlank() || objectId == null || objectId.isBlank()) {
             return Optional.empty();
         }
-        // 仅支持有直连 space_id 列的对象类型；其余无 对象→空间 映射 → empty（放行）。
+        // 已支持解析的受控 objectType（解析到 space → over_space 真实判定）：
+        //   - merchant_service_work_order：直连 merchant_service_work_orders.space_id（V022）。
+        //   - bar_bill：objectId=bill_id → bar_bills.table_id → bar_tables.space_id（V084 多级解析）。
+        //   - inspection / amusement_maintenance_record / amusement_incident / amusement_group_booking：
+        //     objectId → 各表 project_id → amusement_projects.space_id（V084）。
+        // 仍未支持（无可用 对象→空间 映射或无 objectId）→ empty（放行，over_space 不阻断）：
+        //   - amusement_manual_override（写接口首参非 String，objectId=null，无法解析）。
+        //   - amusement_project / amusement_session（当前无受控 over_space 动作直传，未接入）。
+        //   - finance_*（ar_ap_item/finance_refund/...）/ ticketing_*（ticket_refund/verification/...）/
+        //     inventory_*（saved_bottle/inventory_stock_adjustment）：业务对象无空间归属或非空间受控，不解析。
         String sql = switch (objectType) {
             case "merchant_service_work_order" ->
                     "SELECT space_id FROM merchant_service_work_orders WHERE id = :object_id";
+            case "bar_bill" -> """
+                    SELECT t.space_id
+                      FROM bar_bills b
+                      JOIN bar_tables t ON t.id = b.table_id
+                     WHERE b.id = :object_id
+                    """;
+            case "inspection" -> """
+                    SELECT p.space_id
+                      FROM amusement_safety_inspections i
+                      JOIN amusement_projects p ON p.id = i.project_id
+                     WHERE i.id = :object_id
+                    """;
+            case "amusement_maintenance_record" -> """
+                    SELECT p.space_id
+                      FROM amusement_maintenance_record m
+                      JOIN amusement_projects p ON p.id = m.project_id
+                     WHERE m.id = :object_id
+                    """;
+            case "amusement_incident" -> """
+                    SELECT p.space_id
+                      FROM amusement_incidents inc
+                      JOIN amusement_projects p ON p.id = inc.project_id
+                     WHERE inc.id = :object_id
+                    """;
+            case "amusement_group_booking" -> """
+                    SELECT p.space_id
+                      FROM amusement_group_bookings g
+                      JOIN amusement_projects p ON p.id = g.project_id
+                     WHERE g.id = :object_id
+                    """;
             default -> null;
         };
         if (sql == null) {
