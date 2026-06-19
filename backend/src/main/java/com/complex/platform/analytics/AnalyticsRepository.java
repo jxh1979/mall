@@ -83,6 +83,13 @@ public interface AnalyticsRepository {
     Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate);
 
     /**
+     * 待确认#2：Σ bar_bill_adjustments.amount_cent（adjustment_type='refund'）——酒吧结账后退款；
+     * 按 refunded_at 落经营日窗口，返回 merchantId(可 null) -> 退款金额。退款冲减 net（revenue.bar 不被改写，
+     * 单列 revenue.bar_refund 展示并由净收入派生时扣减）；免单 waiver 不计入（已体现在更低结算实收）。
+     */
+    Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate);
+
+    /**
      * 待确认项#1：通票售票收入的"业态拆分展示口径"——按 issued_entitlements.allocated_revenue_cent
      * 汇总当日发放的、业态映射到酒吧的权益分配收入；返回 merchantId(可 null) -> 金额。
      * 仅作展示（revenue.ticket_bar_share），不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，

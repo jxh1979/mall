@@ -328,6 +328,13 @@
       "note": "V062 A3: 结算渠道统一词表（与 finance 对账归并）；现金/POS 发 payment.cash_received/pos_received 事件"
     },
     {
+      "req": "REQ-21",
+      "table": "bar_bill_adjustments",
+      "column": "refunded_at",
+      "expected": "present",
+      "note": "待确认#2 V079: 酒吧账单免单(waiver)/退款(refund)减项机制。chk_bar_bill_adjustment_type 扩 {waiver,refund}；refunded_at 仅 refund 落值（结账后退款时点）。口径区分：waiver 结账前减应付→结算本就更低，不计 net 退款冲减；refund 结账后退钱→按 refunded_at 落经营日窗口聚合冲减当日 net（finance aggregateBar.refund_cent + analytics revenue.bar_refund）。权限 bar.bill.refund，复用 bar.bill_waiver 准入门"
+    },
+    {
       "req": "REQ-06",
       "table": "ticket_credentials",
       "column": "anti_fake_code_hash",

@@ -18,6 +18,7 @@ public record BarBillAdjustmentRecord(
         List<String> evidenceAttachmentIds,
         String arApItemId,
         String snapshotJson,
-        Instant createdAt
+        Instant createdAt,
+        Instant refundedAt
 ) {
 }

@@ -89,14 +89,15 @@ final class JdbcBarBillingRepository {
                     id, bill_id, adjustment_type, amount_cent,
                     before_payable_amount_cent, after_payable_amount_cent,
                     reason, requested_by_user_id, approval_required, status,
-                    idempotency_key, evidence_attachment_ids, ar_ap_item_id, snapshot_json, created_at
+                    idempotency_key, evidence_attachment_ids, ar_ap_item_id, snapshot_json,
+                    created_at, refunded_at
                 )
                 VALUES (
                     :id, :bill_id, :adjustment_type, :amount_cent,
                     :before_payable_amount_cent, :after_payable_amount_cent,
                     :reason, :requested_by_user_id, :approval_required, :status,
                     :idempotency_key, CAST(:evidence_attachment_ids AS jsonb),
-                    :ar_ap_item_id, CAST(:snapshot_json AS jsonb), :created_at
+                    :ar_ap_item_id, CAST(:snapshot_json AS jsonb), :created_at, :refunded_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     amount_cent = EXCLUDED.amount_cent,
@@ -108,7 +109,8 @@ final class JdbcBarBillingRepository {
                     status = EXCLUDED.status,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
                     ar_ap_item_id = EXCLUDED.ar_ap_item_id,
-                    snapshot_json = EXCLUDED.snapshot_json
+                    snapshot_json = EXCLUDED.snapshot_json,
+                    refunded_at = EXCLUDED.refunded_at
                 """, parameterSource.billAdjustmentParameters(adjustment));
         return adjustment;
     }
@@ -118,7 +120,8 @@ final class JdbcBarBillingRepository {
                 SELECT id, bill_id, adjustment_type, amount_cent,
                        before_payable_amount_cent, after_payable_amount_cent,
                        reason, requested_by_user_id, approval_required, status,
-                       idempotency_key, evidence_attachment_ids, ar_ap_item_id, snapshot_json, created_at
+                       idempotency_key, evidence_attachment_ids, ar_ap_item_id, snapshot_json,
+                       created_at, refunded_at
                   FROM bar_bill_adjustments
                  WHERE bill_id = :bill_id
                  ORDER BY created_at, id

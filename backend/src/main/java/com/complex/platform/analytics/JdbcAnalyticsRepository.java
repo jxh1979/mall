@@ -408,6 +408,24 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate) {
+        // 待确认#2：酒吧结账后退款（adjustment_type='refund'）按 refunded_at 落经营日窗口，经 bar_bills 取 merchant_id。
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT b.merchant_id AS merchant_id, COALESCE(SUM(a.amount_cent), 0) AS total
+                  FROM bar_bill_adjustments a
+                  JOIN bar_bills b ON b.id = a.bill_id
+                 WHERE a.adjustment_type = 'refund'
+                   AND a.refunded_at >= :start
+                   AND a.refunded_at < :end
+                 GROUP BY b.merchant_id
+                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
+        );
+        return result;
+    }
+
+    @Override
     public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate) {
         // 待确认项#1：当日发放（created_at 落经营日窗口）、业态映射到酒吧的权益分配收入按商户汇总（展示口径）。
         // 业态归属映射：drink/gift_drink/bar_* → 酒吧（与 ticket_amusement_share 互斥，避免重复）。

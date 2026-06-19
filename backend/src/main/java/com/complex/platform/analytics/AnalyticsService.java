@@ -58,6 +58,7 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_TICKET, "finance", "cent", true,
                     "ticket_orders has no merchant_id; merchant-scoped value not available"),
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_BAR, "bar", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.REVENUE_BAR_REFUND, "bar", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.TRAFFIC_AMUSEMENT, "amusement", "count", true,
                     "amusement_verifications has no merchant_id; merchant-scoped value not available"),
             new MetricCatalogEntry(DashboardAggregationJob.VERIFY_DONE, "ticketing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),

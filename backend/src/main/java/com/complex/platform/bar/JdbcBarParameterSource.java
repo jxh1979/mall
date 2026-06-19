@@ -239,7 +239,8 @@ final class JdbcBarParameterSource {
                 .addValue("evidence_attachment_ids", writeJson(adjustment.evidenceAttachmentIds()))
                 .addValue("ar_ap_item_id", adjustment.arApItemId())
                 .addValue("snapshot_json", adjustment.snapshotJson() == null ? "{}" : adjustment.snapshotJson())
-                .addValue("created_at", timestampWithTimeZone(adjustment.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(adjustment.createdAt()))
+                .addValue("refunded_at", timestampWithTimeZone(adjustment.refundedAt()));
     }
 
     MapSqlParameterSource billOperationParameters(BarBillOperationRecord operation) {

@@ -357,7 +357,8 @@ class BarControllerTests {
                 List.of("att_1"),
                 "arap_1",
                 "{}",
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null
         );
     }
 

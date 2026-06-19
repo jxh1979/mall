@@ -30,6 +30,7 @@ public class DashboardAggregationJob {
     // 七类 metric_code（与聚合草案 §2 对齐）。
     static final String REVENUE_TICKET = "revenue.ticket";      // 收入
     static final String REVENUE_BAR = "revenue.bar";            // 收入
+    static final String REVENUE_BAR_REFUND = "revenue.bar_refund"; // 收入·酒吧退款（冲减 net，待确认#2）
     // 待确认项#1：通票售票收入的业态拆分展示口径（不并入 net，仅展示）。
     static final String REVENUE_TICKET_BAR_SHARE = "revenue.ticket_bar_share";             // 收入·通票酒吧分摊
     static final String REVENUE_TICKET_AMUSEMENT_SHARE = "revenue.ticket_amusement_share"; // 收入·通票游乐分摊
@@ -75,6 +76,10 @@ public class DashboardAggregationJob {
         // 收入·酒吧：bar_bill_settlements 有 merchant_id → 平台 + 商户口径。
         // 硬约束：revenue.bar 仅取现场消费实收（bar_bill_settlements），不含通票售票分摊，保证净收入口径不重复。
         upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate), now);
+
+        // 收入·酒吧退款（待确认#2）：bar_bill_adjustments(adjustment_type='refund') 按 refunded_at 落经营日窗口，
+        // 单列 revenue.bar_refund（不改写 revenue.bar 实收口径），net 派生时扣减；免单 waiver 不计入（已在更低结算实收体现）。
+        upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate), now);
 
         // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"

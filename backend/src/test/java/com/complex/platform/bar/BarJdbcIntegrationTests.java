@@ -33,6 +33,70 @@ class BarJdbcIntegrationTests {
     @Autowired
     private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.finance.FinanceRepository financeRepository;
+
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDayResolver;
+
+    @Test
+    void aggregateBarRefundCentSumsRefundAdjustmentsWithinBusinessDayWindowAndExcludesWaiver() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveTable(new BarTableRecord(
+                "table_refund_jdbc", "bar_jdbc", null, "T-REFUND", "Refund JDBC", "card_seat",
+                6, 2, 50000L, "CNY", "active", now, now));
+        repository.saveOrder(new BarOrderRecord(
+                "order_refund_jdbc", "bar_jdbc", null, "table_refund_jdbc", null, "customer_jdbc",
+                "staff", "created", 128800L, "CNY", "web", "device_1", "staff_sales", now, now));
+        repository.saveBill(new BarBillRecord(
+                "bill_refund_window_jdbc", "BILL-REFUND-WINDOW", "order_refund_jdbc", "bar_jdbc", null,
+                "table_refund_jdbc", null, 128800L, 0L, 0L, 128800L, 0L, "CNY", "paid", "settled",
+                "staff_sales", "sales", now, now));
+
+        LocalDate businessDate = LocalDate.parse("2026-06-18");
+        Instant from = businessDayResolver.startInstant(businessDate);
+        Instant to = businessDayResolver.endInstant(businessDate);
+
+        // 窗口内退款（10:00）计入 refund_cent；窗口外退款（03:00，归前一经营日）不计入；waiver 永不计入。
+        saveBarAdjustment("refund_in", "bill_refund_window_jdbc", "refund", 5000L,
+                Instant.parse("2026-06-18T10:00:00Z"));
+        saveBarAdjustment("refund_out", "bill_refund_window_jdbc", "refund", 9999L,
+                Instant.parse("2026-06-18T03:00:00Z"));
+        saveBarAdjustment("waiver_in", "bill_refund_window_jdbc", "waiver", 7000L, null);
+
+        com.complex.platform.finance.FinanceRepository.DailyCloseSourceTotals totals =
+                financeRepository.aggregateBar(businessDate, from, to);
+        assertThat(totals.refundCent()).isEqualTo(5000L);
+    }
+
+    private void saveBarAdjustment(String id, String billId, String type, long amount, Instant refundedAt) {
+        repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                "bill_adj_" + id, billId, type, amount, 128800L, 128800L - amount,
+                type + " reason", "finance_1", true, "applied", "key_" + id,
+                List.of(), null, "{}", Instant.parse("2026-06-18T10:00:00Z"), refundedAt));
+    }
+
+    @Test
+    void barBillAdjustmentTypeCheckRejectsIllegalEnum() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveTable(new BarTableRecord(
+                "table_bad_enum_jdbc", "bar_jdbc", null, "T-BAD-ENUM", "Bad Enum JDBC", "card_seat",
+                6, 2, 50000L, "CNY", "active", now, now));
+        repository.saveOrder(new BarOrderRecord(
+                "order_bad_enum_jdbc", "bar_jdbc", null, "table_bad_enum_jdbc", null, "customer_jdbc",
+                "staff", "created", 128800L, "CNY", "web", "device_1", "staff_sales", now, now));
+        repository.saveBill(new BarBillRecord(
+                "bill_bad_enum_jdbc", "BILL-BAD-ENUM", "order_bad_enum_jdbc", "bar_jdbc", null,
+                "table_bad_enum_jdbc", null, 128800L, 0L, 0L, 128800L, 0L, "CNY", "unpaid", "unsettled",
+                "staff_sales", "sales", now, now));
+
+        assertThatThrownBy(() -> repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                "bill_adj_bad_enum", "bill_bad_enum_jdbc", "bogus_type", 1L, 128800L, 128799L,
+                "illegal type", "finance_1", true, "applied", "key_bad_enum",
+                List.of(), null, "{}", now, null)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
     @Test
     void migrationCreatesBarTablesAndSeedsPermissions() {
         assertThat(regclass("bar_tables")).isEqualTo("bar_tables");
@@ -328,7 +392,8 @@ class BarJdbcIntegrationTests {
                 List.of("att_service_fee"),
                 "arap_jdbc",
                 "{\"payable_before\":118800,\"payable_after\":131680}",
-                now
+                now,
+                null
         ));
         assertThat(repository.listBillAdjustments("bill_jdbc"))
                 .extracting(
@@ -339,6 +404,56 @@ class BarJdbcIntegrationTests {
                         BarBillAdjustmentRecord::arApItemId
                 )
                 .contains(tuple("bill_adjustment_jdbc", "service_fee", 12880L, 131680L, "arap_jdbc"));
+        // 待确认#2：CHECK 接受 waiver（减项，无 refunded_at）与 refund（减项，带 refunded_at）。
+        repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                "bill_waiver_jdbc",
+                "bill_jdbc",
+                "waiver",
+                10000L,
+                131680L,
+                121680L,
+                "goodwill waiver",
+                "supervisor_1",
+                true,
+                "applied",
+                "bill-waiver-jdbc",
+                List.of("att_waiver"),
+                null,
+                "{}",
+                now,
+                null
+        ));
+        Instant refundedAt = Instant.parse("2026-06-14T05:00:00Z");
+        repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                "bill_refund_jdbc",
+                "bill_jdbc",
+                "refund",
+                20000L,
+                121680L,
+                101680L,
+                "post-settlement refund",
+                "finance_1",
+                true,
+                "applied",
+                "bill-refund-jdbc",
+                List.of("att_refund"),
+                null,
+                "{}",
+                now,
+                refundedAt
+        ));
+        assertThat(repository.listBillAdjustments("bill_jdbc"))
+                .filteredOn(a -> "refund".equals(a.adjustmentType()))
+                .extracting(
+                        BarBillAdjustmentRecord::id,
+                        BarBillAdjustmentRecord::amountCent,
+                        BarBillAdjustmentRecord::refundedAt
+                )
+                .containsExactly(tuple("bill_refund_jdbc", 20000L, refundedAt));
+        assertThat(repository.listBillAdjustments("bill_jdbc"))
+                .filteredOn(a -> "waiver".equals(a.adjustmentType()))
+                .extracting(BarBillAdjustmentRecord::refundedAt)
+                .containsExactly((Instant) null);
         repository.saveBill(new BarBillRecord(
                 "bill_split_jdbc",
                 "BILL-JDBC-001-S1",

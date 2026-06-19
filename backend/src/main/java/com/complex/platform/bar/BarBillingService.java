@@ -165,10 +165,16 @@ public class BarBillingService {
         BarBillRecord bill = repository.findBillById(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
         checkMerchantOwnership(bill.merchantId());
-        if ("settled".equals(bill.settlementStatus())) {
+        String type = requireText(actual.adjustmentType(), "adjustment_type");
+        boolean settled = "settled".equals(bill.settlementStatus());
+        // refund（退款）是结账后操作，必须在已结算账单上执行；其余调整（加项/免单/挂账）只能在未结算前执行。
+        if ("refund".equals(type)) {
+            if (!settled) {
+                throw ApiException.conflict("BAR_BILL_NOT_REFUNDABLE", "only a settled bar bill can be refunded");
+            }
+        } else if (settled) {
             throw ApiException.conflict("BAR_BILL_NOT_ADJUSTABLE", "settled bar bill cannot be adjusted");
         }
-        String type = requireText(actual.adjustmentType(), "adjustment_type");
         String reason = requireText(actual.reason(), "reason");
         String requestedBy = authorizationService.currentActor().id();
         long beforePayable = bill.payableAmountCent();
@@ -177,9 +183,27 @@ public class BarBillingService {
         String arApItemId = null;
         String paymentStatus = bill.paymentStatus();
         String settlementStatus = bill.settlementStatus();
+        Instant refundedAt = null;
         if ("service_fee".equals(type) || "min_spend_top_up".equals(type)) {
             amount = positive(actual.amountCent(), "amount_cent");
             afterPayable = beforePayable + amount;
+        } else if ("waiver".equals(type)) {
+            // 免单/减免：结账前减应付。后续结算金额本就更低 → 不作为独立 net 冲减（已体现在更低实收）。
+            amount = positive(actual.amountCent(), "amount_cent");
+            if (amount > beforePayable) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "waiver amount cannot exceed payable amount");
+            }
+            afterPayable = beforePayable - amount;
+        } else if ("refund".equals(type)) {
+            // 退款：结账后退钱，需独立高危权限（区别于结账前 bar.bill.adjust）。
+            authorizationService.requirePermission("bar.bill.refund");
+            // 记退款时点，聚合按 refunded_at 落经营日窗口冲减当日 net。
+            amount = positive(actual.amountCent(), "amount_cent");
+            if (amount > beforePayable) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "refund amount cannot exceed payable amount");
+            }
+            afterPayable = beforePayable - amount;
+            refundedAt = Instant.now();
         } else if ("on_account".equals(type)) {
             if (amount != 0L) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "on_account amount_cent must be zero");
@@ -229,7 +253,8 @@ public class BarBillingService {
                 safeList(actual.evidenceAttachmentIds()),
                 arApItemId,
                 billAdjustmentSnapshot(bill, afterPayable, paymentStatus, settlementStatus, arApItemId),
-                now
+                now,
+                refundedAt
         ));
     }
 

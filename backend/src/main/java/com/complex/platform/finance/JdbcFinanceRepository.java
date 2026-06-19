@@ -447,14 +447,24 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public DailyCloseSourceTotals aggregateBar(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
         // 酒吧：bar_bill_settlements 已结算（settle_channel 全计），以 settled_at 落在经营日窗口 [from, to) 归集；
-        // 金额=结算分，count=结算笔数。（酒吧侧无独立退款表，bar_bill_adjustments 为加项/挂账，故 refund 暂为 0。）
+        // 金额=结算分，count=结算笔数。
+        // 退款（待确认#2）：bar_bill_adjustments 中 adjustment_type='refund'（结账后退款减项）按 refunded_at
+        //   落经营日窗口 [from, to) 合计为 refund_cent，冲减当日 net。
+        //   免单 waiver 不计入 refund_cent——免单在结账前已减应付、结算金额本就更低，避免与低结算重复冲减。
         return aggregateTotals("""
-                SELECT COALESCE(SUM(settlement_amount_cent), 0) AS amount_cent,
-                       0 AS refund_cent,
-                       COUNT(*) AS order_count
-                  FROM bar_bill_settlements
-                 WHERE settled_at >= :from
-                   AND settled_at < :to
+                SELECT (SELECT COALESCE(SUM(settlement_amount_cent), 0)
+                          FROM bar_bill_settlements
+                         WHERE settled_at >= :from
+                           AND settled_at < :to) AS amount_cent,
+                       (SELECT COALESCE(SUM(amount_cent), 0)
+                          FROM bar_bill_adjustments
+                         WHERE adjustment_type = 'refund'
+                           AND refunded_at >= :from
+                           AND refunded_at < :to) AS refund_cent,
+                       (SELECT COUNT(*)
+                          FROM bar_bill_settlements
+                         WHERE settled_at >= :from
+                           AND settled_at < :to) AS order_count
                 """, businessDate, fromInclusive, toExclusive);
     }
 

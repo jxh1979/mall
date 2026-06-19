@@ -3,7 +3,9 @@ package com.complex.platform.bar;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AuthorizationService;
@@ -48,7 +50,9 @@ class BarServiceTests {
         barRepository = new InMemoryBarRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
         receivableLedgerService = new CapturingBarReceivableLedgerService();
-        authorizationService = new AuthorizationService(mock(AccessRepository.class));
+        AccessRepository accessRepository = mock(AccessRepository.class);
+        when(accessRepository.permissionExists(anyString())).thenReturn(true);
+        authorizationService = new AuthorizationService(accessRepository);
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
@@ -1305,6 +1309,115 @@ class BarServiceTests {
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void waiverReducesPayableBeforeSettlementAndDoesNotRecordRefundTimestamp() {
+        BarBillRecord bill = billForOrder("waiver-pre-settle", "staff_sales");
+
+        BarBillAdjustmentRecord adjustment = service.applyBillAdjustment(
+                bill.id(),
+                new BarBillAdjustmentRequest(
+                        "bill-adjust-waiver",
+                        "waive part of the bill",
+                        List.of("att_waiver"),
+                        "waiver",
+                        28800L,
+                        "goodwill waiver before checkout",
+                        "supervisor_1"
+                )
+        );
+
+        // 免单是结账前减项：after = before - amount；refundedAt 为空（不计入 net 退款冲减）。
+        assertThat(adjustment)
+                .extracting(
+                        BarBillAdjustmentRecord::adjustmentType,
+                        BarBillAdjustmentRecord::amountCent,
+                        BarBillAdjustmentRecord::beforePayableAmountCent,
+                        BarBillAdjustmentRecord::afterPayableAmountCent,
+                        BarBillAdjustmentRecord::status,
+                        BarBillAdjustmentRecord::refundedAt
+                )
+                .containsExactly("waiver", 28800L, 128800L, 100000L, "applied", null);
+        assertThat(barRepository.findBillById(bill.id()))
+                .get()
+                .extracting(BarBillRecord::payableAmountCent, BarBillRecord::paymentStatus, BarBillRecord::settlementStatus)
+                .containsExactly(100000L, "unpaid", "unsettled");
+    }
+
+    @Test
+    void waiverRejectsAmountExceedingPayable() {
+        BarBillRecord bill = billForOrder("waiver-too-big", "staff_sales");
+
+        assertThatThrownBy(() -> service.applyBillAdjustment(
+                bill.id(),
+                new BarBillAdjustmentRequest(
+                        "bill-adjust-waiver-too-big",
+                        "waive more than payable",
+                        List.of(),
+                        "waiver",
+                        128801L,
+                        "cannot waive beyond payable",
+                        "supervisor_1"
+                )
+        ))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void refundReducesPayableAfterSettlementAndRecordsRefundTimestamp() {
+        BarBillRecord bill = billForOrder("refund-post-settle", "staff_sales");
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-for-refund", "settle before refund", List.of(),
+                "pay_for_refund", null, "aggregate_pay", null, null));
+
+        BarBillAdjustmentRecord adjustment = service.applyBillAdjustment(
+                bill.id(),
+                new BarBillAdjustmentRequest(
+                        "bill-adjust-refund",
+                        "refund part of settled bill",
+                        List.of("att_refund"),
+                        "refund",
+                        30000L,
+                        "customer complaint refund after checkout",
+                        "finance_1"
+                )
+        );
+
+        // 退款是结账后减项：记录 refundedAt（用于经营日窗口聚合冲减 net）。
+        assertThat(adjustment)
+                .extracting(
+                        BarBillAdjustmentRecord::adjustmentType,
+                        BarBillAdjustmentRecord::amountCent,
+                        BarBillAdjustmentRecord::beforePayableAmountCent,
+                        BarBillAdjustmentRecord::afterPayableAmountCent,
+                        BarBillAdjustmentRecord::status
+                )
+                .containsExactly("refund", 30000L, 128800L, 98800L, "applied");
+        assertThat(adjustment.refundedAt()).isNotNull();
+    }
+
+    @Test
+    void refundRejectsUnsettledBill() {
+        BarBillRecord bill = billForOrder("refund-unsettled", "staff_sales");
+
+        assertThatThrownBy(() -> service.applyBillAdjustment(
+                bill.id(),
+                new BarBillAdjustmentRequest(
+                        "bill-adjust-refund-unsettled",
+                        "refund before settle",
+                        List.of(),
+                        "refund",
+                        1000L,
+                        "cannot refund an unsettled bill",
+                        "finance_1"
+                )
+        ))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_BILL_NOT_REFUNDABLE");
     }
 
     @Test

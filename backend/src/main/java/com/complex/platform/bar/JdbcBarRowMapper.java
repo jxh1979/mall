@@ -245,7 +245,8 @@ final class JdbcBarRowMapper {
                 readStringList(resultSet.getString("evidence_attachment_ids")),
                 resultSet.getString("ar_ap_item_id"),
                 resultSet.getString("snapshot_json"),
-                nullableInstant(resultSet, "created_at")
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "refunded_at")
         );
     }
 

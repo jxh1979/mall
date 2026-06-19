@@ -155,7 +155,8 @@ class AnalyticsServiceTests {
 
         var barDomain = service.dashboardDomain("bar", Optional.of("merchant_a"));
 
-        assertThat(barDomain.metrics()).containsOnlyKeys("revenue.bar");
+        // bar 域含现场消费实收（revenue.bar）与结账后退款冲减（revenue.bar_refund，待确认#2）。
+        assertThat(barDomain.metrics()).containsOnlyKeys("revenue.bar", "revenue.bar_refund");
         assertThat(barDomain.metrics().get("revenue.bar").value()).isEqualByComparingTo("5000");
     }
 
@@ -784,6 +785,11 @@ class AnalyticsServiceTests {
 
         @Override
         public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate) {
             return Map.of();
         }
 
