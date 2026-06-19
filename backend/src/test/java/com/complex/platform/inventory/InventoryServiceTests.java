@@ -46,6 +46,7 @@ class InventoryServiceTests {
     private InMemoryInventoryRepository inventoryRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private AuthorizationService authorizationService;
+    private com.complex.platform.terminal.TerminalDeviceRepository terminalDeviceRepository;
     private InventoryService service;
 
     private static final AccessActor ADMIN_ACTOR =
@@ -63,11 +64,21 @@ class InventoryServiceTests {
         // 默认：平台管理员视角——看全部，写入时 merchantId = null
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
+        terminalDeviceRepository = mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
+        // 默认：无显式开关行 → opt-out 语义放行（机器人段被动留痕允许）。
+        when(terminalDeviceRepository.resolveEffectiveSwitch(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyMap())).thenReturn(Optional.empty());
+        com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard =
+                new com.complex.platform.gate.TerminalSwitchGuard(
+                        terminalDeviceRepository, new AuditEventService(auditEventRepository));
         service = new InventoryService(
                 inventoryRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                authorizationService
+                authorizationService,
+                terminalSwitchGuard
         );
     }
 
@@ -794,6 +805,10 @@ class InventoryServiceTests {
         private final List<StockAdjustmentRecord> stockAdjustments = new ArrayList<>();
         final List<SavedBottleClaimRecord> savedBottleClaims = new ArrayList<>();
         private final List<TraceHandoverRecord> traceHandovers = new ArrayList<>();
+        final Map<String, TraceHandoverRecord> traceHandoverHeaders = new LinkedHashMap<>();
+        final Map<String, TraceHandoverStepRecord> traceHandoverSteps = new LinkedHashMap<>();
+        final Map<String, TraceHandoverExceptionRecord> traceHandoverExceptions = new LinkedHashMap<>();
+        final List<Map<String, Object>> robotTaskEvents = new ArrayList<>();
 
         @Override
         public InventoryItemRecord saveInventoryItem(InventoryItemRecord item) {
@@ -1035,8 +1050,57 @@ class InventoryServiceTests {
 
         @Override
         public TraceHandoverRecord saveTraceHandover(TraceHandoverRecord handover) {
+            traceHandovers.removeIf(h -> h.id().equals(handover.id()));
             traceHandovers.add(handover);
+            traceHandoverHeaders.put(handover.id(), handover);
             return handover;
+        }
+
+        @Override
+        public Optional<TraceHandoverRecord> findTraceHandoverByIdForUpdate(String id) {
+            return Optional.ofNullable(traceHandoverHeaders.get(id));
+        }
+
+        @Override
+        public List<TraceHandoverStepRecord> listTraceHandoverSteps(String handoverId) {
+            return traceHandoverSteps.values().stream()
+                    .filter(s -> s.handoverId().equals(handoverId))
+                    .sorted(java.util.Comparator.comparingInt(TraceHandoverStepRecord::seq))
+                    .toList();
+        }
+
+        @Override
+        public Optional<TraceHandoverStepRecord> findTraceHandoverStep(String handoverId, String segment) {
+            return traceHandoverSteps.values().stream()
+                    .filter(s -> s.handoverId().equals(handoverId) && s.segment().equals(segment))
+                    .findFirst();
+        }
+
+        @Override
+        public TraceHandoverStepRecord saveTraceHandoverStep(TraceHandoverStepRecord step) {
+            traceHandoverSteps.put(step.id(), step);
+            return step;
+        }
+
+        @Override
+        public TraceHandoverExceptionRecord saveTraceHandoverException(TraceHandoverExceptionRecord exception) {
+            traceHandoverExceptions.put(exception.id(), exception);
+            return exception;
+        }
+
+        @Override
+        public Optional<TraceHandoverExceptionRecord> findTraceHandoverExceptionByIdForUpdate(String id) {
+            return Optional.ofNullable(traceHandoverExceptions.get(id));
+        }
+
+        @Override
+        public void saveRobotTaskEvent(
+                String id, String robotTaskRef, String eventType, String handoverId, String payloadJson, Instant reportedAt) {
+            robotTaskEvents.add(Map.of(
+                    "id", id,
+                    "robot_task_ref", robotTaskRef == null ? "" : robotTaskRef,
+                    "event_type", eventType == null ? "" : eventType,
+                    "handover_id", handoverId == null ? "" : handoverId));
         }
 
         private String balanceKey(String itemId, String locationId) {

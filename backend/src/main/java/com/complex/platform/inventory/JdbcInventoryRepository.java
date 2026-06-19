@@ -434,11 +434,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_trace_handovers (
                     id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
-                    handover_result, evidence_attachment_ids, created_at
+                    handover_result, overall_status, current_segment, evidence_attachment_ids, created_at
                 )
                 VALUES (
                     :id, :trace_code, :item_id, :from_staff_id, :to_staff_id, :device_id,
-                    :handover_result, CAST(:evidence_attachment_ids AS jsonb), :created_at
+                    :handover_result, :overall_status, :current_segment, CAST(:evidence_attachment_ids AS jsonb), :created_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     trace_code = EXCLUDED.trace_code,
@@ -447,9 +447,119 @@ class JdbcInventoryRepository implements InventoryRepository {
                     to_staff_id = EXCLUDED.to_staff_id,
                     device_id = EXCLUDED.device_id,
                     handover_result = EXCLUDED.handover_result,
+                    overall_status = EXCLUDED.overall_status,
+                    current_segment = EXCLUDED.current_segment,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
                 """, traceHandoverParameters(handover));
         return handover;
+    }
+
+    @Override
+    public Optional<TraceHandoverRecord> findTraceHandoverByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
+                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at
+                  FROM inventory_trace_handovers
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapTraceHandover).stream().findFirst();
+    }
+
+    @Override
+    public List<TraceHandoverStepRecord> listTraceHandoverSteps(String handoverId) {
+        return jdbcTemplate.query("""
+                SELECT id, handover_id, segment, seq, actor_type, operator_user_id,
+                       robot_task_ref, scan_at, step_status, note, created_at
+                  FROM inventory_trace_handover_steps
+                 WHERE handover_id = :handover_id
+                 ORDER BY seq
+                """, Map.of("handover_id", handoverId), rowMapper::mapTraceHandoverStep);
+    }
+
+    @Override
+    public Optional<TraceHandoverStepRecord> findTraceHandoverStep(String handoverId, String segment) {
+        return jdbcTemplate.query("""
+                SELECT id, handover_id, segment, seq, actor_type, operator_user_id,
+                       robot_task_ref, scan_at, step_status, note, created_at
+                  FROM inventory_trace_handover_steps
+                 WHERE handover_id = :handover_id
+                   AND segment = :segment
+                   FOR UPDATE
+                """, Map.of("handover_id", handoverId, "segment", segment), rowMapper::mapTraceHandoverStep)
+                .stream().findFirst();
+    }
+
+    @Override
+    public TraceHandoverStepRecord saveTraceHandoverStep(TraceHandoverStepRecord step) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_trace_handover_steps (
+                    id, handover_id, segment, seq, actor_type, operator_user_id,
+                    robot_task_ref, scan_at, step_status, note, created_at
+                )
+                VALUES (
+                    :id, :handover_id, :segment, :seq, :actor_type, :operator_user_id,
+                    :robot_task_ref, :scan_at, :step_status, :note, :created_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    actor_type = EXCLUDED.actor_type,
+                    operator_user_id = EXCLUDED.operator_user_id,
+                    robot_task_ref = EXCLUDED.robot_task_ref,
+                    scan_at = EXCLUDED.scan_at,
+                    step_status = EXCLUDED.step_status,
+                    note = EXCLUDED.note
+                """, traceHandoverStepParameters(step));
+        return step;
+    }
+
+    @Override
+    public TraceHandoverExceptionRecord saveTraceHandoverException(TraceHandoverExceptionRecord exception) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_trace_handover_exceptions (
+                    id, handover_id, segment, exception_type, review_status,
+                    reviewer_user_id, reason, created_at, reviewed_at
+                )
+                VALUES (
+                    :id, :handover_id, :segment, :exception_type, :review_status,
+                    :reviewer_user_id, :reason, :created_at, :reviewed_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    review_status = EXCLUDED.review_status,
+                    reviewer_user_id = EXCLUDED.reviewer_user_id,
+                    reason = EXCLUDED.reason,
+                    reviewed_at = EXCLUDED.reviewed_at
+                """, traceHandoverExceptionParameters(exception));
+        return exception;
+    }
+
+    @Override
+    public Optional<TraceHandoverExceptionRecord> findTraceHandoverExceptionByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, handover_id, segment, exception_type, review_status,
+                       reviewer_user_id, reason, created_at, reviewed_at
+                  FROM inventory_trace_handover_exceptions
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapTraceHandoverException).stream().findFirst();
+    }
+
+    @Override
+    public void saveRobotTaskEvent(
+            String id, String robotTaskRef, String eventType, String handoverId, String payloadJson, Instant reportedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_robot_task_events (
+                    id, robot_task_ref, event_type, handover_id, payload, reported_at
+                )
+                VALUES (
+                    :id, :robot_task_ref, :event_type, :handover_id, CAST(:payload AS jsonb), :reported_at
+                )
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("robot_task_ref", robotTaskRef)
+                .addValue("event_type", eventType)
+                .addValue("handover_id", handoverId)
+                .addValue("payload", payloadJson == null ? "{}" : payloadJson)
+                .addValue("reported_at", offset(reportedAt)));
     }
 
     // P0-1: 原子减少库存，WHERE 条件确保 available_quantity 足够，返回受影响行数（0 = 库存不足）
@@ -781,8 +891,38 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("to_staff_id", handover.toStaffId())
                 .addValue("device_id", handover.deviceId())
                 .addValue("handover_result", handover.handoverResult())
+                .addValue("overall_status", handover.overallStatus())
+                .addValue("current_segment", handover.currentSegment())
                 .addValue("evidence_attachment_ids", writeList(handover.evidenceAttachmentIds()))
                 .addValue("created_at", offset(handover.createdAt()));
+    }
+
+    private MapSqlParameterSource traceHandoverStepParameters(TraceHandoverStepRecord step) {
+        return new MapSqlParameterSource()
+                .addValue("id", step.id())
+                .addValue("handover_id", step.handoverId())
+                .addValue("segment", step.segment())
+                .addValue("seq", step.seq())
+                .addValue("actor_type", step.actorType())
+                .addValue("operator_user_id", step.operatorUserId())
+                .addValue("robot_task_ref", step.robotTaskRef())
+                .addValue("scan_at", offset(step.scanAt()))
+                .addValue("step_status", step.stepStatus())
+                .addValue("note", step.note())
+                .addValue("created_at", offset(step.createdAt()));
+    }
+
+    private MapSqlParameterSource traceHandoverExceptionParameters(TraceHandoverExceptionRecord exception) {
+        return new MapSqlParameterSource()
+                .addValue("id", exception.id())
+                .addValue("handover_id", exception.handoverId())
+                .addValue("segment", exception.segment())
+                .addValue("exception_type", exception.exceptionType())
+                .addValue("review_status", exception.reviewStatus())
+                .addValue("reviewer_user_id", exception.reviewerUserId())
+                .addValue("reason", exception.reason())
+                .addValue("created_at", offset(exception.createdAt()))
+                .addValue("reviewed_at", offset(exception.reviewedAt()));
     }
 
     private String writeList(List<String> value) {

@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,6 +52,22 @@ public interface InventoryRepository {
     SavedBottleClaimRecord saveSavedBottleClaim(SavedBottleClaimRecord claim);
 
     TraceHandoverRecord saveTraceHandover(TraceHandoverRecord handover);
+
+    // R5 T17：交接全链状态机——表头查询、分段步骤、异常复核、机器人段被动留痕（T14 关联）。
+    Optional<TraceHandoverRecord> findTraceHandoverByIdForUpdate(String id);
+
+    List<TraceHandoverStepRecord> listTraceHandoverSteps(String handoverId);
+
+    Optional<TraceHandoverStepRecord> findTraceHandoverStep(String handoverId, String segment);
+
+    TraceHandoverStepRecord saveTraceHandoverStep(TraceHandoverStepRecord step);
+
+    TraceHandoverExceptionRecord saveTraceHandoverException(TraceHandoverExceptionRecord exception);
+
+    Optional<TraceHandoverExceptionRecord> findTraceHandoverExceptionByIdForUpdate(String id);
+
+    /** T14 关联：机器人段被动留痕写入 integration_robot_task_events(handover_id)。 */
+    void saveRobotTaskEvent(String id, String robotTaskRef, String eventType, String handoverId, String payloadJson, Instant reportedAt);
 
     // P0-1: 原子库存余额操作，消除竞态条件
     int atomicDecreaseStockBalance(String itemId, String locationId, int qty);

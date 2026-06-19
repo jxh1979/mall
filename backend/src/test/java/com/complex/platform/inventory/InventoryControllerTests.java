@@ -118,7 +118,7 @@ class InventoryControllerTests {
             "POST,/api/v1/inventory/stock-movements/damage,inventory.stock.move",
             "GET,/api/v1/inventory/suppliers,inventory.supplier.view",
             "POST,/api/v1/inventory/suppliers,inventory.supplier.manage",
-            "POST,/api/v1/inventory/trace-codes/scan-handover,inventory.stock.move"
+            "POST,/api/v1/inventory/trace-codes/scan-handover,inventory.handover.scan"
     })
     void inventoryRoutesUseExactOpenApiPermission(String method, String path, String permission) throws Exception {
         if ("GET".equals(method)) {
@@ -302,7 +302,8 @@ class InventoryControllerTests {
 
     private TraceHandoverRecord traceHandover() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new TraceHandoverRecord("trace_1", "TRACE-1", "item_1", "staff_a", "staff_b", "dev_1", "accepted", List.of(), now);
+        return new TraceHandoverRecord("trace_1", "TRACE-1", "item_1", "staff_a", "staff_b", "dev_1",
+                "chain_started", "in_progress", "out_verify", List.of(), now);
     }
 
     @TestConfiguration

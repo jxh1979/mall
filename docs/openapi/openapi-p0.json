@@ -5503,7 +5503,7 @@
         ],
         "operationId": "scanTraceCodeHandover",
         "summary": "物品追踪码扫码交接",
-        "x-permission": "inventory.stock.move",
+        "x-permission": "inventory.handover.scan",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "staff_work_phone",
@@ -5514,6 +5514,214 @@
         "x-audit-event-failure": "operation_handover.failed",
         "requestBody": {
           "$ref": "#/components/requestBodies/Verification"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/trace-handovers": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "createTraceHandover",
+        "summary": "创建扫码交接任务(五段链)",
+        "x-permission": "inventory.handover.scan",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.handover_created",
+        "x-audit-event-failure": "inventory.handover_create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/trace-handovers/{id}/scan-segment": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "scanTraceSegment",
+        "summary": "员工扫码交接分段(主动留痕)",
+        "x-permission": "inventory.handover.scan",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.handover_segment_scanned",
+        "x-audit-event-failure": "inventory.handover_segment_scan_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/trace-handovers/{id}/robot-report": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "reportRobotSegment",
+        "summary": "机器人配送段上报(被动留痕,受第三方开关门控)",
+        "x-permission": "inventory.handover.scan",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.handover_robot_reported",
+        "x-audit-event-failure": "inventory.handover_robot_report_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/trace-handovers/exceptions/{id}/review": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "reviewTraceHandoverException",
+        "summary": "交接异常复核(缺口/重复/差异)",
+        "x-permission": "inventory.handover.review",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.handover_exception_resolved",
+        "x-audit-event-failure": "inventory.handover_exception_review_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
         },
         "responses": {
           "200": {

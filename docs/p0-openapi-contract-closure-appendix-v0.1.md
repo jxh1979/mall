@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 223 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 131 | 人工权限矩阵正文未覆盖 29 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 446 | 人工事件矩阵正文未覆盖 403 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 223 | 人工任务映射正文未逐项覆盖 217 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 125 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 227 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 133 | 人工权限矩阵正文未覆盖 31 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 454 | 人工事件矩阵正文未覆盖 411 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 227 | 人工任务映射正文未逐项覆盖 221 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 129 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -112,10 +112,12 @@
 | `integration.provider_adapter.update` | staff-token | project-provider | 1 | updateProviderAdapter | 已在权限矩阵正文出现 |
 | `integration.provider_adapter.view` | staff-token | project, project-provider | 16 | listIntegrationCompensationTasks, listIntegrationDevices, listIntegrationDeviceEvents, listIntegrationOfflineSyncBatches, listIntegrationOrderSyncs, listProviderAdapters, listIntegrationRetailSkus, listIntegrationRetryTasks, listRobotTaskEvents, listRobotTasks, listVideoCameras, listVoucherVerifications ... | 已在权限矩阵正文出现 |
 | `integration.video.view` | staff-token | project | 1 | listIntegrationVideoAnchors | OpenAPI 补充，以本附录为准 |
+| `inventory.handover.review` | staff-token | project-warehouse-bar | 1 | reviewTraceHandoverException | OpenAPI 补充，以本附录为准 |
+| `inventory.handover.scan` | staff-token | project-warehouse-bar | 4 | scanTraceCodeHandover, createTraceHandover, scanTraceSegment, reportRobotSegment | OpenAPI 补充，以本附录为准 |
 | `inventory.purchase_request.manage` | staff-token | project | 1 | createPurchaseRequest | 已在权限矩阵正文出现 |
 | `inventory.purchase_request.view` | staff-token | project | 1 | listPurchaseRequests | 已在权限矩阵正文出现 |
 | `inventory.stock.adjust` | staff-token | project-warehouse | 1 | createStockAdjustment | 已在权限矩阵正文出现 |
-| `inventory.stock.move` | staff-token | project, project-warehouse, project-warehouse-bar | 6 | createInventoryItem, createStockIn, createStockMovement, transferStockMovement, createTypedStockMovement, scanTraceCodeHandover | 已在权限矩阵正文出现 |
+| `inventory.stock.move` | staff-token | project, project-warehouse | 5 | createInventoryItem, createStockIn, createStockMovement, transferStockMovement, createTypedStockMovement | 已在权限矩阵正文出现 |
 | `inventory.stock.view` | staff-token | project, project-warehouse | 3 | listInventoryItems, listStockBalances, listStockMovements | 已在权限矩阵正文出现 |
 | `inventory.supplier.manage` | staff-token | project | 1 | createInventorySupplier | 已在权限矩阵正文出现 |
 | `inventory.supplier.view` | staff-token | project | 1 | listInventorySuppliers | 已在权限矩阵正文出现 |
@@ -440,6 +442,14 @@
 | `integration.wecom_risk_hit.viewed_failed` | failure | `listWecomRiskHits` | `GET` | `/api/v1/integration/wecom/risk-hits` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `inventory.adjustment_failed` | failure | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | INV-库存存酒 | `inventory.stock.adjust` | 接口级事件，以本附录为准 |
 | `inventory.counted` | success | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | INV-库存存酒 | `inventory.stock.adjust` | 已在事件矩阵正文出现 |
+| `inventory.handover_create_failed` | failure | `createTraceHandover` | `POST` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `inventory.handover_created` | success | `createTraceHandover` | `POST` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `inventory.handover_exception_resolved` | success | `reviewTraceHandoverException` | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | INV-库存存酒 | `inventory.handover.review` | 接口级事件，以本附录为准 |
+| `inventory.handover_exception_review_failed` | failure | `reviewTraceHandoverException` | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | INV-库存存酒 | `inventory.handover.review` | 接口级事件，以本附录为准 |
+| `inventory.handover_robot_report_failed` | failure | `reportRobotSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `inventory.handover_robot_reported` | success | `reportRobotSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `inventory.handover_segment_scan_failed` | failure | `scanTraceSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/scan-segment` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `inventory.handover_segment_scanned` | success | `scanTraceSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/scan-segment` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `inventory.inbound_confirmed` | success | `createStockIn` | `POST` | `/api/v1/inventory/stock-in` | INV-库存存酒 | `inventory.stock.move` | 已在事件矩阵正文出现 |
 | `inventory.inbound_failed` | failure | `createStockIn` | `POST` | `/api/v1/inventory/stock-in` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.item.created` | success | `createInventoryItem` | `POST` | `/api/v1/inventory/items` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
@@ -485,8 +495,8 @@
 | `open_auth.failed` | failure | `openAuthToken` | `POST` | `/api/open/auth/token` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `open_auth.succeeded` | success | `openAuthToken` | `POST` | `/api/open/auth/token` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `open_mapping.changed` | success | `updateProviderAdapter` | `PUT` | `/api/v1/integration/provider-adapters/{id}` | INT-第三方集成 | `integration.provider_adapter.update` | 已在事件矩阵正文出现 |
-| `operation_handover.created` | success | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
-| `operation_handover.failed` | failure | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
+| `operation_handover.created` | success | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `operation_handover.failed` | failure | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `payment.intent_created` | success | `createBarBillPayIntent` | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | BAR-酒吧经营 | `finance.payment_intent.create` | 接口级事件，以本附录为准 |
 | `payment.intent_created` | success | `createPaymentIntent` | `POST` | `/api/v1/finance/payment-intents` | FIN-财务台账 | `finance.payment_intent.create` | 接口级事件，以本附录为准 |
 | `payment.intent_created` | success | `createTicketOrderPayIntent` | `POST` | `/api/v1/ticketing/orders/{order_id}/pay-intents` | TIC-票务权益 | `finance.payment_intent.create` | 接口级事件，以本附录为准 |
@@ -777,6 +787,7 @@
 | INV-库存存酒 | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | 盘点差异、报损、报溢 | `inventory.stock.adjust` | `inventory.counted` / `inventory.adjustment_failed` | web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createStockIn` | `POST` | `/api/v1/inventory/stock-in` | 入库 | `inventory.stock.move` | `inventory.inbound_confirmed` / `inventory.inbound_failed` | web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createStockMovement` | `POST` | `/api/v1/inventory/stock-movements` | 库存移动或扣减 | `inventory.stock.move` | `inventory.outbound_verified` / `inventory.stock_movement_failed` | web, staff_work_phone, tablet | operation 级补充 |
+| INV-库存存酒 | `createTraceHandover` | `POST` | `/api/v1/inventory/trace-handovers` | 创建扫码交接任务(五段链) | `inventory.handover.scan` | `inventory.handover_created` / `inventory.handover_create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `createTypedStockMovement` | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | 创建typed库存流水 | `inventory.stock.move` | `inventory.stock_movement.created` / `inventory.stock_movement.created_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listInventoryItems` | `GET` | `/api/v1/inventory/items` | 查询库存明细 | `inventory.stock.view` | `inventory.item.viewed` / `inventory.item.viewed_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listInventorySuppliers` | `GET` | `/api/v1/inventory/suppliers` | 查询供应商 | `inventory.supplier.view` | `inventory.supplier_viewed` / `inventory.supplier_view_failed` | web | operation 级补充 |
@@ -784,7 +795,10 @@
 | INV-库存存酒 | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | 查询存酒 | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `listStockBalances` | `GET` | `/api/v1/inventory/stock-balances` | 查询库存余额 | `inventory.stock.view` | `inventory.stock_balance.viewed` / `inventory.stock_balance.viewed_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listStockMovements` | `GET` | `/api/v1/inventory/stock-movements` | 查询库存流水 | `inventory.stock.view` | `inventory.stock_movement.viewed` / `inventory.stock_movement.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
-| INV-库存存酒 | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | 物品追踪码扫码交接 | `inventory.stock.move` | `operation_handover.created` / `operation_handover.failed` | staff_work_phone, tablet | operation 级补充 |
+| INV-库存存酒 | `reportRobotSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | 机器人配送段上报(被动留痕,受第三方开关门控) | `inventory.handover.scan` | `inventory.handover_robot_reported` / `inventory.handover_robot_report_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `reviewTraceHandoverException` | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | 交接异常复核(缺口/重复/差异) | `inventory.handover.review` | `inventory.handover_exception_resolved` / `inventory.handover_exception_review_failed` | web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | 物品追踪码扫码交接 | `inventory.handover.scan` | `operation_handover.created` / `operation_handover.failed` | staff_work_phone, tablet | operation 级补充 |
+| INV-库存存酒 | `scanTraceSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/scan-segment` | 员工扫码交接分段(主动留痕) | `inventory.handover.scan` | `inventory.handover_segment_scanned` / `inventory.handover_segment_scan_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | 调拨库存流水 | `inventory.stock.move` | `inventory.stock_transfer.created` / `inventory.stock_transfer.created_failed` | web | operation 级补充 |
 | OPEN-开放平台 | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | 回调处理结果查询 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
 | OPEN-开放平台 | `openAuthToken` | `POST` | `/api/open/auth/token` | 开放平台获取令牌 | `not_applicable` | `open_auth.succeeded` / `open_auth.failed` | <br>channel: server-to-server | operation 级补充 |

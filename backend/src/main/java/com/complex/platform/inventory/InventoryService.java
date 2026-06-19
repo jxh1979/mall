@@ -5,6 +5,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.gate.TerminalSwitchGuard;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
@@ -17,6 +18,10 @@ import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.inventory.dto.SupplierReconciliationRequest;
+import com.complex.platform.inventory.dto.TraceExceptionReviewRequest;
+import com.complex.platform.inventory.dto.TraceHandoverCreateRequest;
+import com.complex.platform.inventory.dto.TraceRobotReportRequest;
+import com.complex.platform.inventory.dto.TraceScanSegmentRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -40,22 +45,31 @@ public class InventoryService {
     private static final Set<String> STOCK_BATCH_STATUSES = Set.of("active", "consumed", "expired", "archived");
     private static final Set<String> SUPPLIER_RECONCILIATION_STATUSES = Set.of("pending", "matched", "difference_found");
 
+    // R5 T17：五段交接链（seq 1..5）。dispatch 段为机器人被动留痕，其余为员工主动扫码。
+    private static final List<String> HANDOVER_SEGMENTS =
+            List.of("out_verify", "dispatch", "kitchen_receive", "staff_pickup", "deliver_customer");
+    private static final String ROBOT_SEGMENT = "dispatch";
+    private static final String ROBOT_SYNC_CAPABILITY = "integration.robot.sync";
+
     private final InventoryRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final InventoryStockMovementService stockMovementService;
+    private final TerminalSwitchGuard terminalSwitchGuard;
 
     public InventoryService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            TerminalSwitchGuard terminalSwitchGuard
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.terminalSwitchGuard = terminalSwitchGuard;
         this.stockMovementService = new InventoryStockMovementService(
                 repository, idempotencyService, auditEventService, authorizationService);
     }
@@ -521,6 +535,11 @@ public class InventoryService {
         );
     }
 
+    /**
+     * R5 T17 兼容入口：旧 scan-handover 端点不再写死 handover_result='accepted'。
+     * 现内部走新分段流程——建一次交接任务（表头 in_progress + 预置五段 steps pending），
+     * 返回的 handover_result 标记为 'chain_started'，真实可追责状态由 overall_status/steps 承载。
+     */
     @Transactional
     public TraceHandoverRecord scanTraceCodeHandover(VerificationRequest request) {
         return executeWrite(
@@ -530,25 +549,308 @@ public class InventoryService {
                 TraceHandoverRecord.class,
                 "operation_handover.created",
                 "operation_handover.failed",
-                "inventory.stock.move",
+                "inventory.handover.scan",
                 "inventory_trace_handover",
                 () -> {
                     VerificationRequest actual = requireRequest(request);
                     Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
-                    Instant now = Instant.now();
-                    return repository.saveTraceHandover(new TraceHandoverRecord(
-                            "trace_" + slug(actual.idempotencyKey()),
-                            requireText(actual.credentialPayload(), "credential_payload"),
-                            trimToNull(textFromMap(context, "item_id", "itemId")),
-                            trimToNull(textFromMap(context, "from_staff_id", "fromStaffId")),
-                            trimToNull(textFromMap(context, "to_staff_id", "toStaffId")),
-                            requireText(actual.deviceId(), "device_id"),
-                            "accepted",
-                            List.of(),
-                            now
-                    ));
+                    String handoverId = "trace_" + slug(actual.idempotencyKey());
+                    String traceCode = requireText(actual.credentialPayload(), "credential_payload");
+                    String deviceId = requireText(actual.deviceId(), "device_id");
+                    String itemId = trimToNull(textFromMap(context, "item_id", "itemId"));
+                    String fromStaffId = trimToNull(textFromMap(context, "from_staff_id", "fromStaffId"));
+                    String toStaffId = trimToNull(textFromMap(context, "to_staff_id", "toStaffId"));
+                    return createHandoverChain(handoverId, traceCode, itemId, deviceId, fromStaffId, toStaffId, "chain_started");
                 }
         );
+    }
+
+    /** R5 T17：建交接任务——表头 overall_status=in_progress + 预置五段 steps(pending, seq 1..5)。 */
+    @Transactional
+    public TraceHandoverChainView createTraceHandover(TraceHandoverCreateRequest request) {
+        return executeWrite(
+                "createTraceHandover",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TraceHandoverChainView.class,
+                "inventory.handover_created",
+                "inventory.handover_create_failed",
+                "inventory.handover.scan",
+                "inventory_trace_handover",
+                () -> {
+                    TraceHandoverCreateRequest actual = requireRequest(request);
+                    String handoverId = "trace_" + slug(actual.idempotencyKey());
+                    String traceCode = requireText(actual.traceCode(), "trace_code");
+                    String deviceId = requireText(actual.deviceId(), "device_id");
+                    String itemId = trimToNull(actual.itemId());
+                    TraceHandoverRecord header =
+                            createHandoverChain(handoverId, traceCode, itemId, deviceId, null, null, "chain_started");
+                    return chainView(header.id());
+                }
+        );
+    }
+
+    /** R5 T17：员工段扫码（主动留痕）。同段重复→duplicate 异常；全段 done→overall completed。 */
+    @Transactional
+    public TraceHandoverChainView scanTraceSegment(String handoverId, TraceScanSegmentRequest request) {
+        String id = requireText(handoverId, "handover_id");
+        return executeWrite(
+                "scanTraceSegment:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TraceHandoverChainView.class,
+                "inventory.handover_segment_scanned",
+                "inventory.handover_segment_scan_failed",
+                "inventory.handover.scan",
+                "inventory_trace_handover_step",
+                () -> {
+                    TraceScanSegmentRequest actual = requireRequest(request);
+                    String segment = requireSegment(actual.segment());
+                    if (ROBOT_SEGMENT.equals(segment)) {
+                        throw ApiException.badRequest("HANDOVER_SEGMENT_NOT_STAFF",
+                                "dispatch segment is robot-passive; use robot-report");
+                    }
+                    TraceHandoverRecord header = requireHandover(id);
+                    TraceHandoverStepRecord step = requireStep(id, segment);
+                    String operator = authorizationService.currentActor().id();
+                    Instant now = Instant.now();
+                    if ("done".equals(step.stepStatus())) {
+                        // 同段重复扫码 → duplicate 异常 + overall exception。
+                        markStep(step, operator, null, "duplicate", now, "duplicate scan on segment " + segment);
+                        raiseException(id, segment, "duplicate", "duplicate scan on segment " + segment, now);
+                        return chainView(id);
+                    }
+                    markStep(step, operator, null, "done", now, null);
+                    completeOrAdvance(header, segment, now);
+                    return chainView(id);
+                }
+        );
+    }
+
+    /** R5 T17：机器人段(dispatch)上报（被动留痕），受 T14 integration.robot.sync 开关门控 + 写 T14 事件。 */
+    @Transactional
+    public TraceHandoverChainView reportRobotSegment(String handoverId, TraceRobotReportRequest request) {
+        String id = requireText(handoverId, "handover_id");
+        return executeWrite(
+                "reportRobotSegment:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TraceHandoverChainView.class,
+                "inventory.handover_segment_scanned",
+                "inventory.handover_segment_scan_failed",
+                "inventory.handover.scan",
+                "inventory_trace_handover_step",
+                () -> {
+                    TraceRobotReportRequest actual = requireRequest(request);
+                    // 受 T14 第三方开关门控（编程式）：关闭则 reject 留痕、不放行被动留痕。
+                    terminalSwitchGuard.check(ROBOT_SYNC_CAPABILITY);
+                    String robotTaskRef = requireText(actual.robotTaskRef(), "robot_task_ref");
+                    String status = trimToDefault(actual.status(), "delivered");
+                    TraceHandoverRecord header = requireHandover(id);
+                    TraceHandoverStepRecord step = requireStep(id, ROBOT_SEGMENT);
+                    Instant now = Instant.now();
+                    // T14 关联：机器人段被动留痕写 integration_robot_task_events(handover_id)。
+                    repository.saveRobotTaskEvent(
+                            "robotevt_" + slug(actual.idempotencyKey()),
+                            robotTaskRef,
+                            "delivered".equals(status) ? "delivered" : "failed",
+                            id,
+                            robotEventPayload(status),
+                            now);
+                    if ("done".equals(step.stepStatus())) {
+                        markStep(step, null, robotTaskRef, "duplicate", now, "duplicate robot report on dispatch");
+                        raiseException(id, ROBOT_SEGMENT, "duplicate", "duplicate robot report on dispatch", now);
+                        return chainView(id);
+                    }
+                    if ("delivered_no_receiver".equals(status)) {
+                        // 机器人上报送达但无人工接收扫码 → gap 异常进复核。
+                        markStep(step, null, robotTaskRef, "gap", now, "robot delivered but no staff receipt");
+                        raiseException(id, ROBOT_SEGMENT, "gap", "robot delivered but no staff receipt", now);
+                        return chainView(id);
+                    }
+                    boolean diff = Boolean.TRUE.equals(actual.reportDiff()) || !"delivered".equals(status);
+                    if (diff) {
+                        // 机器人上报与人工预期不符（点位/物料/状态）→ diff 异常进复核。
+                        markStep(step, null, robotTaskRef, "diff", now, "robot report diff: status=" + status);
+                        raiseException(id, ROBOT_SEGMENT, "diff", "robot report diff: status=" + status, now);
+                        return chainView(id);
+                    }
+                    markStep(step, null, robotTaskRef, "done", now, null);
+                    completeOrAdvance(header, ROBOT_SEGMENT, now);
+                    return chainView(id);
+                }
+        );
+    }
+
+    /** R5 T17：异常复核 approve/reject 闭合 + 留结论；approve 时把该段标 gap-closed 不阻塞，reject 维持 exception。 */
+    @Transactional
+    public TraceHandoverExceptionRecord reviewException(String exceptionId, TraceExceptionReviewRequest request) {
+        String id = requireText(exceptionId, "exception_id");
+        return executeWrite(
+                "reviewTraceException:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TraceHandoverExceptionRecord.class,
+                "inventory.handover_exception_resolved",
+                "inventory.handover_exception_resolve_failed",
+                "inventory.handover.review",
+                "inventory_trace_handover_exception",
+                () -> {
+                    TraceExceptionReviewRequest actual = requireRequest(request);
+                    String decision = requireDecision(actual.decision());
+                    TraceHandoverExceptionRecord exception = repository.findTraceHandoverExceptionByIdForUpdate(id)
+                            .orElseThrow(() -> ApiException.notFound(
+                                    "HANDOVER_EXCEPTION_NOT_FOUND", "trace handover exception not found"));
+                    if (!"pending".equals(exception.reviewStatus())) {
+                        throw ApiException.conflict("HANDOVER_EXCEPTION_NOT_PENDING",
+                                "trace handover exception is not pending");
+                    }
+                    String reviewer = authorizationService.currentActor().id();
+                    Instant now = Instant.now();
+                    TraceHandoverExceptionRecord resolved = new TraceHandoverExceptionRecord(
+                            exception.id(), exception.handoverId(), exception.segment(), exception.exceptionType(),
+                            decision, reviewer, trimToNull(actual.reason()), exception.createdAt(), now);
+                    repository.saveTraceHandoverException(resolved);
+                    closeExceptionOnHeader(exception.handoverId(), now);
+                    return resolved;
+                }
+        );
+    }
+
+    private TraceHandoverRecord createHandoverChain(
+            String handoverId, String traceCode, String itemId, String deviceId,
+            String fromStaffId, String toStaffId, String handoverResult) {
+        Instant now = Instant.now();
+        TraceHandoverRecord header = repository.saveTraceHandover(new TraceHandoverRecord(
+                handoverId, traceCode, itemId, fromStaffId, toStaffId, deviceId,
+                handoverResult, "in_progress", HANDOVER_SEGMENTS.getFirst(), List.of(), now));
+        for (int i = 0; i < HANDOVER_SEGMENTS.size(); i++) {
+            String segment = HANDOVER_SEGMENTS.get(i);
+            boolean robot = ROBOT_SEGMENT.equals(segment);
+            repository.saveTraceHandoverStep(new TraceHandoverStepRecord(
+                    handoverId + "_" + segment,
+                    handoverId,
+                    segment,
+                    i + 1,
+                    robot ? "robot" : "staff",
+                    null,
+                    null,
+                    null,
+                    "pending",
+                    null,
+                    now));
+        }
+        return header;
+    }
+
+    private void markStep(
+            TraceHandoverStepRecord step, String operatorUserId, String robotTaskRef,
+            String status, Instant scanAt, String note) {
+        repository.saveTraceHandoverStep(new TraceHandoverStepRecord(
+                step.id(), step.handoverId(), step.segment(), step.seq(), step.actorType(),
+                operatorUserId != null ? operatorUserId : step.operatorUserId(),
+                robotTaskRef != null ? robotTaskRef : step.robotTaskRef(),
+                scanAt, status, note, step.createdAt()));
+    }
+
+    private void raiseException(String handoverId, String segment, String type, String reason, Instant now) {
+        repository.saveTraceHandoverException(new TraceHandoverExceptionRecord(
+                "traceexc_" + slug(handoverId + ":" + segment + ":" + type + ":" + now.toEpochMilli()),
+                handoverId, segment, type, "pending", null, reason, now, null));
+        TraceHandoverRecord header = requireHandover(handoverId);
+        repository.saveTraceHandover(withOverall(header, "exception", segment));
+    }
+
+    /** 一段 done 后：若五段全 done → overall completed + 事件；否则推进 current_segment 到下一未完成段。 */
+    private void completeOrAdvance(TraceHandoverRecord header, String segment, Instant now) {
+        List<TraceHandoverStepRecord> steps = repository.listTraceHandoverSteps(header.id());
+        boolean allDone = steps.stream().allMatch(s -> "done".equals(s.stepStatus()));
+        if (allDone) {
+            repository.saveTraceHandover(withOverall(header, "completed", segment));
+            auditEventService.recordSuccess(
+                    "inventory.handover_completed", "inventory.handover.scan",
+                    "inventory_trace_handover", header.id(), null, null,
+                    Map.of("handover_id", header.id()));
+            return;
+        }
+        String next = steps.stream()
+                .filter(s -> "pending".equals(s.stepStatus()))
+                .map(TraceHandoverStepRecord::segment)
+                .findFirst()
+                .orElse(segment);
+        // 仅当当前非 exception 时维持 in_progress 推进；exception 不被一段 done 覆盖。
+        if (!"exception".equals(header.overallStatus())) {
+            repository.saveTraceHandover(withOverall(header, "in_progress", next));
+        }
+    }
+
+    /** 复核闭合后：若该交接已无 pending 异常，则按 steps 真实状态回算 overall。 */
+    private void closeExceptionOnHeader(String handoverId, Instant now) {
+        TraceHandoverRecord header = requireHandover(handoverId);
+        List<TraceHandoverStepRecord> steps = repository.listTraceHandoverSteps(handoverId);
+        boolean allDone = steps.stream().allMatch(s -> "done".equals(s.stepStatus()));
+        String next = steps.stream()
+                .filter(s -> "pending".equals(s.stepStatus()))
+                .map(TraceHandoverStepRecord::segment)
+                .findFirst()
+                .orElse(header.currentSegment());
+        repository.saveTraceHandover(withOverall(header, allDone ? "completed" : "in_progress", next));
+    }
+
+    private TraceHandoverRecord withOverall(TraceHandoverRecord h, String overall, String currentSegment) {
+        TraceHandoverRecord updated = new TraceHandoverRecord(
+                h.id(), h.traceCode(), h.itemId(), h.fromStaffId(), h.toStaffId(), h.deviceId(),
+                h.handoverResult(), overall, currentSegment, h.evidenceAttachmentIds(), h.createdAt());
+        if ("exception".equals(overall)) {
+            auditEventService.recordSuccess(
+                    "inventory.handover_exception_raised", "inventory.handover.scan",
+                    "inventory_trace_handover", h.id(), null, null,
+                    Map.of("handover_id", h.id(), "segment", currentSegment == null ? "" : currentSegment));
+        }
+        return updated;
+    }
+
+    private TraceHandoverChainView chainView(String handoverId) {
+        TraceHandoverRecord header = requireHandover(handoverId);
+        return new TraceHandoverChainView(
+                header,
+                repository.listTraceHandoverSteps(handoverId),
+                List.of());
+    }
+
+    private TraceHandoverRecord requireHandover(String handoverId) {
+        return repository.findTraceHandoverByIdForUpdate(handoverId)
+                .orElseThrow(() -> ApiException.notFound("HANDOVER_NOT_FOUND", "trace handover not found"));
+    }
+
+    private TraceHandoverStepRecord requireStep(String handoverId, String segment) {
+        return repository.findTraceHandoverStep(handoverId, segment)
+                .orElseThrow(() -> ApiException.notFound("HANDOVER_STEP_NOT_FOUND", "trace handover step not found"));
+    }
+
+    private String requireSegment(String segment) {
+        String value = requireText(segment, "segment");
+        if (!HANDOVER_SEGMENTS.contains(value)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "segment is invalid");
+        }
+        return value;
+    }
+
+    private String requireDecision(String decision) {
+        String value = requireText(decision, "decision").toLowerCase(Locale.ROOT);
+        if (!Set.of("approved", "rejected").contains(value)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approved or rejected");
+        }
+        return value;
+    }
+
+    private String robotEventPayload(String status) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(Map.of("status", status, "source", "trace_handover_chain"));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            return "{}";
+        }
     }
 
     private InventoryStockBatchRecord createStockBatchOnce(InventoryStockBatchRequest request) {
@@ -809,6 +1111,12 @@ public class InventoryService {
             return record.id();
         }
         if (response instanceof TraceHandoverRecord record) {
+            return record.id();
+        }
+        if (response instanceof TraceHandoverChainView view) {
+            return view.handover().id();
+        }
+        if (response instanceof TraceHandoverExceptionRecord record) {
             return record.id();
         }
         return "unknown";

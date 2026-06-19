@@ -16,6 +16,10 @@ import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
 import com.complex.platform.inventory.dto.SupplierReconciliationRequest;
+import com.complex.platform.inventory.dto.TraceExceptionReviewRequest;
+import com.complex.platform.inventory.dto.TraceHandoverCreateRequest;
+import com.complex.platform.inventory.dto.TraceRobotReportRequest;
+import com.complex.platform.inventory.dto.TraceScanSegmentRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -191,8 +195,45 @@ public class InventoryController {
 
     @PostMapping("/trace-codes/scan-handover")
     public ApiResponse<TraceHandoverRecord> scanTraceCodeHandover(@RequestBody VerificationRequest request) {
-        authorizationService.requirePermission("inventory.stock.move");
+        authorizationService.requirePermission("inventory.handover.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scanTraceCodeHandover(request));
+    }
+
+    @PostMapping("/trace-handovers")
+    public ApiResponse<TraceHandoverChainView> createTraceHandover(@RequestBody TraceHandoverCreateRequest request) {
+        authorizationService.requirePermission("inventory.handover.scan");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createTraceHandover(request));
+    }
+
+    @PostMapping("/trace-handovers/{id}/scan-segment")
+    public ApiResponse<TraceHandoverChainView> scanTraceSegment(
+            @PathVariable String id,
+            @RequestBody TraceScanSegmentRequest request
+    ) {
+        authorizationService.requirePermission("inventory.handover.scan");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.scanTraceSegment(id, request));
+    }
+
+    @PostMapping("/trace-handovers/{id}/robot-report")
+    public ApiResponse<TraceHandoverChainView> reportRobotSegment(
+            @PathVariable String id,
+            @RequestBody TraceRobotReportRequest request
+    ) {
+        authorizationService.requirePermission("inventory.handover.scan");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reportRobotSegment(id, request));
+    }
+
+    @PostMapping("/trace-handovers/exceptions/{id}/review")
+    public ApiResponse<TraceHandoverExceptionRecord> reviewException(
+            @PathVariable String id,
+            @RequestBody TraceExceptionReviewRequest request
+    ) {
+        authorizationService.requirePermission("inventory.handover.review");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reviewException(id, request));
     }
 }

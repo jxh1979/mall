@@ -177,6 +177,52 @@ final class JdbcInventoryRowMapper {
         );
     }
 
+    TraceHandoverRecord mapTraceHandover(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new TraceHandoverRecord(
+                resultSet.getString("id"),
+                resultSet.getString("trace_code"),
+                resultSet.getString("item_id"),
+                resultSet.getString("from_staff_id"),
+                resultSet.getString("to_staff_id"),
+                resultSet.getString("device_id"),
+                resultSet.getString("handover_result"),
+                resultSet.getString("overall_status"),
+                resultSet.getString("current_segment"),
+                readList(resultSet.getString("evidence_attachment_ids")),
+                instant(resultSet, "created_at")
+        );
+    }
+
+    TraceHandoverStepRecord mapTraceHandoverStep(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new TraceHandoverStepRecord(
+                resultSet.getString("id"),
+                resultSet.getString("handover_id"),
+                resultSet.getString("segment"),
+                resultSet.getInt("seq"),
+                resultSet.getString("actor_type"),
+                resultSet.getString("operator_user_id"),
+                resultSet.getString("robot_task_ref"),
+                instantOrNull(resultSet, "scan_at"),
+                resultSet.getString("step_status"),
+                resultSet.getString("note"),
+                instant(resultSet, "created_at")
+        );
+    }
+
+    TraceHandoverExceptionRecord mapTraceHandoverException(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new TraceHandoverExceptionRecord(
+                resultSet.getString("id"),
+                resultSet.getString("handover_id"),
+                resultSet.getString("segment"),
+                resultSet.getString("exception_type"),
+                resultSet.getString("review_status"),
+                resultSet.getString("reviewer_user_id"),
+                resultSet.getString("reason"),
+                instant(resultSet, "created_at"),
+                instantOrNull(resultSet, "reviewed_at")
+        );
+    }
+
     private List<String> readList(String value) {
         if (value == null || value.isBlank()) {
             return List.of();

@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 223 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 227 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -170,7 +170,11 @@
 | inventory | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | `createTypedStockMovement` | 创建typed库存流水 | `StockMovementRequest` | `inventory.stock.move` | `staff-token` | `project` | web | 是 | `inventory.stock_movement.created` | `inventory.stock_movement.created_failed` |
 | inventory | `GET` | `/api/v1/inventory/suppliers` | `listInventorySuppliers` | 查询供应商 | `-` | `inventory.supplier.view` | `staff-token` | `project` | web | 否 | `inventory.supplier_viewed` | `inventory.supplier_view_failed` |
 | inventory | `POST` | `/api/v1/inventory/suppliers` | `createInventorySupplier` | 创建供应商 | `InventorySupplierRequest` | `inventory.supplier.manage` | `staff-token` | `project` | web | 是 | `inventory.supplier_changed` | `inventory.supplier_change_failed` |
-| inventory | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | `scanTraceCodeHandover` | 物品追踪码扫码交接 | `VerificationRequest` | `inventory.stock.move` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet | 是 | `operation_handover.created` | `operation_handover.failed` |
+| inventory | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | `scanTraceCodeHandover` | 物品追踪码扫码交接 | `VerificationRequest` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet | 是 | `operation_handover.created` | `operation_handover.failed` |
+| inventory | `POST` | `/api/v1/inventory/trace-handovers` | `createTraceHandover` | 创建扫码交接任务(五段链) | `object` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.handover_created` | `inventory.handover_create_failed` |
+| inventory | `POST` | `/api/v1/inventory/trace-handovers/{id}/scan-segment` | `scanTraceSegment` | 员工扫码交接分段(主动留痕) | `object` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.handover_segment_scanned` | `inventory.handover_segment_scan_failed` |
+| inventory | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | `reportRobotSegment` | 机器人配送段上报(被动留痕,受第三方开关门控) | `object` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.handover_robot_reported` | `inventory.handover_robot_report_failed` |
+| inventory | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | `reviewTraceHandoverException` | 交接异常复核(缺口/重复/差异) | `object` | `inventory.handover.review` | `staff-token` | `project-warehouse-bar` | web, mobile_admin | 是 | `inventory.handover_exception_resolved` | `inventory.handover_exception_review_failed` |
 | merchant-service | `GET` | `/api/v1/merchant-service/work-orders` | `listMerchantServiceWorkOrders` | List merchant service work orders | `-` | `merchant.service_work_order.view` | `staff-token` | `project-merchant` | web, mobile_admin, merchant_portal | 否 | `merchant_service.listMerchantServiceWorkOrders.succeeded` | `merchant_service.listMerchantServiceWorkOrders.failed` |
 | merchant-service | `POST` | `/api/v1/merchant-service/work-orders` | `createMerchantServiceWorkOrder` | Create merchant service work order | `MerchantWorkOrderCreateRequest` | `merchant.service_work_order.create` | `staff-token` | `project-merchant` | web, mobile_admin, merchant_portal | 是 | `merchant_service.createMerchantServiceWorkOrder.succeeded` | `merchant_service.createMerchantServiceWorkOrder.failed` |
 | merchant-service | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | `addMerchantServiceWorkOrderAction` | Append merchant service work order action | `MerchantWorkOrderActionRequest` | `merchant.service_work_order.process` | `staff-token` | `project-merchant` | web, mobile_admin, merchant_portal | 是 | `merchant_service.addMerchantServiceWorkOrderAction.succeeded` | `merchant_service.addMerchantServiceWorkOrderAction.failed` |
@@ -311,5 +315,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 223 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 227 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

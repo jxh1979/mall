@@ -237,6 +237,27 @@
       "note": "R4-G1: 交接扫码节点已落 V012"
     },
     {
+      "req": "REQ-38",
+      "table": "inventory_trace_handovers",
+      "column": "overall_status",
+      "expected": "present",
+      "note": "T17: 整体状态机字段已落 V074(替换写死 accepted)"
+    },
+    {
+      "req": "REQ-38",
+      "table": "inventory_trace_handover_steps",
+      "column": null,
+      "expected": "present",
+      "note": "T17: 五段交接状态机(out_verify/dispatch/kitchen_receive/staff_pickup/deliver_customer)已落 V074"
+    },
+    {
+      "req": "REQ-44",
+      "table": "inventory_trace_handover_exceptions",
+      "column": null,
+      "expected": "present",
+      "note": "T17: 交接缺口/重复/差异复核已落 V074"
+    },
+    {
       "req": "REQ-39",
       "table": "inventory_trace_codes",
       "column": null,
