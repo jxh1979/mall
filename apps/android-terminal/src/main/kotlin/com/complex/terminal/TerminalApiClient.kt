@@ -83,6 +83,55 @@ class TerminalApiClient(
 
   fun events(limit: Int = 20): List<JsonObject> = get("/api/v1/evidence/events?limit=$limit")
 
+  // 游乐核销（复用 ticketing VerificationRequest 契约）
+  fun amusementVerify(request: VerificationRequest): AmusementVerificationRecord =
+    post("/api/v1/amusement/verifications", request)
+
+  // 游乐检修：提交检修记录
+  fun submitAmusementMaintenance(request: AmusementMaintenanceRecordRequest): AmusementMaintenanceRecord =
+    post("/api/v1/amusement/maintenance-records", request)
+
+  // 游乐检修：主管确认恢复运营
+  fun confirmAmusementMaintenanceResume(
+    recordId: String,
+    request: AmusementMaintenanceResumeRequest,
+  ): AmusementMaintenanceRecord =
+    post("/api/v1/amusement/maintenance-records/${urlEncode(recordId)}/confirm-resume", request)
+
+  // 酒吧一体机/平板：点酒下单
+  fun createBarOrder(request: BarOrderRequest): BarOrderRecord =
+    post("/api/v1/bar/orders", request)
+
+  // 酒吧账单：创建支付意图
+  fun createBarPaymentIntent(billId: String, request: PaymentIntentRequest): PaymentIntentRecord =
+    post("/api/v1/bar/bills/${urlEncode(billId)}/pay-intents", request)
+
+  // 酒吧账单：结算
+  fun settleBarBill(billId: String, request: BarBillSettleRequest): BarBillRecord =
+    post("/api/v1/bar/bills/${urlEncode(billId)}/settle", request)
+
+  // 员工设备凭证：绑定
+  fun bindStaffDeviceCredential(request: StaffDeviceBindRequest): StaffDeviceCredentialRecord =
+    post("/api/v1/staff/device-credentials", request)
+
+  // 员工设备凭证：主管批准换机
+  fun approveStaffDeviceRebind(
+    credentialId: String,
+    request: StaffDeviceRebindDecisionRequest,
+  ): StaffDeviceCredentialRecord =
+    post("/api/v1/staff/device-credentials/${urlEncode(credentialId)}/approve-rebind", request)
+
+  // 员工设备凭证：完整性上报
+  fun reportStaffDeviceIntegrity(
+    credentialId: String,
+    request: StaffDeviceIntegrityReportRequest,
+  ): StaffDeviceCredentialRecord =
+    post("/api/v1/staff/device-credentials/${urlEncode(credentialId)}/report-integrity", request)
+
+  // 票务核销冲正
+  fun reverseVerification(verificationId: String, request: VerificationReverseRequest): VerificationResponse =
+    post("/api/v1/ticketing/verifications/${urlEncode(verificationId)}/reverse", request)
+
   inline fun <reified T> get(path: String): T {
     val builder = HttpRequest.newBuilder()
       .uri(URI.create("$baseUrl$path"))

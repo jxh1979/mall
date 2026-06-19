@@ -234,6 +234,319 @@ class TerminalWorkflow(
     return ReturnDecision(ReturnStatus.RETURNED, pendingTaskCount, returned.status)
   }
 
+  // -------------------------------------------------------------------------
+  // 游乐入口核销：工作手机在线核销游乐权益；失败/离线时进入待同步队列。
+  // -------------------------------------------------------------------------
+  fun amusementVerifyOnline(entitlementCode: String, sessionId: String? = null): AmusementVerificationRecord {
+    requireOnline()
+    val session = requireNotNull(store.session) { "terminal session is missing" }
+    val binding = requireNotNull(store.binding) { "device binding is missing" }
+    val businessContext = buildMap {
+      put("scenario", "amusement_entry")
+      put("staff_id", session.staffId)
+      if (sessionId != null) put("session_id", sessionId)
+    }
+    val record = api.amusementVerify(
+      VerificationRequest(
+        idempotencyKey = newClientTaskId("amusement-verification"),
+        credentialPayload = entitlementCode,
+        deviceId = binding.id,
+        pointId = binding.locationPointId ?: binding.deviceCode,
+        businessContext = businessContext,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.amusement.verification.online",
+        summary = "游乐入口在线核销完成",
+        payload = mapOf("entitlementCode" to entitlementCode, "result" to record.verificationResult),
+        occurredAt = nowIso(),
+      ),
+    )
+    return record
+  }
+
+  // 游乐离线核销：进入待同步队列（复用 offline_verification 同步通道）。
+  fun amusementVerifyOffline(entitlementCode: String, sessionId: String? = null): LocalTask {
+    val task = LocalTask(
+      clientTaskId = newClientTaskId("amusement-offline-verification"),
+      taskType = "offline_verification",
+      payload = buildMap {
+        put("entitlementCode", entitlementCode)
+        put("pointId", store.binding?.locationPointId ?: "")
+        put("scenario", "amusement_entry")
+        put("mode", "offline")
+        if (sessionId != null) put("sessionId", sessionId)
+      },
+      occurredAt = nowIso(),
+    )
+    store.enqueue(task)
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.amusement.verification.offline_queued",
+        summary = "游乐离线核销进入待同步",
+        payload = mapOf("entitlementCode" to entitlementCode, "clientTaskId" to task.clientTaskId),
+        occurredAt = nowIso(),
+      ),
+    )
+    return task
+  }
+
+  // -------------------------------------------------------------------------
+  // 游乐检修：提交检修记录 -> 主管确认恢复运营。
+  // -------------------------------------------------------------------------
+  fun submitAmusementMaintenance(
+    projectId: String,
+    deviceId: String,
+    result: String,
+    exceptionNote: String? = null,
+    engineerId: String? = null,
+    engineerName: String? = null,
+    locationPointId: String? = null,
+  ): AmusementMaintenanceRecord {
+    requireOnline()
+    val record = api.submitAmusementMaintenance(
+      AmusementMaintenanceRecordRequest(
+        idempotencyKey = stableIdempotencyKey("amusement-maintenance", projectId, deviceId, result),
+        projectId = projectId,
+        deviceId = deviceId,
+        locationPointId = locationPointId ?: store.binding?.locationPointId,
+        engineerId = engineerId ?: store.session?.staffId,
+        engineerName = engineerName,
+        maintenanceAt = nowIso(),
+        result = result,
+        exceptionNote = exceptionNote,
+        sourceTerminal = "android_terminal",
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.amusement.maintenance.submitted",
+        summary = "游乐检修记录已提交",
+        payload = mapOf("deviceId" to deviceId, "result" to result, "recordId" to record.id),
+        occurredAt = nowIso(),
+      ),
+    )
+    return record
+  }
+
+  fun confirmAmusementMaintenanceResume(
+    recordId: String,
+    supervisorConfirmedBy: String? = null,
+    remark: String? = null,
+  ): AmusementMaintenanceRecord {
+    requireOnline()
+    val record = api.confirmAmusementMaintenanceResume(
+      recordId,
+      AmusementMaintenanceResumeRequest(
+        idempotencyKey = stableIdempotencyKey("amusement-maintenance-resume", recordId),
+        supervisorConfirmedBy = supervisorConfirmedBy ?: store.session?.staffId,
+        remark = remark,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.amusement.maintenance.resumed",
+        summary = "游乐检修主管确认恢复运营",
+        payload = mapOf("recordId" to recordId, "status" to record.status),
+        occurredAt = nowIso(),
+      ),
+    )
+    return record
+  }
+
+  // -------------------------------------------------------------------------
+  // 酒吧一体机/平板：点酒下单 -> （针对账单）支付意图 -> 结算。
+  // -------------------------------------------------------------------------
+  fun createBarOrder(
+    barId: String,
+    items: List<Map<String, String>>,
+    tableId: String? = null,
+    reservationId: String? = null,
+    paymentMode: String? = null,
+  ): BarOrderRecord {
+    requireOnline()
+    val session = store.session
+    val order = api.createBarOrder(
+      BarOrderRequest(
+        idempotencyKey = newClientTaskId("bar-order"),
+        operatorNote = "Android terminal bar order",
+        barId = barId,
+        tableId = tableId,
+        reservationId = reservationId,
+        items = items,
+        salespersonUserId = session?.staffId,
+        paymentMode = paymentMode,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.bar.order.created",
+        summary = "酒吧终端点酒下单",
+        payload = mapOf("barId" to barId, "orderId" to order.id, "status" to order.status),
+        occurredAt = nowIso(),
+      ),
+    )
+    return order
+  }
+
+  fun createBarPaymentIntent(
+    billId: String,
+    amountCent: Long,
+    channel: String,
+    currency: String = "CNY",
+  ): PaymentIntentRecord {
+    requireOnline()
+    val intent = api.createBarPaymentIntent(
+      billId,
+      PaymentIntentRequest(
+        idempotencyKey = stableIdempotencyKey("bar-pay-intent", billId, amountCent.toString(), channel),
+        operatorNote = "Android terminal bar payment intent",
+        businessOrderType = "bar_bill",
+        businessOrderId = billId,
+        amountCent = amountCent,
+        currency = currency,
+        channel = channel,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.bar.payment_intent.created",
+        summary = "酒吧终端创建支付意图",
+        payload = mapOf("billId" to billId, "intentId" to intent.id, "status" to intent.status),
+        occurredAt = nowIso(),
+      ),
+    )
+    return intent
+  }
+
+  fun settleBarBill(
+    billId: String,
+    settlementAmountCent: Long,
+    paymentChannel: String,
+    paymentId: String? = null,
+    posTransactionNo: String? = null,
+  ): BarBillRecord {
+    requireOnline()
+    val bill = api.settleBarBill(
+      billId,
+      BarBillSettleRequest(
+        idempotencyKey = stableIdempotencyKey("bar-settle", billId, settlementAmountCent.toString()),
+        operatorNote = "Android terminal bar settlement",
+        paymentId = paymentId,
+        settlementAmountCent = settlementAmountCent,
+        paymentChannel = paymentChannel,
+        cashierStaffId = store.session?.staffId,
+        posTransactionNo = posTransactionNo,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.bar.bill.settled",
+        summary = "酒吧终端账单结算",
+        payload = mapOf("billId" to billId, "settlementStatus" to (bill.settlementStatus ?: "")),
+        occurredAt = nowIso(),
+      ),
+    )
+    return bill
+  }
+
+  // -------------------------------------------------------------------------
+  // 员工设备凭证：换机绑定 -> 主管批准换机 -> 完整性上报。
+  // -------------------------------------------------------------------------
+  fun bindStaffDeviceCredential(
+    staffProfileId: String,
+    devicePublicKey: String,
+    deviceFingerprintHash: String,
+  ): StaffDeviceCredentialRecord {
+    requireOnline()
+    val record = api.bindStaffDeviceCredential(
+      StaffDeviceBindRequest(
+        idempotencyKey = stableIdempotencyKey("staff-device-bind", staffProfileId, deviceFingerprintHash),
+        operatorNote = "Android terminal device credential bind",
+        staffProfileId = staffProfileId,
+        devicePublicKey = devicePublicKey,
+        deviceFingerprintHash = deviceFingerprintHash,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.staff_device.bound",
+        summary = "员工设备凭证绑定",
+        payload = mapOf("credentialId" to record.id, "bindStatus" to record.bindStatus),
+        occurredAt = nowIso(),
+      ),
+    )
+    return record
+  }
+
+  fun approveStaffDeviceRebind(credentialId: String): StaffDeviceCredentialRecord {
+    requireOnline()
+    val record = api.approveStaffDeviceRebind(
+      credentialId,
+      StaffDeviceRebindDecisionRequest(
+        idempotencyKey = stableIdempotencyKey("staff-device-approve-rebind", credentialId),
+        operatorNote = "Android terminal approve device rebind",
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.staff_device.rebind_approved",
+        summary = "员工设备换机已批准",
+        payload = mapOf("credentialId" to credentialId, "bindStatus" to record.bindStatus),
+        occurredAt = nowIso(),
+      ),
+    )
+    return record
+  }
+
+  fun reportStaffDeviceIntegrity(
+    credentialId: String,
+    integrityStatus: String,
+  ): StaffDeviceCredentialRecord {
+    requireOnline()
+    val record = api.reportStaffDeviceIntegrity(
+      credentialId,
+      StaffDeviceIntegrityReportRequest(
+        idempotencyKey = stableIdempotencyKey("staff-device-integrity", credentialId, integrityStatus),
+        operatorNote = "Android terminal device integrity report",
+        integrityStatus = integrityStatus,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.staff_device.integrity_reported",
+        summary = "员工设备完整性上报",
+        payload = mapOf("credentialId" to credentialId, "integrityStatus" to (record.integrityStatus ?: integrityStatus)),
+        occurredAt = nowIso(),
+      ),
+    )
+    return record
+  }
+
+  // -------------------------------------------------------------------------
+  // 票务核销冲正：对已核销记录冲正（撤销）。
+  // -------------------------------------------------------------------------
+  fun reverseVerification(verificationId: String, reason: String): VerificationResponse {
+    requireOnline()
+    val response = api.reverseVerification(
+      verificationId,
+      VerificationReverseRequest(
+        idempotencyKey = stableIdempotencyKey("verification-reverse", verificationId),
+        reason = reason,
+      ),
+    )
+    store.addEvent(
+      TerminalEvent(
+        eventType = "terminal.verification.reversed",
+        summary = "票务核销冲正完成",
+        payload = mapOf("verificationId" to verificationId, "status" to response.status, "reason" to reason),
+        occurredAt = nowIso(),
+      ),
+    )
+    return response
+  }
+
   private fun requireOnline() {
     check(networkOnline) { "terminal network is offline" }
   }

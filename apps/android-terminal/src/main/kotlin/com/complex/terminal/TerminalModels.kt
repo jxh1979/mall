@@ -222,3 +222,213 @@ data class ReturnDecision(
   val pendingTaskCount: Int,
   val remoteStatus: String? = null,
 )
+
+// ---------------------------------------------------------------------------
+// 游乐核销 POST /api/v1/amusement/verifications
+// 复用 ticketing 的 VerificationRequest 契约（idempotency_key/credential_type/
+// credential_payload/device_id/point_id/business_context）。
+// 响应为 AmusementVerificationRecord。
+// ---------------------------------------------------------------------------
+@Serializable
+data class AmusementVerificationRecord(
+  val id: String = "",
+  val projectId: String? = null,
+  val sessionId: String? = null,
+  val deviceId: String? = null,
+  val staffId: String? = null,
+  val verificationResult: String = "",
+  val failureReason: String? = null,
+  val evidenceAttachmentIds: List<String> = emptyList(),
+  val createdAt: String? = null,
+)
+
+// ---------------------------------------------------------------------------
+// 游乐检修 POST /api/v1/amusement/maintenance-records
+// ---------------------------------------------------------------------------
+@Serializable
+data class AmusementMaintenanceRecordRequest(
+  val idempotencyKey: String,
+  val projectId: String? = null,
+  val deviceId: String? = null,
+  val locationPointId: String? = null,
+  val maintenanceVendorId: String? = null,
+  val engineerId: String? = null,
+  val engineerName: String? = null,
+  val maintenanceAt: String? = null,
+  val result: String? = null,
+  val exceptionNote: String? = null,
+  val sourceTerminal: String? = null,
+)
+
+// 游乐检修主管确认恢复 POST .../maintenance-records/{id}/confirm-resume
+// 注意：此处用 remark（非 operator_note）。
+@Serializable
+data class AmusementMaintenanceResumeRequest(
+  val idempotencyKey: String,
+  val supervisorConfirmedBy: String? = null,
+  val remark: String? = null,
+)
+
+@Serializable
+data class AmusementMaintenanceRecord(
+  val id: String = "",
+  val projectId: String? = null,
+  val deviceId: String? = null,
+  val locationPointId: String? = null,
+  val maintenanceVendorId: String? = null,
+  val engineerId: String? = null,
+  val engineerName: String? = null,
+  val maintenanceAt: String? = null,
+  val result: String? = null,
+  val exceptionNote: String? = null,
+  val sourceTerminal: String? = null,
+  val status: String = "",
+  val supervisorConfirmedBy: String? = null,
+  val confirmedAt: String? = null,
+  val resumeBusinessAt: String? = null,
+  val createdAt: String? = null,
+)
+
+// ---------------------------------------------------------------------------
+// 酒吧 一体机/平板 点酒 POST /api/v1/bar/orders
+// ---------------------------------------------------------------------------
+@Serializable
+data class BarOrderRequest(
+  val idempotencyKey: String,
+  val operatorNote: String? = null,
+  val evidenceAttachmentIds: List<String> = emptyList(),
+  val barId: String? = null,
+  val tableId: String? = null,
+  val reservationId: String? = null,
+  val items: List<Map<String, String>> = emptyList(),
+  val salespersonUserId: String? = null,
+  val serviceUserIds: List<String> = emptyList(),
+  val paymentMode: String? = null,
+)
+
+@Serializable
+data class BarOrderRecord(
+  val id: String = "",
+  val barId: String? = null,
+  val tableId: String? = null,
+  val reservationId: String? = null,
+  val customerId: String? = null,
+  val orderSource: String? = null,
+  val status: String = "",
+  val totalAmountCent: Long = 0,
+  val currency: String? = null,
+  val createdTerminal: String? = null,
+  val deviceId: String? = null,
+  val salesStaffId: String? = null,
+  val orderType: String? = null,
+  val createdAt: String? = null,
+  val updatedAt: String? = null,
+)
+
+// 酒吧账单支付意图 POST /api/v1/bar/bills/{bill_id}/pay-intents
+@Serializable
+data class PaymentIntentRequest(
+  val idempotencyKey: String,
+  val operatorNote: String? = null,
+  val evidenceAttachmentIds: List<String> = emptyList(),
+  val businessOrderType: String? = null,
+  val businessOrderId: String? = null,
+  val amountCent: Long? = null,
+  val currency: String? = null,
+  val channel: String? = null,
+)
+
+@Serializable
+data class PaymentIntentRecord(
+  val id: String = "",
+  val businessOrderType: String? = null,
+  val businessOrderId: String? = null,
+  val amountCent: Long = 0,
+  val currency: String? = null,
+  val channel: String? = null,
+  val status: String = "",
+  val createdAt: String? = null,
+  val updatedAt: String? = null,
+)
+
+// 酒吧账单结算 POST /api/v1/bar/bills/{bill_id}/settle
+@Serializable
+data class BarBillSettleRequest(
+  val idempotencyKey: String,
+  val operatorNote: String? = null,
+  val evidenceAttachmentIds: List<String> = emptyList(),
+  val paymentId: String? = null,
+  val settlementAmountCent: Long? = null,
+  val paymentChannel: String? = null,
+  val cashierStaffId: String? = null,
+  val posTransactionNo: String? = null,
+)
+
+@Serializable
+data class BarBillRecord(
+  val id: String = "",
+  val billNo: String? = null,
+  val orderId: String? = null,
+  val barId: String? = null,
+  val tableId: String? = null,
+  val reservationId: String? = null,
+  val payableAmountCent: Long = 0,
+  val paidAmountCent: Long = 0,
+  val currency: String? = null,
+  val paymentStatus: String? = null,
+  val settlementStatus: String? = null,
+  val createdAt: String? = null,
+  val updatedAt: String? = null,
+)
+
+// ---------------------------------------------------------------------------
+// 员工设备凭证 POST /api/v1/staff/device-credentials
+// ---------------------------------------------------------------------------
+@Serializable
+data class StaffDeviceBindRequest(
+  val idempotencyKey: String,
+  val operatorNote: String? = null,
+  val staffProfileId: String? = null,
+  val devicePublicKey: String? = null,
+  val deviceFingerprintHash: String? = null,
+)
+
+// 主管批准换机 POST .../device-credentials/{id}/approve-rebind
+@Serializable
+data class StaffDeviceRebindDecisionRequest(
+  val idempotencyKey: String,
+  val operatorNote: String? = null,
+)
+
+// 设备完整性上报 POST .../device-credentials/{id}/report-integrity
+@Serializable
+data class StaffDeviceIntegrityReportRequest(
+  val idempotencyKey: String,
+  val operatorNote: String? = null,
+  val integrityStatus: String? = null,
+)
+
+@Serializable
+data class StaffDeviceCredentialRecord(
+  val id: String = "",
+  val staffProfileId: String? = null,
+  val devicePublicKey: String? = null,
+  val deviceFingerprintHash: String? = null,
+  val bindStatus: String = "",
+  val supersedesCredentialId: String? = null,
+  val integrityStatus: String? = null,
+  val revokedReason: String? = null,
+  val boundAt: String? = null,
+  val revokedAt: String? = null,
+  val createdAt: String? = null,
+  val updatedAt: String? = null,
+)
+
+// ---------------------------------------------------------------------------
+// 票务核销冲正 POST /api/v1/ticketing/verifications/{id}/reverse
+// ---------------------------------------------------------------------------
+@Serializable
+data class VerificationReverseRequest(
+  val idempotencyKey: String,
+  val reason: String? = null,
+)
