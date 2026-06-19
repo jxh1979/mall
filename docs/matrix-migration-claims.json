@@ -446,6 +446,27 @@
       "column": "approval_status",
       "expected": "present",
       "note": "V069 R5 T7：锁定后补录审批工单表（chk_ar_ap_adj_approval pending/approved/rejected）已落"
+    },
+    {
+      "req": "REQ-03",
+      "table": "integration_robot_task_events",
+      "column": "handover_id",
+      "expected": "present",
+      "note": "V071 R5 T14：机器人被动留痕写回调表（chk_robot_event_type created/picked/delivering/delivered/failed，handover_id 预留对接 T17）已落。口径=接口+开关预留、被动留痕已落，真实回流闭环待厂商资料+开关开启后交付；不把占位当真实回流"
+    },
+    {
+      "req": "REQ-41",
+      "table": "integration_video_anchors",
+      "column": "clip_index_ref",
+      "expected": "present",
+      "note": "V071 R5 T14：视频点位+时间锚点表已落，clip_index_ref 本期留空待厂商监控片段索引接入。口径=接口+开关预留、视频锚点已落，真实片段索引/调阅联动待厂商资料+开关开启后交付"
+    },
+    {
+      "req": "REQ-70",
+      "table": "integration_video_access_audits",
+      "column": "approval_ref",
+      "expected": "present",
+      "note": "V071 R5 T14：视频锚点调阅审计表（viewer_user_id + approval_ref，FK anchor_id）已落，调阅敏感需 integration.video.view 权限+最小授权审批。口径=接口+开关预留、调阅审计已落，真实回流待厂商"
     }
   ]
 }

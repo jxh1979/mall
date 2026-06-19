@@ -94,6 +94,47 @@ class IntegrationControllerTests {
     }
 
     @Test
+    void t14VideoAnchorsRequiresVideoViewPermissionAndPassesViewer() throws Exception {
+        when(authorizationService.currentActor()).thenReturn(new com.complex.platform.access.AccessActor(
+                "viewer-1", "viewer", "staff", null, null, "active"));
+        when(service.listVideoAnchors(eq("viewer-1"), eq("approval-9"))).thenReturn(new PageResponse<>(
+                List.of(new VideoAnchorRecord("anchor-1", "point-1",
+                        Instant.parse("2026-06-18T10:00:00Z"), "verification-1", null,
+                        Instant.parse("2026-06-18T10:00:00Z"))),
+                1, 50, 1));
+        mockMvc.perform(get("/api/v1/integration/video-anchors?approval_ref=approval-9")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"));
+        verify(authorizationService).requirePermission("integration.video.view");
+        verify(service).listVideoAnchors(eq("viewer-1"), eq("approval-9"));
+    }
+
+    @Test
+    void t14TypedWebhookAndRobotReportDelegateToService() throws Exception {
+        when(service.receiveTypedWebhook(eq("catering_pos"), anyString(), any()))
+                .thenReturn(new WebhookAcceptedResponse("evt-1", false));
+        when(service.reportRobotTaskEvent(any(RobotTaskEventRequest.class)))
+                .thenReturn(new RobotTaskEventRecord("robotevt-1", "task-1", "delivered", "handover-1",
+                        Map.of(), Instant.parse("2026-06-18T10:00:00Z")));
+        mockMvc.perform(post("/api/v1/integration/catering_pos/webhook")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .header("Idempotency-Key", "idem-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"event_id\":\"evt-1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"));
+        mockMvc.perform(post("/api/v1/integration/robot/report")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"robotTaskRef\":\"task-1\",\"eventType\":\"delivered\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"));
+        verify(service).receiveTypedWebhook(eq("catering_pos"), anyString(), any());
+        verify(service).reportRobotTaskEvent(any(RobotTaskEventRequest.class));
+    }
+
+    @Test
     void integrationEndpointsRequireExactOpenApiPermissions() throws Exception {
         for (Endpoint endpoint : endpoints()) {
             Mockito.clearInvocations(authorizationService);

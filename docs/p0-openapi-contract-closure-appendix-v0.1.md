@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 216 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 128 | 人工权限矩阵正文未覆盖 26 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 432 | 人工事件矩阵正文未覆盖 389 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 216 | 人工任务映射正文未逐项覆盖 210 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 119 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 219 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 129 | 人工权限矩阵正文未覆盖 27 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 438 | 人工事件矩阵正文未覆盖 395 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 219 | 人工任务映射正文未逐项覆盖 213 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 121 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -109,6 +109,7 @@
 | `integration.provider_adapter.test` | staff-token | project-provider | 1 | testProviderAdapterMock | 已在权限矩阵正文出现 |
 | `integration.provider_adapter.update` | staff-token | project-provider | 1 | updateProviderAdapter | 已在权限矩阵正文出现 |
 | `integration.provider_adapter.view` | staff-token | project, project-provider | 16 | listIntegrationCompensationTasks, listIntegrationDevices, listIntegrationDeviceEvents, listIntegrationOfflineSyncBatches, listIntegrationOrderSyncs, listProviderAdapters, listIntegrationRetailSkus, listIntegrationRetryTasks, listRobotTaskEvents, listRobotTasks, listVideoCameras, listVoucherVerifications ... | 已在权限矩阵正文出现 |
+| `integration.video.view` | staff-token | project | 1 | listIntegrationVideoAnchors | OpenAPI 补充，以本附录为准 |
 | `inventory.purchase_request.manage` | staff-token | project | 1 | createPurchaseRequest | 已在权限矩阵正文出现 |
 | `inventory.purchase_request.view` | staff-token | project | 1 | listPurchaseRequests | 已在权限矩阵正文出现 |
 | `inventory.stock.adjust` | staff-token | project-warehouse | 1 | createStockAdjustment | 已在权限矩阵正文出现 |
@@ -124,7 +125,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-app, open-endpoint, project-device, public-project-bar | 12 | openAuthToken, getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, getKioskConfig, kioskHeartbeat | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-app, open-endpoint, project-device, public-project-bar | 14 | openAuthToken, getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent, receiveIntegrationTypedWebhook ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -405,14 +406,20 @@
 | `integration.retail_sku.viewed_failed` | failure | `listIntegrationRetailSkus` | `GET` | `/api/v1/integration/retail/skus` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.retry_task.viewed` | success | `listIntegrationRetryTasks` | `GET` | `/api/v1/integration/retry-tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.retry_task.viewed_failed` | failure | `listIntegrationRetryTasks` | `GET` | `/api/v1/integration/retry-tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
+| `integration.robot_report_failed` | failure | `reportIntegrationRobotTaskEvent` | `POST` | `/api/v1/integration/robot/report` | INT-第三方集成 | `not_applicable` | 接口级事件，以本附录为准 |
+| `integration.robot_reported` | success | `reportIntegrationRobotTaskEvent` | `POST` | `/api/v1/integration/robot/report` | INT-第三方集成 | `not_applicable` | 接口级事件，以本附录为准 |
 | `integration.robot_task_event.viewed` | success | `listRobotTaskEvents` | `GET` | `/api/v1/integration/robot/task-events` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.robot_task_event.viewed_failed` | failure | `listRobotTaskEvents` | `GET` | `/api/v1/integration/robot/task-events` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.robot_task.viewed` | success | `listRobotTasks` | `GET` | `/api/v1/integration/robot/tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.robot_task.viewed_failed` | failure | `listRobotTasks` | `GET` | `/api/v1/integration/robot/tasks` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.video_camera.viewed` | success | `listVideoCameras` | `GET` | `/api/v1/integration/video/cameras` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.video_camera.viewed_failed` | failure | `listVideoCameras` | `GET` | `/api/v1/integration/video/cameras` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
+| `integration.video_clip_view_failed` | failure | `listIntegrationVideoAnchors` | `GET` | `/api/v1/integration/video-anchors` | INT-第三方集成 | `integration.video.view` | 接口级事件，以本附录为准 |
+| `integration.video_clip_viewed` | success | `listIntegrationVideoAnchors` | `GET` | `/api/v1/integration/video-anchors` | INT-第三方集成 | `integration.video.view` | 接口级事件，以本附录为准 |
 | `integration.voucher_verification.viewed` | success | `listVoucherVerifications` | `GET` | `/api/v1/integration/voucher-verifications` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.voucher_verification.viewed_failed` | failure | `listVoucherVerifications` | `GET` | `/api/v1/integration/voucher-verifications` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
+| `integration.webhook_received` | success | `receiveIntegrationTypedWebhook` | `POST` | `/api/v1/integration/{type}/webhook` | INT-第三方集成 | `not_applicable` | 接口级事件，以本附录为准 |
+| `integration.webhook_rejected` | failure | `receiveIntegrationTypedWebhook` | `POST` | `/api/v1/integration/{type}/webhook` | INT-第三方集成 | `not_applicable` | 接口级事件，以本附录为准 |
 | `integration.wecom_binding.viewed` | success | `listWecomBindings` | `GET` | `/api/v1/integration/wecom/bindings` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.wecom_binding.viewed_failed` | failure | `listWecomBindings` | `GET` | `/api/v1/integration/wecom/bindings` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `integration.wecom_conversation.viewed` | success | `listWecomConversations` | `GET` | `/api/v1/integration/wecom/conversations` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
@@ -733,6 +740,7 @@
 | INT-第三方集成 | `listIntegrationOrderSyncs` | `GET` | `/api/v1/integration/order-syncs` | 查询第三方集成订单syncs | `integration.provider_adapter.view` | `integration.order_sync.viewed` / `integration.order_sync.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationRetailSkus` | `GET` | `/api/v1/integration/retail/skus` | 查询第三方集成零售SKU | `integration.provider_adapter.view` | `integration.retail_sku.viewed` / `integration.retail_sku.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listIntegrationRetryTasks` | `GET` | `/api/v1/integration/retry-tasks` | 查询第三方集成retry任务 | `integration.provider_adapter.view` | `integration.retry_task.viewed` / `integration.retry_task.viewed_failed` | web | operation 级补充 |
+| INT-第三方集成 | `listIntegrationVideoAnchors` | `GET` | `/api/v1/integration/video-anchors` | 调阅视频点位时间锚点（敏感，写调阅审计） | `integration.video.view` | `integration.video_clip_viewed` / `integration.video_clip_view_failed` | web, mobile_admin | operation 级补充 |
 | INT-第三方集成 | `listProviderAdapters` | `GET` | `/api/v1/integration/provider-adapters` | 供应商适配器查询 | `integration.provider_adapter.view` | `provider_adapter.viewed` / `provider_adapter.view_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listRobotTaskEvents` | `GET` | `/api/v1/integration/robot/task-events` | 查询机器人task事件 | `integration.provider_adapter.view` | `integration.robot_task_event.viewed` / `integration.robot_task_event.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listRobotTasks` | `GET` | `/api/v1/integration/robot/tasks` | 查询机器人任务 | `integration.provider_adapter.view` | `integration.robot_task.viewed` / `integration.robot_task.viewed_failed` | web | operation 级补充 |
@@ -743,6 +751,8 @@
 | INT-第三方集成 | `listWecomMessages` | `GET` | `/api/v1/integration/wecom/messages` | 查询企业微信消息 | `integration.provider_adapter.view` | `integration.wecom_message.viewed` / `integration.wecom_message.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `listWecomRiskHits` | `GET` | `/api/v1/integration/wecom/risk-hits` | 查询企业微信风险命中 | `integration.provider_adapter.view` | `integration.wecom_risk_hit.viewed` / `integration.wecom_risk_hit.viewed_failed` | web | operation 级补充 |
 | INT-第三方集成 | `markProviderAdapterProductionReady` | `POST` | `/api/v1/integration/provider-adapters/{id}/mark-production-ready` | 标记供应商适配器生产就绪 | `integration.provider_adapter.production_ready` | `provider_adapter.production_ready_marked` / `provider_adapter.production_ready_failed` | web | operation 级补充 |
+| INT-第三方集成 | `receiveIntegrationTypedWebhook` | `POST` | `/api/v1/integration/{type}/webhook` | 第三方统一 webhook 入口（开关门控） | `not_applicable` | `integration.webhook_received` / `integration.webhook_rejected` | <br>channel: provider-webhook | operation 级补充 |
+| INT-第三方集成 | `reportIntegrationRobotTaskEvent` | `POST` | `/api/v1/integration/robot/report` | 机器人任务事件上报（被动留痕） | `not_applicable` | `integration.robot_reported` / `integration.robot_report_failed` | <br>channel: provider-webhook | operation 级补充 |
 | INT-第三方集成 | `testProviderAdapterMock` | `POST` | `/api/v1/integration/provider-adapters/{id}/test-mock` | mock adapter 契约测试 | `integration.provider_adapter.test` | `provider_adapter.tested` / `provider_adapter.test_failed` | web | operation 级补充 |
 | INT-第三方集成 | `updateProviderAdapter` | `PUT` | `/api/v1/integration/provider-adapters/{id}` | 更新供应商适配器配置 | `integration.provider_adapter.update` | `open_mapping.changed` / `provider_adapter.update_failed` | web | operation 级补充 |
 | INV-库存存酒 | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | 存酒领取 | `bar.saved_bottle.manage` | `bar.saved_bottle_picked_up` / `bar.saved_bottle.pickup_failed` | tablet, staff_work_phone | operation 级补充 |

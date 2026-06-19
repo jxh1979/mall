@@ -177,6 +177,28 @@ final class JdbcIntegrationRowMapper {
         );
     }
 
+    RobotTaskEventRecord mapRobotTaskEvent(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new RobotTaskEventRecord(
+                resultSet.getString("id"),
+                resultSet.getString("robot_task_ref"),
+                resultSet.getString("event_type"),
+                resultSet.getString("handover_id"),
+                readMap(resultSet.getString("payload")),
+                instant(resultSet, "reported_at")
+        );
+    }
+
+    VideoAnchorRecord mapVideoAnchor(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new VideoAnchorRecord(
+                resultSet.getString("id"),
+                resultSet.getString("point_id"),
+                instant(resultSet, "event_time"),
+                resultSet.getString("business_ref"),
+                resultSet.getString("clip_index_ref"),
+                instant(resultSet, "created_at")
+        );
+    }
+
     private Map<String, Object> readMap(String value) {
         if (value == null || value.isBlank()) {
             return Map.of();

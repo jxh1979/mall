@@ -4525,6 +4525,146 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/integration/robot/report": {
+      "post": {
+        "tags": [
+          "integration"
+        ],
+        "operationId": "reportIntegrationRobotTaskEvent",
+        "summary": "机器人任务事件上报（被动留痕）",
+        "description": "R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "open-endpoint",
+        "x-terminal-allowed": [],
+        "x-invocation-channel": [
+          "provider-webhook"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "integration.robot_reported",
+        "x-audit-event-failure": "integration.robot_report_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RobotTaskEventRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "webhook-signature"
+      }
+    },
+    "/api/v1/integration/video-anchors": {
+      "get": {
+        "tags": [
+          "integration"
+        ],
+        "operationId": "listIntegrationVideoAnchors",
+        "summary": "调阅视频点位时间锚点（敏感，写调阅审计）",
+        "description": "R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer + approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。",
+        "x-permission": "integration.video.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "integration.video_clip_viewed",
+        "x-audit-event-failure": "integration.video_clip_view_failed",
+        "parameters": [
+          {
+            "name": "approval_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "调阅审批引用；写入 integration_video_access_audits.approval_ref 留痕。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/integration/{type}/webhook": {
+      "post": {
+        "tags": [
+          "integration"
+        ],
+        "operationId": "receiveIntegrationTypedWebhook",
+        "summary": "第三方统一 webhook 入口（开关门控）",
+        "description": "R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "open-endpoint",
+        "x-terminal-allowed": [],
+        "x-invocation-channel": [
+          "provider-webhook"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "integration.webhook_received",
+        "x-audit-event-failure": "integration.webhook_rejected",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "catering_pos",
+                "retail_pos",
+                "robot",
+                "video",
+                "wecom",
+                "ticket_channel",
+                "payment",
+                "face_age"
+              ]
+            },
+            "description": "第三方类型；对应终端能力开关 integration.{type}.sync。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/Webhook"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/WebhookAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "webhook-signature"
+      }
+    },
     "/api/v1/integration/retry-tasks": {
       "get": {
         "tags": [
@@ -8327,6 +8467,26 @@
                 "normalized_status": "paid"
               },
               "signature_version": "v1"
+            }
+          }
+        }
+      },
+      "RobotTaskEventRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RobotTaskEventRequest"
+            },
+            "example": {
+              "robot_task_ref": "robot_task_20260618_000001",
+              "event_type": "delivered",
+              "handover_id": "handover_20260618_000001",
+              "payload": {
+                "floor": "3",
+                "location": "lobby"
+              },
+              "idempotency_key": "robot_evt_robot_task_20260618_000001_delivered"
             }
           }
         }
@@ -13267,6 +13427,48 @@
           "mock_payload": {
             "type": "object",
             "description": "ProviderAdapterTestRequest.mock_payload 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。"
+          }
+        }
+      },
+      "RobotTaskEventRequest": {
+        "type": "object",
+        "description": "请求载荷 `RobotTaskEventRequest`（R5 T14 机器人被动留痕上报）；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
+        "additionalProperties": false,
+        "required": [
+          "robot_task_ref",
+          "event_type"
+        ],
+        "properties": {
+          "robot_task_ref": {
+            "type": "string",
+            "description": "机器人任务引用；写入 integration_robot_task_events.robot_task_ref。",
+            "maxLength": 128
+          },
+          "event_type": {
+            "type": "string",
+            "description": "机器人事件类型；对应 integration_robot_task_events.event_type CHECK 取值。",
+            "enum": [
+              "created",
+              "picked",
+              "delivering",
+              "delivered",
+              "failed"
+            ],
+            "maxLength": 32
+          },
+          "handover_id": {
+            "type": "string",
+            "description": "交接 ID 预留；对接 T17 dispatch 段交接（integration_robot_task_events.handover_id）。",
+            "maxLength": 64
+          },
+          "payload": {
+            "type": "object",
+            "description": "机器人上报原始载荷；占位透传，厂商资料到位前不解析映射。"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复留痕。",
+            "maxLength": 128
           }
         }
       },

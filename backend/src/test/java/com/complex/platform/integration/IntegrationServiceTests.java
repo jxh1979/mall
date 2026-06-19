@@ -41,6 +41,7 @@ class IntegrationServiceTests {
     private InMemoryAuditEventRepository auditEventRepository;
     private IntegrationService service;
     private Map<String, String> secrets;
+    private com.complex.platform.terminal.TerminalDeviceRepository terminalDeviceRepository;
 
     @BeforeEach
     void setUp() {
@@ -49,12 +50,22 @@ class IntegrationServiceTests {
         secrets = new LinkedHashMap<>();
         secrets.put(OPEN_APP_SECRET_REF, OPEN_APP_TEST_SECRET);
         secrets.put(OPEN_WEBHOOK_SECRET_REF, OPEN_WEBHOOK_TEST_SECRET);
+        terminalDeviceRepository = org.mockito.Mockito.mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
+        // 默认无显式开关行 → T2 语义"默认开启"，放行（第三方默认关闭由迁移种子在真实库表达）。
+        org.mockito.Mockito.when(terminalDeviceRepository.resolveEffectiveSwitch(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyMap())).thenReturn(Optional.empty());
+        com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard =
+                new com.complex.platform.gate.TerminalSwitchGuard(
+                        terminalDeviceRepository, new AuditEventService(auditEventRepository));
         service = new IntegrationService(
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                secretRef -> Optional.ofNullable(secrets.get(secretRef))
+                secretRef -> Optional.ofNullable(secrets.get(secretRef)),
+                terminalSwitchGuard
         );
         repository.appCredentials.put("p0-open-app", new OpenAppCredentialRecord(
                 "cred-p0",
@@ -755,6 +766,84 @@ class IntegrationServiceTests {
         }
     }
 
+    // ── R5 T14 第三方接口/开关预留骨架 ───────────────────────────────────────────
+
+    @Test
+    void t14TypedWebhookRejectedWhenSwitchDisabled() {
+        org.mockito.Mockito.when(terminalDeviceRepository.resolveEffectiveSwitch(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq("integration.catering_pos.sync"),
+                org.mockito.ArgumentMatchers.anyMap()))
+                .thenReturn(Optional.of(new com.complex.platform.terminal.TerminalCapabilitySwitchRecord(
+                        "tcs_int_catering_pos_off", "*", "integration.catering_pos.sync", "global", "global",
+                        false, "off", NOW, NOW)));
+        assertThatThrownBy(() -> service.receiveTypedWebhook(
+                "catering_pos", "idem-catering-1", Map.of("event_id", "ev1")))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code())
+                .isEqualTo("TERMINAL_DISABLED");
+    }
+
+    @Test
+    void t14TypedWebhookAcceptedDoesNotFakeReconciliation() {
+        WebhookAcceptedResponse response = service.receiveTypedWebhook(
+                "retail_pos", "idem-retail-1", Map.of("event_id", "evt-retail-1"));
+        assertThat(response.eventId()).isEqualTo("evt-retail-1");
+        OpenApiEventRecord stored = repository.events.stream()
+                .filter(e -> "evt-retail-1".equals(e.id())).findFirst().orElseThrow();
+        assertThat(stored.eventStatus()).isEqualTo("accepted");
+        assertThat(stored.resultJson().get("mapped")).isEqualTo(false);
+        assertThat(stored.resultJson().get("mapping")).isEqualTo(Map.of());
+        assertThat(auditEventRepository.events)
+                .anyMatch(e -> "integration.webhook_received".equals(e.eventName()));
+    }
+
+    @Test
+    void t14TypedWebhookRejectsUnsupportedType() {
+        assertThatThrownBy(() -> service.receiveTypedWebhook("unknown_provider", "idem-x", Map.of()))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code())
+                .isEqualTo("THIRD_PARTY_TYPE_UNSUPPORTED");
+    }
+
+    @Test
+    void t14RobotReportWritesPassiveTraceWithEventTypeCheck() {
+        RobotTaskEventRecord record = service.reportRobotTaskEvent(new RobotTaskEventRequest(
+                "robot-task-1", "delivered", "handover-9", Map.of("floor", "3"), "idem-robot-1"));
+        assertThat(record.eventType()).isEqualTo("delivered");
+        assertThat(record.handoverId()).isEqualTo("handover-9");
+        assertThat(auditEventRepository.events)
+                .anyMatch(e -> "integration.robot_reported".equals(e.eventName()));
+
+        assertThatThrownBy(() -> service.reportRobotTaskEvent(new RobotTaskEventRequest(
+                "robot-task-2", "exploded", null, Map.of(), "idem-robot-2")))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code())
+                .isEqualTo("ROBOT_EVENT_TYPE_INVALID");
+    }
+
+    @Test
+    void t14RecordVideoAnchorLeavesClipIndexEmpty() {
+        VideoAnchorRecord anchor = service.recordVideoAnchor(
+                "point-1", Instant.parse("2026-06-18T10:00:00Z"), "verification-77");
+        assertThat(anchor.pointId()).isEqualTo("point-1");
+        assertThat(anchor.clipIndexRef()).isNull();
+        assertThat(anchor.businessRef()).isEqualTo("verification-77");
+        assertThat(auditEventRepository.events)
+                .anyMatch(e -> "integration.video_anchor_recorded".equals(e.eventName()));
+    }
+
+    @Test
+    void t14ListVideoAnchorsWritesAccessAudit() {
+        service.recordVideoAnchor("point-9", Instant.parse("2026-06-18T11:00:00Z"), "handover-1");
+        var page = service.listVideoAnchors("user-viewer-1", "approval-555");
+        assertThat(page.items()).hasSize(1);
+        assertThat(repository.videoAccessAudits)
+                .anyMatch(a -> a.contains("user-viewer-1") && a.contains("approval-555"));
+        assertThat(auditEventRepository.events)
+                .anyMatch(e -> "integration.video_clip_viewed".equals(e.eventName()));
+    }
+
     private static final class InMemoryIntegrationRepository implements IntegrationRepository {
         private final Map<String, OpenAppCredentialRecord> appCredentials = new LinkedHashMap<>();
         private final Map<String, OpenEndpointConfigRecord> endpointConfigs = new LinkedHashMap<>();
@@ -936,6 +1025,37 @@ class IntegrationServiceTests {
         @Override
         public List<ReconciliationDifferenceRecord> listReconciliationDifferences() {
             return new ArrayList<>(reconciliationDifferences.values());
+        }
+
+        private final List<RobotTaskEventRecord> robotTaskEvents = new ArrayList<>();
+        private final Map<String, VideoAnchorRecord> videoAnchors = new LinkedHashMap<>();
+        private final List<String> videoAccessAudits = new ArrayList<>();
+
+        @Override
+        public RobotTaskEventRecord saveRobotTaskEvent(RobotTaskEventRecord record) {
+            robotTaskEvents.add(record);
+            return record;
+        }
+
+        @Override
+        public VideoAnchorRecord saveVideoAnchor(VideoAnchorRecord record) {
+            videoAnchors.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public List<VideoAnchorRecord> listVideoAnchors() {
+            return new ArrayList<>(videoAnchors.values());
+        }
+
+        @Override
+        public Optional<VideoAnchorRecord> findVideoAnchorById(String id) {
+            return Optional.ofNullable(videoAnchors.get(id));
+        }
+
+        @Override
+        public void saveVideoAccessAudit(String id, String anchorId, String viewerUserId, String approvalRef, Instant viewedAt) {
+            videoAccessAudits.add(id + ":" + anchorId + ":" + viewerUserId + ":" + approvalRef);
         }
     }
 

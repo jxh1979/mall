@@ -453,6 +453,80 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 """, rowMapper::mapReconciliationDifference);
     }
 
+    @Override
+    public RobotTaskEventRecord saveRobotTaskEvent(RobotTaskEventRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_robot_task_events (
+                    id, robot_task_ref, event_type, handover_id, payload, reported_at
+                )
+                VALUES (
+                    :id, :robot_task_ref, :event_type, :handover_id, CAST(:payload AS jsonb), :reported_at
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", record.id())
+                .addValue("robot_task_ref", record.robotTaskRef())
+                .addValue("event_type", record.eventType())
+                .addValue("handover_id", record.handoverId())
+                .addValue("payload", writeJson(record.payload()))
+                .addValue("reported_at", timestampWithTimeZone(record.reportedAt())));
+        return record;
+    }
+
+    @Override
+    public VideoAnchorRecord saveVideoAnchor(VideoAnchorRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_video_anchors (
+                    id, point_id, event_time, business_ref, clip_index_ref, created_at
+                )
+                VALUES (
+                    :id, :point_id, :event_time, :business_ref, :clip_index_ref, :created_at
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", record.id())
+                .addValue("point_id", record.pointId())
+                .addValue("event_time", timestampWithTimeZone(record.eventTime()))
+                .addValue("business_ref", record.businessRef())
+                .addValue("clip_index_ref", record.clipIndexRef())
+                .addValue("created_at", timestampWithTimeZone(record.createdAt())));
+        return record;
+    }
+
+    @Override
+    public List<VideoAnchorRecord> listVideoAnchors() {
+        return jdbcTemplate.query("""
+                SELECT id, point_id, event_time, business_ref, clip_index_ref, created_at
+                  FROM integration_video_anchors
+                 ORDER BY event_time DESC, id
+                 LIMIT 200
+                """, rowMapper::mapVideoAnchor);
+    }
+
+    @Override
+    public Optional<VideoAnchorRecord> findVideoAnchorById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, point_id, event_time, business_ref, clip_index_ref, created_at
+                  FROM integration_video_anchors
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapVideoAnchor).stream().findFirst();
+    }
+
+    @Override
+    public void saveVideoAccessAudit(String id, String anchorId, String viewerUserId, String approvalRef, Instant viewedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_video_access_audits (
+                    id, anchor_id, viewer_user_id, approval_ref, viewed_at
+                )
+                VALUES (
+                    :id, :anchor_id, :viewer_user_id, :approval_ref, :viewed_at
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("anchor_id", anchorId)
+                .addValue("viewer_user_id", viewerUserId)
+                .addValue("approval_ref", approvalRef)
+                .addValue("viewed_at", timestampWithTimeZone(viewedAt)));
+    }
+
     private Optional<IntegrationTaskRecord> findTaskById(String tableName, String taskCategory, String id) {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, task_type, business_type, external_business_id,

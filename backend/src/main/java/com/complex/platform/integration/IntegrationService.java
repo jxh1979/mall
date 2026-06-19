@@ -30,15 +30,17 @@ public class IntegrationService {
     private final ProviderAdapterService providerAdapterService;
     private final IntegrationOrderSyncService orderSyncService;
     private final IntegrationReconciliationService reconciliationService;
+    private final ThirdPartyScaffoldingService thirdPartyService;
 
     @Autowired
     public IntegrationService(
             IntegrationRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            SecretResolver secretResolver
+            SecretResolver secretResolver,
+            com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard
     ) {
-        this(repository, idempotencyService, auditEventService, Clock.systemUTC(), secretResolver);
+        this(repository, idempotencyService, auditEventService, Clock.systemUTC(), secretResolver, terminalSwitchGuard);
     }
 
     IntegrationService(
@@ -46,7 +48,8 @@ public class IntegrationService {
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             Clock clock,
-            SecretResolver secretResolver
+            SecretResolver secretResolver,
+            com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard
     ) {
         this.repository = repository;
         this.auditEventService = auditEventService;
@@ -56,6 +59,8 @@ public class IntegrationService {
         this.providerAdapterService = new ProviderAdapterService(repository, clock, operationSupport);
         this.orderSyncService = new IntegrationOrderSyncService(repository, clock, operationSupport);
         this.reconciliationService = new IntegrationReconciliationService(repository, clock, operationSupport);
+        this.thirdPartyService = new ThirdPartyScaffoldingService(
+                repository, clock, auditEventService, terminalSwitchGuard);
     }
 
     public OpenAuthTokenResponse issueOpenToken(OpenAuthTokenRequest request) {
@@ -406,6 +411,33 @@ public class IntegrationService {
 
     public AdapterTestRecord testProviderAdapterMock(String id, ProviderAdapterTestRequest request) {
         return providerAdapterService.testProviderAdapterMock(id, request);
+    }
+
+    // ── R5 T14 第三方接口/开关预留骨架 ───────────────────────────────────────────
+
+    /**
+     * 各类第三方统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，
+     * 在 handler 内编程式调用 TerminalSwitchGuard.check（@GuardedAction 静态值不适用）。
+     * 开关关 → 抛 TERMINAL_DISABLED；通过则落 open_api_events 信封（mapping 占位空，
+     * processStatus=accepted，不伪造对账）。
+     */
+    public WebhookAcceptedResponse receiveTypedWebhook(String type, String idempotencyKey, Map<String, Object> payload) {
+        return thirdPartyService.receiveTypedWebhook(type, idempotencyKey, payload);
+    }
+
+    /** 机器人被动留痕：写 integration_robot_task_events，受 integration.robot.sync 开关门控。 */
+    public RobotTaskEventRecord reportRobotTaskEvent(RobotTaskEventRequest request) {
+        return thirdPartyService.reportRobotTaskEvent(request);
+    }
+
+    /** 视频锚点内部记录：业务侧关键动作（核销/交接/异常）调用，clip_index_ref 留空待厂商。 */
+    public VideoAnchorRecord recordVideoAnchor(String pointId, Instant eventTime, String businessRef) {
+        return thirdPartyService.recordVideoAnchor(pointId, eventTime, businessRef);
+    }
+
+    /** 视频锚点调阅：敏感操作，需 integration.video.view 权限 + 写 integration_video_access_audits。 */
+    public PageResponse<VideoAnchorRecord> listVideoAnchors(String viewerUserId, String approvalRef) {
+        return thirdPartyService.listVideoAnchors(viewerUserId, approvalRef);
     }
 
     private OpenAppCredentialRecord verifyOpenSignature(OpenSignatureRequest request, String endpointKey, boolean reserveNonce) {

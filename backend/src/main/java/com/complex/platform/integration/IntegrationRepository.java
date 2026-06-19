@@ -63,4 +63,15 @@ public interface IntegrationRepository {
     Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id);
 
     List<ReconciliationDifferenceRecord> listReconciliationDifferences();
+
+    // ── R5 T14 第三方接口/开关预留骨架 ───────────────────────────────────────────
+    RobotTaskEventRecord saveRobotTaskEvent(RobotTaskEventRecord record);
+
+    VideoAnchorRecord saveVideoAnchor(VideoAnchorRecord record);
+
+    List<VideoAnchorRecord> listVideoAnchors();
+
+    Optional<VideoAnchorRecord> findVideoAnchorById(String id);
+
+    void saveVideoAccessAudit(String id, String anchorId, String viewerUserId, String approvalRef, java.time.Instant viewedAt);
 }

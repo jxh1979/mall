@@ -31,6 +31,7 @@ public class IntegrationController {
     private static final String RECONCILIATION_VIEW_PERMISSION = "integration.reconciliation.view";
     private static final String RECONCILIATION_MANAGE_PERMISSION = "integration.reconciliation.manage";
     private static final String RECONCILIATION_RESOLVE_PERMISSION = "integration.reconciliation.resolve";
+    private static final String VIDEO_VIEW_PERMISSION = "integration.video.view";
 
     private final IntegrationService service;
     private final AuthorizationService authorizationService;
@@ -196,6 +197,31 @@ public class IntegrationController {
         authorizationService.requirePermission(RECONCILIATION_RESOLVE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.resolveReconciliationDifference(id, request));
+    }
+
+    @PostMapping("/{type}/webhook")
+    public ApiResponse<WebhookAcceptedResponse> receiveTypedWebhook(
+            @PathVariable String type,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody(required = false) java.util.Map<String, Object> payload
+    ) {
+        // 鉴权上下文 = webhook-signature（供应商回调）；门控在 service 内编程式调用 TerminalSwitchGuard。
+        return ApiResponse.ok(service.receiveTypedWebhook(type, idempotencyKey, payload));
+    }
+
+    @PostMapping("/robot/report")
+    public ApiResponse<RobotTaskEventRecord> reportRobotTaskEvent(@RequestBody RobotTaskEventRequest request) {
+        // 鉴权上下文 = webhook-signature（机器人回调）；门控在 service 内编程式调用 TerminalSwitchGuard。
+        return ApiResponse.ok(service.reportRobotTaskEvent(request));
+    }
+
+    @GetMapping("/video-anchors")
+    public ApiResponse<PageResponse<VideoAnchorRecord>> listVideoAnchors(
+            @org.springframework.web.bind.annotation.RequestParam(value = "approval_ref", required = false) String approvalRef
+    ) {
+        authorizationService.requirePermission(VIDEO_VIEW_PERMISSION);
+        String viewerUserId = authorizationService.currentActor().id();
+        return ApiResponse.ok(service.listVideoAnchors(viewerUserId, approvalRef));
     }
 
     @GetMapping("/robot/task-events")
