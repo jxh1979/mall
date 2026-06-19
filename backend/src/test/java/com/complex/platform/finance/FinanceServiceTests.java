@@ -675,6 +675,68 @@ class FinanceServiceTests {
 
     // ─── helpers ─────────────────────────────────────────────────────────────
 
+    // ─── Payment gateway switch routing (V093) ────────────────────────────────
+
+    private FinanceService financeWithGatewaySwitch(boolean enabled) {
+        com.complex.platform.terminal.TerminalDeviceRepository terminalRepo =
+                mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
+        when(terminalRepo.resolveEffectiveSwitch(
+                org.mockito.ArgumentMatchers.eq("*"),
+                org.mockito.ArgumentMatchers.eq(com.complex.platform.finance.gateway.PaymentGatewayRouter.CAPABILITY),
+                org.mockito.ArgumentMatchers.anyMap()))
+                .thenReturn(Optional.of(new com.complex.platform.terminal.TerminalCapabilitySwitchRecord(
+                        "tcs_payment_gateway_off", "*",
+                        com.complex.platform.finance.gateway.PaymentGatewayRouter.CAPABILITY,
+                        "global", "global", enabled, "test", Instant.now(), Instant.now())));
+        AuditEventService auditEventService = new AuditEventService(auditEventRepository);
+        AuditedOperationExecutor ops = new AuditedOperationExecutor(
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), auditEventService);
+        return new FinanceService(financeRepository, ops, auditEventService, authorizationService,
+                new com.complex.platform.common.BusinessDayResolver(4),
+                new com.complex.platform.finance.gateway.PaymentGatewayRouter(terminalRepo));
+    }
+
+    @Test
+    void paymentGatewayOff_createPaymentIntentRecordsReservedNoExternalCall() {
+        FinanceService svc = financeWithGatewaySwitch(false);
+        PaymentIntentRecord intent = svc.createPaymentIntent(new PaymentIntentRequest(
+                "pi-gw-off", "create", List.of(), "ticket_order", "order_gw_off", 5000L, "CNY", "wechat"));
+        assertThat(intent.gatewayStatus()).isEqualTo("RESERVED");
+        assertThat(intent.gatewayProvider()).isNull();
+    }
+
+    @Test
+    void paymentGatewayOn_createPaymentIntentRoutesToPortReturnsNotConfigured() {
+        FinanceService svc = financeWithGatewaySwitch(true);
+        PaymentIntentRecord intent = svc.createPaymentIntent(new PaymentIntentRequest(
+                "pi-gw-on", "create", List.of(), "ticket_order", "order_gw_on", 5000L, "CNY", "wechat"));
+        assertThat(intent.gatewayStatus()).isEqualTo("NOT_CONFIGURED");
+        assertThat(intent.gatewayProvider()).isEqualTo("reserved");
+    }
+
+    @Test
+    void paymentGatewayOff_refundUsesInternalManualChannel() {
+        FinanceService svc = financeWithGatewaySwitch(false);
+        ArApItemRecord item = svc.createArApItem(itemRequest("arap-gw-refund-off", "receivable", 30000L));
+        ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-gw-off", 30000L));
+        FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
+                "refund-gw-off", "refund", List.of(), payment.payment().id(), 10000L, "refund", null));
+        assertThat(refund.refundChannel()).isEqualTo("manual");
+        assertThat(refund.status()).isEqualTo("requested");
+    }
+
+    @Test
+    void paymentGatewayOn_refundDoesNotCrashAndStillRecorded() {
+        FinanceService svc = financeWithGatewaySwitch(true);
+        ArApItemRecord item = svc.createArApItem(itemRequest("arap-gw-refund-on", "receivable", 30000L));
+        ArApPaymentResponse payment = svc.registerArApPayment(item.id(), paymentRequest("pay-gw-on", 30000L));
+        FinanceRefundRecord refund = svc.createRefund(new RefundRequest(
+                "refund-gw-on", "refund", List.of(), payment.payment().id(), 10000L, "refund", null));
+        assertThat(refund.status()).isEqualTo("requested");
+        // 占位 NOT_CONFIGURED 仍属"未真正经渠道结算"→回退内部手工打款渠道（manual），不崩、不阻塞。
+        assertThat(refund.refundChannel()).isEqualTo("manual");
+    }
+
     private ArApItemRequest itemRequest(String idempotencyKey, String direction, long amountCent) {
         return new ArApItemRequest(
                 idempotencyKey,

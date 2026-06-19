@@ -7417,6 +7417,7 @@
         ],
         "operationId": "updateCapabilitySwitch",
         "summary": "修改端能力开关",
+        "description": "后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如 payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位 NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。",
         "x-permission": "terminal.switch.manage",
         "x-data-scope": "project-device",
         "x-terminal-allowed": [

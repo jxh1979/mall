@@ -28,20 +28,31 @@ public class MembershipService {
     private final CustomerRepository repository;
     private final FinanceService financeService;
     private final AuditEventService auditEventService;
+    private final com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway;
     private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
     public MembershipService(CustomerRepository repository, FinanceService financeService,
-                             AuditEventService auditEventService) {
-        this(repository, financeService, auditEventService, Clock.systemUTC());
+                             AuditEventService auditEventService,
+                             com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway) {
+        this(repository, financeService, auditEventService, paymentGateway, Clock.systemUTC());
     }
 
     MembershipService(CustomerRepository repository, FinanceService financeService,
-                      AuditEventService auditEventService, Clock clock) {
+                      AuditEventService auditEventService,
+                      com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway, Clock clock) {
         this.repository = repository;
         this.financeService = financeService;
         this.auditEventService = auditEventService;
+        this.paymentGateway = paymentGateway;
         this.clock = clock;
+    }
+
+    /** 向后兼容构造：未提供支付渠道路由时用"开关关"占位路由（不调外部渠道）。供既有单测构造。 */
+    MembershipService(CustomerRepository repository, FinanceService financeService,
+                      AuditEventService auditEventService, Clock clock) {
+        this(repository, financeService, auditEventService,
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), clock);
     }
 
     // ============================================================
@@ -129,6 +140,68 @@ public class MembershipService {
                 "customer_membership", membership.id(), null, null,
                 Map.of("expire_at", newExpire.toString()));
         return renewed;
+    }
+
+    // ============================================================
+    // 自动续费扣款（到期前由作业触发；走支付渠道开关）
+    // ============================================================
+
+    /** 自动续费扣款结果：是否实际扣款成功并续期，及渠道状态（留痕/对账用）。 */
+    public record AutoRenewOutcome(boolean charged, String gatewayStatus, CustomerMembershipRecord membership) {
+    }
+
+    /**
+     * 自动续费扣款：对开启 autoRenew 的会员尝试经支付渠道扣款，扣款成功则续期。
+     *
+     * <p>支付渠道开关（payment.gateway.enabled，后台可配，默认关）决定行为：
+     * <ul>
+     *   <li>关（默认）→ 不调外部渠道，扣款返回 reserved，不实际扣款、不续期、不阻塞
+     *       （续费意向已留痕，待后台开启渠道或人工/内部确认收款后再续期）。</li>
+     *   <li>开 → 路由到 {@code PaymentGatewayPort.autoRenewCharge}（当前无真实厂商=占位 NOT_CONFIGURED，
+     *       同样不实际扣款，留接缝，不崩）。真实渠道接入后扣款 SUCCEEDED 时在此续期。</li>
+     * </ul>
+     * 系统作业逻辑本体，可单测直调；不过权限闸。
+     */
+    @Transactional
+    public AutoRenewOutcome autoRenewCharge(String membershipId) {
+        Instant now = now();
+        CustomerMembershipRecord membership = repository.findMembershipByIdForUpdate(membershipId)
+                .orElseThrow(() -> ApiException.notFound("MEMBERSHIP_NOT_FOUND", "membership not found"));
+        if (!membership.autoRenew()) {
+            throw ApiException.conflict("MEMBERSHIP_AUTORENEW_DISABLED", "membership auto-renew is disabled");
+        }
+        if ("cancelled".equals(membership.status())) {
+            throw ApiException.conflict("MEMBERSHIP_CANCELLED", "membership is cancelled");
+        }
+        CustomerMembershipPlanRecord plan = requirePlan(membership.planId());
+        long amountCent = Math.max(1L, plan.priceCent());
+
+        com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.autoRenewCharge(
+                com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
+                        "membership_auto_renew", membership.id(), amountCent, null));
+
+        if (gw.requiresInternalFallback()) {
+            // 开关关 / 占位未配置：不实际扣款、不续期，仅留痕续费意向（不阻塞）。
+            auditEventService.recordSuccess("membership.auto_renew_reserved", "not_applicable",
+                    "customer_membership", membership.id(), null, null,
+                    Map.of("plan_id", membership.planId(), "amount_cent", amountCent,
+                            "gateway_status", gw.status().name()));
+            return new AutoRenewOutcome(false, gw.status().name(), membership);
+        }
+
+        // 渠道扣款成功（真实适配器接入后路径）：续期。
+        Instant base = membership.expireAt().isAfter(now) ? membership.expireAt() : now;
+        Instant newExpire = base.plusSeconds((long) plan.durationDays() * 86_400L);
+        CustomerMembershipRecord renewed = new CustomerMembershipRecord(
+                membership.id(), membership.customerId(), membership.planId(), membership.projectId(),
+                membership.startAt(), newExpire, "active", membership.autoRenew(),
+                membership.paymentIntentId(), membership.idempotencyKey(), membership.createdAt(), now);
+        repository.saveMembership(renewed);
+        auditEventService.recordSuccess("membership.auto_renewed", "not_applicable",
+                "customer_membership", membership.id(), null, null,
+                Map.of("plan_id", membership.planId(), "amount_cent", amountCent,
+                        "gateway_status", gw.status().name(), "expire_at", newExpire.toString()));
+        return new AutoRenewOutcome(true, gw.status().name(), renewed);
     }
 
     // ============================================================

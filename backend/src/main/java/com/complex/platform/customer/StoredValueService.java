@@ -31,20 +31,31 @@ public class StoredValueService {
     private final CustomerRepository repository;
     private final FinanceService financeService;
     private final AuditEventService auditEventService;
+    private final com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway;
     private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
     public StoredValueService(CustomerRepository repository, FinanceService financeService,
-                              AuditEventService auditEventService) {
-        this(repository, financeService, auditEventService, Clock.systemUTC());
+                              AuditEventService auditEventService,
+                              com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway) {
+        this(repository, financeService, auditEventService, paymentGateway, Clock.systemUTC());
     }
 
     StoredValueService(CustomerRepository repository, FinanceService financeService,
-                       AuditEventService auditEventService, Clock clock) {
+                       AuditEventService auditEventService,
+                       com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway, Clock clock) {
         this.repository = repository;
         this.financeService = financeService;
         this.auditEventService = auditEventService;
+        this.paymentGateway = paymentGateway;
         this.clock = clock;
+    }
+
+    /** 向后兼容构造：未提供支付渠道路由时用"开关关"占位路由（不调外部渠道）。供既有单测构造。 */
+    StoredValueService(CustomerRepository repository, FinanceService financeService,
+                       AuditEventService auditEventService, Clock clock) {
+        this(repository, financeService, auditEventService,
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), clock);
     }
 
     // ============================================================
@@ -181,10 +192,17 @@ public class StoredValueService {
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
                         account.id(), customerId, "refund", -amountCent, balanceAfter,
                         null, reason, idempotencyKey, now));
+        // 退款打款：系统内余额已退回（上方）。实际打款路径由支付渠道开关决定——
+        //   关（默认）→ 不调外部渠道，标 reserved（人工/内部确认打款，不阻塞）。
+        //   开 → 路由到 PaymentGatewayPort.refund（无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
+        com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.refund(
+                com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
+                        "stored_value_refund", account.id(), amountCent, null));
         auditEventService.recordSuccess(EVENT_REFUND, "customer.stored_value.refund",
                 "customer_stored_value", account.id(), null, null,
                 Map.of("amount_cent", amountCent, "balance_after_cent", balanceAfter,
-                        "closed", newStatus.equals("closed")));
+                        "closed", newStatus.equals("closed"),
+                        "payout_gateway_status", gw.status().name()));
         return txn;
     }
 

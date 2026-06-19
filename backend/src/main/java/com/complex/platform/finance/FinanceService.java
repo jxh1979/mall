@@ -46,7 +46,29 @@ public class FinanceService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
+    private final com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public FinanceService(
+            FinanceRepository repository,
+            AuditedOperationExecutor operations,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver,
+            com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway
+    ) {
+        this.repository = repository;
+        this.operations = operations;
+        this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
+        this.businessDayResolver = businessDayResolver;
+        this.paymentGateway = paymentGateway;
+    }
+
+    /**
+     * 向后兼容构造：未提供支付渠道路由时，使用"开关关"语义的占位路由（不调外部渠道）。
+     * 供既有单测构造（开关默认关，行为与生产默认一致）。
+     */
     public FinanceService(
             FinanceRepository repository,
             AuditedOperationExecutor operations,
@@ -54,11 +76,8 @@ public class FinanceService {
             AuthorizationService authorizationService,
             com.complex.platform.common.BusinessDayResolver businessDayResolver
     ) {
-        this.repository = repository;
-        this.operations = operations;
-        this.auditEventService = auditEventService;
-        this.authorizationService = authorizationService;
-        this.businessDayResolver = businessDayResolver;
+        this(repository, operations, auditEventService, authorizationService, businessDayResolver,
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled());
     }
 
     public PageResponse<ArApItemRecord> listArApItems() {
@@ -600,14 +619,30 @@ public class FinanceService {
     private PaymentIntentRecord createIntent(PaymentIntentRequest request) {
         PaymentIntentRequest actual = requireRequest(request);
         Instant now = Instant.now();
+        String businessOrderType = requireText(actual.businessOrderType(), "business_order_type");
+        String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
+        long amountCent = requirePositive(actual.amountCent(), "amount_cent");
+        String currency = trimToDefault(actual.currency(), CURRENCY_CNY);
+        String channel = requireText(actual.channel(), "channel");
+
+        // 支付渠道开关（payment.gateway.enabled，后台可配，默认关）。
+        //   关 → 不调外部渠道，支付意图标 reserved（占位，由 markPaymentIntentSucceeded 内部确认，不阻塞）。
+        //   开 → 路由到 PaymentGatewayPort（当前无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
+        com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.initiatePayment(
+                com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
+                        businessOrderType, businessOrderId, amountCent, channel));
+
         return repository.savePaymentIntent(new PaymentIntentRecord(
                 "pay_intent_" + slug(actual.idempotencyKey()),
-                requireText(actual.businessOrderType(), "business_order_type"),
-                requireText(actual.businessOrderId(), "business_order_id"),
-                requirePositive(actual.amountCent(), "amount_cent"),
-                trimToDefault(actual.currency(), CURRENCY_CNY),
-                requireText(actual.channel(), "channel"),
+                businessOrderType,
+                businessOrderId,
+                amountCent,
+                currency,
+                channel,
                 "created",
+                gw.gatewayProvider(),
+                gw.gatewayRef(),
+                gw.status().name(),
                 now,
                 now
         ));
@@ -660,12 +695,23 @@ public class FinanceService {
                             + ", already refunded: " + alreadyRefunded + ")");
         }
 
+        // 支付渠道开关（payment.gateway.enabled，后台可配，默认关）决定退款打款路径：
+        //   关 → 不调渠道，退款标 requested + 内部/手工打款渠道（reserved，人工确认，不阻塞）。
+        //   开 → 路由到 PaymentGatewayPort.refund（当前无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
+        com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.refund(
+                new com.complex.platform.finance.gateway.PaymentGatewayRequest(
+                        "finance_refund", targetId, refundAmountCent, CURRENCY_CNY,
+                        trimToNull(actual.refundChannel()), null));
+        String refundChannel = gw.requiresInternalFallback()
+                ? trimToDefault(actual.refundChannel(), "manual")
+                : trimToDefault(actual.refundChannel(), gw.gatewayProvider());
+
         return repository.saveRefund(new FinanceRefundRecord(
                 "refund_" + slug(actual.idempotencyKey()),
                 targetId,
                 refundAmountCent,
                 requireText(actual.reason(), "reason"),
-                trimToDefault(actual.refundChannel(), "manual"),
+                refundChannel,
                 "requested",
                 Instant.now()
         ));

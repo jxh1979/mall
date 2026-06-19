@@ -218,11 +218,13 @@ class JdbcFinanceRepository implements FinanceRepository {
         jdbcTemplate.update("""
                 INSERT INTO finance_payment_intents (
                     id, business_order_type, business_order_id, amount_cent, currency,
-                    channel, status, created_at, updated_at
+                    channel, status, gateway_provider, gateway_ref, gateway_status,
+                    created_at, updated_at
                 )
                 VALUES (
                     :id, :business_order_type, :business_order_id, :amount_cent, :currency,
-                    :channel, :status, :created_at, :updated_at
+                    :channel, :status, :gateway_provider, :gateway_ref, :gateway_status,
+                    :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     business_order_type = EXCLUDED.business_order_type,
@@ -231,6 +233,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                     currency = EXCLUDED.currency,
                     channel = EXCLUDED.channel,
                     status = EXCLUDED.status,
+                    gateway_provider = EXCLUDED.gateway_provider,
+                    gateway_ref = EXCLUDED.gateway_ref,
+                    gateway_status = EXCLUDED.gateway_status,
                     updated_at = EXCLUDED.updated_at
                 """, paymentIntentParameters(paymentIntent));
         return paymentIntent;
@@ -240,7 +245,8 @@ class JdbcFinanceRepository implements FinanceRepository {
     public Optional<PaymentIntentRecord> findPaymentIntentById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, business_order_type, business_order_id, amount_cent, currency,
-                       channel, status, created_at, updated_at
+                       channel, status, gateway_provider, gateway_ref, gateway_status,
+                       created_at, updated_at
                   FROM finance_payment_intents
                  WHERE id = :id
                 """, Map.of("id", id), this::mapPaymentIntent).stream().findFirst();
@@ -255,6 +261,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 rs.getString("currency"),
                 rs.getString("channel"),
                 rs.getString("status"),
+                rs.getString("gateway_provider"),
+                rs.getString("gateway_ref"),
+                rs.getString("gateway_status"),
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "updated_at"));
     }
@@ -703,6 +712,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("currency", paymentIntent.currency())
                 .addValue("channel", paymentIntent.channel())
                 .addValue("status", paymentIntent.status())
+                .addValue("gateway_provider", paymentIntent.gatewayProvider())
+                .addValue("gateway_ref", paymentIntent.gatewayRef())
+                .addValue("gateway_status", paymentIntent.gatewayStatus())
                 .addValue("created_at", timestampWithTimeZone(paymentIntent.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(paymentIntent.updatedAt()));
     }

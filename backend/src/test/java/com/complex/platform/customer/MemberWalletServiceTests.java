@@ -178,6 +178,77 @@ class MemberWalletServiceTests {
     }
 
     // ============================================================
+    // 支付渠道开关（V093）：会员自动续费扣款 / 储值退款打款
+    // ============================================================
+
+    private com.complex.platform.finance.gateway.PaymentGatewayRouter gatewayRouter(boolean enabled) {
+        com.complex.platform.terminal.TerminalDeviceRepository terminalRepo =
+                org.mockito.Mockito.mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
+        org.mockito.Mockito.when(terminalRepo.resolveEffectiveSwitch(
+                org.mockito.ArgumentMatchers.eq("*"),
+                org.mockito.ArgumentMatchers.eq(com.complex.platform.finance.gateway.PaymentGatewayRouter.CAPABILITY),
+                org.mockito.ArgumentMatchers.anyMap()))
+                .thenReturn(Optional.of(new com.complex.platform.terminal.TerminalCapabilitySwitchRecord(
+                        "tcs_payment_gateway_off", "*",
+                        com.complex.platform.finance.gateway.PaymentGatewayRouter.CAPABILITY,
+                        "global", "global", enabled, "test", T0, T0)));
+        return new com.complex.platform.finance.gateway.PaymentGatewayRouter(terminalRepo);
+    }
+
+    @Test
+    void autoRenewChargeWithGatewayOffIsReservedDoesNotChargeOrExtend() {
+        InMemoryRepo repo = seeded();
+        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
+                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
+        FakeFinance finance = new FakeFinance();
+        MembershipService service = new MembershipService(repo, finance, audit(),
+                gatewayRouter(false), Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-ar1");
+        finance.markPaymentIntentSucceeded(intent.id());
+        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
+
+        MembershipService.AutoRenewOutcome outcome = service.autoRenewCharge(m.id());
+        assertThat(outcome.charged()).isFalse();
+        assertThat(outcome.gatewayStatus()).isEqualTo("RESERVED");
+        // 未实际扣款 → 未续期（expire 不变）。
+        assertThat(repo.memberships.get(m.id()).expireAt()).isEqualTo(T0.plusSeconds(days(30)));
+    }
+
+    @Test
+    void autoRenewChargeWithGatewayOnRoutesToPortNotConfiguredNoCrash() {
+        InMemoryRepo repo = seeded();
+        repo.plans.put("plan1", new CustomerMembershipPlanRecord(
+                "plan1", null, "gold", "金卡", 9_900L, 30, Map.of(), "active", T0, T0));
+        FakeFinance finance = new FakeFinance();
+        MembershipService service = new MembershipService(repo, finance, audit(),
+                gatewayRouter(true), Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.subscribe("c1", "plan1", "wechat", "sub-ar2");
+        finance.markPaymentIntentSucceeded(intent.id());
+        CustomerMembershipRecord m = service.activate("c1", "plan1", null, intent.id(), true);
+
+        MembershipService.AutoRenewOutcome outcome = service.autoRenewCharge(m.id());
+        // 占位 NOT_CONFIGURED：不实际扣款、不续期、不崩。
+        assertThat(outcome.charged()).isFalse();
+        assertThat(outcome.gatewayStatus()).isEqualTo("NOT_CONFIGURED");
+        assertThat(repo.memberships.get(m.id()).expireAt()).isEqualTo(T0.plusSeconds(days(30)));
+    }
+
+    @Test
+    void storedValueRefundWithGatewayOnDoesNotCrashAndReturnsBalance() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                gatewayRouter(true), Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-gw");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, intent.id());
+        // 退款：系统内余额退回；渠道打款占位不崩。
+        service.refund("c1", null, 5_000L, "refund all", true, "refund-gw");
+        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
+        assertThat(repo.storedValue.get("c1").status()).isEqualTo("closed");
+    }
+
+    // ============================================================
     // 积分转赠：原子 + 日限额拒 + 不足拒
     // ============================================================
 

@@ -948,6 +948,27 @@
       "column": "tip_amount_cent",
       "expected": "present",
       "note": "V091 成熟 POS 深度（PRD §10.1，2026-06-19 落代码+迁移）：小费入账单，结算 payable 含小费（代收口径）"
+    },
+    {
+      "req": "REQ-payment-gateway",
+      "table": "finance_payment_intents",
+      "column": "gateway_provider",
+      "expected": "present",
+      "note": "V093 支付真实渠道预留（2026-06-19）：渠道厂商标识，开关关=占位 reserved，开经 PaymentGatewayPort 回填"
+    },
+    {
+      "req": "REQ-payment-gateway",
+      "table": "finance_payment_intents",
+      "column": "gateway_ref",
+      "expected": "present",
+      "note": "V093 支付真实渠道预留（2026-06-19）：渠道侧引用号，留接缝"
+    },
+    {
+      "req": "REQ-payment-gateway",
+      "table": "finance_payment_intents",
+      "column": "gateway_status",
+      "expected": "present",
+      "note": "V093 支付真实渠道预留（2026-06-19）：渠道交互状态 RESERVED/NOT_CONFIGURED/SUCCEEDED/PENDING/FAILED"
     }
   ]
 }
