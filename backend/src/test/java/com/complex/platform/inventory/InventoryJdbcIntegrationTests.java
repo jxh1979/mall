@@ -85,6 +85,7 @@ class InventoryJdbcIntegrationTests {
                 "active",
                 now,
                 now,
+                null,
                 null
         ));
         repository.saveInventorySupplier(new InventorySupplierRecord(
@@ -320,6 +321,7 @@ class InventoryJdbcIntegrationTests {
                 "active",
                 now,
                 now,
+                null,
                 null
         ));
         repository.saveInventorySupplier(new InventorySupplierRecord(

@@ -498,6 +498,7 @@ class SupplyChainT6ServiceTests {
             return new ArrayList<>(stockMovements);
         }
         @Override public StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord a) { throw nyi(); }
+        @Override public Optional<StockAdjustmentRecord> findStockAdjustmentByIdForUpdate(String id) { throw nyi(); }
         @Override public SavedBottleRecord saveSavedBottle(SavedBottleRecord s) { throw nyi(); }
         @Override public Optional<SavedBottleRecord> findSavedBottleById(String id) { throw nyi(); }
         @Override public List<SavedBottleRecord> listSavedBottles() { throw nyi(); }

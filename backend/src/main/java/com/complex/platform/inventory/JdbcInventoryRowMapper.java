@@ -33,7 +33,24 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("status"),
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                resultSet.getObject("high_value_threshold_cents", Long.class)
+        );
+    }
+
+    StockAdjustmentRecord mapStockAdjustment(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new StockAdjustmentRecord(
+                resultSet.getString("id"),
+                resultSet.getString("item_id"),
+                resultSet.getString("location_id"),
+                resultSet.getString("adjustment_type"),
+                resultSet.getInt("quantity"),
+                resultSet.getString("reason"),
+                readList(resultSet.getString("evidence_attachment_ids")),
+                resultSet.getString("status"),
+                instant(resultSet, "created_at"),
+                resultSet.getString("merchant_id"),
+                resultSet.getObject("unit_cost_cents", Long.class)
         );
     }
 

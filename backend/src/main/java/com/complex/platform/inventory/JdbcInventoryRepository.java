@@ -30,11 +30,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_items (
                     id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                    min_quantity, status, created_at, updated_at, merchant_id
+                    min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
                 )
                 VALUES (
                     :id, :sku_code, :item_name, :item_type, :unit, :barcode, :trace_required,
-                    :min_quantity, :status, :created_at, :updated_at, :merchant_id
+                    :min_quantity, :status, :created_at, :updated_at, :merchant_id, :high_value_threshold_cents
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     sku_code = EXCLUDED.sku_code,
@@ -45,7 +45,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                     trace_required = EXCLUDED.trace_required,
                     min_quantity = EXCLUDED.min_quantity,
                     status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    high_value_threshold_cents = EXCLUDED.high_value_threshold_cents
                 """, itemParameters(item));
         return item;
     }
@@ -54,7 +55,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryItemRecord> listInventoryItems() {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id
+                       min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
                   FROM inventory_items
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapInventoryItem);
@@ -64,7 +65,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<InventoryItemRecord> findInventoryItemById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id
+                       min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
                   FROM inventory_items
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapInventoryItem).stream().findFirst();
@@ -383,11 +384,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_adjustments (
                     id, item_id, location_id, adjustment_type, quantity, reason,
-                    evidence_attachment_ids, status, created_at, merchant_id
+                    evidence_attachment_ids, status, created_at, merchant_id, unit_cost_cents
                 )
                 VALUES (
                     :id, :item_id, :location_id, :adjustment_type, :quantity, :reason,
-                    CAST(:evidence_attachment_ids AS jsonb), :status, :created_at, :merchant_id
+                    CAST(:evidence_attachment_ids AS jsonb), :status, :created_at, :merchant_id, :unit_cost_cents
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     item_id = EXCLUDED.item_id,
@@ -396,9 +397,21 @@ class JdbcInventoryRepository implements InventoryRepository {
                     quantity = EXCLUDED.quantity,
                     reason = EXCLUDED.reason,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    status = EXCLUDED.status
+                    status = EXCLUDED.status,
+                    unit_cost_cents = EXCLUDED.unit_cost_cents
                 """, stockAdjustmentParameters(adjustment));
         return adjustment;
+    }
+
+    @Override
+    public Optional<StockAdjustmentRecord> findStockAdjustmentByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, item_id, location_id, adjustment_type, quantity, reason,
+                       evidence_attachment_ids, status, created_at, merchant_id, unit_cost_cents
+                  FROM inventory_stock_adjustments
+                 WHERE id = :id
+                 FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapStockAdjustment).stream().findFirst();
     }
 
     @Override
@@ -667,7 +680,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryItemRecord> listInventoryItemsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id
+                       min_quantity, status, created_at, updated_at, merchant_id, high_value_threshold_cents
                   FROM inventory_items
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -777,7 +790,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("status", item.status())
                 .addValue("created_at", offset(item.createdAt()))
                 .addValue("updated_at", offset(item.updatedAt()))
-                .addValue("merchant_id", item.merchantId());
+                .addValue("merchant_id", item.merchantId())
+                .addValue("high_value_threshold_cents", item.highValueThresholdCents());
     }
 
     private MapSqlParameterSource supplierParameters(InventorySupplierRecord supplier) {
@@ -906,7 +920,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("evidence_attachment_ids", writeList(adjustment.evidenceAttachmentIds()))
                 .addValue("status", adjustment.status())
                 .addValue("created_at", offset(adjustment.createdAt()))
-                .addValue("merchant_id", adjustment.merchantId());
+                .addValue("merchant_id", adjustment.merchantId())
+                .addValue("unit_cost_cents", adjustment.unitCostCents());
     }
 
     private MapSqlParameterSource savedBottleParameters(SavedBottleRecord savedBottle) {

@@ -99,7 +99,8 @@ class InventoryServiceTests {
                 "spirit",
                 "bottle",
                 1,
-                "active"
+                "active",
+                null
         ));
 
         service.createStockIn(new StockInRequest(
@@ -299,7 +300,8 @@ class InventoryServiceTests {
                 "spirit",
                 "bottle",
                 5,
-                "active"
+                "active",
+                null
         ));
         InventoryItemRecord outOfStockItem = service.createInventoryItem(new InventoryItemRequest(
                 "risk-out-item",
@@ -311,7 +313,8 @@ class InventoryServiceTests {
                 "spirit",
                 "bottle",
                 2,
-                "active"
+                "active",
+                null
         ));
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
                 "balance_low",
@@ -539,6 +542,164 @@ class InventoryServiceTests {
         assertThat(inventoryRepository.listHighValueReviews()).isEmpty();
     }
 
+    // ── R5 T6-4：报损(damage_report)/盘点差异(stock_variance)高价值入口接入域内复核 ──────────────
+
+    // 高价值报损（loss）无双证据 → 拒（HIGH_VALUE_EVIDENCE_REQUIRED）。
+    @Test
+    void highValueDamageReportRejectsWhenEvidenceMissing() {
+        InventoryItemRecord item = createHighValueItem("hv-damage-noevid", 100_000L); // 阈值 1000 元
+        seedStock(item.id(), "warehouse_1", 10);
+
+        // quantity 5 × 单价 30000 分 = 150000 ≥ 100000 → 高价值，缺视频 → 拒。
+        assertThatThrownBy(() -> service.createStockAdjustment(new StockAdjustmentRequest(
+                "damage-noevid", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
+                "broken case", 30_000L, List.of("att_photo"), List.of())))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("HIGH_VALUE_EVIDENCE_REQUIRED"));
+
+        // 库存未变更（未即时扣减）。
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(10);
+    }
+
+    // 高价值报损双证据 → 建 pending 复核 + 调整 pending_review + 未即时扣减。
+    @Test
+    void highValueDamageReportCreatesPendingAndDoesNotDeductImmediately() {
+        InventoryItemRecord item = createHighValueItem("hv-damage-pending", 100_000L);
+        seedStock(item.id(), "warehouse_1", 10);
+
+        StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
+                "damage-pending", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
+                "broken case", 30_000L, List.of("att_photo"), List.of("att_video")));
+
+        assertThat(pending.status()).isEqualTo("pending_review");
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(10); // 未即时扣减
+        assertThat(inventoryRepository.listHighValueReviews()).hasSize(1);
+        InventoryHighValueReviewRecord review = inventoryRepository.listHighValueReviews().getFirst();
+        assertThat(review.reviewStatus()).isEqualTo("pending");
+        assertThat(review.subjectType()).isEqualTo("damage_report");
+        assertThat(review.subjectId()).isEqualTo(pending.id());
+    }
+
+    // 高价值报损 approve → 真正扣减 + 调整 completed。
+    @Test
+    void highValueDamageReportApproveDeductsStock() {
+        InventoryItemRecord item = createHighValueItem("hv-damage-approve", 100_000L);
+        seedStock(item.id(), "warehouse_1", 10);
+
+        StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
+                "damage-approve", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
+                "broken case", 30_000L, List.of("att_photo"), List.of("att_video")));
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+
+        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+                new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                        "damage-approve-review", "approved", "confirmed"));
+
+        assertThat(decided.reviewStatus()).isEqualTo("approved");
+        assertThat(inventoryRepository.findStockAdjustmentByIdForUpdate(pending.id()).orElseThrow().status())
+                .isEqualTo("completed");
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(5); // 10 - 5 扣减生效
+    }
+
+    // 高价值报损 reject → 不扣减 + 调整 rejected。
+    @Test
+    void highValueDamageReportRejectDoesNotDeductStock() {
+        InventoryItemRecord item = createHighValueItem("hv-damage-reject", 100_000L);
+        seedStock(item.id(), "warehouse_1", 10);
+
+        StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
+                "damage-reject", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
+                "broken case", 30_000L, List.of("att_photo"), List.of("att_video")));
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+
+        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+                new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                        "damage-reject-review", "rejected", "insufficient"));
+
+        assertThat(decided.reviewStatus()).isEqualTo("rejected");
+        assertThat(inventoryRepository.findStockAdjustmentByIdForUpdate(pending.id()).orElseThrow().status())
+                .isEqualTo("rejected");
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(10); // 未扣减
+    }
+
+    // 高价值盘点差异（count_correction）双证据 → pending；approve → 扣减生效。
+    @Test
+    void highValueStockVarianceCreatesPendingThenApproveDeducts() {
+        InventoryItemRecord item = createHighValueItem("hv-variance", 100_000L);
+        seedStock(item.id(), "warehouse_1", 8);
+
+        StockAdjustmentRecord pending = service.createStockAdjustment(new StockAdjustmentRequest(
+                "variance-pending", null, List.of(), "count_correction",
+                List.of(Map.of("item_id", item.id(), "quantity", 3, "location_id", "warehouse_1")),
+                "盘点短缺", 40_000L, List.of("att_photo"), List.of("att_video")));
+
+        assertThat(pending.status()).isEqualTo("pending_review");
+        InventoryHighValueReviewRecord review = inventoryRepository.listHighValueReviews().getFirst();
+        assertThat(review.subjectType()).isEqualTo("stock_variance");
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(8); // 未即时扣减
+
+        service.reviewHighValue(review.id(),
+                new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                        "variance-approve-review", "approved", "确认差异"));
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(5); // 8 - 3 扣减生效
+    }
+
+    // 非高价值报损（金额低于阈值）→ 即时扣减（向后兼容回归保护）。
+    @Test
+    void belowThresholdDamageReportAdjustsImmediately() {
+        InventoryItemRecord item = createHighValueItem("below-threshold", 1_000_000L); // 阈值 1 万元
+        seedStock(item.id(), "warehouse_1", 10);
+
+        StockAdjustmentRecord adjustment = service.createStockAdjustment(new StockAdjustmentRequest(
+                "below-threshold-adjust", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 2, "location_id", "warehouse_1")),
+                "小额报损", 30_000L, null, null)); // 2 × 30000 = 60000 < 1000000 → 非高价值
+
+        assertThat(adjustment.status()).isEqualTo("completed");
+        assertThat(inventoryRepository.listHighValueReviews()).isEmpty();
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(8); // 即时扣减
+    }
+
+    // 物料无阈值（null）→ 报损永不触发复核，即时扣减（向后兼容）。
+    @Test
+    void nullThresholdItemDamageReportAdjustsImmediately() {
+        InventoryItemRecord item = createItem("no-threshold-item"); // 阈值 null
+        seedStock(item.id(), "warehouse_1", 10);
+
+        StockAdjustmentRecord adjustment = service.createStockAdjustment(new StockAdjustmentRequest(
+                "no-threshold-adjust", null, List.of(), "loss",
+                List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
+                "报损", 9_999_999L, null, null)); // 单价很高但阈值 null → 不视高价值
+
+        assertThat(adjustment.status()).isEqualTo("completed");
+        assertThat(inventoryRepository.listHighValueReviews()).isEmpty();
+        assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                .isEqualTo(5);
+    }
+
+    private InventoryItemRecord createHighValueItem(String idempotencyKey, long thresholdCents) {
+        return service.createInventoryItem(new InventoryItemRequest(
+                idempotencyKey, null, List.of(), null, null,
+                "HV " + idempotencyKey, "spirit", "bottle", 0, "active", thresholdCents));
+    }
+
+    private void seedStock(String itemId, String locationId, int quantity) {
+        service.createStockIn(new StockInRequest(
+                "seed-" + itemId + "-" + locationId, null, List.of(), "initial", null, locationId,
+                List.of(Map.of("item_id", itemId, "quantity", quantity))));
+    }
+
     // P1-3: verificationCode 不可缺失
     @Test
     void claimSavedBottleRequiresVerificationCode() {
@@ -670,7 +831,10 @@ class InventoryServiceTests {
                 List.of(),
                 "credit_in",  // P1-4: 非法类型，不在白名单
                 List.of(Map.of("item_id", item.id(), "quantity", 5, "location_id", "warehouse_1")),
-                "inject via adjustment"
+                "inject via adjustment",
+                null,
+                null,
+                null
         )))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -690,7 +854,8 @@ class InventoryServiceTests {
                 "spirit",
                 "bottle",
                 0,
-                "active"
+                "active",
+                null
         ));
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
                 "p15-bal",
@@ -756,12 +921,12 @@ class InventoryServiceTests {
         // 商户 A 的数据
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_a", null, "Item A", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a"
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_a", null
         ));
         // 商户 B 的数据
         inventoryRepository.saveInventoryItem(new InventoryItemRecord(
                 "item_b", null, "Item B", "spirit", "bottle", null, false, 0, "active",
-                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_b"
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z"), "m_b", null
         ));
 
         // 平台管理员看全部
@@ -794,7 +959,8 @@ class InventoryServiceTests {
                 "spirit",
                 "bottle",
                 0,
-                "active"
+                "active",
+                null
         ));
     }
 
@@ -1073,8 +1239,14 @@ class InventoryServiceTests {
 
         @Override
         public StockAdjustmentRecord saveStockAdjustment(StockAdjustmentRecord adjustment) {
+            stockAdjustments.removeIf(a -> a.id().equals(adjustment.id()));
             stockAdjustments.add(adjustment);
             return adjustment;
+        }
+
+        @Override
+        public Optional<StockAdjustmentRecord> findStockAdjustmentByIdForUpdate(String id) {
+            return stockAdjustments.stream().filter(a -> a.id().equals(id)).reduce((first, second) -> second);
         }
 
         @Override

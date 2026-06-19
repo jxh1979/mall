@@ -63,7 +63,9 @@ public class PurchaseRequestService {
         this.authorizationService = authorizationService;
         this.supplyContractService = supplyContractService;
         this.stockMovementService = new InventoryStockMovementService(
-                repository, idempotencyService, auditEventService, authorizationService);
+                repository, idempotencyService, auditEventService, authorizationService,
+                new InventoryHighValueReviewService(
+                        repository, idempotencyService, auditEventService, authorizationService));
     }
 
     /** 审批：created/submitted →(decision) approved/rejected。绑定合同则按 purchasable_scope 卡控。 */

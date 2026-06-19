@@ -31,21 +31,33 @@ final class InventoryStockMovementService {
     private static final Set<String> ALLOWED_TYPED_MOVEMENT_TYPES =
             Set.of("outbound", "damage", "waste", "loss", "redeem_consume");
 
+    // R5 T6-4：报损/盘点差异高价值判定——调整类型到复核 subject_type 的映射。
+    // 报损族（loss/damage/waste）→ damage_report；盘点差异（count_correction）→ stock_variance；
+    // gain（报溢/增加库存）不视为高价值（不存在价值损失，维持即时调整）。
+    private static final Map<String, String> HIGH_VALUE_SUBJECT_BY_TYPE = Map.of(
+            "loss", InventoryHighValueReviewService.SUBJECT_DAMAGE_REPORT,
+            "damage", InventoryHighValueReviewService.SUBJECT_DAMAGE_REPORT,
+            "waste", InventoryHighValueReviewService.SUBJECT_DAMAGE_REPORT,
+            "count_correction", InventoryHighValueReviewService.SUBJECT_STOCK_VARIANCE);
+
     private final InventoryRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final InventoryHighValueReviewService highValueReviewService;
 
     InventoryStockMovementService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            InventoryHighValueReviewService highValueReviewService
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.highValueReviewService = highValueReviewService;
     }
 
     StockAdjustmentRecord createStockAdjustment(StockAdjustmentRequest request) {
@@ -70,24 +82,49 @@ final class InventoryStockMovementService {
                         throw ApiException.badRequest("INVALID_ADJUSTMENT_TYPE",
                                 "adjustment_type '" + adjustmentType + "' is not allowed");
                     }
+                    String reason = requireText(actual.reason(), "reason");
+                    Long unitCostCents = nonNegativeOrNull(actual.unitCostCents(), "unit_cost_cents");
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    Instant now = Instant.now();
+                    String adjustmentId = "adjust_" + slug(actual.idempotencyKey());
+
+                    // R5 T6-4：报损(damage_report)/盘点差异(stock_variance)高价值入口接入域内复核。
+                    // 命中高价值（quantity × unitCostCents ≥ 物料 high_value_threshold_cents，且二者均非空）→
+                    // 不直接扣减：建 pending 复核单（要求照片+视频双证据各非空）+ 调整置 pending_review（库存不变）。
+                    // 主管 approve 后由 applyDecisionEffect 真正扣减并置 completed；reject 置 rejected（不扣）。
+                    String subjectType = HIGH_VALUE_SUBJECT_BY_TYPE.get(adjustmentType);
+                    if (subjectType != null && isHighValue(itemId, quantity, unitCostCents)) {
+                        StockAdjustmentRecord pending = repository.saveStockAdjustment(new StockAdjustmentRecord(
+                                adjustmentId, itemId, locationId, adjustmentType, quantity, reason,
+                                safeList(actual.evidenceAttachmentIds()), "pending_review", now, merchantId,
+                                unitCostCents));
+                        highValueReviewService.createPending(
+                                actual.idempotencyKey(),
+                                subjectType,
+                                pending.id(),
+                                actual.photoAttachmentIds(),
+                                actual.videoAttachmentIds());
+                        return pending;
+                    }
+
+                    // 非高价值：维持即时调整（向后兼容）。
                     if ("gain".equals(adjustmentType)) {
                         increaseBalance(itemId, locationId, quantity);
                     } else {
                         decreaseBalance(itemId, locationId, quantity);
                     }
-                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
-                    Instant now = Instant.now();
                     return repository.saveStockAdjustment(new StockAdjustmentRecord(
-                            "adjust_" + slug(actual.idempotencyKey()),
+                            adjustmentId,
                             itemId,
                             locationId,
                             adjustmentType,
                             quantity,
-                            requireText(actual.reason(), "reason"),
+                            reason,
                             safeList(actual.evidenceAttachmentIds()),
                             "completed",
                             now,
-                            merchantId
+                            merchantId,
+                            unitCostCents
                     ));
                 }
         );
@@ -465,6 +502,32 @@ final class InventoryStockMovementService {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
         }
         return trimmed;
+    }
+
+    /** 可空非负长整：null 透传（如调整单价 null=不视高价值），非空须 >= 0。 */
+    private Long nonNegativeOrNull(Long value, String fieldName) {
+        if (value != null && value < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+        }
+        return value;
+    }
+
+    /**
+     * R5 T6-4 高价值判定口径：调整金额（数量 × 单价）≥ 物料阈值 high_value_threshold_cents。
+     *
+     * <p>阈值或单价任一为空 → 不视为高价值（向后兼容，维持即时调整）。物料缺失亦不视高价值。
+     */
+    private boolean isHighValue(String itemId, int quantity, Long unitCostCents) {
+        if (unitCostCents == null) {
+            return false;
+        }
+        Long threshold = repository.findInventoryItemById(itemId)
+                .map(InventoryItemRecord::highValueThresholdCents)
+                .orElse(null);
+        if (threshold == null) {
+            return false;
+        }
+        return (long) quantity * unitCostCents >= threshold;
     }
 
     private List<String> safeList(List<String> value) {

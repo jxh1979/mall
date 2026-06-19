@@ -5904,6 +5904,7 @@
         ],
         "operationId": "createStockAdjustment",
         "summary": "盘点差异、报损、报溢",
+        "description": "报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review 调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。",
         "x-permission": "inventory.stock.adjust",
         "x-data-scope": "project-warehouse",
         "x-terminal-allowed": [
@@ -16967,6 +16968,30 @@
             "type": "string",
             "description": "操作原因；审批、撤销、退款、解绑、冲正、整改等高风险动作必须填写。",
             "maxLength": 1000
+          },
+          "unit_cost_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "调整单价（整数分，可选）。报损/盘点差异高价值判定 = 数量 × 单价 ≥ 物料 high_value_threshold_cents；为空则不视为高价值。"
+          },
+          "photo_attachment_ids": {
+            "type": "array",
+            "description": "照片证据 ID 列表；报损/盘点差异命中高价值时需照片+视频双证据各非空。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "video_attachment_ids": {
+            "type": "array",
+            "description": "视频证据 ID 列表；报损/盘点差异命中高价值时需照片+视频双证据各非空。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
           }
         }
       },

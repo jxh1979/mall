@@ -71,10 +71,11 @@ public class InventoryService {
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.terminalSwitchGuard = terminalSwitchGuard;
-        this.stockMovementService = new InventoryStockMovementService(
-                repository, idempotencyService, auditEventService, authorizationService);
         this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService);
+        this.stockMovementService = new InventoryStockMovementService(
+                repository, idempotencyService, auditEventService, authorizationService,
+                highValueReviewService);
     }
 
     public PageResponse<InventoryItemRecord> listInventoryItems() {
@@ -119,7 +120,8 @@ public class InventoryService {
                             trimToDefault(actual.status(), "active"),
                             now,
                             now,
-                            merchantId
+                            merchantId,
+                            nonNegativeOrNull(actual.highValueThresholdCents(), "high_value_threshold_cents")
                     );
                     return repository.saveInventoryItem(item);
                 }
@@ -1251,6 +1253,14 @@ public class InventoryService {
             throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
         }
         return actual;
+    }
+
+    /** 可空非负长整：null 透传（如高价值阈值 null=不视高价值），非空须 >= 0。 */
+    private Long nonNegativeOrNull(Long value, String fieldName) {
+        if (value != null && value < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " must be non-negative");
+        }
+        return value;
     }
 
     private int requirePositiveInteger(Integer value, String fieldName) {

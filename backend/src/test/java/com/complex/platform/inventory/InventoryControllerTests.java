@@ -248,7 +248,7 @@ class InventoryControllerTests {
 
     private InventoryItemRecord item() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new InventoryItemRecord("item_1", null, "Vodka", "spirit", "bottle", null, false, 2, "active", now, now, null);
+        return new InventoryItemRecord("item_1", null, "Vodka", "spirit", "bottle", null, false, 2, "active", now, now, null, null);
     }
 
     private InventorySupplierRecord supplier() {
@@ -278,7 +278,7 @@ class InventoryControllerTests {
 
     private StockAdjustmentRecord stockAdjustment() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        return new StockAdjustmentRecord("adjust_1", "item_1", "wh_1", "loss", 1, "broken", List.of(), "completed", now, null);
+        return new StockAdjustmentRecord("adjust_1", "item_1", "wh_1", "loss", 1, "broken", List.of(), "completed", now, null, null);
     }
 
     private InventoryStockBatchRecord stockBatch() {

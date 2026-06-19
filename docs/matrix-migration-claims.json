@@ -458,7 +458,14 @@
       "table": "inventory_high_value_reviews",
       "column": "review_status",
       "expected": "present",
-      "note": "R5 T6 第3部分已落地（V085）：库存域内高价值复核表(subject_type/review_status + photo/video attachment JSONB)。InventoryHighValueReviewService 接复核闭环——高价值动作(saved_bottle_void/damage_report/stock_variance)命中 is_high_value 时不直接生效,建 pending 复核单并要求照片+视频双证据(各非空,真正区分类型,替换旧'附件数≥2不分类型'弱校验);主管 reviewHighValue(approve→生效/reject→回滚)写 reviewer/reason/reviewed_at + 事件 inventory.high_value_review_created/decided。cancelSavedBottle 两步改造:高价值→建复核+存酒置中间态 disputed_frozen,approve 后才置 cancelled,reject 维持冻结;非高价值维持直接 cancel(向后兼容)。新端点 POST /api/v1/inventory/high-value-reviews/{id}/review + GET 列表 + 补 saved-bottles/{id}/cancel。本期 saved_bottle_void 接活跃链路;damage_report/stock_variance 子类型表与服务已支持但报损/盘点差异入口暂未接复核,作为遗留"
+      "note": "R5 T6 第3部分已落地（V085）+ T6-4 补全（V094）：库存域内高价值复核表(subject_type/review_status + photo/video attachment JSONB)。InventoryHighValueReviewService 接复核闭环——高价值动作(saved_bottle_void/damage_report/stock_variance)命中高价值时不直接生效,建 pending 复核单并要求照片+视频双证据(各非空,真正区分类型,替换旧'附件数≥2不分类型'弱校验);主管 reviewHighValue(approve→生效/reject→回滚)写 reviewer/reason/reviewed_at + 事件 inventory.high_value_review_created/decided。(a)cancelSavedBottle 两步改造:高价值→建复核+存酒置中间态 disputed_frozen,approve 后才置 cancelled,reject 维持冻结;非高价值维持直接 cancel(向后兼容)。(b)T6-4：createStockAdjustment 报损(loss/damage/waste→damage_report)/盘点差异(count_correction→stock_variance)接入——判定口径=数量×unit_cost_cents≥物料 high_value_threshold_cents(V094 加列,可空,null/单价空=不视高价值);命中→不即时扣减,调整置 pending_review+建复核(双证据各非空,无证据拒 HIGH_VALUE_EVIDENCE_REQUIRED),applyDecisionEffect approve→atomicDecreaseStockBalance 扣减+置 completed/reject→置 rejected 不扣;非高价值维持即时调整(向后兼容)。新端点 POST /api/v1/inventory/high-value-reviews/{id}/review + GET 列表 + saved-bottles/{id}/cancel + stock-adjustments(返回 pending_review)"
+    },
+    {
+      "req": "REQ-27",
+      "table": "inventory_items",
+      "column": "high_value_threshold_cents",
+      "expected": "present",
+      "note": "R5 T6-4 已落（V094）：物料高价值阈值(整数分,可空,null=不视高价值/报损/盘点差异不触发复核,向后兼容)。判定=数量×调整单价≥阈值。inventory_stock_adjustments 同迁移加 unit_cost_cents(可空,留痕+approve 复算)"
     },
     {
       "req": "REQ-54",

@@ -14,6 +14,8 @@ public record StockAdjustmentRecord(
         List<String> evidenceAttachmentIds,
         String status,
         Instant createdAt,
-        @JsonIgnore String merchantId
+        @JsonIgnore String merchantId,
+        // R5 T6-4：调整单价（整数分，可空）。高价值判定 = quantity × unitCostCents ≥ 物料阈值；approve 时复算/留痕。
+        Long unitCostCents
 ) {
 }

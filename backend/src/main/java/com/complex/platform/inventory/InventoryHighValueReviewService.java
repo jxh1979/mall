@@ -167,25 +167,27 @@ public class InventoryHighValueReviewService {
                             current.id(), current.subjectType(), current.subjectId(),
                             current.photoAttachmentIds(), current.videoAttachmentIds(),
                             decision, reviewer, trimToNull(actual.reason()), current.createdAt(), now);
-                    // approve → 动作生效（回滚由 reject 路径不调回调实现，保持原态/不扣减）。
+                    // approve → 动作生效（回调）；reject → 收口（报损/盘点差异置 rejected，存酒维持冻结/不扣减）。
                     if ("approved".equals(decision) && onApprove != null) {
                         onApprove.accept(resolved);
+                    } else if ("rejected".equals(decision)) {
+                        applyRejectEffect(resolved);
                     }
                     return repository.saveHighValueReview(resolved);
                 });
     }
 
-    /** 默认生效分发：saved_bottle_void → approve 时把存酒由中间态置 cancelled；其余子类型本期不在活跃链路。 */
+    /**
+     * approve 生效分发：
+     * <ul>
+     *   <li>{@code saved_bottle_void} → 存酒由中间态 {@code disputed_frozen} 置 {@code cancelled}；</li>
+     *   <li>{@code damage_report}/{@code stock_variance} → 调整单由 {@code pending_review} 真正扣减库存并置
+     *       {@code completed}（即此前未即时扣减的报损/盘点差异，approve 时才落库存变更）。</li>
+     * </ul>
+     */
     private void applyDecisionEffect(InventoryHighValueReviewRecord resolved) {
         if (SUBJECT_SAVED_BOTTLE_VOID.equals(resolved.subjectType())) {
-            SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(resolved.subjectId())
-                    .orElseThrow(() -> ApiException.notFound(
-                            "SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
-            Optional<String> scope = authorizationService.currentMerchantScope();
-            if (scope.isPresent() && !scope.get().equals(bottle.merchantId())) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "saved bottle does not belong to your merchant");
-            }
+            SavedBottleRecord bottle = loadSavedBottleScoped(resolved.subjectId());
             repository.saveSavedBottle(new SavedBottleRecord(
                     bottle.id(), bottle.customerId(), bottle.barProjectId(), bottle.itemId(), bottle.bottleName(),
                     bottle.initialQuantity(), bottle.remainingQuantity(), bottle.unit(), bottle.expireAt(),
@@ -193,7 +195,59 @@ public class InventoryHighValueReviewService {
                     bottle.merchantId(), bottle.isHighValue(), bottle.highValueThresholdCents(),
                     bottle.bottleLabelValue(), bottle.customerNameOrNickname(),
                     bottle.customerPhone(), bottle.customerPhoneHash()));
+        } else if (SUBJECT_DAMAGE_REPORT.equals(resolved.subjectType())
+                || SUBJECT_STOCK_VARIANCE.equals(resolved.subjectType())) {
+            StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());
+            // approve → 真正扣减（报损/盘点差异均为减少库存）+ 置 completed。
+            int affected = repository.atomicDecreaseStockBalance(
+                    adjustment.itemId(), adjustment.locationId(), adjustment.quantity());
+            if (affected == 0) {
+                throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
+            }
+            repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "completed"));
         }
+    }
+
+    /** reject 收口：报损/盘点差异调整单由 {@code pending_review} 置 {@code rejected}（不扣减）。存酒维持冻结由 approve 不触发实现。 */
+    private void applyRejectEffect(InventoryHighValueReviewRecord resolved) {
+        if (SUBJECT_DAMAGE_REPORT.equals(resolved.subjectType())
+                || SUBJECT_STOCK_VARIANCE.equals(resolved.subjectType())) {
+            StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());
+            repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "rejected"));
+        }
+    }
+
+    private SavedBottleRecord loadSavedBottleScoped(String subjectId) {
+        SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(subjectId)
+                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(bottle.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    "saved bottle does not belong to your merchant");
+        }
+        return bottle;
+    }
+
+    private StockAdjustmentRecord loadAdjustmentPending(String subjectId) {
+        StockAdjustmentRecord adjustment = repository.findStockAdjustmentByIdForUpdate(subjectId)
+                .orElseThrow(() -> ApiException.notFound(
+                        "STOCK_ADJUSTMENT_NOT_FOUND", "stock adjustment not found"));
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(adjustment.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    "stock adjustment does not belong to your merchant");
+        }
+        if (!"pending_review".equals(adjustment.status())) {
+            throw ApiException.conflict(
+                    "STOCK_ADJUSTMENT_NOT_PENDING", "stock adjustment is not pending review");
+        }
+        return adjustment;
+    }
+
+    private StockAdjustmentRecord withAdjustmentStatus(StockAdjustmentRecord a, String status) {
+        return new StockAdjustmentRecord(
+                a.id(), a.itemId(), a.locationId(), a.adjustmentType(), a.quantity(), a.reason(),
+                a.evidenceAttachmentIds(), status, a.createdAt(), a.merchantId(), a.unitCostCents());
     }
 
     private InventoryHighValueReviewRecord executeWrite(
