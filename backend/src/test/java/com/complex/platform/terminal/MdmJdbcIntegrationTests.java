@@ -128,6 +128,24 @@ class MdmJdbcIntegrationTests {
     }
 
     @Test
+    void v098SeedsDeviceKeystoreAndTabletSwitchesDefaultOff() {
+        // V098：员工设备 Keystore 凭证绑定（item1）+ 平板终端（②）能力开关，显式 seed enabled=false（默认关）。
+        Boolean deviceKeystore = jdbcTemplate.queryForObject("""
+                SELECT enabled FROM terminal_capability_switches
+                 WHERE capability_code = 'staff.device_keystore.enabled'
+                   AND terminal_type = '*' AND scope_type = 'global' AND scope_id = 'global'
+                """, Boolean.class);
+        assertThat(deviceKeystore).isFalse();
+
+        Boolean tablet = jdbcTemplate.queryForObject("""
+                SELECT enabled FROM terminal_capability_switches
+                 WHERE capability_code = 'terminal.tablet.enabled'
+                   AND terminal_type = '*' AND scope_type = 'global' AND scope_id = 'global'
+                """, Boolean.class);
+        assertThat(tablet).isFalse();
+    }
+
+    @Test
     void checkRejectsInvalidWhitelistScopeType() {
         assertThatThrownBy(() -> jdbcTemplate.update("""
                 INSERT INTO mdm_app_whitelist (id, package_name, scope_type, scope_id, enabled, created_at, updated_at)
