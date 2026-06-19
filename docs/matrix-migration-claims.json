@@ -184,15 +184,15 @@
       "req": "REQ-46",
       "table": "amusement_capacity_config",
       "column": null,
-      "expected": "absent",
-      "note": "R3: 三维容量配置表未建（容量仅场次级单维）"
+      "expected": "present",
+      "note": "V083：点位/设备维并发容量配置表已建（容量三维度之第三维，设计 §6.4/§7.14b；核销取最小可放行余量，未配置则退化场次单维）"
     },
     {
       "req": "REQ-46",
       "table": "amusement_capacity_snapshot",
       "column": null,
-      "expected": "absent",
-      "note": "R3: 容量快照表未建"
+      "expected": "present",
+      "note": "V083：三维度容量快照表已建（project/session/point_device 各维在场计数物化，核销原子 check+increment，设计 §7.14c）"
     },
     {
       "req": "REQ-48",

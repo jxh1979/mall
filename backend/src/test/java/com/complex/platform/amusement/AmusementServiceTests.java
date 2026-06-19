@@ -411,6 +411,74 @@ class AmusementServiceTests {
     }
 
     @Test
+    void verificationRejectsWhenPointDeviceDimensionFullEvenIfSessionHasRoom() {
+        // §6.4：点位/设备维满即拒绝，即便场次仍有余量（任一受控维度余量 0 即拒）。
+        AmusementProjectRecord project = createProject("pd-full", createTemplate("pd-full-tpl").id(), "open", 100);
+        submitPassingInspection(project, "pd-full");
+        AmusementSessionRecord session = createSession("pd-full-session", project.id(), 100, "open");
+        // 点位/设备维只配 1 个并发名额（设备 gate_1），场次/项目余量充足。
+        amusementRepository.configurePointDeviceCapacity(project.id(), null, "gate_1", 1);
+        registerAmusementEntitlement("credential-pd-1", 1);
+        registerAmusementEntitlement("credential-pd-2", 1);
+
+        AmusementVerificationRecord first = service.createVerification(verification(
+                "verify-pd-1", project.id(), session.id(), "credential-pd-1"));
+        assertThat(first.verificationResult()).isEqualTo("success");
+
+        // 第二次：场次还有 99 余量，但点位/设备维已满 → 拒绝且 SESSION_CAPACITY_EXHAUSTED。
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-pd-2", project.id(), session.id(), "credential-pd-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        // 点位维失败回补权益（未被白扣），场次维已回滚（仍只占用 1）。
+        assertThat(entitlementGateway.usedTimes("credential-pd-2")).isEqualTo(0);
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(1);
+    }
+
+    @Test
+    void verificationTakesMinimumAcrossThreeConfiguredDimensions() {
+        // §6.4：三维度均配置时取最小可放行余量——最小维度（项目安全上限=2）满即整体拒绝。
+        AmusementProjectRecord project = createProject("min-dim", createTemplate("min-dim-tpl").id(), "open", 2);
+        submitPassingInspection(project, "min-dim");
+        AmusementSessionRecord session = createSession("min-dim-session", project.id(), 10, "open");
+        amusementRepository.configurePointDeviceCapacity(project.id(), null, "gate_1", 5);
+        registerAmusementEntitlement("credential-min-1", 1);
+        registerAmusementEntitlement("credential-min-2", 1);
+        registerAmusementEntitlement("credential-min-3", 1);
+
+        // 前两次成功（项目安全上限=2 是最小维度，放行 2 个）。
+        assertThat(service.createVerification(verification("v-min-1", project.id(), session.id(), "credential-min-1"))
+                .verificationResult()).isEqualTo("success");
+        assertThat(service.createVerification(verification("v-min-2", project.id(), session.id(), "credential-min-2"))
+                .verificationResult()).isEqualTo("success");
+
+        // 第三次：场次(8 余)与点位(3 余)都有余，但项目安全上限维已满(2/2) → 取最小后拒绝。
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-min-3", project.id(), session.id(), "credential-min-3")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        assertThat(entitlementGateway.usedTimes("credential-min-3")).isEqualTo(0);
+    }
+
+    @Test
+    void verificationDegradesToSessionOnlyWhenNoCapacityConfig() {
+        // 向后兼容：无 capacity_config 且项目安全上限=0 时退化为仅场次维（既有单维行为不变）。
+        AmusementProjectRecord project = createProject("degrade", createTemplate("degrade-tpl").id(), "open", 0);
+        submitPassingInspection(project, "degrade");
+        AmusementSessionRecord session = createSession("degrade-session", project.id(), 1, "open");
+        registerAmusementEntitlement("credential-deg-1", 1);
+        registerAmusementEntitlement("credential-deg-2", 1);
+
+        assertThat(service.createVerification(verification("v-deg-1", project.id(), session.id(), "credential-deg-1"))
+                .verificationResult()).isEqualTo("success");
+        // 场次满(1/1) → 拒绝（仅场次维生效）。
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-deg-2", project.id(), session.id(), "credential-deg-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        assertThat(amusementRepository.findSessionById(session.id()))
+                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(1);
+    }
+
+    @Test
     void verificationPassesWhenEntitlementBoundToProject() {
         AmusementProjectRecord project = projectWithTemplate("bound");
         submitPassingInspection(project, "bound");
@@ -974,9 +1042,21 @@ class AmusementServiceTests {
         private final Map<String, AmusementMaintenanceRecord> maintenanceRecords = new LinkedHashMap<>();
         private final List<AmusementSafetyActionRecord> safetyActions = new ArrayList<>();
         private final Map<String, List<String>> projectEntitlementTypes = new LinkedHashMap<>();
+        // §6.4 三维度容量：点位/设备维容量配置（key=projectId|pointId|deviceId）与维度快照在场计数。
+        private final Map<String, Integer> pointDeviceCapacityConfig = new LinkedHashMap<>();
+        private final Map<String, Integer> snapshotOccupied = new LinkedHashMap<>();
 
         void bindProjectEntitlementType(String projectId, String entitlementType) {
             projectEntitlementTypes.computeIfAbsent(projectId, key -> new ArrayList<>()).add(entitlementType);
+        }
+
+        /** 测试夹具：为项目的点位/设备维配置最大并发上限（落地点位·设备维度受控）。 */
+        void configurePointDeviceCapacity(String projectId, String pointId, String deviceId, int maxConcurrent) {
+            pointDeviceCapacityConfig.put(pointDeviceKey(projectId, pointId, deviceId), maxConcurrent);
+        }
+
+        private String pointDeviceKey(String projectId, String pointId, String deviceId) {
+            return projectId + "|" + (pointId == null ? "" : pointId) + "|" + (deviceId == null ? "" : deviceId);
         }
 
         @Override
@@ -1068,6 +1148,67 @@ class AmusementServiceTests {
                     now
             ));
             return true;
+        }
+
+        @Override
+        public CapacityClaimResult claimCapacityAcrossDimensions(CapacityClaimContext context) {
+            // 与 Jdbc 实现同口径：场次 → 点位/设备 → 项目安全上限逐维原子 +1，任一失败回滚已增维度。
+            List<String> controlled = new ArrayList<>();
+            List<String> incremented = new ArrayList<>();
+
+            controlled.add("session");
+            if (!incrementSessionUsedCapacityIfAvailable(context.sessionId())) {
+                return new CapacityClaimResult(false, "session", controlled);
+            }
+            incremented.add("session");
+
+            Integer pointDeviceLimit = pointDeviceCapacityConfig.get(
+                    pointDeviceKey(context.projectId(), context.locationPointId(), context.deviceId()));
+            if (pointDeviceLimit != null) {
+                controlled.add("point_device");
+                String key = "pd|" + pointDeviceKey(context.projectId(), context.locationPointId(), context.deviceId());
+                if (snapshotOccupied.getOrDefault(key, 0) >= pointDeviceLimit) {
+                    rollback(incremented, context);
+                    return new CapacityClaimResult(false, "point_device", controlled);
+                }
+                snapshotOccupied.merge(key, 1, Integer::sum);
+                incremented.add("point_device");
+            }
+
+            if (context.projectSafetyCapacity() > 0) {
+                controlled.add("project_safety");
+                String key = "proj|" + context.projectId();
+                if (snapshotOccupied.getOrDefault(key, 0) >= context.projectSafetyCapacity()) {
+                    rollback(incremented, context);
+                    return new CapacityClaimResult(false, "project_safety", controlled);
+                }
+                snapshotOccupied.merge(key, 1, Integer::sum);
+                incremented.add("project_safety");
+            }
+
+            return new CapacityClaimResult(true, null, controlled);
+        }
+
+        private void rollback(List<String> incremented, CapacityClaimContext context) {
+            for (String dimension : incremented) {
+                switch (dimension) {
+                    case "session" -> {
+                        AmusementSessionRecord s = sessions.get(context.sessionId());
+                        if (s != null) {
+                            sessions.put(s.id(), new AmusementSessionRecord(
+                                    s.id(), s.projectId(), s.startTime(), s.endTime(), s.capacity(),
+                                    Math.max(s.usedCapacity() - 1, 0), s.lockedCapacity(), s.status(),
+                                    s.evidenceAttachmentIds(), s.createdAt(), s.updatedAt()));
+                        }
+                    }
+                    case "point_device" -> snapshotOccupied.computeIfPresent(
+                            "pd|" + pointDeviceKey(context.projectId(), context.locationPointId(), context.deviceId()),
+                            (k, v) -> Math.max(v - 1, 0));
+                    case "project_safety" -> snapshotOccupied.computeIfPresent(
+                            "proj|" + context.projectId(), (k, v) -> Math.max(v - 1, 0));
+                    default -> { }
+                }
+            }
         }
 
         @Override

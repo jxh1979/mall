@@ -246,6 +246,155 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public CapacityClaimResult claimCapacityAcrossDimensions(CapacityClaimContext context) {
+        // 解析本次受控（已配置）维度，按「场次 → 点位/设备 → 项目安全上限」顺序逐维原子 +1；
+        // 任一维度失败则回滚已成功 +1 的维度，整体判失败（防超卖、无副作用）。
+        java.util.List<String> controlled = new java.util.ArrayList<>();
+        java.util.List<String> incremented = new java.util.ArrayList<>();
+        Instant now = Instant.now();
+
+        // 维度 1：场次维（基础维度，始终受控；沿用 used_capacity 原子扣减）。
+        controlled.add("session");
+        if (!incrementSessionUsedCapacityIfAvailable(context.sessionId())) {
+            return new CapacityClaimResult(false, "session", controlled);
+        }
+        incremented.add("session");
+
+        // 维度 2：点位/设备维（仅当该项目存在启用的 capacity_config 命中点位/设备时受控）。
+        Integer pointDeviceLimit = findPointDeviceCapacityLimit(context);
+        if (pointDeviceLimit != null) {
+            controlled.add("point_device");
+            if (!incrementSnapshotIfAvailable(context, "point_device",
+                    context.locationPointId(), context.deviceId(), pointDeviceLimit, now)) {
+                rollbackIncremented(incremented, context, now);
+                return new CapacityClaimResult(false, "point_device", controlled);
+            }
+            incremented.add("point_device");
+        }
+
+        // 维度 3：项目安全上限维（仅当 project.capacity > 0 时受控；旁路/安全上限）。
+        if (context.projectSafetyCapacity() > 0) {
+            controlled.add("project_safety");
+            if (!incrementSnapshotIfAvailable(context, "project", null, null,
+                    context.projectSafetyCapacity(), now)) {
+                rollbackIncremented(incremented, context, now);
+                return new CapacityClaimResult(false, "project_safety", controlled);
+            }
+            incremented.add("project_safety");
+        }
+
+        return new CapacityClaimResult(true, null, controlled);
+    }
+
+    private void rollbackIncremented(java.util.List<String> incremented, CapacityClaimContext context, Instant now) {
+        for (String dimension : incremented) {
+            switch (dimension) {
+                case "session" -> jdbcTemplate.update("""
+                        UPDATE amusement_sessions
+                           SET used_capacity = GREATEST(used_capacity - 1, 0),
+                               updated_at = :updated_at
+                         WHERE id = :id
+                        """, Map.of("id", context.sessionId(), "updated_at", timestampWithTimeZone(now)));
+                case "point_device" -> decrementSnapshot(context, "point_device",
+                        context.locationPointId(), context.deviceId(), now);
+                case "project_safety" -> decrementSnapshot(context, "project", null, null, now);
+                default -> { /* no-op */ }
+            }
+        }
+    }
+
+    /**
+     * 查询该项目命中点位/设备的启用容量配置上限：优先精确匹配 (point, device)，
+     * 退而匹配仅按设备或仅按点位的配置；无任何配置返回 null（该维度跳过，向后兼容）。
+     */
+    private Integer findPointDeviceCapacityLimit(CapacityClaimContext context) {
+        if (context.locationPointId() == null && context.deviceId() == null) {
+            return null;
+        }
+        // 命中口径：config 的点位/设备范围与本次核销点位/设备兼容（config 该列为空=通配，非空=须等于本次值），
+        // 且 config 至少约束一个本次提供的维度。多条命中时取约束更具体（命中维度更多）的一条。
+        return jdbcTemplate.query("""
+                SELECT max_concurrent
+                  FROM amusement_capacity_config
+                 WHERE project_id = :project_id
+                   AND enabled = TRUE
+                   AND (location_point_id IS NULL OR location_point_id = :point_id)
+                   AND (device_id IS NULL OR device_id = :device_id)
+                   AND ((location_point_id IS NOT NULL AND :point_id IS NOT NULL)
+                     OR (device_id IS NOT NULL AND :device_id IS NOT NULL))
+                 ORDER BY (CASE WHEN location_point_id IS NOT NULL THEN 1 ELSE 0 END
+                         + CASE WHEN device_id IS NOT NULL THEN 1 ELSE 0 END) DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("project_id", context.projectId())
+                .addValue("point_id", context.locationPointId())
+                .addValue("device_id", context.deviceId()),
+                (rs, n) -> rs.getInt("max_concurrent")).stream().findFirst().orElse(null);
+    }
+
+    /** upsert 维度快照（capacity_limit 刷新，occupied 不变）后原子 +1（仅当 occupied < limit）。 */
+    private boolean incrementSnapshotIfAvailable(CapacityClaimContext context, String dimension,
+            String pointId, String deviceId, int limit, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("id", "capsnap_" + dimension + "_" + java.util.UUID.randomUUID())
+                .addValue("project_id", context.projectId())
+                .addValue("session_id", "session".equals(dimension) ? context.sessionId() : null)
+                .addValue("point_id", pointId)
+                .addValue("device_id", deviceId)
+                .addValue("dimension", dimension)
+                .addValue("limit", limit)
+                .addValue("updated_at", timestampWithTimeZone(now));
+        // 先确保快照行存在并刷新上限（不动 occupied）。
+        jdbcTemplate.update("""
+                INSERT INTO amusement_capacity_snapshot (
+                    id, project_id, session_id, location_point_id, device_id,
+                    dimension, capacity_limit, occupied_count, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :session_id, :point_id, :device_id,
+                    :dimension, :limit, 0, :updated_at
+                )
+                ON CONFLICT (project_id, dimension,
+                             COALESCE(session_id, ''), COALESCE(location_point_id, ''), COALESCE(device_id, ''))
+                DO UPDATE SET capacity_limit = EXCLUDED.capacity_limit,
+                              updated_at = EXCLUDED.updated_at
+                """, params);
+        // 原子 +1（防超卖：仅当当前在场 < 上限）。
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_capacity_snapshot
+                   SET occupied_count = occupied_count + 1,
+                       updated_at = :updated_at
+                 WHERE project_id = :project_id
+                   AND dimension = :dimension
+                   AND COALESCE(session_id, '') = COALESCE(:session_id, '')
+                   AND COALESCE(location_point_id, '') = COALESCE(:point_id, '')
+                   AND COALESCE(device_id, '') = COALESCE(:device_id, '')
+                   AND occupied_count < capacity_limit
+                """, params);
+        return updated > 0;
+    }
+
+    private void decrementSnapshot(CapacityClaimContext context, String dimension,
+            String pointId, String deviceId, Instant now) {
+        jdbcTemplate.update("""
+                UPDATE amusement_capacity_snapshot
+                   SET occupied_count = GREATEST(occupied_count - 1, 0),
+                       updated_at = :updated_at
+                 WHERE project_id = :project_id
+                   AND dimension = :dimension
+                   AND COALESCE(session_id, '') = COALESCE(:session_id, '')
+                   AND COALESCE(location_point_id, '') = COALESCE(:point_id, '')
+                   AND COALESCE(device_id, '') = COALESCE(:device_id, '')
+                """, new MapSqlParameterSource()
+                .addValue("project_id", context.projectId())
+                .addValue("dimension", dimension)
+                .addValue("session_id", "session".equals(dimension) ? context.sessionId() : null)
+                .addValue("point_id", pointId)
+                .addValue("device_id", deviceId)
+                .addValue("updated_at", timestampWithTimeZone(now)));
+    }
+
+    @Override
     public boolean lockSessionCapacityIfAvailable(String sessionId, int capacityToLock) {
         int updated = jdbcTemplate.update("""
                 UPDATE amusement_sessions

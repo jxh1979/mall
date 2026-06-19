@@ -512,14 +512,27 @@ public class AmusementService {
             throw ApiException.conflict("ENTITLEMENT_NOT_FOR_PROJECT", "entitlement is not bound to this project");
         }
 
-        // §6.4 步骤 4/6：先消费票务权益（原子扣 used_times），再扣场次容量。
-        // 顺序与回滚：权益扣减失败不扣容量；容量扣减失败则回补权益（补偿），保证两者一致。
+        // §6.4 步骤 4/6：先消费票务权益（原子扣 used_times），再按三维度扣容量。
+        // 顺序与回滚：权益扣减失败不扣容量；容量任一维度扣减失败则回补权益（补偿），保证两者一致。
         if (!entitlementGateway.consumeEntitlement(entitlement.id())) {
             throw ApiException.conflict("ENTITLEMENT_USED", "entitlement has no remaining times");
         }
         try {
-            if (!repository.incrementSessionUsedCapacityIfAvailable(session.id())) {
-                throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED", "session capacity exhausted");
+            // §6.4 三维度取最小可放行余量：对已配置的受控维度（场次 / 点位·设备 / 项目安全上限）
+            // 原子 check+increment，任一维度余量为 0 即拒绝（session_full / SESSION_CAPACITY_EXHAUSTED）；
+            // 未配置维度跳过（无 capacity_config 退化为场次单维，向后兼容）。
+            String pointId = trimToNull(textFromMap(actual.businessContext(),
+                    "location_point_id", "locationPointId", "point_id", "pointId"));
+            CapacityClaimResult claim = repository.claimCapacityAcrossDimensions(new CapacityClaimContext(
+                    project.id(),
+                    session.id(),
+                    pointId,
+                    trimToNull(actual.deviceId()),
+                    project.capacity()
+            ));
+            if (!claim.claimed()) {
+                throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED",
+                        "session capacity exhausted (dimension=" + claim.exhaustedDimension() + ")");
             }
         } catch (RuntimeException exception) {
             // 容量扣减失败：回补已消费的权益，避免权益被白扣。
