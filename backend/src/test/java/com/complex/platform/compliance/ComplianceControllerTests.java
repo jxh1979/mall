@@ -222,6 +222,11 @@ class ComplianceControllerTests {
         }
 
         @Bean
+        WecomConversationService wecomConversationService() {
+            return Mockito.mock(WecomConversationService.class);
+        }
+
+        @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
         }

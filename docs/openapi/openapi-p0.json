@@ -73,6 +73,10 @@
     },
     {
       "name": "merchant-billing"
+    },
+    {
+      "name": "compliance",
+      "description": "合规域（含 R5 T8 企微会话合规链）"
     }
   ],
   "paths": {
@@ -9955,6 +9959,277 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/compliance/wecom/conversations/sync": {
+      "post": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "syncWecomConversation",
+        "summary": "企微会话同步入站（PIPL 合规，开关门控）",
+        "description": "R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调 PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until 按生效留存策略（默认180天）推算。",
+        "x-permission": "wecom.sync",
+        "x-data-scope": "open-endpoint",
+        "x-terminal-allowed": [],
+        "x-invocation-channel": [
+          "provider-webhook"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "wecom.conversation_synced",
+        "x-audit-event-failure": "wecom.conversation_sync_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "external_conversation_id",
+                  "project_id"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "external_conversation_id": {
+                    "type": "string"
+                  },
+                  "project_id": {
+                    "type": "string"
+                  },
+                  "owner_staff_id": {
+                    "type": "string"
+                  },
+                  "customer_ref": {
+                    "type": "string"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "external_message_id": {
+                          "type": "string"
+                        },
+                        "sender_ref": {
+                          "type": "string"
+                        },
+                        "content": {
+                          "type": "string"
+                        },
+                        "sent_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "webhook-signature"
+      }
+    },
+    "/api/v1/compliance/wecom/conversations/{id}/messages": {
+      "get": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "viewWecomConversationMessages",
+        "summary": "分级查看企微会话消息（脱敏/原文，原文需审批+审计）",
+        "description": "R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 + approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件 wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。",
+        "x-permission": "wecom.view_raw",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "wecom.raw_viewed",
+        "x-audit-event-failure": "wecom.raw_view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "会话 id。"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "redacted",
+                "raw"
+              ]
+            },
+            "description": "查看模式；raw 为原文（高敏，需 wecom.view_raw + approval_ref）。"
+          },
+          {
+            "name": "approval_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "原文调阅审批引用；raw 模式必填，写入 wecom_access_audits.approval_ref。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/compliance/wecom/retention-policies": {
+      "get": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "listWecomRetentionPolicies",
+        "summary": "企微留存策略列表",
+        "description": "R5 T8：列出企微会话留存策略（scope/retention_days/expiry_action）。需 wecom.retention.manage。",
+        "x-permission": "wecom.retention.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "wecom.retention_policy_viewed",
+        "x-audit-event-failure": "wecom.retention_policy_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "upsertWecomRetentionPolicy",
+        "summary": "配置企微留存策略（默认180天）",
+        "description": "R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一 upsert。需 wecom.retention.manage（高敏需审批）。",
+        "x-permission": "wecom.retention.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "wecom.retention_policy_set",
+        "x-audit-event-failure": "wecom.retention_policy_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "scope_type",
+                  "expiry_action"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "scope_type": {
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "project",
+                      "merchant"
+                    ]
+                  },
+                  "scope_id": {
+                    "type": "string",
+                    "description": "global 时忽略（固定 *）；非 global 必填。"
+                  },
+                  "retention_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3650,
+                    "default": 180
+                  },
+                  "expiry_action": {
+                    "type": "string",
+                    "enum": [
+                      "archive",
+                      "delete",
+                      "anonymize"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {

@@ -462,10 +462,31 @@
     },
     {
       "req": "REQ-54",
-      "table": "wecom_conversation_retention",
-      "column": null,
-      "expected": "absent",
-      "note": "R5: 企微会话留存/到期归档销毁匿名化/脱敏/查看访问审计零落地，仅 V015 一行 mock 种子。R5 裁决：平台侧合规能力本期 P0；企微同步接口按第三方原则预留+开关"
+      "table": "wecom_retention_policies",
+      "column": "expiry_action",
+      "expected": "present",
+      "note": "R5 T8 已落地（平台侧，V087）：企微留存策略表（scope_type/scope_id 唯一 + retention_days 默认180 + expiry_action archive/delete/anonymize）。WecomConversationService 接合规链：默认全局180天策略 seed。"
+    },
+    {
+      "req": "REQ-54",
+      "table": "wecom_conversations",
+      "column": "retention_until",
+      "expected": "present",
+      "note": "R5 T8 已落地（V087）：会话归属（external_conversation_id 唯一/project/owner_staff/customer_ref）+ archive_status(active/archived/anonymized/deleted) + retention_until 留存到期日。WecomRetentionJob.applyRetention 扫到期按 expiry_action 归档/销毁/匿名化。"
+    },
+    {
+      "req": "REQ-54",
+      "table": "wecom_messages",
+      "column": "content_redacted",
+      "expected": "present",
+      "note": "R5 T8 已落地（V087）：消息表 content_raw_ref(原文引用/密文,仅授权可解) + content_redacted(普通展示脱敏,PiiTextRedactor 手机号/身份证/银行卡正则) + risk_flags(基础关键词质检命中) + anonymized + business_date。普通展示无明文。"
+    },
+    {
+      "req": "REQ-54",
+      "table": "wecom_access_audits",
+      "column": "view_type",
+      "expected": "present",
+      "note": "R5 T8 已落地（V087）：原文调阅审计（viewer_user_id/view_type redacted|raw/approval_ref/viewed_at）。原文调阅需 wecom.view_raw + 审批引用,调阅即写审计 + 事件 wecom.raw_viewed/sensitive.viewed。同步入站受 T2 开关 integration.wecom.sync 门控。AI 语义质检 P2,企微真实 SDK 对接待资料。"
     },
     {
       "req": "REQ-55",

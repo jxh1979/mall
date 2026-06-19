@@ -8,10 +8,14 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.compliance.dto.ComplianceExpiryItemRequest;
 import com.complex.platform.compliance.dto.ComplianceReminderScanRequest;
 import com.complex.platform.compliance.dto.ContractKeyDateRequest;
+import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
+import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -19,10 +23,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class ComplianceController {
 
     private final ComplianceService service;
+    private final WecomConversationService wecomConversationService;
     private final AuthorizationService authorizationService;
 
-    public ComplianceController(ComplianceService service, AuthorizationService authorizationService) {
+    public ComplianceController(
+            ComplianceService service,
+            WecomConversationService wecomConversationService,
+            AuthorizationService authorizationService
+    ) {
         this.service = service;
+        this.wecomConversationService = wecomConversationService;
         this.authorizationService = authorizationService;
     }
 
@@ -63,5 +73,43 @@ public class ComplianceController {
         authorizationService.requirePermission("compliance.reminder.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scanReminders(request));
+    }
+
+    // ---------------------------------------------------------------- R5 T8 企微会话合规链
+
+    @PostMapping("/wecom/conversations/sync")
+    public ApiResponse<WecomSyncResult> syncWecomConversation(@RequestBody WecomConversationSyncRequest request) {
+        // 同步入站受 T2 开关 integration.wecom.sync 编程式门控（在 service 内 check，关→TERMINAL_DISABLED）。
+        // 鉴权上下文 = webhook-signature（企微回调/拉取通道），不走 staff 权限闸。
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(wecomConversationService.syncConversation(request));
+    }
+
+    @GetMapping("/wecom/conversations/{id}/messages")
+    public ApiResponse<PageResponse<WecomMessageView>> viewWecomMessages(
+            @PathVariable String id,
+            @RequestParam(value = "mode", required = false, defaultValue = "redacted") String mode,
+            @RequestParam(value = "approval_ref", required = false) String approvalRef
+    ) {
+        // 原文调阅最小授权：raw 需 wecom.view_raw，脱敏展示需 wecom.view。
+        boolean raw = "raw".equalsIgnoreCase(mode);
+        authorizationService.requirePermission(raw ? "wecom.view_raw" : "wecom.view");
+        String viewerUserId = authorizationService.currentActor().id();
+        return ApiResponse.ok(wecomConversationService.viewMessages(id, mode, viewerUserId, approvalRef));
+    }
+
+    @GetMapping("/wecom/retention-policies")
+    public ApiResponse<PageResponse<WecomRetentionPolicyRecord>> listWecomRetentionPolicies() {
+        authorizationService.requirePermission("wecom.retention.manage");
+        return ApiResponse.ok(wecomConversationService.listRetentionPolicies());
+    }
+
+    @PostMapping("/wecom/retention-policies")
+    public ApiResponse<WecomRetentionPolicyRecord> upsertWecomRetentionPolicy(
+            @RequestBody WecomRetentionPolicyRequest request
+    ) {
+        authorizationService.requirePermission("wecom.retention.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(wecomConversationService.upsertRetentionPolicy(request));
     }
 }

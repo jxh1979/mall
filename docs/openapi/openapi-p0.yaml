@@ -29,6 +29,8 @@ tags:
   - name: floor-plan
   - name: merchant-service
   - name: merchant-billing
+  - name: compliance
+    description: 合规域（含 R5 T8 企微会话合规链）
 paths:
   /api/open/auth/token:
     post:
@@ -1158,7 +1160,15 @@ paths:
         - amusement
       operationId: createAmusementVerification
       summary: 游乐权益核销
+      description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→扣场次容量→留痕。失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(场次容量耗尽，已消费权益回补)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
       x-permission: amusement.verification.execute
+      x-failure-codes:
+        - TICKET_NOT_FOUND
+        - ENTITLEMENT_EXPIRED
+        - ENTITLEMENT_USED
+        - ENTITLEMENT_NOT_AMUSEMENT
+        - ENTITLEMENT_NOT_FOR_PROJECT
+        - SESSION_CAPACITY_EXHAUSTED
       x-data-scope: project-amusement-point
       x-terminal-allowed:
         - staff_work_phone
@@ -4605,223 +4615,6 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-  /api/v1/inventory/supply-contracts:
-    post:
-      tags:
-        - inventory
-      operationId: createSupplyContract
-      summary: 创建供应合同(三模式)
-      x-permission: inventory.supply_contract.manage
-      x-data-scope: project-warehouse-bar
-      x-terminal-allowed:
-        - staff_work_phone
-        - tablet
-        - web
-        - mobile_admin
-      x-idempotency-required: true
-      x-audit-event-success: supply_contract.created
-      x-audit-event-failure: supply_contract.create_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - supplier_id
-                - project_id
-                - contract_mode
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键
-                  maxLength: 128
-                supplier_id:
-                  type: string
-                  description: 供应商 id（inventory_suppliers）
-                  maxLength: 64
-                project_id:
-                  type: string
-                  description: 综合体项目 id
-                  maxLength: 64
-                merchant_id:
-                  type: string
-                  description: 商户 id；商户自采必填，平台管理员可显式指定
-                  maxLength: 64
-                contract_mode:
-                  type: string
-                  description: 三模式
-                  enum:
-                    - platform_self_use
-                    - merchant_self_purchase
-                    - platform_purchase_distribution
-                supply_scope:
-                  type: string
-                  description: 供货范围
-                  maxLength: 2000
-                price_terms:
-                  type: string
-                  description: 价格口径摘要
-                  maxLength: 2000
-                payment_term_days:
-                  type: integer
-                  description: 账期天数
-                valid_from:
-                  type: string
-                  description: 有效期起
-                  format: date
-                valid_to:
-                  type: string
-                  description: 有效期止
-                  format: date
-                summary:
-                  type: string
-                  description: 合同核心摘要
-                  maxLength: 2000
-                purchasable_scope:
-                  type: array
-                  description: 可采购物料 id 列表（审批后卡控）
-                  items:
-                    type: string
-                    maxLength: 64
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/inventory/supply-contracts/{id}/approve:
-    post:
-      tags:
-        - inventory
-      operationId: approveSupplyContract
-      summary: 审批供应合同(draft→approved/rejected)
-      x-permission: inventory.purchase.approve
-      x-data-scope: project-warehouse-bar
-      x-terminal-allowed:
-        - staff_work_phone
-        - tablet
-        - web
-        - mobile_admin
-      x-idempotency-required: true
-      x-audit-event-success: supply_contract.approved
-      x-audit-event-failure: supply_contract.approve_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - decision
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键
-                  maxLength: 128
-                decision:
-                  type: string
-                  description: 审批结论
-                  enum:
-                    - approved
-                    - rejected
-                reason:
-                  type: string
-                  description: 审批意见
-                  maxLength: 255
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/inventory/warehouses:
-    post:
-      tags:
-        - inventory
-      operationId: createWarehouse
-      summary: 创建结构化库房(六类)
-      x-permission: inventory.warehouse.manage
-      x-data-scope: project-warehouse-bar
-      x-terminal-allowed:
-        - staff_work_phone
-        - tablet
-        - web
-        - mobile_admin
-      x-idempotency-required: true
-      x-audit-event-success: inventory.warehouse.created
-      x-audit-event-failure: inventory.warehouse.create_failed
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-                - project_id
-                - warehouse_type
-                - name
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键
-                  maxLength: 128
-                project_id:
-                  type: string
-                  description: 综合体项目 id
-                  maxLength: 64
-                merchant_id:
-                  type: string
-                  description: 商户 id；商户上下文强制本商户
-                  maxLength: 64
-                warehouse_type:
-                  type: string
-                  description: 库房六类
-                  enum:
-                    - main
-                    - bar
-                    - bar_counter
-                    - consumable
-                    - gift
-                    - saved_bottle
-                name:
-                  type: string
-                  description: 库房名称
-                  maxLength: 120
-                status:
-                  type: string
-                  description: 库房状态
-                  enum:
-                    - active
-                    - archived
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/merchant-service/work-orders:
     get:
       tags:
@@ -6840,13 +6633,231 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/inventory/supply-contracts:
+    post:
+      tags:
+        - inventory
+      operationId: createSupplyContract
+      summary: 创建供应合同(三模式)
+      x-permission: inventory.supply_contract.manage
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+        - tablet
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: supply_contract.created
+      x-audit-event-failure: supply_contract.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - supplier_id
+                - project_id
+                - contract_mode
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                supplier_id:
+                  type: string
+                  description: 供应商 id（inventory_suppliers）
+                  maxLength: 64
+                project_id:
+                  type: string
+                  description: 综合体项目 id
+                  maxLength: 64
+                merchant_id:
+                  type: string
+                  description: 商户 id；商户自采必填，平台管理员可显式指定
+                  maxLength: 64
+                contract_mode:
+                  type: string
+                  description: 三模式
+                  enum:
+                    - platform_self_use
+                    - merchant_self_purchase
+                    - platform_purchase_distribution
+                supply_scope:
+                  type: string
+                  description: 供货范围
+                  maxLength: 2000
+                price_terms:
+                  type: string
+                  description: 价格口径摘要
+                  maxLength: 2000
+                payment_term_days:
+                  type: integer
+                  description: 账期天数
+                valid_from:
+                  type: string
+                  description: 有效期起
+                  format: date
+                valid_to:
+                  type: string
+                  description: 有效期止
+                  format: date
+                summary:
+                  type: string
+                  description: 合同核心摘要
+                  maxLength: 2000
+                purchasable_scope:
+                  type: array
+                  description: 可采购物料 id 列表（审批后卡控）
+                  items:
+                    type: string
+                    maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/inventory/supply-contracts/{id}/approve:
+    post:
+      tags:
+        - inventory
+      operationId: approveSupplyContract
+      summary: 审批供应合同(draft→approved/rejected)
+      x-permission: inventory.purchase.approve
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+        - tablet
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: supply_contract.approved
+      x-audit-event-failure: supply_contract.approve_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - decision
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                decision:
+                  type: string
+                  description: 审批结论
+                  enum:
+                    - approved
+                    - rejected
+                reason:
+                  type: string
+                  description: 审批意见
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/inventory/warehouses:
+    post:
+      tags:
+        - inventory
+      operationId: createWarehouse
+      summary: 创建结构化库房(六类)
+      x-permission: inventory.warehouse.manage
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+        - tablet
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: inventory.warehouse.created
+      x-audit-event-failure: inventory.warehouse.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - project_id
+                - warehouse_type
+                - name
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键
+                  maxLength: 128
+                project_id:
+                  type: string
+                  description: 综合体项目 id
+                  maxLength: 64
+                merchant_id:
+                  type: string
+                  description: 商户 id；商户上下文强制本商户
+                  maxLength: 64
+                warehouse_type:
+                  type: string
+                  description: 库房六类
+                  enum:
+                    - main
+                    - bar
+                    - bar_counter
+                    - consumable
+                    - gift
+                    - saved_bottle
+                name:
+                  type: string
+                  description: 库房名称
+                  maxLength: 120
+                status:
+                  type: string
+                  description: 库房状态
+                  enum:
+                    - active
+                    - archived
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/staff/registrations:
     post:
       tags:
         - access
       operationId: submitStaffRegistration
       summary: 员工自助注册
-      description: 员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建 staff_profiles(submitted)，待后台审批。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      description: 员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建 staff_profiles(submitted)，待后台审批。必须按 OpenAPI
+        schema、权限、数据范围、终端、幂等和审计事件实现。
       x-permission: staff.profile.submit
       x-data-scope: project
       x-terminal-allowed:
@@ -6877,7 +6888,8 @@ paths:
         - access
       operationId: reviewStaffRegistration
       summary: 审批员工注册
-      description: 后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带 reject_reason。仅 submitted 状态可审批；商户角色仅可审批本 merchant 范围。
+      description: 后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带 reject_reason。仅 submitted
+        状态可审批；商户角色仅可审批本 merchant 范围。
       x-permission: staff.profile.review
       x-data-scope: project
       x-terminal-allowed:
@@ -6938,7 +6950,8 @@ paths:
         - access
       operationId: bindStaffDeviceCredential
       summary: 绑定/换机申请员工设备凭证
-      description: 员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证 pending_review + supersedes 指向旧 active。与 kiosk 的 terminal_device_credentials 两套实体互不串值。
+      description: 员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证 pending_review + supersedes 指向旧
+        active。与 kiosk 的 terminal_device_credentials 两套实体互不串值。
       x-permission: staff.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -6971,7 +6984,8 @@ paths:
         - access
       operationId: approveStaffDeviceRebind
       summary: 审批换机生效
-      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证 uq_staff_device_credentials_one_active 始终成立。
+      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证
+        uq_staff_device_credentials_one_active 始终成立。
       x-permission: staff.device.review
       x-data-scope: project
       x-terminal-allowed:
@@ -7007,7 +7021,8 @@ paths:
         - access
       operationId: reportStaffDeviceIntegrity
       summary: 端侧完整性上报
-      description: 端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发 staff_device.integrity_failed + 通知复核。由端侧鉴权调用。
+      description: 端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发
+        staff_device.integrity_failed + 通知复核。由端侧鉴权调用。
       x-permission: staff.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -7126,6 +7141,203 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/compliance/wecom/conversations/sync:
+    post:
+      tags:
+        - compliance
+      operationId: syncWecomConversation
+      summary: 企微会话同步入站（PIPL 合规，开关门控）
+      description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调
+        PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until
+        按生效留存策略（默认180天）推算。
+      x-permission: wecom.sync
+      x-data-scope: open-endpoint
+      x-terminal-allowed: []
+      x-invocation-channel:
+        - provider-webhook
+      x-idempotency-required: true
+      x-audit-event-success: wecom.conversation_synced
+      x-audit-event-failure: wecom.conversation_sync_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+                - external_conversation_id
+                - project_id
+              properties:
+                idempotency_key:
+                  type: string
+                external_conversation_id:
+                  type: string
+                project_id:
+                  type: string
+                owner_staff_id:
+                  type: string
+                customer_ref:
+                  type: string
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      external_message_id:
+                        type: string
+                      sender_ref:
+                        type: string
+                      content:
+                        type: string
+                      sent_at:
+                        type: string
+                        format: date-time
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: webhook-signature
+  /api/v1/compliance/wecom/conversations/{id}/messages:
+    get:
+      tags:
+        - compliance
+      operationId: viewWecomConversationMessages
+      summary: 分级查看企微会话消息（脱敏/原文，原文需审批+审计）
+      description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 +
+        approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件
+        wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
+      x-permission: wecom.view_raw
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: wecom.raw_viewed
+      x-audit-event-failure: wecom.raw_view_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 会话 id。
+        - name: mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - redacted
+              - raw
+          description: 查看模式；raw 为原文（高敏，需 wecom.view_raw + approval_ref）。
+        - name: approval_ref
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 原文调阅审批引用；raw 模式必填，写入 wecom_access_audits.approval_ref。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/compliance/wecom/retention-policies:
+    get:
+      tags:
+        - compliance
+      operationId: listWecomRetentionPolicies
+      summary: 企微留存策略列表
+      description: R5 T8：列出企微会话留存策略（scope/retention_days/expiry_action）。需 wecom.retention.manage。
+      x-permission: wecom.retention.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: wecom.retention_policy_viewed
+      x-audit-event-failure: wecom.retention_policy_view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - compliance
+      operationId: upsertWecomRetentionPolicy
+      summary: 配置企微留存策略（默认180天）
+      description: R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一
+        upsert。需 wecom.retention.manage（高敏需审批）。
+      x-permission: wecom.retention.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: wecom.retention_policy_set
+      x-audit-event-failure: wecom.retention_policy_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+                - scope_type
+                - expiry_action
+              properties:
+                idempotency_key:
+                  type: string
+                scope_type:
+                  type: string
+                  enum:
+                    - global
+                    - project
+                    - merchant
+                scope_id:
+                  type: string
+                  description: global 时忽略（固定 *）；非 global 必填。
+                retention_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 3650
+                  default: 180
+                expiry_action:
+                  type: string
+                  enum:
+                    - archive
+                    - delete
+                    - anonymize
+                enabled:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -7293,74 +7505,6 @@ components:
         type: string
       description: 主管复核记录 ID。
   requestBodies:
-    StaffRegistrationRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StaffRegistrationRequest"
-          example:
-            idempotency_key: staff_reg_20260618_000001
-            project_id: project_main
-            merchant_id: null
-            name: 张三
-            phone_hash: sha256:phone_hash_placeholder
-            staff_level_id: lvl_m1_lower
-    StaffRegistrationReviewRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StaffRegistrationReviewRequest"
-          example:
-            idempotency_key: staff_review_20260618_000001
-            decision: approve
-    StaffDeviceBindRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StaffDeviceBindRequest"
-          example:
-            idempotency_key: staff_dev_bind_20260618_000001
-            staff_profile_id: staff_staff_reg_20260618_000001
-            device_public_key: MFkwEwYHKoZIzj0CAQ...keystore_pubkey
-            device_fingerprint_hash: sha256:device_fingerprint_placeholder
-    StaffDeviceRebindDecisionRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StaffDeviceRebindDecisionRequest"
-          example:
-            idempotency_key: staff_dev_rebind_20260618_000001
-    StaffDeviceIntegrityReportRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StaffDeviceIntegrityReportRequest"
-          example:
-            idempotency_key: staff_dev_integrity_20260618_000001
-            integrity_status: root_detected
-    StaffDeviceRevokeRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StaffDeviceRevokeRequest"
-          example:
-            idempotency_key: staff_dev_revoke_20260618_000001
-            reason: 员工离职解绑
-    EmployeeNoticeAcknowledgeRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/EmployeeNoticeAcknowledgeRequest"
-          example:
-            idempotency_key: staff_notice_ack_20260618_000001
-            consent: true
     StatusChange:
       required: true
       content:
@@ -7765,7 +7909,7 @@ components:
             maintenance_vendor_id: supplier_maint_01
             engineer_id: engineer_001
             engineer_name: 张工
-            maintenance_at: "2026-06-18T10:00:00+08:00"
+            maintenance_at: 2026-06-18T10:00:00+08:00
             result: pass
             exception_note: ""
             source_terminal: kiosk
@@ -8135,6 +8279,74 @@ components:
             mode: min_consumption_ratio
             ratio_bps: 3000
             cancel_free_before_minutes: 60
+    StaffRegistrationRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffRegistrationRequest"
+          example:
+            idempotency_key: staff_reg_20260618_000001
+            project_id: project_main
+            merchant_id: null
+            name: 张三
+            phone_hash: sha256:phone_hash_placeholder
+            staff_level_id: lvl_m1_lower
+    StaffRegistrationReviewRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffRegistrationReviewRequest"
+          example:
+            idempotency_key: staff_review_20260618_000001
+            decision: approve
+    StaffDeviceBindRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffDeviceBindRequest"
+          example:
+            idempotency_key: staff_dev_bind_20260618_000001
+            staff_profile_id: staff_staff_reg_20260618_000001
+            device_public_key: MFkwEwYHKoZIzj0CAQ...keystore_pubkey
+            device_fingerprint_hash: sha256:device_fingerprint_placeholder
+    StaffDeviceRebindDecisionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffDeviceRebindDecisionRequest"
+          example:
+            idempotency_key: staff_dev_rebind_20260618_000001
+    StaffDeviceIntegrityReportRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffDeviceIntegrityReportRequest"
+          example:
+            idempotency_key: staff_dev_integrity_20260618_000001
+            integrity_status: root_detected
+    StaffDeviceRevokeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StaffDeviceRevokeRequest"
+          example:
+            idempotency_key: staff_dev_revoke_20260618_000001
+            reason: 员工离职解绑
+    EmployeeNoticeAcknowledgeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EmployeeNoticeAcknowledgeRequest"
+          example:
+            idempotency_key: staff_notice_ack_20260618_000001
+            consent: true
   responses:
     Success:
       description: 统一成功响应
@@ -8186,181 +8398,6 @@ components:
             meta:
               server_time: 2026-06-12T12:00:00Z
   schemas:
-    StaffRegistrationRequest:
-      type: object
-      description: 员工自助注册请求体。个人信息只传不可逆哈希（PIPL）。project_id 必填（隔离），merchant_id 可空（NULL=平台员工）。
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - project_id
-        - name
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键；同一注册重试必须复用。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
-        project_id:
-          type: string
-          description: 综合体归属（隔离），必填。
-          maxLength: 64
-        merchant_id:
-          type: string
-          description: 商户归属；空=平台员工。
-          maxLength: 64
-        name:
-          type: string
-          description: 员工姓名，必填。
-          maxLength: 128
-        phone_hash:
-          type: string
-          description: 手机号不可逆哈希（PIPL，不存明文）。
-          maxLength: 64
-        id_doc_hash:
-          type: string
-          description: 证件不可逆哈希（可选）。
-          maxLength: 64
-        staff_level_id:
-          type: string
-          description: 职级 id（V055 staff_levels），可选；非空必须已存在。
-          maxLength: 64
-    StaffRegistrationReviewRequest:
-      type: object
-      description: 审批员工注册请求体。approve 生成 user_id+默认角色；reject 必须带 reject_reason。
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - decision
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
-        decision:
-          type: string
-          description: 审批决定。
-          enum:
-            - approve
-            - reject
-        reject_reason:
-          type: string
-          description: 驳回原因；decision=reject 时必填。
-          maxLength: 255
-    StaffDeviceBindRequest:
-      type: object
-      description: 员工设备凭证绑定/换机请求体。device_public_key=Keystore 公钥，device_fingerprint_hash=不可逆指纹（不读 NFC）。
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - staff_profile_id
-        - device_public_key
-        - device_fingerprint_hash
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
-        staff_profile_id:
-          type: string
-          description: 员工档案 id。
-          maxLength: 64
-        device_public_key:
-          type: string
-          description: Android Keystore 设备公钥。
-        device_fingerprint_hash:
-          type: string
-          description: 不可逆设备指纹哈希（不读手机本机 NFC 唯一标识）。
-          maxLength: 64
-    StaffDeviceRebindDecisionRequest:
-      type: object
-      description: 审批换机生效请求体。批准后新凭证 active、旧凭证 superseded。
-      additionalProperties: false
-      required:
-        - idempotency_key
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
-    StaffDeviceIntegrityReportRequest:
-      type: object
-      description: 端侧完整性上报请求体。非 trusted 即自动失效凭证 + 复核。
-      additionalProperties: false
-      required:
-        - idempotency_key
-        - integrity_status
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
-        integrity_status:
-          type: string
-          description: 端侧完整性状态。
-          enum:
-            - trusted
-            - root_detected
-            - debug_detected
-            - abnormal
-    StaffDeviceRevokeRequest:
-      type: object
-      description: 解绑/失效设备凭证请求体。
-      additionalProperties: false
-      required:
-        - idempotency_key
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
-        reason:
-          type: string
-          description: 失效原因，记入 revoked_reason。
-          maxLength: 255
-    EmployeeNoticeAcknowledgeRequest:
-      type: object
-      description: 确认/同意通知请求体。consent=true→consented，decline=true→declined，否则 acknowledged。
-      additionalProperties: false
-      required:
-        - idempotency_key
-      properties:
-        idempotency_key:
-          type: string
-          description: 幂等键。
-          maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
-        consent:
-          type: boolean
-          description: true 表示同意（consented）。
-        decline:
-          type: boolean
-          description: true 表示拒绝（declined）。
     SuccessResponse:
       type: object
       required:
@@ -13254,6 +13291,181 @@ components:
           description: 取消免没收时限（分钟）。
           minimum: 0
           maximum: 100000000
+    StaffRegistrationRequest:
+      type: object
+      description: 员工自助注册请求体。个人信息只传不可逆哈希（PIPL）。project_id 必填（隔离），merchant_id 可空（NULL=平台员工）。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - project_id
+        - name
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键；同一注册重试必须复用。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        project_id:
+          type: string
+          description: 综合体归属（隔离），必填。
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 商户归属；空=平台员工。
+          maxLength: 64
+        name:
+          type: string
+          description: 员工姓名，必填。
+          maxLength: 128
+        phone_hash:
+          type: string
+          description: 手机号不可逆哈希（PIPL，不存明文）。
+          maxLength: 64
+        id_doc_hash:
+          type: string
+          description: 证件不可逆哈希（可选）。
+          maxLength: 64
+        staff_level_id:
+          type: string
+          description: 职级 id（V055 staff_levels），可选；非空必须已存在。
+          maxLength: 64
+    StaffRegistrationReviewRequest:
+      type: object
+      description: 审批员工注册请求体。approve 生成 user_id+默认角色；reject 必须带 reject_reason。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - decision
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        decision:
+          type: string
+          description: 审批决定。
+          enum:
+            - approve
+            - reject
+        reject_reason:
+          type: string
+          description: 驳回原因；decision=reject 时必填。
+          maxLength: 255
+    StaffDeviceBindRequest:
+      type: object
+      description: 员工设备凭证绑定/换机请求体。device_public_key=Keystore 公钥，device_fingerprint_hash=不可逆指纹（不读 NFC）。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - staff_profile_id
+        - device_public_key
+        - device_fingerprint_hash
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        staff_profile_id:
+          type: string
+          description: 员工档案 id。
+          maxLength: 64
+        device_public_key:
+          type: string
+          description: Android Keystore 设备公钥。
+        device_fingerprint_hash:
+          type: string
+          description: 不可逆设备指纹哈希（不读手机本机 NFC 唯一标识）。
+          maxLength: 64
+    StaffDeviceRebindDecisionRequest:
+      type: object
+      description: 审批换机生效请求体。批准后新凭证 active、旧凭证 superseded。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+    StaffDeviceIntegrityReportRequest:
+      type: object
+      description: 端侧完整性上报请求体。非 trusted 即自动失效凭证 + 复核。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - integrity_status
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        integrity_status:
+          type: string
+          description: 端侧完整性状态。
+          enum:
+            - trusted
+            - root_detected
+            - debug_detected
+            - abnormal
+    StaffDeviceRevokeRequest:
+      type: object
+      description: 解绑/失效设备凭证请求体。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        reason:
+          type: string
+          description: 失效原因，记入 revoked_reason。
+          maxLength: 255
+    EmployeeNoticeAcknowledgeRequest:
+      type: object
+      description: 确认/同意通知请求体。consent=true→consented，decline=true→declined，否则 acknowledged。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        consent:
+          type: boolean
+          description: true 表示同意（consented）。
+        decline:
+          type: boolean
+          description: true 表示拒绝（declined）。
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
