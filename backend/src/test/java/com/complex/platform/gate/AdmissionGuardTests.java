@@ -171,23 +171,88 @@ class AdmissionGuardTests {
         verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
     }
 
-    // ── over_contract_scope / over_space：数据不可得 → 放行 + TODO 行为 ──────
+    // ── over_contract_scope：真实合同经营范围（V080 allowed_business_scope） ──
 
     @Test
-    void overContractScopePassesThroughBecauseNoScopeDataAvailable() {
-        // contracts 无 allowed_business_scope 字段（见 AdmissionGuard TODO）→ 无数据时放行，绝不阻断。
+    void overContractScopeNotTriggeredWhenScopeContainsDomainPassesThrough() {
+        // 合同经营范围含 bar → bar.bill_waiver 放行。businessDomain = actionType 第一段 = "bar"。
         when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
                 policy("over_contract_scope", "block", 2)));
-        assertThatCode(() -> guard.check("act", "obj", "o1")).doesNotThrowAnyException();
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.isOverContractScopeForMerchant("m1", "bar")).thenReturn(false);
+
+        assertThatCode(() -> guard.check("bar.bill_waiver", "bar_bill", "b1")).doesNotThrowAnyException();
         verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
     }
 
     @Test
-    void overSpacePassesThroughBecauseNoObjectToSpaceMapping() {
-        // 无 对象→空间→合同租赁空间 映射（见 AdmissionGuard TODO）→ 无数据时放行，绝不阻断。
+    void overContractScopeTriggeredWhenScopeMissesDomainBlocks() {
+        // 经营范围不含该业务域 → 越界命中 → block。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_contract_scope", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.isOverContractScopeForMerchant("m1", "ticketing")).thenReturn(true);
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_scope"));
+
+        assertThatThrownBy(() -> guard.check("ticketing.special_release", "verification", "v1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+    }
+
+    @Test
+    void overContractScopeNotTriggeredWhenNoMerchantScopePassesThrough() {
+        // 无商户上下文（平台管理员）→ 放行，不查事实源。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_contract_scope", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.empty());
+
+        assertThatCode(() -> guard.check("bar.bill_waiver", "bar_bill", "b1")).doesNotThrowAnyException();
+        verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
+    }
+
+    // ── over_space：对象→空间→合同租赁（V080 contract_spaces） ──────────────
+
+    @Test
+    void overSpaceNotTriggeredWhenSpaceLeasedByContractPassesThrough() {
+        // 解析到 space 且在生效合同租赁内 → 放行。
         when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
                 policy("over_space", "block", 2)));
-        assertThatCode(() -> guard.check("act", "obj", "o1")).doesNotThrowAnyException();
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("merchant_service_work_order", "wo1")).thenReturn(Optional.of("sp1"));
+        when(factRepo.isOverSpaceForMerchant("m1", "sp1")).thenReturn(false);
+
+        assertThatCode(() -> guard.check("merchant_service.work_order_close",
+                "merchant_service_work_order", "wo1")).doesNotThrowAnyException();
+        verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void overSpaceTriggeredWhenSpaceNotLeasedBlocks() {
+        // 解析到 space 但不在生效合同租赁内 → 越界命中 → block。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("merchant_service_work_order", "wo1")).thenReturn(Optional.of("sp1"));
+        when(factRepo.isOverSpaceForMerchant("m1", "sp1")).thenReturn(true);
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_space"));
+
+        assertThatThrownBy(() -> guard.check("merchant_service.work_order_close",
+                "merchant_service_work_order", "wo1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+    }
+
+    @Test
+    void overSpacePassesThroughWhenObjectTypeNotResolvable() {
+        // objectType 无 对象→空间 映射（resolveSpaceId 返回 empty）→ 放行，绝不阻断。
+        when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(
+                policy("over_space", "block", 2)));
+        when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
+        when(factRepo.resolveSpaceId("bar_bill", "b1")).thenReturn(Optional.empty());
+
+        assertThatCode(() -> guard.check("bar.bill_waiver", "bar_bill", "b1")).doesNotThrowAnyException();
         verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
     }
 

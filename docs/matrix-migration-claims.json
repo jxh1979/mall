@@ -543,6 +543,20 @@
       "column": "approval_ref",
       "expected": "present",
       "note": "V071 R5 T14：视频锚点调阅审计表（viewer_user_id + approval_ref，FK anchor_id）已落，调阅敏感需 integration.video.view 权限+最小授权审批。口径=接口+开关预留、调阅审计已落，真实回流待厂商"
+    },
+    {
+      "req": "REQ-69",
+      "table": "contracts",
+      "column": "allowed_business_scope",
+      "expected": "present",
+      "note": "V080 第二阶段（待确认#4）：合同经营范围（JSON 业务域列表），驱动 AdmissionGuard over_contract_scope 真实判定（actionType 第一段为业务域；scope 不含→命中；空[]=未配置不限放行；无生效合同→命中）"
+    },
+    {
+      "req": "REQ-69",
+      "table": "contract_spaces",
+      "column": "space_id",
+      "expected": "present",
+      "note": "V080 第二阶段（待确认#4）：合同-空间租赁关联表（contract_id,space_id PK），驱动 AdmissionGuard over_space 真实判定（object→space 经 resolveSpaceId，当前仅 merchant_service_work_order 可解析；space 不在生效合同 contract_spaces 内→命中；不可解析→放行）"
     }
   ]
 }

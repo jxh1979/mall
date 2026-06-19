@@ -27,10 +27,15 @@ import org.springframework.stereotype.Component;
  *       数据源 staff_levels（经 AuthorizationService）。</li>
  *   <li><b>qualification_abnormal</b>：当前 actor 的商户存在已过期的 active 合规资质项 → 命中。
  *       数据源 compliance_expiry_items（V028，subject_type merchant/supplier、valid_to、status）。</li>
- *   <li><b>over_contract_scope</b>：<b>TODO</b>——contracts 表无 allowed_business_scope（经营范围）字段，
- *       且无 action→业务域→合同经营范围映射数据，暂无法真实判定 → 保守放行（不阻断）。</li>
- *   <li><b>over_space</b>：<b>TODO</b>——无 对象→空间→合同租赁空间 映射（spaces.merchant_id 仅到商户，
- *       无 contract_id；object_id→space 亦无通用映射）→ 保守放行（不阻断）。</li>
+ *   <li><b>over_contract_scope</b>：从 actionType 第一段取业务域（bar.bill_waiver→bar /
+ *       amusement.reopen→amusement / ticketing.special_release→ticketing / finance.*→finance）。
+ *       查 actor 商户的生效合同（approved + 日期覆盖今天）的 allowed_business_scope（V080），
+ *       不含该业务域 → 命中；scope 为空 [] → 视为“未配置=不限”放行（保守不误伤，可后台收紧）；
+ *       无生效合同 → 命中（与 expired 语义一致）。数据源 contracts（V010 + V080）。</li>
+ *   <li><b>over_space</b>：先按 objectType 解析 objectId→space（当前仅
+ *       {@code merchant_service_work_order}→merchant_service_work_orders.space_id 可解析，V022），
+ *       再查该 space 是否在 actor 商户生效合同的 contract_spaces（V080）租赁内，不在 → 命中。
+ *       objectType 不支持解析 / 解析不到 space → 放行（不阻断）。数据源 contract_spaces + contracts。</li>
  * </ul>
  *
  * <h3>异常口径</h3>
@@ -125,8 +130,14 @@ public class AdmissionGuard {
                         .map(factRepository::isQualificationAbnormalForMerchant)
                         .orElse(false);
                 case "permission_insufficient" -> authorizationService.currentActorLevelRank() < policy.requiredLevel();
-                // over_contract_scope / over_space：缺判定数据（见类注释 TODO）→ 保守放行，不阻断。
-                case "over_contract_scope", "over_space" -> false;
+                case "over_contract_scope" -> authorizationService.currentMerchantIdQuietly()
+                        .map(merchantId -> factRepository.isOverContractScopeForMerchant(
+                                merchantId, businessDomainOf(actionType)))
+                        .orElse(false); // 无商户上下文（平台管理员等）→ 放行
+                case "over_space" -> authorizationService.currentMerchantIdQuietly()
+                        .flatMap(merchantId -> factRepository.resolveSpaceId(objectType, objectId)
+                                .map(spaceId -> factRepository.isOverSpaceForMerchant(merchantId, spaceId)))
+                        .orElse(false); // 无商户上下文 / objectType 不可解析到 space → 放行
                 default -> false; // 未知 trigger_mode（DB CHECK 约束兜底）→ 放行
             };
         } catch (RuntimeException exception) {
@@ -144,5 +155,14 @@ public class AdmissionGuard {
             );
             return false;
         }
+    }
+
+    /** 取 actionType 第一段为业务域：bar.bill_waiver→bar、amusement.reopen→amusement、finance.*→finance。 */
+    private static String businessDomainOf(String actionType) {
+        if (actionType == null) {
+            return "";
+        }
+        int dot = actionType.indexOf('.');
+        return dot < 0 ? actionType : actionType.substring(0, dot);
     }
 }
