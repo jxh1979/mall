@@ -157,11 +157,13 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
         jdbcTemplate.update("""
                 INSERT INTO wecom_messages (
                     id, conversation_id, sender_ref, content_raw_ref, content_redacted,
-                    risk_flags, anonymized, sent_at, business_date, created_at
+                    risk_flags, anonymized, sent_at, business_date, created_at,
+                    ai_qc_status, ai_qc_result
                 )
                 VALUES (
                     :id, :conversation_id, :sender_ref, :content_raw_ref, :content_redacted,
-                    CAST(:risk_flags AS jsonb), :anonymized, :sent_at, :business_date, :created_at
+                    CAST(:risk_flags AS jsonb), :anonymized, :sent_at, :business_date, :created_at,
+                    :ai_qc_status, CAST(:ai_qc_result AS jsonb)
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
@@ -174,7 +176,9 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                 .addValue("anonymized", record.anonymized())
                 .addValue("sent_at", timestampWithTimeZone(record.sentAt()))
                 .addValue("business_date", record.businessDate())
-                .addValue("created_at", timestampWithTimeZone(record.createdAt())));
+                .addValue("created_at", timestampWithTimeZone(record.createdAt()))
+                .addValue("ai_qc_status", record.aiQcStatus() == null ? "skipped" : record.aiQcStatus())
+                .addValue("ai_qc_result", record.aiQcResult()));
         return record;
     }
 
@@ -182,7 +186,8 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
     public List<WecomMessageRecord> findMessagesByConversation(String conversationId) {
         return jdbcTemplate.query("""
                 SELECT id, conversation_id, sender_ref, content_raw_ref, content_redacted,
-                       risk_flags, anonymized, sent_at, business_date, created_at
+                       risk_flags, anonymized, sent_at, business_date, created_at,
+                       ai_qc_status, ai_qc_result
                   FROM wecom_messages
                  WHERE conversation_id = :conversation_id
                  ORDER BY sent_at, id
@@ -196,7 +201,8 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                 UPDATE wecom_messages
                    SET content_raw_ref = NULL,
                        content_redacted = '[ANONYMIZED]',
-                       anonymized = true
+                       anonymized = true,
+                       ai_qc_result = NULL
                  WHERE conversation_id = :conversation_id
                 """, Map.of("conversation_id", conversationId));
     }
@@ -275,7 +281,9 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                 rs.getBoolean("anonymized"),
                 nullableInstant(rs, "sent_at"),
                 rs.getObject("business_date", LocalDate.class),
-                nullableInstant(rs, "created_at")
+                nullableInstant(rs, "created_at"),
+                rs.getString("ai_qc_status"),
+                rs.getString("ai_qc_result")
         );
     }
 

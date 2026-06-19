@@ -493,7 +493,21 @@
       "table": "wecom_access_audits",
       "column": "view_type",
       "expected": "present",
-      "note": "R5 T8 已落地（V087）：原文调阅审计（viewer_user_id/view_type redacted|raw/approval_ref/viewed_at）。原文调阅需 wecom.view_raw + 审批引用,调阅即写审计 + 事件 wecom.raw_viewed/sensitive.viewed。同步入站受 T2 开关 integration.wecom.sync 门控。AI 语义质检 P2,企微真实 SDK 对接待资料。"
+      "note": "R5 T8 已落地（V087）：原文调阅审计（viewer_user_id/view_type redacted|raw/approval_ref/viewed_at）。原文调阅需 wecom.view_raw + 审批引用,调阅即写审计 + 事件 wecom.raw_viewed/sensitive.viewed。同步入站受 T2 开关 integration.wecom.sync 门控。AI 语义质检见 V096（预留接口+开关默认关）。"
+    },
+    {
+      "req": "REQ-wecom-ai-qc",
+      "table": "wecom_messages",
+      "column": "ai_qc_status",
+      "expected": "present",
+      "note": "V096 企微 AI 语义质检预留（2026-06-19）：AI 质检状态 skipped(开关关,不调AI)/not_configured(开关开但无厂商,占位接缝)/analyzed/failed。能力开关 wecom.ai_qc.enabled 显式 seed=FALSE(terminal_capability_switches '*' global,后台 updateCapabilitySwitch 可配)。经 WecomQcPort 路由:关→DisabledWecomQc(SKIPPED,仅关键词质检 risk_flags 不变);开→ReservedWecomQc(NOT_CONFIGURED 占位,不崩不阻塞)。AI 结果与关键词 risk_flags 独立并存。"
+    },
+    {
+      "req": "REQ-wecom-ai-qc",
+      "table": "wecom_messages",
+      "column": "ai_qc_result",
+      "expected": "present",
+      "note": "V096 企微 AI 语义质检预留（2026-06-19）：AI 结构化结果 JSONB(情绪 sentiment/投诉倾向 complaint_risk/语义风险 ai_risk_flags),占位实现为 NULL,真实适配器(待 AI/LLM SDK 资料,可接本地 LLM)回填。匿名化时同步清空。权限复用 wecom.retention.manage,另 seed wecom.ai_qc.manage。"
     },
     {
       "req": "REQ-55",

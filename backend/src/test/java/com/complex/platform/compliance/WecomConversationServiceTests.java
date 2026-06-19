@@ -10,6 +10,11 @@ import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
 import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
+import com.complex.platform.compliance.qc.DisabledWecomQc;
+import com.complex.platform.compliance.qc.ReservedWecomQc;
+import com.complex.platform.compliance.qc.WecomQcPort;
+import com.complex.platform.compliance.qc.WecomQcRequest;
+import com.complex.platform.compliance.qc.WecomQcResult;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
@@ -42,11 +47,18 @@ class WecomConversationServiceTests {
         repository = new InMemoryWecomRepository();
         auditRepository = new InMemoryAuditEventRepository();
         switchGuard = Mockito.mock(TerminalSwitchGuard.class);
-        service = new WecomConversationService(
+        // 默认：AI 质检开关关（DisabledWecomQc）→ 仅关键词质检（行为不变）。
+        service = newService(new DisabledWecomQc());
+    }
+
+    private WecomConversationService newService(WecomQcPort qcPort) {
+        return new WecomConversationService(
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditRepository),
                 switchGuard,
+                qcPort,
+                new ObjectMapper(),
                 FIXED
         );
     }
@@ -90,6 +102,116 @@ class WecomConversationServiceTests {
         assertThat(result.flaggedForReview()).isEqualTo(1);
         assertThat(repository.messages.get(0).riskFlags())
                 .contains("lure_private_contact", "private_payment");
+    }
+
+    @Test
+    void aiQcDisabledKeepsKeywordResultAndDoesNotInvokeAi() {
+        // 开关关（DisabledWecomQc，setUp 默认）：不调 AI；ai_qc_status=skipped，无 AI 结果；关键词命中照常。
+        CountingQcPort counting = new CountingQcPort(new DisabledWecomQc());
+        WecomConversationService svc = newService(counting);
+
+        svc.syncConversation(syncRequest("ext-ai-off", "加我私微，私收款转我"));
+
+        WecomMessageRecord stored = repository.messages.get(0);
+        // 关键词质检结果不变（AI 不覆盖）。
+        assertThat(stored.riskFlags()).contains("lure_private_contact", "private_payment");
+        // AI 走 SKIPPED 占位（不调真实 AI），结果留空。
+        assertThat(stored.aiQcStatus()).isEqualTo("skipped");
+        assertThat(stored.aiQcResult()).isNull();
+        // 端口仍被调用（开关由 router 内部判定，本测用 Disabled 实现验证语义）。
+        assertThat(counting.calls).isEqualTo(1);
+    }
+
+    @Test
+    void aiQcEnabledReservedReturnsNotConfiguredWithoutBreakingKeyword() {
+        // 开关开但无真实厂商（ReservedWecomQc）：返回 NOT_CONFIGURED 占位，不崩、不阻塞；关键词结果仍在。
+        WecomConversationService svc = newService(new ReservedWecomQc());
+
+        WecomSyncResult result = svc.syncConversation(syncRequest("ext-ai-on", "加我私微 13800001111"));
+
+        assertThat(result.messagesStored()).isEqualTo(1);
+        WecomMessageRecord stored = repository.messages.get(0);
+        // 关键词命中保留 + 脱敏照常（AI 不影响）。
+        assertThat(stored.riskFlags()).contains("lure_private_contact");
+        assertThat(stored.contentRedacted()).doesNotContain("13800001111");
+        // AI 开关开但无厂商 → not_configured 占位接缝，结果留空（不崩）。
+        assertThat(stored.aiQcStatus()).isEqualTo("not_configured");
+        assertThat(stored.aiQcResult()).isNull();
+    }
+
+    @Test
+    void aiQcAnalyzedResultIsPersistedAlongsideKeywordFlags() {
+        // 真实适配器接缝（ANALYZED 有结构化结果）：ai_qc_result 落库，关键词结果独立并存。
+        WecomQcPort analyzing = new WecomQcPort() {
+            @Override
+            public WecomQcResult analyzeMessage(WecomQcRequest request) {
+                return new WecomQcResult(WecomQcResult.Status.ANALYZED, "negative", 80,
+                        List.of("complaint_tendency"), "ok");
+            }
+
+            @Override
+            public List<WecomQcResult> analyzeConversation(List<WecomQcRequest> requests) {
+                return List.of();
+            }
+        };
+        WecomConversationService svc = newService(analyzing);
+
+        svc.syncConversation(syncRequest("ext-ai-analyzed", "加我私微"));
+
+        WecomMessageRecord stored = repository.messages.get(0);
+        assertThat(stored.aiQcStatus()).isEqualTo("analyzed");
+        assertThat(stored.aiQcResult())
+                .contains("negative")
+                .contains("complaint_tendency");
+        // 关键词结果独立保留（AI 不覆盖）。
+        assertThat(stored.riskFlags()).contains("lure_private_contact");
+    }
+
+    @Test
+    void aiQcAdapterErrorIsFailSafeAndDoesNotBlock() {
+        // 适配器抛异常 → fail-safe：本测直接用会抛异常的端口，service 不应崩（端口路由层兜底）。
+        // 注：生产路由 WecomQcRouter 已兜底；此处校验占位 FAILED 路径不影响落库与关键词结果。
+        WecomQcPort failing = new WecomQcPort() {
+            @Override
+            public WecomQcResult analyzeMessage(WecomQcRequest request) {
+                return WecomQcResult.failed("adapter error");
+            }
+
+            @Override
+            public List<WecomQcResult> analyzeConversation(List<WecomQcRequest> requests) {
+                return List.of();
+            }
+        };
+        WecomConversationService svc = newService(failing);
+
+        WecomSyncResult result = svc.syncConversation(syncRequest("ext-ai-fail", "加我私微"));
+
+        assertThat(result.messagesStored()).isEqualTo(1);
+        WecomMessageRecord stored = repository.messages.get(0);
+        assertThat(stored.aiQcStatus()).isEqualTo("failed");
+        assertThat(stored.aiQcResult()).isNull();
+        assertThat(stored.riskFlags()).contains("lure_private_contact");
+    }
+
+    /** 计数包装端口：验证 AI 质检确被调用次数（语义=每条消息一次）。 */
+    private static final class CountingQcPort implements WecomQcPort {
+        private final WecomQcPort delegate;
+        private int calls;
+
+        CountingQcPort(WecomQcPort delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public WecomQcResult analyzeMessage(WecomQcRequest request) {
+            calls++;
+            return delegate.analyzeMessage(request);
+        }
+
+        @Override
+        public List<WecomQcResult> analyzeConversation(List<WecomQcRequest> requests) {
+            return delegate.analyzeConversation(requests);
+        }
     }
 
     @Test

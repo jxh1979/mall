@@ -6,7 +6,13 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
 import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
+import com.complex.platform.compliance.qc.WecomQcPort;
+import com.complex.platform.compliance.qc.WecomQcRequest;
+import com.complex.platform.compliance.qc.WecomQcResult;
+import com.complex.platform.compliance.qc.WecomQcRouter;
 import com.complex.platform.evidence.AuditEventService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import java.time.Clock;
 import java.time.Instant;
@@ -32,7 +38,11 @@ import org.springframework.stereotype.Service;
  *       返回原文并写 raw 审计 + 事件 wecom.raw_viewed / sensitive.viewed。
  *   <li><b>留存到期</b>：{@link #applyRetention(LocalDate)} 可单测直调；按策略 expiry_action 执行
  *       archive/delete/anonymize；@Scheduled 仅薄包装（默认不注册）。
- *   <li><b>质检</b>：基础关键词敏感命中（私单/私收款/辱骂/诱导私微等）标记 risk_flags 进复核，不做 AI 语义（P2）。
+ *   <li><b>质检</b>：基础关键词敏感命中（私单/私收款/辱骂/诱导私微等）标记 risk_flags 进复核。
+ *       AI 语义质检（V096）按"第三方一律预留接口 + 开关默认关"经 {@link WecomQcPort} 路由：
+ *       开关 {@code wecom.ai_qc.enabled} 关（默认）→ 不调 AI、仅关键词质检（行为不变）；
+ *       开 → 调 {@link WecomQcPort}（当前无真实厂商=占位 NOT_CONFIGURED，不崩、不阻塞），
+ *       AI 结果叠加落 ai_qc_status/ai_qc_result，关键词 risk_flags 始终独立保留。
  * </ul>
  */
 @Service
@@ -57,6 +67,8 @@ public class WecomConversationService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final TerminalSwitchGuard terminalSwitchGuard;
+    private final WecomQcPort wecomQcPort;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
     @Autowired
@@ -64,9 +76,12 @@ public class WecomConversationService {
             WecomComplianceRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            TerminalSwitchGuard terminalSwitchGuard
+            TerminalSwitchGuard terminalSwitchGuard,
+            WecomQcPort wecomQcPort,
+            ObjectMapper objectMapper
     ) {
-        this(repository, idempotencyService, auditEventService, terminalSwitchGuard, Clock.systemUTC());
+        this(repository, idempotencyService, auditEventService, terminalSwitchGuard,
+                wecomQcPort, objectMapper, Clock.systemUTC());
     }
 
     WecomConversationService(
@@ -74,12 +89,17 @@ public class WecomConversationService {
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             TerminalSwitchGuard terminalSwitchGuard,
+            WecomQcPort wecomQcPort,
+            ObjectMapper objectMapper,
             Clock clock
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.terminalSwitchGuard = terminalSwitchGuard;
+        // AI 质检端口：默认 fail-safe 当作关（仅关键词质检）；可为 null（向后兼容/单测）。
+        this.wecomQcPort = wecomQcPort == null ? WecomQcRouter.alwaysDisabled() : wecomQcPort;
+        this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper.copy().findAndRegisterModules();
         this.clock = clock;
     }
 
@@ -146,10 +166,15 @@ public class WecomConversationService {
             String content = message.content() == null ? "" : message.content();
             // 普通展示脱敏（手机号/身份证/银行卡等正则）。
             String redacted = PiiTextRedactor.redactAndTruncate(content, MAX_REDACTED_CHARS).value();
+            // 基础关键词质检（始终执行；行为不变，AI 不影响此结果）。
             List<String> riskFlags = detectRiskFlags(content);
             if (!riskFlags.isEmpty()) {
                 flagged++;
             }
+            // AI 语义质检（第三方预留接口 + 开关默认关）：经路由按 wecom.ai_qc.enabled 选实现——
+            //   关→SKIPPED（不调 AI）；开→占位 NOT_CONFIGURED（不崩、不阻塞）。任何状态都不覆盖关键词结果。
+            WecomQcResult aiQc = wecomQcPort.analyzeMessage(
+                    new WecomQcRequest(conversation.id(), content, riskFlags));
             Instant sentAt = message.sentAt() == null ? now : message.sentAt();
             LocalDate businessDate = LocalDate.ofInstant(sentAt, ZoneOffset.UTC);
             LocalDate retentionUntil = businessDate.plusDays(retentionDays);
@@ -168,7 +193,9 @@ public class WecomConversationService {
                     false,
                     sentAt,
                     businessDate,
-                    now
+                    now,
+                    aiQc.persistenceStatus(),
+                    aiQcResultJson(aiQc)
             ));
             stored++;
         }
@@ -417,6 +444,21 @@ public class WecomConversationService {
             }
         }
         return List.copyOf(flags);
+    }
+
+    /**
+     * AI 质检结构化结果转 JSON 串落 ai_qc_result（仅 ANALYZED 且有内容时回填；占位/跳过/失败=null）。
+     * 序列化异常不阻塞落库——返回 null（结果留空，关键词质检与状态码不受影响）。
+     */
+    private String aiQcResultJson(WecomQcResult result) {
+        if (result == null || !result.hasStructuredResult()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(result.toResultMap());
+        } catch (JsonProcessingException exception) {
+            return null;
+        }
     }
 
     // ----------------------------------------------------------------------------------------- 校验/工具
