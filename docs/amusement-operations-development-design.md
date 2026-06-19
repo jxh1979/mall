@@ -1,32 +1,12 @@
 # 游乐设施运营系统开发设计文档
 
-> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
-> 以业务说明地图 #amusement 为基准核验真实代码（正面：容量原子扣减、检修状态机校验为真）：
-> - **检修恢复不联动项目状态**：`approveReopen` 只改 inspection 行 `reopen_status=approved`，**从不写 `amusement_projects.open_status`**，且无 pause/resume/maintenance 项目状态写端点。
-> - **现场核销不校验票务权益**：`AmusementService` 把 credential 原样入库，amusement 域无任何 ticketing/entitlement 调用，"判权益是否可用/绑定该项目"未实现。
-> - **检修单字段缺**：缺"检修单位(供应商)/检修人员/异常原因"结构化字段（只能塞非结构化 JSON）；`amusement-p0-safety-inspection-spec` 声称的 `session_id/device_id/inspector_id` 与 `amusement_reopen_approvals` 表真实不存在。
-> - **一体机入口未实现**：整条检修链仅在 admin Web/legacy-console，`apps/android-terminal/` 无 amusement/safety 集成；device_status 无写端点。
-> - **待业务确认**：检修字段是否结构化+审批是否自动联动 open_status；现场权益校验由 amusement 调 ticketing 还是网关先校验；检修是否必须落一体机入口。
-> - **候选验收口径**：检修主管确认通过后项目 open_status 自动恢复；无有效权益不能核销入场。
-
-> **⚠️ D11 游乐现状标注补强（2026-06-18，只读核验真实代码/迁移后回填，未改代码）**
-> 以下四项把 R5 横幅的现状逐条补全为「现状 → 目标 → 候选验收口径（已升正式验收）」三段式，与真实迁移 V014 一致；本文第 6/7/8/16 节中描述为「现有/已落地」但真实缺失的能力，一律以本节为准视为「目标，尚未实现」。
-> 1. **现场核销未校验票务权益**：
->    - 现状：`AmusementService` 把 `credential_payload` 原样入库（V014 `amusement_verifications.credential_payload`），amusement 域无任何 ticketing/entitlement 注入或调用，「判该权益是否有效/是否绑定本项目/剩余次数/有效期」全部未实现；§5.5 失败原因 `entitlement_*` 在真实代码无判定路径。
->    - 目标：核销时在线校验票实例与权益实例（适用项目、有效期、剩余次数），权益不可用即拒绝并回写票务。
->    - 候选验收口径（已升正式验收）：无有效/未绑定本项目权益时核销必须失败并返回明确 `entitlement_*` 原因；票据被截图/重复使用不得放行。
-> 2. **主管确认检修（approveReopen）不联动项目状态、无项目级 pause/resume 写端点**：
->    - 现状：`approveReopen` 只把 `amusement_safety_inspections.reopen_status` 改为 approved，**从不写 `amusement_projects.open_status`**；§5.1 的九态项目状态机在真实迁移中只有 `open_status CHECK IN ('open','paused','closed','maintenance')` 四态（无 draft/unopened/preparing/abnormal/archived）；无独立的项目级 pause/resume 写端点。
->    - 目标：主管确认恢复后由系统联动把项目/设备 `maintenance/abnormal → open`，并提供项目级暂停/恢复写端点；真实状态机至少补齐 PRD 六态。
->    - 候选验收口径（已升正式验收）：主管确认通过后项目 `open_status` 自动恢复为 `open` 并产生 `amusement.project.resumed` 事件；未确认前任何路径不得把项目流转回 `open`。
-> 3. **`amusement_maintenance_record` 表 / `/maintenance-records` / `/confirm-resume` 端点缺失**：
->    - 现状：真实迁移 V014 **无** `amusement_maintenance_record`、`amusement_capacity_config`、`amusement_capacity_snapshot` 三表；§7.14a/§8.7.1 描述的「提交检修 / 主管确认恢复营业」端点与 `amusement.maintenance.*` 权限在真实代码中不存在；检修单位/工程师/异常原因只能塞进非结构化 JSON。
->    - 目标：新增检修记录表与「提交检修 / `confirm-resume`」端点，检修单位复用供应链 `suppliers`，工程师/结果/异常说明/主管确认结构化落地。
->    - 候选验收口径（已升正式验收）：检修必填项（检修单位、工程师、检修时间、结果、异常说明、来源终端、点位）可结构化留痕；`result=fail` 或未主管确认时 `confirm-resume` 返回 409 并保持检修中。
-> 4. **三维度容量仅场次单维，capacity_config/snapshot 未实现**：
->    - 现状：真实迁移仅 `amusement_sessions.capacity/used_capacity` 单维度容量（原子扣减为真），无点位/设备维度（`amusement_capacity_config`）也无容量快照表（`amusement_capacity_snapshot`），§6.4 的「三维度取最小值」目前退化为场次单维。
->    - 目标：补点位/设备维度配置与三维度容量快照，核销按三维度取最小可放行余量判定。
->    - 候选验收口径（已升正式验收）：任一受控维度（项目安全上限/场次/点位设备）余量为 0 即拒绝并返回 `session_full`；三维度均配置时取最小值放行。
+> **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
+> R5 横幅与下方 D11 原标注的四项缺口已在本会话 P0 实现并落库（V081/V082/V083，且代码已接线），以下上修；仅"一体机端侧实际集成"保持开放。
+> - **✅ 检修整表 + 恢复营业联动已落地（V081）**：新建 `amusement_maintenance_record`（检修单位复用供应链供应商 supplier_category∈{maintenance,service}、工程师、检修结果、异常说明、来源终端/点位结构化、`supervisor_confirmed_by`/`resume_business_at`）；主管确认恢复时联动写 `amusement_projects.open_status`(maintenance→open)，`AmusementMaintenanceService` 提供提交检修 / `confirm-resume` 端点；CHECK 硬约束确认前不得由 maintenance 流转回 open。
+> - **✅ 现场核销校验票务权益已落地（V082）**：新建 `amusement_project_entitlements`（项目↔权益类型绑定）；`AmusementService.createVerification` 经 `AmusementEntitlementGateway` 在线校验存在/active/有效期/剩余次数/游乐类/绑定本项目，不可用即拒绝（`ENTITLEMENT_USED`/`ENTITLEMENT_EXPIRED`/无剩余次数等），不再原样入库；无绑定配置的项目回退为"仅校验游乐类放行"（向后兼容，待运营配置后自动收紧）。
+> - **✅ 三维度容量已落地（V083）**：新建 `amusement_capacity_config`（点位/设备维并发容量）+ `amusement_capacity_snapshot`（项目/场次/点位设备各维在场计数物化），核销按"项目安全上限 / 场次 / 点位设备"三维度取最小可放行余量原子 check+increment；仅校验已配置受控维度，未配置维度退化为场次单维。
+> - **仍开放——一体机端侧实际集成**：整条检修/核销链当前在 admin Web/legacy-console 已可用，`apps/android-terminal/` 仍无 amusement/safety 实际端侧集成、device_status 无端侧写入口（属客人端/Android 终端端侧实现遗留，待端侧排期）。
+> - **验收口径（已正式）**：检修主管确认通过后项目 `open_status` 自动恢复为 `open`；无有效/未绑定本项目权益核销失败并返回明确原因；任一受控容量维度余量为 0 即拒绝（`session_full`）。
 
 本文档覆盖【游乐设施运营系统：项目、场次、核销、巡检】的开发级设计。目标是让后端、前端、安卓端、数据分析和第三方设备对接可以直接按本文档拆任务和编码。
 

@@ -1,12 +1,11 @@
 # 应收应付台账开发设计 V0.1
 
-> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
-> 以业务说明地图 #finance + 治理 #audit"日结锁定后须审批补录"为基准核验真实代码：
-> - **日结锁定补录审批零落地（HTML 关键链条）**：本设计 §38 `ar_ap_adjustments`、§72 `ar_ap_items.locked_day_close_id`、§98-100 审批状态机、§121"锁定台账不得直接改金额"——三者在迁移与 Java **全部零命中**。`FinanceService.lockDailyClose` 仅插一条 status=locked 记录，`registerArApPayment`/`createArApItem` 从不查锁定状态，**锁定后仍可自由改 AR/AP 金额、退款，无任何拦截，无补录审批概念**。
-> - **日结多源汇总**：`finance_daily_closes` 无汇总金额字段，`lockDailyClose` 不读取票务/酒吧/游乐/供应链/第三方流水，无 `@Scheduled`/聚合，日结批次=空壳。
-> - **盘点/报损对账**：无 stocktake/variance 相关表或代码，§"库存差异→独立批次→应收应付"链条未落地。
-> - **业务裁决（2026-06-18）**：P0 必做——锁定后硬拦截直改影响金额 + 补录需上级审批通过后方可补录并留痕（补 ar_ap_adjustments + locked_day_close_id + 审批状态机）+ 日结多源汇总。**二轮裁决（2026-06-18）**：日结聚合口径由本审计先起草默认草案，待财务复核修正后定稿。
-> - **候选验收口径**：锁定日结后直接改影响金额被拒，走上级审批通过后方可补录并留痕；日结金额来自真实多源流水汇总。
+> **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
+> R5 横幅原标注的"日结锁定补录审批零落地"已在本会话 P0 实现并落库（V069），以下上修；盘点/报损对账、聚合口径财务复核保持开放。
+> - **日结锁定 + 补录审批 + 六源汇总已落地（V069）**：`ar_ap_items` 补 `locked_day_close_id`（指向 `finance_daily_closes`），新建 `ar_ap_adjustments`（`locked_day_close_id` + `approval_status` 三态 `pending/approved/rejected`）——锁定后直接改影响金额被硬拦截，须走补录审批通过后方可补录并留痕；新建日结六源汇总表 `finance_daily_close_sources`（`source_stream` 六源 CHECK + `uq_fdcs_close_source` 唯一键），日结金额来自真实多源流水汇总，不再是空壳。退款联动 `ar_ap` + `revenue.net`（V079/V078 口径）。
+> - **聚合口径**：T7 六源与 `revenue.net`（= 自营售票实付 + 酒吧实收 − 退款，bar 仅取 `bar_bill_settlements` 现场消费实收）口径已定稿、日切可配；通票收入业态拆分另设展示口径 `revenue.ticket_bar_share/ticket_amusement_share`(V078)，不并入 net。
+> - **仍开放**：盘点/报损对账（无 stocktake/variance 表或代码，§"库存差异→独立批次→应收应付"链条未落地）；聚合口径最终值仍待财务复核确认（草案见 `r5-aggregation-metrics-draft-20260618.md`）。
+> - **验收口径（已正式）**：锁定日结后直接改影响金额被拒，走上级审批通过后方可补录并留痕；日结金额来自真实多源流水汇总。
 
 文档类型：Implementation  
 适用范围：P0 财务经营子域。  

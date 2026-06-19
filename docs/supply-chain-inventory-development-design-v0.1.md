@@ -1,15 +1,16 @@
 # 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.1
 
-> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
-> 以业务说明地图 #supply 为基准核验真实迁移(V012 等)+代码：
-> - **供应合同三模式（用户原始 P0）**：`supply_contracts`/`contract_mode`(§6.2 platform_self_use/merchant_self_purchase/platform_purchase_distribution) 迁移**零命中**，纯"有设计无实现"。
-> - **采购周期**：仅 `inventory_purchase_requests` 的"申请"create，审批/下单/预计到货/实际到货/入库确认状态流转全缺，`purchase_cycles` 未建。
-> - **扫码交接全链（关键）**：`inventory_trace_handovers` 为单条平面记录，`scanTraceCodeHandover` 把 `handover_result` 写死 accepted，**无出库核验→配送→后厨接收→服务员取走→送达分段状态机，无缺口/重复/差异异常**（五段交接状态机另见 r5-spec-T17）。
-> - **唯一码主数据（B 类 D11 补）**：`items.is_traceable` 仅"是否需平台唯一二维码"标记位，**平台物品唯一二维码主数据本身无独立表/无生成与绑定流程**（trace_code 仅在交接记录里以文本出现），正向溯源/反向召回的码—批次—物品主数据链未建模，纯"有标记位无主数据"。
-> - **库房/供应商降级**：`location_id` 自由文本（`warehouses`/`warehouse_type` 未建）；`inventory_suppliers` 缺资质/结算方式（`supplier_qualifications` 未建）；外键命名分裂（设计 `suppliers` vs 真实 `inventory_suppliers`）。
-> - **高价值复核未接入**：`isHighValue` 仅校验附件数≥2，`SupervisorReviewService` 未被 inventory 调用，代码注释自认"复核闭环为后续"。
-> - **业务裁决（2026-06-18）**：供应合同三模式 + 采购周期完整流转 + 结构化库房模型，三项本期 P0。**二轮裁决（2026-06-18）**：高价值报损/存酒作废复核=**库存域内自建**（不走 governance 统一队列）；扫码交接=**员工扫码主动留痕 + 机器人上报被动留痕**，机器人上报与人工扫码出现缺口/重复/差异进复核。
-> - **候选验收口径**：采购全状态可流转；交接逐段可追责且缺口进复核；三模式合同可配置并卡控可采购范围。
+> **⚠️ R7 复审标注（2026-06-19，只读核验真实迁移/代码后回填）**
+> 本会话仅"扫码交接全链"已 P0 落库（V074），已上修；供应合同三模式/采购周期/结构化库房/高价值复核/唯一码主数据等 r5-spec-T6 项经核验**仍零命中**，保持开放。
+> - **✅ 扫码交接全链已落地（V074，T17）**：`inventory_trace_handovers` 补 `overall_status`/`current_segment`（替换写死 accepted），新建 `inventory_trace_handover_steps`（五段链 out_verify/dispatch/kitchen_receive/staff_pickup/deliver_customer，`step_status` pending/done/gap/duplicate/diff）+ `inventory_trace_handover_exceptions`（gap/duplicate/diff → 复核）。员工扫码主动 + 机器人上报被动（V071 `integration_robot_task_events`），出现缺口/重复/差异进复核。
+> - **仍开放——供应合同三模式（用户原始 P0，未做）**：`supply_contracts`/`contract_mode`(§6.2 platform_self_use/merchant_self_purchase/platform_purchase_distribution) 迁移**仍零命中**，纯"有设计无实现"。
+> - **仍开放——采购周期（未做）**：仅 `inventory_purchase_requests` 的"申请"create，审批/下单/预计到货/实际到货/入库确认状态机与 `inventory_purchase_request_events` 未建。
+> - **仍开放——唯一码主数据**：`items.is_traceable` 仅标记位，平台物品唯一二维码主数据无独立表/无生成绑定流程（`inventory_trace_codes` 零命中），码—批次—物品主数据链未建模。
+> - **仍开放——库房/供应商降级**：`location_id` 自由文本（`warehouses`/`warehouse_type` 未建）；`inventory_suppliers` 缺资质/结算方式（`supplier_qualifications` 未建）。
+> - **仍开放——高价值复核**：库存域内自建 `inventory_high_value_reviews` 迁移**仍零命中**，`isHighValue` 仅校验附件数≥2，未接入复核服务。
+> - **仍开放——成熟进销存深度能力（P1/P2）**：FIFO/保质期效期预警、账龄、BOM 配方、采购退货、安全库存/补货点、单位换算瓶↔杯等，规划级（见 §13A），非本期 P0。
+> - **裁决（保留）**：供应合同三模式 + 采购周期完整流转 + 结构化库房三项本期 P0；高价值复核=库存域内自建；扫码交接=员工主动 + 机器人被动。**以上除扫码交接外均待后续排期落地。**
+> - **候选验收口径**：采购全状态可流转；交接逐段可追责且缺口进复核（已可验）；三模式合同可配置并卡控可采购范围（待落地）。
 
 > **本文档为什么新增（定位）：** 依据 finding **supply-1**（HIGH/omission）——供应链是用户原始需求点名的 P0 域、三种供应合同模式被反复列为"已拍板"，但全部文档此前只在产品口径层面用散文描述，没有任何一份开发设计给出供应商表、供应合同表、采购周期表、库房/批次/流水表的字段与状态定义，P0 编码任务清单也无对应任务，处于"有 PRD 无开发设计"状态，开发无法据此编码。本文对标 `bar-operations-development-design.md` 结构，把供应链域落到可编码的数据结构、状态机、流程、API、事件与 P0 编码任务。
 >

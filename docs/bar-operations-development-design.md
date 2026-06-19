@@ -1,13 +1,12 @@
 # 酒吧经营：桌台、点单、库存、存酒开发设计
 
-> **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
-> 以业务说明地图 #bar 为基准核验真实代码：
-> - **订台定金闭环断裂**：`createReservation` 硬编码 `deposit_amount_cent=0`/`deposit_status=not_required`，定金金额不入库，§13.1 的到店抵扣/取消退没收逻辑因定金恒为 0 **形同空转**。
-> - **赠饮核销→扣库存断（§7.8/§9.4）**：PRD §126 标 P0 闭环，但 `BarController` 无 gift/redeem 端点，ticketing 不触发 bar 扣库存，`bar_production_ticket_events` 无 `inventory_movement_id`，两域无代码连接。
-> - **存酒**：转赠(transfer)无方法，争议仅枚举无入口；高价值作废主管复核未接入（见供应链 R5）。
-> - **按杯损耗**：依赖请求传 `actual_pour_volume`，不传则 loss=0，无强制采集。
-> - **业务裁决（2026-06-18 二轮）**：订台定金后台可配——固定额与按最低消费比例两种都支持，退/没收时限后台可配。仍待开发期决定：赠饮触发方式（建议票务核销事件推送 → bar 生成 0 元点单扣库存）。
-> - **候选验收口径**：订台付定金可回查、到店抵扣、取消按规则退/没收；赠饮权益核销后吧台库存相应减少且可对账。
+> **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
+> R5 横幅原标注的订台定金/赠饮扣库存缺口已在本会话 P0 实现并落库（V072/V073/V079），以下逐条上修；存酒转赠/争议入口与按杯损耗强制采集保持开放。
+> - **订台定金闭环已落地（V073）**：新建 `bar_deposit_rules`（固定额 `fixed` / 按最低消费比例 `min_consumption_ratio`，scope=bar/table_type/time_slot，取消免没收时限 `cancel_free_before_minutes` 后台可配）+ `bar_reservations` 定金结算字段，定金按规则计算入库、到店抵扣、取消按时限退/没收，不再硬编码 `deposit=0/not_required`。下方 R5-D11 小节的"现状空转"描述已被本次实现取代，仅"目标/验收"口径仍有效。
+> - **赠饮核销→扣库存已落地（V072）**：链路 ticketing 核销 `entitlement_type='gift_drink'` 成功 → 发 Spring 事件 `ticket.gift_verified` → `BarGiftConsumer` 监听 → 生成 0 元 `bar_order(order_type='gift')` + 出品 ticket → `deliver` 调 `atomicDecreaseStock(redeem_consume)` 扣库存 → 回填 `inventory_movement_id` 到出品事件与桥表 `bar_gift_redemptions`（`verification_id` 唯一键保证幂等，冲正联动 `status=reversed` + 回补库存）。赠饮→吧台 SKU 映射来源 `entitlement_templates.bar_item_ref`(V076)；0 元赠饮单不计商户收入但进账单/留痕。
+> - **酒吧账单免单/退款已落地（V079）**：`chk_bar_bill_adjustment_type` 扩 `{waiver, refund}`，`refunded_at` 仅 refund 落值用于经营日聚合冲减当日 net（与 finance/analytics 退款口径联动）。
+> - **仍开放（P2 未做）**：退菜/退酒、反结、沽清 86、小费；存酒转赠(transfer) 无方法、争议仅枚举无入口；按杯损耗仍依赖请求传 `actual_pour_volume`（不传则 loss=0），无强制采集；存酒侧高价值作废主管复核见供应链域 `inventory_high_value_reviews`。
+> - **验收口径（已正式）**：订台付定金可回查、到店抵扣、取消按规则退/没收；赠饮权益核销后吧台库存相应减少且可对账。
 
 #### R5-D11 订台定金现状与收口（2026-06-18 回填，未改代码）
 
