@@ -88,6 +88,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")
     @Transactional
     public InventoryItemRecord createInventoryItem(InventoryItemRequest request) {
         return executeWrite(
@@ -136,6 +137,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.purchase_request.manage")
     @Transactional
     public PurchaseRequestRecord createPurchaseRequest(PurchaseRequestCreate request) {
         return executeWrite(
@@ -186,6 +188,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
     @Transactional
     public SavedBottleRecord createSavedBottle(SavedBottleRequest request) {
         return executeWrite(
@@ -252,6 +255,7 @@ public class InventoryService {
                 b.bottleLabelValue(), b.customerNameOrNickname(), b.customerPhone(), b.customerPhoneHash());
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_claim", objectType = "saved_bottle")
     @Transactional
     public SavedBottleClaimRecord claimSavedBottle(String savedBottleId, SavedBottleClaimRequest request) {
         String id = requireText(savedBottleId, "saved_bottle_id");
@@ -327,6 +331,7 @@ public class InventoryService {
 
     /** A1/REQ-32：存酒作废。高价值存酒必须提供照片+视频双证据（>=2 附件）方可作废。
      * 主管复核由 r5-spec-T6 库存域内自建 inventory_high_value_reviews 承载（最终态）；本处仅校验照片+视频双证据（附件数≥2）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_cancel", objectType = "saved_bottle")
     @Transactional
     public SavedBottleRecord cancelSavedBottle(String savedBottleId, SavedBottleCancelRequest request) {
         String id = requireText(savedBottleId, "saved_bottle_id");
@@ -361,6 +366,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.adjust", admissionAction = "inventory.stock_adjust", objectType = "inventory_stock_adjustment")
     @Transactional
     public StockAdjustmentRecord createStockAdjustment(StockAdjustmentRequest request) {
         return stockMovementService.createStockAdjustment(request);
@@ -394,6 +400,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.batch.manage")
     @Transactional
     public InventoryStockBatchRecord createStockBatch(InventoryStockBatchRequest request) {
         return executeWrite(
@@ -423,6 +430,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.risk.scan")
     @Transactional
     public InventoryRiskScanResult runInventoryRiskScan(InventoryRiskScanRequest request) {
         return executeWrite(
@@ -452,6 +460,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.reconcile")
     @Transactional
     public SupplierReconciliationRecord createSupplierReconciliation(SupplierReconciliationRequest request) {
         return executeWrite(
@@ -467,6 +476,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")
     @Transactional
     public StockMovementRecord createStockIn(StockInRequest request) {
         return stockMovementService.createStockIn(request);
@@ -476,16 +486,19 @@ public class InventoryService {
         return stockMovementService.listStockMovements();
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")
     @Transactional
     public StockMovementRecord createStockMovement(StockMovementRequest request) {
         return stockMovementService.createStockMovement(request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")
     @Transactional
     public StockMovementRecord transferStockMovement(StockMovementRequest request) {
         return stockMovementService.transferStockMovement(request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")
     @Transactional
     public StockMovementRecord createTypedStockMovement(String movementType, StockMovementRequest request) {
         return stockMovementService.createTypedStockMovement(movementType, request);
@@ -505,6 +518,7 @@ public class InventoryService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.manage")
     @Transactional
     public InventorySupplierRecord createInventorySupplier(InventorySupplierRequest request) {
         return executeWrite(
@@ -541,6 +555,7 @@ public class InventoryService {
      * 返回的 handover_result 标记为 'chain_started'，真实可追责状态由 overall_status/steps 承载。
      */
     @Transactional
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.handover.scan")
     public TraceHandoverRecord scanTraceCodeHandover(VerificationRequest request) {
         return executeWrite(
                 "scanTraceCodeHandover",
@@ -567,6 +582,7 @@ public class InventoryService {
 
     /** R5 T17：建交接任务——表头 overall_status=in_progress + 预置五段 steps(pending, seq 1..5)。 */
     @Transactional
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.handover.scan")
     public TraceHandoverChainView createTraceHandover(TraceHandoverCreateRequest request) {
         return executeWrite(
                 "createTraceHandover",
@@ -592,6 +608,7 @@ public class InventoryService {
 
     /** R5 T17：员工段扫码（主动留痕）。同段重复→duplicate 异常；全段 done→overall completed。 */
     @Transactional
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.handover.scan")
     public TraceHandoverChainView scanTraceSegment(String handoverId, TraceScanSegmentRequest request) {
         String id = requireText(handoverId, "handover_id");
         return executeWrite(
@@ -629,6 +646,7 @@ public class InventoryService {
 
     /** R5 T17：机器人段(dispatch)上报（被动留痕），受 T14 integration.robot.sync 开关门控 + 写 T14 事件。 */
     @Transactional
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.handover.scan")
     public TraceHandoverChainView reportRobotSegment(String handoverId, TraceRobotReportRequest request) {
         String id = requireText(handoverId, "handover_id");
         return executeWrite(
@@ -684,6 +702,7 @@ public class InventoryService {
 
     /** R5 T17：异常复核 approve/reject 闭合 + 留结论；approve 时把该段标 gap-closed 不阻塞，reject 维持 exception。 */
     @Transactional
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.handover.review")
     public TraceHandoverExceptionRecord reviewException(String exceptionId, TraceExceptionReviewRequest request) {
         String id = requireText(exceptionId, "exception_id");
         return executeWrite(

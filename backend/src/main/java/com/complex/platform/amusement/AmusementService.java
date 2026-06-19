@@ -75,6 +75,7 @@ public class AmusementService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.override", admissionAction = "amusement.manual_override", objectType = "amusement_manual_override")
     @Transactional
     public AmusementManualOverrideRecord createManualOverride(AmusementManualOverrideRequest request) {
         return executeWrite(
@@ -101,6 +102,7 @@ public class AmusementService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.session.manage")
     @Transactional
     public AmusementProjectRecord createProject(AmusementProjectRequest request) {
         return executeWrite(
@@ -157,6 +159,7 @@ public class AmusementService {
         }
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.project.manage")
     @Transactional
     public AmusementProjectRuleRecord createProjectRule(String projectId, AmusementProjectRuleRequest request) {
         String id = requireText(projectId, "project_id");
@@ -177,11 +180,13 @@ public class AmusementService {
         return bookingService.listQueueEntries();
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.queue.manage")
     @Transactional
     public AmusementQueueEntryRecord createQueueEntry(AmusementQueueEntryRequest request) {
         return bookingService.createQueueEntry(request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.queue.manage")
     @Transactional
     public AmusementQueueEntryRecord changeQueueEntryStatus(String queueEntryId, StatusChangeRequest request) {
         return bookingService.changeQueueEntryStatus(queueEntryId, request);
@@ -191,11 +196,13 @@ public class AmusementService {
         return bookingService.listReservations();
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.reservation.manage")
     @Transactional
     public AmusementReservationRecord createReservation(AmusementReservationRequest request) {
         return bookingService.createReservation(request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.reservation.manage")
     @Transactional
     public AmusementReservationRecord changeReservationStatus(String reservationId, StatusChangeRequest request) {
         return bookingService.changeReservationStatus(reservationId, request);
@@ -205,16 +212,19 @@ public class AmusementService {
         return bookingService.listGroupBookings();
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.group_booking.manage")
     @Transactional
     public AmusementGroupBookingRecord createGroupBooking(AmusementGroupBookingRequest request) {
         return bookingService.createGroupBooking(request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.group_booking.approve", admissionAction = "amusement.group_booking_approve", objectType = "amusement_group_booking")
     @Transactional
     public AmusementGroupBookingRecord approveGroupBooking(String bookingId, AmusementGroupBookingApprovalRequest request) {
         return bookingService.approveGroupBooking(bookingId, request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.group_booking.manage")
     @Transactional
     public AmusementGroupBookingRecord releaseGroupBooking(String bookingId, AmusementGroupBookingReleaseRequest request) {
         return bookingService.releaseGroupBooking(bookingId, request);
@@ -224,27 +234,31 @@ public class AmusementService {
         return inspectionService.listSafetyInspections();
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.safety_inspection.create")
     @Transactional
     public AmusementSafetyInspectionRecord createSafetyInspection(AmusementSafetyInspectionRequest request) {
         return inspectionService.createSafetyInspection(request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.safety_inspection.submit")
     @Transactional
     public AmusementSafetyInspectionRecord submitSafetyInspection(String inspectionId, AmusementSafetyActionRequest request) {
         return inspectionService.submitSafetyInspection(inspectionId, request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.safety_inspection.rectify")
     @Transactional
     public AmusementSafetyInspectionRecord rectifySafetyInspection(String inspectionId, AmusementSafetyActionRequest request) {
         return inspectionService.rectifySafetyInspection(inspectionId, request);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.safety_inspection.recheck")
     @Transactional
     public AmusementSafetyInspectionRecord recheckSafetyInspection(String inspectionId, AmusementSafetyActionRequest request) {
         return inspectionService.recheckSafetyInspection(inspectionId, request);
     }
 
-    @com.complex.platform.gate.GuardedAction(admissionAction = "amusement.reopen", objectType = "inspection")
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.safety_inspection.approve_reopen", admissionAction = "amusement.reopen", objectType = "inspection")
     @Transactional
     public AmusementSafetyInspectionRecord approveReopen(String inspectionId, StatusChangeRequest request) {
         return inspectionService.approveReopen(inspectionId, request);
@@ -261,6 +275,7 @@ public class AmusementService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.safety_template.manage")
     @Transactional
     public AmusementSafetyTemplateRecord createSafetyTemplate(AmusementSafetyTemplateRequest request) {
         return executeWrite(
@@ -287,6 +302,7 @@ public class AmusementService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.session.manage")
     @Transactional
     public AmusementSessionRecord createSession(AmusementSessionRequest request) {
         return executeWrite(
@@ -313,6 +329,7 @@ public class AmusementService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.verification.execute")
     @Transactional
     public AmusementVerificationRecord createVerification(VerificationRequest request) {
         return executeWrite(

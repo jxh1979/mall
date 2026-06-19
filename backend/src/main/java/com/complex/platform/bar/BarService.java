@@ -40,6 +40,7 @@ public class BarService {
         this.authorizationService = authorizationService;
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.entry.age_verify")
     @Transactional
     public BarAgeVerificationRecord createAgeVerification(VerificationRequest request) {
         return ageVerificationService.createAgeVerification(request);
@@ -52,6 +53,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.order.create")
     @Transactional
     public BarOrderRecord createOrder(BarOrderRequest request) {
         return operations.executeWrite(
@@ -64,6 +66,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.order.create")
     @Transactional
     public BarBillRecord createOrderBill(String orderId, BarOrderBillCreateRequest request) {
         String id = operations.requireText(orderId, "order_id");
@@ -77,6 +80,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.order.create")
     @Transactional
     public BarOrderRecord deliverOrder(String orderId, BarOrderDeliveryRequest request) {
         String id = operations.requireText(orderId, "order_id");
@@ -90,6 +94,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.order.create")
     @Transactional
     public BarOrderItemRecord addOrderItem(String orderId, BarOrderRequest request) {
         String id = operations.requireText(orderId, "order_id");
@@ -118,6 +123,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.production_ticket.manage")
     @Transactional
     public BarProductionTicketRecord transitionProductionTicket(String ticketId, BarProductionTicketTransitionRequest request) {
         String id = operations.requireText(ticketId, "ticket_id");
@@ -138,6 +144,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.order.create")
     @Transactional
     public BarProductRecord createProduct(BarProductRequest request) {
         return operations.executeWrite(
@@ -157,6 +164,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.create")
     @Transactional
     public BarReservationRecord createReservation(BarReservationRequest request) {
         return operations.executeWrite(
@@ -169,6 +177,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
     @Transactional
     public BarReservationRecord payReservationDeposit(String reservationId, BarReservationDepositActionRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
@@ -182,6 +191,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
     @Transactional
     public BarReservationRecord checkInReservationDeposit(String reservationId, BarReservationDepositActionRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
@@ -195,6 +205,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
     @Transactional
     public BarReservationRecord cancelReservation(String reservationId, BarReservationCancelRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
@@ -208,6 +219,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.deposit_rule.manage")
     @Transactional
     public BarDepositRuleRecord createDepositRule(BarDepositRuleRequest request) {
         return operations.executeWrite(
@@ -220,6 +232,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.guest_checkin")
     @Transactional
     public BarTableGuestCheckinRecord checkInReservationGuest(String reservationId, VerificationRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
@@ -240,6 +253,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.manage")
     @Transactional
     public BarTableRecord createTable(BarTableRequest request) {
         return operations.executeWrite(
@@ -252,6 +266,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.open_close")
     @Transactional
     public BarTableRecord openTable(String tableId, OpenBarTableRequest request) {
         String id = operations.requireText(tableId, "table_id");
@@ -272,6 +287,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.create")
     @Transactional
     public BarTableSessionRecord createTableSession(BarTableSessionRequest request) {
         return operations.executeWrite(
@@ -284,6 +300,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.transfer")
     @Transactional
     public BarTableSessionAdjustmentRecord transferTableSession(String sessionId, BarTableTransferRequest request) {
         String id = operations.requireText(sessionId, "session_id");
@@ -297,6 +314,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.merge")
     @Transactional
     public BarTableSessionAdjustmentRecord mergeTableSessions(String sessionId, BarTableMergeRequest request) {
         String id = operations.requireText(sessionId, "session_id");
@@ -310,6 +328,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.renew")
     @Transactional
     public BarTableSessionAdjustmentRecord renewTableSession(String sessionId, BarTableRenewRequest request) {
         String id = operations.requireText(sessionId, "session_id");
@@ -323,6 +342,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment_intent.create")
     @Transactional
     public PaymentIntentRecord createBillPayIntent(String billId, PaymentIntentRequest request) {
         String id = operations.requireText(billId, "bill_id");
@@ -336,6 +356,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")
     @Transactional
     public BarBillRecord settleBill(String billId, BarBillSettleRequest request) {
         String id = operations.requireText(billId, "bill_id");
@@ -349,7 +370,7 @@ public class BarService {
         );
     }
 
-    @com.complex.platform.gate.GuardedAction(admissionAction = "bar.bill_waiver", objectType = "bar_bill")
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.adjust", admissionAction = "bar.bill_waiver", objectType = "bar_bill")
     @Transactional
     public BarBillAdjustmentRecord applyBillAdjustment(String billId, BarBillAdjustmentRequest request) {
         String id = operations.requireText(billId, "bill_id");
@@ -371,6 +392,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.split_merge")
     @Transactional
     public BarBillOperationRecord splitBill(String billId, BarBillSplitRequest request) {
         String id = operations.requireText(billId, "bill_id");
@@ -384,6 +406,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.split_merge")
     @Transactional
     public BarBillOperationRecord mergeBills(String billId, BarBillMergeRequest request) {
         String id = operations.requireText(billId, "bill_id");
@@ -397,6 +420,7 @@ public class BarService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_commission.calculate")
     @Transactional
     public BarCommissionCalculationRecord calculateCommission(String billId, CommissionCalculateRequest request) {
         String id = operations.requireText(billId, "bill_id");

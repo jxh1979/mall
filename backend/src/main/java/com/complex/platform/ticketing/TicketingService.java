@@ -73,6 +73,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.dynamic_pricing.manage")
     @Transactional
     public TicketDynamicPricingRuleRecord createDynamicPricingRule(TicketDynamicPricingRuleRequest request) {
         return operations.executeWrite(
@@ -85,6 +86,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.dynamic_pricing.publish", admissionAction = "ticketing.dynamic_pricing_publish", objectType = "ticket_dynamic_pricing_rule")
     @Transactional
     public TicketDynamicPricingRuleRecord publishDynamicPricingRule(String ruleId, StatusChangeRequest request) {
         String id = operations.requireText(ruleId, "dynamic_pricing_rule_id");
@@ -110,6 +112,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
     @Transactional
     public TicketTypeRecord createTicketType(TicketTypeRequest request) {
         return operations.executeWrite(
@@ -122,6 +125,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")
     @Transactional
     public TicketPriceRuleRecord createTicketPriceRule(TicketPriceRuleRequest request) {
         return operations.executeWrite(
@@ -141,6 +145,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.entitlement.manage")
     @Transactional
     public EntitlementTemplateRecord createEntitlementTemplate(EntitlementTemplateRequest request) {
         return operations.executeWrite(
@@ -153,6 +158,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
     @Transactional
     public TicketTypeEntitlementRecord bindTicketTypeEntitlement(String ticketTypeId, TicketTypeEntitlementRequest request) {
         String id = operations.requireText(ticketTypeId, "ticket_type_id");
@@ -166,6 +172,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.order.create")
     @Transactional
     public IssuedTicketResponse issueTicketTypeDirectly(String ticketTypeId, TicketIssueRequest request) {
         String id = operations.requireText(ticketTypeId, "ticket_type_id");
@@ -179,6 +186,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.order.create")
     @Transactional
     public TicketOrderRecord createTicketOrder(TicketOrderRequest request) {
         return operations.executeWrite(
@@ -191,6 +199,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment_intent.create")
     @Transactional
     public TicketPaymentIntentRecord createTicketOrderPayIntent(String orderId, PaymentIntentRequest request) {
         String id = operations.requireText(orderId, "order_id");
@@ -204,6 +213,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.ticket.issue")
     @Transactional
     public IssuedTicketResponse issueTicketOrder(String orderId, StatusChangeRequest request) {
         String id = operations.requireText(orderId, "order_id");
@@ -217,6 +227,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
     @Transactional
     public TicketTypeRecord publishTicketType(String ticketTypeId, StatusChangeRequest request) {
         String id = operations.requireText(ticketTypeId, "ticket_type_id");
@@ -251,6 +262,7 @@ public class TicketingService {
         return credentialService.getCustomerTicketCredential(ticketId, customerId);
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.request")
     @Transactional
     public TicketRefundRecord requestTicketRefund(TicketRefundRequest request) {
         return operations.executeWrite(
@@ -263,6 +275,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.approve", admissionAction = "ticketing.refund_approve", objectType = "ticket_refund")
     @Transactional
     public TicketRefundRecord approveTicketRefund(String refundId, StatusChangeRequest request) {
         String id = operations.requireText(refundId, "refund_id");
@@ -300,6 +313,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "verification.execute")
     @Transactional
     public VerificationResponse createVerification(VerificationRequest request) {
         return operations.executeWrite(
@@ -319,6 +333,7 @@ public class TicketingService {
     }
 
     /** R5 T5：核销冲正。幂等键必填、reason 必填、权限 ticket.verify.reverse；成功事件 ticket.verification_reversed。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.verify.reverse", admissionAction = "ticketing.verification_reverse", objectType = "verification")
     @Transactional
     public VerificationResponse reverseVerification(String verificationId, VerificationReverseRequest request, String reversedBy) {
         return operations.executeWrite(
@@ -342,6 +357,7 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "terminal.device.bind")
     @Transactional
     public SyncTasksResponse syncTerminalTasks(TerminalSyncTasksRequest request) {
         return operations.executeWrite(

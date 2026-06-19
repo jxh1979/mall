@@ -67,6 +67,7 @@ public class AmusementSafetyService {
         return new PageResponse<>(records, 1, 50, records.size());
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.safety_notice.manage")
     @Transactional
     public AmusementSafetyNoticeRecord createSafetyNotice(AmusementSafetyNoticeCreateRequest request) {
         return executeNoticeWrite(
@@ -81,6 +82,7 @@ public class AmusementSafetyService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.waiver.acknowledge")
     @Transactional
     public AmusementWaiverAcknowledgementRecord acknowledgeWaiver(
             String noticeId,
@@ -119,6 +121,7 @@ public class AmusementSafetyService {
         return new PageResponse<>(records, 1, 50, records.size());
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.incident.create")
     @Transactional
     public AmusementIncidentRecord createIncident(AmusementIncidentCreateRequest request) {
         return executeIncidentWrite(
@@ -133,6 +136,7 @@ public class AmusementSafetyService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.incident.process")
     @Transactional
     public AmusementIncidentRecord addIncidentAction(String incidentId, AmusementIncidentActionRequest request) {
         String id = requireText(incidentId, "incident_id");
@@ -151,6 +155,7 @@ public class AmusementSafetyService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.incident.close", admissionAction = "amusement.incident_close", objectType = "amusement_incident")
     @Transactional
     public AmusementIncidentRecord closeIncident(String incidentId, AmusementIncidentCloseRequest request) {
         String id = requireText(incidentId, "incident_id");

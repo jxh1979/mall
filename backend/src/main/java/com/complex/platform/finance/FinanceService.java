@@ -73,7 +73,7 @@ public class FinanceService {
         );
     }
 
-    @com.complex.platform.gate.GuardedAction(admissionAction = "finance.locked_backfill", objectType = "ar_ap_item")
+    @com.complex.platform.gate.GuardedAction(capability = "finance.ar_ap.manage", admissionAction = "finance.locked_backfill", objectType = "ar_ap_item")
     @Transactional
     public ArApItemRecord createArApItem(ArApItemRequest request) {
         return executeWrite(
@@ -89,6 +89,7 @@ public class FinanceService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")
     @Transactional
     public ArApPaymentResponse registerArApPayment(String arApItemId, ArApPaymentRequest request) {
         String itemId = requireText(arApItemId, "ar_ap_item_id");
@@ -121,6 +122,7 @@ public class FinanceService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment_intent.create")
     @Transactional
     public PaymentIntentRecord createPaymentIntent(PaymentIntentRequest request) {
         return executeWrite(
@@ -136,6 +138,7 @@ public class FinanceService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register", admissionAction = "finance.offline_payment_confirm", objectType = "finance_offline_payment_confirmation")
     @Transactional
     public OfflinePaymentConfirmationRecord confirmOfflinePayment(
             String paymentId,
@@ -194,6 +197,7 @@ public class FinanceService {
         }
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.refund.create", admissionAction = "finance.refund", objectType = "finance_refund")
     @Transactional
     public FinanceRefundRecord createRefund(RefundRequest request) {
         return executeWrite(
@@ -231,6 +235,7 @@ public class FinanceService {
                 });
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.locked_backfill.request")
     @Transactional
     public ArApAdjustmentRecord requestAdjustment(ArApAdjustmentRequest request) {
         return executeWrite(
@@ -245,6 +250,7 @@ public class FinanceService {
                 () -> createAdjustment(request));
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.locked_backfill.approve", admissionAction = "finance.locked_backfill_approve", objectType = "ar_ap_adjustment")
     @Transactional
     public ArApAdjustmentRecord approveAdjustment(String adjustmentId, ArApAdjustmentDecisionRequest request) {
         String id = requireText(adjustmentId, "adjustment_id");
