@@ -50,11 +50,11 @@ class CustomerJdbcIntegrationTests {
     void pointsAccountBalanceCannotGoNegativeAtDatabaseLevel() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveCustomer(new CustomerRecord(
-                "customer_neg", "13900139000", "139****9000", "active", now, now, now));
+                "customer_neg", "13900139000", "139****9000", "active", null, now, now, now));
 
         // The V054 CHECK backstop must reject a negative balance even if a writer bypasses the service guard.
         assertThatThrownBy(() -> repository.savePoints(new CustomerPointsAccountRecord(
-                "points_neg", "customer_neg", -100L, "base", Map.of(), now, now)))
+                "points_neg", "customer_neg", -100L, "base", Map.of(), 0L, "active", now, 0L, null, null, 0, now, now)))
                 .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
@@ -91,6 +91,7 @@ class CustomerJdbcIntegrationTests {
                 "13800138000",
                 "138****8000",
                 "active",
+                java.time.LocalDate.of(1990, 6, 14),
                 now,
                 now,
                 now
@@ -122,6 +123,13 @@ class CustomerJdbcIntegrationTests {
                 120L,
                 "silver",
                 Map.of("last", "ticket_order"),
+                0L,
+                "active",
+                now,
+                0L,
+                null,
+                null,
+                0,
                 now,
                 now
         ));
@@ -204,6 +212,7 @@ class CustomerJdbcIntegrationTests {
                 "13900139000",
                 "139****9000",
                 "active",
+                null,
                 now,
                 now,
                 now
@@ -214,6 +223,13 @@ class CustomerJdbcIntegrationTests {
                 380L,
                 "silver",
                 Map.of("last_redemption_id", "redemption_jdbc"),
+                0L,
+                "active",
+                now,
+                0L,
+                null,
+                null,
+                0,
                 now,
                 now
         ));
@@ -225,6 +241,9 @@ class CustomerJdbcIntegrationTests {
                 "points_redemption",
                 "redemption_jdbc",
                 "Redeemed Plush Gift",
+                null,
+                null,
+                false,
                 now
         ));
         repository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(

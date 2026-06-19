@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 261 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 153 | 人工权限矩阵正文未覆盖 51 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 522 | 人工事件矩阵正文未覆盖 478 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 261 | 人工任务映射正文未逐项覆盖 255 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 153 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 267 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 156 | 人工权限矩阵正文未覆盖 54 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 534 | 人工事件矩阵正文未覆盖 490 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 267 | 人工任务映射正文未逐项覆盖 261 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 157 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -81,6 +81,9 @@
 | `contract.draft.manage` | staff-token | project-merchant | 1 | createContractDraft | 已在权限矩阵正文出现 |
 | `contract.lifecycle.approve` | staff-token | project-merchant | 1 | approveContract | 已在权限矩阵正文出现 |
 | `contract.view` | staff-token | project-merchant | 1 | listContracts | 已在权限矩阵正文出现 |
+| `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
+| `customer.loyalty.view` | staff-token | project | 1 | listMemberLevels | OpenAPI 补充，以本附录为准 |
+| `customer.points.freeze` | staff-token | project | 2 | freezePointsAccount, unfreezePointsAccount | OpenAPI 补充，以本附录为准 |
 | `entity.binding.manage` | staff-token | project-merchant | 3 | createBusinessEntity, createBusinessEntityBinding, changeBusinessEntityBinding | 已在权限矩阵正文出现 |
 | `entity.binding.view` | staff-token | project-merchant | 2 | listBusinessEntities, listBusinessEntityBindings | 已在权限矩阵正文出现 |
 | `evidence.attachment.create` | staff-token | project-object | 3 | createEvidenceAttachmentUploadIntent, bindEvidenceAttachment, completeEvidenceAttachmentUpload | 已在权限矩阵正文出现 |
@@ -139,7 +142,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-app, open-endpoint, project-device, public-project-bar | 14 | openAuthToken, getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent, receiveIntegrationTypedWebhook ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-app, open-endpoint, project-device, public-project-bar | 16 | openAuthToken, getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent, receiveIntegrationTypedWebhook ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -362,12 +365,23 @@
 | `customer.bar_reservation_options_viewed` | success | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation.create_failed` | failure | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation.created` | success | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.check_in_failed` | failure | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.check_ins_view_failed` | failure | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.check_ins_viewed` | success | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.checked_in` | success | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.consent.create_failed` | failure | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.consent.created` | success | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.level_evaluate_failed` | failure | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
+| `customer.member_levels_view_failed` | failure | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
+| `customer.member_levels_viewed` | success | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `customer.orders_view_failed` | failure | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_viewed` | success | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points_view_failed` | failure | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points_viewed` | success | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.points.freeze_failed` | failure | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
+| `customer.points.frozen` | success | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
+| `customer.points.unfreeze_failed` | failure | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
+| `customer.points.unfrozen` | success | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
 | `customer.ticket_order.create_failed` | failure | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_order.created` | success | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_view_failed` | failure | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
@@ -532,6 +546,7 @@
 | `mdm.site_whitelist.viewed` | success | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.violation.view_failed` | failure | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
 | `mdm.violation.viewed` | success | `listMdmPolicyViolations` | `GET` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.violation.view` | 接口级事件，以本附录为准 |
+| `member.level_changed` | success | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.view_failed` | failure | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.viewed` | success | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_service.addMerchantServiceWorkOrderAction.failed` | failure | `addMerchantServiceWorkOrderAction` | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | P0-待归类 | `merchant.service_work_order.process` | 接口级事件，以本附录为准 |
@@ -812,9 +827,15 @@
 | BAR-酒吧经营 | `payBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | 订台定金支付 | `bar.reservation.manage` | `bar.reservation_deposit_paid` / `bar.reservation_deposit_pay_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | 账单结清 | `finance.payment.register` | `bar.bill.settled` / `bar.bill.settle_failed` | tablet, web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | 客人手机号登录 | `public` | `customer.auth.login` / `customer.auth.login_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | 手动触发会员等级评估 | `customer.loyalty.evaluate` | `member.level_changed` / `customer.level_evaluate_failed` | web | operation 级补充 |
+| CUS-客人端 | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | 冻结会员积分账户 | `customer.points.freeze` | `customer.points.frozen` / `customer.points.freeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | web, miniapp, app | 已在任务映射正文出现 |
+| CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | 会员等级配置列表 | `customer.loyalty.view` | `customer.member_levels_viewed` / `customer.member_levels_view_failed` | web | operation 级补充 |
+| CUS-客人端 | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | 解冻会员积分账户 | `customer.points.freeze` | `customer.points.unfrozen` / `customer.points.unfreeze_failed` | web | operation 级补充 |
 | CUS/BAR-客人订台 | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | 客人卡座预订 | `not_applicable` | `customer.bar_reservation.created` / `customer.bar_reservation.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS/BAR-客人订台 | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | 客人可订台资源 | `not_applicable` | `customer.bar_reservation_options_viewed` / `customer.bar_reservation_options_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS/TIC-客人购票 | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | 客人购票下单 | `not_applicable` | `customer.ticket_order.created` / `customer.ticket_order.create_failed` | web, miniapp, app, kiosk | operation 级补充 |

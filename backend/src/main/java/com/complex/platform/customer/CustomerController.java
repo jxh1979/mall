@@ -6,6 +6,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.CustomerBarReservationRequest;
+import com.complex.platform.customer.dto.CustomerCheckInRequest;
 import com.complex.platform.customer.dto.CustomerConsentRequest;
 import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
 import com.complex.platform.customer.dto.CustomerPointsRedemptionRequest;
@@ -99,6 +100,23 @@ public class CustomerController {
             @RequestHeader(name = "Authorization", required = false) String authorization
     ) {
         return ApiResponse.ok(service.listPointsLedger(requireCustomerToken(customerToken, authorization)));
+    }
+
+    @PostMapping("/check-ins")
+    public ApiResponse<CustomerCheckInRecord> checkIn(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) CustomerCheckInRequest request
+    ) {
+        return ApiResponse.ok(service.checkIn(requireCustomerToken(customerToken, authorization), request));
+    }
+
+    @GetMapping("/check-ins")
+    public ApiResponse<PageResponse<CustomerCheckInRecord>> listCheckIns(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.listCheckIns(requireCustomerToken(customerToken, authorization)));
     }
 
     @GetMapping("/points/redemption-items")

@@ -669,6 +669,132 @@
       "column": "space_id",
       "expected": "present",
       "note": "V084 第二阶段（over_space 解析覆盖面扩大）：游乐项目所属空间（软引用 spaces.id，不强制 FK）。驱动 AdmissionGuard over_space：amusement 受控对象（inspection/amusement_maintenance_record/amusement_incident/amusement_group_booking）经各自 project_id→amusement_projects.space_id；无该列时此前 amusement 对象不可解析→保守放行"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_member_levels",
+      "column": "keep_threshold",
+      "expected": "present",
+      "note": "V089 会员忠诚度①：等级保级门槛（gap-analysis §7A P1 等级降级/保级宽限）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_member_levels",
+      "column": "grace_days",
+      "expected": "present",
+      "note": "V089 等级宽限期天数"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_member_levels",
+      "column": "keep_period_days",
+      "expected": "present",
+      "note": "V089 保级考核周期"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_member_levels",
+      "column": "point_multiplier_basis_points",
+      "expected": "present",
+      "note": "V089 等级积分倍率（万分比）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_accounts",
+      "column": "frozen_points",
+      "expected": "present",
+      "note": "V089 会员忠诚度②：积分冻结额（gap-analysis §7A P1 冻结/解冻）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_accounts",
+      "column": "account_status",
+      "expected": "present",
+      "note": "V089 积分账户冻结状态 active/frozen"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_accounts",
+      "column": "level_period_start",
+      "expected": "present",
+      "note": "V089 等级保级周期起点"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_accounts",
+      "column": "keep_threshold_progress",
+      "expected": "present",
+      "note": "V089 当周期保级进度累计"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_accounts",
+      "column": "grace_until",
+      "expected": "present",
+      "note": "V089 宽限期截止"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_accounts",
+      "column": "check_in_streak",
+      "expected": "present",
+      "note": "V089 连续签到天数缓存"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_ledger",
+      "column": "expire_at",
+      "expected": "present",
+      "note": "V089 积分过期清零②：获取批次过期时间（FIFO 批次过期，gap-analysis §7A P1 过期清零）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_ledger",
+      "column": "remaining_points",
+      "expected": "present",
+      "note": "V089 批次剩余积分（FIFO 消耗/过期只清未用部分）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_points_ledger",
+      "column": "expired",
+      "expected": "present",
+      "note": "V089 批次已过期标记"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_check_ins",
+      "column": "check_in_date",
+      "expected": "present",
+      "note": "V089 会员忠诚度③：连续签到记录（每客每日唯一，gap-analysis §7A P2 连续签到阶梯）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_check_ins",
+      "column": "streak",
+      "expected": "present",
+      "note": "V089 签到连续天数（断签重置）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_check_in_tiers",
+      "column": "award_points",
+      "expected": "present",
+      "note": "V089 连续签到阶梯奖励配置（streak_days→award_points）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customers",
+      "column": "birth_date",
+      "expected": "present",
+      "note": "V089 会员忠诚度④：会员生日（生日加倍，gap-analysis §7A P2 生日加倍）"
+    },
+    {
+      "req": "REQ-13",
+      "table": "customer_birthday_rules",
+      "column": "multiplier_basis_points",
+      "expected": "present",
+      "note": "V089 生日加倍规则倍率（万分比，window_type=birthday_day/birthday_month）"
     }
   ]
 }

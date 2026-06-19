@@ -64,13 +64,15 @@ class CustomerServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 auditEventService
         );
+        LoyaltyService loyaltyService = new LoyaltyService(customerRepository, auditEventService);
         service = new CustomerService(
                 customerRepository,
                 new FixedCustomerOtpVerifier("000000"),
                 ticketingService,
                 operations,
                 auditEventService,
-                inventoryService
+                inventoryService,
+                loyaltyService
         );
     }
 
@@ -319,6 +321,13 @@ class CustomerServiceTests {
                 500L,
                 "silver",
                 Map.of("last_earned", 200),
+                0L,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                0L,
+                null,
+                null,
+                0,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
@@ -330,6 +339,9 @@ class CustomerServiceTests {
                 "ticket_order",
                 "order_1",
                 "Ticket purchase reward",
+                null,
+                null,
+                false,
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
         customerRepository.savePointsLedger(new CustomerPointsLedgerRecord(
@@ -340,6 +352,9 @@ class CustomerServiceTests {
                 "manual",
                 "manual_1",
                 "Other customer",
+                null,
+                null,
+                false,
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
         customerRepository.saveRedemptionCatalogItem(new CustomerRedemptionCatalogItemRecord(
@@ -390,6 +405,13 @@ class CustomerServiceTests {
                 500L,
                 "silver",
                 Map.of(),
+                0L,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                0L,
+                null,
+                null,
+                0,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
@@ -464,6 +486,13 @@ class CustomerServiceTests {
                 50L,
                 "base",
                 Map.of(),
+                0L,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                0L,
+                null,
+                null,
+                0,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
@@ -503,6 +532,13 @@ class CustomerServiceTests {
                 500L,
                 "silver",
                 Map.of(),
+                0L,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                0L,
+                null,
+                null,
+                0,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
@@ -549,6 +585,13 @@ class CustomerServiceTests {
                 120L,
                 "base",
                 Map.of(),
+                0L,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                0L,
+                null,
+                null,
+                0,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
@@ -572,7 +615,9 @@ class CustomerServiceTests {
             CustomerPointsAccountRecord current = customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow();
             customerRepository.savePoints(new CustomerPointsAccountRecord(
                     current.id(), current.customerId(), 0L, current.level(),
-                    Map.of(), current.createdAt(), Instant.parse("2026-06-14T00:00:01Z")
+                    Map.of(), current.frozenPoints(), current.accountStatus(), current.levelPeriodStart(),
+                    current.keepThresholdProgress(), current.graceUntil(), current.lastCheckInDate(),
+                    current.checkInStreak(), current.createdAt(), Instant.parse("2026-06-14T00:00:01Z")
             ));
         };
 
@@ -733,6 +778,120 @@ class CustomerServiceTests {
         public BarReservationRecord saveCustomerBarReservation(BarReservationRecord reservation) {
             barReservations.put(reservation.id(), reservation);
             return reservation;
+        }
+
+        final Map<String, CustomerMemberLevelRecord> memberLevels = new LinkedHashMap<>();
+        final Map<String, CustomerCheckInTierRecord> checkInTiers = new LinkedHashMap<>();
+        final Map<String, CustomerBirthdayRuleRecord> birthdayRules = new LinkedHashMap<>();
+        final Map<String, CustomerCheckInRecord> checkIns = new LinkedHashMap<>();
+
+        @Override
+        public List<CustomerPointsAccountRecord> listAllPointsAccounts() {
+            return new ArrayList<>(points.values());
+        }
+
+        @Override
+        public CustomerMemberLevelRecord saveMemberLevel(CustomerMemberLevelRecord level) {
+            memberLevels.put(level.id(), level);
+            return level;
+        }
+
+        @Override
+        public List<CustomerMemberLevelRecord> listMemberLevels(String projectId) {
+            return memberLevels.values().stream()
+                    .filter(l -> "active".equals(l.status()))
+                    .sorted((a, b) -> Integer.compare(a.levelRank(), b.levelRank()))
+                    .toList();
+        }
+
+        @Override
+        public CustomerCheckInTierRecord saveCheckInTier(CustomerCheckInTierRecord tier) {
+            checkInTiers.put(tier.id(), tier);
+            return tier;
+        }
+
+        @Override
+        public List<CustomerCheckInTierRecord> listCheckInTiers(String projectId) {
+            return checkInTiers.values().stream()
+                    .filter(t -> "active".equals(t.status()))
+                    .sorted((a, b) -> Integer.compare(a.streakDays(), b.streakDays()))
+                    .toList();
+        }
+
+        @Override
+        public CustomerBirthdayRuleRecord saveBirthdayRule(CustomerBirthdayRuleRecord rule) {
+            birthdayRules.put(rule.id(), rule);
+            return rule;
+        }
+
+        @Override
+        public List<CustomerBirthdayRuleRecord> listActiveBirthdayRules(String projectId) {
+            return birthdayRules.values().stream()
+                    .filter(r -> "active".equals(r.status()))
+                    .toList();
+        }
+
+        @Override
+        public CustomerCheckInRecord saveCheckIn(CustomerCheckInRecord checkIn) {
+            checkIns.put(checkIn.customerId() + ":" + checkIn.checkInDate(), checkIn);
+            return checkIn;
+        }
+
+        @Override
+        public Optional<CustomerCheckInRecord> findCheckIn(String customerId, java.time.LocalDate checkInDate) {
+            return Optional.ofNullable(checkIns.get(customerId + ":" + checkInDate));
+        }
+
+        @Override
+        public List<CustomerCheckInRecord> listCheckIns(String customerId) {
+            return checkIns.values().stream()
+                    .filter(c -> customerId.equals(c.customerId()))
+                    .sorted((a, b) -> b.checkInDate().compareTo(a.checkInDate()))
+                    .toList();
+        }
+
+        @Override
+        public List<CustomerPointsLedgerRecord> listExpirableBatches(String customerId, Instant now) {
+            return pointsLedger.stream()
+                    .filter(l -> customerId.equals(l.customerId()))
+                    .filter(l -> l.pointsDelta() > 0 && !l.expired() && l.expireAt() != null)
+                    .filter(l -> !l.expireAt().isAfter(now))
+                    .filter(l -> l.remainingPoints() != null && l.remainingPoints() > 0)
+                    .sorted((a, b) -> a.expireAt().compareTo(b.expireAt()))
+                    .toList();
+        }
+
+        @Override
+        public List<CustomerPointsLedgerRecord> listOpenBatches(String customerId) {
+            return pointsLedger.stream()
+                    .filter(l -> customerId.equals(l.customerId()))
+                    .filter(l -> l.pointsDelta() > 0 && !l.expired() && l.expireAt() != null)
+                    .filter(l -> l.remainingPoints() != null && l.remainingPoints() > 0)
+                    .sorted((a, b) -> a.expireAt().compareTo(b.expireAt()))
+                    .toList();
+        }
+
+        @Override
+        public void markBatchExpired(String ledgerId) {
+            replaceLedger(ledgerId, l -> new CustomerPointsLedgerRecord(
+                    l.id(), l.customerId(), l.pointsDelta(), l.balanceAfter(), l.sourceType(),
+                    l.sourceId(), l.description(), l.expireAt(), 0L, true, l.createdAt()));
+        }
+
+        @Override
+        public void consumeBatchRemaining(String ledgerId, long remainingPoints) {
+            replaceLedger(ledgerId, l -> new CustomerPointsLedgerRecord(
+                    l.id(), l.customerId(), l.pointsDelta(), l.balanceAfter(), l.sourceType(),
+                    l.sourceId(), l.description(), l.expireAt(), remainingPoints, l.expired(), l.createdAt()));
+        }
+
+        private void replaceLedger(String ledgerId, java.util.function.UnaryOperator<CustomerPointsLedgerRecord> op) {
+            for (int i = 0; i < pointsLedger.size(); i++) {
+                if (pointsLedger.get(i).id().equals(ledgerId)) {
+                    pointsLedger.set(i, op.apply(pointsLedger.get(i)));
+                    return;
+                }
+            }
         }
     }
 

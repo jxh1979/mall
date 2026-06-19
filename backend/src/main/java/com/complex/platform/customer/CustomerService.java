@@ -7,6 +7,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.customer.dto.CustomerBarReservationRequest;
+import com.complex.platform.customer.dto.CustomerCheckInRequest;
 import com.complex.platform.customer.dto.CustomerConsentRequest;
 import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
 import com.complex.platform.customer.dto.CustomerPointsRedemptionRequest;
@@ -43,6 +44,7 @@ public class CustomerService {
     private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
     private final InventoryService inventoryService;
+    private final LoyaltyService loyaltyService;
 
     public CustomerService(
             CustomerRepository repository,
@@ -50,7 +52,8 @@ public class CustomerService {
             TicketingService ticketingService,
             AuditedOperationExecutor operations,
             AuditEventService auditEventService,
-            InventoryService inventoryService
+            InventoryService inventoryService,
+            LoyaltyService loyaltyService
     ) {
         this.repository = repository;
         this.otpVerifier = otpVerifier;
@@ -58,6 +61,7 @@ public class CustomerService {
         this.operations = operations;
         this.auditEventService = auditEventService;
         this.inventoryService = inventoryService;
+        this.loyaltyService = loyaltyService;
     }
 
     @Transactional
@@ -74,6 +78,7 @@ public class CustomerService {
                             existing.phone(),
                             existing.maskedPhone(),
                             "active",
+                            existing.birthDate(),
                             now,
                             existing.createdAt(),
                             now
@@ -83,6 +88,7 @@ public class CustomerService {
                             phone,
                             maskPhone(phone),
                             "active",
+                            null,
                             now,
                             now,
                             now
@@ -222,18 +228,7 @@ public class CustomerService {
         CustomerRecord customer = requireCustomer(customerToken);
         try {
             CustomerPointsAccountRecord account = repository.findPointsByCustomerId(customer.id())
-                    .orElseGet(() -> {
-                        Instant now = Instant.now();
-                        return repository.savePoints(new CustomerPointsAccountRecord(
-                                "points_" + customer.id(),
-                                customer.id(),
-                                0L,
-                                "base",
-                                Map.of(),
-                                now,
-                                now
-                        ));
-                    });
+                    .orElseGet(() -> repository.savePoints(newPointsAccount(customer.id(), Instant.now())));
             auditEventService.recordSuccess(
                     "customer.points_viewed",
                     "not_applicable",
@@ -271,6 +266,47 @@ public class CustomerService {
                 "not_applicable",
                 "customer_points_ledger",
                 () -> repository.listPointsLedgerByCustomerId(customer.id())
+        );
+    }
+
+    @Transactional
+    public CustomerCheckInRecord checkIn(String customerToken, CustomerCheckInRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        String terminal = request == null ? null : trimToNull(request.sourceTerminal());
+        try {
+            CustomerCheckInRecord checkIn = loyaltyService.checkIn(customer.id(), trimToDefault(terminal, "miniapp"));
+            auditEventService.recordSuccess(
+                    "customer.checked_in",
+                    "not_applicable",
+                    "customer_check_in",
+                    customer.id(),
+                    null,
+                    null,
+                    Map.of("streak", checkIn.streak(), "awarded_points", checkIn.awardedPoints())
+            );
+            return checkIn;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "customer.check_in_failed",
+                    "not_applicable",
+                    "customer_check_in",
+                    customer.id(),
+                    null,
+                    null,
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public PageResponse<CustomerCheckInRecord> listCheckIns(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage(
+                "customer.check_ins_viewed",
+                "customer.check_ins_view_failed",
+                "not_applicable",
+                "customer_check_in",
+                () -> repository.listCheckIns(customer.id())
         );
     }
 
@@ -342,7 +378,12 @@ public class CustomerService {
                             )),
                             "points_redemption:" + redemptionId
                     ));
+                    if ("frozen".equals(account.accountStatus())) {
+                        throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "points account is frozen");
+                    }
                     long balanceAfter = account.balance() - totalPoints;
+                    // FIFO 消耗获取批次剩余，使过期清零只清未用部分。
+                    consumeFifoBatches(customer.id(), totalPoints);
                     repository.savePoints(new CustomerPointsAccountRecord(
                             account.id(),
                             account.customerId(),
@@ -352,6 +393,13 @@ public class CustomerService {
                                     "last_redemption_id", redemptionId,
                                     "last_redeemed_points", totalPoints
                             ),
+                            account.frozenPoints(),
+                            account.accountStatus(),
+                            account.levelPeriodStart(),
+                            account.keepThresholdProgress(),
+                            account.graceUntil(),
+                            account.lastCheckInDate(),
+                            account.checkInStreak(),
                             account.createdAt(),
                             now
                     ));
@@ -363,6 +411,9 @@ public class CustomerService {
                             "points_redemption",
                             redemptionId,
                             "Redeemed " + item.itemName(),
+                            null,
+                            null,
+                            false,
                             now
                     ));
                     return repository.savePointsRedemption(new CustomerPointsRedemptionRecord(
@@ -385,6 +436,28 @@ public class CustomerService {
         );
     }
 
+    /**
+     * 兑换/扣减时按 FIFO 消耗获取批次的剩余积分。仅用于使后续按 expire_at 的过期清零只清"未使用"部分；
+     * 不再持有 expire_at 的旧余额不影响（remaining_points 为空的批次跳过）。
+     */
+    private void consumeFifoBatches(String customerId, long amount) {
+        long remaining = amount;
+        // 取该客所有"尚有 remaining_points 的获取批次"按时间升序（含未到期），FIFO 扣减。
+        List<CustomerPointsLedgerRecord> batches = repository.listOpenBatches(customerId);
+        for (CustomerPointsLedgerRecord batch : batches) {
+            if (remaining <= 0) {
+                break;
+            }
+            long batchRemaining = batch.remainingPoints() == null ? 0 : batch.remainingPoints();
+            if (batchRemaining <= 0) {
+                continue;
+            }
+            long consumed = Math.min(batchRemaining, remaining);
+            repository.consumeBatchRemaining(batch.id(), batchRemaining - consumed);
+            remaining -= consumed;
+        }
+    }
+
     private CustomerRedemptionCatalogItemRecord resolveActiveRedemptionItem(String catalogItemId, Instant now) {
         return repository.findRedemptionCatalogItemById(catalogItemId)
                 .filter(candidate -> redemptionItemIsActive(candidate, now))
@@ -396,18 +469,26 @@ public class CustomerService {
 
     private CustomerPointsAccountRecord loadOrCreatePointsAccountForUpdate(String customerId) {
         return repository.findPointsByCustomerIdForUpdate(customerId)
-                .orElseGet(() -> {
-                    Instant createdAt = Instant.now();
-                    return repository.savePoints(new CustomerPointsAccountRecord(
-                            "points_" + customerId,
-                            customerId,
-                            0L,
-                            "base",
-                            Map.of(),
-                            createdAt,
-                            createdAt
-                    ));
-                });
+                .orElseGet(() -> repository.savePoints(newPointsAccount(customerId, Instant.now())));
+    }
+
+    static CustomerPointsAccountRecord newPointsAccount(String customerId, Instant now) {
+        return new CustomerPointsAccountRecord(
+                "points_" + customerId,
+                customerId,
+                0L,
+                "base",
+                Map.of(),
+                0L,
+                "active",
+                now,
+                0L,
+                null,
+                null,
+                0,
+                now,
+                now
+        );
     }
 
     public PageResponse<CustomerBarReservationOptionResponse> listBarReservationOptions(String customerToken) {

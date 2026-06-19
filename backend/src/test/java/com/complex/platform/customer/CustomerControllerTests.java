@@ -297,6 +297,9 @@ class CustomerControllerTests {
                 "points_redemption",
                 "redemption_1",
                 "Redeemed Plush Gift",
+                null,
+                null,
+                false,
                 Instant.parse("2026-06-14T00:00:00Z")
         )), 1, 50, 1));
         when(service.listRedemptionItems("cust_token_1")).thenReturn(new PageResponse<>(List.of(new CustomerRedemptionCatalogItemRecord(

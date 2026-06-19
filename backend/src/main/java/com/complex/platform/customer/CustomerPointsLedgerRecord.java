@@ -10,6 +10,9 @@ public record CustomerPointsLedgerRecord(
         String sourceType,
         String sourceId,
         String description,
+        Instant expireAt,
+        Long remainingPoints,
+        boolean expired,
         Instant createdAt
 ) {
 }

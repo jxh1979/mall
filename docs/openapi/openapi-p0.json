@@ -5258,7 +5258,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -5346,7 +5347,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -5420,7 +5422,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -5494,7 +5497,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -5697,7 +5701,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -5833,7 +5838,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -6316,7 +6322,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -6371,7 +6378,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -6427,7 +6435,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -8810,7 +8819,8 @@
         "x-auth-context": "staff-token",
         "parameters": [
           {
-            "$ref": "#/components/parameters/ReviewId"
+            "$ref": "#/components/parameters/ReviewId",
+            "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ]
       }
@@ -9408,7 +9418,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
           }
         ],
         "requestBody": {
@@ -10579,6 +10590,257 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer/check-ins": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerCheckIn",
+        "summary": "客人每日签到",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.checked_in",
+        "x-audit-event-failure": "customer.check_in_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CustomerCheckInRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      },
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerCheckIns",
+        "summary": "客人签到记录",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.check_ins_viewed",
+        "x-audit-event-failure": "customer.check_ins_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/loyalty/member-levels": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listMemberLevels",
+        "summary": "会员等级配置列表",
+        "x-permission": "customer.loyalty.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.member_levels_viewed",
+        "x-audit-event-failure": "customer.member_levels_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/points-accounts/{customer_id}/freeze": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "freezePointsAccount",
+        "summary": "冻结会员积分账户",
+        "x-permission": "customer.points.freeze",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.points.frozen",
+        "x-audit-event-failure": "customer.points.freeze_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "会员ID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LoyaltyFreezeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/points-accounts/{customer_id}/unfreeze": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "unfreezePointsAccount",
+        "summary": "解冻会员积分账户",
+        "x-permission": "customer.points.freeze",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.points.unfrozen",
+        "x-audit-event-failure": "customer.points.unfreeze_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "会员ID"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LoyaltyFreezeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "evaluateMemberLevel",
+        "summary": "手动触发会员等级评估",
+        "x-permission": "customer.loyalty.evaluate",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "member.level_changed",
+        "x-audit-event-failure": "customer.level_evaluate_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "会员ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -12152,6 +12414,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/MdmPolicyViolationRequest"
+            }
+          }
+        }
+      },
+      "CustomerCheckInRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomerCheckInRequest"
+            }
+          }
+        }
+      },
+      "LoyaltyFreezeRequest": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LoyaltyFreezeRequest"
             }
           }
         }
@@ -17967,72 +18249,89 @@
         "properties": {
           "id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "merchant_id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.merchant_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "space_id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.space_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "contract_id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.contract_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "work_order_type": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.work_order_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "priority": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.priority 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "status": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "title": {
             "type": "string",
-            "maxLength": 120
+            "maxLength": 120,
+            "description": "商户work订单record.title 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "description": {
             "type": "string",
-            "maxLength": 2000
+            "maxLength": 2000,
+            "description": "商户work订单record.description 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "reported_by_user_id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.reported_by_user_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "reported_channel": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.reported_channel 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "owner_department": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.owner_department 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "owner_user_id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "商户work订单record.owner_user_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "due_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "商户work订单record.due_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "closed_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "商户work订单record.closed_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "resolution": {
             "type": "string",
-            "maxLength": 2000
+            "maxLength": 2000,
+            "description": "商户work订单record.resolution 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "satisfaction_score": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 5
+            "maximum": 5,
+            "description": "商户work订单record.satisfaction_score 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -18040,15 +18339,18 @@
               "type": "string",
               "maxLength": 64
             },
-            "maxItems": 50
+            "maxItems": 50,
+            "description": "商户work订单record.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "商户work订单record.created_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "商户work订单record.updated_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },
@@ -18063,16 +18365,19 @@
         "properties": {
           "idempotency_key": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "supervisorreviewevaluate.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "operator_note": {
-            "type": "string"
+            "type": "string",
+            "description": "supervisorreviewevaluate.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "evidence_attachment_ids": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "supervisorreviewevaluate.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "action_type": {
             "type": "string",
@@ -18083,25 +18388,31 @@
               "ar_ap_adjustment",
               "contract_violation",
               "base_definition_violation"
-            ]
+            ],
+            "description": "supervisorreviewevaluate.action_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "object_type": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "supervisorreviewevaluate.object_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "object_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "supervisorreviewevaluate.object_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "amount_cent": {
             "type": "integer",
             "format": "int64",
-            "minimum": 0
+            "minimum": 0,
+            "description": "supervisorreviewevaluate.amount_cent 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "violation_summary": {
-            "type": "string"
+            "type": "string",
+            "description": "supervisorreviewevaluate.violation_summary 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
-        }
+        },
+        "description": "supervisorreviewevaluate请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
       },
       "SupervisorReviewApprovalRequest": {
         "type": "object",
@@ -18113,32 +18424,39 @@
         "properties": {
           "idempotency_key": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "supervisorreviewapproval.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "operator_note": {
-            "type": "string"
+            "type": "string",
+            "description": "supervisorreviewapproval.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "evidence_attachment_ids": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "supervisorreviewapproval.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "reviewer_level": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "description": "supervisorreviewapproval.reviewer_level 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "decision": {
             "type": "string",
             "enum": [
               "approved",
               "rejected"
-            ]
+            ],
+            "description": "supervisorreviewapproval.decision 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "comment": {
-            "type": "string"
+            "type": "string",
+            "description": "supervisorreviewapproval.comment 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
-        }
+        },
+        "description": "supervisorreviewapproval请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
       },
       "StaffLevelAssignmentRequest": {
         "type": "object",
@@ -18200,7 +18518,8 @@
             "description": "核销冲正原因；必填，留痕可追溯。",
             "maxLength": 1000
           }
-        }
+        },
+        "description": "核销reverse请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
       },
       "ArApAdjustmentRequest": {
         "type": "object",
@@ -18742,16 +19061,19 @@
         "properties": {
           "id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "mdmappwhitelistrecord.id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "package_name": {
             "type": "string",
-            "maxLength": 255
+            "maxLength": 255,
+            "description": "mdmappwhitelistrecord.package_name 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "app_label": {
             "type": "string",
             "nullable": true,
-            "maxLength": 255
+            "maxLength": 255,
+            "description": "mdmappwhitelistrecord.app_label 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "scope_type": {
             "type": "string",
@@ -18759,27 +19081,33 @@
               "global",
               "project",
               "device_model"
-            ]
+            ],
+            "description": "mdmappwhitelistrecord.scope_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "scope_id": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdmappwhitelistrecord.scope_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "mdmappwhitelistrecord.enabled 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "reason": {
             "type": "string",
             "nullable": true,
-            "maxLength": 500
+            "maxLength": 500,
+            "description": "mdmappwhitelistrecord.reason 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdmappwhitelistrecord.created_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdmappwhitelistrecord.updated_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },
@@ -18794,19 +19122,22 @@
         "properties": {
           "idempotency_key": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdmsitewhitelist.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "operator_note": {
             "type": "string",
             "nullable": true,
-            "maxLength": 500
+            "maxLength": 500,
+            "description": "mdmsitewhitelist.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "evidence_attachment_ids": {
             "type": "array",
             "items": {
               "type": "string",
               "maxLength": 64
-            }
+            },
+            "description": "mdmsitewhitelist.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "domain": {
             "type": "string",
@@ -18816,7 +19147,8 @@
           "description": {
             "type": "string",
             "nullable": true,
-            "maxLength": 255
+            "maxLength": 255,
+            "description": "mdmsitewhitelist.description 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "scope_type": {
             "type": "string",
@@ -18824,20 +19156,24 @@
               "global",
               "project",
               "device_model"
-            ]
+            ],
+            "description": "mdmsitewhitelist.scope_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "scope_id": {
             "type": "string",
             "nullable": true,
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdmsitewhitelist.scope_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "mdmsitewhitelist.enabled 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "reason": {
             "type": "string",
             "nullable": true,
-            "maxLength": 500
+            "maxLength": 500,
+            "description": "mdmsitewhitelist.reason 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },
@@ -18857,16 +19193,19 @@
         "properties": {
           "id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "mdmsitewhitelistrecord.id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "domain": {
             "type": "string",
-            "maxLength": 255
+            "maxLength": 255,
+            "description": "mdmsitewhitelistrecord.domain 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "description": {
             "type": "string",
             "nullable": true,
-            "maxLength": 255
+            "maxLength": 255,
+            "description": "mdmsitewhitelistrecord.description 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "scope_type": {
             "type": "string",
@@ -18874,27 +19213,33 @@
               "global",
               "project",
               "device_model"
-            ]
+            ],
+            "description": "mdmsitewhitelistrecord.scope_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "scope_id": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdmsitewhitelistrecord.scope_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "mdmsitewhitelistrecord.enabled 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "reason": {
             "type": "string",
             "nullable": true,
-            "maxLength": 500
+            "maxLength": 500,
+            "description": "mdmsitewhitelistrecord.reason 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdmsitewhitelistrecord.created_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "updated_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdmsitewhitelistrecord.updated_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },
@@ -18909,19 +19254,22 @@
         "properties": {
           "idempotency_key": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdm设备enroll.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "operator_note": {
             "type": "string",
             "nullable": true,
-            "maxLength": 500
+            "maxLength": 500,
+            "description": "mdm设备enroll.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "evidence_attachment_ids": {
             "type": "array",
             "items": {
               "type": "string",
               "maxLength": 64
-            }
+            },
+            "description": "mdm设备enroll.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "device_id": {
             "type": "string",
@@ -18942,7 +19290,8 @@
           "reason": {
             "type": "string",
             "nullable": true,
-            "maxLength": 500
+            "maxLength": 500,
+            "description": "mdm设备enroll.reason 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },
@@ -18957,17 +19306,20 @@
         "properties": {
           "device_id": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdm设备managementrecord.device_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "terminal_type": {
             "type": "string",
             "nullable": true,
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "mdm设备managementrecord.terminal_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "status": {
             "type": "string",
             "nullable": true,
-            "maxLength": 32
+            "maxLength": 32,
+            "description": "mdm设备managementrecord.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "management_status": {
             "type": "string",
@@ -18976,7 +19328,8 @@
               "enrolled",
               "compliant",
               "violation"
-            ]
+            ],
+            "description": "mdm设备managementrecord.management_status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "policy_status": {
             "type": "string",
@@ -18986,17 +19339,20 @@
               "applied",
               "failed",
               "outdated"
-            ]
+            ],
+            "description": "mdm设备managementrecord.policy_status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "last_policy_sync_at": {
             "type": "string",
             "nullable": true,
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdm设备managementrecord.last_policy_sync_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "enrolled_at": {
             "type": "string",
             "nullable": true,
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdm设备managementrecord.enrolled_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },
@@ -19012,23 +19368,27 @@
         "properties": {
           "idempotency_key": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdmpolicyviolation.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "operator_note": {
             "type": "string",
             "nullable": true,
-            "maxLength": 500
+            "maxLength": 500,
+            "description": "mdmpolicyviolation.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "evidence_attachment_ids": {
             "type": "array",
             "items": {
               "type": "string",
               "maxLength": 64
-            }
+            },
+            "description": "mdmpolicyviolation.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "device_id": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdmpolicyviolation.device_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "violation_type": {
             "type": "string",
@@ -19039,12 +19399,14 @@
               "root_detected",
               "policy_sync_failed",
               "other"
-            ]
+            ],
+            "description": "mdmpolicyviolation.violation_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "detail": {
             "type": "string",
             "nullable": true,
-            "maxLength": 1000
+            "maxLength": 1000,
+            "description": "mdmpolicyviolation.detail 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },
@@ -19063,11 +19425,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "maxLength": 64
+            "maxLength": 64,
+            "description": "mdmpolicyviolationrecord.id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "device_id": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 128,
+            "description": "mdmpolicyviolationrecord.device_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "violation_type": {
             "type": "string",
@@ -19078,28 +19442,68 @@
               "root_detected",
               "policy_sync_failed",
               "other"
-            ]
+            ],
+            "description": "mdmpolicyviolationrecord.violation_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "detail": {
             "type": "string",
             "nullable": true,
-            "maxLength": 1000
+            "maxLength": 1000,
+            "description": "mdmpolicyviolationrecord.detail 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "occurred_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdmpolicyviolationrecord.occurred_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "handled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "mdmpolicyviolationrecord.handled 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "handled_note": {
             "type": "string",
             "nullable": true,
-            "maxLength": 1000
+            "maxLength": 1000,
+            "description": "mdmpolicyviolationrecord.handled_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "created_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "mdmpolicyviolationrecord.created_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+          }
+        }
+      },
+      "CustomerCheckInRequest": {
+        "type": "object",
+        "description": "请求载荷 `CustomerCheckInRequest`；客人每日签到（连续签到阶梯），字段用于生成 DTO、校验和契约测试。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "source_terminal": {
+            "type": "string",
+            "description": "分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。",
+            "maxLength": 32
+          }
+        }
+      },
+      "LoyaltyFreezeRequest": {
+        "type": "object",
+        "description": "请求载荷 `LoyaltyFreezeRequest`；会员积分账户冻结/解冻（后台风控动作），字段用于生成 DTO、校验和契约测试。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同键重复提交返回首次结果。",
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "description": "LoyaltyFreezeRequest.reason 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
+            "maxLength": 255
           }
         }
       }
