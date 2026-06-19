@@ -478,22 +478,22 @@
       "req": "REQ-56",
       "table": "staff_device_credentials",
       "column": null,
-      "expected": "absent",
-      "note": "R5: 员工设备凭证表零落地（Keystore 公钥/不可逆指纹）；现存 terminal_device_credentials 为 kiosk 随机 token，非员工凭证，是不同实体。R5 裁决：员工三表+Android 端凭证本期 P0"
+      "expected": "present",
+      "note": "R5 T1 已落地（V086）：员工私人手机设备凭证表（Keystore 公钥 device_public_key + 不可逆指纹 device_fingerprint_hash）；换机 supersedes 链 + uq_staff_device_credentials_one_active 唯一 active；与 kiosk 的 terminal_device_credentials（V011 随机 token）两套实体互不串值。Service=StaffService, 端点 /api/v1/staff/device-credentials*"
     },
     {
       "req": "REQ-56",
       "table": "staff_profiles",
       "column": null,
-      "expected": "absent",
-      "note": "R5: 员工档案表零落地"
+      "expected": "present",
+      "note": "R5 T1 已落地（V086）：员工档案注册→审批状态机（submitted/approved/rejected/suspended）；隔离列 project_id NOT NULL + merchant_id（NULL=平台员工）；个人信息只存 phone_hash/id_doc_hash（PIPL）。Service=StaffService"
     },
     {
       "req": "REQ-56",
       "table": "employee_notices",
       "column": null,
-      "expected": "absent",
-      "note": "R5: 员工通知/合规同意凭据表零落地，无写入方"
+      "expected": "present",
+      "note": "R5 T1 已落地（V086）：员工通知/合规同意凭据表；写入方 created_by NOT NULL（审批/状态变更/完整性失效/合规模块下发），员工私人手机 App 查看/确认。Service=StaffService"
     },
     {
       "req": "REQ-42",

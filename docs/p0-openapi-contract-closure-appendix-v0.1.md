@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 241 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 140 | 人工权限矩阵正文未覆盖 38 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 482 | 人工事件矩阵正文未覆盖 439 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 241 | 人工任务映射正文未逐项覆盖 235 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 140 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 250 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 147 | 人工权限矩阵正文未覆盖 45 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 500 | 人工事件矩阵正文未覆盖 457 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 250 | 人工任务映射正文未逐项覆盖 244 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 147 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -142,6 +142,13 @@
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
 | `public` | public | customer, none, public-project | 4 | login, customerPhoneLogin, listCustomerTicketProducts, getSystemHealth | 已在权限矩阵正文出现 |
+| `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
+| `staff.device.review` | staff-token | project | 1 | approveStaffDeviceRebind | OpenAPI 补充，以本附录为准 |
+| `staff.device.revoke` | staff-token | project | 1 | revokeStaffDeviceCredential | OpenAPI 补充，以本附录为准 |
+| `staff.notice.view` | staff-token | project | 2 | listEmployeeNotices, acknowledgeEmployeeNotice | OpenAPI 补充，以本附录为准 |
+| `staff.profile.review` | staff-token | project | 1 | reviewStaffRegistration | OpenAPI 补充，以本附录为准 |
+| `staff.profile.submit` | staff-token | project | 1 | submitStaffRegistration | OpenAPI 补充，以本附录为准 |
+| `staff.profile.view` | staff-token | project | 1 | listStaffProfiles | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 4 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks | 已在权限矩阵正文出现 |
 | `terminal.device.unbind` | staff-token | project-device | 1 | unbindDevice | 已在权限矩阵正文出现 |
@@ -579,6 +586,24 @@
 | `space.updated` | success | `createSpace` | `POST` | `/api/v1/platform/spaces` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space.view_failed` | failure | `listSpaces` | `GET` | `/api/v1/platform/spaces` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
 | `space.viewed` | success | `listSpaces` | `GET` | `/api/v1/platform/spaces` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
+| `staff_device.bind_failed` | failure | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
+| `staff_device.bound` | success | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
+| `staff_device.integrity_report_failed` | failure | `reportStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
+| `staff_device.integrity_reported` | success | `reportStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
+| `staff_device.rebind_failed` | failure | `approveStaffDeviceRebind` | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | AUTH-账号权限 | `staff.device.review` | 接口级事件，以本附录为准 |
+| `staff_device.rebound` | success | `approveStaffDeviceRebind` | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | AUTH-账号权限 | `staff.device.review` | 接口级事件，以本附录为准 |
+| `staff_device.revoke_failed` | failure | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | AUTH-账号权限 | `staff.device.revoke` | 接口级事件，以本附录为准 |
+| `staff_device.revoked` | success | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | AUTH-账号权限 | `staff.device.revoke` | 接口级事件，以本附录为准 |
+| `staff.approved` | success | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
+| `staff.notice_acknowledge_failed` | failure | `acknowledgeEmployeeNotice` | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | AUTH-账号权限 | `staff.notice.view` | 接口级事件，以本附录为准 |
+| `staff.notice_acknowledged` | success | `acknowledgeEmployeeNotice` | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | AUTH-账号权限 | `staff.notice.view` | 接口级事件，以本附录为准 |
+| `staff.notice.view_failed` | failure | `listEmployeeNotices` | `GET` | `/api/v1/staff/notices` | AUTH-账号权限 | `staff.notice.view` | 接口级事件，以本附录为准 |
+| `staff.notice.viewed` | success | `listEmployeeNotices` | `GET` | `/api/v1/staff/notices` | AUTH-账号权限 | `staff.notice.view` | 接口级事件，以本附录为准 |
+| `staff.profile.view_failed` | failure | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | AUTH-账号权限 | `staff.profile.view` | 接口级事件，以本附录为准 |
+| `staff.profile.viewed` | success | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | AUTH-账号权限 | `staff.profile.view` | 接口级事件，以本附录为准 |
+| `staff.register_failed` | failure | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | AUTH-账号权限 | `staff.profile.submit` | 接口级事件，以本附录为准 |
+| `staff.registered` | success | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | AUTH-账号权限 | `staff.profile.submit` | 接口级事件，以本附录为准 |
+| `staff.review_failed` | failure | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `supply_contract.approve_failed` | failure | `approveSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts/{id}/approve` | INV-库存存酒 | `inventory.purchase.approve` | 接口级事件，以本附录为准 |
 | `supply_contract.approved` | success | `approveSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts/{id}/approve` | INV-库存存酒 | `inventory.purchase.approve` | 接口级事件，以本附录为准 |
 | `supply_contract.create_failed` | failure | `createSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts` | INV-库存存酒 | `inventory.supply_contract.manage` | 接口级事件，以本附录为准 |
@@ -711,8 +736,11 @@
 | AUTH-登录会话 | `login` | `POST` | `/api/v1/auth/login` | 员工或商户员工登录 | `public` | `auth.login.succeeded` / `auth.login.failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | 已在任务映射正文出现 |
 | AUTH-登录会话 | `logout` | `POST` | `/api/v1/auth/logout` | 退出登录 | `authenticated` | `auth.logout` / `auth.logout_failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | 已在任务映射正文出现 |
 | AUTH-登录会话 | `refreshToken` | `POST` | `/api/v1/auth/refresh` | 刷新会话 | `authenticated` | `auth.token.refreshed` / `auth.token_refresh_failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | operation 级补充 |
+| AUTH-账号权限 | `acknowledgeEmployeeNotice` | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | 确认/同意员工通知 | `staff.notice.view` | `staff.notice_acknowledged` / `staff.notice_acknowledge_failed` | staff_private_phone, web | operation 级补充 |
 | AUTH-账号权限 | `applyPermissionTemplate` | `POST` | `/api/v1/access/permission-templates/{id}/apply` | 应用权限模板 | `access.permission_template.apply` | `permission_template.applied` / `permission_template.apply_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `approveStaffDeviceRebind` | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | 审批换机生效 | `staff.device.review` | `staff_device.rebound` / `staff_device.rebind_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `assignStaffLevel` | `PUT` | `/api/v1/access/users/{id}/staff-level` | 分配员工职级与薪资 | `access.staff_level.manage` | `access.staff_level.assigned` / `access.staff_level.assign_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | 绑定/换机申请员工设备凭证 | `staff.device.bind` | `staff_device.bound` / `staff_device.bind_failed` | staff_private_phone, web | operation 级补充 |
 | AUTH-账号权限 | `copyPermissionTemplate` | `POST` | `/api/v1/access/permission-templates/{id}/copy` | 复制权限模板 | `access.permission_template.manage` | `permission_template.copied` / `permission_template.copy_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `createAccessUser` | `POST` | `/api/v1/access/users` | 创建权限用户 | `access.user.manage` | `access.user.changed` / `access.user.changed_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `createPermissionTemplate` | `POST` | `/api/v1/access/permission-templates` | 创建权限模板 | `access.permission_template.manage` | `permission_template.changed` / `permission_template.change_failed` | web | operation 级补充 |
@@ -721,11 +749,17 @@
 | AUTH-账号权限 | `getEffectivePermissions` | `GET` | `/api/v1/access/effective-permissions` | 查询当前账号有效权限集 | `authenticated` | `access.effective_permission.viewed` / `access.effective_permission.viewed_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | 查询指定账号有效权限集 | `access.user.view` | `access.effective_permission.viewed` / `access.effective_permission.viewed_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `listAccessUsers` | `GET` | `/api/v1/access/users` | 查询权限用户 | `access.user.view` | `access.user.viewed` / `access.user.viewed_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `listEmployeeNotices` | `GET` | `/api/v1/staff/notices` | 查询员工通知 | `staff.notice.view` | `staff.notice.viewed` / `staff.notice.view_failed` | staff_private_phone, web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `listPermissions` | `GET` | `/api/v1/access/permissions` | 权限点列表 | `access.permission.view` | `permission.viewed` / `permission.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listPermissionTemplates` | `GET` | `/api/v1/access/permission-templates` | 权限模板列表 | `access.permission_template.view` | `permission_template.viewed` / `permission_template.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listRoles` | `GET` | `/api/v1/access/roles` | 角色列表 | `access.role.view` | `role.viewed` / `role.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listStaffLevels` | `GET` | `/api/v1/access/staff-levels` | 查询职级目录 | `access.staff_level.view` | `access.staff_level.viewed` / `access.staff_level.viewed_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | 查询员工档案 | `staff.profile.view` | `staff.profile.viewed` / `staff.profile.view_failed` | web, mobile_admin | operation 级补充 |
+| AUTH-账号权限 | `reportStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | 端侧完整性上报 | `staff.device.bind` | `staff_device.integrity_reported` / `staff_device.integrity_report_failed` | staff_private_phone | operation 级补充 |
+| AUTH-账号权限 | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | 审批员工注册 | `staff.profile.review` | `staff.approved` / `staff.review_failed` | web, mobile_admin | operation 级补充 |
+| AUTH-账号权限 | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | 解绑/失效设备凭证 | `staff.device.revoke` | `staff_device.revoked` / `staff_device.revoke_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeTemporaryGrant` | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | 撤销临时授权 | `access.temporary_grant.revoke` | `permission_template.revoked` / `temporary_grant.revoke_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | 员工自助注册 | `staff.profile.submit` | `staff.registered` / `staff.register_failed` | staff_private_phone, web | operation 级补充 |
 | AUTH-账号权限 | `updatePermissionTemplate` | `PUT` | `/api/v1/access/permission-templates/{id}` | 修改权限模板 | `access.permission_template.manage` | `permission_template.changed` / `permission_template.change_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | 新增酒吧订单物品 | `bar.order.create` | `bar.order_item.created` / `bar.order_item.created_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | 卡座销售提成计算 | `bar.table_commission.calculate` | `bar.table_commission.calculated` / `bar.table_commission.calculate_failed` | web | operation 级补充 |

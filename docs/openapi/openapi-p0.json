@@ -9552,6 +9552,417 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/staff/registrations": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "submitStaffRegistration",
+        "summary": "员工自助注册",
+        "description": "员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建 staff_profiles(submitted)，待后台审批。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "x-permission": "staff.profile.submit",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.registered",
+        "x-audit-event-failure": "staff.register_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StaffRegistrationRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/registrations/{id}/review": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "reviewStaffRegistration",
+        "summary": "审批员工注册",
+        "description": "后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带 reject_reason。仅 submitted 状态可审批；商户角色仅可审批本 merchant 范围。",
+        "x-permission": "staff.profile.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.approved",
+        "x-audit-event-failure": "staff.review_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "员工档案 staff_profile id；必须引用当前数据范围内存在且允许访问的记录。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StaffRegistrationReviewRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/profiles": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "listStaffProfiles",
+        "summary": "查询员工档案",
+        "description": "隔离列表：平台角色见全量，商户角色仅见本 merchant_id 行（跨商户不可见）。返回注册/审批状态与职级关联。",
+        "x-permission": "staff.profile.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.profile.viewed",
+        "x-audit-event-failure": "staff.profile.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/device-credentials": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "bindStaffDeviceCredential",
+        "summary": "绑定/换机申请员工设备凭证",
+        "description": "员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证 pending_review + supersedes 指向旧 active。与 kiosk 的 terminal_device_credentials 两套实体互不串值。",
+        "x-permission": "staff.device.bind",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff_device.bound",
+        "x-audit-event-failure": "staff_device.bind_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StaffDeviceBindRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/device-credentials/{id}/approve-rebind": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "approveStaffDeviceRebind",
+        "summary": "审批换机生效",
+        "description": "审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证 uq_staff_device_credentials_one_active 始终成立。",
+        "x-permission": "staff.device.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff_device.rebound",
+        "x-audit-event-failure": "staff_device.rebind_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "设备凭证 staff_device_credential id；必须为当前 scope 内 pending_review 凭证。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StaffDeviceRebindDecisionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/device-credentials/{id}/report-integrity": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "reportStaffDeviceIntegrity",
+        "summary": "端侧完整性上报",
+        "description": "端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发 staff_device.integrity_failed + 通知复核。由端侧鉴权调用。",
+        "x-permission": "staff.device.bind",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff_device.integrity_reported",
+        "x-audit-event-failure": "staff_device.integrity_report_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "设备凭证 staff_device_credential id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StaffDeviceIntegrityReportRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "device-credential"
+      }
+    },
+    "/api/v1/staff/device-credentials/{id}/revoke": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "revokeStaffDeviceCredential",
+        "summary": "解绑/失效设备凭证",
+        "description": "解绑或失效设备凭证（active|pending_review → revoked），记 revoked_reason/revoked_at。",
+        "x-permission": "staff.device.revoke",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff_device.revoked",
+        "x-audit-event-failure": "staff_device.revoke_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "设备凭证 staff_device_credential id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StaffDeviceRevokeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/notices": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "listEmployeeNotices",
+        "summary": "查询员工通知",
+        "description": "通知/合规同意列表，员工私人手机 App 查看。隔离：商户角色仅见所属员工 merchant_id 的通知。",
+        "x-permission": "staff.notice.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.notice.viewed",
+        "x-audit-event-failure": "staff.notice.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/notices/{id}/acknowledge": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "acknowledgeEmployeeNotice",
+        "summary": "确认/同意员工通知",
+        "description": "确认或同意通知：consent=true→consented，decline=true→declined，否则 acknowledged；consent_required 通知必须显式同意/拒绝。",
+        "x-permission": "staff.notice.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.notice_acknowledged",
+        "x-audit-event-failure": "staff.notice_acknowledge_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "通知 employee_notice id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EmployeeNoticeAcknowledgeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -10974,6 +11385,109 @@
               "mode": "min_consumption_ratio",
               "ratio_bps": 3000,
               "cancel_free_before_minutes": 60
+            }
+          }
+        }
+      },
+      "StaffRegistrationRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StaffRegistrationRequest"
+            },
+            "example": {
+              "idempotency_key": "staff_reg_20260618_000001",
+              "project_id": "project_main",
+              "merchant_id": null,
+              "name": "张三",
+              "phone_hash": "sha256:phone_hash_placeholder",
+              "staff_level_id": "lvl_m1_lower"
+            }
+          }
+        }
+      },
+      "StaffRegistrationReviewRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StaffRegistrationReviewRequest"
+            },
+            "example": {
+              "idempotency_key": "staff_review_20260618_000001",
+              "decision": "approve"
+            }
+          }
+        }
+      },
+      "StaffDeviceBindRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StaffDeviceBindRequest"
+            },
+            "example": {
+              "idempotency_key": "staff_dev_bind_20260618_000001",
+              "staff_profile_id": "staff_staff_reg_20260618_000001",
+              "device_public_key": "MFkwEwYHKoZIzj0CAQ...keystore_pubkey",
+              "device_fingerprint_hash": "sha256:device_fingerprint_placeholder"
+            }
+          }
+        }
+      },
+      "StaffDeviceRebindDecisionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StaffDeviceRebindDecisionRequest"
+            },
+            "example": {
+              "idempotency_key": "staff_dev_rebind_20260618_000001"
+            }
+          }
+        }
+      },
+      "StaffDeviceIntegrityReportRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StaffDeviceIntegrityReportRequest"
+            },
+            "example": {
+              "idempotency_key": "staff_dev_integrity_20260618_000001",
+              "integrity_status": "root_detected"
+            }
+          }
+        }
+      },
+      "StaffDeviceRevokeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StaffDeviceRevokeRequest"
+            },
+            "example": {
+              "idempotency_key": "staff_dev_revoke_20260618_000001",
+              "reason": "员工离职解绑"
+            }
+          }
+        }
+      },
+      "EmployeeNoticeAcknowledgeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EmployeeNoticeAcknowledgeRequest"
+            },
+            "example": {
+              "idempotency_key": "staff_notice_ack_20260618_000001",
+              "consent": true
             }
           }
         }
@@ -17252,6 +17766,233 @@
             "description": "取消免没收时限（分钟）。",
             "minimum": 0,
             "maximum": 100000000
+          }
+        }
+      },
+      "StaffRegistrationRequest": {
+        "type": "object",
+        "description": "员工自助注册请求体。个人信息只传不可逆哈希（PIPL）。project_id 必填（隔离），merchant_id 可空（NULL=平台员工）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "project_id",
+          "name"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键；同一注册重试必须复用。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体归属（隔离），必填。",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "商户归属；空=平台员工。",
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "description": "员工姓名，必填。",
+            "maxLength": 128
+          },
+          "phone_hash": {
+            "type": "string",
+            "description": "手机号不可逆哈希（PIPL，不存明文）。",
+            "maxLength": 64
+          },
+          "id_doc_hash": {
+            "type": "string",
+            "description": "证件不可逆哈希（可选）。",
+            "maxLength": 64
+          },
+          "staff_level_id": {
+            "type": "string",
+            "description": "职级 id（V055 staff_levels），可选；非空必须已存在。",
+            "maxLength": 64
+          }
+        }
+      },
+      "StaffRegistrationReviewRequest": {
+        "type": "object",
+        "description": "审批员工注册请求体。approve 生成 user_id+默认角色；reject 必须带 reject_reason。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "decision"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "decision": {
+            "type": "string",
+            "description": "审批决定。",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "reject_reason": {
+            "type": "string",
+            "description": "驳回原因；decision=reject 时必填。",
+            "maxLength": 255
+          }
+        }
+      },
+      "StaffDeviceBindRequest": {
+        "type": "object",
+        "description": "员工设备凭证绑定/换机请求体。device_public_key=Keystore 公钥，device_fingerprint_hash=不可逆指纹（不读 NFC）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "staff_profile_id",
+          "device_public_key",
+          "device_fingerprint_hash"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "staff_profile_id": {
+            "type": "string",
+            "description": "员工档案 id。",
+            "maxLength": 64
+          },
+          "device_public_key": {
+            "type": "string",
+            "description": "Android Keystore 设备公钥。"
+          },
+          "device_fingerprint_hash": {
+            "type": "string",
+            "description": "不可逆设备指纹哈希（不读手机本机 NFC 唯一标识）。",
+            "maxLength": 64
+          }
+        }
+      },
+      "StaffDeviceRebindDecisionRequest": {
+        "type": "object",
+        "description": "审批换机生效请求体。批准后新凭证 active、旧凭证 superseded。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "StaffDeviceIntegrityReportRequest": {
+        "type": "object",
+        "description": "端侧完整性上报请求体。非 trusted 即自动失效凭证 + 复核。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "integrity_status"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "integrity_status": {
+            "type": "string",
+            "description": "端侧完整性状态。",
+            "enum": [
+              "trusted",
+              "root_detected",
+              "debug_detected",
+              "abnormal"
+            ]
+          }
+        }
+      },
+      "StaffDeviceRevokeRequest": {
+        "type": "object",
+        "description": "解绑/失效设备凭证请求体。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "reason": {
+            "type": "string",
+            "description": "失效原因，记入 revoked_reason。",
+            "maxLength": 255
+          }
+        }
+      },
+      "EmployeeNoticeAcknowledgeRequest": {
+        "type": "object",
+        "description": "确认/同意通知请求体。consent=true→consented，decline=true→declined，否则 acknowledged。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "consent": {
+            "type": "boolean",
+            "description": "true 表示同意（consented）。"
+          },
+          "decline": {
+            "type": "boolean",
+            "description": "true 表示拒绝（declined）。"
           }
         }
       }
