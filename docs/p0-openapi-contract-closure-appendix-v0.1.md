@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 296 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 172 | 人工权限矩阵正文未覆盖 70 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 592 | 人工事件矩阵正文未覆盖 548 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 296 | 人工任务映射正文未逐项覆盖 290 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 177 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 299 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 174 | 人工权限矩阵正文未覆盖 72 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 598 | 人工事件矩阵正文未覆盖 554 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 299 | 人工任务映射正文未逐项覆盖 293 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 179 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -79,6 +79,8 @@
 | `bar.reservation.manage` | staff-token | project-bar | 3 | payBarReservationDeposit, checkInBarReservationDeposit, cancelBarReservation | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.view` | staff-token | project-bar-table | 1 | listBarReservations | 已在权限矩阵正文出现 |
 | `bar.saved_bottle.manage` | staff-token | project-bar-customer | 4 | listSavedBottles, createSavedBottle, claimSavedBottle, cancelSavedBottle | 已在权限矩阵正文出现 |
+| `bar.shift.close` | staff-token | project-bar-table | 1 | closeBarShift | OpenAPI 补充，以本附录为准 |
+| `bar.shift.manage` | staff-token | project-bar-table | 2 | listBarShifts, openBarShift | OpenAPI 补充，以本附录为准 |
 | `bar.table_commission.calculate` | staff-token | project-bar | 1 | calculateBarTableCommission | 已在权限矩阵正文出现 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 1 | checkInBarReservationGuest | 已在权限矩阵正文出现 |
 | `bar.table.manage` | staff-token | project-bar, project-bar-table | 3 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace | 已在权限矩阵正文出现 |
@@ -379,6 +381,12 @@
 | `bar.saved_bottle.pickup_failed` | failure | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.view_failed` | failure | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.viewed` | success | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_close_failed` | failure | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | BAR-酒吧经营 | `bar.shift.close` | 接口级事件，以本附录为准 |
+| `bar.shift_closed` | success | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | BAR-酒吧经营 | `bar.shift.close` | 接口级事件，以本附录为准 |
+| `bar.shift_open_failed` | failure | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_opened` | success | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.shift.view_failed` | failure | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.shift.viewed` | success | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
 | `bar.table_commission.calculate_failed` | failure | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | BAR-酒吧经营 | `bar.table_commission.calculate` | 接口级事件，以本附录为准 |
 | `bar.table_commission.calculated` | success | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | BAR-酒吧经营 | `bar.table_commission.calculate` | 已在事件矩阵正文出现 |
 | `bar.table_guest.checked_in` | success | `checkInBarReservationGuest` | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | BAR-酒吧经营 | `bar.table.guest_checkin` | 已在事件矩阵正文出现 |
@@ -893,6 +901,7 @@
 | BAR-酒吧经营 | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | 订台取消/爽约（按时限退定金或没收） | `bar.reservation.manage` | `bar.reservation.cancelled` / `bar.reservation.cancel_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `checkInBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/checkin` | 订台到店核销（定金转抵扣进账单） | `bar.reservation.manage` | `bar.reservation_deposit_deducted` / `bar.reservation_deposit_deduct_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `checkInBarReservationGuest` | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | 卡座免通票入场名额核销 | `bar.table.guest_checkin` | `bar.table_guest.checked_in` / `bar.table_guest.rejected` | staff_work_phone | operation 级补充 |
+| BAR-酒吧经营 | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | 班结对账 | `bar.shift.close` | `bar.shift_closed` / `bar.shift_close_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `createBarAgeVerification` | `POST` | `/api/v1/bar/age-verifications` | 酒吧年龄和人脸核验 | `bar.entry.age_verify` | `bar.age_verification.passed` / `bar.age_verification.rejected` | staff_work_phone<br>device: age-verification-device | operation 级补充 |
 | BAR-酒吧经营 | `createBarBillPayIntent` | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | 酒吧账单支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `createBarDepositRule` | `POST` | `/api/v1/bar/deposit-rules` | 创建订台定金规则（固定额/按低消比例） | `bar.deposit_rule.manage` | `bar.deposit_rule.created` / `bar.deposit_rule.create_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
@@ -906,9 +915,11 @@
 | BAR-酒吧经营 | `listBarProductionTickets` | `GET` | `/api/v1/bar/production-tickets` | 查询酒吧出品票据 | `bar.order.create` | `bar.production_ticket.viewed` / `bar.production_ticket.viewed_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarProducts` | `GET` | `/api/v1/bar/products` | 查询酒吧商品 | `bar.order.create` | `bar.product.viewed` / `bar.product.viewed_failed` | web, tablet, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `listBarReservations` | `GET` | `/api/v1/bar/reservations` | 查询酒吧预约 | `bar.reservation.view` | `bar.reservation.viewed` / `bar.reservation.view_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | 查询收银班次 | `bar.shift.manage` | `bar.shift.viewed` / `bar.shift.view_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTables` | `GET` | `/api/v1/bar/tables` | 查询桌台或卡座 | `bar.table.view` | `bar.table.viewed` / `bar.table.view_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | 未回填空间的卡座/桌台清单 | `bar.table.manage` | `bar.table_space_backlog.viewed` / `bar.table_space_backlog.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | 商品沽清/恢复 | `bar.product.sold_out` | `bar.product_sold_out` / `bar.product_sold_out_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | 开班 | `bar.shift.manage` | `bar.shift_opened` / `bar.shift_open_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `openBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/open` | 开台 | `bar.table.open_close` | `bar.table.opened` / `bar.table.open_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `payBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | 订台定金支付 | `bar.reservation.manage` | `bar.reservation_deposit_paid` / `bar.reservation_deposit_pay_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | tablet, web | operation 级补充 |

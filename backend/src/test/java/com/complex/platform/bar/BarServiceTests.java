@@ -61,6 +61,7 @@ class BarServiceTests {
                 barRepository,
                 new BarOperationExecutor(operations),
                 new BarBillingService(barRepository, receivableLedgerService, authorizationService, auditEventService),
+                new BarShiftService(barRepository, authorizationService, auditEventService),
                 new BarTableSessionService(barRepository, authorizationService),
                 new BarOrderService(barRepository, authorizationService, auditEventService,
                         new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
@@ -2096,6 +2097,158 @@ class BarServiceTests {
         ));
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // V095: 交班 / 班结对账（PRD §10.1）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void closeShiftAggregatesSettlementsByChannelRefundAndTipIntoSystemReceivable() {
+        BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
+                "open-1", "bar_1", "cashier_1", null, 50_000L, 0L, null));
+
+        // 三笔不同支付方式结算 + 一笔小费账单，均归属 cashier_1。
+        BarBillRecord cashBill = billForOrder("agg-cash", "staff_sales");
+        service.settleBill(cashBill.id(), new BarBillSettleRequest(
+                "s-cash", null, List.of(), "pay_cash", cashBill.payableAmountCent(),
+                "cash", "cashier_1", null));
+        BarBillRecord posBill = billForOrder("agg-pos", "staff_sales");
+        service.settleBill(posBill.id(), new BarBillSettleRequest(
+                "s-pos", null, List.of(), "pay_pos", posBill.payableAmountCent(),
+                "pos", "cashier_1", "POS123"));
+        BarBillRecord onlineBill = billForOrder("agg-online", "staff_sales");
+        service.settleBill(onlineBill.id(), new BarBillSettleRequest(
+                "s-online", null, List.of(), "pay_online", onlineBill.payableAmountCent(),
+                "aggregate_pay", "cashier_1", null));
+
+        // 小费账单：加 1000 分小费后用现金结算（结算含小费），系统现金应收含 tip，tip 另行单列。
+        BarBillRecord tipBill = billForOrder("agg-tip", "staff_sales");
+        service.addBillTip(tipBill.id(), new BarBillTipRequest("tip-1", null, List.of(), 1_000L, null));
+        BarBillRecord tippedReloaded = barRepository.findBillById(tipBill.id()).orElseThrow();
+        service.settleBill(tipBill.id(), new BarBillSettleRequest(
+                "s-tip", null, List.of(), "pay_tip",
+                tippedReloaded.payableAmountCent() + tippedReloaded.tipAmountCent(),
+                "cash", "cashier_1", null));
+
+        BarShiftRecord closed = service.closeShift(shift.id(), new BarShiftCloseRequest(
+                "close-1", 50_000L + cashBill.payableAmountCent()
+                        + tippedReloaded.payableAmountCent() + tippedReloaded.tipAmountCent(),
+                "cashier_2", "end of night"));
+
+        assertThat(closed.status()).isEqualTo("closed");
+        assertThat(closed.systemCashCent())
+                .isEqualTo(cashBill.payableAmountCent() + tippedReloaded.payableAmountCent() + 1_000L);
+        assertThat(closed.systemPosCent()).isEqualTo(posBill.payableAmountCent());
+        assertThat(closed.systemOnlineCent()).isEqualTo(onlineBill.payableAmountCent());
+        assertThat(closed.systemTipCent()).isEqualTo(1_000L);
+        assertThat(closed.systemRefundCent()).isZero();
+        assertThat(closed.handoverToUserId()).isEqualTo("cashier_2");
+    }
+
+    @Test
+    void closeShiftComputesCashDiffAgainstDeclaredCashAndOpeningFloat() {
+        BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
+                "open-diff", "bar_1", "cashier_diff", null, 20_000L, 0L, null));
+        BarBillRecord cashBill = billForOrder("diff-cash", "staff_sales");
+        service.settleBill(cashBill.id(), new BarBillSettleRequest(
+                "s-diff", null, List.of(), "pay_diff", cashBill.payableAmountCent(),
+                "cash", "cashier_diff", null));
+
+        // 实点现金 = 备用金 + 系统现金 + 300 长款。
+        long declared = 20_000L + cashBill.payableAmountCent() + 300L;
+        BarShiftRecord closed = service.closeShift(shift.id(), new BarShiftCloseRequest(
+                "close-diff", declared, null, null));
+
+        assertThat(closed.systemCashCent()).isEqualTo(cashBill.payableAmountCent());
+        assertThat(closed.cashDiffCent()).isEqualTo(300L);
+        assertThat(closed.needsReview()).isTrue();
+    }
+
+    @Test
+    void closeShiftBalancesWhenDeclaredCashMatchesSystemAndDoesNotNeedReview() {
+        BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
+                "open-bal", "bar_1", "cashier_bal", null, 10_000L, 500L, null));
+        BarBillRecord cashBill = billForOrder("bal-cash", "staff_sales");
+        service.settleBill(cashBill.id(), new BarBillSettleRequest(
+                "s-bal", null, List.of(), "pay_bal", cashBill.payableAmountCent(),
+                "cash", "cashier_bal", null));
+
+        BarShiftRecord closed = service.closeShift(shift.id(), new BarShiftCloseRequest(
+                "close-bal", 10_000L + cashBill.payableAmountCent(), null, null));
+
+        assertThat(closed.cashDiffCent()).isZero();
+        assertThat(closed.needsReview()).isFalse();
+    }
+
+    @Test
+    void closeShiftAggregatesRefundWithinWindow() {
+        BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
+                "open-refund", "bar_1", "cashier_refund", null, 0L, 0L, null));
+        BarBillRecord bill = billForOrder("refund-bill", "staff_sales");
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "s-refund", null, List.of(), "pay_refund", bill.payableAmountCent(),
+                "cash", "cashier_refund", null));
+        service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
+                "refund-1", null, List.of(), "refund", 5_000L, "guest complaint", null));
+
+        BarShiftRecord closed = service.closeShift(shift.id(), new BarShiftCloseRequest(
+                "close-refund", bill.payableAmountCent(), null, null));
+
+        assertThat(closed.systemRefundCent()).isEqualTo(5_000L);
+    }
+
+    @Test
+    void openShiftRejectsDuplicateOpenShiftForSameCashierAndBar() {
+        service.openShift(new BarShiftOpenRequest("open-dup-1", "bar_1", "cashier_dup", null, 0L, 0L, null));
+        assertThatThrownBy(() -> service.openShift(
+                new BarShiftOpenRequest("open-dup-2", "bar_1", "cashier_dup", null, 0L, 0L, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_SHIFT_ALREADY_OPEN");
+    }
+
+    @Test
+    void closeShiftRejectsAlreadyClosedShift() {
+        BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
+                "open-closed", "bar_1", "cashier_closed", null, 0L, 0L, null));
+        service.closeShift(shift.id(), new BarShiftCloseRequest("close-once", 0L, null, null));
+        assertThatThrownBy(() -> service.closeShift(shift.id(),
+                new BarShiftCloseRequest("close-twice", 0L, null, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_SHIFT_NOT_OPEN");
+    }
+
+    @Test
+    void closeShiftRejectsCrossMerchantAccessWithForbiddenError() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarShiftRecord shift = barRepository.saveShift(new BarShiftRecord(
+                "bar_shift_other", null, "merchant_b", "bar_1", "cashier_x", "open",
+                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, 0L, false,
+                null, null, "opener", null, Instant.now(), Instant.now()));
+        assertThatThrownBy(() -> service.closeShift(shift.id(),
+                new BarShiftCloseRequest("close-x", 0L, null, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void listShiftsReturnsOnlyCurrentMerchantRecordsWhenScopedToMerchant() {
+        barRepository.saveShift(new BarShiftRecord(
+                "bar_shift_a", null, "merchant_a", "bar_1", "c1", "open",
+                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, 0L, false,
+                null, null, "opener", null, Instant.now(), Instant.now()));
+        barRepository.saveShift(new BarShiftRecord(
+                "bar_shift_b", null, "merchant_b", "bar_1", "c2", "open",
+                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, 0L, false,
+                null, null, "opener", null, Instant.now(), Instant.now()));
+
+        TestSecurityActors.asMerchantUser("merchant_a");
+        assertThat(service.listShifts().items())
+                .extracting(BarShiftRecord::id)
+                .containsExactly("bar_shift_a");
+    }
+
     private BarBillRecord billForOrder(String key, String salesStaffId) {
         BarReservationRecord reservation = createReservation("reservation-" + key, "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
@@ -2155,6 +2308,8 @@ class BarServiceTests {
         private final Map<String, BarOrderItemRecord> orderItems = new LinkedHashMap<>();
         private final List<BarOrderItemVoidRecord> orderItemVoids = new ArrayList<>();
         private final Map<String, BarBillRecord> bills = new LinkedHashMap<>();
+        private final List<BarBillSettlementRecord> billSettlements = new ArrayList<>();
+        private final Map<String, BarShiftRecord> shifts = new LinkedHashMap<>();
         private final List<BarBillAdjustmentRecord> billAdjustments = new ArrayList<>();
         private final List<BarBillOperationRecord> billOperations = new ArrayList<>();
         private final Map<String, BarTableSessionRecord> tableSessions = new LinkedHashMap<>();
@@ -2392,6 +2547,108 @@ class BarServiceTests {
                             || billId.equals(operation.secondaryBillId())
                             || billId.equals(operation.generatedBillId()))
                     .toList();
+        }
+
+        @Override
+        public BarBillSettlementRecord saveBillSettlement(BarBillSettlementRecord settlement) {
+            billSettlements.removeIf(existing -> existing.id().equals(settlement.id()));
+            billSettlements.add(settlement);
+            return settlement;
+        }
+
+        @Override
+        public List<BarBillSettlementRecord> listBillSettlements(String billId) {
+            return billSettlements.stream().filter(s -> billId.equals(s.billId())).toList();
+        }
+
+        @Override
+        public BarShiftRecord saveShift(BarShiftRecord shift) {
+            shifts.put(shift.id(), shift);
+            return shift;
+        }
+
+        @Override
+        public Optional<BarShiftRecord> findShiftById(String id) {
+            return Optional.ofNullable(shifts.get(id));
+        }
+
+        @Override
+        public Optional<BarShiftRecord> findOpenShift(String barId, String cashierUserId) {
+            return shifts.values().stream()
+                    .filter(s -> "open".equals(s.status())
+                            && barId.equals(s.barId())
+                            && cashierUserId.equals(s.cashierUserId()))
+                    .findFirst();
+        }
+
+        @Override
+        public List<BarShiftRecord> listShifts(Optional<String> merchantScope) {
+            List<BarShiftRecord> all = new ArrayList<>(shifts.values());
+            if (merchantScope.isEmpty()) {
+                return all;
+            }
+            return all.stream().filter(r -> merchantScope.get().equals(r.merchantId())).toList();
+        }
+
+        @Override
+        public BarShiftReconciliationSnapshot aggregateShiftReconciliation(
+                String barId,
+                String cashierUserId,
+                Instant from,
+                Instant to,
+                Optional<String> merchantScope
+        ) {
+            long cash = 0L;
+            long pos = 0L;
+            long online = 0L;
+            long tip = 0L;
+            java.util.Set<String> tippedBills = new java.util.LinkedHashSet<>();
+            for (BarBillSettlementRecord s : billSettlements) {
+                BarBillRecord bill = bills.get(s.billId());
+                if (bill == null || !barId.equals(bill.barId())) {
+                    continue;
+                }
+                if (!cashierUserId.equals(s.cashierStaffId())) {
+                    continue;
+                }
+                if (merchantScope.isPresent() && !merchantScope.get().equals(bill.merchantId())) {
+                    continue;
+                }
+                Instant at = s.settledAt();
+                if (at == null || at.isBefore(from) || !at.isBefore(to)) {
+                    continue;
+                }
+                switch (s.settleChannel()) {
+                    case "cash" -> cash += s.settlementAmountCent();
+                    case "pos" -> pos += s.settlementAmountCent();
+                    default -> online += s.settlementAmountCent();
+                }
+                if (bill.tipAmountCent() > 0) {
+                    tippedBills.add(bill.id());
+                }
+            }
+            for (String billId : tippedBills) {
+                tip += bills.get(billId).tipAmountCent();
+            }
+            long refund = 0L;
+            for (BarBillAdjustmentRecord a : billAdjustments) {
+                if (!"refund".equals(a.adjustmentType()) || a.refundedAt() == null) {
+                    continue;
+                }
+                BarBillRecord bill = bills.get(a.billId());
+                if (bill == null || !barId.equals(bill.barId())) {
+                    continue;
+                }
+                if (merchantScope.isPresent() && !merchantScope.get().equals(bill.merchantId())) {
+                    continue;
+                }
+                Instant at = a.refundedAt();
+                if (at.isBefore(from) || !at.isBefore(to)) {
+                    continue;
+                }
+                refund += a.amountCent();
+            }
+            return new BarShiftReconciliationSnapshot(cash, pos, online, refund, tip);
         }
 
         @Override

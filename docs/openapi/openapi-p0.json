@@ -12065,6 +12065,114 @@
           }
         }
       }
+    },
+    "/api/v1/bar/shifts": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarShifts",
+        "summary": "查询收银班次",
+        "x-permission": "bar.shift.manage",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "tablet",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.shift.viewed",
+        "x-audit-event-failure": "bar.shift.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/shifts/open": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "openBarShift",
+        "summary": "开班",
+        "x-permission": "bar.shift.manage",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "tablet",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.shift_opened",
+        "x-audit-event-failure": "bar.shift_open_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarShiftOpenRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/shifts/{shift_id}/close": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "closeBarShift",
+        "summary": "班结对账",
+        "x-permission": "bar.shift.close",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "tablet",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.shift_closed",
+        "x-audit-event-failure": "bar.shift_close_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShiftId",
+            "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarShiftCloseRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -12299,6 +12407,16 @@
           "maxLength": 64
         },
         "description": "ConfigId 路径参数；必须引用当前数据范围内存在的容量配置记录。"
+      },
+      "ShiftId": {
+        "name": "shift_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "description": "ShiftId 路径参数；必须引用当前数据范围内存在且允许访问的收银班次。"
       }
     },
     "requestBodies": {
@@ -13870,6 +13988,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/AmusementProjectSpaceAssignmentRequest"
+            }
+          }
+        }
+      },
+      "BarShiftOpenRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarShiftOpenRequest"
+            }
+          }
+        }
+      },
+      "BarShiftCloseRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarShiftCloseRequest"
             }
           }
         }
@@ -21542,6 +21680,85 @@
             "type": "string",
             "description": "目标空间 ID（spaces.id）；必须存在且属于同一商户，否则拒绝（跨商户禁止）。",
             "maxLength": 64
+          }
+        }
+      },
+      "BarShiftOpenRequest": {
+        "type": "object",
+        "description": "请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省 0）、现金差异复核阈值（cash_diff_threshold_cent，默认 0=任何差异即复核）；同一吧台同一收银员仅允许一个 open 班次。",
+        "additionalProperties": false,
+        "required": [
+          "bar_id",
+          "cashier_user_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复开班/班结或重复入账。",
+            "maxLength": 128
+          },
+          "bar_id": {
+            "type": "string",
+            "description": "开班吧台 ID。",
+            "maxLength": 64
+          },
+          "cashier_user_id": {
+            "type": "string",
+            "description": "本班收银员用户 ID。",
+            "maxLength": 64
+          },
+          "project_id": {
+            "type": "string",
+            "description": "所属项目 ID（可空）。",
+            "maxLength": 64
+          },
+          "opening_cash_cent": {
+            "type": "integer",
+            "description": "备用金，单位分；不得使用浮点数。",
+            "minimum": 0,
+            "maximum": 999999999999
+          },
+          "cash_diff_threshold_cent": {
+            "type": "integer",
+            "description": "现金差异复核阈值，单位分；差异绝对值超此值进复核（默认 0）。",
+            "minimum": 0,
+            "maximum": 999999999999
+          },
+          "note": {
+            "type": "string",
+            "description": "开班备注；进入审计留痕。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "BarShiftCloseRequest": {
+        "type": "object",
+        "description": "请求载荷 `BarShiftCloseRequest`（V095 班结对账）；录入实点现金 declared_cash_cent，可选交接下一班收银员（handover_to_user_id）。系统应收（各支付方式/退款/小费）按班次时间窗口聚合，无需客户端传入；现金差异 = 实点 -（备用金 + 系统现金应收），超阈值进复核。",
+        "additionalProperties": false,
+        "required": [
+          "declared_cash_cent"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复开班/班结或重复入账。",
+            "maxLength": 128
+          },
+          "declared_cash_cent": {
+            "type": "integer",
+            "description": "班结实点现金（含备用金），单位分；不得使用浮点数。",
+            "minimum": 0,
+            "maximum": 999999999999
+          },
+          "handover_to_user_id": {
+            "type": "string",
+            "description": "交接下一班收银员用户 ID（可空）。",
+            "maxLength": 64
+          },
+          "note": {
+            "type": "string",
+            "description": "班结备注；进入审计留痕。",
+            "maxLength": 1000
           }
         }
       }

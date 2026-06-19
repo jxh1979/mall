@@ -142,4 +142,37 @@ public interface BarRepository {
     default List<BarBillSettlementRecord> listBillSettlements(String billId) {
         return List.of();
     }
+
+    // ── V095 交班 / 班结对账 ──────────────────────────────────────────────────
+    /** 保存班次（开班 / 班结）。默认 no-op，JdbcBarRepository 覆盖。 */
+    default BarShiftRecord saveShift(BarShiftRecord shift) {
+        return shift;
+    }
+
+    default Optional<BarShiftRecord> findShiftById(String id) {
+        return Optional.empty();
+    }
+
+    /** 同一吧台同一收银员当前未关闭的班次（防重复开班）。 */
+    default Optional<BarShiftRecord> findOpenShift(String barId, String cashierUserId) {
+        return Optional.empty();
+    }
+
+    default List<BarShiftRecord> listShifts(Optional<String> merchantScope) {
+        return List.of();
+    }
+
+    /**
+     * 班结时按班次时间窗口 [from, to) 聚合本吧台（可选本收银员）的系统应收：
+     * 各支付方式结算流水 / 退款（refunded_at 落窗口）/ 小费（结算账单 tip）。只读聚合，不改账单。
+     */
+    default BarShiftReconciliationSnapshot aggregateShiftReconciliation(
+            String barId,
+            String cashierUserId,
+            java.time.Instant from,
+            java.time.Instant to,
+            Optional<String> merchantScope
+    ) {
+        return BarShiftReconciliationSnapshot.empty();
+    }
 }

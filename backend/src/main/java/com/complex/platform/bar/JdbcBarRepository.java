@@ -222,6 +222,37 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public BarShiftRecord saveShift(BarShiftRecord shift) {
+        return billing.saveShift(shift);
+    }
+
+    @Override
+    public Optional<BarShiftRecord> findShiftById(String id) {
+        return billing.findShiftById(id);
+    }
+
+    @Override
+    public Optional<BarShiftRecord> findOpenShift(String barId, String cashierUserId) {
+        return billing.findOpenShift(barId, cashierUserId);
+    }
+
+    @Override
+    public List<BarShiftRecord> listShifts(Optional<String> merchantScope) {
+        return billing.listShifts(merchantScope);
+    }
+
+    @Override
+    public BarShiftReconciliationSnapshot aggregateShiftReconciliation(
+            String barId,
+            String cashierUserId,
+            java.time.Instant from,
+            java.time.Instant to,
+            Optional<String> merchantScope
+    ) {
+        return billing.aggregateShiftReconciliation(barId, cashierUserId, from, to, merchantScope);
+    }
+
+    @Override
     public Optional<BarBillRecord> findBillById(String id) {
         return billing.findBillById(id);
     }

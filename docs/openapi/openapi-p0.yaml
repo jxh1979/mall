@@ -4223,7 +4223,8 @@ paths:
         - inventory
       operationId: createStockAdjustment
       summary: 盘点差异、报损、报溢
-      description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review 调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
+      description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review
+        调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
       x-permission: inventory.stock.adjust
       x-data-scope: project-warehouse
       x-terminal-allowed:
@@ -5316,12 +5317,9 @@ paths:
         - terminals
       operationId: updateCapabilitySwitch
       summary: 修改端能力开关
-      description: >-
-        后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，
-        覆盖第三方/支付类预留开关，例如 payment.gateway.enabled（支付真实渠道总开关，默认关；
-        关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；
-        开→路由到渠道适配器，当前无真实厂商=占位 NOT_CONFIGURED，留接缝）。
-        支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。
+      description: 后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如
+        payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位
+        NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。
       x-permission: terminal.switch.manage
       x-data-scope: project-device
       x-terminal-allowed:
@@ -8531,7 +8529,7 @@ paths:
           description: TableId 路径参数；必须引用当前数据范围内存在且允许访问的记录。
       requestBody:
         $ref: "#/components/requestBodies/BarTableSpaceAssignmentRequest"
-      responses: &a1
+      responses:
         "200":
           $ref: "#/components/responses/Success"
         "400":
@@ -8558,7 +8556,7 @@ paths:
       x-audit-event-success: bar.table_space_backlog.viewed
       x-audit-event-failure: bar.table_space_backlog.view_failed
       x-auth-context: staff-token
-      responses: &a2
+      responses:
         "200":
           $ref: "#/components/responses/Success"
         "400":
@@ -8586,7 +8584,19 @@ paths:
           description: Id 路径参数；必须引用当前数据范围内存在且允许访问的记录。
       requestBody:
         $ref: "#/components/requestBodies/AmusementProjectSpaceAssignmentRequest"
-      responses: *a1
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/projects/without-space:
     get:
       tags:
@@ -8601,7 +8611,82 @@ paths:
       x-audit-event-success: amusement.project_space_backlog.viewed
       x-audit-event-failure: amusement.project_space_backlog.view_failed
       x-auth-context: staff-token
-      responses: *a2
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/shifts:
+    get:
+      tags:
+        - bar
+      operationId: listBarShifts
+      summary: 查询收银班次
+      x-permission: bar.shift.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.shift.viewed
+      x-audit-event-failure: bar.shift.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/shifts/open:
+    post:
+      tags:
+        - bar
+      operationId: openBarShift
+      summary: 开班
+      x-permission: bar.shift.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.shift_opened
+      x-audit-event-failure: bar.shift_open_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/BarShiftOpenRequest"
+      responses: &a1
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/shifts/{shift_id}/close:
+    post:
+      tags:
+        - bar
+      operationId: closeBarShift
+      summary: 班结对账
+      x-permission: bar.shift.close
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.shift_closed
+      x-audit-event-failure: bar.shift_close_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/ShiftId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarShiftCloseRequest"
+      responses: *a1
 components:
   securitySchemes:
     BearerAuth:
@@ -8788,6 +8873,14 @@ components:
         type: string
         maxLength: 64
       description: ConfigId 路径参数；必须引用当前数据范围内存在的容量配置记录。
+    ShiftId:
+      name: shift_id
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 64
+      description: ShiftId 路径参数；必须引用当前数据范围内存在且允许访问的收银班次。
   requestBodies:
     StatusChange:
       required: true
@@ -9781,6 +9874,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AmusementProjectSpaceAssignmentRequest"
+    BarShiftOpenRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarShiftOpenRequest"
+    BarShiftCloseRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarShiftCloseRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -15780,22 +15885,22 @@ components:
       required:
         - space_id
       properties:
-        idempotency_key: &a3
+        idempotency_key:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复指派或重复入账。
           maxLength: 128
-        operator_note: &a4
+        operator_note:
           type: string
           description: 操作备注；用于解释人工录入/回填判断，进入审计留痕。
           maxLength: 1000
-        evidence_attachment_ids: &a5
+        evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定空间归属说明、审批或现场凭证。
           items:
             type: string
             maxLength: 64
           maxItems: 50
-        space_id: &a6
+        space_id:
           type: string
           description: 目标空间 ID（spaces.id）；必须存在且属于同一商户，否则拒绝（跨商户禁止）。
           maxLength: 64
@@ -15808,10 +15913,87 @@ components:
       required:
         - space_id
       properties:
-        idempotency_key: *a3
-        operator_note: *a4
-        evidence_attachment_ids: *a5
-        space_id: *a6
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复指派或重复入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；用于解释人工录入/回填判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定空间归属说明、审批或现场凭证。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        space_id:
+          type: string
+          description: 目标空间 ID（spaces.id）；必须存在且属于同一商户，否则拒绝（跨商户禁止）。
+          maxLength: 64
+    BarShiftOpenRequest:
+      type: object
+      description: 请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省
+        0）、现金差异复核阈值（cash_diff_threshold_cent，默认 0=任何差异即复核）；同一吧台同一收银员仅允许一个 open 班次。
+      additionalProperties: false
+      required:
+        - bar_id
+        - cashier_user_id
+      properties:
+        idempotency_key: &a2
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复开班/班结或重复入账。
+          maxLength: 128
+        bar_id:
+          type: string
+          description: 开班吧台 ID。
+          maxLength: 64
+        cashier_user_id:
+          type: string
+          description: 本班收银员用户 ID。
+          maxLength: 64
+        project_id:
+          type: string
+          description: 所属项目 ID（可空）。
+          maxLength: 64
+        opening_cash_cent:
+          type: integer
+          description: 备用金，单位分；不得使用浮点数。
+          minimum: 0
+          maximum: 999999999999
+        cash_diff_threshold_cent:
+          type: integer
+          description: 现金差异复核阈值，单位分；差异绝对值超此值进复核（默认 0）。
+          minimum: 0
+          maximum: 999999999999
+        note:
+          type: string
+          description: 开班备注；进入审计留痕。
+          maxLength: 1000
+    BarShiftCloseRequest:
+      type: object
+      description: 请求载荷 `BarShiftCloseRequest`（V095 班结对账）；录入实点现金
+        declared_cash_cent，可选交接下一班收银员（handover_to_user_id）。系统应收（各支付方式/退款/小费）按班次时间窗口聚合，无需客户端传入；现金差异 = 实点 -（备用金 +
+        系统现金应收），超阈值进复核。
+      additionalProperties: false
+      required:
+        - declared_cash_cent
+      properties:
+        idempotency_key: *a2
+        declared_cash_cent:
+          type: integer
+          description: 班结实点现金（含备用金），单位分；不得使用浮点数。
+          minimum: 0
+          maximum: 999999999999
+        handover_to_user_id:
+          type: string
+          description: 交接下一班收银员用户 ID（可空）。
+          maxLength: 64
+        note:
+          type: string
+          description: 班结备注；进入审计留痕。
+          maxLength: 1000
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

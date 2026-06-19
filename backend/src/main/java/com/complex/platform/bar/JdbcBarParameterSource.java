@@ -158,6 +158,34 @@ final class JdbcBarParameterSource {
                 .addValue("settled_at", timestampWithTimeZone(settlement.settledAt()));
     }
 
+    MapSqlParameterSource shiftParameters(BarShiftRecord shift) {
+        return new MapSqlParameterSource()
+                .addValue("id", shift.id())
+                .addValue("project_id", shift.projectId())
+                .addValue("merchant_id", shift.merchantId())
+                .addValue("bar_id", shift.barId())
+                .addValue("cashier_user_id", shift.cashierUserId())
+                .addValue("status", shift.status())
+                .addValue("opened_at", timestampWithTimeZone(shift.openedAt()))
+                .addValue("closed_at", timestampWithTimeZone(shift.closedAt()))
+                .addValue("opening_cash_cent", shift.openingCashCent())
+                .addValue("declared_cash_cent", shift.declaredCashCent())
+                .addValue("system_cash_cent", shift.systemCashCent())
+                .addValue("system_pos_cent", shift.systemPosCent())
+                .addValue("system_online_cent", shift.systemOnlineCent())
+                .addValue("system_refund_cent", shift.systemRefundCent())
+                .addValue("system_tip_cent", shift.systemTipCent())
+                .addValue("cash_diff_cent", shift.cashDiffCent())
+                .addValue("cash_diff_threshold_cent", shift.cashDiffThresholdCent())
+                .addValue("needs_review", shift.needsReview())
+                .addValue("handover_to_user_id", shift.handoverToUserId())
+                .addValue("note", shift.note())
+                .addValue("opened_by_user_id", shift.openedByUserId())
+                .addValue("closed_by_user_id", shift.closedByUserId())
+                .addValue("created_at", timestampWithTimeZone(shift.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(shift.updatedAt()));
+    }
+
     MapSqlParameterSource orderItemParameters(BarOrderItemRecord item) {
         return new MapSqlParameterSource()
                 .addValue("id", item.id())

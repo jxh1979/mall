@@ -976,6 +976,69 @@
       "column": "gateway_status",
       "expected": "present",
       "note": "V093 支付真实渠道预留（2026-06-19）：渠道交互状态 RESERVED/NOT_CONFIGURED/SUCCEEDED/PENDING/FAILED"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "cashier_user_id",
+      "expected": "present",
+      "note": "V095 交班/班结对账（PRD §10.1，2026-06-19 落代码+迁移）：按收银员/吧台的收银班次"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "opening_cash_cent",
+      "expected": "present",
+      "note": "V095：开班备用金"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "declared_cash_cent",
+      "expected": "present",
+      "note": "V095：班结实点现金（含备用金）"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "system_cash_cent",
+      "expected": "present",
+      "note": "V095：班次内系统现金应收快照（settle_channel=cash 窗口聚合）"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "system_pos_cent",
+      "expected": "present",
+      "note": "V095：班次内系统 POS 应收快照"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "system_online_cent",
+      "expected": "present",
+      "note": "V095：班次内系统扫码/聚合/转账应收快照"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "system_refund_cent",
+      "expected": "present",
+      "note": "V095：班次内退款快照（refunded_at 落窗口）"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "system_tip_cent",
+      "expected": "present",
+      "note": "V095：班次内小费快照（结算账单 tip，代收口径）"
+    },
+    {
+      "req": "REQ-10.1-shift-handover",
+      "table": "bar_shifts",
+      "column": "cash_diff_cent",
+      "expected": "present",
+      "note": "V095：现金差异 = 实点 -（备用金 + 系统现金应收）；超阈值标记 needs_review 进复核"
     }
   ]
 }

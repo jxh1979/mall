@@ -14,6 +14,7 @@ public class BarService {
     private final BarRepository repository;
     private final BarOperationExecutor operations;
     private final BarBillingService billingService;
+    private final BarShiftService shiftService;
     private final BarTableSessionService tableSessionService;
     private final BarOrderService orderService;
     private final BarEntryService entryService;
@@ -24,6 +25,7 @@ public class BarService {
             BarRepository repository,
             BarOperationExecutor operations,
             BarBillingService billingService,
+            BarShiftService shiftService,
             BarTableSessionService tableSessionService,
             BarOrderService orderService,
             BarEntryService entryService,
@@ -33,6 +35,7 @@ public class BarService {
         this.repository = repository;
         this.operations = operations;
         this.billingService = billingService;
+        this.shiftService = shiftService;
         this.tableSessionService = tableSessionService;
         this.orderService = orderService;
         this.entryService = entryService;
@@ -508,6 +511,41 @@ public class BarService {
                 BarCommissionCalculationRecord.class,
                 BarWriteOperation.CALCULATE_COMMISSION,
                 () -> billingService.calculateCommission(id, request)
+        );
+    }
+
+    // ── V095 交班 / 班结对账 ──────────────────────────────────────────────────
+    public PageResponse<BarShiftRecord> listShifts() {
+        return operations.readPage(
+                BarReadOperation.LIST_SHIFTS,
+                () -> repository.listShifts(authorizationService.currentMerchantScope())
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.shift.manage")
+    @Transactional
+    public BarShiftRecord openShift(BarShiftOpenRequest request) {
+        return operations.executeWrite(
+                "openBarShift",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarShiftRecord.class,
+                BarWriteOperation.OPEN_SHIFT,
+                () -> shiftService.openShift(request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.shift.close", admissionAction = "bar.shift_close", objectType = "bar_shift")
+    @Transactional
+    public BarShiftRecord closeShift(String shiftId, BarShiftCloseRequest request) {
+        String id = operations.requireText(shiftId, "shift_id");
+        return operations.executeWrite(
+                "closeBarShift:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarShiftRecord.class,
+                BarWriteOperation.CLOSE_SHIFT,
+                () -> shiftService.closeShift(id, request)
         );
     }
 }

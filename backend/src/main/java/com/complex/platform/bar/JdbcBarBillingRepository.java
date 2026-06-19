@@ -1,8 +1,12 @@
 package com.complex.platform.bar;
+import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 final class JdbcBarBillingRepository {
@@ -171,6 +175,123 @@ final class JdbcBarBillingRepository {
                  WHERE primary_bill_id = :bill_id OR secondary_bill_id = :bill_id OR generated_bill_id = :bill_id
                  ORDER BY created_at, id
                 """, Map.of("bill_id", billId), rowMapper::mapBillOperation);
+    }
+
+    // ── V095 交班 / 班结对账 ──────────────────────────────────────────────────
+    public BarShiftRecord saveShift(BarShiftRecord shift) {
+        jdbcTemplate.update("""
+                INSERT INTO bar_shifts (
+                    id, project_id, merchant_id, bar_id, cashier_user_id, status,
+                    opened_at, closed_at, opening_cash_cent, declared_cash_cent,
+                    system_cash_cent, system_pos_cent, system_online_cent, system_refund_cent, system_tip_cent,
+                    cash_diff_cent, cash_diff_threshold_cent, needs_review, handover_to_user_id, note,
+                    opened_by_user_id, closed_by_user_id, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :merchant_id, :bar_id, :cashier_user_id, :status,
+                    :opened_at, :closed_at, :opening_cash_cent, :declared_cash_cent,
+                    :system_cash_cent, :system_pos_cent, :system_online_cent, :system_refund_cent, :system_tip_cent,
+                    :cash_diff_cent, :cash_diff_threshold_cent, :needs_review, :handover_to_user_id, :note,
+                    :opened_by_user_id, :closed_by_user_id, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    closed_at = EXCLUDED.closed_at,
+                    declared_cash_cent = EXCLUDED.declared_cash_cent,
+                    system_cash_cent = EXCLUDED.system_cash_cent,
+                    system_pos_cent = EXCLUDED.system_pos_cent,
+                    system_online_cent = EXCLUDED.system_online_cent,
+                    system_refund_cent = EXCLUDED.system_refund_cent,
+                    system_tip_cent = EXCLUDED.system_tip_cent,
+                    cash_diff_cent = EXCLUDED.cash_diff_cent,
+                    cash_diff_threshold_cent = EXCLUDED.cash_diff_threshold_cent,
+                    needs_review = EXCLUDED.needs_review,
+                    handover_to_user_id = EXCLUDED.handover_to_user_id,
+                    note = EXCLUDED.note,
+                    closed_by_user_id = EXCLUDED.closed_by_user_id,
+                    updated_at = EXCLUDED.updated_at
+                """, parameterSource.shiftParameters(shift));
+        return shift;
+    }
+
+    public Optional<BarShiftRecord> findShiftById(String id) {
+        return jdbcTemplate.query("SELECT * FROM bar_shifts WHERE id = :id",
+                Map.of("id", id), rowMapper::mapShift).stream().findFirst();
+    }
+
+    public Optional<BarShiftRecord> findOpenShift(String barId, String cashierUserId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM bar_shifts
+                 WHERE bar_id = :bar_id AND cashier_user_id = :cashier_user_id AND status = 'open'
+                 ORDER BY opened_at DESC
+                 LIMIT 1
+                """, Map.of("bar_id", barId, "cashier_user_id", cashierUserId), rowMapper::mapShift)
+                .stream().findFirst();
+    }
+
+    public List<BarShiftRecord> listShifts(Optional<String> merchantScope) {
+        if (merchantScope.isPresent()) {
+            return jdbcTemplate.query("""
+                    SELECT * FROM bar_shifts WHERE merchant_id = :merchant_id ORDER BY opened_at DESC, id
+                    """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapShift);
+        }
+        return jdbcTemplate.query("SELECT * FROM bar_shifts ORDER BY opened_at DESC, id", Map.of(), rowMapper::mapShift);
+    }
+
+    public BarShiftReconciliationSnapshot aggregateShiftReconciliation(
+            String barId,
+            String cashierUserId,
+            Instant from,
+            Instant to,
+            Optional<String> merchantScope
+    ) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("bar_id", barId)
+                .addValue("cashier_user_id", cashierUserId)
+                .addValue("from_ts", timestampWithTimeZone(from))
+                .addValue("to_ts", timestampWithTimeZone(to))
+                .addValue("merchant_id", merchantScope.orElse(null));
+        String merchantFilter = merchantScope.isPresent() ? " AND b.merchant_id = :merchant_id" : "";
+        // 各支付方式应收：本吧台 + 本收银员 + settled_at 落窗口的结算流水，按 settle_channel 归并。
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                SELECT
+                  COALESCE(SUM(CASE WHEN s.settle_channel = 'cash' THEN s.settlement_amount_cent ELSE 0 END), 0) AS cash_cent,
+                  COALESCE(SUM(CASE WHEN s.settle_channel = 'pos' THEN s.settlement_amount_cent ELSE 0 END), 0) AS pos_cent,
+                  COALESCE(SUM(CASE WHEN s.settle_channel IN ('aggregate_pay', 'bank_transfer', 'other')
+                                    THEN s.settlement_amount_cent ELSE 0 END), 0) AS online_cent
+                  FROM bar_bill_settlements s
+                  JOIN bar_bills b ON b.id = s.bill_id
+                 WHERE b.bar_id = :bar_id
+                   AND s.cashier_staff_id = :cashier_user_id
+                   AND s.settled_at >= :from_ts AND s.settled_at < :to_ts""" + merchantFilter,
+                new HashMap<>(params.getValues()));
+        long cash = ((Number) row.get("cash_cent")).longValue();
+        long pos = ((Number) row.get("pos_cent")).longValue();
+        long online = ((Number) row.get("online_cent")).longValue();
+        // 退款：本吧台 + refunded_at 落窗口的 refund 调整额。
+        Long refund = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(a.amount_cent), 0)
+                  FROM bar_bill_adjustments a
+                  JOIN bar_bills b ON b.id = a.bill_id
+                 WHERE b.bar_id = :bar_id
+                   AND a.adjustment_type = 'refund'
+                   AND a.refunded_at >= :from_ts AND a.refunded_at < :to_ts""" + merchantFilter,
+                new HashMap<>(params.getValues()), Long.class);
+        // 小费：本吧台 + 本收银员窗口内结算账单的 tip（代收，不计低消/提成基数）。
+        Long tip = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(b.tip_amount_cent), 0)
+                  FROM bar_bills b
+                 WHERE b.bar_id = :bar_id
+                   AND b.tip_amount_cent > 0
+                   AND EXISTS (
+                       SELECT 1 FROM bar_bill_settlements s
+                        WHERE s.bill_id = b.id
+                          AND s.cashier_staff_id = :cashier_user_id
+                          AND s.settled_at >= :from_ts AND s.settled_at < :to_ts
+                   )""" + merchantFilter,
+                new HashMap<>(params.getValues()), Long.class);
+        return new BarShiftReconciliationSnapshot(cash, pos, online,
+                refund == null ? 0L : refund, tip == null ? 0L : tip);
     }
 
     public BarCommissionCalculationRecord saveCommissionCalculation(BarCommissionCalculationRecord calculation) {

@@ -31,7 +31,9 @@ enum BarWriteOperation implements AuditedOperation {
     VOID_ORDER_ITEM("bar.order_item_voided", "bar.order_item_void_failed", "bar.order_item.void", "bar_order_item"),
     REOPEN_BILL("bar.bill_reopened", "bar.bill_reopen_failed", "bar.bill.reopen", "bar_bill"),
     MARK_PRODUCT_SOLD_OUT("bar.product_sold_out", "bar.product_sold_out_failed", "bar.product.sold_out", "bar_product"),
-    ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill");
+    ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill"),
+    OPEN_SHIFT("bar.shift_opened", "bar.shift_open_failed", "bar.shift.manage", "bar_shift"),
+    CLOSE_SHIFT("bar.shift_closed", "bar.shift_close_failed", "bar.shift.close", "bar_shift");
 
     private final String successEvent;
     private final String failureEvent;

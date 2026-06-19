@@ -166,6 +166,29 @@ public class BarController {
         return ApiResponse.ok(service.addBillTip(billId, request));
     }
 
+    @GetMapping("/shifts")
+    public ApiResponse<PageResponse<BarShiftRecord>> listShifts() {
+        authorizationService.requirePermission("bar.shift.manage");
+        return ApiResponse.ok(service.listShifts());
+    }
+
+    @PostMapping("/shifts/open")
+    public ApiResponse<BarShiftRecord> openShift(@RequestBody(required = false) BarShiftOpenRequest request) {
+        authorizationService.requirePermission("bar.shift.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.openShift(request));
+    }
+
+    @PostMapping("/shifts/{shift_id}/close")
+    public ApiResponse<BarShiftRecord> closeShift(
+            @PathVariable("shift_id") String shiftId,
+            @RequestBody(required = false) BarShiftCloseRequest request
+    ) {
+        authorizationService.requirePermission("bar.shift.close");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.closeShift(shiftId, request));
+    }
+
     @PostMapping("/products/{product_id}/sold-out")
     public ApiResponse<BarProductRecord> markProductSoldOut(
             @PathVariable("product_id") String productId,

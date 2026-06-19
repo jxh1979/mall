@@ -98,6 +98,38 @@ final class JdbcBarRowMapper {
                 nullableInstant(resultSet, "settled_at"));
     }
 
+    BarShiftRecord mapShift(ResultSet resultSet, int rowNumber) throws SQLException {
+        Long declaredCash = resultSet.getObject("declared_cash_cent") == null
+                ? null : resultSet.getLong("declared_cash_cent");
+        Long cashDiff = resultSet.getObject("cash_diff_cent") == null
+                ? null : resultSet.getLong("cash_diff_cent");
+        return new BarShiftRecord(
+                resultSet.getString("id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("bar_id"),
+                resultSet.getString("cashier_user_id"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "opened_at"),
+                nullableInstant(resultSet, "closed_at"),
+                resultSet.getLong("opening_cash_cent"),
+                declaredCash,
+                resultSet.getLong("system_cash_cent"),
+                resultSet.getLong("system_pos_cent"),
+                resultSet.getLong("system_online_cent"),
+                resultSet.getLong("system_refund_cent"),
+                resultSet.getLong("system_tip_cent"),
+                cashDiff,
+                resultSet.getLong("cash_diff_threshold_cent"),
+                resultSet.getBoolean("needs_review"),
+                resultSet.getString("handover_to_user_id"),
+                resultSet.getString("note"),
+                resultSet.getString("opened_by_user_id"),
+                resultSet.getString("closed_by_user_id"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at"));
+    }
+
     BarProductRecord mapProduct(ResultSet resultSet, int rowNumber) throws SQLException {
         return new BarProductRecord(
                 resultSet.getString("id"),
