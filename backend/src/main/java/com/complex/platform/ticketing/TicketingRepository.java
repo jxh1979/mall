@@ -58,6 +58,8 @@ public interface TicketingRepository {
 
     TicketOrderRecord updateTicketOrder(TicketOrderRecord order);
 
+    List<TicketOrderRecord> listTicketOrders();
+
     List<TicketOrderRecord> listTicketOrdersByCustomerId(String customerId);
 
     TicketPaymentIntentRecord saveTicketPaymentIntent(TicketPaymentIntentRecord intent);

@@ -12,10 +12,7 @@ export function OpsReadinessPage({ api, setActionResult, setGlobalError }: Admin
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [items] = await Promise.all([
-        api.get<ReadinessItemRow[]>("/api/v1/ops/production-readiness/items"),
-        api.get("/api/v1/ops/production-readiness/checks"),
-      ]);
+      const items = await api.get<ReadinessItemRow[]>("/api/v1/ops/production-readiness/items");
       setRows(items);
     },
     { onError: setGlobalError, fallbackMessage: "生产证据读取失败" },

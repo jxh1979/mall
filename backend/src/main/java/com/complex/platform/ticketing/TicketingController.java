@@ -147,6 +147,12 @@ public class TicketingController {
         return ApiResponse.ok(service.listIssuedEntitlements());
     }
 
+    @GetMapping("/ticketing/orders")
+    public ApiResponse<PageResponse<TicketOrderRecord>> listTicketOrders() {
+        authorizationService.requirePermission("ticket.order.read");
+        return ApiResponse.ok(service.listTicketOrders());
+    }
+
     @PostMapping("/ticketing/orders")
     public ApiResponse<TicketOrderRecord> createTicketOrder(@RequestBody TicketOrderRequest request) {
         authorizationService.requirePermission("ticket.order.create");

@@ -248,6 +248,13 @@ public class TicketingService {
         );
     }
 
+    public PageResponse<TicketOrderRecord> listTicketOrders() {
+        return operations.readPage(
+                TicketingReadOperation.LIST_TICKET_ORDERS,
+                repository::listTicketOrders
+        );
+    }
+
     public List<TicketOrderRecord> listTicketOrdersByCustomerId(String customerId) {
         return repository.listTicketOrdersByCustomerId(operations.requireText(customerId, "customer_id"));
     }

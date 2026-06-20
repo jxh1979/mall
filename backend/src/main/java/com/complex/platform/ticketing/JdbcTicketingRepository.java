@@ -469,6 +469,11 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public List<TicketOrderRecord> listTicketOrders() {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + " ORDER BY created_at DESC, id", rowMapper::mapTicketOrder);
+    }
+
+    @Override
     public List<TicketOrderRecord> listTicketOrdersByCustomerId(String customerId) {
         return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + """
                  WHERE customer_id = :customer_id
