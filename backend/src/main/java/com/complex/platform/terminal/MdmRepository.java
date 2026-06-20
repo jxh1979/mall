@@ -48,8 +48,14 @@ public interface MdmRepository {
 
     Optional<MdmPolicyViolationRecord> findViolationById(String id);
 
-    /** P0#9 处置闭环：置 handled=true 并落处置类型/封禁时间/处置备注。 */
-    void markViolationHandled(
+    /**
+     * P0#9 处置闭环：置 handled=true 并落处置类型/封禁时间/处置备注。
+     * <p>P2 并发缺口②修复：条件 UPDATE 仅在 {@code handled = FALSE} 时生效
+     * （{@code WHERE id=:id AND handled = FALSE}），返回受影响行数：
+     * 1=本次处置成功；0=已被并发处置过（不同 idempotencyKey 重入）→调用方判"已处置"冲突，
+     * 避免重复 block/撤凭证。
+     */
+    int markViolationHandled(
             String id,
             String disposition,
             String handledNote,

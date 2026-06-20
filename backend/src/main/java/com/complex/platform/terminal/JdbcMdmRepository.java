@@ -219,14 +219,18 @@ class JdbcMdmRepository implements MdmRepository {
     }
 
     @Override
-    public void markViolationHandled(String id, String disposition, String handledNote, Instant blockedAt) {
-        jdbcTemplate.update("""
+    public int markViolationHandled(String id, String disposition, String handledNote, Instant blockedAt) {
+        // P2 并发缺口②修复：条件 UPDATE 加 AND handled = FALSE。
+        // 不同 idempotencyKey 并发重入时，只有第一笔命中 handled=FALSE 行（受影响 1 行），
+        // 后续受影响 0 行 → 调用方判"已处置"冲突，避免重复 block/撤凭证。
+        return jdbcTemplate.update("""
                 UPDATE mdm_policy_violations
                    SET handled = TRUE,
                        disposition = :disposition,
                        handled_note = :handled_note,
                        blocked_at = :blocked_at
                  WHERE id = :id
+                   AND handled = FALSE
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("disposition", disposition)

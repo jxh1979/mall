@@ -17,6 +17,14 @@ public interface MerchantServiceRepository {
 
     MerchantWorkOrderRecord saveWorkOrder(MerchantWorkOrderRecord record);
 
+    /**
+     * SLA 条件升级（并发幂等护栏）：仅当该工单 escalated_at IS NULL 时，原子地打标
+     * sla_breached=true、escalated_at=now、updated_at=now，并返回受影响行数（1 表示本调用赢得升级，
+     * 0 表示已被其它并发事务（定时 vs 手动触发）抢先升级，应跳过留痕避免双重升级/双留痕）。
+     * 不改变 status（升级是横切标记，非状态迁移）。
+     */
+    int markSlaBreachedIfNotEscalated(String id, java.time.Instant now);
+
     MerchantWorkOrderActionRecord saveAction(MerchantWorkOrderActionRecord record);
 
     List<MerchantWorkOrderActionRecord> findActionsByWorkOrderId(String workOrderId);

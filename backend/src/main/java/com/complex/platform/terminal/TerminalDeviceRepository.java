@@ -8,6 +8,16 @@ public interface TerminalDeviceRepository {
 
     TerminalDeviceRecord save(TerminalDeviceRecord device);
 
+    /**
+     * P2 并发缺口①修复：设备状态机条件流转（乐观并发保护）。
+     * 仅当当前行 {@code status = expectedFrom} 时，才把整行更新为 {@code updated}，
+     * 实现为条件 UPDATE {@code WHERE id=:id AND status=:expectedFrom}。
+     * 返回受影响行数：1=流转成功；0=前态不符（被并发改过/非法前态/行不存在）→调用方判冲突。
+     * <p>与无条件 {@link #save}（device_id upsert，用于绑定/复用）互补：本方法用于"必须基于已读前态"
+     * 的生命周期流转，按受影响行数杜绝并发丢更新/非法状态跃迁，并保持终态不可逆语义。
+     */
+    int compareAndSetStatus(String id, String expectedFrom, TerminalDeviceRecord updated);
+
     Optional<TerminalDeviceRecord> findByDeviceCode(String deviceCode);
 
     Optional<TerminalDeviceRecord> findById(String id);

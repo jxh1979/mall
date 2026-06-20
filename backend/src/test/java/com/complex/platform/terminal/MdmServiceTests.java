@@ -254,6 +254,44 @@ class MdmServiceTests {
     }
 
     @Test
+    void markViolationHandledReturnsZeroRowsWhenAlreadyHandled() {
+        // P2 并发缺口②红线：条件 UPDATE（AND handled=FALSE）对已处置 violation 返回 0 行。
+        // 复现"不同 idempotencyKey 并发重入"——第二笔即使绕过 Service 的 existing.handled() 串行校验，
+        // 也会因条件 UPDATE 命中 0 行被兜底拒绝，避免重复 block/撤凭证。
+        MdmPolicyViolationRecord saved = service.reportPolicyViolation(new MdmPolicyViolationRequest(
+                "vio-cas", "note", List.of(), "device_cas", "other", "x"));
+
+        int first = mdmRepository.markViolationHandled(saved.id(), "dismissed", "first", null);
+        int second = mdmRepository.markViolationHandled(saved.id(), "acknowledged", "second", null);
+
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+        // 仅第一笔处置生效：disposition 仍为首笔，未被第二笔覆盖。
+        assertThat(mdmRepository.findViolationById(saved.id()))
+                .get()
+                .extracting(MdmPolicyViolationRecord::disposition)
+                .isEqualTo("dismissed");
+    }
+
+    @Test
+    void handleViolationDeviceBlockedTwiceDoesNotRepeatBlock() {
+        // device_blocked 处置后二次重入：第二笔被条件 UPDATE 行数兜底拒绝，不再重复 block/撤凭证。
+        mdmRepository.management.put("device_2x", new MdmDeviceManagementRecord(
+                "device_2x", "staff_work_phone", "bound", "violation", "failed", Instant.now(), Instant.now()));
+        MdmPolicyViolationRecord saved = service.reportPolicyViolation(new MdmPolicyViolationRequest(
+                "vio-2x", "note", List.of(), "device_2x", "root_detected", "root"));
+
+        service.handleViolation(saved.id(), "device_blocked", "first", "handle-2x-a");
+
+        assertThatThrownBy(() -> service.handleViolation(saved.id(), "device_blocked", "second", "handle-2x-b"))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VIOLATION_ALREADY_HANDLED");
+        // 设备仍为 blocked（首笔结果），第二笔未重复联动。
+        assertThat(mdmRepository.management.get("device_2x").managementStatus()).isEqualTo("blocked");
+    }
+
+    @Test
     void mdmEnabledHardBlocksLostDeviceRegardlessOfManaged() {
         terminalRepository.setMdmEnabled(false);
         mdmRepository.management.put("device_lost", new MdmDeviceManagementRecord(
@@ -356,16 +394,22 @@ class MdmServiceTests {
         }
 
         @Override
-        public void markViolationHandled(String id, String disposition, String handledNote, Instant blockedAt) {
+        public int markViolationHandled(String id, String disposition, String handledNote, Instant blockedAt) {
             for (int i = 0; i < violations.size(); i++) {
                 MdmPolicyViolationRecord v = violations.get(i);
                 if (v.id().equals(id)) {
+                    // 条件 UPDATE 语义：仅当 handled=FALSE 才生效（受影响 1 行）；
+                    // 已处置（handled=true）则受影响 0 行，复现并发重复处置被拒。
+                    if (v.handled()) {
+                        return 0;
+                    }
                     violations.set(i, new MdmPolicyViolationRecord(
                             v.id(), v.deviceId(), v.violationType(), v.detail(), v.occurredAt(),
                             true, handledNote, disposition, blockedAt, v.createdAt()));
-                    return;
+                    return 1;
                 }
             }
+            return 0;
         }
 
         @Override
@@ -393,6 +437,11 @@ class MdmServiceTests {
 
         @Override
         public TerminalDeviceRecord save(TerminalDeviceRecord device) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int compareAndSetStatus(String id, String expectedFrom, TerminalDeviceRecord updated) {
             throw new UnsupportedOperationException();
         }
 

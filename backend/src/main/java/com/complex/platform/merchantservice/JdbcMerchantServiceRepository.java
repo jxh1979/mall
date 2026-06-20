@@ -79,7 +79,23 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                    AND status NOT IN ('resolved', 'closed', 'cancelled')
                  ORDER BY due_at ASC, id
                  LIMIT :limit
+                 FOR UPDATE SKIP LOCKED
                 """, Map.of("now", timestampWithTimeZone(now), "limit", limit), this::mapWorkOrder);
+    }
+
+    @Override
+    public int markSlaBreachedIfNotEscalated(String id, Instant now) {
+        // 条件 UPDATE 幂等护栏：仅当 escalated_at IS NULL 才打标，返回受影响行数（0 表示已被并发抢先）。
+        return jdbcTemplate.update("""
+                UPDATE merchant_service_work_orders
+                   SET sla_breached = true,
+                       escalated_at = :now,
+                       updated_at = :now
+                 WHERE id = :id
+                   AND escalated_at IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", timestampWithTimeZone(now)));
     }
 
     @Override

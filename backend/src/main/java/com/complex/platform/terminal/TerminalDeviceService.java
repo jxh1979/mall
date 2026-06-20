@@ -202,7 +202,16 @@ public class TerminalDeviceService {
                 existing.createdAt(),
                 now
         );
-        TerminalDeviceRecord saved = repository.save(updated);
+        // P2 并发缺口①修复：状态流转改条件 UPDATE（WHERE id AND status=:expectedFrom），
+        // 按受影响行数判冲突。上面的前态校验给出清晰错误码（INVALID/TERMINAL_STATUS）；
+        // 此处的行数==0 兜住"读后被并发改过"的真并发窗口（如 found 与 scrap 同时），
+        // 受影响 0 行即抛冲突，保证仅一个流转成功、终态不可逆。
+        int affected = repository.compareAndSetStatus(existing.id(), existing.status(), updated);
+        if (affected == 0) {
+            throw ApiException.conflict("DEVICE_TRANSITION_CONFLICT",
+                    "device status changed concurrently; transition to " + targetStatus + " rejected");
+        }
+        TerminalDeviceRecord saved = updated;
         // 挂失/报废/封禁：撤销 kiosk 凭证（设备被踢出）。
         if (NON_OPERATIONAL_STATUSES.contains(targetStatus) && !"repair".equals(targetStatus)) {
             revokeDeviceCredential(saved.deviceId(), now);

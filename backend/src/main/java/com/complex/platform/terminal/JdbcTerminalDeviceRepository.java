@@ -69,6 +69,39 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     }
 
     @Override
+    public int compareAndSetStatus(String id, String expectedFrom, TerminalDeviceRecord updated) {
+        // P2 并发缺口①修复：条件 UPDATE，仅当当前 status = :expected_from 时整行更新。
+        // WHERE id=:id AND status=:expected_from 提供乐观并发保护：
+        // 并发流转（如 found 与 scrap 同时）只有一个 UPDATE 命中前态，另一个受影响 0 行被判冲突，
+        // 杜绝 ON CONFLICT DO UPDATE 的盲写丢更新；终态（scrapped/blocked）因前态不再匹配天然不可逆。
+        MapSqlParameterSource params = deviceParameters(updated)
+                .addValue("expected_from", expectedFrom);
+        return jdbcTemplate.update("""
+                UPDATE terminal_devices SET
+                    device_code = :device_code,
+                    terminal_type = :terminal_type,
+                    binding_scope = :binding_scope,
+                    bound_space_id = :bound_space_id,
+                    mdm_device_ref = :mdm_device_ref,
+                    kiosk_mode = :kiosk_mode,
+                    merchant_id = :merchant_id,
+                    venue_id = :venue_id,
+                    area_id = :area_id,
+                    location_point_id = :location_point_id,
+                    staff_id = :staff_id,
+                    status = :status,
+                    bound_at = :bound_at,
+                    returned_at = :returned_at,
+                    unbound_at = :unbound_at,
+                    return_reason = :return_reason,
+                    unbind_reason = :unbind_reason,
+                    updated_at = :updated_at
+                 WHERE id = :id
+                   AND status = :expected_from
+                """, params);
+    }
+
+    @Override
     public Optional<TerminalDeviceRecord> findByDeviceCode(String deviceCode) {
         return jdbcTemplate.query("""
                 SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,

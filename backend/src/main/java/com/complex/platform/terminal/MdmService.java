@@ -398,7 +398,14 @@ public class MdmService {
                     }
                     Instant now = Instant.now();
                     Instant blockedAt = "device_blocked".equals(chosen) ? now : null;
-                    mdmRepository.markViolationHandled(id, chosen, trimToNull(handledNote), blockedAt);
+                    // P2 并发缺口②修复：markViolationHandled 为条件 UPDATE（AND handled=FALSE），
+                    // 受影响行数==1 才算本次处置成功。上面的 existing.handled() 校验给清晰错误码；
+                    // 此处的行数==0 兜住"读后被并发处置"的真并发窗口（不同 idempotencyKey 重入），
+                    // 杜绝重复 block/撤凭证——只有夺得该行的那一笔才会执行后续封禁联动。
+                    int affected = mdmRepository.markViolationHandled(id, chosen, trimToNull(handledNote), blockedAt);
+                    if (affected == 0) {
+                        throw ApiException.conflict("VIOLATION_ALREADY_HANDLED", "violation is already handled");
+                    }
                     if ("device_blocked".equals(chosen)) {
                         blockDeviceAndRevokeCredential(existing.deviceId(), now);
                     }

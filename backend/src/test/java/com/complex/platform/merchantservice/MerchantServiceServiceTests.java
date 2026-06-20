@@ -575,6 +575,106 @@ class MerchantServiceServiceTests {
         assertThat(repository.findActionsByWorkOrderId("mswo_overdue")).hasSize(1);
     }
 
+    // ── P3 并发护栏：定时任务与手动触发并发双扫同一 overdue 工单，只能升级一次 ───────
+    //
+    // 缺口复现：读已提交隔离下，两个事务可在对方提交前各自读到同一行 escalated_at IS NULL，
+    // 若升级走无条件 UPDATE 则会双重升级（escalated_at 被设两次、两条 escalated 留痕、
+    // 两次 sla_breached 审计）。修复后升级走条件 UPDATE WHERE escalated_at IS NULL，
+    // 受影响行数==1 才算升级，第二个事务行数==0 → 跳过留痕/审计，幂等防双升级。
+    @Test
+    void concurrentEscalationOfSameWorkOrderEscalatesOnlyOnce() {
+        Instant now = Instant.parse("2026-06-19T00:00:00Z");
+        // 用一个会“重复返回同一未升级行”的 repo 模拟两个并发事务各自的扫描快照都命中该行。
+        ConcurrentSnapshotRepository concurrentRepo = new ConcurrentSnapshotRepository();
+        concurrentRepo.saveWorkOrder(overdueRecord("mswo_race", "processing",
+                Instant.parse("2026-06-18T00:00:00Z")));
+        MerchantServiceService racingService = new MerchantServiceService(
+                concurrentRepo,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                authorizationService
+        );
+
+        // 第一次触发（定时）：拿到快照、条件 UPDATE 行数 1 → 升级。
+        assertThat(racingService.escalateOverdueWorkOrders(now)).isEqualTo(1);
+        // 第二次触发（手动）：扫描快照仍含该行（模拟并发未见对方提交），
+        // 但条件 UPDATE 行数 0 → 不再升级、不再留痕、不再审计。
+        assertThat(racingService.escalateOverdueWorkOrders(now)).isEqualTo(0);
+
+        MerchantWorkOrderRecord escalated = concurrentRepo.workOrders.get("mswo_race");
+        assertThat(escalated.slaBreached()).isTrue();
+        assertThat(escalated.escalatedAt()).isEqualTo(now); // 只设一次
+        // escalated 留痕只有一条（防双留痕）
+        assertThat(concurrentRepo.findActionsByWorkOrderId("mswo_race"))
+                .filteredOn(a -> "escalated".equals(a.actionType()))
+                .hasSize(1);
+        // 升级审计事件只发一次
+        assertThat(auditEventRepository.events)
+                .filteredOn(e -> "merchant_service.work_order.escalated".equals(e.eventName()))
+                .hasSize(1);
+    }
+
+    /**
+     * 并发快照模拟 repo：findOverdueOpenWorkOrders 不按 escalated_at 过滤，
+     * 每次都把库内所有 overdue 行原样返回（模拟两个并发事务的扫描快照都在对方提交前命中同一行），
+     * 但 markSlaBreachedIfNotEscalated 保持条件 UPDATE 的原子语义（escalated_at 非空则返回 0）。
+     * 用以验证 service 仅依据条件 UPDATE 行数判定升级，而非依赖读端过滤。
+     */
+    private static final class ConcurrentSnapshotRepository implements MerchantServiceRepository {
+        private final Map<String, MerchantWorkOrderRecord> workOrders = new LinkedHashMap<>();
+        private final List<MerchantWorkOrderActionRecord> actions = new ArrayList<>();
+
+        @Override
+        public List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, int limit) {
+            return List.copyOf(workOrders.values());
+        }
+
+        @Override
+        public Optional<MerchantWorkOrderRecord> findWorkOrderById(String id) {
+            return Optional.ofNullable(workOrders.get(id));
+        }
+
+        @Override
+        public List<MerchantWorkOrderRecord> findOverdueOpenWorkOrders(Instant now, int limit) {
+            // 故意不过滤 escalated_at：模拟并发事务在对方提交前拿到的旧快照仍含该行。
+            java.util.Set<String> doneStatuses = java.util.Set.of("resolved", "closed", "cancelled");
+            return workOrders.values().stream()
+                    .filter(r -> r.dueAt() != null && !r.dueAt().isAfter(now))
+                    .filter(r -> !doneStatuses.contains(r.status()))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public MerchantWorkOrderRecord saveWorkOrder(MerchantWorkOrderRecord record) {
+            workOrders.put(record.id(), record);
+            return record;
+        }
+
+        @Override
+        public int markSlaBreachedIfNotEscalated(String id, Instant now) {
+            MerchantWorkOrderRecord current = workOrders.get(id);
+            if (current == null || current.escalatedAt() != null) {
+                return 0;
+            }
+            workOrders.put(id, current.markSlaBreached(now));
+            return 1;
+        }
+
+        @Override
+        public MerchantWorkOrderActionRecord saveAction(MerchantWorkOrderActionRecord record) {
+            actions.add(record);
+            return record;
+        }
+
+        @Override
+        public List<MerchantWorkOrderActionRecord> findActionsByWorkOrderId(String workOrderId) {
+            return actions.stream()
+                    .filter(action -> action.workOrderId().equals(workOrderId))
+                    .toList();
+        }
+    }
+
     private MerchantWorkOrderRecord overdueRecord(String id, String status, Instant dueAt) {
         Instant created = Instant.parse("2026-06-14T00:00:00Z");
         return new MerchantWorkOrderRecord(
@@ -661,6 +761,19 @@ class MerchantServiceServiceTests {
             workOrders.put(record.id(), record);
             saveCount++;
             return record;
+        }
+
+        @Override
+        public int markSlaBreachedIfNotEscalated(String id, Instant now) {
+            // 模拟 PostgreSQL 条件 UPDATE ... WHERE escalated_at IS NULL 的原子语义：
+            // 仅当当前持久行 escalated_at 仍为空才升级并返回 1，否则返回 0（已被并发抢先）。
+            MerchantWorkOrderRecord current = workOrders.get(id);
+            if (current == null || current.escalatedAt() != null) {
+                return 0;
+            }
+            workOrders.put(id, current.markSlaBreached(now));
+            saveCount++;
+            return 1;
         }
 
         @Override

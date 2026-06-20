@@ -52,6 +52,9 @@ const INFRA_TABLE_WHITELIST = new Set(["flyway_schema_history"]);
 const SQL_NOISE_TOKENS = new Set([
   "select", "set", "values", "where", "on", "and", "or", "as", "using",
   "lateral", "returning", "into",
+  // 行锁子句关键字：`FOR UPDATE [OF ..] [SKIP LOCKED|NOWAIT|SHARE]` 中 UPDATE 之后的 token
+  // 是锁修饰符而非被更新的表名，否则会把 `FOR UPDATE SKIP LOCKED` 的 'skip' 误判为未登记表。
+  "skip", "locked", "nowait", "of", "share",
 ]);
 
 // ---- CSV 解析（处理引号内逗号）----

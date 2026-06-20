@@ -163,12 +163,17 @@ public class MerchantServiceService {
         List<MerchantWorkOrderRecord> overdue = repository.findOverdueOpenWorkOrders(now, ESCALATE_BATCH_LIMIT);
         int escalated = 0;
         for (MerchantWorkOrderRecord record : overdue) {
-            MerchantWorkOrderRecord breached = repository.saveWorkOrder(record.markSlaBreached(now));
+            // 并发护栏：条件 UPDATE WHERE escalated_at IS NULL，受影响行数==1 才算本调用赢得升级。
+            // 行数==0 表示已被其它并发事务（定时 vs 手动触发）抢先升级，跳过留痕/审计避免双重升级、双留痕。
+            int affected = repository.markSlaBreachedIfNotEscalated(record.id(), now);
+            if (affected == 0) {
+                continue;
+            }
             repository.saveAction(action(
-                    breached.id(),
+                    record.id(),
                     "escalated",
                     record.status(),
-                    breached.status(),
+                    record.status(),
                     SYSTEM_OPERATOR,
                     "SLA overdue auto-escalation",
                     List.of()
@@ -177,10 +182,10 @@ public class MerchantServiceService {
                     "merchant_service.work_order.escalated",
                     "merchant.service_work_order.process",
                     BUSINESS_TYPE,
-                    breached.id(),
+                    record.id(),
                     requestId(),
                     null,
-                    Map.of("status", breached.status(), "sla_breached", breached.slaBreached())
+                    Map.of("status", record.status(), "sla_breached", true)
             );
             escalated++;
         }

@@ -377,6 +377,66 @@ class TerminalDeviceServiceTests {
                 .isEqualTo("INVALID_DEVICE_STATUS");
     }
 
+    // ── P2 并发缺口①：状态机条件流转（乐观并发保护）─────────────────────────────
+    @Test
+    void concurrentTransitionLosesToScrapAndIsRejectedByConditionalUpdate() {
+        // found（lost→found）与 scrap 并发：本测试模拟 found 在"读到 lost 前态"之后、
+        // 写入之前，被另一笔 scrap 抢先改为终态 scrapped。
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-race", "P0-RACE-1"));
+        service.markDeviceLost(bound.id(), lifecycleRequest("race-lost", "lost"));
+
+        // 注入并发：found 流转执行 compareAndSetStatus 前，先把设备改为终态 scrapped。
+        deviceRepository.beforeCompareAndSet = id -> {
+            TerminalDeviceRecord current = deviceRepository.findById(id).orElseThrow();
+            deviceRepository.save(new TerminalDeviceRecord(
+                    current.id(), current.deviceId(), current.deviceCode(), current.terminalType(),
+                    current.bindingScope(), current.boundSpaceId(), current.mdmDeviceRef(), current.kioskMode(),
+                    current.merchantId(), current.venueId(), current.areaId(), current.locationPointId(),
+                    current.staffId(), "scrapped", current.boundAt(), current.returnedAt(), current.unboundAt(),
+                    current.returnReason(), current.unbindReason(), current.createdAt(), current.updatedAt()));
+            deviceRepository.beforeCompareAndSet = null; // 仅触发一次
+        };
+
+        // found 的前态校验通过（读到 lost），但条件 UPDATE 因前态已变 scrapped 命中 0 行 → 冲突。
+        assertThatThrownBy(() -> service.markDeviceFound(bound.id(), lifecycleRequest("race-found", "recovered")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DEVICE_TRANSITION_CONFLICT");
+
+        // 仅一个流转生效：设备停在终态 scrapped，未被 found 盲写丢更新。
+        assertThat(deviceRepository.findById(bound.id()))
+                .get()
+                .extracting(TerminalDeviceRecord::status)
+                .isEqualTo("scrapped");
+    }
+
+    @Test
+    void compareAndSetStatusReturnsZeroRowsWhenExpectedFromMismatch() {
+        // 红线：前态不符的条件 UPDATE 必须返回 0 行（被并发改过/非法前态被拒）。
+        DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-cas", "P0-CAS-1"));
+        TerminalDeviceRecord existing = deviceRepository.findById(bound.id()).orElseThrow();
+
+        // 当前态为 bound，用错误的 expectedFrom=lost 发起条件流转。
+        int affected = deviceRepository.compareAndSetStatus(
+                existing.id(), "lost", recordWithStatus(existing, "found"));
+
+        assertThat(affected).isZero();
+        // 前态不符未写入，设备仍为 bound。
+        assertThat(deviceRepository.findById(bound.id()))
+                .get()
+                .extracting(TerminalDeviceRecord::status)
+                .isEqualTo("bound");
+    }
+
+    private TerminalDeviceRecord recordWithStatus(TerminalDeviceRecord base, String status) {
+        return new TerminalDeviceRecord(
+                base.id(), base.deviceId(), base.deviceCode(), base.terminalType(),
+                base.bindingScope(), base.boundSpaceId(), base.mdmDeviceRef(), base.kioskMode(),
+                base.merchantId(), base.venueId(), base.areaId(), base.locationPointId(),
+                base.staffId(), status, base.boundAt(), base.returnedAt(), base.unboundAt(),
+                base.returnReason(), base.unbindReason(), base.createdAt(), base.updatedAt());
+    }
+
     @Test
     void repairTransitionRejectedFromUnboundStatus() {
         DeviceBindingResponse bound = service.bindDevice(bindRequest("bind-repair-bad", "P0-REPAIR-1"));
@@ -677,6 +737,9 @@ class TerminalDeviceServiceTests {
         private final Map<String, KioskHeartbeatRecord> heartbeats = new LinkedHashMap<>();
         private int deviceSaveCount;
 
+        // 测试钩子：注入"读后写前"被并发改态的场景，复现真并发窗口。
+        private java.util.function.Consumer<String> beforeCompareAndSet;
+
         @Override
         public TerminalDeviceRecord save(TerminalDeviceRecord device) {
             deviceSaveCount += 1;
@@ -684,6 +747,23 @@ class TerminalDeviceServiceTests {
             devicesByCode.put(device.deviceCode(), device);
             devicesByDeviceId.put(device.deviceId(), device);
             return device;
+        }
+
+        @Override
+        public int compareAndSetStatus(String id, String expectedFrom, TerminalDeviceRecord updated) {
+            // 模拟条件 UPDATE 的并发窗口：在比对前态前先让注入的并发流转改态。
+            if (beforeCompareAndSet != null) {
+                beforeCompareAndSet.accept(id);
+            }
+            TerminalDeviceRecord current = devicesById.get(id);
+            // 条件 UPDATE 语义：仅当当前 status = expectedFrom 才整行更新，否则 0 行（前态不符/不存在）。
+            if (current == null || !expectedFrom.equals(current.status())) {
+                return 0;
+            }
+            devicesById.put(updated.id(), updated);
+            devicesByCode.put(updated.deviceCode(), updated);
+            devicesByDeviceId.put(updated.deviceId(), updated);
+            return 1;
         }
 
         @Override
@@ -845,8 +925,9 @@ class TerminalDeviceServiceTests {
         }
 
         @Override
-        public void markViolationHandled(
+        public int markViolationHandled(
                 String id, String disposition, String handledNote, java.time.Instant blockedAt) {
+            return 0;
         }
 
         @Override
