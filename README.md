@@ -1,6 +1,8 @@
 # 综合体管理系统（Entertainment Complex Management）
 
 > 文档goal(2026-06-20)：本 README 为仓库第一入口，供产品、开发、测试、运营、第三方供应商快速理解项目并上手。所有命令与数字均经实证（`ls`/`grep`/OpenAPI 统计/Surefire 报告/Playwright `--list`），不臆造。
+>
+> 🌐 English: [`README.en.md`](./README.en.md) ｜ 🏗️ 架构图集：[`docs/architecture-overview-v0.1.md`](./docs/architecture-overview-v0.1.md)
 
 ## 1. 项目定位
 
@@ -121,7 +123,23 @@ npm run verify:closed-loop-runtime      # 闭环运行态总验收（后端测�
 - 分类文档地图（按类别列出当前有效文档+用途+现行/部分过期/归档）：**`docs/documentation-map-v0.1.md`**
 - 唯一正式口径与准入入口：**`docs/00-current-effective-document-entry-v0.1.md`**
 
-## 8. 边界声明
+## 8. 架构总览
+
+完整架构图集（系统上下文、后端域模块地图、分层与请求流、关键业务链、前端/终端、交付闸口）见 **[`docs/architecture-overview-v0.1.md`](./docs/architecture-overview-v0.1.md)**。系统上下文概览：
+
+```mermaid
+graph LR
+  GUEST["客人 Guest"] --> WEB["前端 Web<br/>(admin/customer)"]
+  STAFF["员工 Staff"] --> ANDROID["Android 终端"]
+  WEB --> API["后端 API<br/>Java 21 + Spring Boot 4"]
+  ANDROID --> API
+  API --> DB[("PostgreSQL<br/>Flyway V001..V124")]
+  API -. "开关化 + mock" .-> EXT["第三方/支付/企微/机器人/视频/MDM/NAS"]
+```
+
+每个写动作经 `@GuardedAction`（权限点 + 终端开关 + 准入闸 AdmissionGuard）→ Service（业务+幂等+留痕）→ JDBC Repository（强制注入 merchant_id/project_id scope）→ PostgreSQL，并发布审计事件；异常进统一责任链 `risk_alerts`。
+
+## 9. 边界声明
 
 - **可联调 / 可业务验收**：当前代码与文档支持本地/160 联调与业务验收；mock/adapter/页面/后端测试/E2E 替身可支撑验收，但 `MOCK_IS_NOT_PRODUCTION_EVIDENCE`，不替代生产证据。
 - **生产上线把关**：由 `npm run verify:production-blockers` 与 `npm run verify:delivery-gates` 等闸口裁决，未通过即阻断上线。
