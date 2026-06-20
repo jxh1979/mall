@@ -5,8 +5,11 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.inventory.dto.CreateStocktakeRequest;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
+import com.complex.platform.inventory.dto.RecordVarianceRequest;
+import com.complex.platform.inventory.dto.ReviewVarianceRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestApproveRequest;
@@ -203,6 +206,47 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.high_value.review");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewHighValue(id, request));
+    }
+
+    // ── V108/V126：盘点录入闭环（建盘点单 → 录差异 → 差异复核(approved/rejected) → 查询）。 ──
+    @GetMapping("/stocktakes")
+    public ApiResponse<PageResponse<StocktakeRecord>> listStocktakes() {
+        authorizationService.requirePermission("inventory.stocktake.view");
+        return ApiResponse.ok(service.listStocktakes());
+    }
+
+    @GetMapping("/stocktakes/{id}")
+    public ApiResponse<StocktakeDetailRecord> getStocktake(@PathVariable String id) {
+        authorizationService.requirePermission("inventory.stocktake.view");
+        return ApiResponse.ok(service.getStocktake(id));
+    }
+
+    @PostMapping("/stocktakes")
+    public ApiResponse<StocktakeRecord> createStocktake(@RequestBody CreateStocktakeRequest request) {
+        authorizationService.requirePermission("inventory.stocktake.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createStocktake(request));
+    }
+
+    @PostMapping("/stocktakes/{id}/variances")
+    public ApiResponse<InventoryVarianceRecord> recordVariance(
+            @PathVariable String id,
+            @RequestBody RecordVarianceRequest request
+    ) {
+        authorizationService.requirePermission("inventory.stocktake.variance_record");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.recordVariance(id, request));
+    }
+
+    @PostMapping("/stocktakes/{id}/variances/{vid}/review")
+    public ApiResponse<InventoryVarianceRecord> reviewVariance(
+            @PathVariable String id,
+            @PathVariable String vid,
+            @RequestBody ReviewVarianceRequest request
+    ) {
+        authorizationService.requirePermission("inventory.stocktake.variance_review");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reviewVariance(id, vid, request));
     }
 
     @PostMapping("/stock-adjustments")

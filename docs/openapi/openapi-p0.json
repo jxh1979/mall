@@ -19192,6 +19192,212 @@
           }
         }
       }
+    },
+    "/api/v1/inventory/stocktakes": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "listInventoryStocktakes",
+        "summary": "查询库存盘点单列表",
+        "x-permission": "inventory.stocktake.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "inventory.stocktake.viewed",
+        "x-audit-event-failure": "inventory.stocktake.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "createInventoryStocktake",
+        "summary": "建库存盘点单",
+        "x-permission": "inventory.stocktake.create",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.stocktake.created",
+        "x-audit-event-failure": "inventory.stocktake.create_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateStocktakeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/stocktakes/{id}": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "getInventoryStocktake",
+        "summary": "查询库存盘点单详情（含差异明细）",
+        "x-permission": "inventory.stocktake.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "inventory.stocktake.detail_viewed",
+        "x-audit-event-failure": "inventory.stocktake.detail_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/stocktakes/{id}/variances": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "recordInventoryStocktakeVariance",
+        "summary": "录入库存盘点差异行",
+        "x-permission": "inventory.stocktake.variance_record",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.stocktake.variance_recorded",
+        "x-audit-event-failure": "inventory.stocktake.variance_record_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RecordVarianceRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/stocktakes/{id}/variances/{vid}/review": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "reviewInventoryStocktakeVariance",
+        "summary": "复核库存盘点差异（approved/rejected）",
+        "x-permission": "inventory.stocktake.variance_review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.stocktake.variance_reviewed",
+        "x-audit-event-failure": "inventory.stocktake.variance_review_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          },
+          {
+            "$ref": "#/components/parameters/VarianceId",
+            "description": "路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReviewVarianceRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -19436,6 +19642,16 @@
           "maxLength": 64
         },
         "description": "ShiftId 路径参数；必须引用当前数据范围内存在且允许访问的收银班次。"
+      },
+      "VarianceId": {
+        "name": "vid",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "description": "VarianceId 路径参数；必须引用当前数据范围内、隶属该盘点单的库存差异明细行 id。"
       }
     },
     "requestBodies": {
@@ -21027,6 +21243,36 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/BarShiftCloseRequest"
+            }
+          }
+        }
+      },
+      "CreateStocktakeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreateStocktakeRequest"
+            }
+          }
+        }
+      },
+      "RecordVarianceRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RecordVarianceRequest"
+            }
+          }
+        }
+      },
+      "ReviewVarianceRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReviewVarianceRequest"
             }
           }
         }
@@ -28819,6 +29065,124 @@
           "note": {
             "type": "string",
             "description": "班结备注；进入审计留痕。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "CreateStocktakeRequest": {
+        "type": "object",
+        "description": "请求载荷 `CreateStocktakeRequest`（V108 盘点单建单）；建盘点单 status=counting，merchant_id 强制取自认证上下文不由请求体传入。",
+        "additionalProperties": false,
+        "required": [
+          "warehouse_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复建盘点单 / 重复录差异 / 重复复核。",
+            "maxLength": 128
+          },
+          "warehouse_id": {
+            "type": "string",
+            "description": "盘点库房 id（必填）。",
+            "maxLength": 64
+          },
+          "business_date": {
+            "type": "string",
+            "format": "date",
+            "description": "盘点经营日（缺省取当日）。"
+          },
+          "remark": {
+            "type": "string",
+            "description": "盘点单备注（可空）。",
+            "maxLength": 255
+          }
+        }
+      },
+      "RecordVarianceRequest": {
+        "type": "object",
+        "description": "请求载荷 `RecordVarianceRequest`（V108 库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按 variance_qty×unit_cost_cents 成本估算。",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复建盘点单 / 重复录差异 / 重复复核。",
+            "maxLength": 128
+          },
+          "item_id": {
+            "type": "string",
+            "description": "物料/商品 id（供应链域只读引用，必填）。",
+            "maxLength": 64
+          },
+          "batch_no": {
+            "type": "string",
+            "description": "批次号（可空）。",
+            "maxLength": 64
+          },
+          "book_qty": {
+            "type": "number",
+            "description": "账面数量（缺省 0）。"
+          },
+          "counted_qty": {
+            "type": "number",
+            "description": "实盘数量（缺省 0）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "差异原因：报损 damage / 盘亏 shortage / 盘盈 overage / 供应商责任 supplier_fault。",
+            "enum": [
+              "damage",
+              "shortage",
+              "overage",
+              "supplier_fault"
+            ]
+          },
+          "supplier_id": {
+            "type": "string",
+            "description": "供应商责任（supplier_fault）时的责任供应商 id（→ AP 对手方）。",
+            "maxLength": 64
+          },
+          "variance_amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "金额差（带符号，分）；显式传入优先于成本估算。"
+          },
+          "unit_cost_cents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "成本单价（分，非负）；未显式传 variance_amount_cent 时按 variance_qty×unit_cost_cents 估算。",
+            "minimum": 0
+          }
+        }
+      },
+      "ReviewVarianceRequest": {
+        "type": "object",
+        "description": "请求载荷 `ReviewVarianceRequest`（V108 库存差异复核）；decision=approved/rejected，pending→终态，幂等，重复/非 pending 拒绝。approved 是解锁 finance postInventoryVariance 入账的关键。",
+        "additionalProperties": false,
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复建盘点单 / 重复录差异 / 重复复核。",
+            "maxLength": 128
+          },
+          "decision": {
+            "type": "string",
+            "description": "复核裁决：approved（复核通过，可入账）/ rejected（驳回，不入账）。",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "复核意见（可空）。",
             "maxLength": 1000
           }
         }

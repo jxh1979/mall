@@ -18,8 +18,11 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.inventory.dto.CreateStocktakeRequest;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
+import com.complex.platform.inventory.dto.RecordVarianceRequest;
+import com.complex.platform.inventory.dto.ReviewVarianceRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
@@ -1265,6 +1268,158 @@ class InventoryServiceTests {
                 .containsExactly("item_b");
     }
 
+    // ── V108/V126：盘点录入闭环测试。 ──
+
+    @Test
+    void createStocktakeStartsInCountingAndIsIdempotent() {
+        CreateStocktakeRequest request = new CreateStocktakeRequest(
+                "stocktake-1", "wh_main", LocalDate.parse("2026-06-19"), "month-end count");
+        StocktakeRecord first = service.createStocktake(request);
+        StocktakeRecord second = service.createStocktake(request);
+
+        assertThat(second).isEqualTo(first);
+        assertThat(first.status()).isEqualTo("counting");
+        assertThat(first.warehouseId()).isEqualTo("wh_main");
+        assertThat(first.stocktakeNo()).isNotBlank();
+        assertThat(inventoryRepository.listStocktakes()).hasSize(1);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("inventory.stocktake.created");
+    }
+
+    @Test
+    void recordVarianceComputesSignedVarianceQtyAndEstimatesAmountFromCost() {
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-var", "wh_main", null, null));
+        // book=10, counted=7 → variance_qty=-3（盘亏）；unit_cost=500 分 → amount=-1500。
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-1", "item_x", null,
+                new java.math.BigDecimal("10"), new java.math.BigDecimal("7"),
+                "shortage", null, null, 500L));
+
+        assertThat(variance.varianceQty()).isEqualByComparingTo("-3");
+        assertThat(variance.varianceAmountCent()).isEqualTo(-1500L);
+        assertThat(variance.reviewStatus()).isEqualTo("pending");
+        assertThat(variance.stocktakeId()).isEqualTo(stocktake.id());
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("inventory.stocktake.variance_recorded");
+    }
+
+    @Test
+    void recordVarianceUsesExplicitAmountOverCostEstimate() {
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-var2", "wh_main", null, null));
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-2", "item_y", "BATCH-1",
+                new java.math.BigDecimal("5"), new java.math.BigDecimal("8"),
+                "overage", null, 9999L, 100L));
+
+        assertThat(variance.varianceQty()).isEqualByComparingTo("3");
+        // 显式 9999 优先于 cost 估算 300。
+        assertThat(variance.varianceAmountCent()).isEqualTo(9999L);
+        assertThat(variance.batchNo()).isEqualTo("BATCH-1");
+    }
+
+    @Test
+    void reviewVarianceApprovedUnlocksFinancePostingPrerequisite() {
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-appr", "wh_main", null, null));
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-appr", "item_a", null,
+                new java.math.BigDecimal("3"), new java.math.BigDecimal("0"),
+                "damage", null, -3000L, null));
+
+        InventoryVarianceRecord reviewed = service.reviewVariance(stocktake.id(), variance.id(),
+                new ReviewVarianceRequest("rev-appr", "approved", "confirmed damage"));
+
+        assertThat(reviewed.reviewStatus()).isEqualTo("approved");
+        assertThat(reviewed.reviewedBy()).isEqualTo("usr_admin");
+        assertThat(reviewed.reviewedAt()).isNotNull();
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("inventory.stocktake.variance_reviewed");
+    }
+
+    @Test
+    void reviewVarianceRejectedSetsTerminalRejected() {
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-rej", "wh_main", null, null));
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-rej", "item_b", null,
+                new java.math.BigDecimal("4"), new java.math.BigDecimal("4"),
+                "supplier_fault", "sup_1", 1L, null));
+
+        InventoryVarianceRecord reviewed = service.reviewVariance(stocktake.id(), variance.id(),
+                new ReviewVarianceRequest("rev-rej", "rejected", "not justified"));
+
+        assertThat(reviewed.reviewStatus()).isEqualTo("rejected");
+    }
+
+    @Test
+    void reviewVarianceRejectsDuplicateReviewOnNonPending() {
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-dup", "wh_main", null, null));
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-dup", "item_c", null,
+                new java.math.BigDecimal("2"), new java.math.BigDecimal("1"),
+                "shortage", null, -500L, null));
+        service.reviewVariance(stocktake.id(), variance.id(),
+                new ReviewVarianceRequest("rev-dup-1", "approved", null));
+
+        // 不同幂等键的第二次复核 → 非 pending，被拒（条件 UPDATE 0 行）。
+        assertThatThrownBy(() -> service.reviewVariance(stocktake.id(), variance.id(),
+                new ReviewVarianceRequest("rev-dup-2", "rejected", null)))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("INVENTORY_VARIANCE_NOT_PENDING");
+    }
+
+    @Test
+    void stocktakeListAndDetailAreMerchantScoped() {
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
+        StocktakeRecord ownStocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-a", "wh_a", null, null));
+        service.recordVariance(ownStocktake.id(), new RecordVarianceRequest(
+                "va-a", "item_a", null,
+                new java.math.BigDecimal("1"), new java.math.BigDecimal("0"),
+                "shortage", null, -100L, null));
+
+        // 详情含差异明细，归属一致。
+        StocktakeDetailRecord detail = service.getStocktake(ownStocktake.id());
+        assertThat(detail.variances()).hasSize(1);
+        assertThat(service.listStocktakes().items())
+                .extracting(StocktakeRecord::id)
+                .containsExactly(ownStocktake.id());
+
+        // 商户 B 看不到商户 A 的盘点单，详情访问被拒。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThat(service.listStocktakes().items()).isEmpty();
+        assertThatThrownBy(() -> service.getStocktake(ownStocktake.id()))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void reviewVarianceRejectsForeignStocktakeBinding() {
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-bind", "wh_main", null, null));
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-bind", "item_d", null,
+                new java.math.BigDecimal("2"), new java.math.BigDecimal("0"),
+                "damage", null, -200L, null));
+
+        // 用错误的 stocktakeId 复核该差异行 → 404（不属于该盘点单）。
+        assertThatThrownBy(() -> service.reviewVariance("stocktake_wrong", variance.id(),
+                new ReviewVarianceRequest("rev-bind", "approved", null)))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("INVENTORY_VARIANCE_NOT_FOUND");
+    }
+
     private InventoryItemRecord createItem(String idempotencyKey) {
         return service.createInventoryItem(new InventoryItemRequest(
                 idempotencyKey,
@@ -1752,6 +1907,59 @@ class InventoryServiceTests {
         }
         @Override public List<SupplierSettlementMethodRecord> listSupplierSettlementMethods() {
             throw new UnsupportedOperationException("not needed");
+        }
+
+        // ── V108/V126：盘点单 + 库存差异明细写入侧内存替身。 ──
+        final Map<String, StocktakeRecord> stocktakes = new LinkedHashMap<>();
+        final Map<String, InventoryVarianceRecord> variances = new LinkedHashMap<>();
+
+        @Override public StocktakeRecord saveStocktake(StocktakeRecord stocktake) {
+            stocktakes.put(stocktake.id(), stocktake);
+            return stocktake;
+        }
+
+        @Override public Optional<StocktakeRecord> findStocktakeById(String id) {
+            return Optional.ofNullable(stocktakes.get(id));
+        }
+
+        @Override public List<StocktakeRecord> listStocktakes() {
+            return new ArrayList<>(stocktakes.values());
+        }
+
+        @Override public List<StocktakeRecord> listStocktakesByMerchant(String merchantId) {
+            return stocktakes.values().stream()
+                    .filter(s -> merchantId.equals(s.merchantId()))
+                    .toList();
+        }
+
+        @Override public InventoryVarianceRecord saveInventoryVariance(InventoryVarianceRecord variance) {
+            variances.put(variance.id(), variance);
+            return variance;
+        }
+
+        @Override public Optional<InventoryVarianceRecord> findInventoryVarianceByIdForUpdate(String id) {
+            return Optional.ofNullable(variances.get(id));
+        }
+
+        @Override public List<InventoryVarianceRecord> listInventoryVariancesByStocktake(String stocktakeId) {
+            return variances.values().stream()
+                    .filter(v -> stocktakeId.equals(v.stocktakeId()))
+                    .toList();
+        }
+
+        @Override public int reviewInventoryVarianceIfPending(
+                String varianceId, String decision, String reviewedBy, Instant reviewedAt) {
+            InventoryVarianceRecord current = variances.get(varianceId);
+            if (current == null || !"pending".equals(current.reviewStatus())) {
+                return 0;
+            }
+            variances.put(varianceId, new InventoryVarianceRecord(
+                    current.id(), current.stocktakeId(), current.itemId(), current.batchNo(),
+                    current.bookQty(), current.countedQty(), current.varianceQty(),
+                    current.varianceAmountCent(), current.reason(), current.supplierId(),
+                    decision, reviewedBy, reviewedAt, current.postedArApItemId(),
+                    current.merchantId(), current.createdAt(), reviewedAt));
+            return 1;
         }
 
         private String balanceKey(String itemId, String locationId) {

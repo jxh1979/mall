@@ -885,7 +885,7 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.queue.manage
       x-data-scope: project-amusement
-      x-terminal-allowed: &a1
+      x-terminal-allowed:
         - tablet
         - staff_work_phone
       x-idempotency-required: true
@@ -901,7 +901,7 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: &a2
+                idempotency_key:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
@@ -925,7 +925,7 @@ paths:
                   type: string
                   description: 初始状态。
                   maxLength: 255
-      responses: &a3
+      responses:
         "200":
           $ref: "#/components/responses/Success"
         "400":
@@ -966,7 +966,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.reservation.manage
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.reservation.create
       x-audit-event-failure: amusement.reservation.create_failed
@@ -980,7 +982,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 project_id:
                   type: string
                   description: 所属项目 ID。
@@ -997,7 +1002,17 @@ paths:
                   type: string
                   description: 预约状态。
                   maxLength: 255
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/safety-inspections:
     get:
       tags:
@@ -2923,12 +2938,15 @@ paths:
                 - business_ref
                 - source
               properties:
-                idempotency_key: *a2
-                operator_note: &a4
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
                   type: string
                   description: 操作留痕备注；进入审计。
                   maxLength: 1000
-                evidence_attachment_ids: &a11
+                evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
                   items:
@@ -2957,7 +2975,17 @@ paths:
                   description: 实际金额（source=manual 时填写）。（单位：分，禁止浮点）
                   minimum: -999999999999
                   maximum: 999999999999
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/refunds:
     post:
       tags:
@@ -3251,7 +3279,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 operator_note:
                   type: string
                   description: 操作留痕备注。
@@ -3290,7 +3321,17 @@ paths:
                     type: object
                     additionalProperties: true
                     description: 顶点坐标 FloorPlanPoint（x/y）。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/compensation-tasks:
     get:
       tags:
@@ -3338,9 +3379,15 @@ paths:
                 - provider_code
                 - task_type
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: &a5
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
                   items:
@@ -3377,7 +3424,17 @@ paths:
                   type: object
                   additionalProperties: true
                   description: 任务载荷。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/devices:
     get:
       tags:
@@ -3492,9 +3549,20 @@ paths:
                 - business_type
                 - external_business_id
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a5
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 provider_code:
                   type: string
                   description: 渠道编码。
@@ -3536,7 +3604,17 @@ paths:
                   type: object
                   additionalProperties: true
                   description: 渠道原始载荷。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/provider-adapters:
     get:
       tags:
@@ -3862,9 +3940,20 @@ paths:
                 - provider_code
                 - task_type
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a5
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 provider_code:
                   type: string
                   description: 渠道编码。
@@ -3896,7 +3985,17 @@ paths:
                   type: object
                   additionalProperties: true
                   description: 任务载荷。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/robot/task-events:
     get:
       tags:
@@ -6692,7 +6791,10 @@ paths:
                 - idempotency_key
                 - merchant_id
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 operator_note:
                   type: string
                   description: 操作留痕备注。
@@ -6737,7 +6839,17 @@ paths:
                     type: object
                     additionalProperties: true
                     description: 账单明细行 MerchantBillLineRequest。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/platform/supervisor-review-policies:
     get:
       tags:
@@ -7241,12 +7353,12 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.supply_contract.manage
       x-data-scope: supplier
-      x-terminal-allowed: &a6
+      x-terminal-allowed:
         - web
       x-idempotency-required: false
       x-audit-event-success: inventory.supply_contract.list
       x-audit-event-failure: inventory.supply_contract.list_failed
-      responses: &a7
+      responses:
         "200":
           $ref: "#/components/responses/Page"
         "403":
@@ -7390,11 +7502,18 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.warehouse.manage
       x-data-scope: warehouse
-      x-terminal-allowed: *a6
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: inventory.warehouse.list
       x-audit-event-failure: inventory.warehouse.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/staff/registrations:
     post:
       tags:
@@ -9233,7 +9352,7 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.report
       x-data-scope: platform
-      x-terminal-allowed: &a8
+      x-terminal-allowed:
         - web
         - mobile_admin
       x-idempotency-required: true
@@ -9253,9 +9372,15 @@ paths:
                 - risk_level
                 - summary
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: &a10
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
                   items:
@@ -9295,7 +9420,17 @@ paths:
                   items:
                     type: string
                     maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     get:
       tags:
         - evidence
@@ -9304,7 +9439,9 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.view
       x-data-scope: platform
-      x-terminal-allowed: *a8
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: false
       x-audit-event-success: exception.alerts_viewed
       x-audit-event-failure: exception.alerts_view_failed
@@ -9339,7 +9476,13 @@ paths:
             maximum: 200
             default: 20
           description: 返回条数上限。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/evidence/risk-alerts/{alert_id}:
     get:
       tags:
@@ -9349,11 +9492,13 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.view
       x-data-scope: platform
-      x-terminal-allowed: *a8
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: false
       x-audit-event-success: exception.alert_viewed
       x-audit-event-failure: exception.alert_view_failed
-      parameters: &a9
+      parameters:
         - name: alert_id
           in: path
           required: true
@@ -9361,7 +9506,13 @@ paths:
             type: string
             maxLength: 64
           description: 风险预警 ID。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/evidence/risk-alerts/{alert_id}/claim:
     post:
       tags:
@@ -9371,11 +9522,20 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.claim
       x-data-scope: platform
-      x-terminal-allowed: *a8
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: true
       x-audit-event-success: exception.claimed
       x-audit-event-failure: exception.claim_failed
-      parameters: *a9
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 风险预警 ID。
       requestBody:
         required: true
         content:
@@ -9386,9 +9546,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a10
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 target_handler_id:
                   type: string
                   description: 目标处理人用户 ID（transfer/escalate 必填）。
@@ -9397,7 +9568,17 @@ paths:
                   type: string
                   description: 操作原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/evidence/risk-alerts/{alert_id}/transfer:
     post:
       tags:
@@ -9407,11 +9588,20 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.transfer
       x-data-scope: platform
-      x-terminal-allowed: *a8
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: true
       x-audit-event-success: exception.transferred
       x-audit-event-failure: exception.transfer_failed
-      parameters: *a9
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 风险预警 ID。
       requestBody:
         required: true
         content:
@@ -9423,9 +9613,20 @@ paths:
                 - idempotency_key
                 - target_handler_id
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a10
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 target_handler_id:
                   type: string
                   description: 目标处理人用户 ID（transfer/escalate 必填）。
@@ -9434,7 +9635,17 @@ paths:
                   type: string
                   description: 操作原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/evidence/risk-alerts/{alert_id}/escalate:
     post:
       tags:
@@ -9444,11 +9655,20 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.escalate
       x-data-scope: platform
-      x-terminal-allowed: *a8
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: true
       x-audit-event-success: exception.escalated
       x-audit-event-failure: exception.escalate_failed
-      parameters: *a9
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 风险预警 ID。
       requestBody:
         required: true
         content:
@@ -9460,9 +9680,20 @@ paths:
                 - idempotency_key
                 - target_handler_id
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a10
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 target_handler_id:
                   type: string
                   description: 目标处理人用户 ID（transfer/escalate 必填）。
@@ -9471,7 +9702,17 @@ paths:
                   type: string
                   description: 操作原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/evidence/risk-alerts/{alert_id}/resolve:
     post:
       tags:
@@ -9481,11 +9722,20 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.resolve
       x-data-scope: platform
-      x-terminal-allowed: *a8
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: true
       x-audit-event-success: exception.resolved
       x-audit-event-failure: exception.resolve_failed
-      parameters: *a9
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 风险预警 ID。
       requestBody:
         required: true
         content:
@@ -9497,9 +9747,20 @@ paths:
                 - idempotency_key
                 - resolution_conclusion
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a10
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 resolution_conclusion:
                   type: string
                   description: 处置结论。
@@ -9508,7 +9769,17 @@ paths:
                   type: string
                   description: 处置原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/evidence/risk-alerts/{alert_id}/dismiss:
     post:
       tags:
@@ -9518,11 +9789,20 @@ paths:
       x-auth-context: staff-token
       x-permission: risk_alert.dismiss
       x-data-scope: platform
-      x-terminal-allowed: *a8
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: true
       x-audit-event-success: exception.dismissed
       x-audit-event-failure: exception.dismiss_failed
-      parameters: *a9
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 风险预警 ID。
       requestBody:
         required: true
         content:
@@ -9533,9 +9813,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a10
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 target_handler_id:
                   type: string
                   description: 目标处理人用户 ID（transfer/escalate 必填）。
@@ -9544,7 +9835,17 @@ paths:
                   type: string
                   description: 操作原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/cam/allocations:
     post:
       tags:
@@ -9573,9 +9874,20 @@ paths:
                 - due_date
                 - shares
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a11
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 period:
                   type: string
                   description: 计费周期标识。
@@ -9607,7 +9919,17 @@ paths:
                         type: integer
                         description: 分摊权重（基点，万分比）。
                         minimum: 0
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/cam/trueups:
     post:
       tags:
@@ -9636,9 +9958,20 @@ paths:
                 - due_date
                 - shares
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a11
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 settlement_period:
                   type: string
                   description: 结算周期标识。
@@ -9670,7 +10003,17 @@ paths:
                         type: integer
                         description: 分摊权重（基点）。
                         minimum: 0
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/deposits/actions:
     post:
       tags:
@@ -9698,9 +10041,20 @@ paths:
                 - action
                 - amount_cent
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a11
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 merchant_id:
                   type: string
                   description: 商户 ID。
@@ -9722,7 +10076,17 @@ paths:
                   type: string
                   description: 动作原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/inventory-variances/post:
     post:
       tags:
@@ -9749,9 +10113,20 @@ paths:
                 - inventory_variance_id
                 - counterparty_id
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a11
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 inventory_variance_id:
                   type: string
                   description: 库存差异记录 ID。
@@ -9760,7 +10135,17 @@ paths:
                   type: string
                   description: 责任方/对手方 ID。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/turnover-rent/bills:
     post:
       tags:
@@ -9789,9 +10174,20 @@ paths:
                 - period_end
                 - due_date
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a11
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 rule_id:
                   type: string
                   description: 抽成规则 ID。
@@ -9808,7 +10204,17 @@ paths:
                   type: string
                   format: date
                   description: 应收到期日。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/reconciliation/batches:
     get:
       tags:
@@ -9823,7 +10229,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: integration.reconciliation_batch.viewed
       x-audit-event-failure: integration.reconciliation_batch.view_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - integration
@@ -9851,9 +10263,20 @@ paths:
                 - period_start
                 - period_end
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a5
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 provider_code:
                   type: string
                   description: 渠道/供应商编码。
@@ -9884,7 +10307,17 @@ paths:
                   description: 差异总额。（单位：分，禁止浮点）
                   minimum: -999999999999
                   maximum: 999999999999
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/reconciliation/differences:
     get:
       tags:
@@ -9899,7 +10332,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: integration.reconciliation_difference.viewed
       x-audit-event-failure: integration.reconciliation_difference.view_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - integration
@@ -9928,9 +10367,20 @@ paths:
                 - external_business_id
                 - difference_type
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a5
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 batch_id:
                   type: string
                   description: 对账批次 ID。
@@ -9970,7 +10420,17 @@ paths:
                   type: string
                   description: 分派处理人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/reconciliation/differences/{id}/resolve:
     post:
       tags:
@@ -10004,9 +10464,20 @@ paths:
                 - idempotency_key
                 - status
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a5
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 operator_user_id:
                   type: string
                   description: 处理人用户 ID。
@@ -10019,7 +10490,17 @@ paths:
                   type: string
                   description: 处理说明。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/reconciliation/channel-auto:
     post:
       tags:
@@ -10050,7 +10531,10 @@ paths:
                 - period_end
                 - expected_entries
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 provider_code:
                   type: string
                   description: 渠道编码。
@@ -10103,7 +10587,17 @@ paths:
                         type: object
                         additionalProperties: true
                         description: 附加元数据。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/compensation-tasks/{id}/resolve:
     post:
       tags:
@@ -10137,9 +10631,20 @@ paths:
                 - idempotency_key
                 - status
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a5
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 operator_user_id:
                   type: string
                   description: 处理人用户 ID。
@@ -10152,7 +10657,17 @@ paths:
                   type: string
                   description: 处理说明。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/integration/retry-tasks/{id}/run-now:
     post:
       tags:
@@ -10185,7 +10700,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 action:
                   type: string
                   description: 执行动作。
@@ -10200,7 +10718,17 @@ paths:
                   items:
                     type: string
                     maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/table-sessions:
     get:
       tags:
@@ -10210,13 +10738,19 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.table_session.view
       x-data-scope: project-bar-table
-      x-terminal-allowed: &a12
+      x-terminal-allowed:
         - tablet
         - web
       x-idempotency-required: false
       x-audit-event-success: bar.table_session.list
       x-audit-event-failure: bar.table_session.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - bar
@@ -10225,7 +10759,9 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.table_session.create
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.table_session.create
       x-audit-event-failure: bar.table_session.create_failed
@@ -10239,9 +10775,15 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: &a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
                   items:
@@ -10286,7 +10828,17 @@ paths:
                   type: string
                   description: 开台操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/table-sessions/{session_id}/merge:
     post:
       tags:
@@ -10296,11 +10848,13 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.table_session.merge
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.table_session.merge
       x-audit-event-failure: bar.table_session.merge_failed
-      parameters: &a14
+      parameters:
         - name: session_id
           in: path
           required: true
@@ -10318,9 +10872,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 merged_session_id:
                   type: string
                   description: 被合并会话 ID。
@@ -10339,7 +10904,17 @@ paths:
                 merged_session_version:
                   type: integer
                   description: 被合并会话版本号。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/table-sessions/{session_id}/renew:
     post:
       tags:
@@ -10349,11 +10924,20 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.table_session.renew
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.table_session.renew
       x-audit-event-failure: bar.table_session.renew_failed
-      parameters: *a14
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 台位会话 ID。
       requestBody:
         required: true
         content:
@@ -10364,9 +10948,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 renewed_until:
                   type: string
                   format: date-time
@@ -10397,7 +10992,17 @@ paths:
                 session_version:
                   type: integer
                   description: 会话版本号。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/table-sessions/{session_id}/transfer:
     post:
       tags:
@@ -10407,11 +11012,20 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.table_session.transfer
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.table_session.transfer
       x-audit-event-failure: bar.table_session.transfer_failed
-      parameters: *a14
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 台位会话 ID。
       requestBody:
         required: true
         content:
@@ -10423,9 +11037,20 @@ paths:
                 - idempotency_key
                 - target_table_id
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 target_table_id:
                   type: string
                   description: 目标台位 ID。
@@ -10441,7 +11066,17 @@ paths:
                 session_version:
                   type: integer
                   description: 会话版本号。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/bills/{bill_id}/operations:
     get:
       tags:
@@ -10451,11 +11086,13 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.bill.split_merge
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: false
       x-audit-event-success: bar.bill_operation.list
       x-audit-event-failure: bar.bill_operation.list_failed
-      parameters: &a15
+      parameters:
         - name: bill_id
           in: path
           required: true
@@ -10463,7 +11100,13 @@ paths:
             type: string
             maxLength: 64
           description: 酒水账单 ID。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/bills/{bill_id}/adjustments:
     post:
       tags:
@@ -10473,11 +11116,20 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.bill.adjust
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.bill.adjust
       x-audit-event-failure: bar.bill.adjust_failed
-      parameters: *a15
+      parameters:
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 酒水账单 ID。
       requestBody:
         required: true
         content:
@@ -10488,9 +11140,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 adjustment_type:
                   type: string
                   description: 调整类型。
@@ -10508,7 +11171,17 @@ paths:
                   type: string
                   description: 发起人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/bills/{bill_id}/merge:
     post:
       tags:
@@ -10518,11 +11191,20 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.bill.split_merge
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.bill.merge
       x-audit-event-failure: bar.bill.merge_failed
-      parameters: *a15
+      parameters:
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 酒水账单 ID。
       requestBody:
         required: true
         content:
@@ -10533,9 +11215,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 merged_bill_id:
                   type: string
                   description: 被合并账单 ID。
@@ -10548,7 +11241,17 @@ paths:
                   type: string
                   description: 发起人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/bills/{bill_id}/split:
     post:
       tags:
@@ -10558,11 +11261,20 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.bill.split_merge
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.bill.split
       x-audit-event-failure: bar.bill.split_failed
-      parameters: *a15
+      parameters:
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 酒水账单 ID。
       requestBody:
         required: true
         content:
@@ -10573,9 +11285,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 split_amount_cent:
                   type: integer
                   description: 拆出金额。（单位：分，禁止浮点）
@@ -10589,7 +11312,17 @@ paths:
                   type: string
                   description: 发起人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/order-item-voids/{void_id}/decision:
     post:
       tags:
@@ -10599,7 +11332,9 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.order_item.void
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.order_item_void.decide
       x-audit-event-failure: bar.order_item_void.decide_failed
@@ -10622,7 +11357,10 @@ paths:
                 - idempotency_key
                 - decision
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 decision:
                   type: string
                   description: 审批结论。
@@ -10633,7 +11371,17 @@ paths:
                   type: string
                   description: 决策原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/production-tickets/{ticket_id}/events:
     get:
       tags:
@@ -10643,7 +11391,9 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.production_ticket.view
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: false
       x-audit-event-success: bar.production_ticket_event.list
       x-audit-event-failure: bar.production_ticket_event.list_failed
@@ -10655,7 +11405,13 @@ paths:
             type: string
             maxLength: 64
           description: 出品工单 ID。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/production-tickets/{ticket_id}/transition:
     post:
       tags:
@@ -10665,7 +11421,9 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.production_ticket.manage
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a12
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.production_ticket.transition
       x-audit-event-failure: bar.production_ticket.transition_failed
@@ -10688,9 +11446,20 @@ paths:
                 - idempotency_key
                 - target_status
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a13
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 target_status:
                   type: string
                   description: 目标状态。
@@ -10707,7 +11476,17 @@ paths:
                   type: string
                   description: 流转原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/queue-entries/{id}/status:
     post:
       tags:
@@ -10717,7 +11496,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.queue.manage
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.queue_entry.status_change
       x-audit-event-failure: amusement.queue_entry.status_change_failed
@@ -10729,7 +11510,7 @@ paths:
             type: string
             maxLength: 64
           description: 排队记录 ID。
-      requestBody: &a16
+      requestBody:
         required: true
         content:
           application/json:
@@ -10739,7 +11520,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 action:
                   type: string
                   description: 状态动作。
@@ -10754,7 +11538,17 @@ paths:
                   items:
                     type: string
                     maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/reservations/{id}/status:
     post:
       tags:
@@ -10764,7 +11558,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.reservation.manage
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.reservation.status_change
       x-audit-event-failure: amusement.reservation.status_change_failed
@@ -10776,8 +11572,45 @@ paths:
             type: string
             maxLength: 64
           description: 预约记录 ID。
-      requestBody: *a16
-      responses: *a3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                action:
+                  type: string
+                  description: 状态动作。
+                  maxLength: 255
+                reason:
+                  type: string
+                  description: 原因。
+                  maxLength: 4000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/incidents:
     get:
       tags:
@@ -10787,11 +11620,19 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.incident.view
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: amusement.incident.list
       x-audit-event-failure: amusement.incident.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - amusement
@@ -10800,7 +11641,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.incident.create
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.incident.create
       x-audit-event-failure: amusement.incident.create_failed
@@ -10814,9 +11657,15 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: &a17
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
                   items:
@@ -10866,7 +11715,17 @@ paths:
                   type: string
                   format: date-time
                   description: 发生时间。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/incidents/{incidentId}/actions:
     post:
       tags:
@@ -10876,7 +11735,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.incident.process
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.incident.action
       x-audit-event-failure: amusement.incident.action_failed
@@ -10898,9 +11759,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a17
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 target_status:
                   type: string
                   description: 目标状态。
@@ -10909,7 +11781,17 @@ paths:
                   type: string
                   description: 处置人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/incidents/{incidentId}/close:
     post:
       tags:
@@ -10919,7 +11801,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.incident.close
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.incident.close
       x-audit-event-failure: amusement.incident.close_failed
@@ -10941,9 +11825,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a17
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 resolution:
                   type: string
                   description: 处置结论。
@@ -10952,7 +11847,17 @@ paths:
                   type: string
                   description: 关闭人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/safety-notices:
     get:
       tags:
@@ -10962,11 +11867,19 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.safety_notice.view
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: amusement.safety_notice.list
       x-audit-event-failure: amusement.safety_notice.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - amusement
@@ -10975,7 +11888,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.safety_notice.manage
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.safety_notice.create
       x-audit-event-failure: amusement.safety_notice.create_failed
@@ -10989,9 +11904,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a17
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 project_id:
                   type: string
                   description: 所属项目 ID。
@@ -11032,7 +11958,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/safety-notices/{noticeId}/acknowledgements:
     post:
       tags:
@@ -11042,7 +11978,9 @@ paths:
       x-auth-context: staff-token
       x-permission: amusement.waiver.acknowledge
       x-data-scope: project-amusement
-      x-terminal-allowed: *a1
+      x-terminal-allowed:
+        - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.waiver.acknowledge
       x-audit-event-failure: amusement.waiver.acknowledge_failed
@@ -11064,9 +12002,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a17
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 project_id:
                   type: string
                   description: 所属项目 ID。
@@ -11111,7 +12060,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/risk-alerts:
     get:
       tags:
@@ -11121,13 +12080,19 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.risk_alert.view
       x-data-scope: warehouse
-      x-terminal-allowed: &a18
+      x-terminal-allowed:
         - web
         - mobile_admin
       x-idempotency-required: false
       x-audit-event-success: inventory.risk_alert.list
       x-audit-event-failure: inventory.risk_alert.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/risk-alerts/scan:
     post:
       tags:
@@ -11137,7 +12102,9 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.risk.scan
       x-data-scope: warehouse
-      x-terminal-allowed: *a18
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: true
       x-audit-event-success: inventory.risk.scan
       x-audit-event-failure: inventory.risk.scan_failed
@@ -11151,7 +12118,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 operator_note:
                   type: string
                   description: 操作留痕备注。
@@ -11163,7 +12133,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/stock-batches:
     get:
       tags:
@@ -11173,11 +12153,19 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.stock.view
       x-data-scope: warehouse
-      x-terminal-allowed: *a18
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: false
       x-audit-event-success: inventory.stock_batch.list
       x-audit-event-failure: inventory.stock_batch.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - inventory
@@ -11186,7 +12174,9 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.stock.batch.manage
       x-data-scope: warehouse
-      x-terminal-allowed: *a18
+      x-terminal-allowed:
+        - web
+        - mobile_admin
       x-idempotency-required: true
       x-audit-event-success: inventory.stock_batch.create
       x-audit-event-failure: inventory.stock_batch.create_failed
@@ -11200,9 +12190,15 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: &a19
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
                   items:
@@ -11235,7 +12231,17 @@ paths:
                   type: string
                   description: 状态。
                   maxLength: 255
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/supplier-qualifications:
     get:
       tags:
@@ -11245,7 +12251,8 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.supplier.qualification.manage
       x-data-scope: supplier
-      x-terminal-allowed: *a6
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: inventory.supplier_qualification.list
       x-audit-event-failure: inventory.supplier_qualification.list_failed
@@ -11257,7 +12264,13 @@ paths:
             type: string
             maxLength: 64
           description: 按供应商过滤。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - inventory
@@ -11266,7 +12279,8 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.supplier.qualification.manage
       x-data-scope: supplier
-      x-terminal-allowed: *a6
+      x-terminal-allowed:
+        - web
       x-idempotency-required: true
       x-audit-event-success: inventory.supplier_qualification.create
       x-audit-event-failure: inventory.supplier_qualification.create_failed
@@ -11281,7 +12295,10 @@ paths:
                 - idempotency_key
                 - qualification_type
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 supplier_id:
                   type: string
                   description: 供应商 ID。
@@ -11316,7 +12333,17 @@ paths:
                   type: string
                   description: 状态。
                   maxLength: 255
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/supplier-reconciliations:
     get:
       tags:
@@ -11326,11 +12353,18 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.supplier.reconcile
       x-data-scope: supplier
-      x-terminal-allowed: *a6
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: inventory.supplier_reconciliation.list
       x-audit-event-failure: inventory.supplier_reconciliation.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - inventory
@@ -11339,7 +12373,8 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.supplier.reconcile
       x-data-scope: supplier
-      x-terminal-allowed: *a6
+      x-terminal-allowed:
+        - web
       x-idempotency-required: true
       x-audit-event-success: inventory.supplier_reconciliation.create
       x-audit-event-failure: inventory.supplier_reconciliation.create_failed
@@ -11353,9 +12388,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a19
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 supplier_id:
                   type: string
                   description: 供应商 ID。
@@ -11386,7 +12432,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/supplier-settlement-methods:
     get:
       tags:
@@ -11396,7 +12452,8 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.supplier.settlement.manage
       x-data-scope: supplier
-      x-terminal-allowed: *a6
+      x-terminal-allowed:
+        - web
       x-idempotency-required: false
       x-audit-event-success: inventory.supplier_settlement_method.list
       x-audit-event-failure: inventory.supplier_settlement_method.list_failed
@@ -11408,7 +12465,13 @@ paths:
             type: string
             maxLength: 64
           description: 按供应商过滤。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - inventory
@@ -11417,7 +12480,8 @@ paths:
       x-auth-context: staff-token
       x-permission: inventory.supplier.settlement.manage
       x-data-scope: supplier
-      x-terminal-allowed: *a6
+      x-terminal-allowed:
+        - web
       x-idempotency-required: true
       x-audit-event-success: inventory.supplier_settlement_method.create
       x-audit-event-failure: inventory.supplier_settlement_method.create_failed
@@ -11432,7 +12496,10 @@ paths:
                 - idempotency_key
                 - settlement_method
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 supplier_id:
                   type: string
                   description: 供应商 ID。
@@ -11455,7 +12522,17 @@ paths:
                   type: string
                   description: 状态。
                   maxLength: 255
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/saved-bottles/{id}/dispute:
     post:
       tags:
@@ -11465,7 +12542,7 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.saved_bottle.manage
       x-data-scope: project-bar-table
-      x-terminal-allowed: &a20
+      x-terminal-allowed:
         - tablet
         - web
       x-idempotency-required: true
@@ -11489,9 +12566,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a19
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 reason:
                   type: string
                   description: 争议原因。
@@ -11508,7 +12596,17 @@ paths:
                   items:
                     type: string
                     maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/saved-bottles/{id}/transfer:
     post:
       tags:
@@ -11518,7 +12616,9 @@ paths:
       x-auth-context: staff-token
       x-permission: bar.saved_bottle.manage
       x-data-scope: project-bar-table
-      x-terminal-allowed: *a20
+      x-terminal-allowed:
+        - tablet
+        - web
       x-idempotency-required: true
       x-audit-event-success: bar.saved_bottle.transfer
       x-audit-event-failure: bar.saved_bottle.transfer_failed
@@ -11540,9 +12640,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a19
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 to_name_or_nickname:
                   type: string
                   description: 受赠人姓名/昵称。
@@ -11555,7 +12666,17 @@ paths:
                   type: string
                   description: 转赠原因。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/compliance/contract-key-dates:
     get:
       tags:
@@ -11569,7 +12690,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: compliance.contract_key_date.list
       x-audit-event-failure: compliance.contract_key_date.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - compliance
@@ -11592,9 +12719,15 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: &a21
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
                   items:
@@ -11640,7 +12773,17 @@ paths:
                 human_confirmed:
                   type: boolean
                   description: 是否人工确认。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/compliance/expiry-items:
     get:
       tags:
@@ -11654,7 +12797,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: compliance.expiry_item.list
       x-audit-event-failure: compliance.expiry_item.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - compliance
@@ -11677,9 +12826,20 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
-                evidence_attachment_ids: *a21
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
                 subject_type:
                   type: string
                   description: 主体类型。
@@ -11740,7 +12900,17 @@ paths:
                 human_confirmed:
                   type: boolean
                   description: 是否人工确认。
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/compliance/reminders:
     get:
       tags:
@@ -11754,7 +12924,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: compliance.reminder.list
       x-audit-event-failure: compliance.reminder.list_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/compliance/reminders/scan:
     post:
       tags:
@@ -11778,7 +12954,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 operator_note:
                   type: string
                   description: 操作留痕备注。
@@ -11794,7 +12973,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/compliance/wecom/risk-hits:
     get:
       tags:
@@ -11823,7 +13012,13 @@ paths:
             type: string
             maxLength: 64
           description: 按会话过滤。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/compliance/wecom/risk-hits/{id}/review:
     post:
       tags:
@@ -11866,7 +13061,17 @@ paths:
                   type: string
                   description: 复核说明。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/devices/{id}/found:
     post:
       tags:
@@ -11881,7 +13086,7 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: terminal.device.found
       x-audit-event-failure: terminal.device.found_failed
-      parameters: &a22
+      parameters:
         - name: id
           in: path
           required: true
@@ -11899,8 +13104,14 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -11915,7 +13126,17 @@ paths:
                   type: string
                   description: 流转原因；进入留痕事件。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/devices/{id}/lost:
     post:
       tags:
@@ -11930,7 +13151,14 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: terminal.device.lost
       x-audit-event-failure: terminal.device.lost_failed
-      parameters: *a22
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备 ID。
       requestBody:
         required: true
         content:
@@ -11941,8 +13169,14 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -11957,7 +13191,17 @@ paths:
                   type: string
                   description: 流转原因；进入留痕事件。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/devices/{id}/repair:
     post:
       tags:
@@ -11972,7 +13216,14 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: terminal.device.repair
       x-audit-event-failure: terminal.device.repair_failed
-      parameters: *a22
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备 ID。
       requestBody:
         required: true
         content:
@@ -11983,8 +13234,14 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -11999,7 +13256,17 @@ paths:
                   type: string
                   description: 流转原因；进入留痕事件。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/devices/{id}/scrap:
     post:
       tags:
@@ -12014,7 +13281,14 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: terminal.device.scrap
       x-audit-event-failure: terminal.device.scrap_failed
-      parameters: *a22
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备 ID。
       requestBody:
         required: true
         content:
@@ -12025,8 +13299,14 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -12041,7 +13321,17 @@ paths:
                   type: string
                   description: 流转原因；进入留痕事件。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/mdm/violations/detect:
     post:
       tags:
@@ -12067,8 +13357,14 @@ paths:
                 - idempotency_key
                 - device_id
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表。
@@ -12091,7 +13387,17 @@ paths:
                   items:
                     type: string
                     maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/mdm/violations/{id}/handle:
     post:
       tags:
@@ -12124,8 +13430,14 @@ paths:
                 - idempotency_key
                 - disposition
               properties:
-                idempotency_key: *a2
-                operator_note: *a4
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表。
@@ -12143,7 +13455,17 @@ paths:
                   type: string
                   description: 处置说明。
                   maxLength: 4000
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-billing/bills/{id}/confirm:
     post:
       tags:
@@ -12157,7 +13479,7 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: merchant.billing.confirm
       x-audit-event-failure: merchant.billing.confirm_failed
-      parameters: &a23
+      parameters:
         - name: id
           in: path
           required: true
@@ -12175,7 +13497,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 operator_note:
                   type: string
                   description: 操作留痕备注。
@@ -12184,7 +13509,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-billing/bills/{id}/disputes:
     post:
       tags:
@@ -12198,7 +13533,14 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: merchant.billing.dispute.submit
       x-audit-event-failure: merchant.billing.dispute.submit_failed
-      parameters: *a23
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 商户账单 ID。
       requestBody:
         required: true
         content:
@@ -12209,7 +13551,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 operator_note:
                   type: string
                   description: 操作留痕备注。
@@ -12232,7 +13577,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-billing/bills/{id}/dunning-records:
     post:
       tags:
@@ -12246,7 +13601,14 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: merchant.billing.dunning.record
       x-audit-event-failure: merchant.billing.dunning.record_failed
-      parameters: *a23
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 商户账单 ID。
       requestBody:
         required: true
         content:
@@ -12257,7 +13619,10 @@ paths:
               required:
                 - idempotency_key
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 operator_note:
                   type: string
                   description: 操作留痕备注。
@@ -12282,7 +13647,17 @@ paths:
                   type: string
                   description: 操作人。
                   maxLength: 64
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/customer/points/ledger:
     get:
       tags:
@@ -12292,14 +13667,20 @@ paths:
       x-auth-context: customer-token
       x-permission: not_applicable
       x-data-scope: self
-      x-terminal-allowed: &a24
+      x-terminal-allowed:
         - app
         - miniapp
         - web
       x-idempotency-required: false
       x-audit-event-success: customer.points.ledger_viewed
       x-audit-event-failure: customer.points.ledger_view_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/customer/points/redemption-items:
     get:
       tags:
@@ -12309,11 +13690,20 @@ paths:
       x-auth-context: customer-token
       x-permission: not_applicable
       x-data-scope: self
-      x-terminal-allowed: *a24
+      x-terminal-allowed:
+        - app
+        - miniapp
+        - web
       x-idempotency-required: false
       x-audit-event-success: customer.points.redemption_items_viewed
       x-audit-event-failure: customer.points.redemption_items_view_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/customer/points/redemptions:
     get:
       tags:
@@ -12323,11 +13713,20 @@ paths:
       x-auth-context: customer-token
       x-permission: not_applicable
       x-data-scope: self
-      x-terminal-allowed: *a24
+      x-terminal-allowed:
+        - app
+        - miniapp
+        - web
       x-idempotency-required: false
       x-audit-event-success: customer.points.redemptions_viewed
       x-audit-event-failure: customer.points.redemptions_view_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - customer
@@ -12336,7 +13735,10 @@ paths:
       x-auth-context: customer-token
       x-permission: not_applicable
       x-data-scope: self
-      x-terminal-allowed: *a24
+      x-terminal-allowed:
+        - app
+        - miniapp
+        - web
       x-idempotency-required: true
       x-audit-event-success: customer.points.redeem
       x-audit-event-failure: customer.points.redeem_failed
@@ -12352,7 +13754,10 @@ paths:
                 - catalog_item_id
                 - quantity
               properties:
-                idempotency_key: *a2
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
                 catalog_item_id:
                   type: string
                   description: 兑换商品 ID。
@@ -12365,7 +13770,17 @@ paths:
                   type: string
                   description: 来源终端。
                   maxLength: 255
-      responses: *a3
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/analytics/group-overview:
     get:
       tags:
@@ -12380,7 +13795,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: analytics.group_overview.viewed
       x-audit-event-failure: analytics.group_overview.view_failed
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/ticketing/refunds/{refund_id}/lines:
     get:
       tags:
@@ -12402,7 +13823,132 @@ paths:
             type: string
             maxLength: 64
           description: 退票单 ID。
-      responses: *a7
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/inventory/stocktakes:
+    get:
+      tags:
+        - inventory
+      operationId: listInventoryStocktakes
+      summary: 查询库存盘点单列表
+      x-permission: inventory.stocktake.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: inventory.stocktake.viewed
+      x-audit-event-failure: inventory.stocktake.view_failed
+      x-auth-context: staff-token
+      parameters: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - inventory
+      operationId: createInventoryStocktake
+      summary: 建库存盘点单
+      x-permission: inventory.stocktake.create
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.stocktake.created
+      x-audit-event-failure: inventory.stocktake.create_failed
+      x-auth-context: staff-token
+      parameters: []
+      requestBody:
+        $ref: "#/components/requestBodies/CreateStocktakeRequest"
+      responses: &a1
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/inventory/stocktakes/{id}:
+    get:
+      tags:
+        - inventory
+      operationId: getInventoryStocktake
+      summary: 查询库存盘点单详情（含差异明细）
+      x-permission: inventory.stocktake.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: inventory.stocktake.detail_viewed
+      x-audit-event-failure: inventory.stocktake.detail_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/inventory/stocktakes/{id}/variances:
+    post:
+      tags:
+        - inventory
+      operationId: recordInventoryStocktakeVariance
+      summary: 录入库存盘点差异行
+      x-permission: inventory.stocktake.variance_record
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.stocktake.variance_recorded
+      x-audit-event-failure: inventory.stocktake.variance_record_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/RecordVarianceRequest"
+      responses: *a1
+  /api/v1/inventory/stocktakes/{id}/variances/{vid}/review:
+    post:
+      tags:
+        - inventory
+      operationId: reviewInventoryStocktakeVariance
+      summary: 复核库存盘点差异（approved/rejected）
+      x-permission: inventory.stocktake.variance_review
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.stocktake.variance_reviewed
+      x-audit-event-failure: inventory.stocktake.variance_review_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/VarianceId"
+          description: 路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/ReviewVarianceRequest"
+      responses: *a1
 components:
   securitySchemes:
     BearerAuth:
@@ -12597,6 +14143,14 @@ components:
         type: string
         maxLength: 64
       description: ShiftId 路径参数；必须引用当前数据范围内存在且允许访问的收银班次。
+    VarianceId:
+      name: vid
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 64
+      description: VarianceId 路径参数；必须引用当前数据范围内、隶属该盘点单的库存差异明细行 id。
   requestBodies:
     StatusChange:
       required: true
@@ -13602,6 +15156,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/BarShiftCloseRequest"
+    CreateStocktakeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateStocktakeRequest"
+    RecordVarianceRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RecordVarianceRequest"
+    ReviewVarianceRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ReviewVarianceRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -19747,6 +21319,94 @@ components:
         note:
           type: string
           description: 班结备注；进入审计留痕。
+          maxLength: 1000
+    CreateStocktakeRequest:
+      type: object
+      description: 请求载荷 `CreateStocktakeRequest`（V108 盘点单建单）；建盘点单 status=counting，merchant_id 强制取自认证上下文不由请求体传入。
+      additionalProperties: false
+      required:
+        - warehouse_id
+      properties:
+        idempotency_key: &a2
+          type: string
+          description: 操作幂等键；重复提交必须返回同一处理结果，避免重复建盘点单 / 重复录差异 / 重复复核。
+          maxLength: 128
+        warehouse_id:
+          type: string
+          description: 盘点库房 id（必填）。
+          maxLength: 64
+        business_date:
+          type: string
+          format: date
+          description: 盘点经营日（缺省取当日）。
+        remark:
+          type: string
+          description: 盘点单备注（可空）。
+          maxLength: 255
+    RecordVarianceRequest:
+      type: object
+      description: 请求载荷 `RecordVarianceRequest`（V108
+        库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按
+        variance_qty×unit_cost_cents 成本估算。
+      additionalProperties: false
+      required:
+        - item_id
+        - reason
+      properties:
+        idempotency_key: *a2
+        item_id:
+          type: string
+          description: 物料/商品 id（供应链域只读引用，必填）。
+          maxLength: 64
+        batch_no:
+          type: string
+          description: 批次号（可空）。
+          maxLength: 64
+        book_qty:
+          type: number
+          description: 账面数量（缺省 0）。
+        counted_qty:
+          type: number
+          description: 实盘数量（缺省 0）。
+        reason:
+          type: string
+          description: 差异原因：报损 damage / 盘亏 shortage / 盘盈 overage / 供应商责任 supplier_fault。
+          enum:
+            - damage
+            - shortage
+            - overage
+            - supplier_fault
+        supplier_id:
+          type: string
+          description: 供应商责任（supplier_fault）时的责任供应商 id（→ AP 对手方）。
+          maxLength: 64
+        variance_amount_cent:
+          type: integer
+          format: int64
+          description: 金额差（带符号，分）；显式传入优先于成本估算。
+        unit_cost_cents:
+          type: integer
+          format: int64
+          description: 成本单价（分，非负）；未显式传 variance_amount_cent 时按 variance_qty×unit_cost_cents 估算。
+          minimum: 0
+    ReviewVarianceRequest:
+      type: object
+      description: 请求载荷 `ReviewVarianceRequest`（V108 库存差异复核）；decision=approved/rejected，pending→终态，幂等，重复/非 pending 拒绝。approved
+        是解锁 finance postInventoryVariance 入账的关键。
+      additionalProperties: false
+      required:
+        - decision
+      properties:
+        idempotency_key: *a2
+        decision:
+          type: string
+          description: 复核裁决：approved（复核通过，可入账）/ rejected（驳回，不入账）。
+          enum:
+            - approved
+            - rejected
+        reason:
+          type: string
+          description: 复核意见（可空）。
           maxLength: 1000
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"

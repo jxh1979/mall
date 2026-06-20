@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 386 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 391 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -407,6 +407,11 @@
 | customer | `POST` | `/api/v1/customer/points/redemptions` | `redeemCustomerPoints` | 提交积分兑换 | `object` | `not_applicable` | `customer-token` | `self` | app, miniapp, web | 是 | `customer.points.redeem` | `customer.points.redeem_failed` |
 | analytics | `GET` | `/api/v1/analytics/group-overview` | `getGroupOverview` | 集团总览视图 | `-` | `analytics.group.view` | `staff-token` | `group` | web | 否 | `analytics.group_overview.viewed` | `analytics.group_overview.view_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | `listTicketRefundLines` | 查询退票明细行 | `-` | `ticket.refund.view` | `staff-token` | `-` | web | 否 | `ticket.refund_line.list` | `ticket.refund_line.list_failed` |
+| inventory | `GET` | `/api/v1/inventory/stocktakes` | `listInventoryStocktakes` | 查询库存盘点单列表 | `-` | `inventory.stocktake.view` | `staff-token` | `project` | web | 否 | `inventory.stocktake.viewed` | `inventory.stocktake.view_failed` |
+| inventory | `POST` | `/api/v1/inventory/stocktakes` | `createInventoryStocktake` | 建库存盘点单 | `CreateStocktakeRequest` | `inventory.stocktake.create` | `staff-token` | `project` | web | 是 | `inventory.stocktake.created` | `inventory.stocktake.create_failed` |
+| inventory | `GET` | `/api/v1/inventory/stocktakes/{id}` | `getInventoryStocktake` | 查询库存盘点单详情（含差异明细） | `-` | `inventory.stocktake.view` | `staff-token` | `project` | web | 否 | `inventory.stocktake.detail_viewed` | `inventory.stocktake.detail_view_failed` |
+| inventory | `POST` | `/api/v1/inventory/stocktakes/{id}/variances` | `recordInventoryStocktakeVariance` | 录入库存盘点差异行 | `RecordVarianceRequest` | `inventory.stocktake.variance_record` | `staff-token` | `project` | web | 是 | `inventory.stocktake.variance_recorded` | `inventory.stocktake.variance_record_failed` |
+| inventory | `POST` | `/api/v1/inventory/stocktakes/{id}/variances/{vid}/review` | `reviewInventoryStocktakeVariance` | 复核库存盘点差异（approved/rejected） | `ReviewVarianceRequest` | `inventory.stocktake.variance_review` | `staff-token` | `project` | web | 是 | `inventory.stocktake.variance_reviewed` | `inventory.stocktake.variance_review_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -474,5 +479,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 386 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 391 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

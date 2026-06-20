@@ -1415,6 +1415,153 @@ class JdbcInventoryRepository implements InventoryRepository {
                 """, rowMapper::mapSupplierSettlementMethod);
     }
 
+    // ── V108/V126：盘点单（stocktake）+ 库存差异明细（inventory_variance）写入侧。 ──
+    // 强制 merchant scope：stocktake 持 merchant_id；inventory_variance 无 merchant_id 列，经 JOIN stocktake 取值。
+
+    @Override
+    public StocktakeRecord saveStocktake(StocktakeRecord stocktake) {
+        jdbcTemplate.update("""
+                INSERT INTO stocktake (
+                    id, stocktake_no, warehouse_id, merchant_id, business_date, status, remark,
+                    created_at, updated_at
+                )
+                VALUES (
+                    :id, :stocktake_no, :warehouse_id, :merchant_id, :business_date, :status, :remark,
+                    :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    remark = EXCLUDED.remark,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", stocktake.id())
+                .addValue("stocktake_no", stocktake.stocktakeNo())
+                .addValue("warehouse_id", stocktake.warehouseId())
+                .addValue("merchant_id", stocktake.merchantId())
+                .addValue("business_date", stocktake.businessDate())
+                .addValue("status", stocktake.status())
+                .addValue("remark", stocktake.remark())
+                .addValue("created_at", offset(stocktake.createdAt()))
+                .addValue("updated_at", offset(stocktake.updatedAt())));
+        return stocktake;
+    }
+
+    @Override
+    public Optional<StocktakeRecord> findStocktakeById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, stocktake_no, warehouse_id, merchant_id, business_date, status, remark,
+                       created_at, updated_at
+                  FROM stocktake
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapStocktake).stream().findFirst();
+    }
+
+    @Override
+    public List<StocktakeRecord> listStocktakes() {
+        return jdbcTemplate.query("""
+                SELECT id, stocktake_no, warehouse_id, merchant_id, business_date, status, remark,
+                       created_at, updated_at
+                  FROM stocktake
+                 ORDER BY created_at DESC, id
+                """, rowMapper::mapStocktake);
+    }
+
+    @Override
+    public List<StocktakeRecord> listStocktakesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, stocktake_no, warehouse_id, merchant_id, business_date, status, remark,
+                       created_at, updated_at
+                  FROM stocktake
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapStocktake);
+    }
+
+    @Override
+    public InventoryVarianceRecord saveInventoryVariance(InventoryVarianceRecord variance) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_variance (
+                    id, stocktake_id, item_id, batch_no, book_qty, counted_qty, variance_qty,
+                    variance_amount_cent, reason, supplier_id, review_status, reviewed_by, reviewed_at,
+                    posted_ar_ap_item_id, created_at, updated_at
+                )
+                VALUES (
+                    :id, :stocktake_id, :item_id, :batch_no, :book_qty, :counted_qty, :variance_qty,
+                    :variance_amount_cent, :reason, :supplier_id, :review_status, :reviewed_by, :reviewed_at,
+                    :posted_ar_ap_item_id, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    review_status = EXCLUDED.review_status,
+                    reviewed_by = EXCLUDED.reviewed_by,
+                    reviewed_at = EXCLUDED.reviewed_at,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", variance.id())
+                .addValue("stocktake_id", variance.stocktakeId())
+                .addValue("item_id", variance.itemId())
+                .addValue("batch_no", variance.batchNo())
+                .addValue("book_qty", variance.bookQty())
+                .addValue("counted_qty", variance.countedQty())
+                .addValue("variance_qty", variance.varianceQty())
+                .addValue("variance_amount_cent", variance.varianceAmountCent())
+                .addValue("reason", variance.reason())
+                .addValue("supplier_id", variance.supplierId())
+                .addValue("review_status", variance.reviewStatus())
+                .addValue("reviewed_by", variance.reviewedBy())
+                .addValue("reviewed_at", offset(variance.reviewedAt()))
+                .addValue("posted_ar_ap_item_id", variance.postedArApItemId())
+                .addValue("created_at", offset(variance.createdAt()))
+                .addValue("updated_at", offset(variance.updatedAt())));
+        return variance;
+    }
+
+    @Override
+    public Optional<InventoryVarianceRecord> findInventoryVarianceByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT v.id, v.stocktake_id, v.item_id, v.batch_no, v.book_qty, v.counted_qty,
+                       v.variance_qty, v.variance_amount_cent, v.reason, v.supplier_id,
+                       v.review_status, v.reviewed_by, v.reviewed_at, v.posted_ar_ap_item_id,
+                       s.merchant_id, v.created_at, v.updated_at
+                  FROM inventory_variance v
+                  JOIN stocktake s ON s.id = v.stocktake_id
+                 WHERE v.id = :id
+                   FOR UPDATE OF v
+                """, Map.of("id", id), rowMapper::mapInventoryVariance).stream().findFirst();
+    }
+
+    @Override
+    public List<InventoryVarianceRecord> listInventoryVariancesByStocktake(String stocktakeId) {
+        return jdbcTemplate.query("""
+                SELECT v.id, v.stocktake_id, v.item_id, v.batch_no, v.book_qty, v.counted_qty,
+                       v.variance_qty, v.variance_amount_cent, v.reason, v.supplier_id,
+                       v.review_status, v.reviewed_by, v.reviewed_at, v.posted_ar_ap_item_id,
+                       s.merchant_id, v.created_at, v.updated_at
+                  FROM inventory_variance v
+                  JOIN stocktake s ON s.id = v.stocktake_id
+                 WHERE v.stocktake_id = :stocktake_id
+                 ORDER BY v.created_at, v.id
+                """, Map.of("stocktake_id", stocktakeId), rowMapper::mapInventoryVariance);
+    }
+
+    @Override
+    public int reviewInventoryVarianceIfPending(
+            String varianceId, String decision, String reviewedBy, Instant reviewedAt) {
+        // V108 防并发重复复核：仅当 review_status='pending' 才置终态，受影响行数==1 才视为成功。
+        return jdbcTemplate.update("""
+                UPDATE inventory_variance
+                   SET review_status = :decision,
+                       reviewed_by = :reviewed_by,
+                       reviewed_at = :reviewed_at,
+                       updated_at = now()
+                 WHERE id = :id
+                   AND review_status = 'pending'
+                """, new MapSqlParameterSource()
+                .addValue("id", varianceId)
+                .addValue("decision", decision)
+                .addValue("reviewed_by", reviewedBy)
+                .addValue("reviewed_at", offset(reviewedAt)));
+    }
+
     private String writeList(List<String> value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);

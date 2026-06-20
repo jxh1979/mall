@@ -147,4 +147,26 @@ public interface InventoryRepository {
     List<SupplierSettlementMethodRecord> listSupplierSettlementMethodsByMerchant(String merchantId);
 
     List<SupplierSettlementMethodRecord> listSupplierSettlementMethods();
+
+    // ── V108/V126：盘点单（stocktake）+ 库存差异明细（inventory_variance）写入侧。 ──
+    StocktakeRecord saveStocktake(StocktakeRecord stocktake);
+
+    Optional<StocktakeRecord> findStocktakeById(String id);
+
+    List<StocktakeRecord> listStocktakes();
+
+    List<StocktakeRecord> listStocktakesByMerchant(String merchantId);
+
+    InventoryVarianceRecord saveInventoryVariance(InventoryVarianceRecord variance);
+
+    Optional<InventoryVarianceRecord> findInventoryVarianceByIdForUpdate(String id);
+
+    List<InventoryVarianceRecord> listInventoryVariancesByStocktake(String stocktakeId);
+
+    /**
+     * V108 差异复核：条件 UPDATE（WHERE review_status='pending'）置 approved/rejected，受影响行数==1 才成功，
+     * 防并发重复复核。返回受影响行数。
+     */
+    int reviewInventoryVarianceIfPending(
+            String varianceId, String decision, String reviewedBy, Instant reviewedAt);
 }

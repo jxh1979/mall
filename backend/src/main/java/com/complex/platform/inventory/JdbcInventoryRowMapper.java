@@ -347,6 +347,43 @@ final class JdbcInventoryRowMapper {
         );
     }
 
+    // ── V108/V126：盘点单 + 库存差异明细。 ──
+    StocktakeRecord mapStocktake(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new StocktakeRecord(
+                resultSet.getString("id"),
+                resultSet.getString("stocktake_no"),
+                resultSet.getString("warehouse_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getObject("business_date", java.time.LocalDate.class),
+                resultSet.getString("status"),
+                resultSet.getString("remark"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
+    InventoryVarianceRecord mapInventoryVariance(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new InventoryVarianceRecord(
+                resultSet.getString("id"),
+                resultSet.getString("stocktake_id"),
+                resultSet.getString("item_id"),
+                resultSet.getString("batch_no"),
+                resultSet.getBigDecimal("book_qty"),
+                resultSet.getBigDecimal("counted_qty"),
+                resultSet.getBigDecimal("variance_qty"),
+                resultSet.getLong("variance_amount_cent"),
+                resultSet.getString("reason"),
+                resultSet.getString("supplier_id"),
+                resultSet.getString("review_status"),
+                resultSet.getString("reviewed_by"),
+                instantOrNull(resultSet, "reviewed_at"),
+                resultSet.getString("posted_ar_ap_item_id"),
+                resultSet.getString("merchant_id"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
     private List<String> readList(String value) {
         if (value == null || value.isBlank()) {
             return List.of();

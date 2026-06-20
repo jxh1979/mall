@@ -15,8 +15,11 @@ import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.GlobalExceptionHandler;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.config.SecurityConfig;
+import com.complex.platform.inventory.dto.CreateStocktakeRequest;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
+import com.complex.platform.inventory.dto.RecordVarianceRequest;
+import com.complex.platform.inventory.dto.ReviewVarianceRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
@@ -105,6 +108,13 @@ class InventoryControllerTests {
         when(service.createTypedStockMovement(eq("damage"), any(StockMovementRequest.class))).thenReturn(stockMovement("damage"));
         when(service.createInventorySupplier(any(InventorySupplierRequest.class))).thenReturn(supplier());
         when(service.scanTraceCodeHandover(any(VerificationRequest.class))).thenReturn(traceHandover());
+        when(service.listStocktakes()).thenReturn(new PageResponse<>(List.of(stocktake()), 1, 50, 1));
+        when(service.getStocktake(eq("stocktake_1")))
+                .thenReturn(new StocktakeDetailRecord(stocktake(), List.of(variance())));
+        when(service.createStocktake(any(CreateStocktakeRequest.class))).thenReturn(stocktake());
+        when(service.recordVariance(eq("stocktake_1"), any(RecordVarianceRequest.class))).thenReturn(variance());
+        when(service.reviewVariance(eq("stocktake_1"), eq("variance_1"), any(ReviewVarianceRequest.class)))
+                .thenReturn(variance());
     }
 
     @ParameterizedTest
@@ -135,7 +145,12 @@ class InventoryControllerTests {
             "POST,/api/v1/inventory/supplier-qualifications,inventory.supplier.qualification.manage",
             "GET,/api/v1/inventory/supplier-settlement-methods,inventory.supplier.settlement.manage",
             "POST,/api/v1/inventory/supplier-settlement-methods,inventory.supplier.settlement.manage",
-            "POST,/api/v1/inventory/trace-codes/scan-handover,inventory.handover.scan"
+            "POST,/api/v1/inventory/trace-codes/scan-handover,inventory.handover.scan",
+            "GET,/api/v1/inventory/stocktakes,inventory.stocktake.view",
+            "GET,/api/v1/inventory/stocktakes/stocktake_1,inventory.stocktake.view",
+            "POST,/api/v1/inventory/stocktakes,inventory.stocktake.create",
+            "POST,/api/v1/inventory/stocktakes/stocktake_1/variances,inventory.stocktake.variance_record",
+            "POST,/api/v1/inventory/stocktakes/stocktake_1/variances/variance_1/review,inventory.stocktake.variance_review"
     })
     void inventoryRoutesUseExactOpenApiPermission(String method, String path, String permission) throws Exception {
         if ("GET".equals(method)) {
@@ -169,7 +184,10 @@ class InventoryControllerTests {
             "/api/v1/inventory/suppliers,'{\"supplier_name\":\"Supplier\"}'",
             "/api/v1/inventory/supplier-qualifications,'{\"supplier_id\":\"supplier_1\",\"qualification_type\":\"business_license\"}'",
             "/api/v1/inventory/supplier-settlement-methods,'{\"supplier_id\":\"supplier_1\",\"settlement_method\":\"monthly\"}'",
-            "/api/v1/inventory/trace-codes/scan-handover,'{\"credential_type\":\"manual\",\"credential_payload\":\"TRACE-1\",\"device_id\":\"dev_1\",\"point_id\":\"bar_1\"}'"
+            "/api/v1/inventory/trace-codes/scan-handover,'{\"credential_type\":\"manual\",\"credential_payload\":\"TRACE-1\",\"device_id\":\"dev_1\",\"point_id\":\"bar_1\"}'",
+            "/api/v1/inventory/stocktakes,'{\"warehouse_id\":\"wh_1\",\"business_date\":\"2026-06-19\"}'",
+            "/api/v1/inventory/stocktakes/stocktake_1/variances,'{\"item_id\":\"item_1\",\"book_qty\":10,\"counted_qty\":7,\"reason\":\"shortage\"}'",
+            "/api/v1/inventory/stocktakes/stocktake_1/variances/variance_1/review,'{\"decision\":\"approved\"}'"
     })
     void writeRoutesRejectMissingIdempotencyKey(String path, String body) throws Exception {
         mockMvc.perform(post(path)
@@ -205,6 +223,21 @@ class InventoryControllerTests {
     }
 
     private String bodyFor(String path) {
+        if (path.contains("/variances/") && path.endsWith("/review")) {
+            return """
+                    {"idempotency_key":"variance-review","decision":"approved","reason":"confirmed"}
+                    """;
+        }
+        if (path.endsWith("/variances")) {
+            return """
+                    {"idempotency_key":"variance-record","item_id":"item_1","book_qty":10,"counted_qty":7,"reason":"shortage","unit_cost_cents":500}
+                    """;
+        }
+        if (path.endsWith("/stocktakes")) {
+            return """
+                    {"idempotency_key":"stocktake-create","warehouse_id":"wh_1","business_date":"2026-06-19","remark":"month-end"}
+                    """;
+        }
         if (path.contains("supplier-qualifications")) {
             return """
                     {"idempotency_key":"qual-create","supplier_id":"supplier_1","qualification_type":"business_license","qualification_no":"BL-1","valid_to":"2030-01-01"}
@@ -278,6 +311,19 @@ class InventoryControllerTests {
     private InventoryItemRecord item() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new InventoryItemRecord("item_1", null, "Vodka", "spirit", "bottle", null, false, 2, "active", now, now, null, null);
+    }
+
+    private StocktakeRecord stocktake() {
+        Instant now = Instant.parse("2026-06-19T00:00:00Z");
+        return new StocktakeRecord("stocktake_1", "ST1", "wh_1", null,
+                LocalDate.parse("2026-06-19"), "counting", null, now, now);
+    }
+
+    private InventoryVarianceRecord variance() {
+        Instant now = Instant.parse("2026-06-19T00:00:00Z");
+        return new InventoryVarianceRecord("variance_1", "stocktake_1", "item_1", null,
+                new java.math.BigDecimal("10"), new java.math.BigDecimal("7"), new java.math.BigDecimal("-3"),
+                -1500L, "shortage", null, "pending", null, null, null, null, now, now);
     }
 
     private InventorySupplierRecord supplier() {

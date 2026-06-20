@@ -696,6 +696,33 @@ class SupplyChainT6ServiceTests {
             return new ArrayList<>(settlementMethods.values());
         }
 
+        // ── V108/V126：盘点单 + 库存差异明细写入侧（T6 测试不直接覆盖，未用方法抛 nyi）。 ──
+        @Override public StocktakeRecord saveStocktake(StocktakeRecord stocktake) {
+            throw nyi();
+        }
+        @Override public Optional<StocktakeRecord> findStocktakeById(String id) {
+            throw nyi();
+        }
+        @Override public List<StocktakeRecord> listStocktakes() {
+            throw nyi();
+        }
+        @Override public List<StocktakeRecord> listStocktakesByMerchant(String merchantId) {
+            throw nyi();
+        }
+        @Override public InventoryVarianceRecord saveInventoryVariance(InventoryVarianceRecord variance) {
+            throw nyi();
+        }
+        @Override public Optional<InventoryVarianceRecord> findInventoryVarianceByIdForUpdate(String id) {
+            throw nyi();
+        }
+        @Override public List<InventoryVarianceRecord> listInventoryVariancesByStocktake(String stocktakeId) {
+            throw nyi();
+        }
+        @Override public int reviewInventoryVarianceIfPending(
+                String varianceId, String decision, String reviewedBy, java.time.Instant reviewedAt) {
+            throw nyi();
+        }
+
         private static UnsupportedOperationException nyi() {
             return new UnsupportedOperationException("not needed for T6 service tests");
         }

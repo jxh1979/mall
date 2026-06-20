@@ -602,6 +602,215 @@ public class InventoryService {
         return highValueReviewService.review(reviewId, request);
     }
 
+    // ── V108/V126：盘点录入闭环（建盘点单 → 录差异 → 差异复核(approved/rejected) → 查询）。 ──
+    // 复核 approved 是解锁 finance postInventoryVariance 入账的关键（finance 依赖 review_status='approved'）。
+
+    private static final Set<String> INVENTORY_VARIANCE_REASONS =
+            Set.of("damage", "shortage", "overage", "supplier_fault");
+
+    public PageResponse<StocktakeRecord> listStocktakes() {
+        return readPage(
+                "inventory.stocktake.viewed",
+                "inventory.stocktake.view_failed",
+                "inventory.stocktake.view",
+                "stocktake",
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listStocktakesByMerchant)
+                                .orElseGet(repository::listStocktakes);
+                }
+        );
+    }
+
+    public StocktakeDetailRecord getStocktake(String stocktakeId) {
+        String id = requireText(stocktakeId, "stocktake_id");
+        try {
+            StocktakeRecord stocktake = loadStocktakeScoped(id);
+            List<InventoryVarianceRecord> variances = repository.listInventoryVariancesByStocktake(id);
+            auditEventService.recordSuccess(
+                    "inventory.stocktake.detail_viewed", "inventory.stocktake.view", "stocktake",
+                    id, null, null, Map.of("variance_count", variances.size()));
+            return new StocktakeDetailRecord(stocktake, variances);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "inventory.stocktake.detail_view_failed", "inventory.stocktake.view", "stocktake",
+                    id, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stocktake.create")
+    @Transactional
+    public StocktakeRecord createStocktake(com.complex.platform.inventory.dto.CreateStocktakeRequest request) {
+        return executeWrite(
+                "createStocktake",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                StocktakeRecord.class,
+                "inventory.stocktake.created",
+                "inventory.stocktake.create_failed",
+                "inventory.stocktake.create",
+                "stocktake",
+                () -> {
+                    com.complex.platform.inventory.dto.CreateStocktakeRequest actual = requireRequest(request);
+                    String warehouseId = requireText(actual.warehouseId(), "warehouse_id");
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    LocalDate businessDate =
+                            actual.businessDate() == null ? LocalDate.now() : actual.businessDate();
+                    Instant now = Instant.now();
+                    String slug = slug(actual.idempotencyKey());
+                    return repository.saveStocktake(new StocktakeRecord(
+                            "stocktake_" + slug,
+                            "ST" + now.toEpochMilli() + slug.substring(0, Math.min(6, slug.length())).toUpperCase(Locale.ROOT),
+                            warehouseId,
+                            merchantId,
+                            businessDate,
+                            "counting",
+                            trimToNull(actual.remark()),
+                            now,
+                            now));
+                }
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stocktake.variance_record")
+    @Transactional
+    public InventoryVarianceRecord recordVariance(
+            String stocktakeId, com.complex.platform.inventory.dto.RecordVarianceRequest request) {
+        String id = requireText(stocktakeId, "stocktake_id");
+        return executeWrite(
+                "recordVariance:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                InventoryVarianceRecord.class,
+                "inventory.stocktake.variance_recorded",
+                "inventory.stocktake.variance_record_failed",
+                "inventory.stocktake.variance_record",
+                "inventory_variance",
+                () -> {
+                    com.complex.platform.inventory.dto.RecordVarianceRequest actual = requireRequest(request);
+                    StocktakeRecord stocktake = loadStocktakeScoped(id);
+                    if (!List.of("counting", "reviewing").contains(stocktake.status())) {
+                        throw ApiException.conflict("STOCKTAKE_NOT_OPEN",
+                                "stocktake is closed; cannot record variance");
+                    }
+                    String itemId = requireText(actual.itemId(), "item_id");
+                    String reason = normalizeAllowed(actual.reason(), INVENTORY_VARIANCE_REASONS, "reason");
+                    java.math.BigDecimal bookQty = actual.bookQty() == null
+                            ? java.math.BigDecimal.ZERO : actual.bookQty();
+                    java.math.BigDecimal countedQty = actual.countedQty() == null
+                            ? java.math.BigDecimal.ZERO : actual.countedQty();
+                    // variance_qty = counted − book（带符号）。
+                    java.math.BigDecimal varianceQty = countedQty.subtract(bookQty);
+                    // variance_amount_cent：显式传入优先；缺省按 variance_qty × unitCostCents 估算（成本估算，带符号）。
+                    long varianceAmountCent = resolveVarianceAmountCent(
+                            actual.varianceAmountCent(), varianceQty, actual.unitCostCents());
+                    Instant now = Instant.now();
+                    return repository.saveInventoryVariance(new InventoryVarianceRecord(
+                            "variance_" + slug(actual.idempotencyKey()),
+                            stocktake.id(),
+                            itemId,
+                            trimToNull(actual.batchNo()),
+                            bookQty,
+                            countedQty,
+                            varianceQty,
+                            varianceAmountCent,
+                            reason,
+                            trimToNull(actual.supplierId()),
+                            "pending",
+                            null,
+                            null,
+                            null,
+                            stocktake.merchantId(),
+                            now,
+                            now));
+                }
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stocktake.variance_review", admissionAction = "inventory.stocktake_variance_review", objectType = "inventory_variance")
+    @Transactional
+    public InventoryVarianceRecord reviewVariance(
+            String stocktakeId, String varianceId,
+            com.complex.platform.inventory.dto.ReviewVarianceRequest request) {
+        String stId = requireText(stocktakeId, "stocktake_id");
+        String vId = requireText(varianceId, "variance_id");
+        return executeWrite(
+                "reviewVariance:" + stId + ":" + vId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                InventoryVarianceRecord.class,
+                "inventory.stocktake.variance_reviewed",
+                "inventory.stocktake.variance_review_failed",
+                "inventory.stocktake.variance_review",
+                "inventory_variance",
+                () -> {
+                    com.complex.platform.inventory.dto.ReviewVarianceRequest actual = requireRequest(request);
+                    String decision = requireDecision(actual.decision());
+                    InventoryVarianceRecord variance = repository.findInventoryVarianceByIdForUpdate(vId)
+                            .orElseThrow(() -> ApiException.notFound(
+                                    "INVENTORY_VARIANCE_NOT_FOUND", "inventory variance not found"));
+                    if (!variance.stocktakeId().equals(stId)) {
+                        throw ApiException.notFound("INVENTORY_VARIANCE_NOT_FOUND",
+                                "inventory variance does not belong to the stocktake");
+                    }
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (scope.isPresent() && !scope.get().equals(variance.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                "inventory variance does not belong to your merchant");
+                    }
+                    if (!"pending".equals(variance.reviewStatus())) {
+                        throw ApiException.conflict("INVENTORY_VARIANCE_NOT_PENDING",
+                                "inventory variance is not pending review");
+                    }
+                    String reviewer = authorizationService.currentActor().id();
+                    Instant now = Instant.now();
+                    // 条件 UPDATE WHERE review_status='pending'，受影响行数==1 才成功（防并发重复复核）。
+                    int affected = repository.reviewInventoryVarianceIfPending(vId, decision, reviewer, now);
+                    if (affected != 1) {
+                        throw ApiException.conflict("INVENTORY_VARIANCE_NOT_PENDING",
+                                "inventory variance was reviewed concurrently");
+                    }
+                    return new InventoryVarianceRecord(
+                            variance.id(), variance.stocktakeId(), variance.itemId(), variance.batchNo(),
+                            variance.bookQty(), variance.countedQty(), variance.varianceQty(),
+                            variance.varianceAmountCent(), variance.reason(), variance.supplierId(),
+                            decision, reviewer, now, variance.postedArApItemId(),
+                            variance.merchantId(), variance.createdAt(), now);
+                }
+        );
+    }
+
+    /** 按 id 读取盘点单并校验归属（merchant scope）。不存在抛 404，跨商户抛 403。 */
+    private StocktakeRecord loadStocktakeScoped(String stocktakeId) {
+        StocktakeRecord stocktake = repository.findStocktakeById(stocktakeId)
+                .orElseThrow(() -> ApiException.notFound("STOCKTAKE_NOT_FOUND", "stocktake not found"));
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(stocktake.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    "stocktake does not belong to your merchant");
+        }
+        return stocktake;
+    }
+
+    /** variance_amount_cent：显式传入优先；否则 round(variance_qty × unitCostCents)（带符号，可为 0）。 */
+    private long resolveVarianceAmountCent(
+            Long explicitAmountCent, java.math.BigDecimal varianceQty, Long unitCostCents) {
+        if (explicitAmountCent != null) {
+            return explicitAmountCent;
+        }
+        if (unitCostCents == null) {
+            return 0L;
+        }
+        if (unitCostCents < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "unit_cost_cents must be non-negative");
+        }
+        return varianceQty
+                .multiply(java.math.BigDecimal.valueOf(unitCostCents))
+                .setScale(0, java.math.RoundingMode.HALF_UP)
+                .longValueExact();
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.adjust", admissionAction = "inventory.stock_adjust", objectType = "inventory_stock_adjustment")
     @Transactional
     public StockAdjustmentRecord createStockAdjustment(StockAdjustmentRequest request) {
@@ -1503,6 +1712,12 @@ public class InventoryService {
             return record.id();
         }
         if (response instanceof InventoryHighValueReviewRecord record) {
+            return record.id();
+        }
+        if (response instanceof StocktakeRecord record) {
+            return record.id();
+        }
+        if (response instanceof InventoryVarianceRecord record) {
             return record.id();
         }
         return "unknown";
