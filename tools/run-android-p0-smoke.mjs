@@ -18,6 +18,36 @@ const logPath = path.join(logDir, "backend.log");
 const healthUrl = `${backendBaseUrl}/api/v1/system/health`;
 const useExistingBackend = process.env.ANDROID_P0_SMOKE_USE_EXISTING_BACKEND === "1";
 
+// Spring Boot / Hikari require a `jdbc:` URL with separate credentials. Some
+// environments export a 12-factor style `postgresql://user:pass@host/db` URL
+// (used by psql and node `pg`), which Hikari rejects with
+// `'url' must start with "jdbc"`. Normalize that shape so the seeded backend
+// boots against the local database without requiring a manual env override
+// (mirrors tools/run-real-backend-ui-e2e.mjs).
+function normalizeDatabaseEnv(env) {
+  const raw = env.COMPLEX_DATABASE_URL;
+  if (!raw || raw.startsWith("jdbc:")) {
+    return {};
+  }
+  const match = raw.match(
+    /^(?:postgres|postgresql):\/\/(?:([^:@/]+)(?::([^@/]*))?@)?(.+)$/,
+  );
+  if (!match) {
+    return {};
+  }
+  const [, user, pass, rest] = match;
+  const overrides = { COMPLEX_DATABASE_URL: `jdbc:postgresql://${rest}` };
+  if (user && !env.COMPLEX_DATABASE_USERNAME) {
+    overrides.COMPLEX_DATABASE_USERNAME = decodeURIComponent(user);
+  }
+  if (pass !== undefined && !env.COMPLEX_DATABASE_PASSWORD) {
+    overrides.COMPLEX_DATABASE_PASSWORD = decodeURIComponent(pass);
+  }
+  return overrides;
+}
+
+const databaseEnv = normalizeDatabaseEnv(process.env);
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -100,6 +130,7 @@ async function startBackend() {
     stdio: ["ignore", logFd, logFd],
     env: {
       ...process.env,
+      ...databaseEnv,
       SERVER_PORT: port,
       P0_ADMIN_USERNAME: username,
       P0_ADMIN_PASSWORD: password,

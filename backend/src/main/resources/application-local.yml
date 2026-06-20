@@ -7,3 +7,16 @@ logging:
 spring:
   jpa:
     show-sql: false
+
+complex:
+  auth:
+    production:
+      # 本地/开发临时管理员账号：应用启动时自动在 access_users + auth_credentials
+      # 落库（bcrypt），并绑定 role_platform_admin。仅 local profile 生效，
+      # prod profile 不含此配置，不会带入生产。
+      # 环境变量沿用项目既有约定 P0_ADMIN_USERNAME / P0_ADMIN_PASSWORD，
+      # 前端真实后端 UI 联调（verify:ui:real-backend:seeded）与 Android P0 smoke
+      # 已注入这两个变量，因此默认即可一键打通登录。
+      seed-admin:
+        username: ${P0_ADMIN_USERNAME:admin}
+        password: ${P0_ADMIN_PASSWORD:admin-pass}
