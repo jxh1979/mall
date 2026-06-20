@@ -26,6 +26,7 @@ import com.complex.platform.inventory.dto.ReviewVarianceRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
+import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
@@ -1420,6 +1421,134 @@ class InventoryServiceTests {
                 .isEqualTo("INVENTORY_VARIANCE_NOT_FOUND");
     }
 
+    // ── V128 / REQ-39：溯源码主数据 CRUD 测试。 ──
+
+    @Test
+    void registerTraceCodeStartsRegisteredAndIsIdempotent() {
+        InventoryItemRecord item = createItem("tc-item");
+        RegisterTraceCodeRequest request = new RegisterTraceCodeRequest(
+                "tc-reg-1", item.id(), "BATCH-1", "TRC-ABC");
+        InventoryTraceCodeRecord first = service.registerTraceCode(request);
+        InventoryTraceCodeRecord second = service.registerTraceCode(request);
+
+        assertThat(second).isEqualTo(first);
+        assertThat(first.status()).isEqualTo("registered");
+        assertThat(first.traceCode()).isEqualTo("TRC-ABC");
+        assertThat(first.itemId()).isEqualTo(item.id());
+        assertThat(first.batchId()).isEqualTo("BATCH-1");
+        assertThat(inventoryRepository.listTraceCodes()).hasSize(1);
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("inventory.trace_code.registered");
+    }
+
+    @Test
+    void registerTraceCodeGeneratesCodeWhenAbsent() {
+        InventoryItemRecord item = createItem("tc-gen-item");
+        InventoryTraceCodeRecord traceCode = service.registerTraceCode(
+                new RegisterTraceCodeRequest("tc-gen", item.id(), null, null));
+
+        assertThat(traceCode.traceCode()).isNotBlank();
+        assertThat(traceCode.status()).isEqualTo("registered");
+    }
+
+    @Test
+    void registerTraceCodeRejectsMissingItem() {
+        assertThatThrownBy(() -> service.registerTraceCode(
+                new RegisterTraceCodeRequest("tc-noitem", "item_missing", null, "TRC-NO")))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("INVENTORY_ITEM_NOT_FOUND");
+    }
+
+    @Test
+    void registerTraceCodeRejectsDuplicateTraceCode() {
+        InventoryItemRecord item = createItem("tc-dup-item");
+        service.registerTraceCode(new RegisterTraceCodeRequest("tc-dup-1", item.id(), null, "TRC-DUP"));
+
+        // 不同幂等键但同 trace_code → 唯一冲突拒绝。
+        assertThatThrownBy(() -> service.registerTraceCode(
+                new RegisterTraceCodeRequest("tc-dup-2", item.id(), null, "TRC-DUP")))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("TRACE_CODE_DUPLICATE");
+    }
+
+    @Test
+    void printTraceCodeTransitionsRegisteredToPrintedAndRecordsTimestamp() {
+        InventoryItemRecord item = createItem("tc-print-item");
+        InventoryTraceCodeRecord registered = service.registerTraceCode(
+                new RegisterTraceCodeRequest("tc-print", item.id(), null, "TRC-PRINT"));
+
+        InventoryTraceCodeRecord printed = service.printTraceCode(registered.id(),
+                new com.complex.platform.inventory.dto.PrintTraceCodeRequest("tc-print-do"));
+
+        assertThat(printed.status()).isEqualTo("printed");
+        assertThat(printed.printedAt()).isNotNull();
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("inventory.trace_code.printed");
+    }
+
+    @Test
+    void printTraceCodeRejectsDuplicatePrintOnNonRegistered() {
+        InventoryItemRecord item = createItem("tc-reprint-item");
+        InventoryTraceCodeRecord registered = service.registerTraceCode(
+                new RegisterTraceCodeRequest("tc-reprint", item.id(), null, "TRC-REPRINT"));
+        service.printTraceCode(registered.id(),
+                new com.complex.platform.inventory.dto.PrintTraceCodeRequest("tc-reprint-1"));
+
+        // 不同幂等键的第二次打印 → 非 registered，条件 UPDATE 0 行，被拒。
+        assertThatThrownBy(() -> service.printTraceCode(registered.id(),
+                new com.complex.platform.inventory.dto.PrintTraceCodeRequest("tc-reprint-2")))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("TRACE_CODE_NOT_PRINTABLE");
+    }
+
+    @Test
+    void getTraceCodeResolvesByIdOrTraceCode() {
+        InventoryItemRecord item = createItem("tc-get-item");
+        InventoryTraceCodeRecord registered = service.registerTraceCode(
+                new RegisterTraceCodeRequest("tc-get", item.id(), null, "TRC-GET"));
+
+        assertThat(service.getTraceCode(registered.id()).id()).isEqualTo(registered.id());
+        assertThat(service.getTraceCode("TRC-GET").id()).isEqualTo(registered.id());
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("inventory.trace_code.viewed");
+    }
+
+    @Test
+    void traceCodeListAndGetAreMerchantScoped() {
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
+        InventoryItemRecord item = createItem("tc-scope-item");
+        InventoryTraceCodeRecord own = service.registerTraceCode(
+                new RegisterTraceCodeRequest("tc-scope", item.id(), null, "TRC-SCOPE"));
+
+        assertThat(service.listTraceCodes().items())
+                .extracting(InventoryTraceCodeRecord::id)
+                .containsExactly(own.id());
+
+        // 商户 B 看不到商户 A 的码，按 id/code 查询被拒（CROSS_MERCHANT_FORBIDDEN）。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThat(service.listTraceCodes().items()).isEmpty();
+        assertThatThrownBy(() -> service.getTraceCode(own.id()))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void getTraceCodeRejectsUnknown() {
+        assertThatThrownBy(() -> service.getTraceCode("trace_code_missing"))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("TRACE_CODE_NOT_FOUND");
+    }
+
     private InventoryItemRecord createItem(String idempotencyKey) {
         return service.createInventoryItem(new InventoryItemRequest(
                 idempotencyKey,
@@ -1959,6 +2088,47 @@ class InventoryServiceTests {
                     current.varianceAmountCent(), current.reason(), current.supplierId(),
                     decision, reviewedBy, reviewedAt, current.postedArApItemId(),
                     current.merchantId(), current.createdAt(), reviewedAt));
+            return 1;
+        }
+
+        // ── V128 / REQ-39：溯源码主数据写入侧内存替身。 ──
+        final Map<String, InventoryTraceCodeRecord> traceCodes = new LinkedHashMap<>();
+
+        @Override public InventoryTraceCodeRecord saveTraceCode(InventoryTraceCodeRecord traceCode) {
+            traceCodes.put(traceCode.id(), traceCode);
+            return traceCode;
+        }
+
+        @Override public Optional<InventoryTraceCodeRecord> findTraceCodeById(String id) {
+            return Optional.ofNullable(traceCodes.get(id));
+        }
+
+        @Override public Optional<InventoryTraceCodeRecord> findTraceCodeByCode(String traceCode) {
+            return traceCodes.values().stream()
+                    .filter(t -> traceCode.equals(t.traceCode()))
+                    .findFirst();
+        }
+
+        @Override public List<InventoryTraceCodeRecord> listTraceCodes() {
+            return new ArrayList<>(traceCodes.values());
+        }
+
+        @Override public List<InventoryTraceCodeRecord> listTraceCodesByMerchant(String merchantId) {
+            return traceCodes.values().stream()
+                    .filter(t -> merchantId.equals(t.merchantId()))
+                    .toList();
+        }
+
+        @Override public int printTraceCodeIfRegistered(String id, Instant printedAt, String boundRef) {
+            InventoryTraceCodeRecord current = traceCodes.get(id);
+            if (current == null || !"registered".equals(current.status())) {
+                return 0;
+            }
+            traceCodes.put(id, new InventoryTraceCodeRecord(
+                    current.id(), current.traceCode(), current.itemId(), current.batchId(),
+                    current.merchantId(), "printed",
+                    boundRef != null ? boundRef : current.boundRef(), printedAt,
+                    current.createdBy(), current.createdAt(), printedAt));
             return 1;
         }
 

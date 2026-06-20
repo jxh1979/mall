@@ -22,7 +22,9 @@ import com.complex.platform.inventory.dto.RecordVarianceRequest;
 import com.complex.platform.inventory.dto.ReviewVarianceRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
+import com.complex.platform.inventory.dto.PrintTraceCodeRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
+import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
@@ -115,6 +117,11 @@ class InventoryControllerTests {
         when(service.recordVariance(eq("stocktake_1"), any(RecordVarianceRequest.class))).thenReturn(variance());
         when(service.reviewVariance(eq("stocktake_1"), eq("variance_1"), any(ReviewVarianceRequest.class)))
                 .thenReturn(variance());
+        when(service.listTraceCodes()).thenReturn(new PageResponse<>(List.of(traceCode()), 1, 50, 1));
+        when(service.getTraceCode(eq("trace_code_1"))).thenReturn(traceCode());
+        when(service.registerTraceCode(any(RegisterTraceCodeRequest.class))).thenReturn(traceCode());
+        when(service.printTraceCode(eq("trace_code_1"), any(PrintTraceCodeRequest.class)))
+                .thenReturn(traceCode());
     }
 
     @ParameterizedTest
@@ -146,6 +153,10 @@ class InventoryControllerTests {
             "GET,/api/v1/inventory/supplier-settlement-methods,inventory.supplier.settlement.manage",
             "POST,/api/v1/inventory/supplier-settlement-methods,inventory.supplier.settlement.manage",
             "POST,/api/v1/inventory/trace-codes/scan-handover,inventory.handover.scan",
+            "GET,/api/v1/inventory/trace-codes,inventory.trace_code.view",
+            "GET,/api/v1/inventory/trace-codes/trace_code_1,inventory.trace_code.view",
+            "POST,/api/v1/inventory/trace-codes,inventory.trace_code.register",
+            "POST,/api/v1/inventory/trace-codes/trace_code_1/print,inventory.trace_code.print",
             "GET,/api/v1/inventory/stocktakes,inventory.stocktake.view",
             "GET,/api/v1/inventory/stocktakes/stocktake_1,inventory.stocktake.view",
             "POST,/api/v1/inventory/stocktakes,inventory.stocktake.create",
@@ -185,6 +196,8 @@ class InventoryControllerTests {
             "/api/v1/inventory/supplier-qualifications,'{\"supplier_id\":\"supplier_1\",\"qualification_type\":\"business_license\"}'",
             "/api/v1/inventory/supplier-settlement-methods,'{\"supplier_id\":\"supplier_1\",\"settlement_method\":\"monthly\"}'",
             "/api/v1/inventory/trace-codes/scan-handover,'{\"credential_type\":\"manual\",\"credential_payload\":\"TRACE-1\",\"device_id\":\"dev_1\",\"point_id\":\"bar_1\"}'",
+            "/api/v1/inventory/trace-codes,'{\"item_id\":\"item_1\",\"trace_code\":\"TRC-1\"}'",
+            "/api/v1/inventory/trace-codes/trace_code_1/print,'{}'",
             "/api/v1/inventory/stocktakes,'{\"warehouse_id\":\"wh_1\",\"business_date\":\"2026-06-19\"}'",
             "/api/v1/inventory/stocktakes/stocktake_1/variances,'{\"item_id\":\"item_1\",\"book_qty\":10,\"counted_qty\":7,\"reason\":\"shortage\"}'",
             "/api/v1/inventory/stocktakes/stocktake_1/variances/variance_1/review,'{\"decision\":\"approved\"}'"
@@ -223,6 +236,16 @@ class InventoryControllerTests {
     }
 
     private String bodyFor(String path) {
+        if (path.endsWith("/trace-codes/trace_code_1/print")) {
+            return """
+                    {"idempotency_key":"trace-code-print"}
+                    """;
+        }
+        if (path.endsWith("/trace-codes")) {
+            return """
+                    {"idempotency_key":"trace-code-register","item_id":"item_1","batch_id":"BATCH-1","trace_code":"TRC-1"}
+                    """;
+        }
         if (path.contains("/variances/") && path.endsWith("/review")) {
             return """
                     {"idempotency_key":"variance-review","decision":"approved","reason":"confirmed"}
@@ -391,6 +414,12 @@ class InventoryControllerTests {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new TraceHandoverRecord("trace_1", "TRACE-1", "item_1", "staff_a", "staff_b", "dev_1",
                 "chain_started", "in_progress", "out_verify", List.of(), now);
+    }
+
+    private InventoryTraceCodeRecord traceCode() {
+        Instant now = Instant.parse("2026-06-19T00:00:00Z");
+        return new InventoryTraceCodeRecord("trace_code_1", "TRC-1", "item_1", "BATCH-1", null,
+                "registered", null, null, "usr_admin", now, now);
     }
 
     @TestConfiguration

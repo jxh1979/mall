@@ -722,6 +722,24 @@ class SupplyChainT6ServiceTests {
                 String varianceId, String decision, String reviewedBy, java.time.Instant reviewedAt) {
             throw nyi();
         }
+        @Override public InventoryTraceCodeRecord saveTraceCode(InventoryTraceCodeRecord traceCode) {
+            throw nyi();
+        }
+        @Override public Optional<InventoryTraceCodeRecord> findTraceCodeById(String id) {
+            throw nyi();
+        }
+        @Override public Optional<InventoryTraceCodeRecord> findTraceCodeByCode(String traceCode) {
+            throw nyi();
+        }
+        @Override public List<InventoryTraceCodeRecord> listTraceCodes() {
+            throw nyi();
+        }
+        @Override public List<InventoryTraceCodeRecord> listTraceCodesByMerchant(String merchantId) {
+            throw nyi();
+        }
+        @Override public int printTraceCodeIfRegistered(String id, java.time.Instant printedAt, String boundRef) {
+            throw nyi();
+        }
 
         private static UnsupportedOperationException nyi() {
             return new UnsupportedOperationException("not needed for T6 service tests");

@@ -16,6 +16,7 @@ import com.complex.platform.inventory.dto.InventorySupplierRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
+import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
@@ -608,6 +609,10 @@ public class InventoryService {
     private static final Set<String> INVENTORY_VARIANCE_REASONS =
             Set.of("damage", "shortage", "overage", "supplier_fault");
 
+    // ── V128 / REQ-39：溯源码主数据生命周期。 ──
+    private static final Set<String> TRACE_CODE_STATUSES =
+            Set.of("registered", "printed", "bound", "consumed");
+
     public PageResponse<StocktakeRecord> listStocktakes() {
         return readPage(
                 "inventory.stocktake.viewed",
@@ -809,6 +814,135 @@ public class InventoryService {
                 .multiply(java.math.BigDecimal.valueOf(unitCostCents))
                 .setScale(0, java.math.RoundingMode.HALF_UP)
                 .longValueExact();
+    }
+
+    // ── V128 / REQ-39：溯源码主数据 CRUD（贴码登记 → 出库打印 → 责任链查询/列表）。 ──
+    // 与扫码交接（scan-handover / TraceHandover）互补：本组端点是码本身的生命周期主数据。
+
+    public PageResponse<InventoryTraceCodeRecord> listTraceCodes() {
+        return readPage(
+                "inventory.trace_code.listed",
+                "inventory.trace_code.list_failed",
+                "inventory.trace_code.view",
+                "inventory_trace_code",
+                () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return scope.map(repository::listTraceCodesByMerchant)
+                                .orElseGet(repository::listTraceCodes);
+                }
+        );
+    }
+
+    /** REQ-39 责任链查询：按 id 或 trace_code 任一定位（merchant scope）。不存在 404，跨商户 403。 */
+    public InventoryTraceCodeRecord getTraceCode(String idOrCode) {
+        String key = requireText(idOrCode, "trace_code_id");
+        try {
+            InventoryTraceCodeRecord traceCode = loadTraceCodeScoped(key);
+            auditEventService.recordSuccess(
+                    "inventory.trace_code.viewed", "inventory.trace_code.view", "inventory_trace_code",
+                    traceCode.id(), null, null, Map.of("trace_code", traceCode.traceCode()));
+            return traceCode;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "inventory.trace_code.view_failed", "inventory.trace_code.view", "inventory_trace_code",
+                    key, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /** REQ-39 贴码登记（入库）：status=registered，幂等；trace_code 缺省服务端生成，重复 trace_code 冲突拒绝。 */
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.trace_code.register")
+    @Transactional
+    public InventoryTraceCodeRecord registerTraceCode(RegisterTraceCodeRequest request) {
+        return executeWrite(
+                "registerTraceCode",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                InventoryTraceCodeRecord.class,
+                "inventory.trace_code.registered",
+                "inventory.trace_code.register_failed",
+                "inventory.trace_code.register",
+                "inventory_trace_code",
+                () -> {
+                    RegisterTraceCodeRequest actual = requireRequest(request);
+                    String itemId = requireText(actual.itemId(), "item_id");
+                    repository.findInventoryItemById(itemId)
+                            .orElseThrow(() -> ApiException.notFound(
+                                    "INVENTORY_ITEM_NOT_FOUND", "inventory item not found"));
+                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    String slug = slug(actual.idempotencyKey());
+                    // trace_code 缺省服务端生成（基于幂等键稳定，重复提交命中幂等不重复建）。
+                    String traceCode = trimToDefault(actual.traceCode(), "TRC-" + slug.toUpperCase(Locale.ROOT));
+                    // 唯一冲突处理：码值已存在（非本次幂等重放）→ 409 拒绝。
+                    repository.findTraceCodeByCode(traceCode).ifPresent(existing -> {
+                        throw ApiException.conflict("TRACE_CODE_DUPLICATE",
+                                "trace code already exists");
+                    });
+                    Instant now = Instant.now();
+                    return repository.saveTraceCode(new InventoryTraceCodeRecord(
+                            "trace_code_" + slug,
+                            traceCode,
+                            itemId,
+                            trimToNull(actual.batchId()),
+                            merchantId,
+                            "registered",
+                            null,
+                            null,
+                            authorizationService.currentActor().id(),
+                            now,
+                            now));
+                }
+        );
+    }
+
+    /** REQ-39 出库打印码：status registered→printed，记 printed_at，幂等；条件 UPDATE 受影响 1 行才成功，防重复打印。 */
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.trace_code.print")
+    @Transactional
+    public InventoryTraceCodeRecord printTraceCode(
+            String traceCodeId, com.complex.platform.inventory.dto.PrintTraceCodeRequest request) {
+        String id = requireText(traceCodeId, "trace_code_id");
+        return executeWrite(
+                "printTraceCode:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                InventoryTraceCodeRecord.class,
+                "inventory.trace_code.printed",
+                "inventory.trace_code.print_failed",
+                "inventory.trace_code.print",
+                "inventory_trace_code",
+                () -> {
+                    requireRequest(request);
+                    InventoryTraceCodeRecord traceCode = loadTraceCodeScoped(id);
+                    if (!"registered".equals(traceCode.status())) {
+                        throw ApiException.conflict("TRACE_CODE_NOT_PRINTABLE",
+                                "trace code is not in registered status");
+                    }
+                    Instant now = Instant.now();
+                    // 条件 UPDATE WHERE status='registered'，受影响行数==1 才成功（防并发重复打印）。
+                    int affected = repository.printTraceCodeIfRegistered(id, now, null);
+                    if (affected != 1) {
+                        throw ApiException.conflict("TRACE_CODE_NOT_PRINTABLE",
+                                "trace code was printed concurrently");
+                    }
+                    return new InventoryTraceCodeRecord(
+                            traceCode.id(), traceCode.traceCode(), traceCode.itemId(), traceCode.batchId(),
+                            traceCode.merchantId(), "printed", traceCode.boundRef(), now,
+                            traceCode.createdBy(), traceCode.createdAt(), now);
+                }
+        );
+    }
+
+    /** 按 id 或 trace_code 读取溯源码并校验归属（merchant scope）。不存在抛 404，跨商户抛 403。 */
+    private InventoryTraceCodeRecord loadTraceCodeScoped(String idOrCode) {
+        InventoryTraceCodeRecord traceCode = repository.findTraceCodeById(idOrCode)
+                .or(() -> repository.findTraceCodeByCode(idOrCode))
+                .orElseThrow(() -> ApiException.notFound("TRACE_CODE_NOT_FOUND", "trace code not found"));
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(traceCode.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    "trace code does not belong to your merchant");
+        }
+        return traceCode;
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.adjust", admissionAction = "inventory.stock_adjust", objectType = "inventory_stock_adjustment")
@@ -1718,6 +1852,9 @@ public class InventoryService {
             return record.id();
         }
         if (response instanceof InventoryVarianceRecord record) {
+            return record.id();
+        }
+        if (response instanceof InventoryTraceCodeRecord record) {
             return record.id();
         }
         return "unknown";

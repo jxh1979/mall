@@ -169,4 +169,21 @@ public interface InventoryRepository {
      */
     int reviewInventoryVarianceIfPending(
             String varianceId, String decision, String reviewedBy, Instant reviewedAt);
+
+    // ── V128 / REQ-39：溯源码主数据（inventory_trace_codes）。 ──
+    InventoryTraceCodeRecord saveTraceCode(InventoryTraceCodeRecord traceCode);
+
+    Optional<InventoryTraceCodeRecord> findTraceCodeById(String id);
+
+    Optional<InventoryTraceCodeRecord> findTraceCodeByCode(String traceCode);
+
+    List<InventoryTraceCodeRecord> listTraceCodes();
+
+    List<InventoryTraceCodeRecord> listTraceCodesByMerchant(String merchantId);
+
+    /**
+     * V128 出库打印：条件 UPDATE（WHERE status='registered'）置 printed + 回填 printed_at，受影响行数==1
+     * 才成功，防重复打印。返回受影响行数。
+     */
+    int printTraceCodeIfRegistered(String id, Instant printedAt, String boundRef);
 }

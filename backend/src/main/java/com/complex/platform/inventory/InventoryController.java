@@ -12,8 +12,10 @@ import com.complex.platform.inventory.dto.RecordVarianceRequest;
 import com.complex.platform.inventory.dto.ReviewVarianceRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
+import com.complex.platform.inventory.dto.PrintTraceCodeRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestApproveRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestCreate;
+import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestReceiveRequest;
 import com.complex.platform.inventory.dto.HighValueReviewDecisionRequest;
 import com.complex.platform.inventory.dto.PurchaseRequestTransitionRequest;
@@ -351,6 +353,36 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.supplier.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createInventorySupplier(request));
+    }
+
+    // ── V128 / REQ-39：溯源码主数据 CRUD（贴码登记 → 出库打印 → 责任链查询/列表）。 ──
+    @GetMapping("/trace-codes")
+    public ApiResponse<PageResponse<InventoryTraceCodeRecord>> listTraceCodes() {
+        authorizationService.requirePermission("inventory.trace_code.view");
+        return ApiResponse.ok(service.listTraceCodes());
+    }
+
+    @GetMapping("/trace-codes/{id}")
+    public ApiResponse<InventoryTraceCodeRecord> getTraceCode(@PathVariable String id) {
+        authorizationService.requirePermission("inventory.trace_code.view");
+        return ApiResponse.ok(service.getTraceCode(id));
+    }
+
+    @PostMapping("/trace-codes")
+    public ApiResponse<InventoryTraceCodeRecord> registerTraceCode(@RequestBody RegisterTraceCodeRequest request) {
+        authorizationService.requirePermission("inventory.trace_code.register");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.registerTraceCode(request));
+    }
+
+    @PostMapping("/trace-codes/{id}/print")
+    public ApiResponse<InventoryTraceCodeRecord> printTraceCode(
+            @PathVariable String id,
+            @RequestBody PrintTraceCodeRequest request
+    ) {
+        authorizationService.requirePermission("inventory.trace_code.print");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.printTraceCode(id, request));
     }
 
     @PostMapping("/trace-codes/scan-handover")

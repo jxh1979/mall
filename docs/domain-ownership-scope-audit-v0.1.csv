@@ -133,6 +133,7 @@ inventory_stock_batches,direct,merchant_id,merchant_id column on inventory_stock
 inventory_stock_movements,direct,merchant_id,merchant_id column on inventory_stock_movements,ready for project/merchant scoped query enforcement,covered
 inventory_supplier_reconciliations,direct,merchant_id,merchant_id column on inventory_supplier_reconciliations,ready for project/merchant scoped query enforcement,covered
 inventory_suppliers,direct,merchant_id,merchant_id column on inventory_suppliers,ready for project/merchant scoped query enforcement,covered
+inventory_trace_codes,direct,merchant_id,merchant_id column on inventory_trace_codes,ready for project/merchant scoped query enforcement,covered
 inventory_trace_handover_exceptions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 inventory_trace_handover_steps,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 inventory_trace_handovers,inherited,movement/batch linkage,movement/batch linkage -> inventory_stock_movements/batches,must join through scope path before multi-complex rollout,covered

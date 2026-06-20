@@ -1562,6 +1562,96 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("reviewed_at", offset(reviewedAt)));
     }
 
+    // ── V128 / REQ-39：溯源码主数据（inventory_trace_codes）。强制 merchant scope（直接归属列）。 ──
+    @Override
+    public InventoryTraceCodeRecord saveTraceCode(InventoryTraceCodeRecord traceCode) {
+        jdbcTemplate.update("""
+                INSERT INTO inventory_trace_codes (
+                    id, trace_code, item_id, batch_id, merchant_id, status, bound_ref,
+                    printed_at, created_by, created_at, updated_at
+                )
+                VALUES (
+                    :id, :trace_code, :item_id, :batch_id, :merchant_id, :status, :bound_ref,
+                    :printed_at, :created_by, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    bound_ref = EXCLUDED.bound_ref,
+                    printed_at = EXCLUDED.printed_at,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", traceCode.id())
+                .addValue("trace_code", traceCode.traceCode())
+                .addValue("item_id", traceCode.itemId())
+                .addValue("batch_id", traceCode.batchId())
+                .addValue("merchant_id", traceCode.merchantId())
+                .addValue("status", traceCode.status())
+                .addValue("bound_ref", traceCode.boundRef())
+                .addValue("printed_at", offset(traceCode.printedAt()))
+                .addValue("created_by", traceCode.createdBy())
+                .addValue("created_at", offset(traceCode.createdAt()))
+                .addValue("updated_at", offset(traceCode.updatedAt())));
+        return traceCode;
+    }
+
+    @Override
+    public Optional<InventoryTraceCodeRecord> findTraceCodeById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, trace_code, item_id, batch_id, merchant_id, status, bound_ref,
+                       printed_at, created_by, created_at, updated_at
+                  FROM inventory_trace_codes
+                 WHERE id = :id
+                """, Map.of("id", id), rowMapper::mapTraceCode).stream().findFirst();
+    }
+
+    @Override
+    public Optional<InventoryTraceCodeRecord> findTraceCodeByCode(String traceCode) {
+        return jdbcTemplate.query("""
+                SELECT id, trace_code, item_id, batch_id, merchant_id, status, bound_ref,
+                       printed_at, created_by, created_at, updated_at
+                  FROM inventory_trace_codes
+                 WHERE trace_code = :trace_code
+                """, Map.of("trace_code", traceCode), rowMapper::mapTraceCode).stream().findFirst();
+    }
+
+    @Override
+    public List<InventoryTraceCodeRecord> listTraceCodes() {
+        return jdbcTemplate.query("""
+                SELECT id, trace_code, item_id, batch_id, merchant_id, status, bound_ref,
+                       printed_at, created_by, created_at, updated_at
+                  FROM inventory_trace_codes
+                 ORDER BY created_at DESC, id
+                """, rowMapper::mapTraceCode);
+    }
+
+    @Override
+    public List<InventoryTraceCodeRecord> listTraceCodesByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, trace_code, item_id, batch_id, merchant_id, status, bound_ref,
+                       printed_at, created_by, created_at, updated_at
+                  FROM inventory_trace_codes
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapTraceCode);
+    }
+
+    @Override
+    public int printTraceCodeIfRegistered(String id, Instant printedAt, String boundRef) {
+        // V128 防重复打印：仅当 status='registered' 才置 printed + 回填 printed_at，受影响行数==1 才视为成功。
+        return jdbcTemplate.update("""
+                UPDATE inventory_trace_codes
+                   SET status = 'printed',
+                       printed_at = :printed_at,
+                       bound_ref = COALESCE(:bound_ref, bound_ref),
+                       updated_at = now()
+                 WHERE id = :id
+                   AND status = 'registered'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("printed_at", offset(printedAt))
+                .addValue("bound_ref", boundRef));
+    }
+
     private String writeList(List<String> value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);

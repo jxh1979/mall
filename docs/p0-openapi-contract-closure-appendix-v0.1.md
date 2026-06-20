@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 393 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 239 | 人工权限矩阵正文未覆盖 136 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 786 | 人工事件矩阵正文未覆盖 742 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 393 | 人工任务映射正文未逐项覆盖 387 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 245 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 397 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 242 | 人工权限矩阵正文未覆盖 139 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 794 | 人工事件矩阵正文未覆盖 750 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 397 | 人工任务映射正文未逐项覆盖 391 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 247 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -197,6 +197,9 @@
 | `inventory.supplier.settlement.manage` | staff-token | supplier | 2 | listSupplierSettlementMethods, createSupplierSettlementMethod | OpenAPI 补充，以本附录为准 |
 | `inventory.supplier.view` | staff-token | project | 1 | listInventorySuppliers | 已在权限矩阵正文出现 |
 | `inventory.supply_contract.manage` | staff-token | project-warehouse-bar, supplier | 2 | listSupplyContracts, createSupplyContract | OpenAPI 补充，以本附录为准 |
+| `inventory.trace_code.print` | staff-token | project | 1 | printInventoryTraceCode | OpenAPI 补充，以本附录为准 |
+| `inventory.trace_code.register` | staff-token | project | 1 | registerInventoryTraceCode | OpenAPI 补充，以本附录为准 |
+| `inventory.trace_code.view` | staff-token | project | 2 | listInventoryTraceCodes, getInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.warehouse.manage` | staff-token | project-warehouse-bar, warehouse | 2 | listWarehouses, createWarehouse | OpenAPI 补充，以本附录为准 |
 | `mdm.device.manage` | staff-token | -, project-device | 3 | enrollMdmDevice, reportMdmPolicyViolation, detectMdmViolations | OpenAPI 补充，以本附录为准 |
 | `mdm.policy.manage` | staff-token | project-device | 4 | listMdmAppWhitelist, upsertMdmAppWhitelist, listMdmSiteWhitelist, upsertMdmSiteWhitelist | OpenAPI 补充，以本附录为准 |
@@ -827,6 +830,14 @@
 | `inventory.supplier_viewed` | success | `listInventorySuppliers` | `GET` | `/api/v1/inventory/suppliers` | INV-库存存酒 | `inventory.supplier.view` | 接口级事件，以本附录为准 |
 | `inventory.supply_contract.list` | success | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | INV-库存存酒 | `inventory.supply_contract.manage` | 接口级事件，以本附录为准 |
 | `inventory.supply_contract.list_failed` | failure | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | INV-库存存酒 | `inventory.supply_contract.manage` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.list_failed` | failure | `listInventoryTraceCodes` | `GET` | `/api/v1/inventory/trace-codes` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.listed` | success | `listInventoryTraceCodes` | `GET` | `/api/v1/inventory/trace-codes` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.print_failed` | failure | `printInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes/{id}/print` | INV-库存存酒 | `inventory.trace_code.print` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.printed` | success | `printInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes/{id}/print` | INV-库存存酒 | `inventory.trace_code.print` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.register_failed` | failure | `registerInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes` | INV-库存存酒 | `inventory.trace_code.register` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.registered` | success | `registerInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes` | INV-库存存酒 | `inventory.trace_code.register` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.view_failed` | failure | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
+| `inventory.trace_code.viewed` | success | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.create_failed` | failure | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.created` | success | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.list` | success | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
@@ -1346,12 +1357,14 @@
 | INV-库存存酒 | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | 创建结构化库房(六类) | `inventory.warehouse.manage` | `inventory.warehouse.created` / `inventory.warehouse.create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `disputeSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/dispute` | 受理存酒争议 | `bar.saved_bottle.manage` | `bar.saved_bottle.dispute` / `bar.saved_bottle.dispute_failed` | tablet, web | operation 级补充 |
 | INV-库存存酒 | `getInventoryStocktake` | `GET` | `/api/v1/inventory/stocktakes/{id}` | 查询库存盘点单详情（含差异明细） | `inventory.stocktake.view` | `inventory.stocktake.detail_viewed` / `inventory.stocktake.detail_view_failed` | web | operation 级补充 |
+| INV-库存存酒 | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | 查询溯源码责任链（按 id 或 trace_code） | `inventory.trace_code.view` | `inventory.trace_code.viewed` / `inventory.trace_code.view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listHighValueReviews` | `GET` | `/api/v1/inventory/high-value-reviews` | 查询库存域高价值复核单(报损/盘点差异/存酒作废) | `inventory.high_value.review` | `inventory.high_value_review.viewed` / `inventory.high_value_review.view_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventoryItems` | `GET` | `/api/v1/inventory/items` | 查询库存明细 | `inventory.stock.view` | `inventory.item.viewed` / `inventory.item.viewed_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listInventoryRiskAlerts` | `GET` | `/api/v1/inventory/risk-alerts` | 查询库存风险预警列表 | `inventory.risk_alert.view` | `inventory.risk_alert.list` / `inventory.risk_alert.list_failed` | web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventoryStockBatches` | `GET` | `/api/v1/inventory/stock-batches` | 查询库存批次列表 | `inventory.stock.view` | `inventory.stock_batch.list` / `inventory.stock_batch.list_failed` | web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventoryStocktakes` | `GET` | `/api/v1/inventory/stocktakes` | 查询库存盘点单列表 | `inventory.stocktake.view` | `inventory.stocktake.viewed` / `inventory.stocktake.view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listInventorySuppliers` | `GET` | `/api/v1/inventory/suppliers` | 查询供应商 | `inventory.supplier.view` | `inventory.supplier_viewed` / `inventory.supplier_view_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listInventoryTraceCodes` | `GET` | `/api/v1/inventory/trace-codes` | 查询溯源码主数据列表 | `inventory.trace_code.view` | `inventory.trace_code.listed` / `inventory.trace_code.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listPurchaseRequests` | `GET` | `/api/v1/inventory/purchase-requests` | 查询采购申请 | `inventory.purchase_request.view` | `inventory.purchase_request_viewed` / `inventory.purchase_request_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | 查询存酒 | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `listStockBalances` | `GET` | `/api/v1/inventory/stock-balances` | 查询库存余额 | `inventory.stock.view` | `inventory.stock_balance.viewed` / `inventory.stock_balance.viewed_failed` | web | operation 级补充 |
@@ -1362,8 +1375,10 @@
 | INV-库存存酒 | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | 查询供应合同列表 | `inventory.supply_contract.manage` | `inventory.supply_contract.list` / `inventory.supply_contract.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | 查询库房列表 | `inventory.warehouse.manage` | `inventory.warehouse.list` / `inventory.warehouse.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `orderPurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | 采购单下单(approved→ordered) | `inventory.purchase.approve` | `inventory.purchase_status_changed` / `inventory.purchase_status_change_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `printInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes/{id}/print` | 出库打印溯源码（registered→printed） | `inventory.trace_code.print` | `inventory.trace_code.printed` / `inventory.trace_code.print_failed` | web | operation 级补充 |
 | INV-库存存酒 | `receivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/receive` | 采购单入库确认(arrived→received,生成入库流水) | `inventory.purchase.approve` | `inventory.received` / `inventory.received_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `recordInventoryStocktakeVariance` | `POST` | `/api/v1/inventory/stocktakes/{id}/variances` | 录入库存盘点差异行 | `inventory.stocktake.variance_record` | `inventory.stocktake.variance_recorded` / `inventory.stocktake.variance_record_failed` | web | operation 级补充 |
+| INV-库存存酒 | `registerInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes` | 贴码登记溯源码（入库） | `inventory.trace_code.register` | `inventory.trace_code.registered` / `inventory.trace_code.register_failed` | web | operation 级补充 |
 | INV-库存存酒 | `reportRobotSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | 机器人配送段上报(被动留痕,受第三方开关门控) | `inventory.handover.scan` | `inventory.handover_robot_reported` / `inventory.handover_robot_report_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewHighValue` | `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | 主管复核高价值动作(approve生效/reject回滚) | `inventory.high_value.review` | `inventory.high_value_review_decided` / `inventory.high_value_review_decide_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewInventoryStocktakeVariance` | `POST` | `/api/v1/inventory/stocktakes/{id}/variances/{vid}/review` | 复核库存盘点差异（approved/rejected） | `inventory.stocktake.variance_review` | `inventory.stocktake.variance_reviewed` / `inventory.stocktake.variance_review_failed` | web | operation 级补充 |

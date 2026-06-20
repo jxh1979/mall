@@ -384,6 +384,23 @@ final class JdbcInventoryRowMapper {
         );
     }
 
+    // ── V128 / REQ-39：溯源码主数据。 ──
+    InventoryTraceCodeRecord mapTraceCode(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new InventoryTraceCodeRecord(
+                resultSet.getString("id"),
+                resultSet.getString("trace_code"),
+                resultSet.getString("item_id"),
+                resultSet.getString("batch_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("status"),
+                resultSet.getString("bound_ref"),
+                instantOrNull(resultSet, "printed_at"),
+                resultSet.getString("created_by"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
     private List<String> readList(String value) {
         if (value == null || value.isBlank()) {
             return List.of();

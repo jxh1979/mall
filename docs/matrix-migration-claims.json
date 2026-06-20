@@ -261,8 +261,8 @@
       "req": "REQ-39",
       "table": "inventory_trace_codes",
       "column": null,
-      "expected": "absent",
-      "note": "R4-G1 DRIFT: 矩阵明确声称 inventory_trace_codes 表，迁移从未建；trace_code 仅为共用列"
+      "expected": "present",
+      "note": "V128 已建 inventory_trace_codes 表+码 CRUD（贴码登记/出库打印/责任链查询，带直接 merchant_id 列）"
     },
     {
       "req": "REQ-52",
