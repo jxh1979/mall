@@ -4,7 +4,7 @@
 > R5 横幅原标注的"终端开关后端拒绝铁律未实现/scope 收窄"已在本会话 P0 实现并落库（V068 + 切面 + 全景埋点），以下上修；事件名漂移与三层留痕接线保持开放。
 > - **✅ 终端开关后端拒绝铁律（§5.4）已落地（V068）**：新增 `ActionGateAspect`（`@Order(10)`，早于业务事务）在带 `@GuardedAction(capability=...)` 的业务方法执行前由 `TerminalSwitchGuard` 校验开关、关闭/读取失败发 `terminal.access_rejected`(reason=disabled|switch_fetch_failed) 并拒绝，**finance/bar/ticketing/amusement/inventory 共 94 处 `@GuardedAction` 全景埋点**，不再可绕过。准入闸 `AdmissionGuard` + `supervisor_review_policies`(V068) 同切面串联（T3 合同准入）。
 > - **✅ scope 7 维已落地（V068）**：`TerminalSwitchGuard.resolveEffectiveSwitch` 解析优先级 device > version > module > business_system > merchant > project > global（默认开启 opt-out，fail-closed）；`terminal_capability_switches.scope_type` 加 7 维 CHECK，不再收窄到 global/device。
-> - **仍开放——留痕自动生成/异常责任链事件名漂移**：见 `evidence-risk-layer-spec-v0.2.md`——通用 `risk_alerts` 状态机、三层过程留痕(business_process_instances/step_records，V059 建表但未全面接线)，销售归属/服务责任事件名 `order.acquired`/`order.sales_attributed` 代码**仍零命中**（实际事件名漂移，待对齐 PRD §4.1）。
+> - **部分收口——异常责任链事件名漂移已对齐（`文档goalP1(2026-06-20)`）**：异常责任链 `risk_alerts`/`risk_alert_actions` 已由 V103 落地，代码真实事件名为 `exception.reported/claimed/transferred/escalated/resolved/dismissed`（`RiskAlertService`）；§4.1 已就地补"字典名→代码真实名"映射（`exception.first_handled`→`exception.claimed` 等），并新增 §4.1.6 登记 V099–V124 全部新功能真实事件名。**仍开放**：销售归属/服务责任事件名 `order.acquired`/`order.sales_attributed` 代码**仍零命中、无替代发布**（§4.1 已标注为待接线占位）；三层过程留痕(business_process_instances/step_records，V059 建表但未全面接线)见 `evidence-risk-layer-spec-v0.2.md`。
 > - **候选验收口径（已正式）**：关闭某端/模块后调用其业务接口被后端拒绝并写 `terminal.access_rejected`，前端隐藏仅作辅助。
 
 ## 1. 文档定位
@@ -181,8 +181,8 @@ flowchart TD
 | `bar_service.goods_delivered` | 服务员送达客人或卡座 |
 | `inventory.exception_reported` | 库存或交接异常 |
 | `inventory.exception_resolved` | 异常处理完成 |
-| `order.acquired` | 订单被获取或创建 |
-| `order.sales_attributed` | 订单销售归属确认或变更 |
+| `order.acquired` | 订单被获取或创建。**`文档goalP1(2026-06-20)` 漂移修正**：审计确认本事件名代码**零命中**、无等效替代发布；销售归属链当前未按本名落事件。本名暂保留为待接线占位（标记"字典名→代码暂无落点"），分析域勿依赖本名取数，待销售归属服务接线后回填权威落点。 |
+| `order.sales_attributed` | 订单销售归属确认或变更。**`文档goalP1(2026-06-20)` 漂移修正**：同 `order.acquired`，代码**零命中**、无等效替代；暂保留为待接线占位（"字典名→代码暂无落点"），分析域勿依赖。 |
 | `reservation.deposit_paid` | 订台定金支付完成 |
 | `table.service_assigned` | 卡座或桌台分配责任服务员 |
 | `table.service_changed` | 服务责任人变更 |
@@ -190,12 +190,14 @@ flowchart TD
 | `bar.order_delivered` | 酒吧订单送达 |
 | `payment.cash_received` | 现金收款确认 |
 | `payment.pos_received` | POS 收款确认 |
-| `contract.blocked` | 合同或基础定义违规命中、准入流程被卡住（修订说明 2026-06-07 新增，trace-3） |
-| `contract.released` | 合同准入经上级审核放行（修订说明 2026-06-07 新增，trace-3） |
-| `exception.reported` | 异常被发现或上报 |
-| `exception.first_handled` | 异常第一处理人接单 |
-| `exception.escalated` | 异常升级 |
-| `exception.resolved` | 异常处理完成 |
+| `contract.blocked` | 合同或基础定义违规命中、准入流程被卡住（修订说明 2026-06-07 新增，trace-3）。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `contract.blocked` 代码**零命中**，准入卡住的代码真实事件名为 **`admission.blocked`**（`SupervisorReviewService.blockForAdmission`），另有 `admission.warned`/`admission.review`/`admission.eval_failed_closed`/`admission.space_unresolved_closed`/`admission.eval_skipped`（`AdmissionGuard`）。映射：**`contract.blocked`（字典名）→ `admission.blocked`（代码名）**；准入超范围/超空间策略见 §11.1（V099）。 |
+| `contract.released` | 合同准入经上级审核放行（修订说明 2026-06-07 新增，trace-3）。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `contract.released` 代码**零命中**，复核放行的代码真实事件名为 **`admission.released`**（驳回为 `admission.escalated`，`SupervisorReviewService`）。映射：**`contract.released`（字典名）→ `admission.released`（代码名）**。 |
+| `exception.reported` | 异常被发现或上报（代码命中：`RiskAlertService.report`，V103 统一异常责任链） |
+| `exception.first_handled` | 异常第一处理人接单。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `exception.first_handled` 代码**零命中**，认领接单的代码真实事件名为 **`exception.claimed`**（`RiskAlertService.claim`，V103）。映射：**`exception.first_handled`（字典名）→ `exception.claimed`（代码名）**。 |
+| `exception.transferred` | 异常转交（`文档goalP1(2026-06-20)` 新增；代码真实事件名 `exception.transferred`，`RiskAlertService.transfer`，V103） |
+| `exception.escalated` | 异常升级（代码命中：`RiskAlertService.escalate`，V103） |
+| `exception.resolved` | 异常处理完成（代码命中：`RiskAlertService.resolve`，V103；关闭必有结论，见 §11.5 `chk_risk_alerts_resolved_conclusion`） |
+| `exception.dismissed` | 异常误报驳回关闭（`文档goalP1(2026-06-20)` 新增；代码真实事件名 `exception.dismissed`，`RiskAlertService.dismiss`，V103） |
 | `exception.reviewed` | 异常复核完成 |
 | `video.candidate_matched` | 事件候选视频片段匹配 |
 | `terminal.access_rejected` | 终端/模块开关关闭或开关拉取失败兜底关闭时，后端拒绝访问并留痕（修订说明 2026-06-07 新增，switch-4/switch-5） |
@@ -322,6 +324,36 @@ flowchart TD
 | `evidence.exported` | personnel | 证据导出：导出人、对象范围、用途、审批单、水印和文件摘要 |
 | `risk.alert_created` | risk | 风控告警创建：规则、对象、风险等级、命中证据、责任队列 |
 | `risk.alert_resolved` | risk | 风控告警关闭/解决：告警、处置结果、复核人、证据、关闭原因 |
+
+#### 4.1.6 V099–V124 新功能事件登记（`文档goalP1(2026-06-20)`）
+
+> 本小节 `文档goalP1(2026-06-20)` 新增，登记本会话 V099–V124 新功能产生的标准事件，事件名均经 Grep `backend/src/main/java/` 核对为代码真实发布名（非臆造）。**新功能事件的权威定义以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准**（功能实现与验收口径），本节为事件名收口登记，分析/风控/审计消费下列真实名。带"映射"的为字典旧名→代码真实名收口。
+
+| 事件类型（代码真实名） | event_category | 含义与载荷要点 / 来源 |
+|---|---|---|
+| `admission.blocked` | governance | 准入超合同范围/超空间被卡住（V099 over_*/over_space 策略命中 → supervisor_review）；映射：字典名 `contract.blocked`→`admission.blocked`。来源 `SupervisorReviewService` |
+| `admission.released` | governance | 准入复核放行（驳回为 `admission.escalated`）；映射：字典名 `contract.released`→`admission.released` |
+| `exception.reported` | risk | 统一异常上报（V103 责任链：risk_alerts/risk_alert_actions）。`RiskAlertService.report` |
+| `exception.claimed` | risk | 异常认领接单；映射：字典名 `exception.first_handled`→`exception.claimed`。`RiskAlertService.claim` |
+| `exception.transferred` | risk | 异常转交。`RiskAlertService.transfer` |
+| `exception.escalated` | risk | 异常升级。`RiskAlertService.escalate` |
+| `exception.resolved` | risk | 异常处理完成（关闭必有结论）。`RiskAlertService.resolve` |
+| `exception.dismissed` | risk | 异常误报驳回。`RiskAlertService.dismiss` |
+| `amusement.incident.over_capacity` | amusement | 游乐超容落事件（V104 软上限 operating_capacity + disposal_mode）。`AmusementService` |
+| `points.earned` | customer | 会员积分获取（V100 入账引擎）。`LoyaltyService` |
+| `points.deducted` | customer | 会员积分扣减/冲正（V100）。`LoyaltyService` |
+| `wecom.risk.hit_detected` | conversation | 企微违规命中检出（V106 wecom_risk_hits + 规则码 seed）。`WecomConversationService` |
+| `wecom.risk.hit_reviewed` | conversation | 企微违规命中复核处置（confirmed/dismissed）。`WecomConversationService` |
+| `terminal.device.repaired` | facility | 终端设备送修（V107 设备生命周期）。`TerminalDeviceService` |
+| `terminal.device.lost` | facility | 终端设备挂失（V107）。`TerminalDeviceService` |
+| `terminal.device.found` | facility | 终端设备找回（V107）。`TerminalDeviceService` |
+| `terminal.device.scrapped` | facility | 终端设备报废（V107）。`TerminalDeviceService` |
+| `mdm.violation.handled` | facility | MDM 受管设备违规处置闭环（V107 disposition：acknowledged/device_blocked/dismissed）。`MdmService` |
+| `merchant_service.work_order.escalated` | service | 物业工单 SLA 自动超时升级（V120 sla_breached/escalated_at）。`MerchantServiceService` |
+| `bar.order_item_void_decided` | bar | 退菜退酒审批决策（approved/rejected，V117 回写 + V124 驳回反向冲销 waiver_reversal/refund_reversal）。`BarWriteOperation.DECIDE_ORDER_ITEM_VOID` |
+| `finance_cam.trued_up` | finance | CAM 年度 true-up 多退少补（V121 cam_trueup_runs/lines）。**注意为 `finance_cam.` 下划线连写**，字典/口语 `finance.cam.trued_up` 为漂移；映射：`finance.cam.trued_up`→`finance_cam.trued_up`。`FinanceService` |
+| `integration.channel_reconciliation.completed` | third_party | 第三方回流渠道自动对账完成（V109 channel/external_channel_order_id + source_domain）。`IntegrationOrderSyncService` |
+| `integration.channel_reconciliation.failed` | third_party | 第三方回流渠道自动对账失败。`IntegrationOrderSyncService` |
 
 > 修订说明（2026-06-08 三轮收口）：① `points.earned`/`points.redeemed` 原括注"对齐 data-risk `member.point_earned`/`member.point_redeemed`"为悬空引用（data-risk 全文无这两个名）——已改为说明"data-risk §7.1 消费本 `points.*` 细粒度事件"，与 R3 删除主表聚合旧名 `member.points_changed` 后两侧统一用 `points.*` 一致（依据 R3、event-consumers-8、struct-annot-2、critic2-3）。② 新登记 `personal_data.purged`/`personal_data.anonymized`（域=合规）承载 C5 留存销毁/匿名化作业（`data-risk §11.6.2`）每条处置的事件留痕，载荷统一为 data_category/target_table/affected_count/disposal_action/job_log_id；登记后 data-risk §11.6.2 与 java-backend §14 同步补入（依据 R6、compliance-wired-5、struct-annot-7）。
 
@@ -644,3 +676,5 @@ flowchart TD
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §7 | 留痕、终端开关、责任链和视频证据能力必须能在 OpenAPI、operation 验收矩阵和 `p0-openapi-contract-closure-appendix-v0.1.md` 中追溯；未通过 `verify:openapi-closure` 不得生成接口、mock 或自动化用例 | 防止历史能力清单绕过权限、事件、任务和样例准入 |
 | 2026-06-18 E2 | 增 | §5.4 关闭后的表现 | 补同口径修订说明：确认 `legacy-console` 为正式 Web 前端，Web 端写动作边界（不直接核销/人工放行/结账支付/存取酒，只跳转）与"终端开关后端拒绝铁律"一致；Web 模块开关关闭后后端仍须独立校验拒绝并写 `terminal.access_rejected` | 业务已确认（2026-06-18）legacy-console 为正式 Web 前端，须按终端铁律约束 Web 端写动作边界 |
 | 2026-06-18 D7 收口 | 改 | §7/§8 | 收口 §7 与 §8 自相矛盾：§7 明确旧 `/exceptions/*`、`/api/mobile/*` 及 `/api/admin/exceptions/*` 历史路径 deprecated、不作正式契约；§8 明确异常责任链（发现→第一处理→转派→升级→关闭）P0 必做，须改用正式 OpenAPI operationId 并登记到 operation 验收矩阵，含 first-handle/transfer/escalate/close 写动作及验收。两节各管路径形态与能力范围、不再互斥；operationId 待 OpenAPI 与验收矩阵登记后定稿 | D7 异常接口 §7/§8 自相矛盾收口 |
+| 2026-06-20 `文档goalP1` | 改 | §4.1 标准事件类型 | 漂移修正：`order.acquired`/`order.sales_attributed` 代码零命中、无替代，标注为待接线占位（"字典名→代码暂无落点"）；`contract.blocked`→`admission.blocked`、`contract.released`→`admission.released`、`exception.first_handled`→`exception.claimed` 三处就地补"字典名→代码真实名"映射；主表补 `exception.transferred`/`exception.dismissed`（V103 责任链真实事件名） | Grep backend 确认事件名漂移；V103 统一异常责任链 |
+| 2026-06-20 `文档goalP1` | 增 | §4.1.6 V099–V124 新功能事件登记 | 新增小节登记本会话 V099–V124 新功能事件（均经 Grep 核对为代码真实发布名）：`exception.reported/claimed/transferred/escalated/resolved/dismissed`(V103)、`amusement.incident.over_capacity`(V104)、`points.earned/deducted`(V100)、`wecom.risk.hit_detected/hit_reviewed`(V106)、`terminal.device.repaired/lost/found/scrapped`+`mdm.violation.handled`(V107)、`merchant_service.work_order.escalated`(V120)、`bar.order_item_void_decided`(V117/V124)、`finance_cam.trued_up`(V121，注意下划线连写)、`integration.channel_reconciliation.completed/failed`(V109)；指向 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为新功能事件权威 | 权威事件字典漂移收口 + 新功能事件登记 |

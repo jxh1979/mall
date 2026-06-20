@@ -1,7 +1,7 @@
 # 地基系统数据库设计第一版
 
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
-> 本设计多处表/字段为"有设计无迁移"，以真实 Flyway V001–V065 为准收口：
+> 本设计多处表/字段为"有设计无迁移"，以真实 Flyway V001–V124 为准收口（V099–V124 新增表/列见 §11 `文档goalP1(2026-06-20)`）：
 > - **准入两表**：`contract_admission_rules`(§238)、`admission_audits`(§259) 迁移**零命中**；审批层级实际落 `supervisor_review_decisions`(V057)。§449"admission_audits.approval_level"为过期落点。
 > - **空间四级模型**：设计的 `complex_projects/venues/areas/location_points` 四级表代码零落地，真实迁移是扁平单表 `spaces`(V005，`space_type` 自由文本无枚举)。该四级模型已过期，需作废或重写。
 > - **员工三表**：`staff_profiles`/`staff_device_credentials`/`employee_notices` **零落地**；`staff_device_credentials`（员工 Keystore 公钥/不可逆指纹）与 `terminal_device_credentials`(V011，kiosk 随机 token) 是**两套不同实体**，不可混用；`employee_notices` 无写入方，合规同意凭据未落地。
@@ -1808,6 +1808,192 @@ erDiagram
 19. 订单获取、销售归属、卡座服务、异常第一处理人和财务调整能通过业务过程实例和步骤记录形成时间线。
 20. 每条事件至少能保留项目、区域、点位、设备和发生时间，为后续视频候选片段匹配预留条件。
 
+## 11. V099–V124 新增表与列设计（`文档goalP1(2026-06-20)`）
+
+> 本节标注 `文档goalP1(2026-06-20)`，依据真实 Flyway 迁移 V099–V124 逐脚本核对回填（非臆造），统一口径：金额=整数分（`*_cent`/`*_amount_cent`/`*_bps` 基点）、状态/枚举均落 CHECK、隔离键沿用 `merchant_id`（商户维）/`project_id`（综合体维）、附件/证据用 JSONB、时间用 TIMESTAMPTZ。迁移号为各表/列的权威落点。
+
+### 11.1 准入策略 seed（V099 → `supervisor_review_policies`，不建新表）
+
+V099 不新建表，仅向 V068 既有 `supervisor_review_policies` 补 `over_space` / `over_contract_scope` 触发模式的策略行 seed，启用判定引擎（消除"无 over_* 策略=判定空转"的 fail-open）。
+
+- 关键列（沿用 V068 表结构）：`policy_code`(唯一)、`action_type`、`object_type`、`trigger_mode`、`outcome`、`approval_level`、`required_level`、`enabled`。
+- 匹配约束：`JdbcAdmissionPolicyRepository.findEnabledPolicy` 按 (`action_type`,`object_type`) 命中且 `ORDER BY policy_code LIMIT 1`，每对仅生效一条；V099 仅补 V068 未占用的对。
+- 分配口径：可解析到 space 的对象（`bar_bill`/`amusement_maintenance_record`/`amusement_incident`/`amusement_group_booking`）走 `over_space`（上两级 `two_levels_up`,3）；其余（票务/财务/库存）走 `over_contract_scope`，财务类升至 `top_authority`,4。`outcome` 一律 `block`（进 supervisor_review）。
+- 幂等：`ON CONFLICT (policy_code) DO NOTHING`。
+
+### 11.2 积分入账引擎列（V100 → `customer_points_ledger` 新列）
+
+V100 给 V025 建表（V089 加 `expire_at`/`remaining_points`/`expired`）的 `customer_points_ledger` 增列，支持可幂等、可分状态入账（支付入 pending、履约转 confirmed、退款 deduct）。
+
+| 新列 | 类型 | 用途 |
+|---|---|---|
+| `change_type` | VARCHAR(32) | 变动类型 earn/deduct（兼容历史 expire/check_in/transfer，回填=source_type） |
+| `status` | VARCHAR(32) NOT NULL DEFAULT 'confirmed' | pending（支付待确认）/confirmed（履约已入账）/reversed（退款冲减置位） |
+| `source_doc_type` | VARCHAR(64) | 业务单据类型（ticket_order/ticket_refund…，幂等键组成） |
+| `source_doc_id` | VARCHAR(120) | 业务单据 id（幂等键组成） |
+
+- 幂等唯一索引（partial）：`uq_customer_points_ledger_source_doc` ON (`source_doc_type`,`source_doc_id`,`change_type`) WHERE 两列非空——同单据+同变动类型至多一条；历史无单据流水不受约束。
+- 隔离键：随主表 `customer_id` 归属。
+
+### 11.3 审计事件分类/主体列（V101 → `audit_events` 新列）
+
+V101 给 V002 建表的 `audit_events` 增两列（均可空，向后兼容，不影响既有 recordSuccess/recordFailure）：
+
+| 新列 | 类型 | 用途 |
+|---|---|---|
+| `event_category` | VARCHAR(64) | 事件类目 loyalty/order/refund…（聚合检索维度，对齐 PRD §4.1 各 event_category） |
+| `subject_type` | VARCHAR(64) | 事件主体类型 customer_points/customer_points_transfer…（与 business_id 配合定位主体） |
+
+- 索引（partial）：`idx_audit_events_category_occurred_at`、`idx_audit_events_subject`。
+
+### 11.4 存酒散客化+转赠（V102 → `saved_bottle_transfers` 新表 + `saved_bottles` 改列）
+
+V102 在 V012（建 `saved_bottles`）+ V061（加高价值/姓名昵称/手机号/扩 status）基础上做散客化与转赠/争议入状态机。
+
+**`saved_bottles` 改列**：`customer_id` DROP NOT NULL（散客可存）；新增 `registration_photo_refs` JSONB NOT NULL DEFAULT `[]`、`manual_note` VARCHAR(1000)、`transferred_at` TIMESTAMPTZ、`transfer_to_name_or_nickname` VARCHAR(128)、`transfer_to_phone` VARCHAR(64)、`transfer_to_phone_hash` VARCHAR(128)。status CHECK 扩为 `stored/claimed/cancelled/expired/pending_identity_review/disputed_frozen/transferred/disputed`（增 transferred 已转赠终态、disputed 争议受理态）。
+
+**新表 `saved_bottle_transfers`（转赠流水留痕）**：
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | VARCHAR(64) PK | |
+| `saved_bottle_id` | VARCHAR(64) NOT NULL | FK → `saved_bottles(id)` |
+| `from_customer_id` / `from_name_or_nickname` | VARCHAR | 转出方 |
+| `to_name_or_nickname` | VARCHAR(128) NOT NULL | 受让人 |
+| `to_phone` / `to_phone_hash` | VARCHAR | 受让人手机号/哈希 |
+| `transfer_quantity` | INTEGER NOT NULL | CHECK `> 0` |
+| `operator_id` | VARCHAR(128) | 操作员 |
+| `status` | VARCHAR(32) NOT NULL | CHECK IN (`transferred`) |
+| `evidence_attachment_ids` | JSONB NOT NULL DEFAULT `[]` | 证据 |
+| `created_at` | TIMESTAMPTZ NOT NULL | |
+
+- 外键：`saved_bottle_id` → `saved_bottles(id)`。CHECK：`chk_saved_bottle_transfers_quantity`、`chk_saved_bottle_transfers_status`。
+
+### 11.5 统一异常责任链（V103 → `risk_alerts` + `risk_alert_actions` 新表）
+
+V103 建立跨域异常汇聚层，统一上报→认领→转交→升级→关闭（resolve/dismiss）责任链（孤岛表 analytics_risk_alerts/inventory_risk_alerts/amusement_incidents 可后续桥接）。
+
+**`risk_alerts`（主表）关键列**：`alert_id` VARCHAR(64) PK、`source_domain` VARCHAR(32) NOT NULL、`source_ref`、`alert_type` NOT NULL、`risk_level` NOT NULL、`status` NOT NULL、`summary` VARCHAR(500) NOT NULL、`first_reported_by` NOT NULL、`first_handler_id`、`escalated_to`、`resolved_by`、`resolution_conclusion` TEXT、`project_id`、`merchant_id`、`idempotency_key`、`created_at`/`updated_at`。
+- CHECK：`source_domain` IN (ticketing/bar/amusement/inventory/finance/wecom/device/thirdparty/analytics/platform)；`risk_level` IN (normal/suspicious/high/critical)；`status` IN (open/handling/escalated/resolved/dismissed)；**关闭必有结论** `chk_risk_alerts_resolved_conclusion`（status=resolved → resolution_conclusion 非空）。
+- 隔离键：`project_id`、`merchant_id`（均可空，带 partial 索引）；幂等唯一索引 `uq_risk_alerts_idempotency_key`。
+
+**`risk_alert_actions`（责任链流水，append-only）**：`action_id` PK、`alert_id` NOT NULL FK → `risk_alerts(alert_id)` ON DELETE CASCADE、`action_type` NOT NULL、`actor_id` NOT NULL、`from_status`、`to_status` NOT NULL、`reason` TEXT、`evidence_refs` JSONB NOT NULL DEFAULT `[]`、`created_at`。
+- CHECK：`action_type` IN (report/claim/transfer/escalate/resolve/dismiss)；`evidence_refs` 必须为 JSON 数组。
+- seed 权限：`risk_alert.report/claim/transfer/escalate/resolve/dismiss/view`（evidence 域），授 role_platform_admin。
+- 真实事件名：`exception.reported`/`exception.claimed`/`exception.transferred`/`exception.escalated`/`exception.resolved`/`exception.dismissed`（PRD §4.1 字典中 `exception.first_handled` 为漂移，代码真实为 `exception.claimed`）。
+
+### 11.6 游乐超容（V104 → `amusement_over_capacity_policy` 新表 + `amusement_incidents.incident_type`）
+
+**`amusement_incidents` 改列**：增 `incident_type` VARCHAR(32) NOT NULL DEFAULT `accident`，CHECK `chk_amusement_incidents_type` IN (accident/fault/complaint/risk/over_capacity)；存量回填 accident。
+
+**新表 `amusement_over_capacity_policy`（项目维一行）**：`project_id` VARCHAR(64) PK FK → `amusement_projects(id)` ON DELETE CASCADE、`operating_capacity` INTEGER NOT NULL DEFAULT 0（运营软上限）、`disposal_mode` VARCHAR(16) NOT NULL DEFAULT `block_hard`、`enabled` BOOLEAN、`created_at`/`updated_at`。
+- CHECK：`operating_capacity >= 0`；`disposal_mode` IN (block_hard/warn_only)。未配置项目退化为"仅 V083 硬上限阻断、无软上限告警"（向后兼容）。
+- 隔离键：`project_id`（即主键）。真实事件名：`amusement.incident.over_capacity`。
+
+### 11.7 对账差异强制化列（V105 → `finance_reconciliation_differences` 新列）
+
+V105 给 V008 建表的 `finance_reconciliation_differences` 增列并纯化 CHECK：
+
+| 新列 | 类型 | 用途 |
+|---|---|---|
+| `expected_amount_cent` | BIGINT | 平台侧系统取数应有额 |
+| `actual_amount_cent` | BIGINT | 第三方侧实际额 |
+| `source` | VARCHAR(16) NOT NULL DEFAULT 'system' | 取数来源 |
+
+- CHECK：`chk_frd_difference_type` 收紧为四类 IN (amount/count/status/missing)（历史 `amount_mismatch` 先 UPDATE 归一为 amount）；`chk_frd_source` IN (system/manual)。纯手填（无系统取数）差异由服务层拒绝。
+- seed 权限：`finance.reconciliation.difference.create`。
+
+### 11.8 企微违规命中（V106 → `wecom_risk_hits` 新表 + `analytics_risk_alerts.source_domain` + 规则 seed）
+
+**新表 `wecom_risk_hits`（一条命中=一消息×一规则码）**：`hit_id` PK、`conversation_id` NOT NULL FK → `wecom_conversations(id)` ON DELETE CASCADE、`message_id` NOT NULL FK → `wecom_messages(id)` ON DELETE CASCADE、`rule_code` VARCHAR(128) NOT NULL、`risk_level` NOT NULL、`matched_snippet` TEXT（脱敏后）、`status` VARCHAR(32) NOT NULL DEFAULT `open`、`reviewer_id`、`review_note`、`project_id` VARCHAR(64) NOT NULL、`alert_id`、`created_at`/`updated_at`。
+- CHECK：`risk_level` IN (normal/suspicious/high/critical)；`status` IN (open/reviewing/confirmed/dismissed)。
+- 幂等唯一索引 `uq_wecom_risk_hits_message_rule` ON (`message_id`,`rule_code`)。隔离键：`project_id`（NOT NULL）。
+- 外键：`conversation_id`/`message_id` → V087 会话/消息表。
+- 同时给 `analytics_risk_alerts` 增可空 `source_domain` VARCHAR(64)（企微命中标 `wecom`，便于统一表就位后聚合）；并 seed 企微违规规则码到 `analytics_risk_rules`（domain=compliance：STAFF_PRIVATE_DEAL/STAFF_PRIVATE_PAYMENT/ABUSE/ILLEGAL_PROMISE/LURE_PRIVATE_WECHAT，关键词作 rule_config_json）。
+- seed 权限：`wecom.risk_hit.view`/`wecom.risk_hit.review`。真实事件名：`wecom.risk.hit_detected`/`wecom.risk.hit_reviewed`。
+
+### 11.9 设备生命周期+MDM处置（V107 → `terminal_devices` 改列 + `mdm_policy_violations` 改列）
+
+**`terminal_devices` 改列**：补 `chk_terminal_devices_status` CHECK，status 枚举=`bound/returned/unbound/disabled/repair/lost/found/scrapped/blocked`（增送修/挂失/找回/报废/封禁，命名以既有代码为准：文档 in_use→bound、checked_out→returned、retired→scrapped）；`management_status` CHECK 重建为 `unmanaged/enrolled/compliant/violation/lost/retired/blocked`。
+
+**`mdm_policy_violations` 改列**：增 `blocked_at` TIMESTAMPTZ、`disposition` VARCHAR(32)，CHECK `chk_mdm_policy_violations_disposition`（NULL 或 acknowledged/device_blocked/dismissed）。
+- seed 权限：`terminal.device.lifecycle`/`mdm.violation.handle`。真实事件名：`terminal.device.repaired`/`terminal.device.lost`/`terminal.device.found`/`terminal.device.scrapped`、`mdm.violation.handled`。
+
+### 11.10 库存盘点差异→AR/AP（V108 → `stocktake` + `inventory_variance` 新表）
+
+**新表 `stocktake`（盘点单头）**：`id` PK、`stocktake_no` VARCHAR(64) NOT NULL UNIQUE、`warehouse_id` NOT NULL、`merchant_id`（隔离，平台库存为空）、`business_date` DATE NOT NULL、`status` VARCHAR(32) NOT NULL DEFAULT `counting`、`remark`、`created_at`/`updated_at`。CHECK `chk_stocktake_status` IN (counting/reviewing/closed)。
+
+**新表 `inventory_variance`（差异明细）**：`id` PK、`stocktake_id` NOT NULL FK → `stocktake(id)` ON DELETE CASCADE、`item_id` NOT NULL、`batch_no`、`book_qty`/`counted_qty` NUMERIC(18,3)、`variance_qty` NUMERIC(18,3) NOT NULL（带符号）、`variance_amount_cent` BIGINT NOT NULL（带符号，分）、`reason` VARCHAR(32) NOT NULL、`supplier_id`、`review_status` VARCHAR(32) NOT NULL DEFAULT `pending`、`reviewed_by`/`reviewed_at`、`posted_ar_ap_item_id` FK → `ar_ap_items(id)`、`created_at`/`updated_at`。
+- CHECK：`reason` IN (damage/shortage/overage/supplier_fault)；`review_status` IN (pending/approved/rejected)。幂等唯一索引 `uq_inventory_variance_posted`（已入账行唯一）。复核通过由 finance 生成 `ar_ap_items(source_type='inventory_difference')`。
+- 隔离键：`stocktake.merchant_id`。seed 权限：`finance.inventory_variance.post`。
+
+### 11.11 第三方回流渠道语义列（V109 → `integration_order_syncs` + `integration_reconciliation_differences` 新列）
+
+**`integration_order_syncs` 改列**：增 `channel` VARCHAR(32) NOT NULL DEFAULT `unknown`、`external_channel_order_id` VARCHAR(160)。CHECK `chk_integration_order_syncs_channel` IN (meituan/dianping/douyin/koubei/eleme/alipay/wechat/internal/unknown)；渠道级幂等唯一索引 `uq_integration_order_syncs_channel_order`（channel+外部单号）。
+
+**`integration_reconciliation_differences` 改列**：增 `source_domain` VARCHAR(16) NOT NULL DEFAULT `platform`，CHECK IN (platform/thirdparty)（自动对账写 thirdparty，人工录入写 platform）。
+- 真实事件名：`integration.channel_reconciliation.completed`/`integration.channel_reconciliation.failed`。
+
+### 11.12 综合体计费引擎（V110 → `turnover_rent_rules` + `deposit_ledger` + `cam_allocations` 新表）
+
+**新表 `turnover_rent_rules`（营业额抽成规则）**：`id` PK、`merchant_id` NOT NULL、`rule_name` NOT NULL、`rate_bps` INTEGER NOT NULL（基点，10000=100%）、`min_amount_cent`/`max_amount_cent` BIGINT（保底/封顶 clamp，可空）、`effective_from` DATE NOT NULL、`effective_to`、`status` DEFAULT `active`、时间戳。CHECK：`rate_bps` 0..10000、min/max ≥0 且 max≥min、status IN (active/inactive)。
+
+**新表 `deposit_ledger`（保证金台账四动作）**：`id` PK、`merchant_id` NOT NULL、`action` VARCHAR(32) NOT NULL、`amount_cent` BIGINT NOT NULL（恒正）、`balance_after_cent` BIGINT NOT NULL（≥0）、`ar_ap_item_id` FK → `ar_ap_items(id)`、`reason`、`created_at`。CHECK：`action` IN (collect/refund/deduct/forfeit)；`amount_cent>0`；`balance_after_cent>=0`。
+
+**新表 `cam_allocations`（CAM 权重分摊）**：`id` PK、`allocation_batch_id` NOT NULL、`merchant_id` NOT NULL、`period` VARCHAR(32) NOT NULL、`total_amount_cent` BIGINT NOT NULL、`weight_bps` INTEGER NOT NULL（基点，批次内合计应 10000）、`allocated_amount_cent` BIGINT NOT NULL、`ar_ap_item_id` FK → `ar_ap_items(id)`、`created_at`。CHECK：`total_amount_cent>0`、`weight_bps` 0..10000、`allocated_amount_cent>=0`；唯一约束 `uq_cam_allocations_batch_merchant`(allocation_batch_id,merchant_id)。
+- 隔离键：三表均 `merchant_id`。生成 `ar_ap_items(source_type='turnover_rent'/'deposit'/'cam')`。seed 权限：`finance.turnover_rent.bill`/`finance.deposit.manage`/`finance.cam.allocate`。
+
+### 11.13 终端开关 terminal_type 收口（V111 → `terminal_capability_switches` 改 CHECK）
+
+V111 把 V068 的 `chk_tcs_terminal_type` 收口对齐 D5 十端权威码：先 UPDATE 漂移别名（customer_app→app、customer_miniapp→miniapp、web_admin→web、staff_personal_app→staff_private_phone、merchant_web→merchant_portal、staff_tablet→tablet），再换 CHECK = `app/miniapp/web/tablet/staff_work_phone/staff_private_phone/merchant_portal/merchant_app/kiosk/mobile_admin` ∪ {`*`}（T2 跨端通配）。无新表/新列。
+
+### 11.14 供应商资质+结算多档（V112 → `supplier_qualifications` + `supplier_settlement_methods` 新表）
+
+**新表 `supplier_qualifications`（进货查验绑定）**：`id` PK、`supplier_id` NOT NULL FK → `inventory_suppliers(id)`、`qualification_type` VARCHAR(48) NOT NULL、`qualification_no`、`issued_by`、`valid_from`/`valid_to` DATE、`attachment_ids` JSONB NOT NULL DEFAULT `[]`、`status` DEFAULT `active`、`merchant_id`（隔离）、时间戳。CHECK：`qualification_type` IN (business_license/food_business_license/production_license/inspection_report/hygiene_permit/import_record/other)；`status` IN (active/suspended/archived)。
+
+**新表 `supplier_settlement_methods`（结算多档/账期）**：`id` PK、`supplier_id` NOT NULL FK → `inventory_suppliers(id)`、`settlement_method` VARCHAR(40) NOT NULL、`payment_term_days` INTEGER、`applicable_category`、`is_default` BOOLEAN、`status` DEFAULT `active`、`merchant_id`（隔离）、时间戳。CHECK：`settlement_method` IN (cash_on_delivery/monthly/credit_term/prepaid/consignment)；`payment_term_days` NULL 或 ≥0；`status` IN (active/archived)。每供应商至多一条 active 默认档（部分唯一索引 `uq_supplier_settlement_default`）。
+- seed 权限：`inventory.supplier.qualification.manage`/`inventory.supplier.settlement.manage`。
+
+### 11.15 票种刷新窗口列（V113 → `ticket_types.refresh_interval_seconds`）
+
+V113 给 `ticket_types` 增 `refresh_interval_seconds` INTEGER（可空），CHECK `chk_ticket_types_refresh_interval`（NULL 或 IN (30,60)）；发凭证按票种取值，为空回退默认 60（向后兼容 V064 凭证级配置）。
+
+### 11.16 游乐巡检结构化+项目入口点位列（V114 → `amusement_safety_inspections` + `amusement_projects` 改列）
+
+**`amusement_projects` 改列**：增 `location_point_id` VARCHAR(64)（项目入口点位，可空）。
+**`amusement_safety_inspections` 改列**：增 `inspector_id` VARCHAR(64)、`inspection_result` VARCHAR(32)、`abnormal_found` BOOLEAN NOT NULL DEFAULT FALSE、`abnormal_note` TEXT。CHECK `chk_amusement_safety_inspections_inspection_result`（NULL 或 IN (pass/fail/pending_rectification)，与 overall_result 同枚举域）。既有 overall_result/operator_note 不动。
+
+### 11.17 集团总览权限 seed（V115 → 不建表）
+
+V115 不新建快照表（复用 V037 `analytics_business_metric_snapshots` 平台口径 ETL 快照），仅 seed 一个权限 `analytics.group.view`（analytics 域）授 role_platform_admin，用于 `GET /api/v1/analytics/group-overview` 集团/跨项目只读总览（区别于可下放商户的 `analytics.dashboard.view`）。
+
+### 11.18 检修单位外键（V116 加 NOT VALID → V123 VALIDATE）
+
+V116 给 `amusement_maintenance_record.maintenance_vendor_id`（V081，VARCHAR(64) NOT NULL）加外键 `fk_amusement_maint_vendor` → `inventory_suppliers(id)`，先用 NOT VALID（仅约束新增/更新行）。V123 清洗存量悬空引用（改挂到幂等占位供应商 `__legacy_orphan_vendor__`，status=archived 业务侧不可选；因列 NOT NULL 不可置空、审计留痕不可删行）后执行 `VALIDATE CONSTRAINT` 收紧为已校验。无新表/新列。
+
+### 11.19 酒吧 void 审批回写列（V117 → `bar_order_item_voids` 改列）
+
+V117 让 void 流水承载审批生命周期：增 `reviewed_by_user_id` VARCHAR(64)、`reviewed_at` TIMESTAMPTZ、`review_reason` VARCHAR(500)。`chk_bar_order_item_voids_status` 放宽为 `pending/approved/rejected/applied`（需审批落 pending、无需审批落 applied）；一致性 CHECK `chk_bar_order_item_voids_review`（approved/rejected 必有审批人与时点，pending/applied 不得带审批留痕）。
+
+### 11.20 工单 SLA 超时升级列（V120 → `merchant_service_work_orders` 改列）
+
+V120 给 `merchant_service_work_orders`（V022）增 `sla_breached` BOOLEAN NOT NULL DEFAULT FALSE、`escalated_at` TIMESTAMPTZ（向后兼容默认未违约/未升级）；partial 索引 `idx_merchant_service_work_orders_sla_due`（扫描 due_at 已过、未关闭、未升级行）。`merchant_service_work_order_actions` 的 `chk_..._action_type` 增 `escalated` 动作类型（升级不改 status，仅打标+留痕）。真实事件名：`merchant_service.work_order.escalated`。
+
+### 11.21 CAM 年度 true-up+退款方向（V121 → `cam_trueup_runs` + `cam_trueup_lines` 新表 + `cam_allocations`/`finance_refunds` 改列）
+
+**`cam_allocations` 改列**：增 `settlement_period` VARCHAR(32)（结算归属期，回填=period）、`trued_up` BOOLEAN NOT NULL DEFAULT FALSE（防重复 true-up）。
+
+**新表 `cam_trueup_runs`（true-up 批次）**：`id` PK、`settlement_period` VARCHAR(32) NOT NULL、`actual_total_amount_cent` BIGINT NOT NULL（实际发生总额）、`prepaid_total_amount_cent` BIGINT NOT NULL（已预收合计）、`status` DEFAULT `completed`、`created_at`。CHECK：actual/prepaid ≥0；`status` IN (completed/void)。
+
+**新表 `cam_trueup_lines`（逐户差额）**：`id` PK、`run_id` NOT NULL FK → `cam_trueup_runs(id)`、`merchant_id` NOT NULL、`weight_bps` INTEGER NOT NULL、`actual_allocated_amount_cent` BIGINT NOT NULL、`prepaid_amount_cent` BIGINT NOT NULL、`diff_amount_cent` BIGINT NOT NULL（=实际应摊−已预收，带符号多退少补）、`ar_ap_item_id` FK → `ar_ap_items(id)`、`created_at`。CHECK：`weight_bps` 0..10000、actual/prepaid ≥0；唯一约束 `uq_cam_trueup_lines_run_merchant`(run_id,merchant_id)。diff>0 补收应收、diff<0 退还应付、diff=0 不生成台账。
+
+**`finance_refunds` 改列**：增 `refund_direction` VARCHAR(32)（回填默认 `original`，后置 NOT NULL+DEFAULT），CHECK `chk_finance_refunds_direction` IN (original/cash/third_party/mixed)。
+- 隔离键：`cam_trueup_lines.merchant_id`。seed 权限：`finance.cam.trueup`。真实事件名：`finance_cam.trued_up`（注意为 `finance_cam.` 下划线连写，PRD/任务中 `finance.cam.trued_up` 为漂移）。
+
+### 11.22 退菜退酒驳回反向冲销列（V124 → `bar_bill_adjustments` 改 CHECK）
+
+V124 把 `bar_bill_adjustments` 的 `chk_bar_bill_adjustment_type` 扩为现状五种 ∪ {`waiver_reversal`,`refund_reversal`}（驳回 void 时对称回滚已施加副作用：未结账单 waiver→waiver_reversal 加回应付；已结账单 refund→refund_reversal 加回应付+对冲退款应收、携带 refunded_at 使经营日 refund 净额归零）；放宽 `chk_bar_bill_adjustment_refunded_at`：仅 refund/refund_reversal 携带 refunded_at，其余类型不得带。无新表/新列。真实事件名：`bar.order_item_void_decided`（BarWriteOperation DECIDE_ORDER_ITEM_VOID）。
+
 ## 10. 下一步
 
 > 修订说明（2026-06-07）：依据基准 D10（A1 用户 2026-06-07 拍板迁移 Java），技术栈已确定，不再是「待选择」。原「下一步进入技术栈选择」按 D10 修正为「按既定技术栈搭建骨架」。
@@ -1863,3 +2049,4 @@ erDiagram
 | 2026-06-08 三轮收口 | 改 | 6B.5.3 points_rules / 6B.5.5 兑换状态 | 声明积分枚举为 DDL 权威：validity_type=natural_year、expire_mode=whole_account_yearly、兑换状态 pending/fulfilled/cancelled/abnormal，供字段字典对齐 | struct-annot-4：积分表与字段字典枚举互不一致违 D7，foundation 为权威 |
 | 2026-06-10 总控拍板 | 增 | 2.10 / 2.10.1 / 建表顺序 | 扩展 `merchant_credentials` 承载证照/资质/保险到期字段；新增 `contract_key_dates` 合同关键日期表，采用一事项一记录 | 合同关键日期、证照/资质/保险到期字段 P0 颗粒度建议，推荐方案 B |
 | 2026-06-10 P0 执行矩阵补齐 | 增/改 | 1 / 3.13.1-3.13.5 / 7.2 / 建表顺序 | 补 CNY 币种口径、权限模板四表、最终权限计算纳入基础/临时模板和显式拒绝 | 用户确认权限模板机制和币类默认按建议执行 |
+| 2026-06-20 `文档goalP1` | 增 | 导言 / §11 V099–V124 新增表与列设计 | 覆盖范围导言由 V001–V065 改为 V001–V124；新增 §11 逐表回填 V099–V124 的新表/新列（含迁移号、关键列+类型、CHECK、外键、隔离键、用途、真实事件名）：V099 准入策略 seed、V100 customer_points_ledger 入账列、V101 audit_events 分类/主体列、V102 saved_bottle_transfers+saved_bottles 改列、V103 risk_alerts/risk_alert_actions、V104 amusement_over_capacity_policy+incident_type、V105 对账差异 expected/actual/source、V106 wecom_risk_hits、V107 设备生命周期+MDM 处置列、V108 stocktake/inventory_variance、V109 渠道语义列、V110 turnover_rent_rules/deposit_ledger/cam_allocations、V111 终端开关 CHECK、V112 supplier_qualifications/settlement_methods、V113 票种刷新窗口、V114 巡检结构化+入口点位、V115 集团总览权限、V116/V123 检修单位外键、V117 void 审批回写、V120 工单 SLA 列、V121 cam_trueup_runs/lines+退款方向、V124 bar void 反向冲销 | 逐脚本 Grep V099–V124 迁移核对回填，不臆造 |

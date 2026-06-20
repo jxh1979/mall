@@ -359,6 +359,41 @@ flowchart TD
 1. 酒吧允许存在多个合作主体，但必须通过经营对象/运营主体/合同主体/结算主体的唯一绑定关系和合同授权范围控制。票务权益 P0 默认绑定明确酒吧/商户/经营对象；跨主体共享权益必须有显式授权关系和结算口径，不得默认共享。
 2. 赠饮权益 P0 必须绑定可扣库存的酒水 SKU、酒水品类或可选 SKU 集合。若配置为“品类券”，核销出品时必须在允许范围内选择具体 SKU 后再扣减吧台库存。
 
+## 11A. 出品成本采集与 void 驳回冲销能力补充 `文档goalP1(2026-06-20)`
+
+> 本节为产品语言的能力描述 + 业务规则 + 验收口径要点；可开发 + 可验收的权威细节（迁移号、operationId、`x-permission`、事件常量、错误码、G/W/T）以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准（本节对应该文第 5 项「pour cost 强制采集」、第 17 项「void 驳回反向冲销」）。先经 grep 后端/迁移核实功能真实存在再写。
+
+### 11A.1 pour cost 出品成本强制采集（按杯必采 actual_pour_volume）（权威：spec §5）
+
+能力描述：承接 §9 与 §11 已确认第 6 条「按杯标准出酒量/实际出量/损耗阈值」，明确按杯出品时**实际倒酒量为强制采集项**，消除"不传则 loss=0"的静默绕过。经 grep 实证落于服务层 `BarOrderService`（按杯出品 + actual/standard 比对 + 损耗异常）。
+
+业务规则：
+- **拒绝模式（默认，从严）**：商品配置了每杯标准出酒量（按杯出品）时，出品/结算缺 `actual_pour_volume` → **直接拒单**（错误码 `POUR_VOLUME_REQUIRED`），不允许无实际出量提交。
+- **标准量兜底模式（后台开关）**：缺量时按 `standard_pour_volume × quantity` 计、loss=0，但**必落损耗异常事件**（reason=`pour_volume_fallback`），把"缺量"显式留痕为可核查异常，而非静默归零。
+- 非按杯出品项（未配置标准出酒量）：维持原行为，loss=0，不强制采集。
+- 已采集且实际 > 标准：记损耗（`loss_volume = actual − standard`），超阈值落损耗异常供核查（与 §11 第 6 条一致）。
+
+验收口径要点（细化 G/W/T 见 spec §5）：
+- 按杯商品 + 拒绝模式 + 不传 actual_pour_volume → 拒单（`POUR_VOLUME_REQUIRED`）。
+- 按杯商品 + 兜底模式 + 缺量 → 按标准量计、loss=0，落损耗异常（reason=pour_volume_fallback）。
+- 按杯出品 actual > standard → 记损耗，超阈值落损耗异常。
+
+> 待业务确认（bar）：拒绝模式 vs 兜底模式的默认值（当前默认拒绝模式从严）是否符合各门店运营，是否需按门店/班次配置；以及损耗阈值默认值口径（与 §11 第 6 条 loss_threshold 联动）。
+
+### 11A.2 void 驳回反向冲销（退菜退酒驳回 → 对称回滚）（权威：spec §17，V117 + V124）
+
+能力描述：承接 §10.2.1 退菜退酒 P0（R6-D14），补全"**void 被驳回时把已施加副作用对称回滚、恢复到 void 前状态**"的闭环。经 grep 实证：发起 void（`voidBarOrderItem`）时同步施加副作用（库存回补、账单减项 waiver、已结退款过账 refund）并落 pending；审批决策（`decideBarOrderItemVoid`）若**驳回（rejected）= void 无效**，则按对称冲销回滚。迁移 `V124` 把账单调整类型扩出 `waiver_reversal` / `refund_reversal`。
+
+业务规则（驳回对称回滚）：
+- **未结账单**：原减项为 waiver（让免）→ 驳回写一条 `waiver_reversal`（加回应付，不带退款时点），库存对称回补回滚，恢复 void 前账单。
+- **已结账单**：原减项为 refund（已过账退款）→ 驳回写一条 `refund_reversal`（加回应付 + 对冲退款应收，带退款时点落经营日窗口）；经营日净额按 `refund − refund_reversal` 归集使退款净额归零，**不重复计入退款额**。
+- 退菜退酒为高危动作（`bar.order_item.void`，发起 + 决策同权限），高价值退酒须主管审批（与 §10.2.1 一致）；驳回全程留痕（原因/审批人/时点）。
+
+验收口径要点（细化 G/W/T 见 spec §17）：
+- 未结账单退酒 void 已施加 waiver、流水 pending → 驳回 → 写 `waiver_reversal` 加回应付、库存回补对称回滚。
+- 已结账单退酒 void 已过账 refund → 驳回 → 写 `refund_reversal`（加回应付 + 带退款时点），经营日 refund 净额归零、不重复计退款。
+- `refund_reversal` 缺退款时点 → 被 DB CHECK 拒绝（refund/refund_reversal 必带退款时点，其余类型不得带）。
+
 ## 12. 本版结论
 
 酒吧 P0 先把现场经营事实管住：入场（含门口年龄核验）、订台定金、销售归属、桌台/卡座、服务责任、平板点酒、最低消费、线上支付、现金/POS 机支付、赠饮核销、吧台售卖消耗、酒水履约交接、客人存酒、账单、关台和异常。复杂自动补货、复杂 BOM 和会员玩法可以后移，但点酒订单、销售和服务责任、赠饮权益、库存消耗、存酒、酒水送达和酒吧经营流水必须在 P0 进入统一经营口径。
@@ -385,3 +420,4 @@ flowchart TD
 | 2026-06-10 | 增/改 | §7.1 / §9 | 补酒吧年龄/人脸核验生产阻断：供应商未确定前只做接口和 mock，生产不得标记正式通过 | 用户确认酒吧年龄强制人脸且需第三方接口采购 |
 | 2026-06-18 | 增 | §10.1 成熟 POS 深度缺口规划 | 新增对照成熟 POS 的退菜退酒、反结/作废已结账单、退酒、沽清估清、小费、独立交班/班结对账规划，统一标 P2；反结/退酒（涉及已出品资金回退）标"待业务最终确认是否升 P1" | D13 成熟 POS 缺口规划 |
 | 2026-06-19 `R6 全闭环` | 增 | §10.2 出品后异常与沽清（优先级收口） | 承接 R6-D14：退菜/退酒（出品后撤单）、反结已结账单、沽清 86 三项全升 P0（业务确认 2026-06-19 覆盖原"沽清 86 保持 P1"；业务规则+G/W/T 验收）。据实标注 V091 已先行落库（void-item/reopen/sold-out 端点已暴露），本节为优先级与业务口径正式收口 | R6-D14（business-decision-log）、§10.1 成熟 POS 缺口 |
+| 2026-06-20 `文档goalP1` | 增 | §11A | 新增「出品成本采集与 void 驳回冲销能力补充」：①pour cost 出品成本强制采集（按杯必采 actual_pour_volume，拒绝模式不传拒单 POUR_VOLUME_REQUIRED / 兜底模式标记 pour_volume_fallback 异常）②void 驳回反向冲销（V117/V124，驳回→对称回滚库存/账单/应付到 void 前，waiver_reversal/refund_reversal）。权威指向 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §5/§17 | 文档goalP1；grep 实证 BarOrderService（POUR_VOLUME_REQUIRED/pour_volume_fallback）+ V124（waiver_reversal/refund_reversal）+ decideBarOrderItemVoid |

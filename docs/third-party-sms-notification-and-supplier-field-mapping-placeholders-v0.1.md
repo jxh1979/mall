@@ -84,7 +84,9 @@
 
 ## 5. 落地动作（供维护者）
 
-- 把 §1.1 `sms_notification` 行并入 `integration-capability-switches-v0.1.md` 与 `integration-capability-switches-latest.json`。
-- 把 §1.2 / §2 的字段映射行并入 `third-party-supplier-integration-kit-v0.1.md` 第 3 节 adapter 字段映射表。
+> 进度标注（`文档goalP1(2026-06-20)`）：§1.2 / §2 的短信/通知、对象存储、MDM、视频字段映射占位**已并入** `third-party-supplier-integration-kit-v0.1.md` §3.2B（字段映射主表区）；短信类最小回流/发送契约锚点已落 supplier kit §3.2C。本文这些字段表保留为来源与失败场景/错误码命名空间说明，**字段映射以 supplier kit §3.2B/§3.2C 为权威**，避免占位散在独立文档。
+
+- 把 §1.1 `sms_notification` 行并入 `integration-capability-switches-v0.1.md` 与 `integration-capability-switches-latest.json`。（注：开关矩阵 `sms_notification` 行已在 `integration-capability-switches-v0.1.md` §3 落地。）
+- ~~把 §1.2 / §2 的字段映射行并入 `third-party-supplier-integration-kit-v0.1.md` 第 3 节 adapter 字段映射表。~~ **已完成**：并入 supplier kit §3.2B；短信最小回流/发送契约锚点见 §3.2C。
 - 在 `docs/supplier-mock/` 增短信发送 mock 样例。
 - 供应商资料到位后，用真实值替换 `<vendor.*>` 占位与错误码映射。

@@ -61,6 +61,63 @@
 
 供应商确定后必须新增字段映射表，不得在 PRD 文本中散写临时映射。
 
+### 3.2B 短信/通知、对象存储、MDM、视频字段映射占位（并入主表，原散在占位文档）
+
+> 新增小节（`文档goalP1(2026-06-20)`）：原 `third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md` §1.2/§2 把短信/通知、对象存储、MDM、视频四类字段映射占位单独成文，导致占位散在独立文档、与本 kit §3.2 主表脱节。现按该占位文档 §5"落地动作"把四类逐项字段映射并入本 kit 字段映射主表（§3.2 区）；占位文档保留为来源与失败场景/错误码命名空间说明，字段映射以本节为权威。供应商私有字段（`<vendor.*>`）经适配器 `request_mapping/response_mapping` 占位，真实值到位后替换，不改业务主模型。
+
+#### 3.2B.1 短信/通知（开关 `sms_notification`，默认 off）
+
+| 平台字段 | 供应商字段（占位）| 说明 | 状态 |
+|---|---|---|---|
+| `phone` | `<vendor.mobile>` | 接收号码 | 占位 |
+| `template_code` | `<vendor.templateId>` | 模板编号 | 占位 |
+| `template_params` | `<vendor.params>` | 模板变量（含 verification_code） | 占位 |
+| `biz_type` | `<vendor.signName/scene>` | 业务类型（login/dunning/risk_alert） | 占位 |
+| `request_id` | `<vendor.outId>` | 我方幂等键 | 占位 |
+| `send_status` | `<vendor.code → sent/failed/throttled>` | 发送状态映射 | 占位 |
+
+#### 3.2B.2 对象存储（开关 `object_storage`，默认 off）
+
+| 平台字段 | 供应商字段（占位）| 平台字段 | 供应商字段（占位）|
+|---|---|---|---|
+| `bucket` | `<vendor.bucket>` | `presigned_url` | `<vendor.signedUrl>` |
+| `object_key` | `<vendor.key>` | `content_hash` | `<vendor.etag/md5>` |
+| `content_type` | `<vendor.contentType>` | `expires_at` | `<vendor.expiry>` |
+
+#### 3.2B.3 MDM 工作设备纳管（开关 `managed_work_devices`，默认 off）
+
+| 平台字段 | 供应商字段（占位）|
+|---|---|
+| `device_serial` | `<vendor.serialNumber>` |
+| `enroll_token` | `<vendor.enrollmentToken>` |
+| `policy_id` | `<vendor.policyName>` |
+| `lock_result` / `wipe_result` | `<vendor.commandResult>` |
+
+#### 3.2B.4 视频/监控（开关 `video_platform`，默认 off；补 §3.2A 样例包缺的视频行）
+
+| 平台字段 | 供应商字段（占位）|
+|---|---|
+| `camera_id` | `<vendor.deviceId>` |
+| `play_token` | `<vendor.streamToken>` |
+| `clip_url` | `<vendor.playbackUrl>` |
+| `retention_until` | `<vendor.retentionExpiry>` |
+
+> 四类失败场景与错误码命名空间（`SMS_*`/`STORAGE_*`/`MDM_*`/`VIDEO_*`）见占位文档 §1.3/§2/§3；开放平台鉴权层错误码仍以 `open-platform-security-auth-development-design.md` §15 为准。
+
+### 3.2C 短信类供应商最小回流/发送契约锚点
+
+> 新增小节（`文档goalP1(2026-06-20)`）：短信与支付/票务等"业务回流"型供应商不同——短信是**出站发送 + 回执回流**模型。本节固化短信类最小发送/回流契约锚点，使 mock adapter 与真实供应商共用同一标准模型；登录链路已硬依赖 `sms_code`，关闭时走 mock OTP（非生产固定码），生产无供应商时 fail-closed 拒绝登录（与开关矩阵 `sms_notification` 一致）。
+
+| 契约环节 | 锚点 | 口径 |
+|---|---|---|
+| 出站发送 | `sendSms(phone, template_code, template_params, biz_type, request_id)` → `{ send_status, provider_msg_id }` | `request_id` 为我方幂等键（`<vendor.outId>`），同 `request_id` 重发不重复扣量；模板变量含验证码时按敏感字段处理 |
+| 状态映射 | `<vendor.code> → sent / failed / throttled` | 供应商发送码映射到平台标准 `send_status`；`throttled` 触发退避重试 + 告警 |
+| 回执回流 | 回调入站或轮询兜底落标准回执 `{ request_id, provider_msg_id, delivery_status, delivered_at }` | 回执缺失时按轮询兜底（占位文档 §1.3）；回执验签复用开放平台 Webhook 验签 |
+| 失败场景 | 超时（不视为已送达，可重发）、签名/鉴权失败、限流/节流、模板不存在、验证码有效期失效（重新获取不放行）、回执缺失 | 失败码走 `SMS_*` 命名空间（`SMS_THROTTLED`/`SMS_TEMPLATE_NOT_FOUND`/`SMS_CODE_EXPIRED`） |
+| mock 桩 | `docs/supplier-mock/` 短信发送 mock | 固定返回 `sent`，可注入 `throttled`/`failed` 触发失败路径；验证码 mock 固定值用于联调 |
+
+> 短信回流不进 §6 经营对账（短信非经营流水），但发送量/失败率进运营监控；催缴/风险告警短信关闭时降级为 manual/站内记录，不静默丢弃。
+
 ### 3.2A P0 最小供应商样例包
 
 P0 供应商未确定时，不等待真实 SDK/API。以下样例包用于 mock adapter、接口自动化和供应商联调说明；真实供应商到位后，只把“供应商字段”列替换为真实字段映射，平台标准字段和业务主模型不变。

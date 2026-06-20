@@ -299,6 +299,52 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 
 无。后续仅根据现场主管使用情况调整移动端待办范围。
 
+## 15A. 设备生命周期、集团多项目视图与端侧开关默认口径补充 `文档goalP1(2026-06-20)`
+
+> 本节为产品语言的能力描述 + 业务规则 + 验收口径要点；可开发 + 可验收的权威细节（迁移号、operationId、`x-permission`、事件常量、状态机、G/W/T）以 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为准（本节对应该文第 10 项「MDM 门控 + 设备生命周期」、第 18 项「集团多项目视图」，端侧开关见下文 grep 实证）。先经 grep 后端/迁移核实功能真实存在再写。
+
+### 15A.1 设备生命周期状态机（权威：spec §10，V107）
+
+能力描述：把 §6「设备领用/归还/异常上报」与 §11「设备管控/远程锁定」落到**设备全生命周期状态机**，补齐维修/挂失/找回/报废/锁定流转，消除"设备只有领用归还、异常无终态"。经 grep 实证落于 `TerminalDeviceService`（repair/lost/found/scrap）+ `MdmService`/`MdmController`（违规处置 device_blocked 联动）+ 迁移 `V107__device_lifecycle_and_mdm_disposition.sql`。
+
+业务规则（设备状态机）：
+- **生命周期状态**：在 bound（已绑定/在用）/ returned（已归还）/ unbound / disabled 基础上补 **repair（维修中）/ lost（挂失）/ found（找回）/ scrapped（报废，终态）/ blocked（锁定/封禁，终态）**。
+- 流转：bound ⇄ repair（送修/修复）；bound → lost → found（找回后可再 bound）/ → scrapped（报废终态）；违规处置 device_blocked → blocked（终态，联动设备纳管状态 blocked + **撤销设备凭证**）。
+- 命名映射（产品语言 ↔ 落地代码，以代码为准）：在用→bound、领出/归还→returned、报废→scrapped；纳管侧另有 retired（纳管退役，语义不同于设备报废 scrapped）。
+- MDM 违规处置闭环：服务端检测违规 → 处置（device_blocked = 封禁设备 + 撤销凭证 + 纳管状态 blocked；dismissed = 误报驳回），处置为高危需审批 + 留痕。
+
+验收口径要点（细化 G/W/T 见 spec §10）：
+- bound 设备送修 → repair；挂失设备找回 → found（可再 bound）。
+- 检出违规设备 → 处置 device_blocked → 设备纳管状态 blocked + 凭证撤销 + 留痕。
+
+### 15A.2 集团多项目视图 group-overview（权威：spec §18，V115）
+
+能力描述：补 §4 管理后台「首页总览/看板分析」之上的**集团跨项目（多综合体）聚合只读视图**，供集团/平台管理员跨 project 看汇总指标。经 grep 实证落于 `AnalyticsController` 的 `getGroupOverview` 端点 + `AnalyticsRepository`（ETL 产出 `segment_type='project'` 维度快照）+ 迁移 `V115__analytics_group_overview_permission.sql`（仅补权限）。
+
+业务规则：
+- 跨项目只读聚合：看板聚合任务（ETL）在 platform/merchant 维度之外，按 project_id 维补 `segment_type='project'` 行（与既有维度并存不互破）；group-overview 返回平台口径 rollup 的指标合计。
+- 权限隔离：`analytics.group.view`（跨商户/跨项目聚合）仅平台/集团管理员，与 `analytics.dashboard.view`（看板下钻，可下放商户）区分；商户角色无 group.view 被拒。
+- 单综合体（单 project）退化：project 维 rollup = 平台口径合计，不破坏既有 platform/merchant 行。
+
+验收口径要点（细化 G/W/T 见 spec §18）：
+- 看板聚合任务已运行 → 查 group-overview → 返回 project/platform 口径指标合计；商户角色无权限被拒。
+
+### 15A.3 端侧能力开关「默认关」口径：摄像头扫码（V097）/ 平板端侧（V098）`文档goalP1(2026-06-20)`
+
+能力描述：承接 §2 末「所有终端都必须支持后台开关控制」与 §15 已确认第 18 条「所有端都必须有开关接口」，明确两组新端侧能力**默认关闭、后台可配、仅预留接口**的口径，避免被误读为"已默认可用"。经 grep 实证落于迁移 `V097__camera_scan_and_native_client_switches.sql` 与 `V098__device_keystore_and_tablet_switches.sql`（显式 seed `enabled=FALSE` 行）。
+
+业务规则（默认关 + 代偿）：
+- **摄像头扫码（V097，`terminal.camera_scan.enabled`，默认关）**：现场摄像头扫码硬件能力默认关闭；关闭时端侧用**文本输入凭证代偿**（手输票号/会员码/设备码），不阻断现场核销作业。
+- **微信小程序 / 原生 App 客户端（V097，`customer.native_client.enabled`，默认关）**：默认关闭；关闭时走 **Web/H5 客户端代偿**（H5/Web 完成下单/查询/核销）。
+- **平板终端 + 设备 Keystore 凭证绑定（V098，默认关）**：平板端侧能力与设备 Keystore 凭证绑定统一做成"后台能力开关（默认关、后台可配、仅预留接口）"；与 §8.5 私人手机设备公钥/不可逆设备指纹（基准 D8）口径一致。
+- 三组均 `terminal_type='*'`（跨端通配）、`scope_type='global'`，后台开启才生效；开启/关闭受开关管理权限控制并留痕。
+
+验收口径要点：
+- 默认部署：camera_scan / native_client / 平板端侧开关均为关，端侧走文本输入 / Web 代偿，不影响 P0 现场作业。
+- 后台开启对应开关 → 能力生效；关闭 → 端侧回落代偿路径。
+
+> 待业务确认（terminal）：①设备生命周期是否需把 repair/lost/found/scrapped/blocked 状态补入 §6「设备领用」页面与 §13 验收作为正式 P0 项；②集团多项目视图 group-overview 是否需补入 §4 管理后台 / §7 移动管理端页面清单；③三组端侧开关（摄像头扫码/原生客户端/平板）的默认关口径已据 V097/V098 实证，后续若任一能力转正式实现需回当前有效入口与 OpenAPI 契约确认。
+
 ## 16. 本版结论
 
 终端页面 P0 的核心是“不同角色只看到自己该看的，只做自己该做的”。后台负责治理、合同准入、复核、企业微信质检、设备管控和终端开关，Web 前端负责查看和少量业务确认，商户侧在授权业务范围内全开放并负责本商户经营，员工私人手机 App 只负责注册、通知、状态和设备凭证绑定，现场端和员工工作手机负责防伪核对后的门票/权益核销、企业微信工作沟通、库房和交接扫码及一线动作，工作人员平板 App 负责员工协助酒吧点酒下单，售票型触摸屏一体机负责官方自助购票/取票/订单查询，非售票型触摸屏一体机负责权益展示/领取、订台下单、吧台买酒下单、游乐设施状态查看和定期检修记录，移动端负责主管待办，客人 App/小程序负责官方购票、预定、查询、防伪二维码、会员积分和兑换展示。所有端都受后台开关控制，为后续酒吧和乐园 SaaS 化预留。
@@ -312,3 +358,4 @@ Web 前端 P0 **不可**执行以下动作（如需操作，跳转到对应端�
 | 2026-06-07 | 增 | §9.1/§9.2 | 新增 Web P0 业务确认动作白名单清单+排除清单 | Web"少量业务确认"范围未界定无法编码（webmobile-1） |
 | 2026-06-07 | 改 | §8.5 边界/页面 | 私人手机 App 审批禁项措辞统一；NFC 绑定改设备凭证绑定 | 审批禁项口径不一致（webmobile-8）；设备身份对齐 D8 |
 | 2026-06-07 | 改 | §13 验收、§15 已确认 #5 | 私人手机身份由"手机 NFC 唯一标识"改为"设备公钥/不可逆设备指纹" | 对齐基准 D8（废止读取手机本机 NFC 唯一标识方案） |
+| 2026-06-20 `文档goalP1` | 增 | §15A | 新增「设备生命周期、集团多项目视图与端侧开关默认口径补充」：①设备生命周期状态机（V107，repair/lost/found/scrapped/blocked + MDM device_blocked 联动撤凭证）②集团多项目视图 group-overview（V115，segment_type=project 跨项目 rollup，analytics.group.view 仅集团/平台）③摄像头扫码（V097）/平板端侧（V098）能力开关「默认关、后台可配、仅预留接口」口径（关时文本输入/Web 代偿）。权威指向 v099-v124-feature-implementation-and-acceptance-spec-v0.1.md §10/§18 | 文档goalP1；grep 实证 TerminalDeviceService/MdmService+V107、AnalyticsController.getGroupOverview+V115、V097/V098 seed enabled=FALSE |

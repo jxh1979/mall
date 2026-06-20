@@ -1,17 +1,18 @@
 # 开发文档完整性审计 V0.2（对当前代码态刷新）
 
-> 注（2026-06-18）：完成审计/闭环报告存在多份重复。当前态以 R1~R4 交付物（`r1-*-20260618.md`、`r2-code-audit-req26b-req21-req30-20260618.md`、`r3-*-20260618.md`、`r4-remaining-work-backlog-20260618.md`）+ 本 v0.2 + `closed-loop-live-acceptance-audit-20260618.md` 为准，其余完成审计/闭环报告降级为历史参考（不删除）。当前事实基线：209 ops / 729 测试 / Flyway V060。
-> 审计日期：2026-06-18
+> 注（2026-06-18）：完成审计/闭环报告存在多份重复。当前态以 R1~R4 交付物（`r1-*-20260618.md`、`r2-code-audit-req26b-req21-req30-20260618.md`、`r3-*-20260618.md`、`r4-remaining-work-backlog-20260618.md`）+ 本 v0.2 + `closed-loop-live-acceptance-audit-20260618.md` 为准，其余完成审计/闭环报告降级为历史参考（不删除）。当前事实基线：386 ops / 1251 测试 / Flyway V124。
+> 刷新（文档goalP1(2026-06-20)）：基线数字按当前代码态上修——OpenAPI 386 ops / 319 paths（此前 207-209 ops / 170 paths）、Flyway V124（此前 V052-V061）、后端测试 1251（此前 729）。V085–V124 新功能开发与验收承接锚点见 `v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`。
+> 审计日期：2026-06-18（数字刷新 2026-06-20）
 > 方法：documentation-specialist + PM critic + acceptance/edge-cases + user-story-map + gstack spec/review，3 路并行只读审计 + 实测代码事实对照。
 > 取代关系：本审计刷新 `development-documentation-adversarial-audit-v0.1.md`（2026-06-16，已对当前代码滞后：写 198 ops/V041，实际 207 ops/V052）。v0.1 降级为历史。
 > 边界：本轮仅改文档，不改代码。
 
 机器识别标记：DOC_AUDIT_V0_2_READY、SUPERSEDES_ADVERSARIAL_AUDIT_V0_1、CODE_FACTS_AS_OF_20260618。
 
-## 1. 当前代码事实（本审计基准，均实测）
-- OpenAPI：**170 paths / 207 operations**（`docs/openapi/openapi-p0.json`）。
-- 数据库迁移：**52 个（V001–V052）**；V044–V052 多为租户隔离/安全加固。
-- 后端测试：**673 / 0 失败 / 0 错误 / BUILD SUCCESS**。
+## 1. 当前代码事实（本审计基准，均实测；数字刷新 文档goalP1(2026-06-20)）
+- OpenAPI：**319 paths / 386 operations**（`docs/openapi/openapi-p0.json`；此前 170 paths / 207 operations）。
+- 数据库迁移：**至 V124（V001–V124，121 个迁移文件）**；此前止于 V052。V085–V124 为第二阶段 R5/R6 新功能落地（供应链/员工/企微合规/MDM/会员忠诚/POS 深度/统一异常责任链/对账强制化/综合体计费等，见 `v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`）。
+- 后端测试：**1251 / 0 失败 / 0 错误 / BUILD SUCCESS**（此前 673/729；surefire 实测）。
 - 前端：Playwright UI **28**；真后端 seeded UI **2**；web 单测 16；完整后台页面 **30**。
 - `verify:delivery-gates`：**exit 0**；Semgrep：results=0。
 - 结论：可开发/联调/业务验收；**不可宣称生产上线**（外部证据待回填）。
@@ -39,8 +40,8 @@ docs/ 现有 md/csv ≈ 279 份（含 json/html ≈ 349）。桶划分（沿用 
 | 链路段 | 承接文档 | 当前态 |
 |---|---|---|
 | 需求 → 文档 | `requirement-traceability-matrix-v0.1.md`（REQ-01–REQ-92）| 覆盖 |
-| 需求 → 代码 | `requirements-code-implementation-matrix-v0.1.csv`（96 项：88 完整/8 部分）| 覆盖 |
-| 接口 → 权限/事件/终端/测试 | `p0-openapi-operation-acceptance-matrix-v0.1.md`（207 op）| 覆盖（唯一未漂移的 op 数源）|
+| 需求 → 代码 | `requirements-code-implementation-matrix-v0.1.csv`（96 项：88 完整/8 部分；REQ-01–REQ-92 口径）| 覆盖。**V099–V124 新功能（V085–V124 第二阶段 R5/R6）见 `v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` + `requirement-traceability-matrix-v0.1.md` 十二·B 小节 REQ-95~106**——此 CSV 的 96 行计数被 `verify:final-closed-loop-audit`（及多份审计 MD 写死的 96/88/8）+ closed-loop/mock-coverage/external-evidence 等 generator golden 产物级联锁定，新功能不在 CSV 内增删行（避免破坏闸口），改由 feature 规格 + 溯源矩阵承接。 |
+| 接口 → 权限/事件/终端/测试 | `p0-openapi-operation-acceptance-matrix-v0.1.md`（386 op，此前 207）| 覆盖（唯一未漂移的 op 数源；新增 V099–V124 端点见 v099-v124-feature 规格）|
 | 任务 → 接口 → 权限 → 事件 → 验收 | `p0-task-api-permission-event-acceptance-map-v0.1.md` | 覆盖 |
 | 页面 → 权限/字段/UI 验收 | `full-admin-page-permission-field-matrix-v0.1.csv`(30 页) + `full-admin-ui-acceptance-matrix-v0.1.md` | 覆盖 |
 | **数据表 → scope/隔离** | **新增 `data-isolation-and-tenant-scope-security-spec-v0.1.md` + `domain-ownership-scope-audit-v0.1.csv`** | 本轮补齐（此前 CSV 为 orphan）|

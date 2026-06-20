@@ -337,6 +337,8 @@ hex 或 base64
 | 时间戳超窗 | 是 |
 | API 权限不足 | 否，记调用拒绝，不锁鉴权 |
 | 业务参数错误 | 否 |
+| 缺必填鉴权头（X-Signature/X-Nonce/X-Timestamp/X-App-Code 缺失）<!-- 新增 文档goalP1(2026-06-20) --> | 否，返回 `MISSING_AUTH_HEADER`(400)，请求格式不完整未构成可判定鉴权尝试，仅写失败记录+事件不累加 failed_auth_count（见 §15.1） |
+| 缺必填业务字段（loginAccount/password 缺失或空）<!-- 新增 文档goalP1(2026-06-20) --> | 否，返回 `VALIDATION_FAILED`(400)，与后端通用校验码一致，仅写失败记录+事件不累加（见 §15.1） |
 
 锁定策略：
 
@@ -875,6 +877,8 @@ POST /api/open/d/7f9c.../verification/verify
 | 错误码 | HTTP | 说明 |
 |---|---|---|
 | `AUTH_FAILED` | 401 | 鉴权失败 |
+| `MISSING_AUTH_HEADER` | 400 | 缺必填鉴权头（X-Signature/X-Nonce/X-Timestamp/X-App-Code 之一缺失），见 §15.1 |
+| `VALIDATION_FAILED` | 400 | 缺必填业务字段或参数非法（与后端通用参数校验码一致），见 §15.1 |
 | `OPEN_APP_NOT_FOUND` | 404 | 开放应用不存在 |
 | `OPEN_APP_DISABLED` | 403 | 应用已停用 |
 | `OPEN_APP_LOCKED` | 423 | 应用已锁定 |
@@ -890,6 +894,22 @@ POST /api/open/d/7f9c.../verification/verify
 | `CIRCUIT_OPEN` | 429 | 熔断中 |
 | `WEBHOOK_SIGNATURE_INVALID` | 401 | Webhook 签名无效 |
 | `IDEMPOTENT_CONFLICT` | 409 | 幂等冲突 |
+
+### 15.1 缺必填头与缺字段失败场景（新增）
+
+> 新增小节（`文档goalP1(2026-06-20)`）：原 §15 错误码表覆盖了签名错误（`INVALID_SIGNATURE`）、nonce 重复（`NONCE_REUSED`）、时间戳超窗（`INVALID_TIMESTAMP`）等"头存在但校验失败"场景，但**缺必填鉴权头本身缺失**（X-Signature/X-Nonce/X-Timestamp/X-App-Code 未携带）与**缺必填业务字段**两类"请求格式不完整"场景无专门错误码，且未明确是否计入连续失败锁定计数。本节据实补齐。
+>
+> **错误码命名空间 Grep 实证**：现有开放平台错误码（§15）为**大写下划线风格**（`AUTH_FAILED`/`INVALID_SIGNATURE`/`INVALID_TIMESTAMP`/`NONCE_REUSED`/`TOKEN_EXPIRED` 等），HTTP 401/403/404/409/423/429 分布。后端通用参数校验码 Grep 命中为 `VALIDATION_FAILED`（HTTP 400，`backend/src/main/java/com/complex/platform/common/api/GlobalExceptionHandler.java` 落 `ApiResponse.error("VALIDATION_FAILED", ...)`，全后端各域 Service 一致用此码）。因此缺字段沿用既有 `VALIDATION_FAILED`（不另造新码避免命名空间分裂）；缺必填头新增 `MISSING_AUTH_HEADER`（沿用大写下划线风格，HTTP 400）。
+
+| 失败场景 | 错误码 | HTTP | 说明 |
+|---|---|---|---|
+| 缺 `X-App-Code` | `MISSING_AUTH_HEADER` | 400 | 无法定位开放应用，请求格式不完整 |
+| 缺 `X-Signature` | `MISSING_AUTH_HEADER` | 400 | 无签名可校验 |
+| 缺 `X-Nonce` | `MISSING_AUTH_HEADER` | 400 | 无 nonce 可校验防重放 |
+| 缺 `X-Timestamp` | `MISSING_AUTH_HEADER` | 400 | 无时间戳可校验时间窗口 |
+| 缺必填业务字段（如 `loginAccount`/`password` 缺失或为空） | `VALIDATION_FAILED` | 400 | 与后端通用参数校验码一致 |
+
+**是否计入连续失败锁定计数（关键裁定）：缺必填头与缺必填字段均 HTTP 400，"请求格式不完整/未构成一次可判定的鉴权尝试"，统一裁定为不计入连续失败锁定计数。** 理由：①与 §6.5 既有"`API 权限不足`/`业务参数错误` 不计入"同类——非凭证型失败不应触发锁定，避免第三方接入初期格式调试误锁；②缺头/缺字段时尚未进入签名/密码/nonce 等凭证校验，无法判定是否为真实攻击；③仍写鉴权失败记录与事件（`open_app.auth_failed`，risk_level 取 `notice`/`suspicious`）供审计，但不累加 `failed_auth_count`。若同一来源**高频**缺头/缺字段，由 §11 限流/熔断（`RATE_LIMITED`/`CIRCUIT_OPEN`）兜底，而非锁定计数。
 
 ## 16. 事件留痕设计
 
@@ -945,6 +965,12 @@ POST /api/open/d/7f9c.../verification/verify
 | 人工解锁后正确鉴权 | 成功 |
 | 应用停用后鉴权 | 返回 403 |
 | IP 不在白名单 | 返回 403，并计入失败 |
+| 缺 `X-Signature` 头<!-- 新增 文档goalP1(2026-06-20) --> | 返回 `MISSING_AUTH_HEADER`(400)，**不**计入连续失败（failed_auth_count 不变），写失败记录+事件 |
+| 缺 `X-Nonce` 头 | 返回 `MISSING_AUTH_HEADER`(400)，**不**计入连续失败 |
+| 缺 `X-Timestamp` 头 | 返回 `MISSING_AUTH_HEADER`(400)，**不**计入连续失败 |
+| 缺 `X-App-Code` 头 | 返回 `MISSING_AUTH_HEADER`(400)，无法定位应用，**不**计入连续失败 |
+| 缺必填字段（如 `password` 缺失/空） | 返回 `VALIDATION_FAILED`(400)，**不**计入连续失败 |
+| 连续 2 次缺头/缺字段后第 3 次密码错误 | 第 3 次才返回 401 且 failed_auth_count=1（前 2 次缺头/缺字段不累加），不触发锁定 |
 
 ### 17.2 签名测试
 
@@ -1106,3 +1132,4 @@ P0 验收必须满足：
 | 2026-06-18 D8 收口 | 注 | §16.2 | `event_category`【待技术确认，推荐落列，值域对齐 operation-traceability §4.1】，与 java-backend §14 同一裁定 | 消除"落/不落"不一致 |
 | 2026-06-18 D8 定稿 | 改 | §16.2 | `event_category` 由【待技术确认/是否落列】定稿为"`audit_events` 落独立数据库列"，值域对齐 operation-traceability §4.1 事件域，与 java-backend §14 同一裁定 | 技术已拍板，去除两可表述 |
 | 2026-06-18 D8 收口 | 注 | §9.1/§21 | SDK 首批语言口径（P0=Java+JavaScript(Node.js)、P1=Python/PHP、P2=完整 SDK）保持不变，确认为权威，java-backend §18 已对齐 | 两文件 SDK 语言一致 |
+| `文档goalP1(2026-06-20)` | 增 | §15/§15.1/§6.5/§17.1 | 补缺必填头（X-Signature/X-Nonce/X-Timestamp/X-App-Code）失败场景错误码 `MISSING_AUTH_HEADER`(400) 与缺字段沿用 `VALIDATION_FAILED`(400)；裁定两类均**不计入连续失败锁定计数**（格式不完整非可判定鉴权尝试，仅写失败记录+事件，高频由限流/熔断兜底）；§6.5 失败计数表、§17.1 测试用例同步补行 | 原错误码表只覆盖"头存在但校验失败"，缺头/缺字段无专门码且锁定计数口径未定。Grep 实证：现有码为大写下划线风格、后端通用校验码为 `VALIDATION_FAILED`，故缺字段复用、缺头新增 `MISSING_AUTH_HEADER` 不分裂命名空间 |
