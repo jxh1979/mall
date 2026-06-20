@@ -72,11 +72,17 @@ if (client.includes("Authorization") || client.includes("Bearer ")) {
   failures.push("local LLM client must not require or embed API authorization secrets in T3-D1");
 }
 
-requireIncludes("backend/src/main/java/com/complex/platform/analytics/AiTextRedactor.java", [
+// R5 T8 重构：PII 分类脱敏标记上移到共享 PiiTextRedactor（analytics 质检 + 企微合规链共用），
+// analytics 的 AiTextRedactor 薄委派至此（避免规则双份漂移）。故标记契约校验指向标记真实所在文件，
+// 并断言 AI 质检入口 AiTextRedactor 仍委派到该共享脱敏器。
+requireIncludes("backend/src/main/java/com/complex/platform/common/PiiTextRedactor.java", [
   "[PHONE_REDACTED]",
   "[ID_REDACTED]",
   "[EMAIL_REDACTED]",
   "[CARD_REDACTED]",
+]);
+requireIncludes("backend/src/main/java/com/complex/platform/analytics/AiTextRedactor.java", [
+  "PiiTextRedactor",
 ]);
 
 requireIncludes("backend/src/main/java/com/complex/platform/analytics/AnalyticsService.java", [
