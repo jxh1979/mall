@@ -5,6 +5,8 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.RiskAlertService;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.nio.charset.StandardCharsets;
@@ -45,7 +47,12 @@ public class AmusementService {
     private final AuthorizationService authorizationService;
     private final AmusementEntitlementGateway entitlementGateway;
     private final AmusementSafetyRepository safetyRepository;
+    // P1：evidence 统一异常责任链服务。游乐超容除写孤岛 amusement_incidents 外，
+    // 再接入统一 risk_alerts（source_domain='amusement'），让统一表真实承载游乐风险数据。
+    // 可为 null（向后兼容/单测无 SecurityContext 环境）；接入为 fail-safe，不阻塞核销主链。
+    private final RiskAlertService riskAlertService;
 
+    // 向后兼容构造器：未注入统一责任链服务（既有单测/无 SecurityContext 环境）。
     public AmusementService(
             AmusementRepository repository,
             IdempotencyService idempotencyService,
@@ -54,12 +61,27 @@ public class AmusementService {
             AmusementEntitlementGateway entitlementGateway,
             AmusementSafetyRepository safetyRepository
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                entitlementGateway, safetyRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AmusementService(
+            AmusementRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            AmusementEntitlementGateway entitlementGateway,
+            AmusementSafetyRepository safetyRepository,
+            RiskAlertService riskAlertService
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.entitlementGateway = entitlementGateway;
         this.safetyRepository = safetyRepository;
+        this.riskAlertService = riskAlertService;
         this.bookingService = new AmusementBookingService(repository, idempotencyService, auditEventService, authorizationService);
         this.inspectionService = new AmusementInspectionService(repository, idempotencyService, auditEventService, authorizationService);
         this.maintenanceService = new AmusementMaintenanceService(repository, idempotencyService, auditEventService, authorizationService);
@@ -847,6 +869,14 @@ public class AmusementService {
                 now,
                 authorizationService.currentMerchantScope().orElse(null)
         ));
+        // 双写统一责任链（fail-safe，不阻塞核销主链；孤岛 amusement_incidents 仍权威）。
+        reportToUnifiedRiskAlerts(
+                "over_capacity",
+                incident.id(),
+                incident.severity(),
+                project.id(),
+                "amusement over capacity: type=" + overType + ", dimension=" + dimension,
+                "incident=" + incident.id() + "; over_type=" + overType + "; dimension=" + dimension);
         auditEventService.recordSuccess(
                 "amusement.incident.over_capacity",
                 "amusement.verification.execute",
@@ -862,6 +892,63 @@ public class AmusementService {
                         "disposal_mode", policy.disposalMode()
                 )
         );
+    }
+
+    /**
+     * 把游乐超容/安全事件双写到统一 risk_alerts（source_domain='amusement'）。
+     *
+     * <p>fail-safe：未注入服务（单测/无 SecurityContext）或上报异常都不阻塞核销主链——
+     * 孤岛 amusement_incidents 仍是落地权威，统一表为汇聚镜像。
+     * idempotencyKey 用 incidentId+":unified" 稳定唯一，重复核销不重复上报。
+     */
+    private void reportToUnifiedRiskAlerts(
+            String alertType,
+            String incidentId,
+            String severity,
+            String projectId,
+            String summary,
+            String reason
+    ) {
+        if (riskAlertService == null) {
+            return;
+        }
+        try {
+            riskAlertService.report(new RiskAlertReportRequest(
+                    incidentId + ":unified",
+                    "amusement",
+                    incidentId,
+                    alertType,
+                    mapRiskLevel(severity),
+                    summary,
+                    projectId,
+                    reason,
+                    List.of()));
+        } catch (RuntimeException exception) {
+            // 统一表上报失败不影响核销主链（incident 已落孤岛表 amusement_incidents）。
+            auditEventService.recordFailure(
+                    "amusement.risk.unified_alert_failed",
+                    "amusement.verification.execute",
+                    "risk_alert",
+                    incidentId,
+                    null,
+                    incidentId + ":unified",
+                    exception instanceof ApiException api ? api.code() : exception.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * 把游乐域 severity 映射到统一表合法 risk_level（仅 normal/suspicious/high/critical）。
+     * medium → suspicious（否则统一表 VALIDATION_FAILED 被吞=丢数据）；high/critical/low 直透 / 兜底。
+     */
+    private String mapRiskLevel(String severity) {
+        String normalized = severity == null ? "" : severity.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "medium" -> "suspicious";
+            case "high" -> "high";
+            case "critical" -> "critical";
+            case "low", "normal" -> "normal";
+            default -> "suspicious";
+        };
     }
 
     private boolean isAmusementEntitlementType(String entitlementType) {

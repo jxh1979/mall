@@ -21,6 +21,8 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
+import com.complex.platform.evidence.RiskAlertService;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -43,6 +45,17 @@ public class AnalyticsService {
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> RISK_LEVELS = Set.of("normal", "suspicious", "high", "critical");
+    // analytics 本域风险级 → 统一表 RISK_LEVELS 映射。本域取值（经 requireRiskLevel 校验）已与统一枚举同名，
+    // 直通即可；额外覆盖历史/其它字段可能出现的别名（medium/low/warning），未命中按 suspicious 兜底——
+    // 避免 report 抛 VALIDATION_FAILED 被 catch 静默吞 = 丢数据。
+    private static final Map<String, String> RISK_LEVEL_TO_UNIFIED = Map.of(
+            "normal", "normal",
+            "suspicious", "suspicious",
+            "high", "high",
+            "critical", "critical",
+            "medium", "suspicious",
+            "low", "normal",
+            "warning", "suspicious");
     private static final Set<String> RISK_ALERT_RESOLVE_ACTIONS = Set.of("investigating", "resolved", "dismissed");
     private static final Set<String> TERMINAL_ALERT_STATUSES = Set.of("resolved", "dismissed");
     private static final BigDecimal LOCAL_LLM_MIN_CONFIDENCE = new BigDecimal("0.60");
@@ -109,26 +122,52 @@ public class AnalyticsService {
     private final AuditedOperationExecutor operations;
     private final Clock clock;
     private final LocalLlmClient localLlmClient;
+    // P1：evidence 统一异常责任链服务。analytics 风险写入除落孤岛 analytics_risk_alerts 外，
+    // 再双写统一 risk_alerts（source_domain='analytics'），复刻 Wave 1 Wecom 先例（fail-safe、孤岛表仍权威、统一表汇聚镜像）。
+    // 可为 null（向后兼容/现有单测用旧构造器）；接入为 fail-safe，不阻塞创建主链。
+    private final RiskAlertService riskAlertService;
 
     @Autowired
     public AnalyticsService(
             AnalyticsRepository repository,
             AuditedOperationExecutor operations,
-            LocalLlmClient localLlmClient
+            LocalLlmClient localLlmClient,
+            RiskAlertService riskAlertService
     ) {
-        this(repository, operations, Clock.systemUTC(), localLlmClient);
+        this(repository, operations, Clock.systemUTC(), localLlmClient, riskAlertService);
     }
 
+    // 向后兼容旧构造器：未注入统一责任链服务（riskAlertService=null），双写短路、仅孤岛表权威。
+    public AnalyticsService(
+            AnalyticsRepository repository,
+            AuditedOperationExecutor operations,
+            LocalLlmClient localLlmClient
+    ) {
+        this(repository, operations, Clock.systemUTC(), localLlmClient, null);
+    }
+
+    // 向后兼容旧构造器（带固定 Clock，现有单测用）：riskAlertService=null，双写短路。
     AnalyticsService(
             AnalyticsRepository repository,
             AuditedOperationExecutor operations,
             Clock clock,
             LocalLlmClient localLlmClient
     ) {
+        this(repository, operations, clock, localLlmClient, null);
+    }
+
+    AnalyticsService(
+            AnalyticsRepository repository,
+            AuditedOperationExecutor operations,
+            Clock clock,
+            LocalLlmClient localLlmClient,
+            RiskAlertService riskAlertService
+    ) {
         this.repository = repository;
         this.operations = operations;
         this.clock = clock;
         this.localLlmClient = localLlmClient;
+        this.riskAlertService = riskAlertService;
     }
 
     public PageResponse<AiQualityResultRecord> listAiQualityResults() {
@@ -494,7 +533,7 @@ public class AnalyticsService {
         RiskAlertRequest actual = requireRequest(request);
         String riskLevel = requireRiskLevel(actual.riskLevel());
         Instant now = Instant.now(clock);
-        return repository.saveRiskAlert(new RiskAlertRecord(
+        RiskAlertRecord saved = repository.saveRiskAlert(new RiskAlertRecord(
                 UUID.randomUUID().toString(),
                 trimToNull(actual.ruleId()),
                 requireText(actual.alertType(), "alert_type"),
@@ -510,6 +549,41 @@ public class AnalyticsService {
                 null,
                 now
         ));
+        // P1：落孤岛表 analytics_risk_alerts（权威）后，双写统一 risk_alerts（汇聚镜像，fail-safe）。
+        reportRiskAlertToUnified(saved);
+        return saved;
+    }
+
+    /**
+     * P1：analytics 风险预警双写统一异常责任链 risk_alerts（evidence/RiskAlertService.report）。
+     *
+     * <p>source_domain='analytics'，alertType 沿用本域风险类型，risk_level 经映射（本域枚举与统一枚举同名直通，
+     * 未知值兜底 suspicious），source_ref=该 risk alert 的 id，幂等键稳定唯一（id + ":unified"），重复不重复上报。
+     *
+     * <p>fail-safe：未注入服务（旧构造器/现有单测）或上报异常都不阻塞创建主链——
+     * 孤岛 analytics_risk_alerts 仍是命中落地的权威，统一表为汇聚镜像。
+     */
+    private void reportRiskAlertToUnified(RiskAlertRecord alert) {
+        if (riskAlertService == null) {
+            return;
+        }
+        // 未知风险级映射不到统一枚举则按 suspicious 兜底（避免 report 抛 VALIDATION_FAILED 静默丢数据）。
+        String unifiedLevel = RISK_LEVEL_TO_UNIFIED.getOrDefault(alert.riskLevel(), "suspicious");
+        try {
+            riskAlertService.report(new RiskAlertReportRequest(
+                    alert.id() + ":unified",
+                    "analytics",
+                    alert.id(),
+                    alert.alertType(),
+                    unifiedLevel,
+                    "Analytics risk: " + alert.alertType() + " on " + alert.objectType(),
+                    null,
+                    "alert_type=" + alert.alertType() + "; object_type=" + alert.objectType()
+                            + "; object_id=" + alert.objectId() + "; rule_id=" + alert.ruleId(),
+                    List.of()));
+        } catch (RuntimeException exception) {
+            // 统一表上报失败不影响创建主链（命中已落孤岛 analytics_risk_alerts）。fail-safe 静默吞，不阻塞。
+        }
     }
 
     private RiskAlertRecord resolveRiskAlertInternal(String alertId, StatusChangeRequest request) {

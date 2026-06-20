@@ -10,6 +10,8 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.RiskAlertService;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -37,17 +39,34 @@ public class AmusementSafetyService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    // P1：evidence 统一异常责任链服务。安全事件除写孤岛 amusement_incidents 外，
+    // 再接入统一 risk_alerts（source_domain='amusement'）。
+    // 可为 null（向后兼容/单测无 SecurityContext 环境）；接入为 fail-safe，不阻塞事件创建主链。
+    private final RiskAlertService riskAlertService;
 
+    // 向后兼容构造器：未注入统一责任链服务（既有单测/无 SecurityContext 环境）。
     public AmusementSafetyService(
             AmusementSafetyRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             AuthorizationService authorizationService
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AmusementSafetyService(
+            AmusementSafetyRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            RiskAlertService riskAlertService
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.riskAlertService = riskAlertService;
     }
 
     public PageResponse<AmusementSafetyNoticeRecord> listSafetyNotices() {
@@ -274,6 +293,8 @@ public class AmusementSafetyService {
                 defaultNote(request.operatorNote(), "created"),
                 record.evidenceAttachmentIds()
         ));
+        // 双写统一责任链（fail-safe，不阻塞事件创建主链；孤岛 amusement_incidents 仍权威）。
+        reportToUnifiedRiskAlerts(record);
         auditEventService.recordSuccess(
                 "amusement.incident.created",
                 "amusement.incident.create",
@@ -284,6 +305,56 @@ public class AmusementSafetyService {
                 Map.of("status", record.status(), "severity", record.severity())
         );
         return record;
+    }
+
+    /**
+     * 把安全事件双写到统一 risk_alerts（source_domain='amusement'，alert_type='safety_incident'）。
+     *
+     * <p>fail-safe：未注入服务（单测/无 SecurityContext）或上报异常都不阻塞事件创建主链——
+     * 孤岛 amusement_incidents 仍是落地权威，统一表为汇聚镜像。
+     * idempotencyKey 用 incidentId+":unified" 稳定唯一，重复创建不重复上报。
+     */
+    private void reportToUnifiedRiskAlerts(AmusementIncidentRecord incident) {
+        if (riskAlertService == null) {
+            return;
+        }
+        try {
+            riskAlertService.report(new RiskAlertReportRequest(
+                    incident.id() + ":unified",
+                    "amusement",
+                    incident.id(),
+                    "safety_incident",
+                    mapRiskLevel(incident.severity()),
+                    "amusement safety incident: " + incident.title(),
+                    incident.projectId(),
+                    "incident=" + incident.id() + "; severity=" + incident.severity(),
+                    List.of()));
+        } catch (RuntimeException exception) {
+            // 统一表上报失败不影响事件创建主链（incident 已落孤岛表 amusement_incidents）。
+            auditEventService.recordFailure(
+                    "amusement.risk.unified_alert_failed",
+                    "amusement.incident.create",
+                    "risk_alert",
+                    incident.id(),
+                    requestId(),
+                    incident.id() + ":unified",
+                    exception instanceof ApiException api ? api.code() : exception.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * 把游乐域 severity 映射到统一表合法 risk_level（仅 normal/suspicious/high/critical）。
+     * medium → suspicious（否则统一表 VALIDATION_FAILED 被吞=丢数据）；high/critical 直透；low → normal。
+     */
+    private String mapRiskLevel(String severity) {
+        String normalized = severity == null ? "" : severity.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "medium" -> "suspicious";
+            case "high" -> "high";
+            case "critical" -> "critical";
+            case "low", "normal" -> "normal";
+            default -> "suspicious";
+        };
     }
 
     private AmusementIncidentRecord addIncidentActionOnce(String incidentId, AmusementIncidentActionRequest request) {

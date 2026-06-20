@@ -2,10 +2,17 @@ package com.complex.platform.amusement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.evidence.RiskAlertService;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
+import org.mockito.ArgumentCaptor;
 import com.complex.platform.amusement.dto.AmusementIncidentActionRequest;
 import com.complex.platform.amusement.dto.AmusementIncidentCloseRequest;
 import com.complex.platform.amusement.dto.AmusementIncidentCreateRequest;
@@ -36,18 +43,21 @@ class AmusementSafetyServiceTests {
     private InMemoryAuditEventRepository auditEventRepository;
     private AmusementSafetyService service;
     private AuthorizationService authorizationService;
+    private RiskAlertService riskAlertService;
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryAmusementSafetyRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
         authorizationService = new AuthorizationService(mock(AccessRepository.class));
+        riskAlertService = mock(RiskAlertService.class);
         TestSecurityActors.asPlatformAdmin();
         service = new AmusementSafetyService(
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                authorizationService
+                authorizationService,
+                riskAlertService
         );
     }
 
@@ -269,6 +279,77 @@ class AmusementSafetyServiceTests {
                 Instant.parse("2026-06-15T08:30:00Z"),
                 "staff_gate"
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 统一责任链双写（Wave 2）：安全事件创建后镜像到统一 risk_alerts。
+    // source_domain='amusement'、alert_type='safety_incident'；severity→risk_level 映射。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void createIncidentDoubleWritesUnifiedRiskAlertKeepingHighLevel() {
+        // 默认 incidentRequest severity=high → 统一表 risk_level 保持 high。
+        AmusementIncidentRecord incident = service.createIncident(incidentRequest("incident-unified-high"));
+
+        ArgumentCaptor<RiskAlertReportRequest> captor = ArgumentCaptor.forClass(RiskAlertReportRequest.class);
+        verify(riskAlertService, atLeastOnce()).report(captor.capture());
+        RiskAlertReportRequest req = captor.getValue();
+        assertThat(req.sourceDomain()).isEqualTo("amusement");
+        assertThat(req.alertType()).isEqualTo("safety_incident");
+        assertThat(req.riskLevel()).isEqualTo("high");
+        // sourceRef = incident id；幂等键稳定唯一。
+        assertThat(req.sourceRef()).isEqualTo(incident.id());
+        assertThat(req.idempotencyKey()).isEqualTo(incident.id() + ":unified");
+    }
+
+    @Test
+    void createIncidentMapsMediumSeverityToSuspicious() {
+        // severity=medium → 统一表 risk_level 必须映射为 suspicious（否则统一表校验失败丢数据）。
+        service.createIncident(new AmusementIncidentCreateRequest(
+                "incident-unified-medium",
+                "create incident",
+                List.of("att-photo"),
+                "prj_1",
+                "amu_project_1",
+                "session_1",
+                "device_1",
+                "customer_1",
+                "medium",
+                "Guest minor scrape",
+                "Guest minor scrape near queue",
+                "staff_reporter",
+                "staff_app",
+                Instant.parse("2026-06-15T09:00:00Z")));
+
+        ArgumentCaptor<RiskAlertReportRequest> captor = ArgumentCaptor.forClass(RiskAlertReportRequest.class);
+        verify(riskAlertService, atLeastOnce()).report(captor.capture());
+        assertThat(captor.getValue().riskLevel()).isEqualTo("suspicious");
+    }
+
+    @Test
+    void createIncidentStillWritesIslandWhenUnifiedServiceAbsent() {
+        // fail-safe：未注入统一责任链服务（riskAlertService=null），创建主流程照常、孤岛 incident 照写。
+        AmusementSafetyService noUnified = new AmusementSafetyService(
+                repository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                authorizationService);
+
+        AmusementIncidentRecord incident = noUnified.createIncident(incidentRequest("incident-null-unified"));
+
+        assertThat(incident.incidentType()).isEqualTo("accident");
+        assertThat(repository.findIncidentById(incident.id())).isPresent();
+    }
+
+    @Test
+    void createIncidentUnifiedReportFailureDoesNotBreakIslandWrite() {
+        // fail-safe：统一表 report 抛 RuntimeException，创建主流程不受影响、孤岛 incident 照写。
+        when(riskAlertService.report(any())).thenThrow(new RuntimeException("unified down"));
+
+        AmusementIncidentRecord incident = service.createIncident(incidentRequest("incident-unified-fail"));
+
+        assertThat(repository.findIncidentById(incident.id())).isPresent();
+        verify(riskAlertService, atLeastOnce()).report(any());
     }
 
     private AmusementIncidentCreateRequest incidentRequest(String idempotencyKey) {

@@ -5,9 +5,11 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.RiskAlertService;
 import com.complex.platform.evidence.TraceabilityProcessInstanceRecord;
 import com.complex.platform.evidence.TraceabilityService;
 import com.complex.platform.evidence.TraceabilityStepRecord;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
@@ -62,7 +64,18 @@ public class InventoryService {
     private final TerminalSwitchGuard terminalSwitchGuard;
     private final InventoryHighValueReviewService highValueReviewService;
     private final TraceabilityService traceabilityService;
+    // P1：evidence 统一异常责任链服务。库存风险扫描命中 + 溯源交接断链异常，除写孤岛表外再接入统一
+    // risk_alerts（source_domain='inventory'），让统一表真实承载本域风险数据。复刻 Wave 1 Wecom 先例。
+    // 可为 null（向后兼容/旧 6 参构造器/单测无注入）；接入为 fail-safe，不阻塞主链。
+    private final RiskAlertService riskAlertService;
 
+    // 本域风险级 → 统一表 RISK_LEVELS({normal,suspicious,high,critical}) 映射。
+    // inventory 用的 medium 在统一表无对应枚举，必须映射为 suspicious，否则 report 抛 VALIDATION_FAILED。
+    private static final Map<String, String> RISK_LEVEL_TO_UNIFIED = Map.of(
+            "medium", "suspicious",
+            "high", "high");
+
+    // 向后兼容旧 6 参构造器：未注入统一责任链服务（riskAlertService=null），双写短路、仅孤岛表权威。
     public InventoryService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
@@ -71,12 +84,27 @@ public class InventoryService {
             TerminalSwitchGuard terminalSwitchGuard,
             TraceabilityService traceabilityService
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                terminalSwitchGuard, traceabilityService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public InventoryService(
+            InventoryRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            TerminalSwitchGuard terminalSwitchGuard,
+            TraceabilityService traceabilityService,
+            RiskAlertService riskAlertService
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.terminalSwitchGuard = terminalSwitchGuard;
         this.traceabilityService = traceabilityService;
+        this.riskAlertService = riskAlertService;
         this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService);
         this.stockMovementService = new InventoryStockMovementService(
@@ -987,11 +1015,91 @@ public class InventoryService {
     }
 
     private void raiseException(String handoverId, String segment, String type, String reason, Instant now) {
+        String exceptionId = "traceexc_" + slug(handoverId + ":" + segment + ":" + type + ":" + now.toEpochMilli());
         repository.saveTraceHandoverException(new TraceHandoverExceptionRecord(
-                "traceexc_" + slug(handoverId + ":" + segment + ":" + type + ":" + now.toEpochMilli()),
+                exceptionId,
                 handoverId, segment, type, "pending", null, reason, now, null));
         TraceHandoverRecord header = requireHandover(handoverId);
         repository.saveTraceHandover(withOverall(header, "exception", segment));
+        // P1：落孤岛表 inventory_trace_handover_exceptions 后，双写统一 risk_alerts（汇聚镜像，fail-safe）。
+        reportTraceHandoverExceptionToUnified(exceptionId, handoverId, segment, type, reason);
+    }
+
+    /**
+     * P1：库存风险告警双写统一异常责任链 risk_alerts（evidence/RiskAlertService.report）。
+     *
+     * <p>source_domain='inventory'，alertType 沿用本域值，risk_level 经映射（medium→suspicious，high→high），
+     * source_ref=该 risk alert 的 id，幂等键稳定唯一（id + ":unified"），重复扫描不重复上报。
+     *
+     * <p>fail-safe：未注入服务（旧构造器/单测）或上报异常都不阻塞扫描主链——
+     * 孤岛 inventory_risk_alerts 仍是命中落地的权威，统一表为汇聚镜像。
+     */
+    private void reportRiskAlertToUnified(InventoryRiskAlertRecord alert) {
+        if (riskAlertService == null) {
+            return;
+        }
+        // 未知风险级映射不到统一枚举则按 high 兜底（避免 report 抛 VALIDATION_FAILED 静默丢数据）。
+        String unifiedLevel = RISK_LEVEL_TO_UNIFIED.getOrDefault(alert.severity(), "high");
+        try {
+            riskAlertService.report(new RiskAlertReportRequest(
+                    alert.id() + ":unified",
+                    "inventory",
+                    alert.id(),
+                    alert.alertType(),
+                    unifiedLevel,
+                    "Inventory risk: " + alert.alertType() + " on item " + alert.itemId(),
+                    null,
+                    "alert_type=" + alert.alertType() + "; item=" + alert.itemId()
+                            + "; location=" + alert.locationId(),
+                    List.of()));
+        } catch (RuntimeException exception) {
+            // 统一表上报失败不影响扫描主链（命中已落孤岛 inventory_risk_alerts）。
+            auditEventService.recordFailure(
+                    "inventory.risk.unified_alert_failed",
+                    "inventory.risk.scan",
+                    "risk_alert",
+                    alert.id(),
+                    null,
+                    alert.id() + ":unified",
+                    codeOf(exception));
+        }
+    }
+
+    /**
+     * P1：溯源交接断链异常双写统一异常责任链 risk_alerts。
+     *
+     * <p>source_domain='inventory'，alertType='trace_handover_exception'，risk_level='high'，
+     * source_ref=异常 id，幂等键稳定唯一（exceptionId + ":unified"）。fail-safe 同上：
+     * 孤岛 inventory_trace_handover_exceptions 仍权威，统一表为汇聚镜像。
+     */
+    private void reportTraceHandoverExceptionToUnified(
+            String exceptionId, String handoverId, String segment, String type, String reason) {
+        if (riskAlertService == null) {
+            return;
+        }
+        try {
+            riskAlertService.report(new RiskAlertReportRequest(
+                    exceptionId + ":unified",
+                    "inventory",
+                    exceptionId,
+                    "trace_handover_exception",
+                    "high",
+                    "Trace handover exception: " + type + " on segment " + segment,
+                    null,
+                    "handover=" + handoverId + "; segment=" + segment + "; type=" + type
+                            + "; reason=" + reason,
+                    List.of()));
+        } catch (RuntimeException exception) {
+            // 统一表上报失败不影响交接主链（异常已落孤岛 inventory_trace_handover_exceptions）。
+            auditEventService.recordFailure(
+                    "inventory.trace.unified_alert_failed",
+                    "inventory.handover.scan",
+                    "risk_alert",
+                    exceptionId,
+                    null,
+                    exceptionId + ":unified",
+                    codeOf(exception));
+        }
     }
 
     /** 一段 done 后：若五段全 done → overall completed + 事件；否则推进 current_segment 到下一未完成段。 */
@@ -1197,6 +1305,8 @@ public class InventoryService {
         List<InventoryRiskAlertRecord> saved = alerts.stream()
                 .map(repository::saveRiskAlert)
                 .toList();
+        // P1：落孤岛表 inventory_risk_alerts 后，双写统一 risk_alerts（汇聚镜像，fail-safe）。
+        saved.forEach(this::reportRiskAlertToUnified);
         return new InventoryRiskScanResult(saved.size(), saved);
     }
 

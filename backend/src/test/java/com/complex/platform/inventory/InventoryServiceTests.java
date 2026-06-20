@@ -2,7 +2,11 @@ package com.complex.platform.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessActor;
@@ -49,6 +53,7 @@ class InventoryServiceTests {
     private AuthorizationService authorizationService;
     private com.complex.platform.terminal.TerminalDeviceRepository terminalDeviceRepository;
     private InMemoryTraceabilityRepository traceabilityRepository;
+    private com.complex.platform.evidence.RiskAlertService riskAlertService;
     private InventoryService service;
 
     private static final AccessActor ADMIN_ACTOR =
@@ -76,13 +81,15 @@ class InventoryServiceTests {
                 new com.complex.platform.gate.TerminalSwitchGuard(
                         terminalDeviceRepository, new AuditEventService(auditEventRepository));
         traceabilityRepository = new InMemoryTraceabilityRepository();
+        riskAlertService = mock(com.complex.platform.evidence.RiskAlertService.class);
         service = new InventoryService(
                 inventoryRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
                 authorizationService,
                 terminalSwitchGuard,
-                new com.complex.platform.evidence.TraceabilityService(traceabilityRepository, authorizationService)
+                new com.complex.platform.evidence.TraceabilityService(traceabilityRepository, authorizationService),
+                riskAlertService
         );
     }
 
@@ -1069,6 +1076,129 @@ class InventoryServiceTests {
         assertThat(result.alerts())
                 .extracting(InventoryRiskAlertRecord::operatorUserId)
                 .containsOnly(ADMIN_ACTOR.id());
+    }
+
+    // ----------------------------------------------------------------------------------------- P1 双写统一 risk_alerts
+
+    /** 库存风险扫描双写统一表：source_domain=inventory，alertType 沿用本域值，medium→suspicious，high→high。 */
+    @Test
+    void scanInventoryRisksDoubleWritesToUnifiedRiskAlertsWithLevelMapping() {
+        // 缺货(out_of_stock=high) item
+        InventoryItemRecord outItem = service.createInventoryItem(new InventoryItemRequest(
+                "dw-out-item", null, List.of(), null, null, "DW Out", "spirit", "bottle", 0, "active", null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "dw-out-bal", outItem.id(), "warehouse_1", 0, 0, 0,
+                Instant.parse("2026-06-14T00:00:00Z"), null, null));
+        // 安全库存不足(safety_stock_low=medium) item：minQuantity>available>0
+        InventoryItemRecord lowItem = service.createInventoryItem(new InventoryItemRequest(
+                "dw-low-item", null, List.of(), null, null, "DW Low", "spirit", "bottle", 10, "active", null));
+        // StockBalanceRecord 第6字段才是 availableQuantity：quantity=3, reserved=0, available=3，
+        // 使 0<available(3)<minQuantity(10) 命中 safety_stock_low(medium)，而非 available=0 的 out_of_stock。
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "dw-low-bal", lowItem.id(), "warehouse_1", 3, 0, 3,
+                Instant.parse("2026-06-14T00:00:00Z"), null, null));
+
+        service.runInventoryRiskScan(new InventoryRiskScanRequest("dw-risk-scan", "scan", 7, null));
+
+        org.mockito.ArgumentCaptor<com.complex.platform.evidence.dto.RiskAlertReportRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.evidence.dto.RiskAlertReportRequest.class);
+        verify(riskAlertService, org.mockito.Mockito.times(2)).report(captor.capture());
+
+        // 全部 source_domain=inventory
+        assertThat(captor.getAllValues())
+                .extracting(com.complex.platform.evidence.dto.RiskAlertReportRequest::sourceDomain)
+                .containsOnly("inventory");
+        // out_of_stock 保持 high
+        assertThat(captor.getAllValues())
+                .filteredOn(r -> "out_of_stock".equals(r.alertType()))
+                .singleElement()
+                .extracting(com.complex.platform.evidence.dto.RiskAlertReportRequest::riskLevel)
+                .isEqualTo("high");
+        // safety_stock_low(medium) 必须映射为 suspicious
+        assertThat(captor.getAllValues())
+                .filteredOn(r -> "safety_stock_low".equals(r.alertType()))
+                .singleElement()
+                .extracting(com.complex.platform.evidence.dto.RiskAlertReportRequest::riskLevel)
+                .isEqualTo("suspicious");
+    }
+
+    /** 溯源交接断链异常双写统一表：source_domain=inventory，alertType=trace_handover_exception，riskLevel=high。 */
+    @Test
+    void traceHandoverExceptionDoubleWritesToUnifiedRiskAlerts() {
+        InventoryItemRecord item = createItem("dw-handover-item");
+        TraceHandoverChainView created = service.createTraceHandover(
+                new com.complex.platform.inventory.dto.TraceHandoverCreateRequest(
+                        "dw-h-create", "TRACE-DW", item.id(), "device_dw", List.of()));
+        String handoverId = created.handover().id();
+        // 先正常完成 out_verify 段
+        service.scanTraceSegment(handoverId, new com.complex.platform.inventory.dto.TraceScanSegmentRequest(
+                "dw-seg-out", "out_verify"));
+        // 同段重复扫码 → duplicate 异常，触发 raiseException
+        service.scanTraceSegment(handoverId, new com.complex.platform.inventory.dto.TraceScanSegmentRequest(
+                "dw-seg-out-dup", "out_verify"));
+
+        org.mockito.ArgumentCaptor<com.complex.platform.evidence.dto.RiskAlertReportRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.evidence.dto.RiskAlertReportRequest.class);
+        verify(riskAlertService).report(captor.capture());
+        assertThat(captor.getValue().sourceDomain()).isEqualTo("inventory");
+        assertThat(captor.getValue().alertType()).isEqualTo("trace_handover_exception");
+        assertThat(captor.getValue().riskLevel()).isEqualTo("high");
+        // 孤岛表仍权威：异常已落 inventory_trace_handover_exceptions。
+        assertThat(inventoryRepository.traceHandoverExceptions).isNotEmpty();
+    }
+
+    /** fail-safe：RiskAlertService 为 null 时主流程不抛、孤岛风险表照常写。 */
+    @Test
+    void scanInventoryRisksFailSafeWhenRiskAlertServiceNull() {
+        InventoryService nullSafeService = new InventoryService(
+                inventoryRepository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                authorizationService,
+                new com.complex.platform.gate.TerminalSwitchGuard(
+                        terminalDeviceRepository, new AuditEventService(auditEventRepository)),
+                new com.complex.platform.evidence.TraceabilityService(traceabilityRepository, authorizationService),
+                null);
+        InventoryItemRecord outItem = nullSafeService.createInventoryItem(new InventoryItemRequest(
+                "fs-out-item", null, List.of(), null, null, "FS Out", "spirit", "bottle", 0, "active", null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "fs-out-bal", outItem.id(), "warehouse_1", 0, 0, 0,
+                Instant.parse("2026-06-14T00:00:00Z"), null, null));
+
+        InventoryRiskScanResult result =
+                nullSafeService.runInventoryRiskScan(new InventoryRiskScanRequest("fs-risk-scan", "scan", 7, null));
+
+        // 孤岛风险表照常写（权威）；未注入服务也不抛。
+        assertThat(result.alerts())
+                .extracting(InventoryRiskAlertRecord::alertType)
+                .contains("out_of_stock");
+    }
+
+    /** fail-safe：report 抛 RuntimeException 时主流程不受影响，孤岛风险表仍写入。 */
+    @Test
+    void scanInventoryRisksFailSafeWhenReportThrows() {
+        doThrow(new RuntimeException("unified down")).when(riskAlertService).report(any());
+        InventoryItemRecord outItem = service.createInventoryItem(new InventoryItemRequest(
+                "ft-out-item", null, List.of(), null, null, "FT Out", "spirit", "bottle", 0, "active", null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "ft-out-bal", outItem.id(), "warehouse_1", 0, 0, 0,
+                Instant.parse("2026-06-14T00:00:00Z"), null, null));
+
+        InventoryRiskScanResult result =
+                service.runInventoryRiskScan(new InventoryRiskScanRequest("ft-risk-scan", "scan", 7, null));
+
+        // report 抛异常被 catch，主流程不受影响，孤岛表照常写。
+        assertThat(result.alerts())
+                .extracting(InventoryRiskAlertRecord::alertType)
+                .contains("out_of_stock");
+        verify(riskAlertService).report(any());
+    }
+
+    // 守卫：非 medium/high 之外的 alertType 不应误报（占位，确保无额外 report 调用）。
+    @Test
+    void scanInventoryRisksWithNoRiskDoesNotReport() {
+        service.runInventoryRiskScan(new InventoryRiskScanRequest("noop-risk-scan", "scan", 7, null));
+        verify(riskAlertService, never()).report(any());
     }
 
     // P1-5: 供应商对账 operatorUserId 必须来自认证上下文

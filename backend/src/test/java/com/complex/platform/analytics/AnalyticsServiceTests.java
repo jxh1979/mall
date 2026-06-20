@@ -1,8 +1,14 @@
 package com.complex.platform.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -293,6 +299,78 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void createRiskAlertDoubleWritesToUnifiedRiskAlertServiceWithAnalyticsDomainAndMappedLevel() {
+        com.complex.platform.evidence.RiskAlertService riskAlertService =
+                mock(com.complex.platform.evidence.RiskAlertService.class);
+        AnalyticsService unifiedService = new AnalyticsService(
+                analyticsRepository, operations(), FIXED_CLOCK, localLlmClient, riskAlertService);
+
+        RiskAlertRecord saved = unifiedService.createRiskAlert(
+                riskAlertRequest("unified-dual-write", "metric_anomaly", "high", "merchant", "Revenue dropped"));
+
+        // 孤岛表仍权威：照常落 analytics_risk_alerts。
+        assertThat(analyticsRepository.riskAlertSaveCount).isEqualTo(1);
+
+        org.mockito.ArgumentCaptor<com.complex.platform.evidence.dto.RiskAlertReportRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.evidence.dto.RiskAlertReportRequest.class);
+        verify(riskAlertService).report(captor.capture());
+        com.complex.platform.evidence.dto.RiskAlertReportRequest reported = captor.getValue();
+        assertThat(reported.sourceDomain()).isEqualTo("analytics");
+        assertThat(reported.alertType()).isEqualTo("metric_anomaly");
+        assertThat(reported.riskLevel()).isEqualTo("high");
+        assertThat(reported.sourceRef()).isEqualTo(saved.id());
+        assertThat(reported.idempotencyKey()).isEqualTo(saved.id() + ":unified");
+    }
+
+    @Test
+    void createRiskAlertMapsMediumSeverityToSuspiciousForUnifiedReport() {
+        // 本域校验只接受统一枚举，但若孤岛记录风险级为别名（如 medium），双写须映射为 suspicious（不丢数据）。
+        com.complex.platform.evidence.RiskAlertService riskAlertService =
+                mock(com.complex.platform.evidence.RiskAlertService.class);
+        // 用一个把保存记录强制改写为 medium 风险级的仓储装饰，验证映射分支。
+        analyticsRepository.overrideSavedRiskLevel = "medium";
+        AnalyticsService unifiedService = new AnalyticsService(
+                analyticsRepository, operations(), FIXED_CLOCK, localLlmClient, riskAlertService);
+
+        unifiedService.createRiskAlert(
+                riskAlertRequest("unified-medium", "metric_anomaly", "high", "merchant", "Revenue dropped"));
+
+        org.mockito.ArgumentCaptor<com.complex.platform.evidence.dto.RiskAlertReportRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.evidence.dto.RiskAlertReportRequest.class);
+        verify(riskAlertService).report(captor.capture());
+        assertThat(captor.getValue().riskLevel()).isEqualTo("suspicious");
+    }
+
+    @Test
+    void createRiskAlertFailSafeWhenRiskAlertServiceNull() {
+        // fail-safe：未注入统一服务（旧构造器）时，主流程不抛、孤岛表照常写。
+        AnalyticsService nullSafeService = new AnalyticsService(
+                analyticsRepository, operations(), FIXED_CLOCK, localLlmClient);
+
+        assertThatCode(() -> nullSafeService.createRiskAlert(
+                riskAlertRequest("unified-null", "metric_anomaly", "high", "merchant", "Revenue dropped")))
+                .doesNotThrowAnyException();
+        assertThat(analyticsRepository.riskAlertSaveCount).isEqualTo(1);
+    }
+
+    @Test
+    void createRiskAlertFailSafeWhenUnifiedReportThrows() {
+        // fail-safe：统一表上报抛异常不影响创建主链，孤岛表仍权威落地。
+        com.complex.platform.evidence.RiskAlertService riskAlertService =
+                mock(com.complex.platform.evidence.RiskAlertService.class);
+        doThrow(new RuntimeException("unified down")).when(riskAlertService).report(any());
+        AnalyticsService unifiedService = new AnalyticsService(
+                analyticsRepository, operations(), FIXED_CLOCK, localLlmClient, riskAlertService);
+
+        RiskAlertRecord saved = unifiedService.createRiskAlert(
+                riskAlertRequest("unified-throws", "metric_anomaly", "high", "merchant", "Revenue dropped"));
+
+        assertThat(saved).isNotNull();
+        assertThat(analyticsRepository.riskAlertSaveCount).isEqualTo(1);
+        verify(riskAlertService).report(any());
+    }
+
+    @Test
     void resolveRiskAlertRejectsMissingTargetStatusOrReason() {
         assertThatThrownBy(() -> service.resolveRiskAlert("alert_1", new StatusChangeRequest("resolve-missing-action", " ", "handled", List.of())))
                 .isInstanceOf(ApiException.class)
@@ -479,6 +557,13 @@ class AnalyticsServiceTests {
         assertThat(response.result().findingCount()).isZero();
         assertThat(analyticsRepository.aiQualityTaskSaveCount).isEqualTo(1);
         assertThat(analyticsRepository.aiQualityResultSaveCount).isEqualTo(1);
+    }
+
+    private AuditedOperationExecutor operations() {
+        return new AuditedOperationExecutor(
+                new IdempotencyService(idempotencyRepository, new ObjectMapper()),
+                new AuditEventService(auditEventRepository)
+        );
     }
 
     private com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey metricKey(
@@ -715,6 +800,8 @@ class AnalyticsServiceTests {
         private final List<RobotMetricRecord> robotMetrics = new ArrayList<>();
         private final List<StaffServiceScoreRecord> staffServiceScores = new ArrayList<>();
         private boolean failAiQualityResults;
+        // 测试钩子：非 null 时把保存的风险预警 riskLevel 强制改写，用于验证双写映射分支（如 medium→suspicious）。
+        private String overrideSavedRiskLevel;
         private int riskAlertSaveCount;
         private int riskAlertUpdateCount;
         private int aiQualityTaskSaveCount;
@@ -790,8 +877,15 @@ class AnalyticsServiceTests {
         @Override
         public RiskAlertRecord saveRiskAlert(RiskAlertRecord alert) {
             riskAlertSaveCount += 1;
-            riskAlerts.put(alert.id(), alert);
-            return alert;
+            RiskAlertRecord stored = overrideSavedRiskLevel == null
+                    ? alert
+                    : new RiskAlertRecord(
+                            alert.id(), alert.ruleId(), alert.alertType(), overrideSavedRiskLevel,
+                            alert.objectType(), alert.objectId(), alert.summary(), alert.status(),
+                            alert.operatorNote(), alert.evidenceAttachmentIds(), alert.idempotencyKey(),
+                            alert.createdAt(), alert.resolvedAt(), alert.updatedAt());
+            riskAlerts.put(stored.id(), stored);
+            return stored;
         }
 
         @Override

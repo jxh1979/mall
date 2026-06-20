@@ -3,11 +3,18 @@ package com.complex.platform.amusement;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.evidence.RiskAlertService;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
+import org.mockito.ArgumentCaptor;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -38,6 +45,7 @@ class AmusementServiceTests {
     private InMemorySafetyRepository safetyRepository;
     private AmusementService service;
     private AuthorizationService authorizationService;
+    private RiskAlertService riskAlertService;
 
     @BeforeEach
     void setUp() {
@@ -48,6 +56,7 @@ class AmusementServiceTests {
         entitlementGateway = new InMemoryAmusementEntitlementGateway();
         safetyRepository = new InMemorySafetyRepository();
         authorizationService = new AuthorizationService(mock(AccessRepository.class));
+        riskAlertService = mock(RiskAlertService.class);
         TestSecurityActors.asPlatformAdmin();
         service = new AmusementService(
                 amusementRepository,
@@ -55,7 +64,8 @@ class AmusementServiceTests {
                 new AuditEventService(auditEventRepository),
                 authorizationService,
                 entitlementGateway,
-                safetyRepository
+                safetyRepository,
+                riskAlertService
         );
     }
 
@@ -791,6 +801,106 @@ class AmusementServiceTests {
                 .extracting(AuditEvent::eventName)
                 .filteredOn(name -> name.equals("amusement.incident.over_capacity"))
                 .hasSizeGreaterThanOrEqualTo(1);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 统一责任链双写（Wave 2）：超容 incident 落孤岛表后镜像到统一 risk_alerts。
+    // source_domain='amusement'、alert_type='over_capacity'；severity→risk_level 映射。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void hardOverCapacityDoubleWritesUnifiedRiskAlertWithHighLevel() {
+        // 硬超容（block_hard 阻断）severity=high → 统一表 risk_level 保持 high。
+        AmusementProjectRecord project = createProject("oc-hard-unified", createTemplate("oc-hard-unified-tpl").id(), "open", 1);
+        submitPassingInspection(project, "oc-hard-unified");
+        AmusementSessionRecord session = createSession("oc-hard-unified-session", project.id(), 100, "open");
+        registerAmusementEntitlement("credential-ochu-1", 1);
+        registerAmusementEntitlement("credential-ochu-2", 1);
+
+        service.createVerification(verification("v-ochu-1", project.id(), session.id(), "credential-ochu-1"));
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-ochu-2", project.id(), session.id(), "credential-ochu-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+
+        ArgumentCaptor<RiskAlertReportRequest> captor = ArgumentCaptor.forClass(RiskAlertReportRequest.class);
+        verify(riskAlertService, atLeastOnce()).report(captor.capture());
+        RiskAlertReportRequest req = captor.getValue();
+        assertThat(req.sourceDomain()).isEqualTo("amusement");
+        assertThat(req.alertType()).isEqualTo("over_capacity");
+        // 硬超容 high 保持 high（未被错误降级）。
+        assertThat(req.riskLevel()).isEqualTo("high");
+        // sourceRef = incident id；幂等键稳定唯一（incidentId + ":unified"）。
+        assertThat(req.idempotencyKey()).isEqualTo(req.sourceRef() + ":unified");
+        // sourceRef 与孤岛表 incident id 一致。
+        assertThat(req.sourceRef()).isEqualTo(safetyRepository.incidents().get(0).id());
+    }
+
+    @Test
+    void softOverCapacityDoubleWritesUnifiedRiskAlertMappingMediumToSuspicious() {
+        // 软超容（达运营容量告警放行）severity=medium → 统一表 risk_level 必须映射为 suspicious（否则丢数据）。
+        AmusementProjectRecord project = createProject("oc-soft-unified", createTemplate("oc-soft-unified-tpl").id(), "open", 100);
+        submitPassingInspection(project, "oc-soft-unified");
+        AmusementSessionRecord session = createSession("oc-soft-unified-session", project.id(), 100, "open");
+        amusementRepository.configureOverCapacityPolicy(project.id(), 1, AmusementOverCapacityPolicy.MODE_BLOCK_HARD);
+        registerAmusementEntitlement("credential-ocsu-1", 1);
+
+        service.createVerification(verification("v-ocsu-1", project.id(), session.id(), "credential-ocsu-1"));
+
+        ArgumentCaptor<RiskAlertReportRequest> captor = ArgumentCaptor.forClass(RiskAlertReportRequest.class);
+        verify(riskAlertService, atLeastOnce()).report(captor.capture());
+        RiskAlertReportRequest req = captor.getValue();
+        assertThat(req.sourceDomain()).isEqualTo("amusement");
+        assertThat(req.alertType()).isEqualTo("over_capacity");
+        // 关键：软超容 medium 映射为 suspicious。
+        assertThat(req.riskLevel()).isEqualTo("suspicious");
+    }
+
+    @Test
+    void overCapacityStillWritesIslandIncidentWhenUnifiedServiceAbsent() {
+        // fail-safe：未注入统一责任链服务（riskAlertService=null），核销主流程照常、孤岛 incident 照写。
+        AmusementService noUnified = new AmusementService(
+                amusementRepository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                authorizationService,
+                entitlementGateway,
+                safetyRepository);
+        AmusementProjectRecord project = createProject("oc-null", createTemplate("oc-null-tpl").id(), "open", 1);
+        submitPassingInspection(project, "oc-null");
+        AmusementSessionRecord session = createSession("oc-null-session", project.id(), 100, "open");
+        registerAmusementEntitlement("credential-ocn-1", 1);
+        registerAmusementEntitlement("credential-ocn-2", 1);
+
+        noUnified.createVerification(verification("v-ocn-1", project.id(), session.id(), "credential-ocn-1"));
+        // 主流程不抛非预期异常（仍是容量耗尽业务异常）。
+        assertThatThrownBy(() -> noUnified.createVerification(verification(
+                        "v-ocn-2", project.id(), session.id(), "credential-ocn-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        // 孤岛 incident 仍写入（权威不受统一表缺失影响）。
+        assertThat(safetyRepository.incidents())
+                .extracting(AmusementIncidentRecord::incidentType)
+                .contains("over_capacity");
+    }
+
+    @Test
+    void overCapacityUnifiedReportFailureDoesNotBreakIslandIncident() {
+        // fail-safe：统一表 report 抛 RuntimeException，核销主流程不受影响、孤岛 incident 照写。
+        when(riskAlertService.report(any())).thenThrow(new RuntimeException("unified down"));
+        AmusementProjectRecord project = createProject("oc-fail", createTemplate("oc-fail-tpl").id(), "open", 1);
+        submitPassingInspection(project, "oc-fail");
+        AmusementSessionRecord session = createSession("oc-fail-session", project.id(), 100, "open");
+        registerAmusementEntitlement("credential-ocf-1", 1);
+        registerAmusementEntitlement("credential-ocf-2", 1);
+
+        service.createVerification(verification("v-ocf-1", project.id(), session.id(), "credential-ocf-1"));
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-ocf-2", project.id(), session.id(), "credential-ocf-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        assertThat(safetyRepository.incidents())
+                .extracting(AmusementIncidentRecord::incidentType)
+                .contains("over_capacity");
+        // report 被调用过（说明双写发生但被 fail-safe 吞掉）。
+        verify(riskAlertService, atLeastOnce()).report(any());
     }
 
     @Test
