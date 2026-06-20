@@ -68,7 +68,7 @@ test.describe("full admin UI hardening acceptance", () => {
     await adminLogin(page, "/admin/overview");
 
     await expect(page.getByTestId("overview-kpi-ticket")).toBeVisible();
-    await expect(page.getByTestId("overview-kpi-finance")).toBeVisible();
+    await expect(page.getByTestId("overview-kpi-bar")).toBeVisible();
 
     await page.getByTestId("overview-date-from").fill("2026-06-01");
     await page.getByTestId("overview-date-to").fill("2026-06-30");

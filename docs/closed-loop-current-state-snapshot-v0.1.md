@@ -36,13 +36,13 @@
 
 | 文件 | 当前行数 |
 |---|---:|
-| `apps/web/src/main.tsx` | 31 |
+| `apps/web/src/main.tsx` | 53 |
 | `apps/web/src/legacy-console/LegacyConsoleApp.tsx` | 313 |
 | `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 372 |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 436 |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 452 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 418 |
-| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 411 |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 565 |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 971 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 527 |
+| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 439 |
 
 ## 4. 安全与生产证据闸口
 

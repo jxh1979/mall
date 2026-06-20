@@ -1129,6 +1129,18 @@ class JdbcInventoryRepository implements InventoryRepository {
                 """, Map.of("merchant_id", merchantId), rowMapper::mapSupplyContract);
     }
 
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<SupplyContractRecord> listSupplyContractsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, contract_no, supplier_id, project_id, merchant_id, contract_mode,
+                       supply_scope, price_terms, payment_term_days, valid_from, valid_to, summary,
+                       purchasable_scope, approval_status, status, created_at, updated_at
+                  FROM supply_contracts
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), rowMapper::mapSupplyContract);
+    }
+
     private MapSqlParameterSource supplyContractParameters(SupplyContractRecord contract) {
         return new MapSqlParameterSource()
                 .addValue("id", contract.id())
@@ -1188,6 +1200,16 @@ class JdbcInventoryRepository implements InventoryRepository {
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapWarehouse);
+    }
+
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<WarehouseRecord> listWarehousesByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                  FROM warehouses
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), rowMapper::mapWarehouse);
     }
 
     private MapSqlParameterSource warehouseParameters(WarehouseRecord warehouse) {

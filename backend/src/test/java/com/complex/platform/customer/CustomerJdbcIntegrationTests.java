@@ -72,6 +72,11 @@ class CustomerJdbcIntegrationTests {
         assertThat(repository.listPointsRules())
                 .extracting(CustomerPointsRuleRecord::id)
                 .contains("rule_1");
+        // P2 多综合体 project_id scoped 读通道：按 project_id 行级隔离。
+        assertThat(repository.listPointsRulesByProject("prj_1"))
+                .extracting(CustomerPointsRuleRecord::id)
+                .contains("rule_1");
+        assertThat(repository.listPointsRulesByProject("prj_nonexistent")).isEmpty();
     }
 
     @Test

@@ -69,6 +69,12 @@ class WecomComplianceJdbcIntegrationTests {
         assertThat(repository.findAccessAuditsByConversation("wcv_jdbc"))
                 .extracting(WecomAccessAuditRecord::viewType, WecomAccessAuditRecord::approvalRef)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("raw", "approval_jdbc"));
+
+        // P2 多综合体 project_id scoped 读通道：按 project_id 行级隔离，仅命中本 project 会话。
+        assertThat(repository.findConversationsByProject("proj_jdbc"))
+                .extracting(WecomConversationRecord::id)
+                .contains("wcv_jdbc");
+        assertThat(repository.findConversationsByProject("proj_nonexistent")).isEmpty();
     }
 
     @Test
@@ -136,6 +142,12 @@ class WecomComplianceJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT source_domain FROM analytics_risk_alerts WHERE id = ?", String.class, alertId))
                 .isEqualTo("wecom");
+
+        // P2 多综合体 project_id scoped 读通道：命中按 project_id 行级隔离。
+        assertThat(repository.findRiskHitsByProject("proj_hit"))
+                .extracting(WecomRiskHitRecord::hitId)
+                .contains("wrh_hit");
+        assertThat(repository.findRiskHitsByProject("proj_nonexistent")).isEmpty();
     }
 
     private boolean columnExists(String tableName, String columnName) {

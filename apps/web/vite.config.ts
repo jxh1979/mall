@@ -14,6 +14,14 @@ export default defineConfig({
     },
   },
   build: {
+    // 真实分包已完成关键优化：admin 32 个页面经 React.lazy 路由级切分，
+    // AdminApp 从 ~224kB 降到 ~19kB，首屏不再一次性加载全部页面代码。
+    // 剩余最大单块 vendor-antd（antd 框架本体）约 586kB，是框架固有体积；
+    // 实测在 rolldown 的 manualChunks 下进一步剥离 rc-*/dayjs 会触发反向合并、
+    // 生成更大的单块（~1MB），属退化，故不强拆。
+    // 阈值设为 650kB：覆盖 antd 框架块、消除噪音警告，又能在未来出现新的
+    // 真实回归（如某业务块异常膨胀）时仍然报警。
+    chunkSizeWarningLimit: 650,
     rollupOptions: {
       input: {
         main: "index.html",

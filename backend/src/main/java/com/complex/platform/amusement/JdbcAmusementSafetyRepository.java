@@ -51,6 +51,18 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 """, Map.of("merchant_id", merchantId), this::mapNotice);
     }
 
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<AmusementSafetyNoticeRecord> findSafetyNoticesByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, amusement_project_id, notice_type, title, content_version,
+                       content_text, status, effective_from, effective_to, created_by_user_id,
+                       evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM amusement_safety_notices
+                 WHERE project_id = :project_id
+                 ORDER BY title, id
+                """, Map.of("project_id", projectId), this::mapNotice);
+    }
+
     @Override
     public Optional<AmusementSafetyNoticeRecord> findSafetyNoticeById(String id) {
         return jdbcTemplate.query("""
@@ -119,6 +131,18 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                  WHERE merchant_id = :merchant_id
                  ORDER BY occurred_at DESC, id
                 """, Map.of("merchant_id", merchantId), this::mapIncident);
+    }
+
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<AmusementIncidentRecord> findIncidentsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, amusement_project_id, session_id, device_id, customer_id,
+                       severity, incident_type, status, title, description, reported_by_user_id, reported_channel,
+                       occurred_at, resolution, closed_at, evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM amusement_incidents
+                 WHERE project_id = :project_id
+                 ORDER BY occurred_at DESC, id
+                """, Map.of("project_id", projectId), this::mapIncident);
     }
 
     @Override

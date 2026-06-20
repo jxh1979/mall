@@ -135,6 +135,16 @@ class AmusementSafetyJdbcIntegrationTests {
         assertThat(repository.findIncidentActionsByIncidentId("ami_jdbc"))
                 .extracting(AmusementIncidentActionRecord::id, AmusementIncidentActionRecord::actionType)
                 .contains(tuple("amia_jdbc", "created"));
+
+        // P2 多综合体 project_id scoped 读通道：notice / incident 均按 project_id 行级隔离。
+        assertThat(repository.findSafetyNoticesByProject("prj_1"))
+                .extracting(AmusementSafetyNoticeRecord::id)
+                .contains("asn_jdbc");
+        assertThat(repository.findSafetyNoticesByProject("prj_nonexistent")).isEmpty();
+        assertThat(repository.findIncidentsByProject("prj_1"))
+                .extracting(AmusementIncidentRecord::id)
+                .contains("ami_jdbc");
+        assertThat(repository.findIncidentsByProject("prj_nonexistent")).isEmpty();
     }
 
     private String regclass(String tableName) {

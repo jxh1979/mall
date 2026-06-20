@@ -45,6 +45,21 @@ pid_from_port() {
   ss -ltnp 2>/dev/null | awk -v port=":$port" '$0 ~ port"[[:space:]]" {print $NF}' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | sort -u
 }
 
+clear_port() {
+  local port="$1"
+  local pids
+  pids="$(pid_from_port "$port" | tr '\n' ' ')"
+  if [[ -z "${pids// }" ]]; then
+    return 0
+  fi
+  kill $pids 2>/dev/null || true
+  sleep 1
+  pids="$(pid_from_port "$port" | tr '\n' ' ')"
+  if [[ -n "${pids// }" ]]; then
+    kill -9 $pids 2>/dev/null || true
+  fi
+}
+
 stop_pid_file() {
   local pid_file="$1"
   if [[ -f "$pid_file" ]]; then
@@ -195,6 +210,8 @@ case "$ACTION" in
     ;;
   restart)
     stop_all
+    clear_port "$API_PORT"
+    clear_port "$WEB_PORT"
     start_api
     start_web
     status_all

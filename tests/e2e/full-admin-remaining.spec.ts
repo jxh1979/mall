@@ -31,6 +31,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },
   { pageId: "ADM-EVD-001", label: "审计事件", route: "/admin/audit/events" },
   { pageId: "ADM-ANA-001", label: "经营分析", route: "/admin/analytics/business" },
+  { pageId: "ADM-ANA-002", label: "集团总览", route: "/admin/analytics/group-overview" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -91,6 +92,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("audit-events-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-001") {
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-002") {
+    await expect(page.getByTestId("admin-group-overview")).toBeVisible();
   } else {
     await expect(page.getByTestId("admin-generic-page")).toBeVisible();
   }
@@ -319,6 +322,11 @@ test.describe("full admin remaining pages acceptance", () => {
         await page.getByTestId("business-analytics-lock-snapshot").click();
         await expect(page.getByTestId("admin-action-result")).toContainText("business_snapshot_locked");
         await expect(page.getByTestId("admin-action-result")).toContainText("management_review_ready");
+        continue;
+      }
+      if (spec.pageId === "ADM-ANA-002") {
+        await expect(page.getByTestId("group-overview-table")).toBeVisible();
+        await expect(page.getByTestId("group-overview-row-project_1")).toBeVisible();
         continue;
       }
       await expect(page.getByTestId("admin-generic-evidence")).toBeVisible();

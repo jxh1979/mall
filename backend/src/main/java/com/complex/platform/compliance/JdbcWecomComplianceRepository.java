@@ -133,6 +133,17 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                 """, Map.of("id", id), this::mapConversation).stream().findFirst();
     }
 
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<WecomConversationRecord> findConversationsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, external_conversation_id, project_id, owner_staff_id, customer_ref,
+                       archive_status, retention_until, created_at, updated_at
+                  FROM wecom_conversations
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), this::mapConversation);
+    }
+
     @Override
     public List<WecomConversationRecord> findConversationsDueForRetention(LocalDate today) {
         return jdbcTemplate.query("""
@@ -316,6 +327,17 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                   FROM wecom_risk_hits
                  WHERE hit_id = :hit_id
                 """, Map.of("hit_id", hitId), this::mapRiskHit).stream().findFirst();
+    }
+
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<WecomRiskHitRecord> findRiskHitsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT hit_id, conversation_id, message_id, rule_code, risk_level, matched_snippet,
+                       status, reviewer_id, review_note, project_id, alert_id, created_at, updated_at
+                  FROM wecom_risk_hits
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, hit_id
+                """, Map.of("project_id", projectId), this::mapRiskHit);
     }
 
     @Override

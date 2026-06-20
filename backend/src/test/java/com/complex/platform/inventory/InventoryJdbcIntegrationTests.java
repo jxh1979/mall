@@ -225,6 +225,11 @@ class InventoryJdbcIntegrationTests {
         assertThat(repository.listSupplyContractsByMerchant("m_a"))
                 .extracting(SupplyContractRecord::id)
                 .contains("sc_t6");
+        // P2 多综合体 project_id scoped 读通道：按 project_id 行级隔离。
+        assertThat(repository.listSupplyContractsByProject("proj_1"))
+                .extracting(SupplyContractRecord::id)
+                .contains("sc_t6");
+        assertThat(repository.listSupplyContractsByProject("proj_nonexistent")).isEmpty();
         assertThat(repository.findSupplyContractByIdForUpdate("sc_t6"))
                 .get()
                 .extracting(SupplyContractRecord::purchasableScope)

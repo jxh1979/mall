@@ -991,6 +991,84 @@ class JdbcCustomerRepository implements CustomerRepository {
                 """, Map.of("customer_id", customerId), this::mapCheckIn);
     }
 
+    // ───────────────────────── P2 多综合体 project_id scoped 读通道 ─────────────────────────
+    // 收紧租户隔离至 strict-0：以下方法以真实 project_id 列做行级过滤（`project_id = :project_id`），
+    // 为多综合体就绪提供按 token scope 的 scoped 读取通道（AC-ISO-1，§4）。既有查询保持不变、向后兼容。
+
+    public List<CustomerMemberLevelRecord> listMemberLevelsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM customer_member_levels
+                 WHERE project_id = :project_id
+                 ORDER BY level_rank ASC, id ASC
+                """, Map.of("project_id", projectId), this::mapMemberLevel);
+    }
+
+    public List<CustomerCheckInTierRecord> listCheckInTiersByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM customer_check_in_tiers
+                 WHERE project_id = :project_id
+                 ORDER BY streak_days ASC, id ASC
+                """, Map.of("project_id", projectId), this::mapCheckInTier);
+    }
+
+    public List<CustomerBirthdayRuleRecord> listBirthdayRulesByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM customer_birthday_rules
+                 WHERE project_id = :project_id
+                 ORDER BY multiplier_basis_points DESC, id ASC
+                """, Map.of("project_id", projectId), this::mapBirthdayRule);
+    }
+
+    public List<CustomerMembershipPlanRecord> listMembershipPlansByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, plan_code, name, price_cent, duration_days,
+                       benefits::text AS benefits, status, created_at, updated_at
+                  FROM customer_membership_plans
+                 WHERE project_id = :project_id
+                 ORDER BY price_cent ASC, id ASC
+                """, Map.of("project_id", projectId), this::mapMembershipPlan);
+    }
+
+    public List<CustomerMembershipRecord> listMembershipsByProject(String projectId) {
+        return jdbcTemplate.query(MEMBERSHIP_SELECT
+                        + " WHERE project_id = :project_id ORDER BY created_at DESC, id DESC",
+                Map.of("project_id", projectId), this::mapMembership);
+    }
+
+    public List<CustomerPointsRuleRecord> listPointsRulesByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM customer_points_rules
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), this::mapPointsRule);
+    }
+
+    public List<CustomerPointsTransferLimitRecord> listPointsTransferLimitsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, daily_points_limit, daily_count_limit, status, created_at, updated_at
+                  FROM customer_points_transfer_limits
+                 WHERE project_id = :project_id
+                 ORDER BY id
+                """, Map.of("project_id", projectId), this::mapPointsTransferLimit);
+    }
+
+    public List<CustomerRedemptionCatalogItemRecord> listRedemptionCatalogItemsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, item_name, item_type, points_cost, inventory_item_id,
+                       stock_location_id, stock_quantity, status, available_from,
+                       available_until, created_at, updated_at
+                  FROM customer_redemption_catalog_items
+                 WHERE project_id = :project_id
+                 ORDER BY points_cost ASC, item_name ASC, id ASC
+                """, Map.of("project_id", projectId), this::mapRedemptionCatalogItem);
+    }
+
+    public List<CustomerStoredValueAccountRecord> listStoredValueAccountsByProject(String projectId) {
+        return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
+                        + " WHERE project_id = :project_id ORDER BY created_at DESC, id",
+                Map.of("project_id", projectId), this::mapStoredValueAccount);
+    }
+
     private CustomerMemberLevelRecord mapMemberLevel(ResultSet rs, int rowNumber) throws SQLException {
         return new CustomerMemberLevelRecord(
                 rs.getString("id"),

@@ -4,39 +4,44 @@ import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
 import { findAdminRoute, groupedAdminRoutes } from "./adminRoutes";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
-import { OverviewPage } from "./pages/OverviewPage";
-import { AccessUsersPage } from "./pages/AccessUsersPage";
-import { PermissionTemplatesPage } from "./pages/PermissionTemplatesPage";
-import { TicketingPoliciesPage } from "./pages/TicketingPoliciesPage";
-import { DynamicPricingPage } from "./pages/DynamicPricingPage";
-import { TicketOrdersPage } from "./pages/TicketOrdersPage";
-import { BarTableSessionsPage } from "./pages/BarTableSessionsPage";
-import { FinanceArApLedgerPage } from "./pages/FinanceArApLedgerPage";
-import { ReconciliationPage } from "./pages/ReconciliationPage";
-import { MerchantWorkOrdersPage } from "./pages/MerchantWorkOrdersPage";
-import { MerchantScopePage } from "./pages/MerchantScopePage";
-import { AmusementSafetyPage } from "./pages/AmusementSafetyPage";
-import { AmusementSessionsPage } from "./pages/AmusementSessionsPage";
-import { AmusementGroupBookingsPage } from "./pages/AmusementGroupBookingsPage";
-import { SupervisorReviewPage } from "./pages/SupervisorReviewPage";
-import { ContractApprovalPage } from "./pages/ContractApprovalPage";
-import { GovernanceTopologyPage } from "./pages/GovernanceTopologyPage";
-import { OrganizationMerchantPage } from "./pages/OrganizationMerchantPage";
-import { SubjectBindingsPage } from "./pages/SubjectBindingsPage";
-import { AdmissionAuditsPage } from "./pages/AdmissionAuditsPage";
-import { RiskAlertsPage } from "./pages/RiskAlertsPage";
-import { IntegrationEventsPage } from "./pages/IntegrationEventsPage";
-import { AuditEventsPage } from "./pages/AuditEventsPage";
-import { BusinessAnalyticsPage } from "./pages/BusinessAnalyticsPage";
-import { GroupOverviewPage } from "./pages/GroupOverviewPage";
-import { InventoryLedgerPage } from "./pages/InventoryLedgerPage";
-import { BarOrdersPage } from "./pages/BarOrdersPage";
-import { StoredWinePage } from "./pages/StoredWinePage";
-import { BarCommissionsPage } from "./pages/BarCommissionsPage";
-import { IntegrationAdaptersPage } from "./pages/IntegrationAdaptersPage";
-import { OpsReadinessPage } from "./pages/OpsReadinessPage";
-import { GenericAdminPage } from "./pages/GenericAdminPage";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
+
+// P2 bundle 优化：admin 页面路由级 lazy 分包。
+// 此前 32 个页面组件 eager 导入，全部塞进 AdminApp chunk（~224kB）。
+// 改为 React.lazy 后每个页面成为独立按需 chunk，仅在路由命中时加载。
+// 命名导出页面通过 .then 映射为 default，复用 main.tsx 三壳的 lazy 写法。
+const OverviewPage = React.lazy(() => import("./pages/OverviewPage").then((m) => ({ default: m.OverviewPage })));
+const AccessUsersPage = React.lazy(() => import("./pages/AccessUsersPage").then((m) => ({ default: m.AccessUsersPage })));
+const PermissionTemplatesPage = React.lazy(() => import("./pages/PermissionTemplatesPage").then((m) => ({ default: m.PermissionTemplatesPage })));
+const TicketingPoliciesPage = React.lazy(() => import("./pages/TicketingPoliciesPage").then((m) => ({ default: m.TicketingPoliciesPage })));
+const DynamicPricingPage = React.lazy(() => import("./pages/DynamicPricingPage").then((m) => ({ default: m.DynamicPricingPage })));
+const TicketOrdersPage = React.lazy(() => import("./pages/TicketOrdersPage").then((m) => ({ default: m.TicketOrdersPage })));
+const BarTableSessionsPage = React.lazy(() => import("./pages/BarTableSessionsPage").then((m) => ({ default: m.BarTableSessionsPage })));
+const FinanceArApLedgerPage = React.lazy(() => import("./pages/FinanceArApLedgerPage").then((m) => ({ default: m.FinanceArApLedgerPage })));
+const ReconciliationPage = React.lazy(() => import("./pages/ReconciliationPage").then((m) => ({ default: m.ReconciliationPage })));
+const MerchantWorkOrdersPage = React.lazy(() => import("./pages/MerchantWorkOrdersPage").then((m) => ({ default: m.MerchantWorkOrdersPage })));
+const MerchantScopePage = React.lazy(() => import("./pages/MerchantScopePage").then((m) => ({ default: m.MerchantScopePage })));
+const AmusementSafetyPage = React.lazy(() => import("./pages/AmusementSafetyPage").then((m) => ({ default: m.AmusementSafetyPage })));
+const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessionsPage").then((m) => ({ default: m.AmusementSessionsPage })));
+const AmusementGroupBookingsPage = React.lazy(() => import("./pages/AmusementGroupBookingsPage").then((m) => ({ default: m.AmusementGroupBookingsPage })));
+const SupervisorReviewPage = React.lazy(() => import("./pages/SupervisorReviewPage").then((m) => ({ default: m.SupervisorReviewPage })));
+const ContractApprovalPage = React.lazy(() => import("./pages/ContractApprovalPage").then((m) => ({ default: m.ContractApprovalPage })));
+const GovernanceTopologyPage = React.lazy(() => import("./pages/GovernanceTopologyPage").then((m) => ({ default: m.GovernanceTopologyPage })));
+const OrganizationMerchantPage = React.lazy(() => import("./pages/OrganizationMerchantPage").then((m) => ({ default: m.OrganizationMerchantPage })));
+const SubjectBindingsPage = React.lazy(() => import("./pages/SubjectBindingsPage").then((m) => ({ default: m.SubjectBindingsPage })));
+const AdmissionAuditsPage = React.lazy(() => import("./pages/AdmissionAuditsPage").then((m) => ({ default: m.AdmissionAuditsPage })));
+const RiskAlertsPage = React.lazy(() => import("./pages/RiskAlertsPage").then((m) => ({ default: m.RiskAlertsPage })));
+const IntegrationEventsPage = React.lazy(() => import("./pages/IntegrationEventsPage").then((m) => ({ default: m.IntegrationEventsPage })));
+const AuditEventsPage = React.lazy(() => import("./pages/AuditEventsPage").then((m) => ({ default: m.AuditEventsPage })));
+const BusinessAnalyticsPage = React.lazy(() => import("./pages/BusinessAnalyticsPage").then((m) => ({ default: m.BusinessAnalyticsPage })));
+const GroupOverviewPage = React.lazy(() => import("./pages/GroupOverviewPage").then((m) => ({ default: m.GroupOverviewPage })));
+const InventoryLedgerPage = React.lazy(() => import("./pages/InventoryLedgerPage").then((m) => ({ default: m.InventoryLedgerPage })));
+const BarOrdersPage = React.lazy(() => import("./pages/BarOrdersPage").then((m) => ({ default: m.BarOrdersPage })));
+const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m) => ({ default: m.StoredWinePage })));
+const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
+const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
+const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
+const GenericAdminPage = React.lazy(() => import("./pages/GenericAdminPage").then((m) => ({ default: m.GenericAdminPage })));
 
 type LoginResponse = {
   accessToken: string;
@@ -266,7 +271,12 @@ export default function AdminApp() {
         </header>
         {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
         <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
-          {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions })}
+          {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，
+              不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
+              chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}
+          <React.Suspense fallback={null}>
+            {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions })}
+          </React.Suspense>
         </PermissionGate>
         {actionResult ? <pre className="admin-result" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
       </section>

@@ -225,6 +225,7 @@ function fixedRows(pathname: string, state: MockState): ApiData {
     "/api/v1/merchant-billing/bills": state.merchantBills,
     "/api/v1/analytics/metric-anomalies": state.metricAnomalies,
     "/api/v1/analytics/business-metric-snapshots": state.metricSnapshots,
+    "/api/v1/analytics/group-overview": { asOf: "2026-06-19T00:00:00Z", businessDate: "2026-06-19", projects: [{ projectId: "project_1", projectName: "综合体一号", merchantCount: 3, metrics: {} }] },
     "/api/v1/floor-plans": empty,
   };
   return routes[pathname] ?? empty;

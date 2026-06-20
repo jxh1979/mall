@@ -238,6 +238,13 @@ final class JdbcBarBillingRepository {
         return jdbcTemplate.query("SELECT * FROM bar_shifts ORDER BY opened_at DESC, id", Map.of(), rowMapper::mapShift);
     }
 
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<BarShiftRecord> listShiftsByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM bar_shifts WHERE project_id = :project_id ORDER BY opened_at DESC, id
+                """, Map.of("project_id", projectId), rowMapper::mapShift);
+    }
+
     public BarShiftReconciliationSnapshot aggregateShiftReconciliation(
             String barId,
             String cashierUserId,

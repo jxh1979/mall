@@ -34,6 +34,7 @@ const bespokePages = new Set([
   "ADM-INT-002",
   "ADM-EVD-001",
   "ADM-ANA-001",
+  "ADM-ANA-002",
   "ADM-OPS-001",
   "ADM-GOV-001",
   "ADM-GOV-002",
@@ -89,7 +90,7 @@ function parseCsv(content) {
 
 function parseRoutes(source) {
   const routes = new Map();
-  const routePattern = /\{\s*pageId:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*module:\s*"([^"]+)",\s*route:\s*"([^"]+)",\s*requiredPermissions:\s*\[([^\]]*)\]\s*\}/g;
+  const routePattern = /\{\s*pageId:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*module:\s*"([^"]+)",\s*(?:group:\s*"[^"]+",\s*)?route:\s*"([^"]+)",\s*requiredPermissions:\s*\[([^\]]*)\]\s*\}/g;
   let match;
   while ((match = routePattern.exec(source)) !== null) {
     const [, pageId, label, moduleName, route, permissionsSource] = match;

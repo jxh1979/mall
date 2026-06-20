@@ -241,6 +241,11 @@ class JdbcBarRepository implements BarRepository {
         return billing.listShifts(merchantScope);
     }
 
+    // P2 多综合体 project_id scoped 读通道：委派至 billing，按真实 project_id 列行级隔离（AC-ISO-1，§4）。
+    public List<BarShiftRecord> listShiftsByProject(String projectId) {
+        return billing.listShiftsByProject(projectId);
+    }
+
     @Override
     public BarShiftReconciliationSnapshot aggregateShiftReconciliation(
             String barId,

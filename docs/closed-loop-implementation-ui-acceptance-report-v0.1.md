@@ -72,7 +72,7 @@
 | 常规 UI | P0-UI-08 role matrix shows forbidden backend access without hiding the audit trail | tests/e2e/web-ui-acceptance.spec.ts |
 | 常规 UI | P0-UI-09 failed login stays on auth screen and surfaces backend reason | tests/e2e/web-ui-acceptance.spec.ts |
 | 常规 UI | P0-UI-10 failed business action records an actionable error result | tests/e2e/web-ui-acceptance.spec.ts |
-| 常规 UI | P0-UI-11 mobile bar critical path remains operable | tests/e2e/web-ui-acceptance.spec.ts |
+| 常规 UI | P0-UI-11 mobile bar critical path redirects to admin (retired write) | tests/e2e/web-ui-acceptance.spec.ts |
 | 常规 UI | P0-UI-12 mobile amusement critical path remains operable | tests/e2e/web-ui-acceptance.spec.ts |
 | 常规 UI | P2-UI-13 platform governance topology shows group to venue relationships | tests/e2e/web-ui-acceptance.spec.ts |
 | 真实后端 UI | REAL-UI-01 health, login, dashboard and logout use the real backend | tests/e2e/web-ui-real-backend.spec.ts |
@@ -93,13 +93,13 @@
 
 | 文件 | 当前行数 |
 | --- | ---: |
-| apps/web/src/main.tsx | 31 |
+| apps/web/src/main.tsx | 53 |
 | apps/web/src/legacy-console/LegacyConsoleApp.tsx | 313 |
 | backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 372 |
-| backend/src/main/java/com/complex/platform/bar/BarService.java | 436 |
-| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 452 |
-| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 418 |
-| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 411 |
+| backend/src/main/java/com/complex/platform/bar/BarService.java | 565 |
+| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 971 |
+| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 527 |
+| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 439 |
 
 ## 6. 可复跑命令
 

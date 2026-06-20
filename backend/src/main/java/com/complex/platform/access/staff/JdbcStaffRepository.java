@@ -96,6 +96,17 @@ class JdbcStaffRepository implements StaffRepository {
                 """, Map.of("merchant_id", merchantScope), this::mapProfile);
     }
 
+    // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
+    public List<StaffProfileRecord> listProfilesByProject(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, user_id, name, phone_hash, id_doc_hash, staff_level_id,
+                       registration_status, approved_by, approved_at, reject_reason, status, created_at, updated_at
+                  FROM staff_profiles
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("project_id", projectId), this::mapProfile);
+    }
+
     // ---------------------------------------------------------- staff_device_credentials
 
     @Override
