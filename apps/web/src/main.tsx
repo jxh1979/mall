@@ -3,11 +3,11 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-// 三壳重构（P2）：默认壳切换为 admin（完整后台）。
-// - 根路径 "/" 与 "/admin*" → AdminApp（主力后台，默认壳）。
-// - "/customer*" → CustomerApp（客人端，按现有约定）。
+// 三壳入口：
+// - 根路径 "/" 与 "/customer*" → CustomerApp（客人/前台入口）。
+// - "/admin*" → AdminApp（完整后台，必须显式进入后台路径）。
 // - "/legacy*" → LegacyConsoleApp（已退役/降只读，仅显式前缀进入；写能力已被 redirectToAdmin 抽空）。
-// 历史上根路径默认进入 legacy，造成「主力 admin 反需 /admin 前缀」的心智倒置，此处修正。
+// 根路径不再直接进入后台，避免普通访问误入员工管理端。
 const AdminApp = React.lazy(() => import("./admin/AdminApp"));
 const CustomerApp = React.lazy(() => import("./customer/CustomerApp"));
 const LegacyConsoleApp = React.lazy(() => import("./legacy-console/LegacyConsoleApp"));
@@ -15,7 +15,7 @@ const LegacyConsoleApp = React.lazy(() => import("./legacy-console/LegacyConsole
 function RootApp(): React.ReactElement {
   const { pathname } = window.location;
 
-  if (pathname.startsWith("/customer")) {
+  if (pathname === "/" || pathname.startsWith("/customer")) {
     return (
       <React.Suspense fallback={<div className="loading-state">加载客人端...</div>}>
         <CustomerApp />
@@ -32,10 +32,17 @@ function RootApp(): React.ReactElement {
     );
   }
 
-  // 默认壳（含根路径 "/" 与 "/admin*"）：admin 完整后台。
+  if (pathname.startsWith("/admin")) {
+    return (
+      <React.Suspense fallback={<div className="loading-state">加载完整后台...</div>}>
+        <AdminApp />
+      </React.Suspense>
+    );
+  }
+
   return (
-    <React.Suspense fallback={<div className="loading-state">加载完整后台...</div>}>
-      <AdminApp />
+    <React.Suspense fallback={<div className="loading-state">加载客人端...</div>}>
+      <CustomerApp />
     </React.Suspense>
   );
 }

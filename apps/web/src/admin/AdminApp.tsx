@@ -43,6 +43,47 @@ const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdap
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
 const GenericAdminPage = React.lazy(() => import("./pages/GenericAdminPage").then((m) => ({ default: m.GenericAdminPage })));
 
+// 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
+const ICON_PATHS: Record<string, string> = {
+  grid: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+  shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z",
+  ticket: "M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-4M14 6v12",
+  cup: "M6 3h12l-1 7a5 5 0 0 1-10 0zM4 21h16M9 14v7",
+  ferris: "M12 12V3m0 9 6.5 4M12 12l-6.5 4M12 2a10 10 0 0 0-7 17h14a10 10 0 0 0-7-17M9 21l3-4 3 4",
+  link: "M9 15l6-6M10 6l1-1a4 4 0 0 1 6 6l-1 1M14 18l-1 1a4 4 0 0 1-6-6l1-1",
+  alert: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM12 9v4M12 16h.01",
+  coin: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M9 9a3 2 0 0 1 6 0M9 14a3 2 0 0 0 6 0M12 7v10",
+  chart: "M4 20V10M10 20V4M16 20v-6M22 20H2",
+  box: "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10",
+  user: "M4 21a8 8 0 0 1 16 0M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  doc: "M6 2h8l4 4v16H6zM14 2v6h6",
+  gear: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2.5M12 19.5V22M4.2 7l2.2 1.2M17.6 15.8 19.8 17M4.2 17l2.2-1.2M17.6 8.2 19.8 7",
+};
+
+const GROUP_ICONS: Record<string, string> = {
+  overview: "grid",
+  ticketing: "ticket",
+  bar: "cup",
+  inventory: "box",
+  amusement: "ferris",
+  finance: "coin",
+  governance: "shield",
+  integration: "link",
+  access: "user",
+  risk: "alert",
+  audit: "doc",
+  ops: "gear",
+};
+
+function NavIcon({ name }: { name: string }) {
+  const d = ICON_PATHS[name] ?? ICON_PATHS.grid;
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+
 type LoginResponse = {
   accessToken: string;
   refreshToken?: string;
@@ -179,6 +220,9 @@ export default function AdminApp() {
     setRoute(nextRoute);
     setActionResult(null);
     setGlobalError(null);
+    // 固定高度布局下内容滚动发生在 .admin-content 内；切换页面后复位到顶部，
+    // 避免从长列表页跳到短页面时停留在空白滚动位置。
+    document.querySelector(".admin-content")?.scrollTo({ top: 0 });
     if (window.location.pathname !== nextRoute.route) {
       window.history.pushState({ pageId: nextRoute.pageId }, "", nextRoute.route);
     }
@@ -210,18 +254,35 @@ export default function AdminApp() {
 
   const shell = !user ? (
     <main className="admin-auth-shell" data-testid="auth-shell">
-      <form className="admin-auth-panel" data-testid="login-view" onSubmit={(event) => void login(event)}>
-        <strong>综合体完整后台</strong>
-        {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
-        <label>账号<input data-testid="login-username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-        <label>密码<input data-testid="login-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        <button type="submit" data-testid="login-submit" disabled={loading}>{loading ? "登录中" : "登录"}</button>
-      </form>
+      <aside className="admin-auth-art">
+        <div className="admin-auth-art-inner">
+          <span className="admin-auth-mark">星</span>
+          <h1 className="admin-auth-art-title">星海综合体</h1>
+          <p className="admin-auth-art-sub">统一运营管理平台</p>
+        </div>
+        <div className="admin-auth-art-foot mono">治理 · 票务 · 酒吧 · 游乐 · 财务</div>
+      </aside>
+      <div className="admin-auth-form-wrap">
+        <form className="admin-auth-panel" data-testid="login-view" onSubmit={(event) => void login(event)}>
+          <strong>综合体完整后台</strong>
+          <p className="admin-auth-desc">登录以进入对应权限与数据范围</p>
+          {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
+          <label><span>账号</span><input data-testid="login-username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+          <label><span>密码</span><input data-testid="login-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+          <button type="submit" data-testid="login-submit" disabled={loading}>{loading ? "登录中" : "登录"}</button>
+        </form>
+      </div>
     </main>
   ) : (
     <div className="admin-shell" data-testid="admin-shell">
       <aside className="admin-sidebar">
-        <div className="admin-brand">综合体完整后台</div>
+        <div className="admin-brand">
+          <span className="admin-brand-mark">星</span>
+          <div className="admin-brand-text">
+            <div className="admin-brand-name">综合体完整后台</div>
+            <div className="admin-brand-sub">统一运营管理平台</div>
+          </div>
+        </div>
         <nav data-testid="admin-nav">
           {groupedAdminRoutes().map((group) => {
             const collapsed = collapsedGroups[group.key] ?? false;
@@ -234,6 +295,7 @@ export default function AdminApp() {
                   aria-expanded={!collapsed}
                   onClick={() => toggleGroup(group.key)}
                 >
+                  <span className="admin-nav-ic"><NavIcon name={GROUP_ICONS[group.key] ?? "grid"} /></span>
                   <span>{group.label}</span>
                   <small>{collapsed ? "▸" : "▾"}</small>
                 </button>
@@ -263,28 +325,41 @@ export default function AdminApp() {
             );
           })}
         </nav>
+        <div className="admin-sidebar-foot">
+          <span className="admin-avatar">{(user.username ?? "U").slice(0, 1).toUpperCase()}</span>
+          <div>
+            <div className="admin-sf-name">{user.username}</div>
+            <div className="admin-sf-role">完整后台 · 在岗</div>
+          </div>
+        </div>
       </aside>
       <section className="admin-main">
         <header className="admin-topbar">
           <div><strong>{route.label}</strong><span>{route.pageId} · {route.route}</span></div>
-          <div className="admin-topbar-actions"><span>{user.username}</span><button type="button" data-testid="admin-logout" onClick={logout}>退出</button></div>
+          <div className="admin-topbar-actions">
+            <span className="admin-topbar-store">营业中 · 综合体</span>
+            <span className="admin-user-chip">{user.username}</span>
+            <button type="button" data-testid="admin-logout" onClick={logout}>退出</button>
+          </div>
         </header>
-        {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
-        <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
-          {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，
-              不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
-              chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}
-          <React.Suspense fallback={null}>
-            {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions })}
-          </React.Suspense>
-        </PermissionGate>
-        {actionResult ? <pre className="admin-result" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
+        <div className="admin-content">
+          {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
+          <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
+            {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，
+                不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
+                chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}
+            <React.Suspense fallback={null}>
+              {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions })}
+            </React.Suspense>
+          </PermissionGate>
+          {actionResult ? <pre className="admin-result" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
+        </div>
       </section>
     </div>
   );
 
   return (
-    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#0f766e", borderRadius: 6 } }}>
+    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: "#1b1d21", borderRadius: 10, fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" } }}>
       {shell}
     </ConfigProvider>
   );
