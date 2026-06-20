@@ -2245,6 +2245,96 @@ class BarServiceTests {
                 .isEqualTo(reversalAdjustmentsAfterFirst);
     }
 
+    // ========================================================================
+    // V125 P1-1：void 驳回库存双扣防护——并发/重复 reject 库存仅扣一次（未结 waiver_reversal 分支）。
+    // V125 P1-2：void 审批分离——decideOrderItemVoid 需 bar.order_item.void_decide，
+    //            仅持申请权限 bar.order_item.void 的 actor 不得自审批。
+    // ========================================================================
+
+    @Test
+    void voidRejectionDeductsStockOnlyOnceForUnsettledWaiverReversalBranch() {
+        // 未结账单 void 驳回：库存回补→驳回重新扣减（waiver_reversal 加回应付）。
+        // 红线：行锁 + status==pending 守卫使第二次 reject 被拒，库存只扣一次，waiver_reversal 仅一条。
+        BarReservationRecord reservation = createReservation("void-rej-once", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-void-rej-once", "create product", List.of(), "bar_1", "Champagne", "spirit",
+                100000L, null, null, "active", "inventory_void_rej_once", "bar_1", true));
+        barRepository.saveStockBalance(new StockBalanceSnapshot(
+                "balance-void-rej-once", "inventory_void_rej_once", "bar_1", 5, 0, 5, Instant.now()));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-void-rej-once", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+        String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-void-rej-once", "deliver", List.of(),
+                List.of(Map.of("order_item_id", orderItemId, "quantity", 2)), "staff_1", List.of("att1")));
+        // 出品后库存 5→3。
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-void-rej-once", "create bill", List.of(), "offline", false, 0));
+        long payableBeforeVoid = bill.payableAmountCent();
+
+        // void：回补库存 3→5、账单减 200000（未结 → 后续驳回走 waiver_reversal）。
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-rej-once-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id()));
+        assertThat(barRepository.findStockBalance("inventory_void_rej_once", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
+
+        // 第一次驳回：对称冲销，库存 5→3，落一条 waiver_reversal、应付加回。
+        service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-rej-once-decide-1", "rejected", "not justified"));
+        assertThat(barRepository.findStockBalance("inventory_void_rej_once", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(3);
+        assertThat(barRepository.bills.get(bill.id()).payableAmountCent()).isEqualTo(payableBeforeVoid);
+        assertThat(barRepository.billAdjustments.stream()
+                .filter(a -> "waiver_reversal".equals(a.adjustmentType())).count()).isEqualTo(1L);
+
+        // 第二次驳回（不同 idempotencyKey）：行锁内 status 已非 pending → 被拒，库存不再扣减、不再加 waiver_reversal。
+        assertThatThrownBy(() -> service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-rej-once-decide-2", "rejected", "again")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_ORDER_ITEM_VOID_NOT_PENDING");
+        // 库存仍为 3（仅扣一次），waiver_reversal 仍仅一条。
+        assertThat(barRepository.findStockBalance("inventory_void_rej_once", "bar_1"))
+                .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(3);
+        assertThat(barRepository.billAdjustments.stream()
+                .filter(a -> "waiver_reversal".equals(a.adjustmentType())).count()).isEqualTo(1L);
+    }
+
+    @Test
+    void decideOrderItemVoidRequiresVoidDecidePermissionDistinctFromVoidApply() {
+        // 审批分离：持申请权限 bar.order_item.void 但无 bar.order_item.void_decide 的 actor → PERMISSION_DENIED。
+        // 用真实权限闸（非 platform_admin bridge）：自建 AuthorizationService + service，actor 为 merchant 用户。
+        AccessRepository accessRepository = mock(AccessRepository.class);
+        when(accessRepository.permissionExists(anyString())).thenReturn(true);
+        // 只授予申请权限，不授予审批权限。
+        when(accessRepository.findPermissionEffects(anyString(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(new AccessRepository.PermissionEffect(
+                        "usr_merchant_voider", "bar.order_item.void",
+                        AccessRepository.Effect.GRANT, AccessRepository.Source.ROLE,
+                        "role_bar_staff", null, null, false, false)));
+        AuthorizationService scopedAuth = new AuthorizationService(accessRepository);
+        BarOrderService scopedOrderService = new BarOrderService(
+                barRepository, scopedAuth,
+                new AuditEventService(auditEventRepository),
+                new TraceabilityService(mock(TraceabilityRepository.class), scopedAuth),
+                receivableLedgerService);
+
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(
+                                "usr_merchant_voider", "merchant_voider", "staff",
+                                "org_1", "merchant_a", "active"),
+                        "token", List.of()));
+
+        assertThatThrownBy(() -> scopedOrderService.decideOrderItemVoid("void_any",
+                new BarOrderItemVoidDecisionRequest("decide-perm", "approved", "self approve")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("PERMISSION_DENIED");
+    }
+
     @Test
     void reopenSettledBillTransitionsToReopenedAndAllowsResettle() {
         BarBillRecord bill = billForOrder("reopen-flow", null);

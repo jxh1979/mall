@@ -86,6 +86,13 @@ public class LoyaltyService {
                 expireAt == null ? null : awarded,
                 false,
                 now));
+        // 审计留痕（P2 缺口修复）：积分入账可追溯，与 confirmPoints/earnPointsPending 留痕口径一致。
+        auditEventService.recordSuccess("points.earned", "not_applicable", "customer_points",
+                customerId, null, sourceId,
+                Map.of("source_type", sourceType == null ? "earn" : sourceType,
+                        "source_id", sourceId == null ? "" : sourceId,
+                        "points", awarded, "status", "earned"),
+                "loyalty", "customer_points");
         return awarded;
     }
 

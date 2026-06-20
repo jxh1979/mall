@@ -279,11 +279,72 @@ class LoyaltyServiceTests {
         assertThat(repo.points.get("c1").balance()).isZero();
     }
 
+    // ===================== P2 缺口：积分入账审计留痕 + 转赠客人端自助口径 =====================
+
+    /**
+     * P2-1（红→绿）：earnPoints 入账后必须有 points.earned 审计留痕（与 confirmPoints/earnPointsPending 口径一致）。
+     * 修复前：earnPoints 全程不调 auditEventService —— audit 无任何事件，断言失败（红）。
+     * 修复后：earnPoints 发 points.earned（category=loyalty, subject=customer_points）—— 断言通过（绿）。
+     */
+    @Test
+    void earnPointsRecordsPointsEarnedAudit() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        RecordingAudit recording = new RecordingAudit();
+        AuditEventService audit = new AuditEventService(recording);
+
+        long awarded = serviceAt(repo, audit, T0).earnPoints("c1", 100, "consume_amount", "o1", "buy", 365);
+        assertThat(awarded).isEqualTo(100);
+
+        // 必须留痕 points.earned；与 earnPointsPending/confirmPoints 口径一致：business_id=customerId(c1)，
+        // 来源单据通过 idempotencyKey/metadata.source_id(o1) 关联。
+        assertThat(recording.events)
+                .anyMatch(e -> "points.earned".equals(e.eventName())
+                        && "success".equals(e.eventResult())
+                        && "c1".equals(e.businessId())
+                        && e.metadata() != null
+                        && "o1".equals(e.metadata().get("source_id"))
+                        && ((Number) e.metadata().get("points")).longValue() == 100L);
+    }
+
+    /**
+     * P2-2（固化客人端自助口径）：积分转赠为客人端 customer-token 自助（无员工权限闸）。
+     * Service 层 transferPoints 只靠 token 解析出的 fromCustomerId + 业务风控（冻结/余额/日限额/日次数）保护，
+     * 不要求员工权限点 customer.points.transfer（该权限点仅供后台代客转赠）。
+     * 同时断言转赠成功后发 points.transferred 审计留痕（既有口径）。
+     * 此测试锁定：给客人端端点误加 requirePermission 会破坏自助转赠 —— 故 Controller 端不加权限闸。
+     */
+    @Test
+    void transferPointsIsCustomerSelfServiceAndRecordsAudit() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        repo.saveCustomer(new CustomerRecord("c2", "13900000000", "139****0000", "active", null, T0, T0, T0));
+        // c1 先有余额：earn 100。
+        RecordingAudit recording = new RecordingAudit();
+        AuditEventService audit = new AuditEventService(recording);
+        LoyaltyService service = serviceAt(repo, audit, T0);
+        service.earnPoints("c1", 100, "consume_amount", "o1", "buy", null);
+
+        // 客人自助转赠 60：仅凭 fromCustomerId（token 解析所得），无员工权限闸即可完成。
+        CustomerPointsTransferRecord transfer =
+                service.transferPoints("c1", "c2", 60, "gift", null, "idem-1");
+        assertThat(transfer.status()).isEqualTo("completed");
+        assertThat(repo.points.get("c1").balance()).isEqualTo(40);
+        assertThat(repo.points.get("c2").balance()).isEqualTo(60);
+
+        // 转赠留痕 points.transferred（既有口径）。
+        assertThat(recording.events)
+                .anyMatch(e -> "points.transferred".equals(e.eventName())
+                        && "success".equals(e.eventResult())
+                        && transfer.id().equals(e.businessId()));
+    }
+
     // ===================== In-memory repo =====================
 
     private static final class RecordingAudit implements AuditEventRepository {
+        final List<AuditEvent> events = new ArrayList<>();
+
         @Override
         public AuditEvent save(AuditEvent event) {
+            events.add(event);
             return event;
         }
     }
@@ -296,6 +357,50 @@ class LoyaltyServiceTests {
         final Map<String, CustomerCheckInTierRecord> tiers = new java.util.LinkedHashMap<>();
         final Map<String, CustomerBirthdayRuleRecord> birthdayRules = new java.util.LinkedHashMap<>();
         final Map<String, CustomerCheckInRecord> checkIns = new java.util.LinkedHashMap<>();
+        final List<CustomerPointsTransferRecord> transfers = new ArrayList<>();
+        final Map<String, CustomerPointsTransferLimitRecord> transferLimits = new java.util.LinkedHashMap<>();
+
+        @Override
+        public CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord transfer) {
+            transfers.add(transfer);
+            return transfer;
+        }
+
+        @Override
+        public java.util.Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String key) {
+            if (key == null) {
+                return java.util.Optional.empty();
+            }
+            return transfers.stream().filter(t -> key.equals(t.idempotencyKey())).findFirst();
+        }
+
+        @Override
+        public long sumPointsTransferredOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
+            return transfers.stream()
+                    .filter(t -> fromCustomerId.equals(t.fromCustomerId()))
+                    .filter(t -> !t.createdAt().isBefore(dayStart) && t.createdAt().isBefore(dayEnd))
+                    .mapToLong(CustomerPointsTransferRecord::points)
+                    .sum();
+        }
+
+        @Override
+        public int countPointsTransfersOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
+            return (int) transfers.stream()
+                    .filter(t -> fromCustomerId.equals(t.fromCustomerId()))
+                    .filter(t -> !t.createdAt().isBefore(dayStart) && t.createdAt().isBefore(dayEnd))
+                    .count();
+        }
+
+        @Override
+        public java.util.Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String projectId) {
+            return java.util.Optional.ofNullable(transferLimits.get(projectId == null ? "" : projectId));
+        }
+
+        @Override
+        public CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord limit) {
+            transferLimits.put(limit.projectId() == null ? "" : limit.projectId(), limit);
+            return limit;
+        }
 
         @Override
         public java.util.Optional<CustomerRecord> findCustomerByPhone(String phone) {

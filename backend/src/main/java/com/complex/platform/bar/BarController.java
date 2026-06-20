@@ -151,7 +151,8 @@ public class BarController {
             @PathVariable("void_id") String voidId,
             @RequestBody(required = false) BarOrderItemVoidDecisionRequest request
     ) {
-        authorizationService.requirePermission("bar.order_item.void");
+        // V125 P1-2：审批分离——决策端点用独立审批权限点，与申请权限 bar.order_item.void 区分，杜绝自审批。
+        authorizationService.requirePermission("bar.order_item.void_decide");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.decideOrderItemVoid(voidId, request));
     }

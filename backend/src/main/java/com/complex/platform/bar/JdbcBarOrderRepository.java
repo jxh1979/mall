@@ -172,6 +172,14 @@ final class JdbcBarOrderRepository {
                 """, Map.of("id", id), rowMapper::mapOrderItemVoid).stream().findFirst();
     }
 
+    public Optional<BarOrderItemVoidRecord> findOrderItemVoidByIdForUpdate(String id) {
+        // V125 P1-1：行锁读，使审批决策的 status==pending 守卫与翻转在同一事务串行化，
+        // 并发第二次 reject 阻塞至首事务提交后读到 rejected/approved 被 BAR_ORDER_ITEM_VOID_NOT_PENDING 拦截。
+        return jdbcTemplate.query("""
+                SELECT * FROM bar_order_item_voids WHERE id = :id FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapOrderItemVoid).stream().findFirst();
+    }
+
     public List<BarOrderItemVoidRecord> listOrderItemVoids(String orderId) {
         return jdbcTemplate.query("""
                 SELECT * FROM bar_order_item_voids WHERE order_id = :order_id ORDER BY created_at, id

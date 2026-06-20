@@ -77,6 +77,15 @@ public interface BarRepository {
         return Optional.empty();
     }
 
+    /**
+     * V125 P1-1：审批决策时对该 void 流水行加 FOR UPDATE 行锁后再读，使 status==pending 守卫与状态翻转
+     * 置于同一锁内事务——不同 idempotencyKey 的并发第二次 reject 会阻塞到首事务提交后读到已非 pending 被拒，
+     * 杜绝库存/waiver_reversal 双扣。默认委托无锁查询，向后兼容内存/轻量实现。
+     */
+    default Optional<BarOrderItemVoidRecord> findOrderItemVoidByIdForUpdate(String id) {
+        return findOrderItemVoidById(id);
+    }
+
     BarProductionTicketRecord saveProductionTicket(BarProductionTicketRecord ticket);
 
     List<BarProductionTicketRecord> listProductionTickets(Optional<String> merchantScope);

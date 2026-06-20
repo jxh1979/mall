@@ -70,7 +70,7 @@
 - 旧控制台业务动作已拆分到 `ticketingActions.ts`、`barActions.ts`、`amusementActions.ts`、`foundationActions.ts`、`floorPlanActions.ts`、`riskAndIntegrationActions.ts`。
 - `TicketingService` 当前 372 行，`BarService` 当前 565 行，仍为入口编排 + 子服务委托（行数随 R5/R6/goal 阶段新增业务回升）。
 - `BarOrderService` 已新增出品前订单项归属校验、已出品校验和完整数量校验，防止跨订单串单、重复出品、部分数量出品误完成、二次扣库存，并保证 `delivery_photo_attachment_ids` 合并进入出品事件和库存流水审计证据链。
-- 后续可优化项：`BarValidation` 已抽出 131 行公共校验与 JSON 辅助，`BarBillRecords` 已抽出 108 行账单记录/快照辅助；`BarOrderService` 971 行、`BarBillingService` 527 行、`BarTableSessionService` 439 行；R5/R6/goal 各阶段新增退菜退酒/反结/沽清、pour cost 强制采集、void 驳回反向冲销、MDM 门控、班结对账等业务后行数明显回升，列为后续可继续瘦身项。
+- 后续可优化项：`BarValidation` 已抽出 131 行公共校验与 JSON 辅助，`BarBillRecords` 已抽出 108 行账单记录/快照辅助；`BarOrderService` 976 行、`BarBillingService` 527 行、`BarTableSessionService` 439 行；R5/R6/goal 各阶段新增退菜退酒/反结/沽清、pour cost 强制采集、void 驳回反向冲销（含 FOR UPDATE 行锁与 facade 委派修复）、MDM 门控、班结对账等业务后行数明显回升，列为后续可继续瘦身项。
 
 ### 6.1 机器校验行数快照
 
@@ -80,7 +80,7 @@
 | `apps/web/src/legacy-console/LegacyConsoleApp.tsx` | 313 行 | Legacy 控制台编排层 |
 | `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 372 行 | 票务 facade |
 | `backend/src/main/java/com/complex/platform/bar/BarService.java` | 565 行 | 酒吧 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 971 行 | 酒吧订单/出品子服务 |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 976 行 | 酒吧订单/出品子服务 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 527 行 | 酒吧账单编排子服务 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillRecords.java` | 108 行 | 酒吧账单记录/审计快照辅助 |
 | `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 439 行 | 酒吧卡座/会话子服务 |

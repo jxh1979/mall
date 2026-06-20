@@ -18,6 +18,8 @@ import com.complex.platform.compliance.qc.WecomQcResult;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.RiskAlertService;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
@@ -40,6 +42,7 @@ class WecomConversationServiceTests {
     private InMemoryWecomRepository repository;
     private InMemoryAuditEventRepository auditRepository;
     private TerminalSwitchGuard switchGuard;
+    private RiskAlertService riskAlertService;
     private WecomConversationService service;
 
     @BeforeEach
@@ -47,6 +50,8 @@ class WecomConversationServiceTests {
         repository = new InMemoryWecomRepository();
         auditRepository = new InMemoryAuditEventRepository();
         switchGuard = Mockito.mock(TerminalSwitchGuard.class);
+        // 统一异常责任链服务（evidence 既有，P1：企微命中接入统一 risk_alerts）。
+        riskAlertService = Mockito.mock(RiskAlertService.class);
         // 默认：AI 质检开关关（DisabledWecomQc）→ 仅关键词质检（行为不变）。
         service = newService(new DisabledWecomQc());
     }
@@ -59,6 +64,7 @@ class WecomConversationServiceTests {
                 switchGuard,
                 qcPort,
                 new ObjectMapper(),
+                riskAlertService,
                 FIXED
         );
     }
@@ -123,6 +129,33 @@ class WecomConversationServiceTests {
         // 入复核队列（一命中一告警）。
         assertThat(repository.riskAlerts).hasSize(2);
         assertThat(auditRepository.names()).contains("wecom.risk.hit_detected");
+    }
+
+    @Test
+    void syncHitReportsToUnifiedRiskAlertsWithWecomDomain() {
+        // P1：企微违规命中 → 接入统一异常责任链 risk_alerts（RiskAlertService.report），
+        // source_domain='wecom'，带 conversation/message/rule_code/risk_level 上下文。
+        service.syncConversation(syncRequest("ext-unified", "加我私微，直接私收款转我"));
+
+        org.mockito.ArgumentCaptor<RiskAlertReportRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(RiskAlertReportRequest.class);
+        // 命中两条规则（诱导私微 + 私收款）→ 统一 risk_alerts 各上报一行。
+        Mockito.verify(riskAlertService, Mockito.times(2)).report(captor.capture());
+        List<RiskAlertReportRequest> reports = captor.getAllValues();
+        assertThat(reports).allSatisfy(req -> {
+            assertThat(req.sourceDomain()).isEqualTo("wecom");
+            assertThat(req.riskLevel()).isIn("normal", "suspicious", "high", "critical");
+            assertThat(req.sourceRef()).isNotBlank();
+            assertThat(req.alertType()).isEqualTo("wecom_risk_hit");
+            assertThat(req.summary()).isNotBlank();
+            assertThat(req.projectId()).isEqualTo("proj_1");
+            assertThat(req.idempotencyKey()).isNotBlank();
+        });
+        // 命中规则码透传到统一上报上下文（reason 或 summary）。
+        assertThat(reports).anySatisfy(
+                req -> assertThat(req.summary()).contains("LURE_PRIVATE_WECHAT"));
+        assertThat(reports).anySatisfy(
+                req -> assertThat(req.summary()).contains("STAFF_PRIVATE_PAYMENT"));
     }
 
     @Test

@@ -18,6 +18,16 @@ public interface FinanceRepository {
     default void markInventoryVariancePosted(String inventoryVarianceId, String arApItemId) {
     }
 
+    /**
+     * P1 修复：条件回填库存差异已入账。仅当 posted_ar_ap_item_id IS NULL 时才 UPDATE，返回是否成功（受影响行数==1）。
+     * 并发双开时只有一个事务能把 NULL→arApItemId，另一个 UPDATE 命中 0 行返回 false，服务层据此抛冲突，
+     * 杜绝同一 variance 重复挂应付台账。default 委托旧方法并恒返回 true，兼容既有测试双子。
+     */
+    default boolean markInventoryVariancePostedIfUnposted(String inventoryVarianceId, String arApItemId) {
+        markInventoryVariancePosted(inventoryVarianceId, arApItemId);
+        return true;
+    }
+
     // ── P1#14 综合体计费（V110）：营业额抽成 / 保证金 / CAM ───────────────────
 
     /** 按 id 查营业额抽成规则。default 空实现兼容既有测试双子。 */
@@ -41,6 +51,15 @@ public interface FinanceRepository {
     /** 取该商户当前保证金余额（最新一行 balance_after_cent；无台账=0）。default 返回 0 兼容既有测试双子。 */
     default long currentDepositBalance(String merchantId) {
         return 0L;
+    }
+
+    /**
+     * P1 修复：取该商户当前保证金余额并对最新台账行加 FOR UPDATE 行锁（必须在事务内调用）。
+     * 并发 collect/deduct 在锁内串行化读取同一权威余额，避免读到旧余额各自 append 导致 balance_after 互覆盖丢更新、
+     * 超额 deduct 校验被绕过。default 委托无锁实现，兼容既有测试双子。
+     */
+    default long currentDepositBalanceForUpdate(String merchantId) {
+        return currentDepositBalance(merchantId);
     }
 
     /** 写一条 CAM 分摊行。default 空实现兼容既有测试双子。 */
@@ -90,6 +109,15 @@ public interface FinanceRepository {
     ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment);
 
     Optional<ArApPaymentRecord> findArApPaymentById(String id);
+
+    /**
+     * P1 修复：同 findArApPaymentById，但对该 payment 行加 FOR UPDATE 行锁（必须在事务内调用）。
+     * 退款前先锁定 target payment，使并发退款在累计校验前串行化，避免 sumRefundedAmount TOCTOU 导致退款合计超过 payment 金额。
+     * default 委托无锁实现，兼容既有测试双子。
+     */
+    default Optional<ArApPaymentRecord> findArApPaymentByIdForUpdate(String id) {
+        return findArApPaymentById(id);
+    }
 
     long sumRefundedAmountByTargetId(String targetId);
 

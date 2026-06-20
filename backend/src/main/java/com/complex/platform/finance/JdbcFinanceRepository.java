@@ -168,6 +168,19 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public Optional<ArApPaymentRecord> findArApPaymentByIdForUpdate(String id) {
+        // P1 修复：退款前对 target payment 行加 FOR UPDATE 行锁，使并发退款在 sumRefundedAmount 累计校验前串行化，
+        // 杜绝 TOCTOU 导致退款合计超过 payment 金额。
+        return jdbcTemplate.query("""
+                SELECT id, ar_ap_item_id, amount_cent, payment_method, payment_time,
+                       bank_flow_ref, created_at
+                  FROM ar_ap_payments
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), this::mapArApPayment).stream().findFirst();
+    }
+
+    @Override
     public long sumRefundedAmountByTargetId(String targetId) {
         Long result = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(refund_amount_cent), 0)
@@ -612,6 +625,23 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("ar_ap_item_id", arApItemId));
     }
 
+    @Override
+    public boolean markInventoryVariancePostedIfUnposted(String inventoryVarianceId, String arApItemId) {
+        // P1 修复：条件 UPDATE 加 AND posted_ar_ap_item_id IS NULL。并发双开 postInventoryVariance 时，
+        // 二者各自 persist 了应付台账后争相回填，只有先到者把 NULL→arApItemId（受影响 1 行返回 true），
+        // 后到者命中 0 行返回 false，服务层据此抛 INVENTORY_VARIANCE_ALREADY_POSTED 冲突，避免重复挂应付。
+        int affected = jdbcTemplate.update("""
+                UPDATE inventory_variance
+                   SET posted_ar_ap_item_id = :ar_ap_item_id,
+                       updated_at = now()
+                 WHERE id = :id
+                   AND posted_ar_ap_item_id IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("id", inventoryVarianceId)
+                .addValue("ar_ap_item_id", arApItemId));
+        return affected == 1;
+    }
+
     private InventoryVarianceRecord mapInventoryVariance(ResultSet rs, int rowNumber) throws SQLException {
         return new InventoryVarianceRecord(
                 rs.getString("id"),
@@ -711,6 +741,23 @@ class JdbcFinanceRepository implements FinanceRepository {
                            LIMIT 1), 0)
                 """, Map.of("merchant_id", merchantId), Long.class);
         return balance == null ? 0L : balance;
+    }
+
+    @Override
+    public long currentDepositBalanceForUpdate(String merchantId) {
+        // P1 修复：对该商户最新一条保证金台账行加 FOR UPDATE 行锁，使并发 collect/deduct 在锁内串行化读取权威余额。
+        // 子查询定位最新行后，外层对该行 SELECT ... FOR UPDATE 持锁直至事务结束，杜绝余额读取丢更新与超额校验绕过。
+        // 无任何台账时（首笔 collect）无行可锁，退化为 0，由 saveDepositLedger 的插入与后续读锁保证后续动作串行。
+        Long locked = jdbcTemplate.query("""
+                SELECT balance_after_cent
+                  FROM deposit_ledger
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT 1
+                   FOR UPDATE
+                """, Map.of("merchant_id", merchantId),
+                (rs, rowNum) -> rs.getLong("balance_after_cent")).stream().findFirst().orElse(null);
+        return locked == null ? 0L : locked;
     }
 
     @Override

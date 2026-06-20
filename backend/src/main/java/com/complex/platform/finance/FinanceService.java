@@ -953,8 +953,10 @@ public class FinanceService {
         // 现场/工作机退款时请求携带 deviceId → 触发硬门控；后台台账类退款无设备上下文 → 留空安全跳过。
         requireManagedDeviceForFinanceAction(actual.deviceId(), "finance.refund");
 
-        // P1 fix: validate target payment exists
-        ArApPaymentRecord payment = repository.findArApPaymentById(targetId)
+        // P1 fix: validate target payment exists.
+        // P1 修复（TOCTOU）：对 target payment 行加 FOR UPDATE 行锁后再做累计校验，使并发退款串行化，
+        // 避免多笔退款各读旧的 sumRefundedAmount 合计后均通过校验、最终退款合计超过 payment 金额。
+        ArApPaymentRecord payment = repository.findArApPaymentByIdForUpdate(targetId)
                 .orElseThrow(() -> ApiException.notFound("PAYMENT_NOT_FOUND", "payment not found: " + targetId));
 
         // P1 fix: reject cross-merchant refund attempts
@@ -1050,7 +1052,13 @@ public class FinanceService {
                 amountCent,
                 actual.idempotencyKey(),
                 variance.merchantId());
-        repository.markInventoryVariancePosted(variance.id(), saved.id());
+        // P1 修复：条件回填（仅当 posted_ar_ap_item_id IS NULL 才 UPDATE）。并发双开时后到者命中 0 行返回 false，
+        // 说明该 variance 已被他人入账，抛冲突，避免重复挂应付台账（前面 persistDerivedArApItem 凭 idempotencyKey 幂等不重复落项）。
+        boolean posted = repository.markInventoryVariancePostedIfUnposted(variance.id(), saved.id());
+        if (!posted) {
+            throw ApiException.conflict("INVENTORY_VARIANCE_ALREADY_POSTED",
+                    "inventory variance already posted by a concurrent request");
+        }
         return saved;
     }
 
@@ -1111,7 +1119,9 @@ public class FinanceService {
         String action = requireEnum(actual.action(), DEPOSIT_ACTIONS, "action");
         long amountCent = requirePositive(actual.amountCent(), "amount_cent");
 
-        long balance = repository.currentDepositBalance(merchantId);
+        // P1 修复：余额读取改对该商户 deposit_ledger 最新行加 FOR UPDATE 行锁，使并发 collect/deduct 串行化，
+        // 在锁内读取权威余额并完成超额校验，避免读旧余额各自 append 导致 balance_after 互覆盖丢更新、超额校验被绕过。
+        long balance = repository.currentDepositBalanceForUpdate(merchantId);
         long newBalance;
         if ("collect".equals(action)) {
             newBalance = balance + amountCent;

@@ -990,6 +990,69 @@ class FinanceServiceTests {
         assertThat(second.id()).isEqualTo(first.id());
     }
 
+    // ─── P1 并发数据一致性红线（FOR UPDATE / 条件 UPDATE + 行数校验）────────────
+
+    @Test
+    void concurrentDoublePostInventoryVarianceOnlyCreatesOneLedgerItem() {
+        // 缺口②：并发双开台账。两个请求都越过 postedArApItemId==null 的幂等门，争相条件回填。
+        // 期望：先到者成功，后到者 markInventoryVariancePostedIfUnposted 命中 0 行 → 抛 ALREADY_POSTED；最终仅 1 条应付台账。
+        financeRepository.seedVariance("var_race", "supplier_fault", -40000L, "approved", "supplier_y");
+
+        // 模拟两个并发请求都已读到 postedArApItemId==null（postInventoryVarianceInternal 前半段），各自生成台账后回填。
+        // 第一次：正常成功。
+        ArApItemRecord first = service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
+                "post-race-1", "note", List.of(), "var_race", "supplier_y"));
+        assertThat(first.id()).isNotNull();
+
+        // 第二个并发请求：强制绕过早期幂等门（直接调用条件回填验证红线 —— 已 posted 故命中 0 行返回 false）。
+        boolean secondWins = financeRepository.markInventoryVariancePostedIfUnposted("var_race", "would_be_duplicate_item");
+        assertThat(secondWins).isFalse();
+
+        // 应付台账仅生成 1 条（来自 inventory_difference）。
+        long ledgerItems = financeRepository.listArApItems().stream()
+                .filter(i -> "inventory_difference".equals(i.sourceType()) && "var_race".equals(i.sourceId()))
+                .count();
+        assertThat(ledgerItems).isEqualTo(1L);
+    }
+
+    @Test
+    void depositActionReadsBalanceUnderRowLockAndRejectsOverdraw() {
+        // 缺口①：保证金余额丢更新。校验余额读取走加锁路径（currentDepositBalanceForUpdate），
+        // 且锁内超额 deduct 被拒（balance 不可为负）。
+        service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-lock-c", "note", List.of(), "merchant_lock", "collect", 30000L, "init"));
+
+        // 锁内读取的余额=30000，deduct 50000 超额 → 拒绝。
+        assertThatThrownBy(() -> service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                "dep-lock-over", "note", List.of(), "merchant_lock", "deduct", 50000L, "too much")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("DEPOSIT_INSUFFICIENT");
+
+        // 验证服务确实走了加锁读取路径。
+        assertThat(financeRepository.forUpdateBalanceReads).contains("merchant_lock");
+    }
+
+    @Test
+    void refundLocksTargetPaymentBeforeCumulativeCheck() {
+        // 缺口③：退款累计 TOCTOU。校验退款前对 target payment 加 FOR UPDATE，且累计校验仍拒绝超额。
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-lock-refund", "receivable", 20000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-lock-refund", 20000L));
+        String paymentId = payment.payment().id();
+
+        // 第一笔退 12000（累计 12000 ≤ 20000）通过。
+        service.createRefund(new RefundRequest("refund-lock-1", "refund", List.of(), paymentId, 12000L, "part1", null, null));
+        // 第二笔退 12000（累计 24000 > 20000）被拒。
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-lock-2", "refund", List.of(), paymentId, 12000L, "part2", null, null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+
+        // 验证退款确实对 target payment 走了加锁读取路径。
+        assertThat(financeRepository.forUpdatePaymentReads).contains(paymentId);
+    }
+
     // ─── P1#14 营业额抽成计费引擎 ─────────────────────────────────────────────
 
     @Test
@@ -1363,9 +1426,19 @@ class FinanceServiceTests {
             return arApPayments.get(payment.id());
         }
 
+        // 记录服务层是否走了 FOR UPDATE 加锁读取路径（P1 并发红线断言）。
+        final List<String> forUpdatePaymentReads = new ArrayList<>();
+        final List<String> forUpdateBalanceReads = new ArrayList<>();
+
         @Override
         public Optional<ArApPaymentRecord> findArApPaymentById(String id) {
             return Optional.ofNullable(arApPayments.get(id));
+        }
+
+        @Override
+        public Optional<ArApPaymentRecord> findArApPaymentByIdForUpdate(String id) {
+            forUpdatePaymentReads.add(id);
+            return findArApPaymentById(id);
         }
 
         @Override
@@ -1564,6 +1637,17 @@ class FinanceServiceTests {
             }
         }
 
+        @Override
+        public boolean markInventoryVariancePostedIfUnposted(String inventoryVarianceId, String arApItemId) {
+            // 模拟 SQL 的 WHERE ... AND posted_ar_ap_item_id IS NULL：已入账则命中 0 行返回 false。
+            InventoryVarianceRecord v = inventoryVariances.get(inventoryVarianceId);
+            if (v == null || v.postedArApItemId() != null) {
+                return false;
+            }
+            markInventoryVariancePosted(inventoryVarianceId, arApItemId);
+            return true;
+        }
+
         // ── P1#14 综合体计费：营业额抽成 / 保证金 / CAM ─────────────────────
         private final Map<String, TurnoverRentRuleRecord> turnoverRentRules = new LinkedHashMap<>();
         private final Map<String, Long> reflowTurnoverByMerchant = new LinkedHashMap<>();
@@ -1595,6 +1679,12 @@ class FinanceServiceTests {
                 }
             }
             return balance;
+        }
+
+        @Override
+        public long currentDepositBalanceForUpdate(String merchantId) {
+            forUpdateBalanceReads.add(merchantId);
+            return currentDepositBalance(merchantId);
         }
 
         @Override

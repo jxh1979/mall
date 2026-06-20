@@ -11,6 +11,8 @@ import com.complex.platform.compliance.qc.WecomQcRequest;
 import com.complex.platform.compliance.qc.WecomQcResult;
 import com.complex.platform.compliance.qc.WecomQcRouter;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.RiskAlertService;
+import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.complex.platform.gate.TerminalSwitchGuard;
@@ -91,6 +93,10 @@ public class WecomConversationService {
     private final TerminalSwitchGuard terminalSwitchGuard;
     private final WecomQcPort wecomQcPort;
     private final ObjectMapper objectMapper;
+    // P1：evidence 统一异常责任链服务。企微违规命中除写孤岛 analytics_risk_alerts 外，
+    // 再接入统一 risk_alerts（source_domain='wecom'），让 V103 死表真实承载企微命中数据。
+    // 可为 null（向后兼容/单测无 SecurityContext 环境）；接入为 fail-safe，不阻塞同步主链。
+    private final RiskAlertService riskAlertService;
     private final Clock clock;
 
     @Autowired
@@ -100,10 +106,11 @@ public class WecomConversationService {
             AuditEventService auditEventService,
             TerminalSwitchGuard terminalSwitchGuard,
             WecomQcPort wecomQcPort,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            RiskAlertService riskAlertService
     ) {
         this(repository, idempotencyService, auditEventService, terminalSwitchGuard,
-                wecomQcPort, objectMapper, Clock.systemUTC());
+                wecomQcPort, objectMapper, riskAlertService, Clock.systemUTC());
     }
 
     WecomConversationService(
@@ -113,6 +120,7 @@ public class WecomConversationService {
             TerminalSwitchGuard terminalSwitchGuard,
             WecomQcPort wecomQcPort,
             ObjectMapper objectMapper,
+            RiskAlertService riskAlertService,
             Clock clock
     ) {
         this.repository = repository;
@@ -122,6 +130,7 @@ public class WecomConversationService {
         // AI 质检端口：默认 fail-safe 当作关（仅关键词质检）；可为 null（向后兼容/单测）。
         this.wecomQcPort = wecomQcPort == null ? WecomQcRouter.alwaysDisabled() : wecomQcPort;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper.copy().findAndRegisterModules();
+        this.riskAlertService = riskAlertService;
         this.clock = clock;
     }
 
@@ -523,7 +532,9 @@ public class WecomConversationService {
             // 命中片段按既有 PiiTextRedactor 脱敏（普通展示口径），不落明文 PII。
             String snippet = PiiTextRedactor.redactAndTruncate(
                     match.keyword(), MAX_SNIPPET_CHARS).value();
-            // 入复核队列：写孤岛 analytics_risk_alerts，标 source_domain=wecom；幂等键=命中维度（消息×规则）。
+            // 命中幂等键（消息×规则）：孤岛表与统一表共用，重复同步不产生重复告警。
+            String hitIdempotencyKey = "wecom-hit:" + messageId + ":" + rule.ruleCode();
+            // 入复核队列：写孤岛 analytics_risk_alerts，标 source_domain=wecom（看板/命中 alert_id 关联读侧仍依赖此表）。
             String alertId = repository.enqueueRiskAlert(new WecomRiskAlertEnqueue(
                     "ara_" + UUID.randomUUID(),
                     rule.ruleId(),
@@ -531,8 +542,11 @@ public class WecomConversationService {
                     "wecom_message",
                     messageId,
                     "WeCom compliance hit: " + rule.ruleCode(),
-                    "wecom-hit:" + messageId + ":" + rule.ruleCode(),
+                    hitIdempotencyKey,
                     now));
+            // P1：再接入统一异常责任链 risk_alerts（source_domain='wecom'），让 V103 死表真实承载企微命中。
+            // 双写：孤岛表保留（读侧依赖未迁移），统一表新增一行 open 预警 + risk_alert_actions。
+            reportToUnifiedRiskAlerts(conversation, messageId, rule, hitIdempotencyKey);
             repository.saveRiskHit(new WecomRiskHitRecord(
                     hitId,
                     conversation.id(),
@@ -559,6 +573,50 @@ public class WecomConversationService {
             created++;
         }
         return created;
+    }
+
+    /**
+     * P1：企微违规命中接入统一异常责任链 risk_alerts（evidence/RiskAlertService.report）。
+     *
+     * <p>source_domain='wecom'（V103 CHECK 白名单已含），source_ref 带 conversation/message 上下文，
+     * summary 透传 rule_code，risk_level 直接复用规则风险级（统一表 RISK_LEVELS 同枚举）。
+     * 幂等键复用命中维度键（消息×规则），重复同步不重复上报。
+     *
+     * <p>fail-safe：未注入服务（单测/无 SecurityContext）或上报异常都不阻塞同步主链——
+     * 孤岛 analytics_risk_alerts 与 wecom_risk_hits 仍是命中落地的权威，统一表为汇聚镜像。
+     */
+    private void reportToUnifiedRiskAlerts(
+            WecomConversationRecord conversation,
+            String messageId,
+            WecomRiskRuleRecord rule,
+            String hitIdempotencyKey
+    ) {
+        if (riskAlertService == null) {
+            return;
+        }
+        try {
+            riskAlertService.report(new RiskAlertReportRequest(
+                    hitIdempotencyKey,
+                    "wecom",
+                    "wecom_conversation:" + conversation.id() + "/message:" + messageId,
+                    "wecom_risk_hit",
+                    rule.riskLevel(),
+                    "WeCom compliance hit: " + rule.ruleCode(),
+                    conversation.projectId(),
+                    "rule_code=" + rule.ruleCode() + "; conversation=" + conversation.id()
+                            + "; message=" + messageId,
+                    List.of()));
+        } catch (RuntimeException exception) {
+            // 统一表上报失败不影响同步主链（命中已落孤岛表 + wecom_risk_hits）。
+            auditEventService.recordFailure(
+                    "wecom.risk.unified_alert_failed",
+                    "wecom.sync",
+                    "risk_alert",
+                    messageId,
+                    requestId(),
+                    hitIdempotencyKey,
+                    errorCode(exception));
+        }
     }
 
     // ----------------------------------------------------------------------------------------- 命中查询 / 复核处置

@@ -676,11 +676,16 @@ public class BarOrderService {
      *       已回补的库存重新扣减、已减的账单项恢复、已生成的退款应付冲正，恢复到 void 前状态。
      *       见 {@link #reverseVoidSideEffects}。</li>
      * </ul>
-     * 审批决策需 bar.order_item.void 权限。
+     * 审批决策需 bar.order_item.void_decide 权限（V125 P1-2：与申请权限 bar.order_item.void 分离，
+     * 杜绝自审批/自驳回）。
      */
     BarOrderItemVoidRecord decideOrderItemVoid(String voidId, BarOrderItemVoidDecisionRequest request) {
         BarOrderItemVoidDecisionRequest actual = requireRequest(request);
-        BarOrderItemVoidRecord current = repository.findOrderItemVoidById(requireText(voidId, "void_id"))
+        // V125 P1-2：审批分离——决策端点须持独立审批权限，仅持申请权限者不得自审批。
+        authorizationService.requirePermission("bar.order_item.void_decide");
+        // V125 P1-1：对该 void 流水行加 FOR UPDATE 行锁后再读，使 status==pending 守卫与状态翻转串行化，
+        // 不同 idempotencyKey 的并发第二次 reject 读到已非 pending 被拒，杜绝库存/账单冲销双扣。
+        BarOrderItemVoidRecord current = repository.findOrderItemVoidByIdForUpdate(requireText(voidId, "void_id"))
                 .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_VOID_NOT_FOUND", "bar order item void not found"));
         checkMerchantOwnership(current.merchantId());
         if (!"pending".equals(current.status())) {
