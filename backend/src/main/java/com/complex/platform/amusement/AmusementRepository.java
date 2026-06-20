@@ -60,6 +60,14 @@ public interface AmusementRepository {
      */
     AmusementOverCapacityPolicy findOverCapacityPolicy(String projectId);
 
+    /**
+     * P0 清单#6 写入/更新项目「超容处置策略」（V104 amusement_over_capacity_policy）。
+     * 按 project_id 幂等 upsert（ON CONFLICT(project_id) DO UPDATE
+     * set operating_capacity/disposal_mode/enabled/updated_at）；首配置补 created_at。
+     * 复用既有 {@link #findOverCapacityPolicy(String)} 读路径供消费方（核销超容判定）。
+     */
+    AmusementOverCapacityPolicy saveOverCapacityPolicy(AmusementOverCapacityPolicy policy);
+
     AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule);
 
     List<AmusementProjectRuleRecord> listActiveBlockingProjectRules(String projectId);

@@ -300,6 +300,33 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public AmusementOverCapacityPolicy saveOverCapacityPolicy(AmusementOverCapacityPolicy policy) {
+        // P0 清单#6 写入侧（V104）：按 project_id 幂等 upsert。首配置补 created_at；
+        // 覆盖配置仅更新 operating_capacity/disposal_mode/enabled/updated_at（保留 created_at）。
+        Instant now = Instant.now();
+        jdbcTemplate.update("""
+                INSERT INTO amusement_over_capacity_policy (
+                    project_id, operating_capacity, disposal_mode, enabled, created_at, updated_at
+                )
+                VALUES (
+                    :project_id, :operating_capacity, :disposal_mode, :enabled, :created_at, :updated_at
+                )
+                ON CONFLICT (project_id) DO UPDATE SET
+                    operating_capacity = EXCLUDED.operating_capacity,
+                    disposal_mode = EXCLUDED.disposal_mode,
+                    enabled = EXCLUDED.enabled,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("project_id", policy.projectId())
+                .addValue("operating_capacity", policy.operatingCapacity())
+                .addValue("disposal_mode", policy.disposalMode())
+                .addValue("enabled", policy.enabled())
+                .addValue("created_at", timestampWithTimeZone(now))
+                .addValue("updated_at", timestampWithTimeZone(now)));
+        return findOverCapacityPolicy(policy.projectId());
+    }
+
+    @Override
     public AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule) {
         jdbcTemplate.update("""
                 INSERT INTO amusement_project_rules (

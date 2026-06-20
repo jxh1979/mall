@@ -148,6 +148,22 @@ public class AmusementController {
                 configId, request == null ? null : request.idempotencyKey()));
     }
 
+    @GetMapping("/projects/{projectId}/over-capacity-policy")
+    public ApiResponse<AmusementOverCapacityPolicy> getOverCapacityPolicy(@PathVariable String projectId) {
+        authorizationService.requirePermission("amusement.over_capacity_policy.view");
+        return ApiResponse.ok(service.getOverCapacityPolicy(projectId));
+    }
+
+    @PutMapping("/projects/{projectId}/over-capacity-policy")
+    public ApiResponse<AmusementOverCapacityPolicy> configureOverCapacityPolicy(
+            @PathVariable String projectId,
+            @RequestBody(required = false) ConfigureOverCapacityPolicyRequest request
+    ) {
+        authorizationService.requirePermission("amusement.over_capacity_policy.configure");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configureOverCapacityPolicy(projectId, request));
+    }
+
     @GetMapping("/queue-entries")
     public ApiResponse<PageResponse<AmusementQueueEntryRecord>> listQueueEntries() {
         authorizationService.requirePermission("amusement.queue.view");

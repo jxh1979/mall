@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 391 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 237 | 人工权限矩阵正文未覆盖 134 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 782 | 人工事件矩阵正文未覆盖 738 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 391 | 人工任务映射正文未逐项覆盖 385 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 244 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 393 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 239 | 人工权限矩阵正文未覆盖 136 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 786 | 人工事件矩阵正文未覆盖 742 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 393 | 人工任务映射正文未逐项覆盖 387 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 245 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -50,6 +50,8 @@
 | `amusement.maintenance.confirm` | staff-token | project-amusement | 1 | confirmAmusementMaintenanceResume | OpenAPI 补充，以本附录为准 |
 | `amusement.maintenance.read` | staff-token | project-amusement | 2 | listAmusementMaintenanceRecords, getAmusementMaintenanceRecord | OpenAPI 补充，以本附录为准 |
 | `amusement.maintenance.submit` | staff-token | project-amusement-point | 1 | createAmusementMaintenanceRecord | OpenAPI 补充，以本附录为准 |
+| `amusement.over_capacity_policy.configure` | staff-token | project-amusement | 1 | configureAmusementOverCapacityPolicy | OpenAPI 补充，以本附录为准 |
+| `amusement.over_capacity_policy.view` | staff-token | project-amusement | 1 | getAmusementOverCapacityPolicy | OpenAPI 补充，以本附录为准 |
 | `amusement.project_entitlement.manage` | staff-token | project-amusement | 3 | listAmusementProjectEntitlements, createAmusementProjectEntitlement, removeAmusementProjectEntitlement | OpenAPI 补充，以本附录为准 |
 | `amusement.project.manage` | staff-token | project | 1 | createAmusementProjectRule | 已在权限矩阵正文出现 |
 | `amusement.queue.manage` | staff-token | project-amusement | 2 | createAmusementQueueEntry, changeAmusementQueueEntryStatus | OpenAPI 补充，以本附录为准 |
@@ -317,6 +319,10 @@
 | `amusement.manual_override.viewed` | success | `listAmusementManualOverrides` | `GET` | `/api/v1/amusement/manual-overrides` | AMU-游乐安全 | `amusement.verification.override` | 接口级事件，以本附录为准 |
 | `amusement.open_eligibility.blocked` | failure | `getAmusementOpenEligibility` | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
 | `amusement.open_eligibility.viewed` | success | `getAmusementOpenEligibility` | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
+| `amusement.over_capacity_policy.configure_failed` | failure | `configureAmusementOverCapacityPolicy` | `PUT` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | AMU-游乐安全 | `amusement.over_capacity_policy.configure` | 接口级事件，以本附录为准 |
+| `amusement.over_capacity_policy.configured` | success | `configureAmusementOverCapacityPolicy` | `PUT` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | AMU-游乐安全 | `amusement.over_capacity_policy.configure` | 接口级事件，以本附录为准 |
+| `amusement.over_capacity_policy.view_failed` | failure | `getAmusementOverCapacityPolicy` | `GET` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | AMU-游乐安全 | `amusement.over_capacity_policy.view` | 接口级事件，以本附录为准 |
+| `amusement.over_capacity_policy.viewed` | success | `getAmusementOverCapacityPolicy` | `GET` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | AMU-游乐安全 | `amusement.over_capacity_policy.view` | 接口级事件，以本附录为准 |
 | `amusement.project_entitlement.change_failed` | failure | `createAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements` | AMU-游乐安全 | `amusement.project_entitlement.manage` | 接口级事件，以本附录为准 |
 | `amusement.project_entitlement.change_failed` | failure | `removeAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/remove` | AMU-游乐安全 | `amusement.project_entitlement.manage` | 接口级事件，以本附录为准 |
 | `amusement.project_entitlement.changed` | success | `createAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements` | AMU-游乐安全 | `amusement.project_entitlement.manage` | 接口级事件，以本附录为准 |
@@ -1067,6 +1073,7 @@
 | AMU-游乐安全 | `changeAmusementQueueEntryStatus` | `POST` | `/api/v1/amusement/queue-entries/{id}/status` | 变更游乐排队记录状态 | `amusement.queue.manage` | `amusement.queue_entry.status_change` / `amusement.queue_entry.status_change_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `changeAmusementReservationStatus` | `POST` | `/api/v1/amusement/reservations/{id}/status` | 变更游乐预约状态 | `amusement.reservation.manage` | `amusement.reservation.status_change` / `amusement.reservation.status_change_failed` | tablet, staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `closeAmusementIncident` | `POST` | `/api/v1/amusement/incidents/{incidentId}/close` | 关闭游乐安全事件 | `amusement.incident.close` | `amusement.incident.close` / `amusement.incident.close_failed` | tablet, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `configureAmusementOverCapacityPolicy` | `PUT` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | 配置游乐项目超容处置策略 | `amusement.over_capacity_policy.configure` | `amusement.over_capacity_policy.configured` / `amusement.over_capacity_policy.configure_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `confirmAmusementMaintenanceResume` | `POST` | `/api/v1/amusement/maintenance-records/{id}/confirm-resume` | 主管确认恢复营业 | `amusement.maintenance.confirm` | `amusement.project.resumed` / `amusement.maintenance_resume_failed` | kiosk, web, mobile_admin | operation 级补充 |
 | AMU-游乐安全 | `createAmusementCapacityConfig` | `POST` | `/api/v1/amusement/projects/{id}/capacity-config` | 维护游乐点位设备并发容量配置 | `amusement.capacity_config.manage` | `amusement.capacity_config.changed` / `amusement.capacity_config.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `createAmusementGroupBooking` | `POST` | `/api/v1/amusement/group-bookings` | Create P2 amusement group or private booking request | `amusement.group_booking.manage` | `amusement_group_booking.created.success` / `amusement_group_booking.created.failure` | web | operation 级补充 |
@@ -1086,6 +1093,7 @@
 | AMU-游乐安全 | `disableAmusementCapacityConfig` | `POST` | `/api/v1/amusement/capacity-config/{configId}/disable` | 停用游乐容量配置 | `amusement.capacity_config.manage` | `amusement.capacity_config.changed` / `amusement.capacity_config.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `getAmusementMaintenanceRecord` | `GET` | `/api/v1/amusement/maintenance-records/{id}` | 查询游乐定期检修记录详情 | `amusement.maintenance.read` | `amusement.maintenance.viewed` / `amusement.maintenance.view_failed` | kiosk, web, mobile_admin | operation 级补充 |
 | AMU-游乐安全 | `getAmusementOpenEligibility` | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | 查询项目或场次安全与容量准入 | `amusement.safety_inspection.view` | `amusement.open_eligibility.viewed` / `amusement.open_eligibility.blocked` | web, staff_work_phone, kiosk | operation 级补充 |
+| AMU-游乐安全 | `getAmusementOverCapacityPolicy` | `GET` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | 查询游乐项目超容处置策略 | `amusement.over_capacity_policy.view` | `amusement.over_capacity_policy.viewed` / `amusement.over_capacity_policy.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementCapacityConfigs` | `GET` | `/api/v1/amusement/projects/{id}/capacity-config` | 查询游乐点位设备并发容量配置 | `amusement.capacity_config.manage` | `amusement.capacity_config.viewed` / `amusement.capacity_config.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementDeviceStatuses` | `GET` | `/api/v1/amusement/device-statuses` | 查询游乐设备状态 | `amusement.device_status.view` | `amusement.device_status.viewed` / `amusement.device_status.viewed_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementGroupBookings` | `GET` | `/api/v1/amusement/group-bookings` | List P2 amusement group and private bookings | `amusement.group_booking.view` | `amusement_group_booking.viewed.success` / `amusement_group_booking.viewed.failure` | web | operation 级补充 |

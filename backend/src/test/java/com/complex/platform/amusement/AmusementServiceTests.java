@@ -903,6 +903,113 @@ class AmusementServiceTests {
         verify(riskAlertService, atLeastOnce()).report(any());
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // V104 超容处置策略写入侧（V127）：PUT upsert 策略 + GET 读取。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void configureOverCapacityPolicyUpsertsNewPolicyAndIsReadable() {
+        AmusementProjectRecord project = createProject("ocp-new", createTemplate("ocp-new-tpl").id(), "open", 100);
+        AmusementOverCapacityPolicy saved = service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-new-key", null, List.of(),
+                        20, AmusementOverCapacityPolicy.MODE_WARN_ONLY, true));
+        assertThat(saved.operatingCapacity()).isEqualTo(20);
+        assertThat(saved.disposalMode()).isEqualTo(AmusementOverCapacityPolicy.MODE_WARN_ONLY);
+        assertThat(saved.enabled()).isTrue();
+
+        AmusementOverCapacityPolicy read = service.getOverCapacityPolicy(project.id());
+        assertThat(read.operatingCapacity()).isEqualTo(20);
+        assertThat(read.disposalMode()).isEqualTo(AmusementOverCapacityPolicy.MODE_WARN_ONLY);
+        assertThat(read.enabled()).isTrue();
+    }
+
+    @Test
+    void configureOverCapacityPolicyUpsertOverwritesExistingPolicy() {
+        AmusementProjectRecord project = createProject("ocp-upd", createTemplate("ocp-upd-tpl").id(), "open", 100);
+        service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-upd-1", null, List.of(),
+                        10, AmusementOverCapacityPolicy.MODE_BLOCK_HARD, true));
+        // 同 projectId 二次配置改 disposal_mode 与 operating_capacity（幂等 upsert，覆盖既有行）。
+        AmusementOverCapacityPolicy updated = service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-upd-2", null, List.of(),
+                        30, AmusementOverCapacityPolicy.MODE_WARN_ONLY, true));
+        assertThat(updated.operatingCapacity()).isEqualTo(30);
+        assertThat(updated.disposalMode()).isEqualTo(AmusementOverCapacityPolicy.MODE_WARN_ONLY);
+        // 读出仅一行（覆盖而非新增）。
+        AmusementOverCapacityPolicy read = service.getOverCapacityPolicy(project.id());
+        assertThat(read.operatingCapacity()).isEqualTo(30);
+        assertThat(read.disposalMode()).isEqualTo(AmusementOverCapacityPolicy.MODE_WARN_ONLY);
+    }
+
+    @Test
+    void configureOverCapacityPolicyActuallyEnablesSoftWarnDuringVerification() {
+        // 关键端到端：通过写入端点配 warn_only + operating_capacity=1 后，超容判定真正走告警分支而非阻断。
+        AmusementProjectRecord project = createProject("ocp-warn", createTemplate("ocp-warn-tpl").id(), "open", 1);
+        submitPassingInspection(project, "ocp-warn");
+        AmusementSessionRecord session = createSession("ocp-warn-session", project.id(), 100, "open");
+        service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-warn-key", null, List.of(),
+                        1, AmusementOverCapacityPolicy.MODE_WARN_ONLY, true));
+        registerAmusementEntitlement("credential-ocp-warn-1", 1);
+        registerAmusementEntitlement("credential-ocp-warn-2", 1);
+
+        // 第一次占满硬上限（1/1）成功。
+        assertThat(service.createVerification(verification("v-ocp-warn-1", project.id(), session.id(), "credential-ocp-warn-1"))
+                .verificationResult()).isEqualTo("success");
+        // 第二次达硬上限：warn_only 不阻断而放行（走告警分支，配置经写入端点持久化后生效）。
+        assertThat(service.createVerification(verification("v-ocp-warn-2", project.id(), session.id(), "credential-ocp-warn-2"))
+                .verificationResult()).isEqualTo("success");
+        assertThat(safetyRepository.incidents())
+                .extracting(AmusementIncidentRecord::incidentType)
+                .containsOnly("over_capacity");
+    }
+
+    @Test
+    void configureOverCapacityPolicyRejectsInvalidDisposalMode() {
+        AmusementProjectRecord project = createProject("ocp-mode", createTemplate("ocp-mode-tpl").id(), "open", 100);
+        assertThatThrownBy(() -> service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-mode-key", null, List.of(),
+                        10, "soft_warn", true)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void configureOverCapacityPolicyRejectsNegativeOperatingCapacity() {
+        AmusementProjectRecord project = createProject("ocp-neg", createTemplate("ocp-neg-tpl").id(), "open", 100);
+        assertThatThrownBy(() -> service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-neg-key", null, List.of(),
+                        -1, AmusementOverCapacityPolicy.MODE_BLOCK_HARD, true)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void configureOverCapacityPolicyRejectsUnknownProject() {
+        assertThatThrownBy(() -> service.configureOverCapacityPolicy("project_missing",
+                new ConfigureOverCapacityPolicyRequest("ocp-missing-key", null, List.of(),
+                        10, AmusementOverCapacityPolicy.MODE_BLOCK_HARD, true)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("PROJECT_NOT_FOUND");
+    }
+
+    @Test
+    void configureOverCapacityPolicyRejectsCrossMerchantProject() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        AmusementProjectRecord project = createProject("ocp-xm", createTemplate("ocp-xm-tpl").id(), "open", 100);
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-xm-key", null, List.of(),
+                        10, AmusementOverCapacityPolicy.MODE_BLOCK_HARD, true)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void getOverCapacityPolicyReturnsDisabledPlaceholderWhenUnconfigured() {
+        AmusementProjectRecord project = createProject("ocp-read", createTemplate("ocp-read-tpl").id(), "open", 100);
+        AmusementOverCapacityPolicy read = service.getOverCapacityPolicy(project.id());
+        assertThat(read.projectId()).isEqualTo(project.id());
+        assertThat(read.enabled()).isFalse();
+        assertThat(read.disposalMode()).isEqualTo(AmusementOverCapacityPolicy.MODE_BLOCK_HARD);
+    }
+
     @Test
     void capacityConfigRequiresPointOrDeviceAndMaxConcurrent() {
         AmusementProjectRecord project = createProject("cfg-val", createTemplate("cfg-val-tpl").id(), "open", 5);
@@ -1785,6 +1892,13 @@ class AmusementServiceTests {
         void configureOverCapacityPolicy(String projectId, int operatingCapacity, String disposalMode) {
             overCapacityPolicies.put(projectId,
                     new AmusementOverCapacityPolicy(projectId, operatingCapacity, disposalMode, true));
+        }
+
+        @Override
+        public AmusementOverCapacityPolicy saveOverCapacityPolicy(AmusementOverCapacityPolicy policy) {
+            // 幂等 upsert：按 projectId 覆盖既有行（与 ON CONFLICT(project_id) DO UPDATE 同语义）。
+            overCapacityPolicies.put(policy.projectId(), policy);
+            return policy;
         }
 
         @Override

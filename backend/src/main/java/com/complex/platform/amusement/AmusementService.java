@@ -359,6 +359,74 @@ public class AmusementService {
         );
     }
 
+    /**
+     * P0 清单#6 读「超容处置策略」（V104）。未配置返回禁用占位（与既有读路径
+     * {@link AmusementRepository#findOverCapacityPolicy(String)} 语义一致，向后兼容）。
+     * 权限点 amusement.over_capacity_policy.view；审计 amusement.over_capacity_policy.viewed。
+     */
+    public AmusementOverCapacityPolicy getOverCapacityPolicy(String projectId) {
+        String id = requireText(projectId, "project_id");
+        try {
+            repository.findProjectById(id)
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+            checkProjectOwnership(id);
+            AmusementOverCapacityPolicy policy = repository.findOverCapacityPolicy(id);
+            auditEventService.recordSuccess(
+                    "amusement.over_capacity_policy.viewed",
+                    "amusement.over_capacity_policy.view",
+                    "amusement_over_capacity_policy",
+                    id, null, null, Map.of());
+            return policy;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "amusement.over_capacity_policy.view_failed",
+                    "amusement.over_capacity_policy.view",
+                    "amusement_over_capacity_policy",
+                    id, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /**
+     * P0 清单#6 配置（幂等 upsert）「超容处置策略」（V104 写入侧）。
+     * 校验 project 存在/归属、disposal_mode 枚举、operating_capacity>=0；按 project_id 幂等 upsert。
+     * 权限点 amusement.over_capacity_policy.configure（risk 偏高）；审计 amusement.over_capacity_policy.configured。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.over_capacity_policy.configure")
+    @Transactional
+    public AmusementOverCapacityPolicy configureOverCapacityPolicy(
+            String projectId, ConfigureOverCapacityPolicyRequest request) {
+        String id = requireText(projectId, "project_id");
+        return executeWrite(
+                "configureAmusementOverCapacityPolicy:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementOverCapacityPolicy.class,
+                "amusement.over_capacity_policy.configured",
+                "amusement.over_capacity_policy.configure_failed",
+                "amusement.over_capacity_policy.configure",
+                "amusement_over_capacity_policy",
+                () -> configureOverCapacityPolicyInternal(id, request)
+        );
+    }
+
+    private AmusementOverCapacityPolicy configureOverCapacityPolicyInternal(
+            String projectId, ConfigureOverCapacityPolicyRequest request) {
+        ConfigureOverCapacityPolicyRequest actual = requireRequest(request);
+        repository.findProjectById(projectId)
+                .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+        checkProjectOwnership(projectId);
+        int operatingCapacity = nonNegativeOrDefault(actual.operatingCapacity(), 0, "operating_capacity");
+        String disposalMode = enumOrDefault(
+                actual.disposalMode(),
+                AmusementOverCapacityPolicy.MODE_BLOCK_HARD,
+                Set.of(AmusementOverCapacityPolicy.MODE_BLOCK_HARD, AmusementOverCapacityPolicy.MODE_WARN_ONLY),
+                "disposal_mode");
+        boolean enabled = actual.enabled() == null || actual.enabled();
+        return repository.saveOverCapacityPolicy(new AmusementOverCapacityPolicy(
+                projectId, operatingCapacity, disposalMode, enabled));
+    }
+
     public PageResponse<AmusementQueueEntryRecord> listQueueEntries() {
         return bookingService.listQueueEntries();
     }
@@ -1133,6 +1201,9 @@ public class AmusementService {
         }
         if (response instanceof AmusementCapacityConfigRecord record) {
             return record.id();
+        }
+        if (response instanceof AmusementOverCapacityPolicy record) {
+            return record.projectId();
         }
         if (response instanceof AmusementVerificationRecord record) {
             return record.id();

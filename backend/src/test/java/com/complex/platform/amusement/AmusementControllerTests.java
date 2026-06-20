@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -71,6 +72,9 @@ class AmusementControllerTests {
         when(service.listCapacityConfigs("project_1")).thenReturn(new PageResponse<>(List.of(capacityConfig()), 1, 50, 1));
         when(service.createCapacityConfig(eq("project_1"), any(AmusementCapacityConfigRequest.class))).thenReturn(capacityConfig());
         when(service.disableCapacityConfig(eq("amcap_1"), any())).thenReturn(capacityConfig());
+        when(service.getOverCapacityPolicy("project_1")).thenReturn(overCapacityPolicy());
+        when(service.configureOverCapacityPolicy(eq("project_1"), any(ConfigureOverCapacityPolicyRequest.class)))
+                .thenReturn(overCapacityPolicy());
         when(service.listQueueEntries()).thenReturn(new PageResponse<>(List.of(queueEntry()), 1, 50, 1));
         when(service.createQueueEntry(any(AmusementQueueEntryRequest.class))).thenReturn(queueEntry());
         when(service.changeQueueEntryStatus(eq("queue_1"), any(StatusChangeRequest.class))).thenReturn(calledQueueEntry());
@@ -110,6 +114,8 @@ class AmusementControllerTests {
             "GET,/api/v1/amusement/projects/project_1/capacity-config,amusement.capacity_config.manage",
             "POST,/api/v1/amusement/projects/project_1/capacity-config,amusement.capacity_config.manage",
             "POST,/api/v1/amusement/capacity-config/amcap_1/disable,amusement.capacity_config.manage",
+            "GET,/api/v1/amusement/projects/project_1/over-capacity-policy,amusement.over_capacity_policy.view",
+            "PUT,/api/v1/amusement/projects/project_1/over-capacity-policy,amusement.over_capacity_policy.configure",
             "GET,/api/v1/amusement/queue-entries,amusement.queue.view",
             "POST,/api/v1/amusement/queue-entries,amusement.queue.manage",
             "POST,/api/v1/amusement/queue-entries/queue_1/status,amusement.queue.manage",
@@ -137,6 +143,12 @@ class AmusementControllerTests {
         if ("GET".equals(method)) {
             mockMvc.perform(get(path).with(user("amusement").roles("P0_SMOKE")))
                     .andExpect(status().isOk());
+        } else if ("PUT".equals(method)) {
+            mockMvc.perform(put(path)
+                            .with(user("amusement").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(bodyFor(path, true)))
+                    .andExpect(status().isOk());
         } else {
             mockMvc.perform(post(path)
                             .with(user("amusement").roles("P0_SMOKE"))
@@ -146,6 +158,17 @@ class AmusementControllerTests {
         }
 
         verify(authorizationService).requirePermission(permission);
+    }
+
+    @org.junit.jupiter.api.Test
+    void overCapacityPolicyPutRejectsMissingIdempotencyKey() throws Exception {
+        mockMvc.perform(put("/api/v1/amusement/projects/project_1/over-capacity-policy")
+                        .with(user("amusement").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyFor("/api/v1/amusement/projects/project_1/over-capacity-policy", false)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 
     @ParameterizedTest
@@ -209,6 +232,9 @@ class AmusementControllerTests {
         if (path.endsWith("/capacity-config")) {
             return "{" + idempotency + "\"device_id\":\"gate_1\",\"max_concurrent\":3,\"operator_note\":\"point capacity\"}";
         }
+        if (path.endsWith("/over-capacity-policy")) {
+            return "{" + idempotency + "\"operating_capacity\":20,\"disposal_mode\":\"warn_only\",\"enabled\":true}";
+        }
         if (path.contains("queue-entries") && path.endsWith("/status")) {
             return "{" + idempotency + "\"action\":\"called\",\"reason\":\"notify customer\",\"evidence_attachment_ids\":[\"att_queue\"]}";
         }
@@ -269,6 +295,10 @@ class AmusementControllerTests {
     private AmusementCapacityConfigRecord capacityConfig() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new AmusementCapacityConfigRecord("amcap_1", "project_1", null, "gate_1", 3, "", true, now, now);
+    }
+
+    private AmusementOverCapacityPolicy overCapacityPolicy() {
+        return new AmusementOverCapacityPolicy("project_1", 20, AmusementOverCapacityPolicy.MODE_WARN_ONLY, true);
     }
 
     private AmusementSessionRecord session() {
