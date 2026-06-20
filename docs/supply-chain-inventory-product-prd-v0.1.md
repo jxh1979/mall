@@ -219,7 +219,11 @@ flowchart TD
 
 无方向性悬空事项。已确认按以下口径执行：
 
-1. 盘点差异 P0 单独形成库存差异批次，并进入证据留痕和主管复核。财务日结只展示差异摘要和潜在金额影响，不自动改写已锁定日结；确需影响金额时，必须走调整/冲正审批后进入应收应付或财务调整台账。
+1. 盘点差异 P0 单独形成库存差异批次，并进入证据留痕和主管复核。财务日结只展示差异摘要和潜在金额影响，不自动改写已锁定日结；高价值报损/盘点差异经复核后入账进入应收应付台账。
+
+   > 文档goal修正(2026-06-20)：原文口径为"确需影响金额时才走调整/冲正审批后进入应收应付或财务调整台账"（即库存差异入账被表述为远期/确需才做）。审计发现与已落地代码相反——**V108 已落地为 P0**：迁移 `V108__inventory_variance_to_ap.sql` 已建 `stocktake`（盘点单）+ `inventory_variance`（库存差异明细，含 review_status pending/approved/rejected 与 posted_ar_ap_item_id 幂等防重），复核通过后由 finance 服务生成 `ar_ap_items(source_type='inventory_difference')`（服务层 SOURCE_TYPES 已加该枚举），并 seed `finance.inventory_variance.post`（high 风险、requires_approval）权限。故口径改为"V108 已落地 P0"。
+   >
+   > **新增验收（G/W/T）**：Given 高价值报损/盘点差异经主管复核通过（review_status=approved）/ When 执行入账（finance.inventory_variance.post）/ Then 生成 `ar_ap_items(source_type='inventory_difference')`，并回填 `inventory_variance.posted_ar_ap_item_id`（幂等，同一差异行只入账一次）。
 
 ## 11. 本版结论
 

@@ -312,6 +312,22 @@
       "enabled_requirements": "开启后必须固化 //192.168.88.113/bn 到 160 本地挂载点、定时备份、容量/失败告警和周期性恢复演练。",
       "enabled": true,
       "production_interface_required": true
+    },
+    {
+      "capability_id": "sms_notification",
+      "label": "短信通知",
+      "default_enabled": false,
+      "category": "notification",
+      "evidence_item_ids": [],
+      "credential_item_ids": [
+        "PRD-CRED-3P-001"
+      ],
+      "security_finding_ids": [],
+      "requirement_ids": [],
+      "disabled_behavior": "关闭后不调用真实短信供应商；登录验证码走 mock OTP loopback（非生产固定码 000000），生产无供应商时 fail-closed 拒绝登录；催缴、告警等短信能力降级为人工或站内留痕。",
+      "enabled_requirements": "开启后必须补齐短信供应商签名/模板报备、API/SDK、credential_ref、发送回执、限频与失败补偿和生产证据。",
+      "enabled": false,
+      "production_interface_required": false
     }
   ]
 }

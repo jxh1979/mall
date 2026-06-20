@@ -31,6 +31,7 @@
 | gate_nfc_scan_device | 闸机/NFC/扫码设备 | off | no | PRD-3P-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不接闸机、NFC 读卡器、扫码枪或设备网关接口；票务/权益核销只能走后台或人工扫码录入。 | 开启后必须补齐设备协议/API、核销校验、开闸结果、离线队列、设备事件、签名和补偿证据。 |
 | local_ai_llm | 160 本地 AI 大模型 | on | no |  |  | 关闭后只使用 Java 内置规则处理器。 | 开启后使用 160 本地大模型作为辅助分析，不调用外部云 AI，不允许 AI 直接做付款、核销、处罚、退款或员工绩效最终决策。 |
 | nas_smb_backup | NAS SMB 备份恢复 | on | yes | PRD-CRED-NAS-001, PRD-NAS-AUTOMOUNT-001, PRD-NAS-SCHEDULE-001, PRD-NAS-ALERT-001, PRD-NAS-DRILL-CADENCE-001 | SEC-P0-OPS-RECOVERY-001 | 不建议关闭。若关闭，必须先指定等效备份恢复目标；否则不能宣称生产可恢复。 | 开启后必须固化 //192.168.88.113/bn 到 160 本地挂载点、定时备份、容量/失败告警和周期性恢复演练。 |
+| sms_notification | 短信通知 | off | no | PRD-CRED-3P-001 |  | 关闭后不调用真实短信供应商；登录验证码走 mock OTP loopback（非生产固定码 000000），生产无供应商时 fail-closed 拒绝登录；催缴、告警等短信能力降级为人工或站内留痕。 | 开启后必须补齐短信供应商签名/模板报备、API/SDK、credential_ref、发送回执、限频与失败补偿和生产证据。 |
 
 ## 4. 后台手动工作人员录入需求
 

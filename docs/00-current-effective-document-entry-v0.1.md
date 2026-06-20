@@ -119,7 +119,7 @@ npm run verify:production-evidence-crosslinks` |
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
-本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 729 测试 / OpenAPI 209 operations / Flyway 最新 V060 / P0 全部完成 + P1 在进行）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线（后端 1251 测试 / OpenAPI 386 operations / Flyway 最新 V124 / P0 全部完成 + P1 在进行）以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。<!-- 文档goal(2026-06-20)：事实基线刷新 729→1251 测试、209→386 op、V060→V124（实证：openapi-p0.yaml 方法统计、surefire-reports、db/migration 目录） -->
 
 | 交付物 | 入口 |
 |---|---|
@@ -150,6 +150,28 @@ npm run verify:production-evidence-crosslinks` |
 | 积分表名 | `points_*` vs `customer_points_*` | **统一以实际迁移表名为权威** | 各引用文档对齐到实际迁移表名 |
 | REQ-79 引用不建之表 | REQ-79 引用 `point_gifts`/`point_redemptions`（迁移未建） | **以实际迁移为权威：引用表不存在，需改引用为真实迁移表** | 修正 REQ-79 引用，去除对未建表的依赖 |
 
+<!-- 文档goal(2026-06-20)：新增 §2.3，登记 R6/R7 决策批次与本会话新功能落地，刷新事实基线 -->
+## 2.3 R6/R7 决策批次与本会话新功能落地登记（2026-06-20）`文档goal(2026-06-20)`
+
+本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。事实基线刷新为：**Flyway 最新 V124、OpenAPI 386 operations、后端 1251 测试通过、前端 E2E 42（6 个 spec）**；各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
+
+### 决策批次登记
+
+| 批次 | 入口 | 状态 |
+|---|---|---|
+| R6 业务输入与确认决议（R6-D01..D14 共 14 项） | `docs/business-decision-log-v0.1.md` §36 | 14 项已于 2026-06-19 全部业务确认，"已确认决策"列为最终编码基线 |
+| R7 决策批次 | —— | 截至 2026-06-20，`business-decision-log-v0.1.md` 最新业务决策批次为 §36（R6）；尚未设立独立 R7 章节。新批次产生时在 decision-log 追加 §37(R7) 并在此登记，避免悬挂引用 |
+
+### 本会话新功能已落地（迁移 V117/V120–V124，实证 `db/migration`）
+
+| 迁移 | 功能 | 关联文档 |
+|---|---|---|
+| `V117__bar_void_approval_writeback` | 酒吧退菜/退酒作废审批回写 | 酒吧 PRD/开发设计、§36 R6-D14（酒吧异常优先级升 P0） |
+| `V120__merchant_service_work_order_sla_escalation` | 商户服务工单 SLA 升级 | `p1-merchant-service-work-order-api-contract-v0.1.md` |
+| `V121__cam_trueup_and_refund_direction` | CAM（公共区域分摊）找差与退款方向 | finance-settlement PRD、§36 R6-D08（科目方向） |
+| `V123__amusement_maintenance_vendor_fk_validate` | 游乐维保供应商外键校验 | 游乐开发设计、`V116__amusement_maintenance_vendor_fk` 续 |
+| `V124__bar_void_reject_reversal_adjustment` | 酒吧作废驳回/冲销调整 | 酒吧 PRD/开发设计、§36 R6-D14 |
+
 ## 3. 当前有效文档阅读顺序
 
 ### 3.1 总控、产品负责人、项目负责人
@@ -176,7 +198,7 @@ npm run verify:production-evidence-crosslinks` |
 | 18 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成条件、输入、输出和阻断项 |
 | 19 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看 P0 接口契约基线和机器可读契约 |
 | 19A | `external-dependency-gates-v0.1.md`、`delivery-readiness-gates-v0.1.md` | 查看外部依赖阻断、交付总闸口和 `npm run verify:delivery-gates` 准入口径 |
-| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 207 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径（operation 数以本矩阵与 OpenAPI 实时为准；下文历史变更记录里的 181/191/198 为旧快照）|
+| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看 386 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径（operation 数以本矩阵与 OpenAPI 实时为准；下文历史变更记录里的 181/191/198/207 为旧快照）<!-- 文档goal(2026-06-20)：207→386 --> |
 | 21 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 OpenAPI 反向生成的权限、事件、任务追溯和样例准入口径 |
 | 22 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 查看 P0 用户故事地图和迭代切片 |
 | 23 | `requirement-traceability-matrix-v0.1.md` | 查看需求到设计、任务、验收的追踪关系 |
@@ -352,7 +374,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 验证层 | 命令 | 通过后代表什么 | 不代表什么 |
 |---|---|---|---|
-| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、207 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合 | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |
+| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、386 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合（operation 数以 OpenAPI/矩阵实时为准） | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |
 | Web 层 | `npm run verify:p0-web` | 契约层通过，且 Web 可构建 | 不代表后端和 Android 环境已就绪 |
 | 环境层 | `npm run verify:p0-env` | 后端 Java/Maven 与 Android Java/Gradle/SDK 前置环境满足验收条件 | 本机缺 Java 21 时不得判定代码失败；Java/后端测试和完整 P0 默认在 160 或等效 Java 21 环境执行 |
 | 完整 P0 | `npm run verify:p0` | 契约、后端测试、Web 构建、Android 环境、Android 构建、smoke 和 APK 验证均通过 | 这是完整验收口径，不能用单项通过替代；当前协作中以后端/Java 测试在 `192.168.88.160` 执行为准 |
@@ -384,7 +406,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 优先级 | 文档 | 目的 |
 |---|---|---|
 | P0 | `p0-api-contract-pack-v0.1.md` + `openapi/openapi-p0.yaml` + `openapi/openapi-p0.json` | 已新增并落地机器可读契约。固化正式 OpenAPI 基线、错误码、幂等、签名、分页、Webhook、回调和接口目录 |
-| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把 207 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵 |
+| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把 386 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵（operation 数以 OpenAPI/矩阵实时为准） |
 | P0 | `p0-openapi-contract-closure-appendix-v0.1.md` | 已新增。由 OpenAPI 反向生成权限、事件、任务追溯和样例准入附录，补齐人工矩阵未逐 operation 展开的缺口 |
 | P0 | `code-contract-difference-and-migration-audit-v0.1.md` | 已新增。明确旧 TypeScript/Fastify/SQLite API、旧 Web/Android 路径和正式 Java/OpenAPI 契约的迁移闸口 |
 | P0 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 已新增。按角色和业务闭环拆用户故事，避免只按模块开发 |
@@ -462,6 +484,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 2026-06-15 | V0.1 P2-A 接口契约 | 新增 `p2-floor-plan-import-api-contract-v0.1.md`，固化平面图导入接口、权限、事件、解析规则和验收标准 |
 | 2026-06-15 | V0.1 P2-A 完成审计 | 新增 `p2-floor-plan-import-completion-audit-v0.1.md`，记录 P2-A 平面图导入完成范围、验证证据和未纳入范围 |
 | 2026-06-18 | V0.1 文档审计刷新与缺口补齐 | 刷新文档审计到当前代码态（207 ops/52 迁移/673 测试），新增 `development-documentation-audit-v0.2.md`（取代 adversarial-audit-v0.1）、`data-isolation-and-tenant-scope-security-spec-v0.1.md`、`third-party-sms-notification-and-supplier-field-mapping-placeholders-v0.1.md`；**补齐此前被记录为"已新增"但文件实际缺失的 `p0-first-coding-package-v0.1.md`**；修正本入口 operation 数 181→207（历史变更记录里的 181/191/198 为旧快照，operation 数以 `p0-openapi-operation-acceptance-matrix-v0.1.md` 与 OpenAPI 实时为准）|
+| 2026-06-20 | V0.1 第一入口与事实基线刷新 `文档goal(2026-06-20)` | 刷新事实基线 729→1251 测试 / 209→386 op / V060→V124（实证：`openapi-p0.yaml` 方法统计、`backend/target/surefire-reports`、`backend/src/main/resources/db/migration`、`playwright --list` 42）；新增 §2.3 登记 R6（§36 已确认 14 项）/R7（暂未设立）与本会话新功能落地（V117/V120–V124）；新建仓库根 `README.md` 与分类文档地图 `docs/documentation-map-v0.1.md` |
 
 | T3-B SDK/mock 套件 | 已新增 | `docs/t3b-supplier-sdk-mock-kit-v0.1.md` |
 | T3-B SDK/mock 套件计划 | 已新增 | `docs/superpowers/plans/2026-06-15-t3b-supplier-mock-kit.md` |
