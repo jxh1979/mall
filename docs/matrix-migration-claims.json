@@ -275,8 +275,8 @@
       "req": "REQ-53",
       "table": "entitlement_sessions",
       "column": null,
-      "expected": "absent",
-      "note": "R4-G1 DRIFT: 声称已补会话表+entitlement_session_id+会话时效+防错领，零落地"
+      "expected": "present",
+      "note": "V129 已建 entitlement_sessions 表+会话时效+防错领 claim（条件 UPDATE 仅 initiated/displayed 且未过期可领）+amusement.entitlement_session.initiate/.view/.claim 权限点"
     },
     {
       "req": "REQ-64",

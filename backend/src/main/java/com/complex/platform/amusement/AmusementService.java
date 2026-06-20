@@ -427,6 +427,159 @@ public class AmusementService {
                 projectId, operatingCapacity, disposalMode, enabled));
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // REQ-53 权益会话（V129 entitlement_sessions）：发起 → 展示 → 领取核销（防错领 + 会话时效）。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static final Set<String> ENTITLEMENT_SESSION_CLAIMABLE = Set.of("initiated", "displayed");
+
+    public PageResponse<EntitlementSessionRecord> listEntitlementSessions() {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        return readPage(
+                "amusement.entitlement_session.listed",
+                "amusement.entitlement_session.list_failed",
+                "amusement.entitlement_session.view",
+                "entitlement_session",
+                scope.isPresent()
+                        ? () -> repository.listEntitlementSessionsByMerchant(scope.get())
+                        : repository::listEntitlementSessions
+        );
+    }
+
+    /**
+     * REQ-53 发起会话（工作手机扫附赠权益码）。status=initiated，merchant 强制注入，幂等。
+     * 校验：entitlement_ref 非空、ttl_seconds>0。expires_at = now + ttlSeconds。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.entitlement_session.initiate")
+    @Transactional
+    public EntitlementSessionRecord initiateEntitlementSession(InitiateEntitlementSessionRequest request) {
+        return executeWrite(
+                "initiateEntitlementSession",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                EntitlementSessionRecord.class,
+                "amusement.entitlement_session.initiated",
+                "amusement.entitlement_session.initiate_failed",
+                "amusement.entitlement_session.initiate",
+                "entitlement_session",
+                () -> initiateEntitlementSessionInternal(request)
+        );
+    }
+
+    private EntitlementSessionRecord initiateEntitlementSessionInternal(InitiateEntitlementSessionRequest request) {
+        InitiateEntitlementSessionRequest actual = requireRequest(request);
+        String entitlementRef = requireText(actual.entitlementRef(), "entitlement_ref");
+        int ttlSeconds = positiveInteger(actual.ttlSeconds(), "ttl_seconds");
+        String projectId = trimToNull(actual.projectId());
+        if (projectId != null) {
+            repository.findProjectById(projectId)
+                    .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+            checkProjectOwnership(projectId);
+        }
+        // merchant 强制注入（direct scope）；无 scope（平台视角）退化为 null。
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        Instant now = Instant.now();
+        String slug = slug(actual.idempotencyKey());
+        return repository.saveEntitlementSession(new EntitlementSessionRecord(
+                "esession_" + slug,
+                "escode_" + slug,
+                entitlementRef,
+                merchantId,
+                projectId,
+                "initiated",
+                now.plusSeconds(ttlSeconds),
+                trimToDefault(actual.initiatedBy(), "work_phone"),
+                null,
+                null,
+                now,
+                now
+        ));
+    }
+
+    /**
+     * REQ-53 一体机查询展示（按 id 或 session_code）。读时把 initiated → displayed（条件 UPDATE，幂等读语义）。
+     * 强制 merchant 归属隔离。
+     */
+    public EntitlementSessionRecord getEntitlementSession(String idOrCode) {
+        String key = requireText(idOrCode, "id");
+        try {
+            EntitlementSessionRecord session = repository.findEntitlementSessionById(key)
+                    .or(() -> repository.findEntitlementSessionByCode(key))
+                    .orElseThrow(() -> ApiException.notFound(
+                            "ENTITLEMENT_SESSION_NOT_FOUND", "entitlement session not found"));
+            checkEntitlementSessionOwnership(session);
+            // 一体机首次展示：initiated → displayed（仅 initiated 命中；已展示/已领/过期/取消保持原状）。
+            if ("initiated".equals(session.status())) {
+                repository.markEntitlementSessionDisplayed(session.id(), Instant.now());
+                session = repository.findEntitlementSessionById(session.id()).orElse(session);
+            }
+            auditEventService.recordSuccess(
+                    "amusement.entitlement_session.viewed",
+                    "amusement.entitlement_session.view",
+                    "entitlement_session",
+                    session.id(), null, null, Map.of("status", session.status()));
+            return session;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "amusement.entitlement_session.view_failed",
+                    "amusement.entitlement_session.view",
+                    "entitlement_session",
+                    key, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /**
+     * REQ-53 一体机领取核销（防错领条件 UPDATE：仅 initiated/displayed 且未过期可领，→claimed）。幂等。
+     * 过期 / 已领 / 重复领 / 已取消均拒（条件 UPDATE 0 行 → ENTITLEMENT_SESSION_NOT_CLAIMABLE）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.entitlement_session.claim")
+    @Transactional
+    public EntitlementSessionRecord claimEntitlementSession(String id, ClaimEntitlementSessionRequest request) {
+        String sessionId = requireText(id, "id");
+        return executeWrite(
+                "claimEntitlementSession:" + sessionId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                EntitlementSessionRecord.class,
+                "amusement.entitlement_session.claimed",
+                "amusement.entitlement_session.claim_failed",
+                "amusement.entitlement_session.claim",
+                "entitlement_session",
+                () -> claimEntitlementSessionInternal(sessionId, request)
+        );
+    }
+
+    private EntitlementSessionRecord claimEntitlementSessionInternal(String sessionId, ClaimEntitlementSessionRequest request) {
+        ClaimEntitlementSessionRequest actual = requireRequest(request);
+        EntitlementSessionRecord session = repository.findEntitlementSessionById(sessionId)
+                .orElseThrow(() -> ApiException.notFound(
+                        "ENTITLEMENT_SESSION_NOT_FOUND", "entitlement session not found"));
+        checkEntitlementSessionOwnership(session);
+        String claimedBy = trimToDefault(actual.claimedBy(), "kiosk");
+        Instant now = Instant.now();
+        // 防错领核心：条件 UPDATE 受影响 1 行才成功；过期/已领/重复领/已取消均 0 行被拒。
+        if (!repository.claimEntitlementSession(sessionId, claimedBy, now)) {
+            // 区分过期与状态非法，给出明确错误码（便于一体机提示）。
+            if (session.expiresAt() != null && !now.isBefore(session.expiresAt())
+                    && ENTITLEMENT_SESSION_CLAIMABLE.contains(session.status())) {
+                throw ApiException.conflict("ENTITLEMENT_SESSION_EXPIRED", "entitlement session has expired");
+            }
+            throw ApiException.conflict("ENTITLEMENT_SESSION_NOT_CLAIMABLE",
+                    "entitlement session is not claimable (status=" + session.status() + ")");
+        }
+        return repository.findEntitlementSessionById(sessionId).orElse(session);
+    }
+
+    private void checkEntitlementSessionOwnership(EntitlementSessionRecord session) {
+        authorizationService.currentMerchantScope().ifPresent(merchantId -> {
+            if (!merchantId.equals(session.merchantId())) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "entitlement session does not belong to your merchant");
+            }
+        });
+    }
+
     public PageResponse<AmusementQueueEntryRecord> listQueueEntries() {
         return bookingService.listQueueEntries();
     }
@@ -1206,6 +1359,9 @@ public class AmusementService {
             return record.projectId();
         }
         if (response instanceof AmusementVerificationRecord record) {
+            return record.id();
+        }
+        if (response instanceof EntitlementSessionRecord record) {
             return record.id();
         }
         if (response instanceof AmusementManualOverrideRecord record) {

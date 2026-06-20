@@ -75,6 +75,11 @@ class AmusementControllerTests {
         when(service.getOverCapacityPolicy("project_1")).thenReturn(overCapacityPolicy());
         when(service.configureOverCapacityPolicy(eq("project_1"), any(ConfigureOverCapacityPolicyRequest.class)))
                 .thenReturn(overCapacityPolicy());
+        when(service.listEntitlementSessions()).thenReturn(new PageResponse<>(List.of(entitlementSession()), 1, 50, 1));
+        when(service.initiateEntitlementSession(any(InitiateEntitlementSessionRequest.class))).thenReturn(entitlementSession());
+        when(service.getEntitlementSession("esession_1")).thenReturn(entitlementSession());
+        when(service.claimEntitlementSession(eq("esession_1"), any(ClaimEntitlementSessionRequest.class)))
+                .thenReturn(claimedEntitlementSession());
         when(service.listQueueEntries()).thenReturn(new PageResponse<>(List.of(queueEntry()), 1, 50, 1));
         when(service.createQueueEntry(any(AmusementQueueEntryRequest.class))).thenReturn(queueEntry());
         when(service.changeQueueEntryStatus(eq("queue_1"), any(StatusChangeRequest.class))).thenReturn(calledQueueEntry());
@@ -116,6 +121,10 @@ class AmusementControllerTests {
             "POST,/api/v1/amusement/capacity-config/amcap_1/disable,amusement.capacity_config.manage",
             "GET,/api/v1/amusement/projects/project_1/over-capacity-policy,amusement.over_capacity_policy.view",
             "PUT,/api/v1/amusement/projects/project_1/over-capacity-policy,amusement.over_capacity_policy.configure",
+            "GET,/api/v1/amusement/entitlement-sessions,amusement.entitlement_session.view",
+            "POST,/api/v1/amusement/entitlement-sessions,amusement.entitlement_session.initiate",
+            "GET,/api/v1/amusement/entitlement-sessions/esession_1,amusement.entitlement_session.view",
+            "POST,/api/v1/amusement/entitlement-sessions/esession_1/claim,amusement.entitlement_session.claim",
             "GET,/api/v1/amusement/queue-entries,amusement.queue.view",
             "POST,/api/v1/amusement/queue-entries,amusement.queue.manage",
             "POST,/api/v1/amusement/queue-entries/queue_1/status,amusement.queue.manage",
@@ -180,6 +189,8 @@ class AmusementControllerTests {
             "/api/v1/amusement/projects/project_1/entitlements/amusement_pass/remove",
             "/api/v1/amusement/projects/project_1/capacity-config",
             "/api/v1/amusement/capacity-config/amcap_1/disable",
+            "/api/v1/amusement/entitlement-sessions",
+            "/api/v1/amusement/entitlement-sessions/esession_1/claim",
             "/api/v1/amusement/queue-entries",
             "/api/v1/amusement/queue-entries/queue_1/status",
             "/api/v1/amusement/reservations",
@@ -234,6 +245,12 @@ class AmusementControllerTests {
         }
         if (path.endsWith("/over-capacity-policy")) {
             return "{" + idempotency + "\"operating_capacity\":20,\"disposal_mode\":\"warn_only\",\"enabled\":true}";
+        }
+        if (path.endsWith("entitlement-sessions/esession_1/claim")) {
+            return "{" + idempotency + "\"claimed_by\":\"kiosk_1\"}";
+        }
+        if (path.endsWith("entitlement-sessions")) {
+            return "{" + idempotency + "\"entitlement_ref\":\"issued_ent_1\",\"ttl_seconds\":300,\"initiated_by\":\"phone_1\"}";
         }
         if (path.contains("queue-entries") && path.endsWith("/status")) {
             return "{" + idempotency + "\"action\":\"called\",\"reason\":\"notify customer\",\"evidence_attachment_ids\":[\"att_queue\"]}";
@@ -299,6 +316,18 @@ class AmusementControllerTests {
 
     private AmusementOverCapacityPolicy overCapacityPolicy() {
         return new AmusementOverCapacityPolicy("project_1", 20, AmusementOverCapacityPolicy.MODE_WARN_ONLY, true);
+    }
+
+    private EntitlementSessionRecord entitlementSession() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new EntitlementSessionRecord("esession_1", "escode_1", "issued_ent_1", null, null,
+                "initiated", now.plusSeconds(300), "phone_1", null, null, now, now);
+    }
+
+    private EntitlementSessionRecord claimedEntitlementSession() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new EntitlementSessionRecord("esession_1", "escode_1", "issued_ent_1", null, null,
+                "claimed", now.plusSeconds(300), "phone_1", "kiosk_1", now, now, now);
     }
 
     private AmusementSessionRecord session() {

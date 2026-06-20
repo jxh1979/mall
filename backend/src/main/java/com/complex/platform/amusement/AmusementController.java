@@ -164,6 +164,38 @@ public class AmusementController {
         return ApiResponse.ok(service.configureOverCapacityPolicy(projectId, request));
     }
 
+    // ── REQ-53 权益会话（V129）：发起 → 展示 → 领取核销（防错领 + 会话时效）──
+    @GetMapping("/entitlement-sessions")
+    public ApiResponse<PageResponse<EntitlementSessionRecord>> listEntitlementSessions() {
+        authorizationService.requirePermission("amusement.entitlement_session.view");
+        return ApiResponse.ok(service.listEntitlementSessions());
+    }
+
+    @PostMapping("/entitlement-sessions")
+    public ApiResponse<EntitlementSessionRecord> initiateEntitlementSession(
+            @RequestBody(required = false) InitiateEntitlementSessionRequest request
+    ) {
+        authorizationService.requirePermission("amusement.entitlement_session.initiate");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.initiateEntitlementSession(request));
+    }
+
+    @GetMapping("/entitlement-sessions/{id}")
+    public ApiResponse<EntitlementSessionRecord> getEntitlementSession(@PathVariable String id) {
+        authorizationService.requirePermission("amusement.entitlement_session.view");
+        return ApiResponse.ok(service.getEntitlementSession(id));
+    }
+
+    @PostMapping("/entitlement-sessions/{id}/claim")
+    public ApiResponse<EntitlementSessionRecord> claimEntitlementSession(
+            @PathVariable String id,
+            @RequestBody(required = false) ClaimEntitlementSessionRequest request
+    ) {
+        authorizationService.requirePermission("amusement.entitlement_session.claim");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.claimEntitlementSession(id, request));
+    }
+
     @GetMapping("/queue-entries")
     public ApiResponse<PageResponse<AmusementQueueEntryRecord>> listQueueEntries() {
         authorizationService.requirePermission("amusement.queue.view");

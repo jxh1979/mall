@@ -326,6 +326,111 @@ class JdbcAmusementRepository implements AmusementRepository {
         return findOverCapacityPolicy(policy.projectId());
     }
 
+    // ── REQ-53 权益会话（V129 entitlement_sessions）────────────────────────────
+    @Override
+    public EntitlementSessionRecord saveEntitlementSession(EntitlementSessionRecord session) {
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_sessions (
+                    id, session_code, entitlement_ref, merchant_id, project_id, status,
+                    expires_at, initiated_by, claimed_by, claimed_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, :session_code, :entitlement_ref, :merchant_id, :project_id, :status,
+                    :expires_at, :initiated_by, :claimed_by, :claimed_at, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    session_code = EXCLUDED.session_code,
+                    entitlement_ref = EXCLUDED.entitlement_ref,
+                    merchant_id = EXCLUDED.merchant_id,
+                    project_id = EXCLUDED.project_id,
+                    status = EXCLUDED.status,
+                    expires_at = EXCLUDED.expires_at,
+                    initiated_by = EXCLUDED.initiated_by,
+                    claimed_by = EXCLUDED.claimed_by,
+                    claimed_at = EXCLUDED.claimed_at,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", session.id())
+                .addValue("session_code", session.sessionCode())
+                .addValue("entitlement_ref", session.entitlementRef())
+                .addValue("merchant_id", session.merchantId())
+                .addValue("project_id", session.projectId())
+                .addValue("status", session.status())
+                .addValue("expires_at", timestampWithTimeZone(session.expiresAt()))
+                .addValue("initiated_by", session.initiatedBy())
+                .addValue("claimed_by", session.claimedBy())
+                .addValue("claimed_at", timestampWithTimeZone(session.claimedAt()))
+                .addValue("created_at", timestampWithTimeZone(session.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(session.updatedAt())));
+        return session;
+    }
+
+    @Override
+    public Optional<EntitlementSessionRecord> findEntitlementSessionById(String id) {
+        return jdbcTemplate.query(entitlementSessionSelect() + " WHERE id = :id",
+                Map.of("id", id), rowMapper::mapEntitlementSession).stream().findFirst();
+    }
+
+    @Override
+    public Optional<EntitlementSessionRecord> findEntitlementSessionByCode(String sessionCode) {
+        return jdbcTemplate.query(entitlementSessionSelect() + " WHERE session_code = :session_code",
+                Map.of("session_code", sessionCode), rowMapper::mapEntitlementSession).stream().findFirst();
+    }
+
+    @Override
+    public List<EntitlementSessionRecord> listEntitlementSessionsByMerchant(String merchantId) {
+        return jdbcTemplate.query(entitlementSessionSelect()
+                        + " WHERE merchant_id = :merchant_id ORDER BY created_at DESC, id",
+                Map.of("merchant_id", merchantId), rowMapper::mapEntitlementSession);
+    }
+
+    @Override
+    public List<EntitlementSessionRecord> listEntitlementSessions() {
+        return jdbcTemplate.query(entitlementSessionSelect() + " ORDER BY created_at DESC, id",
+                rowMapper::mapEntitlementSession);
+    }
+
+    @Override
+    public boolean claimEntitlementSession(String id, String claimedBy, Instant now) {
+        // 防错领核心：条件 UPDATE，仅 initiated/displayed 且未过期可领，受影响 1 行才成功。
+        int updated = jdbcTemplate.update("""
+                UPDATE entitlement_sessions
+                   SET status = 'claimed',
+                       claimed_by = :claimed_by,
+                       claimed_at = :now,
+                       updated_at = :now
+                 WHERE id = :id
+                   AND status IN ('initiated', 'displayed')
+                   AND expires_at > :now
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("claimed_by", claimedBy)
+                .addValue("now", timestampWithTimeZone(now)));
+        return updated == 1;
+    }
+
+    @Override
+    public boolean markEntitlementSessionDisplayed(String id, Instant now) {
+        int updated = jdbcTemplate.update("""
+                UPDATE entitlement_sessions
+                   SET status = 'displayed',
+                       updated_at = :now
+                 WHERE id = :id
+                   AND status = 'initiated'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("now", timestampWithTimeZone(now)));
+        return updated == 1;
+    }
+
+    private String entitlementSessionSelect() {
+        return """
+                SELECT id, session_code, entitlement_ref, merchant_id, project_id, status,
+                       expires_at, initiated_by, claimed_by, claimed_at, created_at, updated_at
+                  FROM entitlement_sessions
+                """;
+    }
+
     @Override
     public AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule) {
         jdbcTemplate.update("""

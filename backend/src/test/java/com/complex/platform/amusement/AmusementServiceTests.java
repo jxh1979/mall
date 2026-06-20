@@ -1010,6 +1010,143 @@ class AmusementServiceTests {
         assertThat(read.disposalMode()).isEqualTo(AmusementOverCapacityPolicy.MODE_BLOCK_HARD);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // REQ-53 权益会话（V129 entitlement_sessions）：发起 → 展示 → 领取核销（防错领 + 会话时效）。
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void initiateEntitlementSessionCreatesInitiatedSessionAndIsIdempotent() {
+        EntitlementSessionRecord first = service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-init-1", "issued_ent_1", null, 300, "phone_1"));
+        assertThat(first.status()).isEqualTo("initiated");
+        assertThat(first.entitlementRef()).isEqualTo("issued_ent_1");
+        assertThat(first.initiatedBy()).isEqualTo("phone_1");
+        assertThat(first.expiresAt()).isAfter(Instant.now());
+        // 同幂等键重复发起返回同一记录（不新增）。
+        EntitlementSessionRecord again = service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-init-1", "issued_ent_1", null, 300, "phone_1"));
+        assertThat(again.id()).isEqualTo(first.id());
+        assertThat(service.listEntitlementSessions().items()).hasSize(1);
+    }
+
+    @Test
+    void initiateEntitlementSessionRejectsBlankEntitlementRef() {
+        assertThatThrownBy(() -> service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-blank", "  ", null, 300, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void initiateEntitlementSessionRejectsNonPositiveTtl() {
+        assertThatThrownBy(() -> service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-ttl", "issued_ent_1", null, 0, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void getEntitlementSessionTransitionsInitiatedToDisplayedAndReadsByCode() {
+        EntitlementSessionRecord created = service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-view-1", "issued_ent_1", null, 300, null));
+        // 一体机首次展示：initiated → displayed。
+        EntitlementSessionRecord viewed = service.getEntitlementSession(created.id());
+        assertThat(viewed.status()).isEqualTo("displayed");
+        // 也可按 session_code 查询，仍返回 displayed（不回退）。
+        EntitlementSessionRecord byCode = service.getEntitlementSession(created.sessionCode());
+        assertThat(byCode.status()).isEqualTo("displayed");
+    }
+
+    @Test
+    void claimEntitlementSessionSucceedsForInitiatedSessionAndIsIdempotent() {
+        EntitlementSessionRecord created = service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-claim-1", "issued_ent_1", null, 300, null));
+        EntitlementSessionRecord claimed = service.claimEntitlementSession(created.id(),
+                new ClaimEntitlementSessionRequest("es-claim-key-1", "kiosk_1"));
+        assertThat(claimed.status()).isEqualTo("claimed");
+        assertThat(claimed.claimedBy()).isEqualTo("kiosk_1");
+        assertThat(claimed.claimedAt()).isNotNull();
+        // 同幂等键重复领取返回同一结果（幂等缓存命中，仍 claimed）。
+        EntitlementSessionRecord again = service.claimEntitlementSession(created.id(),
+                new ClaimEntitlementSessionRequest("es-claim-key-1", "kiosk_1"));
+        assertThat(again.status()).isEqualTo("claimed");
+    }
+
+    @Test
+    void claimEntitlementSessionRejectsExpiredSession() {
+        // 写入一条已过期会话（expires_at 在过去）。
+        Instant past = Instant.now().minusSeconds(60);
+        amusementRepository.putEntitlementSession(new EntitlementSessionRecord(
+                "esession_expired", "escode_expired", "issued_ent_1", null, null,
+                "initiated", past, "phone_1", null, null, past, past));
+        assertThatThrownBy(() -> service.claimEntitlementSession("esession_expired",
+                new ClaimEntitlementSessionRequest("es-exp-key", "kiosk_1")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_SESSION_EXPIRED");
+    }
+
+    @Test
+    void claimEntitlementSessionRejectsDoubleClaim() {
+        EntitlementSessionRecord created = service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-dbl-1", "issued_ent_1", null, 300, null));
+        service.claimEntitlementSession(created.id(),
+                new ClaimEntitlementSessionRequest("es-dbl-key-1", "kiosk_1"));
+        // 不同幂等键再次领取已 claimed 会话：条件 UPDATE 0 行 → 拒绝（防重复领）。
+        assertThatThrownBy(() -> service.claimEntitlementSession(created.id(),
+                new ClaimEntitlementSessionRequest("es-dbl-key-2", "kiosk_2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_SESSION_NOT_CLAIMABLE");
+    }
+
+    @Test
+    void claimEntitlementSessionRejectsCancelledSession() {
+        Instant now = Instant.now();
+        amusementRepository.putEntitlementSession(new EntitlementSessionRecord(
+                "esession_cancelled", "escode_cancelled", "issued_ent_1", null, null,
+                "cancelled", now.plusSeconds(300), "phone_1", null, null, now, now));
+        assertThatThrownBy(() -> service.claimEntitlementSession("esession_cancelled",
+                new ClaimEntitlementSessionRequest("es-cxl-key", "kiosk_1")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_SESSION_NOT_CLAIMABLE");
+    }
+
+    @Test
+    void claimEntitlementSessionRejectsUnknownSession() {
+        assertThatThrownBy(() -> service.claimEntitlementSession("esession_missing",
+                new ClaimEntitlementSessionRequest("es-miss-key", "kiosk_1")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("ENTITLEMENT_SESSION_NOT_FOUND");
+    }
+
+    @Test
+    void listEntitlementSessionsIsolatesByMerchant() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-iso-a", "issued_ent_a", null, 300, null));
+        TestSecurityActors.asMerchantUser("merchant_b");
+        service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-iso-b", "issued_ent_b", null, 300, null));
+        // merchant_b 只看到自己的一条。
+        assertThat(service.listEntitlementSessions().items())
+                .extracting(EntitlementSessionRecord::entitlementRef)
+                .containsExactly("issued_ent_b");
+    }
+
+    @Test
+    void getEntitlementSessionRejectsCrossMerchant() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        EntitlementSessionRecord created = service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-xm-1", "issued_ent_1", null, 300, null));
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.getEntitlementSession(created.id()))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void claimEntitlementSessionRejectsCrossMerchant() {
+        TestSecurityActors.asMerchantUser("merchant_a");
+        EntitlementSessionRecord created = service.initiateEntitlementSession(
+                new InitiateEntitlementSessionRequest("es-xmc-1", "issued_ent_1", null, 300, null));
+        TestSecurityActors.asMerchantUser("merchant_b");
+        assertThatThrownBy(() -> service.claimEntitlementSession(created.id(),
+                new ClaimEntitlementSessionRequest("es-xmc-key", "kiosk_b")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
     @Test
     void capacityConfigRequiresPointOrDeviceAndMaxConcurrent() {
         AmusementProjectRecord project = createProject("cfg-val", createTemplate("cfg-val-tpl").id(), "open", 5);
@@ -1945,6 +2082,72 @@ class AmusementServiceTests {
                     .map(p -> new AmusementProjectSpaceBacklogRecord(
                             p.id(), p.projectName(), p.openStatus(), p.merchantId()))
                     .toList();
+        }
+
+        // REQ-53 权益会话内存夹具（V129 entitlement_sessions）。
+        private final Map<String, EntitlementSessionRecord> entitlementSessions = new LinkedHashMap<>();
+
+        /** 测试夹具：直接写入一条会话（可注入已过期 expires_at / 任意状态，用于过期/重复领/取消用例）。 */
+        void putEntitlementSession(EntitlementSessionRecord session) {
+            entitlementSessions.put(session.id(), session);
+        }
+
+        @Override
+        public EntitlementSessionRecord saveEntitlementSession(EntitlementSessionRecord session) {
+            entitlementSessions.put(session.id(), session);
+            return session;
+        }
+
+        @Override
+        public Optional<EntitlementSessionRecord> findEntitlementSessionById(String id) {
+            return Optional.ofNullable(entitlementSessions.get(id));
+        }
+
+        @Override
+        public Optional<EntitlementSessionRecord> findEntitlementSessionByCode(String sessionCode) {
+            return entitlementSessions.values().stream()
+                    .filter(s -> sessionCode.equals(s.sessionCode()))
+                    .findFirst();
+        }
+
+        @Override
+        public List<EntitlementSessionRecord> listEntitlementSessionsByMerchant(String merchantId) {
+            return entitlementSessions.values().stream()
+                    .filter(s -> merchantId.equals(s.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<EntitlementSessionRecord> listEntitlementSessions() {
+            return new ArrayList<>(entitlementSessions.values());
+        }
+
+        @Override
+        public boolean claimEntitlementSession(String id, String claimedBy, Instant now) {
+            EntitlementSessionRecord s = entitlementSessions.get(id);
+            // 防错领条件 UPDATE 等价语义：仅 initiated/displayed 且未过期可领，受影响 1 行才成功。
+            if (s == null
+                    || !(s.status().equals("initiated") || s.status().equals("displayed"))
+                    || s.expiresAt() == null || !now.isBefore(s.expiresAt())) {
+                return false;
+            }
+            entitlementSessions.put(id, new EntitlementSessionRecord(
+                    s.id(), s.sessionCode(), s.entitlementRef(), s.merchantId(), s.projectId(),
+                    "claimed", s.expiresAt(), s.initiatedBy(), claimedBy, now, s.createdAt(), now));
+            return true;
+        }
+
+        @Override
+        public boolean markEntitlementSessionDisplayed(String id, Instant now) {
+            EntitlementSessionRecord s = entitlementSessions.get(id);
+            if (s == null || !"initiated".equals(s.status())) {
+                return false;
+            }
+            entitlementSessions.put(id, new EntitlementSessionRecord(
+                    s.id(), s.sessionCode(), s.entitlementRef(), s.merchantId(), s.projectId(),
+                    "displayed", s.expiresAt(), s.initiatedBy(), s.claimedBy(), s.claimedAt(),
+                    s.createdAt(), now));
+            return true;
         }
 
         @Override

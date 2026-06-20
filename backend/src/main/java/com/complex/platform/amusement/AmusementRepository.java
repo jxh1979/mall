@@ -1,5 +1,6 @@
 package com.complex.platform.amusement;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -67,6 +68,37 @@ public interface AmusementRepository {
      * 复用既有 {@link #findOverCapacityPolicy(String)} 读路径供消费方（核销超容判定）。
      */
     AmusementOverCapacityPolicy saveOverCapacityPolicy(AmusementOverCapacityPolicy policy);
+
+    /**
+     * REQ-53 权益会话（V129 entitlement_sessions）：写入新会话（发起 status=initiated）。按 id 幂等 upsert。
+     * merchant_id 由 Service 强制注入（domain-ownership direct scope）。
+     */
+    EntitlementSessionRecord saveEntitlementSession(EntitlementSessionRecord session);
+
+    /** REQ-53：按 id 查询权益会话（用于一体机展示/领取与归属隔离校验）。 */
+    Optional<EntitlementSessionRecord> findEntitlementSessionById(String id);
+
+    /** REQ-53：按 session_code 查询权益会话（一体机扫会话码展示）。 */
+    Optional<EntitlementSessionRecord> findEntitlementSessionByCode(String sessionCode);
+
+    /** REQ-53：列出本商户全部权益会话（merchant scope 强制隔离）。 */
+    List<EntitlementSessionRecord> listEntitlementSessionsByMerchant(String merchantId);
+
+    /** REQ-53：列出全部权益会话（无 merchant scope 的平台视角）。 */
+    List<EntitlementSessionRecord> listEntitlementSessions();
+
+    /**
+     * REQ-53 防错领领取核销：条件 UPDATE，仅当 {@code status IN ('initiated','displayed') AND expires_at > now}
+     * 时把会话置为 claimed 并回填 claimed_by/claimed_at，受影响行数 == 1 返回 true。
+     * 过期 / 已领 / 重复领 / 已取消均受影响 0 行返回 false（防错领、防重复领）。
+     */
+    boolean claimEntitlementSession(String id, String claimedBy, Instant now);
+
+    /**
+     * REQ-53（可选）：一体机首次展示时把 initiated → displayed（条件 UPDATE，仅 status='initiated' 命中）。
+     * 命中返回 true；非 initiated（已展示/已领/过期/取消）返回 false，保持幂等读语义。
+     */
+    boolean markEntitlementSessionDisplayed(String id, Instant now);
 
     AmusementProjectRuleRecord saveProjectRule(AmusementProjectRuleRecord rule);
 

@@ -110,6 +110,23 @@ final class JdbcAmusementRowMapper {
         );
     }
 
+    EntitlementSessionRecord mapEntitlementSession(ResultSet rs, int rowNum) throws SQLException {
+        return new EntitlementSessionRecord(
+                rs.getString("id"),
+                rs.getString("session_code"),
+                rs.getString("entitlement_ref"),
+                rs.getString("merchant_id"),
+                rs.getString("project_id"),
+                rs.getString("status"),
+                instant(rs, "expires_at"),
+                rs.getString("initiated_by"),
+                rs.getString("claimed_by"),
+                instant(rs, "claimed_at"),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
     AmusementSafetyInspectionRecord mapSafetyInspection(ResultSet rs, int rowNum) throws SQLException {
         return new AmusementSafetyInspectionRecord(
                 rs.getString("id"),
