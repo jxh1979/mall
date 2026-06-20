@@ -1,5 +1,9 @@
 # Android 设备端开发设计：员工工作手机、酒吧点酒平板、触摸屏一体机
 
+> 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
+> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
 > 以业务说明地图 #staff/#device 为基准核验真实代码：
 > - **员工设备凭证零落地**：`staff_device_credentials`（Keystore 设备公钥/不可逆指纹）后端无表、无 API；现存 `terminal_device_credentials`(V011) 是 **kiosk 一体机随机 token 的 SHA-256**，与员工私人手机指纹是不同实体——不可当作"员工设备凭证已覆盖"。

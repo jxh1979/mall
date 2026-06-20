@@ -1,5 +1,9 @@
 # 应收应付台账开发设计 V0.1
 
+> 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
+> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
 > **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > R5 横幅原标注的"日结锁定补录审批零落地"已在本会话 P0 实现并落库（V069），以下上修；盘点/报损对账、聚合口径财务复核保持开放。
 > - **日结锁定 + 补录审批 + 六源汇总已落地（V069）**：`ar_ap_items` 补 `locked_day_close_id`（指向 `finance_daily_closes`），新建 `ar_ap_adjustments`（`locked_day_close_id` + `approval_status` 三态 `pending/approved/rejected`）——锁定后直接改影响金额被硬拦截，须走补录审批通过后方可补录并留痕；新建日结六源汇总表 `finance_daily_close_sources`（`source_stream` 六源 CHECK + `uq_fdcs_close_source` 唯一键），日结金额来自真实多源流水汇总，不再是空壳。退款联动 `ar_ap` + `revenue.net`（V079/V078 口径）。

@@ -120,6 +120,49 @@
 
 ---
 
+## D14. 新功能统一术语（✅ 沉淀，权威指向 v099-v124-feature spec）`文档goalP2(2026-06-20)`
+
+> 本节把 V099–V124 系列新功能的跨文档共用术语集中为唯一口径，**每条简明定义并指向 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md`**（含迁移号、字段、状态机、G/W/T）。术语真实性已经 grep 后端/迁移核实（见各条末"实证"）。
+
+### D14.1 综合体计费术语（turnover rent / deposit / CAM）
+- **turnover rent（营业额抽成）**：按商户营业额比例计提的租金，落账方向为应收（`direction=receivable`）；计费引擎产出计费台账行 `sourceType='turnover_rent'`。
+- **deposit（保证金四动作）**：保证金台账动作集 = **collect（收取）/ refund（退还）/ deduct（抵扣）/ forfeit（没收）**，单行记一个 action；金额按 D1 整数分。
+- **CAM（公摊费）**：公共区域分摊费用，按商户份额分摊计入应收。
+- **CAM true-up（年度多退少补）**：年度对预收 CAM 与实际成本做差额清算；**少收 → 补应收（receivable top-up）**，**多收 → 退应付（payable refund）**，无差额不产生台账行；份额权重必须合计为全额，否则拒绝。
+- **库存差异入账科目方向（统一口径）**：盘亏/报损（内部损益对手方）→ **receivable**；盘盈（冲成本）→ **payable**；供应商责任（向供应商挂 AP 应付索赔）→ **payable**。差异行 `reason∈{damage/shortage/overage/supplier_fault}`，`varianceQty/varianceAmountCent` 带符号（负=盘亏/报损，正=盘盈）。
+- 实证：`FinanceServiceTests`（turnover_rent / 保证金四动作 / CamTrueUp under/over/exact）、`DepositLedgerRecord`（action=collect|refund|deduct|forfeit）、`InventoryVarianceRecord` + `InventoryVariancePostRequest`（盘亏/报损→损益对手方、供应商责任→供应商 AP）。权威细化见 spec（P1#14 综合体计费 + P2#④ CAM true-up）。
+
+### D14.2 游乐超容术语（硬上限 vs 软上限）
+- **硬上限（安全容量，hard cap）**：安全容量上限，达上限**阻断**核销（除非处置模式 `warn_only`，则留痕放行不阻断）。
+- **软上限（运营容量，soft cap）**：运营容量上限，达上限**告警放行**（不阻断）。
+- **over_capacity（超容）**：无论硬上限阻断、软上限告警放行还是 `warn_only` 留痕放行，均落 `over_capacity` incident 并发 `amusement.incident.over_capacity` 事件（超容必留痕）。
+- 实证：`AmusementServiceTests`（安全容量=硬上限阻断、运营容量=软上限告警放行、warn_only 留痕放行，均落 over_capacity 事件）。
+
+### D14.3 积分状态机术语（pending → confirmed → deducted/reversed）
+- **pending（支付入账未可用）**：支付成功即写 pending，**不计入可用余额**（pending 不可花）。
+- **confirmed（履约可用）**：核销/完成履约后转 confirmed，计入可用余额与保级进度。
+- **deducted / reversed（退款冲减）**：退款时按已 confirmed 比例冲减（如退款 60% 则按比例扣减对应积分）。
+- 实证：`LoyaltyServiceTests`（earnPointsPending→confirmPoints→deductPoints 端到端：pending 不计余额、confirmed 计余额、退款按比例冲减）。
+
+### D14.4 企微违规命中术语（wecom_risk_hits 命中等级 + 复核状态机）
+- **wecom_risk_hits（企微违规命中表）**：企业微信会话违规命中落表；命中等级由**规则码 `rule_code` + `risk_level`** 表达；同一消息同一规则码幂等（唯一约束 `uq_wecom_risk_hits_message_rule`）。
+- **复核状态机**：**open → reviewing → confirmed / dismissed**；复核写 `reviewer_id` 并发 `wecom.risk.hit_reviewed` 事件；命中同时入复核队列 `analytics_risk_alerts`（`source_domain='wecom'`）。
+- 实证：`WecomConversationServiceTests`（open→reviewing→confirmed/dismissed）、`JdbcWecomComplianceRepository`（rule_code/risk_level、wecom_risk_hits 表）、`WecomComplianceJdbcIntegrationTests`（建表 + analytics_risk_alerts.source_domain 列）。权威细化见 spec（P0#8）。
+
+### D14.5 多综合体隔离术语（project_id scoped 通道）
+- **project_id scoped 读通道**：按 `project_id` 做行级隔离的只读通道（隔离闸口 AC-ISO-1，与 CSV `scope_source=project_id` 对齐）。
+- **单综合体（单 project）退化口径**：单综合体下全部归 `DEFAULT_PROJECT_ID`，`project_id` 恒定，project 维 rollup = 平台口径合计（口径与现状一致，**不伪造多 project**）。
+- **多综合体推广前置**：推广到多综合体前必须补 scoped 读（各域按 project_id 行级隔离，仅命中本 project 数据）。
+- 实证：`JdbcTraceabilityRepository`（project_id 行级 scoped 读，AC-ISO-1）、`Customer/Wecom/Inventory/AmusementSafety JdbcIntegrationTests`（P2 多综合体 project_id scoped 读通道按行级隔离）、`AnalyticsServiceTests`/`DashboardAggregationJobNetRevenueTests`（单综合体单 project rollup 不伪造）。
+
+### D14.6 异常责任链术语（risk_alerts 5 态 + 关闭必须有结论）
+- **risk_alerts 5 态状态机**：**open → handling → escalated → resolved / dismissed**（领取/转派均落 handling，升级落 escalated，终态为 resolved 或 dismissed）。
+- **关闭必须有结论**：进入终态（resolved/dismissed）必须带处置结论；dismissed（如误报）须写结论说明，不允许无结论关闭。
+- 升级（escalate）允许从 open/handling → escalated；resolve/dismiss 允许从 open/handling/escalated 进入。
+- 实证：`RiskAlertRecord`（状态机注释 open→handling→escalated→resolved/dismissed）、`RiskAlertService`（escalate/resolve/dismiss 的 requireStatusIn 闸口）、`RiskAlertServiceTests`（handling/escalated 流转 + exception.escalated/exception.resolved 事件）。
+
+---
+
 ## 变更日志
 
 | 日期 | 类型 | 内容 | 原因/依据 |
@@ -131,3 +174,4 @@
 | 2026-06-11 | 改 | 补 D3/D5 OpenAPI 终端枚举硬规则：`x-terminal-allowed` 只允许 D5 10 个终端码，设备能力和服务端调用分别写入扩展字段 | 对抗式审计发现 OpenAPI 中存在 `admin-web`、`work-phone`、`server-to-server` 等伪终端，可能导致终端开关和权限实现分裂 |
 | 2026-06-12 | 增 | 补 D10 旧 API 脚本阻断和正式 `backend/` 入口规则 | 防止文档已废止旧 TypeScript/Fastify/SQLite 原型但命令入口仍回退到旧后端 |
 | 2026-06-13 | 增/改 | 补 D3/D10 OpenAPI 追溯附录闸口：`verify:openapi-closure` 未通过不得进入 P0 联调、SDK/mock、接口自动化或供应商联调 | 防止旧路径清零后仍遗漏权限、事件、任务簇、终端或样例准入 |
+| 2026-06-20 `文档goalP2` | 增 | 新增 D14 新功能统一术语：D14.1 综合体计费（turnover rent/deposit 四动作/CAM/CAM true-up + 库存差异科目方向）、D14.2 游乐超容（硬上限阻断/软上限告警 over_capacity）、D14.3 积分状态机（pending→confirmed→deducted/reversed）、D14.4 企微违规命中（wecom_risk_hits 规则码+risk_level，open→reviewing→confirmed/dismissed）、D14.5 多综合体隔离（project_id scoped 通道）、D14.6 异常责任链（risk_alerts 5 态 + 关闭必须有结论）。每条已 grep 后端/迁移实证，权威指向 v099-v124-feature spec | 把 V099–V124 新功能跨文档共用术语沉淀为单一口径，防止后续各文档各写一套（文档goalP2） |

@@ -1,5 +1,9 @@
 # 酒吧经营：桌台、点单、库存、存酒开发设计
 
+> 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
+> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
 > **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > R5 横幅原标注的订台定金/赠饮扣库存缺口已在本会话 P0 实现并落库（V072/V073/V079），以下逐条上修；存酒转赠/争议入口与按杯损耗强制采集保持开放。
 > - **订台定金闭环已落地（V073）**：新建 `bar_deposit_rules`（固定额 `fixed` / 按最低消费比例 `min_consumption_ratio`，scope=bar/table_type/time_slot，取消免没收时限 `cancel_free_before_minutes` 后台可配）+ `bar_reservations` 定金结算字段，定金按规则计算入库、到店抵扣、取消按时限退/没收，不再硬编码 `deposit=0/not_required`。下方 R5-D11 小节的"现状空转"描述已被本次实现取代，仅"目标/验收"口径仍有效。

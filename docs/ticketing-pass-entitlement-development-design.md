@@ -1,5 +1,9 @@
 # 票务通票、权益、核销与结算开发设计
 
+> 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
+> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
 > **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > R5 横幅原标注的多数缺口已在本会话 P0 实现并落库（V066/V067/V075/V076/V078），以下逐条上修；仅"第三方真实回流"保持部分覆盖。原 R5 现状描述见行内删除线说明，已不再代表当前实现。
 > - **二维码折中防伪（§6.2.3）已落地（V066）**：`ticket_credentials` 补刷新窗口锚点 `window_started_at`，`refreshCredential` 的 `expires_at` 与票种级 `refresh_interval_seconds`(V064, {30,60}) 联动替换硬编码 300s，截图超窗口即失效；`ticket_verifications` 补 `nonce` + 唯一索引 `uq_ticket_verifications_nonce(entitlement_id,nonce) WHERE status='success'` 防重放，重放第二次撞唯一键被拒；核销端补事后核对维度 `window_valid`/`staff_id`/`merchant_id`。HMAC 数字签名版本化预留 `signature_value`/`signature_version` 列（schema 已落、`signature_valid` 恒 NULL），按裁决降 **P1**，本期不写签名算法/校验逻辑。

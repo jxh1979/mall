@@ -1,5 +1,9 @@
 # 第三方集成开发设计：餐饮、零售、机器人、视频监控、企业微信、设备
 
+> 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
+> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
 > 以业务说明地图 #thirdparty 为基准核验真实代码（正面：开放平台鉴权 HMAC+nonce+token+审计为真落地）：
 > - **企微会话留存/脱敏/审计零落地**：后端无会话上传接口/留存表/到期归档销毁匿名化触发/脱敏专链/查看访问审计，仅 V015 一行 mock 种子。属 PIPL 合规暴露（另见 `compliance-...-requirements-v0.1.md` R5）。
@@ -938,6 +942,45 @@ flowchart LR
 
 > **待业务确认**：真实客流采集（闸机/第三方客流统计）厂商接口与真实第三方回流（餐饮/零售 POS、团购渠道）字段映射、对账文件格式未定；上述为接口/开关/映射占位与端到端口径，真实字段/签名/对账细则待厂商资料到位 + 后台开关开启后补齐（与本文 R5 裁决、§14.11a 一致）。
 
+#### ④ mapPayload 映射失败边界 + 测试锚点（占位+待落地） `文档goalP2(2026-06-20)`
+
+> 口径声明：本小节为**占位 + 待落地**。当前 webhook 入站仅落信封（`integration_inbound_messages`，`parse_status=pending`），`mapPayload` 标准化与其失败边界为占位、**尚无测试锚点**（见本文顶部审计横幅）。下文给出失败边界处置规格与待落地测试用例锚点（测试名 + 断言要点），供后续编码补测试；真实供应商资料（字段、签名、错误码、对账文件格式）到位 + 后台开关开启后再接入真实实现。本小节**不声称已完成**，不修改既有链路口径。
+
+边界总原则（deliver-edge-cases 口径）：失败时**不丢数据、不伪造标准模型、不静默吞掉**——一律保留原始信封 + 标注失败状态 + 进异常复核队列（与 §14.11a③、§11 异常补偿、§12 对账差异、F2 衔接，`source_domain=integration`）。
+
+**A. mapPayload 解析失败（缺必填字段 / 格式不符）**
+
+- Given：回流 payload 缺必填字段（如缺渠道订单号、金额、核销码）或格式不符（金额非整数分、时间非法、枚举越界）。
+- When：`mapPayload` 解析该原始 payload 标准化为平台标准订单/券核销模型。
+- Then：
+  1. 保留原始信封：`integration_inbound_messages.payload` 原样留存，**不被覆盖**；
+  2. `parse_status=failed` 且 `error_message` 记录具体失败字段/原因（可定位、可复核）；
+  3. **不产出标准模型**、不进对账（避免伪造 expected/actual），改进异常复核队列（F2）；
+  4. 幂等键已落，重复回流命中幂等返回历史结果，不重复入队（见 B-③）。
+
+**B. 其它失败边界处置**
+
+| 失败类型 | 触发 | 处置（Then） | 状态/落点 |
+|---|---|---|---|
+| ① 签名失败 | 验签不通过（签名/nonce/request_id 不匹配或过期） | 拒绝入站、不落标准模型；落审计与失败计数，进异常复核；**不重试为成功** | 入站拒绝（如 4xx + `SIGN_INVALID`），审计留痕 |
+| ② 渠道未知 | `provider`/`endpoint_key`/`event_type` 未在接入矩阵（§4.1）或开关未开 | 不解析、不入对账；落原始信封 `parse_status=failed`，标注"渠道未知/开关未开"，进异常复核 | `parse_status=failed`，error=channel_unknown |
+| ③ 重复回流（幂等键命中） | 同一幂等键（§9.1）已处理 | 返回历史结果（§9.2 `IDEMPOTENT_REPLAY`），**不重复入账/核销/入队**；记录重复命中次数 | 幂等返回历史，不新增标准模型 |
+
+签名失败与渠道未知均**不丢原始数据**（落信封/审计），与 A 同源进 F2 异常复核；幂等命中是"正常去重"非失败，但需可观测（命中计数）。
+
+**C. 待落地测试用例锚点（测试名 + 断言要点，供后续编码补测试）**
+
+| 测试名（占位） | 断言要点 |
+|---|---|
+| `mapPayload_missingRequiredField_keepsEnvelope_failed` | 缺必填字段时：`parse_status=failed`；`payload` 原文未变；未生成标准订单/券核销模型；该信封进异常复核队列 |
+| `mapPayload_malformedFormat_recordsErrorMessage` | 金额非整数分/时间非法/枚举越界时：`error_message` 含具体字段与原因；不进对账 expected/actual |
+| `mapPayload_signatureInvalid_rejectedAndAudited` | 验签失败：入站被拒（非 2xx + `SIGN_INVALID`）；写审计与失败计数；不产生标准模型；不标记为成功 |
+| `mapPayload_unknownChannelOrSwitchOff_keepsEnvelope` | 渠道/事件未在 §4.1 或开关 off：`parse_status=failed` 且 error=channel_unknown；落原始信封；进异常复核；不入对账 |
+| `mapPayload_duplicateIdempotencyHit_returnsHistory` | 幂等键命中：返回历史结果（`IDEMPOTENT_REPLAY`）；不重复入账/核销；重复命中计数 +1 |
+| `mapPayload_failedThenReprocess_isIdempotent` | 失败信封修复/重投后重处理：以幂等键去重，不产生重复标准模型；成功后 `parse_status` 由 failed 翻 parsed 可追溯 |
+
+> **待落地说明**：上述测试名与断言为**占位锚点**，落地依赖真实供应商字段清单、签名算法/错误码、对账文件格式。资料到位 + 开关开启后，将这些锚点实现为正式后端测试（与 §14.4 `integration_inbound_messages`、§9 幂等、§12 对账衔接），并随实现更新本小节口径，不在资料到位前把占位标注为已完成。
+
 ### 14.12 camera_devices 摄像头设备表
 
 | 字段 | 类型 | 说明 |
@@ -1409,3 +1452,4 @@ unique (device_id, event_seq)
 | 2026-06-13 OpenAPI 追溯闸口 | 改 | §15 | P0 第三方正式联调必须能在 `p0-openapi-contract-closure-appendix-v0.1.md` 追溯 operation、权限、事件、任务簇、终端/调用方和样例准入，并通过 `verify:openapi-closure` | 防止历史 `/api/integration/*` 能力表直接变成供应商联调文档或正式 Controller |
 | 2026-06-19 R6 全闭环 | 增 | §14.11b | 新增"客流采集源接入(P1) + 回流→对账→差异端到端(衔接F5/F12)"小节：客流采集第三方/闸机能力开关默认 off、未接入不渲染假值进客流指标(R6-D11)；第三方回流(mapPayload 标准模型)→进对账(平台侧系统取数 expected 禁手填+第三方侧 source=manual 兜底，R6-D07)→四类差异(amount/count/status/missing)识别→进统一异常复核(F2)→看板 thirdparty_diff；补全链(回流到看板可追溯)验收与待业务确认。口径与"V071 占位表已落地"一致，未改既有内容 | `R6 全闭环(2026-06-19)`；business-decision-log R6-D11(客流数据源)、R6-D07(对账边界) |
 | 2026-06-19 R5业务HTML缺口审计 F12 | 增 | §14.11a/§15.4 | 新增"视频点位时间锚点 + 机器人被动留痕回调(P0/P1)"小节：视频关键动作记点位+时间锚点(integration_video_anchors)、调阅写审计(integration_video_access_audits)按权限+留痕；机器人补 `POST /integration/robot/report` 写回调(任务创建/取货/配送/送达/失败，到达=被动留痕)；回流缺口/重复/差异进异常复核(与 F2 衔接)；补验收与"真实视频/机器人接口未定"待业务确认 | 业务HTML #thirdparty 视频点位+时间锚点列 P0。只读复核真实迁移/代码后上修顶部横幅"零落地"：V071 已落 integration_video_anchors/integration_video_access_audits/integration_robot_task_events，IntegrationController 已有 `POST /robot/report` 写回调（Grep 佐证），文档需补记口径 |
+| 2026-06-20 文档goalP2 | 增 | §14.11b④ | 新增"mapPayload 映射失败边界 + 测试锚点(占位+待落地)"小节：明确失败时不丢数据/不伪造标准模型/进异常复核(F2)；规格化 A.解析失败(缺必填/格式不符 → 保留信封+parse_status=failed+不入对账)、B.签名失败/渠道未知/重复回流(幂等命中)各自处置、C.6 条待落地测试用例锚点(测试名+断言要点)；明确占位+待落地口径，不声称已完成，未改既有链路 | deliver-edge-cases 口径；审计称"webhook 仅落信封无 mapPayload，映射失败边界为待落地占位无测试锚点"，需补失败边界与测试锚点规格供后续编码补测试 |

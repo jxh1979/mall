@@ -215,12 +215,67 @@ npm run android:p0:apk
 
 ## 9. 告警与监控
 
-P0 建议采用低成本可落地方案：
+P0 采用低成本可落地方案：健康检查脚本 + 定时任务 + 日志文件落地，并将关键失败事件接入企业微信或邮件告警。本节把原“建议”细化为可操作配置步骤，告警策略以 `ops/160/complex-backup-alert.example`（事件名、容量阈值、凭证引用、回退渠道占位）为模板，由 IT/运维在受控窗口落地。本 Runbook 只定义口径，不在仓库中写入真实 webhook、SMTP 密码、API token 或密钥；所有密钥一律以 `cred://...` 凭证引用占位。`文档goalP2(2026-06-20)`
 
-- 健康检查脚本 + 定时任务。
-- 日志文件落地。
-- 企业微信或邮件告警。
-- 发布失败、备份失败、磁盘容量不足、服务不可用、证书/密钥到期进入告警。
+### 9.1 监控对象与阈值
+
+| # | 监控对象 | 采集方式（指向既有脚本/口径） | 触发阈值 | 事件名（对应 alert.example） |
+|---|---|---|---|---|
+| 1 | API/Web 服务存活与端口 | `ops/160/complex-health-check.sh`（actuator/system health、`/docs/openapi` 状态码、Web 200、容器存活），定时执行非 0 退出即告警 | 健康检查脚本退出码 ≠ 0，或连续 2 次探测失败 | `service_unavailable` |
+| 2 | PostgreSQL 连接/可达性 | `ops/160/complex-runtime-config-check.sh` 运行配置预检 + `complex-health-check.sh` 的 `complex-postgres=running`；或 `pg_isready`/连接探测 | 容器非 running，或连接探测失败 | `service_unavailable` |
+| 3 | 磁盘容量百分比（本地盘与 `/mnt/complex-nas-backup`） | 定时 `df -P` 采集已用百分比，对照 alert.example 的 `CAPACITY_WARNING_PERCENT`/`CAPACITY_CRITICAL_PERCENT` | ≥ 80% 预警（P1），≥ 90% 严重（P0） | `capacity_threshold_exceeded` |
+| 4 | NAS 挂载状态 | `ops/160/complex-nas-preflight.sh`（挂载点可达/可写预检），定时执行 | 预检失败（未挂载或不可写） | `service_unavailable`（NAS 维度） |
+| 5 | 备份任务成功率 | `ops/160/complex-backup.sh` 退出码 + `ops/160/complex-restore-drill.sh` 恢复演练结果 | 备份脚本非 0 退出，或当日无成功备份产物，或恢复演练失败 | `backup_failed` / `restore_drill_failed` |
+| 6 | 关键 verify 失败 | `npm run verify:ops160-recovery`（备份/恢复/凭证/NAS 证据），及发布链路 `complex-verify-p0.sh` | 任一 verify 非 0 退出 | `backup_failed`（备份链）/ `service_unavailable`（发布链），按 9.4 分级 |
+| 7 | 证书/密钥到期 | 人工台账 + 到期提醒（见 §8），到期前 N 天触发 | 距到期 ≤ 阈值天数 | `credential_expiring` |
+
+说明：上述脚本均为既有 `ops/160/*.sh`，本节只新增“何时采集、何阈值告警”的运维口径，不修改脚本本身。
+
+### 9.2 通知渠道接通（企微 webhook 或邮件 SMTP）
+
+渠道配置位置统一在 `ops/160/complex-backup-alert.example`（告警策略模板）与 `/etc/complex/complex.env`（运行配置）。真实值由 IT/运维在受控窗口注入，**文档与仓库只保留占位**：
+
+- 企业微信机器人 webhook
+  - 凭证引用占位：`WECOM_WEBHOOK_REF="cred://prod/alert/wecom/complex-backup"`（已在 alert.example 中）。
+  - 运行环境变量占位（写入 `/etc/complex/complex.env`，不入仓库）：`COMPLEX_ALERT_WECOM_WEBHOOK_REF=cred://prod/alert/wecom/complex-backup`。
+  - 发送示例命令（占位，真实 URL 从凭证保管处注入，不写入文档/脚本/日志）：
+    ```bash
+    # WECOM_WEBHOOK 由 IT 从 cred://prod/alert/wecom/complex-backup 解析后注入到本进程环境，禁止落盘
+    curl -fsS -H 'Content-Type: application/json' \
+      -d '{"msgtype":"text","text":{"content":"[complex-160][P1] backup_failed: <detail>"}}' \
+      "$WECOM_WEBHOOK"
+    ```
+- 邮件 SMTP（回退渠道，alert.example 中 `FALLBACK_CHANNEL="email"`）
+  - 收件人占位：`EMAIL_RECIPIENTS_REF="cred://prod/alert/email/complex-ops"`。
+  - 运行环境变量占位：`COMPLEX_ALERT_SMTP_HOST`、`COMPLEX_ALERT_SMTP_PORT`、`COMPLEX_ALERT_SMTP_USER`、`COMPLEX_ALERT_SMTP_PASSWORD_REF=cred://prod/alert/smtp/complex-ops`（密码只放凭证引用，不写明文）。
+  - 发送示例命令（占位）：
+    ```bash
+    # SMTP 密码由 IT 从 cred://prod/alert/smtp/complex-ops 解析后注入，禁止写入文档/脚本/日志
+    printf 'Subject: [complex-160][P0] capacity_threshold_exceeded\n\n<detail>\n' \
+      | msmtp --host="$COMPLEX_ALERT_SMTP_HOST" --port="$COMPLEX_ALERT_SMTP_PORT" \
+              --auth=on --user="$COMPLEX_ALERT_SMTP_USER" --passwordeval='<cred-resolver>' \
+              "$(/* recipients from cred://prod/alert/email/complex-ops */)"
+    ```
+
+约束：webhook URL、SMTP 密码、token、私钥不得出现在本 Runbook、`*.example`、脚本仓库或日志中；只允许 `cred://...` 引用，真实值由 IT 在运行机注入并落入生产准入证据台账。
+
+### 9.3 接通验证（发测试告警确认渠道可达）
+
+落地后必须验证渠道连通，再认定告警生效：
+
+1. 企微：以测试内容发送一条 `text` 消息（见 9.2 示例命令），确认机器人所在群收到，并核对 HTTP 200 与返回体 `errcode=0`。
+2. 邮件：发送一封测试主题邮件至 `cred://prod/alert/email/complex-ops` 解析出的收件组，确认收件箱可达且非垃圾箱拦截。
+3. 注入式演练：临时制造可控失败以验证“事件 → 告警”链路，例如把 `complex-health-check.sh` 指向不可达端口、或对 `complex-backup.sh` 设置不可写的 `NAS_BACKUP_TARGET_DIR`，确认对应事件（`service_unavailable`/`backup_failed`）按渠道送达。演练后立即恢复正常配置。
+4. 记录验收：把测试时间、渠道、收到截图/回执、责任人写入生产准入证据台账，作为“告警渠道可达”的证据。
+
+### 9.4 告警分级（P0 立即 / P1 工作时间）
+
+| 级别 | 含义 | 触发事件示例 | 响应时效 | 通知渠道 |
+|---|---|---|---|---|
+| P0 | 生产不可用或数据风险，需立即处置 | `service_unavailable`（API/Web/PostgreSQL/NAS 不可用）、磁盘 ≥ 90% `capacity_threshold_exceeded`、`backup_failed` 连续失败、`restore_drill_failed` | 立即（7×24，分钟级响应） | 企微 + 邮件双发，未确认升级到 `EXPECTED_ACK_OWNER=IT/ops` |
+| P1 | 有降级风险但暂不影响在线业务 | 磁盘 80%–90% 容量预警、单次备份失败已自动重试、`credential_expiring`（距到期 > 紧急阈值）、单个非阻断 verify 失败 | 工作时间内处置 | 企微（必要时邮件回退） |
+
+分级口径与 `complex-backup-alert.example` 的 `CAPACITY_WARNING_PERCENT=80`/`CAPACITY_CRITICAL_PERCENT=90`、`EXPECTED_ACK_OWNER=IT/ops`、`FALLBACK_CHANNEL=email` 保持一致；本节只规定“何级走何渠道、谁确认”，不改脚本。
 
 ## 10. 当前注意事项
 
@@ -261,3 +316,4 @@ P0 建议采用低成本可落地方案：
 | 2026-06-14 | 改 | 明确 NAS 服务器为 `192.168.88.113`；后续 Java/后端集成测试、BE-000 和完整 P0 验收默认在 160 或等效 Java 21 环境执行 | 防止本机缺少 Java 21 时误判后端代码失败，并固定 160 到 NAS 的备份同步目标 |
 | 2026-06-14 | 改 | NAS 挂载协议收口为 SMB；真实共享名、账号和挂载目录由总控/IT 提供 | 防止后续实施继续在 NFS/SMB 之间摇摆，也避免把缺少外部 NAS 账号误判为 P0 编码未完成 |
 | 2026-06-14 | 改 | NAS 参数收口为 `//192.168.88.113/bn`、账号 `jxh1`、160 挂载 `/mnt/complex-nas-backup`、30 天保留、1TB 容量上限；当前不启用备份归档加密 | 防止脚本默认加密口径与总控选择冲突，并把真实密码继续留在凭证保管流程而非文档 |
+| 2026-06-20 | 改 | §9 告警与监控由“建议”细化为可操作配置步骤：监控对象与阈值、企微/邮件渠道接通（占位凭证引用）、接通验证、P0/P1 告警分级；指向既有 `ops/160/*.sh` 与 `complex-backup-alert.example`，不改脚本（`文档goalP2(2026-06-20)`） | 防止告警停留在口号、缺少可执行落地步骤，同时避免把真实 webhook/SMTP 密钥写入文档或仓库 |

@@ -1,5 +1,9 @@
 # 前端后台开发设计：平台端、商户端、运营看板
 
+> 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
+> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
 > 以业务说明地图（治理 #permission、business #analytics）为基准核验 `apps/web`：
 > - **权限 DENY 优先语义缺失**：后端 `AuthorizationService` 已实现 DENY 优先四源计算（D11），但前端 `PermissionGate.tsx` 无 DENY 语义，与后端口径漂移；前端无拉取后端 effective-permissions 的渲染机制。

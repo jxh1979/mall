@@ -1,5 +1,9 @@
 # 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.1
 
+> 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
+> <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+
 > **⚠️ R7 复审标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > 本会话仅"扫码交接全链"已 P0 落库（V074），已上修；供应合同三模式/采购周期/结构化库房/高价值复核/唯一码主数据等 r5-spec-T6 项经核验**仍零命中**，保持开放。
 > - **✅ 扫码交接全链已落地（V074，T17）**：`inventory_trace_handovers` 补 `overall_status`/`current_segment`（替换写死 accepted），新建 `inventory_trace_handover_steps`（五段链 out_verify/dispatch/kitchen_receive/staff_pickup/deliver_customer，`step_status` pending/done/gap/duplicate/diff）+ `inventory_trace_handover_exceptions`（gap/duplicate/diff → 复核）。员工扫码主动 + 机器人上报被动（V071 `integration_robot_task_events`），出现缺口/重复/差异进复核。
