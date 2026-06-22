@@ -33,3 +33,6 @@ playwright-report-real-backend
 security-scans/**/*.log
 # 当期 semgrep 滚动扫描产物(每次重生成的临时输出,非 dated 审计证据,不入库)
 security-scans/semgrep-current/
+
+# 历史扫描目录归档时随迁的滚动 .log(沿用 logs 不入库口径)
+docs/_archive/**/*.log
