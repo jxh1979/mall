@@ -1,8 +1,0 @@
-
-> entertainment-complex-management@0.1.0 verify:android-env
-> node tools/run-android-gradle.mjs --check --require-android-sdk --project apps/android-terminal/android-app
-
-[android-env] Android P0 环境前置校验通过。
-- openjdk version "21.0.11" 2026-04-21
-- system Gradle: ------------------------------------------------------------
-- Android SDK: /home/james/android-sdk
