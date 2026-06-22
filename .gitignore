@@ -27,6 +27,7 @@ playwright-report-real-backend
 
 # 本机 Claude Code 会话配置(机器相关绝对路径,不入库)
 .claude/settings.json
+.claude/settings.local.json
 # TypeScript 增量编译缓存(构建副产物)
 *.tsbuildinfo
 # security 扫描转录日志(保留 findings json/sarif/md,仅日志不入库)
