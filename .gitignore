@@ -31,3 +31,5 @@ playwright-report-real-backend
 *.tsbuildinfo
 # security 扫描转录日志(保留 findings json/sarif/md,仅日志不入库)
 security-scans/**/*.log
+# 当期 semgrep 滚动扫描产物(每次重生成的临时输出,非 dated 审计证据,不入库)
+security-scans/semgrep-current/
