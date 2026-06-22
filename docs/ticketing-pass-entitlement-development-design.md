@@ -162,8 +162,9 @@ erDiagram
 关键约束：
 
 - 支付成功后才能出票。
-- 出票后退款必须检查权益使用情况。
-- 已核销权益默认不可退，除非配置了冲正和审批规则。
+- 出票后退款必须检查权益使用情况（F-TXN-03 已强制：`TicketRefundService.requestRefund` 发起退款前核查本订单权益核销状态）。
+- 已核销即整票不可退（F-TXN-03 用户口径「多次/多人票一经购买即限时用完；核销一张则整票不可退、核销后不可退」）：本订单**任一**权益 `usedTimes>0`（被冲正回滚归零则视为未核销）→ 拒退 `TICKET_ORDER_VERIFIED_NO_REFUND`；仅**全未核销**可原渠道退（其 pending 积分从未 confirmed，天然不计分）。
+  - 注：积分「按核销次数精确计分」（多次/多人票按核销张数比例 confirm）为 F-TXN-03 剩余子项；单次票现有「支付 pending → 核销 confirm」链已等价按核销计分。
 
 ### 4.3 票实例状态
 
@@ -439,6 +440,8 @@ sequenceDiagram
 - 已核销权益默认不可退。
 - 第三方已核销券需要第三方确认冲正后才能退款。
 - 已结算商户款项需要生成反向结算明细。
+
+> **✅ 已实现修复（F-TXN-01，2026-06-22，已在 .160 编译通过）**：退款 `requestRefund` / `approveRefund` **校验原票务订单的 `merchant`（商户）归属**——发起/审批退款时核对该退款对应的原票务订单所属商户，**跨商户操作抛 `CROSS_MERCHANT_FORBIDDEN`**。与 §8.3 强约束「商户后台任何查询都必须自动追加 `merchant_id` 数据范围」「核销员不能跨商户核销」一致：退款链路同样不允许跨商户越权对他人订单发起或审批退款。
 
 ### 5.7 改期流程
 
@@ -1293,6 +1296,14 @@ sequenceDiagram
 - 对 `failed`/`preview_passed`/已 `reversed` 记录发起冲正：拒绝并提示不可冲正。
 - 退款联动：已核销权益按配置触发冲正后再退款，`verification.reversed` 与退款事件可在 `audit_events` 按 `source_doc_id` 串联。
 
+> **✅ 已实现修复（F-TXN-03，2026-06-22，已在 .160 编译通过）**：核销冲正 `reverseVerification` **发 `VerificationReversedEvent` → customer 域 `LoyaltyPointsConsumer` 冲减该订单已确认积分**，补齐冲正侧的积分回扣链路（与 §10A.2 退款 `deduct` 冲减、§10B.2 积分进 `audit_events` 同方向）：
+> - 冲正成功后发 `VerificationReversedEvent`，customer 域 `LoyaltyPointsConsumer` 消费该事件，按原订单**冲减其已确认（earn 入账）的积分**，写 `customer_points_ledger.change_type=deduct` 并回扣 `customer_points_accounts.balance`。
+> - **冲正专用幂等键 `ticket_verification_reversal`**，**区别于退款 `deduct` 的幂等键**——同一订单"退款冲减"与"核销冲正冲减"走不同幂等键，互不抵消、互不去重，避免冲正与退款两条路径误判为同一来源单据而漏扣或重复扣。
+>
+> **✅ 已实现修复（F-TXN-04，2026-06-22，已在 .160 编译通过）**：核销冲正 `markVerificationReversed` 与退款审批 `markTicketRefundApproved` **均改为状态 CAS（compare-and-set）**——以 `UPDATE … WHERE status = <expected>` 的**返回行数**判定是否抢闸成功：
+> - 并发下**只有一路**（返回行数=1）过闸执行后续副作用，其余路（返回行数=0）直接失败，**防止同一票多次冲正导致 `used_times` 重复双减**、或**同一退款单重复审批导致拨付事件双发**。
+> - 与本节状态机 `success → reversed`（冲正）、§4.6 退款 `reviewing → approved`（退款审批）一致：状态前置条件由 CAS 在 SQL 层原子保证，不依赖应用层先读后写（消除 check-then-act 竞态）。
+
 ## 11. Java 后端模块建议
 
 Spring Boot 项目建议按业务模块拆包，不按数据库表拆包。
@@ -1448,3 +1459,6 @@ com.complex.ticketing
 | 2026-06-19 R5业务HTML缺口审计 F4 | 增 | §10.4.1 | 新增"存酒登记与取酒核身字段（契约对齐）"小节：登记 4 必填、`customer_id` 可空（散客存酒）、取酒须比对瓶底标签数值+姓名/昵称、`transferSavedBottle` 转赠与 `disputed` 争议态、saved_bottle.* 五事件；附契约变更清单（待同步 openapi-p0.json） | F4 存酒核身契约对齐；bar-operations §5.3 指向本小节 |
 | 2026-06-19 R5业务HTML缺口审计 F7 | 增 | §10A | 新增"积分入账引擎（earn）规格"章节：触发/计分、退款冲减、防超兑并发（行锁/乐观锁+frozen_points 冻结回滚）、source_doc 幂等、points.earned/deducted 事件、统一表名权威源（customer_points_* 真实表，废弃 point_gifts/point_redemptions/points_rules 字面名） | F7 闭合"有表无引擎"(PTS-001 待编码) |
 | 2026-06-19 R6 全闭环 | 增 | §10B | 新增"防伪签名 P0 例外标注 + 积分审计接线 + 核销 reversed 态收口"章节：①§5.3/§6.2.3"签名"在 P0 指哈希/刷新窗口/nonce 校验、HMAC 数字签名(signature_valid 阻断)为 P1，给 P0/P1 各自验收口径，消除"设计要求校验 vs 实现不校验"误实现；②points.earned/deducted 接入 audit_events(event_category 补 points、subject_type 补 points)，跨域审计时间线可查，不并入 revenue.net；③核销 reversed 态补状态机(success→reversed)+冲正事件 verification.reversed，与退款联动 | R6 审计：防伪口径未标例外、积分未进 audit_events、reversed 态缺；引用 R6-D06/R6-D13 |
+| 2026-06-22 已实现修复回写 | 注 | §5.6 | F-TXN-01：退款 requestRefund/approveRefund 校验原票务订单 merchant 归属，跨商户抛 CROSS_MERCHANT_FORBIDDEN | 回写 .160 已编译通过的修复（F-TXN-01） |
+| 2026-06-22 已实现修复回写 | 注 | §10B.3 | F-TXN-03：核销冲正 reverseVerification 发 VerificationReversedEvent → customer 域 LoyaltyPointsConsumer 冲减该订单已确认积分，冲正专用幂等键 ticket_verification_reversal（区别于退款 deduct） | 回写 .160 已编译通过的修复（F-TXN-03） |
+| 2026-06-22 已实现修复回写 | 注 | §10B.3 | F-TXN-04：markVerificationReversed + markTicketRefundApproved 均改状态 CAS（UPDATE … WHERE status=expected 返回行数），并发只一路过闸，防多次票重复冲正双减 used_times / 退款双发拨付事件 | 回写 .160 已编译通过的修复（F-TXN-04） |

@@ -6,6 +6,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, AmusementSafetyInspectionRow } from "../types";
+import { PermissionButton } from "../security/Can";
 
 const TEXT = {
   title: "安全巡检/事故",
@@ -55,7 +56,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds ?? request.attachmentIds, result };
 }
 
-export function AmusementSafetyPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<AmusementSafetyInspectionRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [createTitle, setCreateTitle] = React.useState("开放前护栏检查");
@@ -179,11 +180,11 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError }: Ad
           <label>{TEXT.rectifyNote}<input data-testid="amusement-safety-rectify-note" value={rectifyNote} onChange={(event) => setRectifyNote(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="amusement-safety-actions">
-          <button type="button" data-testid="amusement-safety-create" disabled={busyAction !== ""} onClick={() => void createInspection()}>{TEXT.create}</button>
-          <button type="button" data-testid="amusement-safety-submit" disabled={busyAction !== ""} onClick={() => void submitInspection()}>{TEXT.submit}</button>
-          <button type="button" data-testid="amusement-safety-rectify" disabled={busyAction !== ""} onClick={() => void rectifyInspection()}>{TEXT.rectify}</button>
-          <button type="button" data-testid="amusement-safety-recheck" disabled={busyAction !== ""} onClick={() => void recheckInspection()}>{TEXT.recheck}</button>
-          <button type="button" data-testid="amusement-safety-approve-reopen" disabled={busyAction !== ""} onClick={() => void approveReopen()}>{TEXT.approveReopen}</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.create"]} data-testid="amusement-safety-create" disabled={busyAction !== ""} onClick={() => void createInspection()}>{TEXT.create}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.submit"]} data-testid="amusement-safety-submit" disabled={busyAction !== ""} onClick={() => void submitInspection()}>{TEXT.submit}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.rectify"]} data-testid="amusement-safety-rectify" disabled={busyAction !== ""} onClick={() => void rectifyInspection()}>{TEXT.rectify}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.recheck"]} data-testid="amusement-safety-recheck" disabled={busyAction !== ""} onClick={() => void recheckInspection()}>{TEXT.recheck}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.approve_reopen"]} data-testid="amusement-safety-approve-reopen" disabled={busyAction !== ""} onClick={() => void approveReopen()}>{TEXT.approveReopen}</PermissionButton>
         </div>
         <div className="admin-muted-action" data-testid="amusement-safety-boundary">{TEXT.boundary}</div>
         {formError ? <div data-testid="amusement-safety-error" className="admin-inline-error">{formError}</div> : null}

@@ -264,12 +264,16 @@ class BarGiftConsumerTests {
         @Override public List<BarProductionTicketEventRecord> listProductionTicketEvents(String ticketId) { return List.copyOf(productionTicketEvents); }
         @Override public BarBillRecord saveBill(BarBillRecord bill) { return bill; }
         @Override public Optional<BarBillRecord> findBillById(String id) { return Optional.empty(); }
+        @Override public Optional<BarBillRecord> findBillByIdForUpdate(String id) { return Optional.empty(); }
+        @Override public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) { return Optional.empty(); }
+        @Override public int markBillSettlementsReversed(String billId) { return 0; }
         @Override public BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment) { return adjustment; }
         @Override public List<BarBillAdjustmentRecord> listBillAdjustments(String billId) { return List.of(); }
         @Override public BarBillOperationRecord saveBillOperation(BarBillOperationRecord operation) { return operation; }
         @Override public List<BarBillOperationRecord> listBillOperations(String billId) { return List.of(); }
         @Override public BarCommissionCalculationRecord saveCommissionCalculation(BarCommissionCalculationRecord calculation) { return calculation; }
         @Override public BarTableSessionRecord saveTableSession(BarTableSessionRecord session) { return session; }
+        @Override public boolean updateTableSessionIfVersionMatches(BarTableSessionRecord session, long expectedVersion) { return true; }
         @Override public List<BarTableSessionRecord> listTableSessions(Optional<String> merchantScope) { return List.of(); }
         @Override public Optional<BarTableSessionRecord> findTableSessionById(String id) { return Optional.empty(); }
         @Override public BarTableSessionAdjustmentRecord saveTableSessionAdjustment(BarTableSessionAdjustmentRecord adjustment) { return adjustment; }

@@ -62,7 +62,8 @@ public class TicketingAmusementEntitlementGateway implements AmusementEntitlemen
                 entitlement.status(),
                 entitlement.validFrom(),
                 entitlement.validTo(),
-                entitlement.remainingTimes()
+                entitlement.remainingTimes(),
+                entitlement.numPeople()
         );
     }
 

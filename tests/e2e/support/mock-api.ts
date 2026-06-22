@@ -79,6 +79,7 @@ function createState(empty = false) {
     ...fillRows(11, (i) => ({ id: `ticket-order-fill-${i + 2}`, orderNo: `TO-FILL-${i + 2}`, ticketTypeId: "ticket-1", quantity: 1, visitDate: "2026-06-21", salesChannel: i % 2 ? "miniapp" : "web", amountCent: 9900, payStatus: i % 2 ? "unpaid" : "paid", issueStatus: "not_issued", status: "created" })),
   ];
   const savedBottles = empty ? [] : [{ id: "saved-1", savedNo: "SAVED-1", customerName: "Guest A", itemName: "Wine", quantity: 1, status: "stored" }];
+  const barTableSessions = empty ? [] : [{ id: "session-1", barId: "bar-main", merchantId: "merchant-1", businessDate: "2026-06-15", tableId: "table-1", reservationId: "reservation-1", customerId: "customer-1", guestCount: 2, status: "open", sessionVersion: 1, openedAt: now }, { id: "session-2", barId: "bar-main", merchantId: "merchant-1", businessDate: "2026-06-15", tableId: "table-2", reservationId: null, customerId: "customer-2", guestCount: 2, status: "open", sessionVersion: 1, openedAt: now }];
   const safetyInspections = empty ? [] : [{ id: "safety-1", inspectionNo: "SAFE-1", projectId: "amuse-1", projectName: "Adventure", templateId: "safety-template-1", overallResult: "pending_rectification", inspectionStatus: "created", rectificationStatus: "pending", reopenStatus: "pending", riskLevel: "medium", status: "open", evidenceAttachmentIds: ["att-safety-1"], inspectedAt: now, createdAt: now, updatedAt: now }];
   const reconciliationBatches = empty ? [] : [{ id: "recon-batch-1", batchNo: "REC-1", amount: 9900, status: "open" }];
   const reconciliationDifferences = empty ? [] : [{ id: "recon-diff-1", differenceNo: "DIFF-1", amount: 100, status: "unresolved" }];
@@ -119,6 +120,7 @@ function createState(empty = false) {
     contracts,
     ticketOrders,
     savedBottles,
+    barTableSessions,
     safetyInspections,
     reconciliationBatches,
     reconciliationDifferences,
@@ -140,7 +142,7 @@ function createState(empty = false) {
     groupBookings: empty ? [] : [{ id: "gb-1", projectId: "amuse-1", sessionId: "session-1", bookingType: "group", customerName: "Team A", partySize: 6, reservedCapacity: 6, bookingStatus: "approved", evidenceAttachmentIds: [], createdAt: now, updatedAt: now }],
     amusementSessions,
     users: empty ? [] : [{ id: "user-1", username: "admin", accountType: "platform_admin", status: "active", organizationId: "org-1" }],
-    permissionTemplates: empty ? [] : [{ id: "template-basic", templateName: "普通员工", templateType: "base", status: "active", validUntil: null, singleUse: false, permissions: ["overview.read"] }],
+    permissionTemplates: empty ? [] : [{ id: "template-basic", templateName: "普通员工", templateType: "base", status: "active", validUntil: null, singleUse: false, permissions: ["analytics.dashboard.view"] }],
     financeItems: empty ? [] : [{ id: "bill-1", billNo: "BILL-1", sourceDoc: "SO-1", counterparty: "Main Merchant", direction: "receivable", totalAmount: 9900, paidAmount: 0, status: "pending", createdAt: now }],
     readinessItems: empty ? [] : [{ id: "blocker-1", blockerCode: "SEC-P0-OPS-RECOVERY-001", title: "NAS 恢复演练", owner: "IT", status: "open", evidenceRef: null, dueAt: "2026-06-30" }],
   };
@@ -162,7 +164,7 @@ function fixedRows(pathname: string, state: MockState): ApiData {
     "/api/v1/platform/spaces": [{ id: "area-1", venueId: "venue-1", areaId: "area-1", name: "Gate A", code: "GATE-A", areaType: "operation", pointType: "gate", status: "active" }],
     "/api/v1/access/users": state.users,
     "/api/v1/access/roles": [{ id: "role-1", roleCode: "BAR_MANAGER", roleName: "酒吧经理" }, { id: "role-2", roleCode: "FINANCE", roleName: "财务" }],
-    "/api/v1/access/permissions": [{ code: "overview.read" }, { code: "finance.ledger.read" }, { code: "bar.table.read" }, { code: "permission_template.read" }],
+    "/api/v1/access/permissions": [{ code: "analytics.dashboard.view", domain: "analytics", permissionName: "查看总控驾驶舱" }, { code: "finance.ar_ap.view", domain: "finance", permissionName: "查看应收应付" }, { code: "bar.table_session.view", domain: "bar", permissionName: "查看卡座会话" }, { code: "bar.table.view", domain: "bar", permissionName: "查看卡座" }, { code: "bar.reservation.view", domain: "bar", permissionName: "查看订台" }, { code: "bar.order.view", domain: "bar", permissionName: "查看酒吧订单" }, { code: "access.permission_template.view", domain: "access", permissionName: "查看权限模板" }, { code: "access.permission_template.manage", domain: "access", permissionName: "维护权限模板" }, { code: "access.permission_template.apply", domain: "access", permissionName: "应用权限模板" }],
     "/api/v1/access/permission-templates": state.permissionTemplates,
     "/api/v1/access/temporary-grants": empty,
     "/api/v1/analytics/merchants": [{ merchantId: "merchant-1", merchantName: "Main Merchant", merchantType: "complex", revenueAmountCents: 880000, orderCount: 8, riskAlertCount: 1, settlementStatus: "pending", businessDate: "2026-06-15", createdAt: now, updatedAt: now }],
@@ -173,13 +175,15 @@ function fixedRows(pathname: string, state: MockState): ApiData {
     "/api/v1/ticketing/issued-entitlements": state.issuedEntitlements,
     "/api/v1/ticketing/verifications": state.verifications,
     "/api/v1/finance/ar-ap-items": state.financeItems,
+    "/api/v1/finance/ar-ap-items/export": { id: "arap-export-1", format: "csv", rowCount: state.financeItems.length, rows: state.financeItems, csvText: "item_no,direction,status\nBILL-1,receivable,pending", exportedAt: now },
     "/api/v1/finance/reconciliation/batches": state.reconciliationBatches,
     "/api/v1/finance/reconciliation/differences": state.reconciliationDifferences,
-    "/api/v1/bar/tables": [{ id: "table-1", tableCode: "A01", tableName: "A01", capacity: 4, guestLimit: 4, minSpendAmount: 10000, barId: "bar-main", status: "active" }],
+    "/api/v1/bar/tables": [{ id: "table-1", tableCode: "A01", tableName: "A01", capacity: 4, guestLimit: 4, minSpendAmount: 10000, barId: "bar-main", status: "active" }, { id: "table-2", tableCode: "A02", tableName: "A02", capacity: 6, guestLimit: 6, minSpendAmount: 12000, barId: "bar-main", status: "active" }],
     "/api/v1/bar/products": [{ id: "drink-1", productName: "Mock Drink", category: "drink", priceAmount: 3000, status: "active" }],
     "/api/v1/bar/production-tickets": empty,
     "/api/v1/bar/reservations": [{ id: "reservation-1", reservationNo: "RSV-1", customerName: "Guest A", partySize: 2, depositAmount: 2000, status: "reserved", reservedAt: now }],
     "/api/v1/bar/orders": [{ id: "order-1", orderNo: "ORD-1", tableId: "table-1", billId: "bill-bar-1", sellerRole: "sales", commissionRate: "15%", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open" }] }],
+    "/api/v1/bar/table-sessions": state.barTableSessions,
     "/api/v1/inventory/stock-movements": empty,
     "/api/v1/inventory/items": [{ id: "item-1", itemCode: "WINE", itemName: "Wine", category: "drink", unit: "bottle", status: "active", minQuantity: 2 }],
     "/api/v1/inventory/stock-balances": [{ id: "stock-1", itemId: "item-1", locationType: "bar", quantity: 10 }],
@@ -259,7 +263,7 @@ function effectivePermissionsFor(options: MockOptions) {
     };
   }
   // 其它受限账号（如 bar_operator）：仅授予自身域读权限，不含平台财务等。
-  return { grants: ["bar.table.read", "bar.order.read"], denies: [], wildcard: false, computedAt: now };
+  return { grants: ["bar.table_session.view", "bar.table.view", "bar.reservation.view", "bar.order.view", "bar.table.guest_checkin", "bar.table_session.transfer", "bar.table_session.merge", "bar.table_session.renew"], denies: [], wildcard: false, computedAt: now };
 }
 
 export async function installMockApi(page: Page, options: MockOptions = {}) {
@@ -305,22 +309,85 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
     return json(route, { accessToken: "mock-token", refreshToken: "mock-refresh", sessionId: "session-1", tokenType: "Bearer", user: mockUser(options.user) });
   }
   if (pathname === "/api/v1/access/users") {
-    const user = { id: `user-${state.users.length + 1}`, username: String(bodyValue(body, "username") ?? "new-staff"), accountType: String(bodyValue(body, "accountType", "account_type") ?? "bar_manager"), status: "active", organizationId: "org-1" };
+    const user = {
+      id: `user-${state.users.length + 1}`,
+      username: String(bodyValue(body, "username") ?? "new-staff"),
+      phone: String(bodyValue(body, "phone") ?? ""),
+      accountType: String(bodyValue(body, "accountType", "account_type") ?? "staff"),
+      status: String(bodyValue(body, "status") ?? "active"),
+      organizationId: String(bodyValue(body, "organizationId", "organization_id") ?? "org-1"),
+      merchantId: String(bodyValue(body, "merchantId", "merchant_id") ?? "merchant-1"),
+      consentReference: String(bodyValue(body, "consentReference", "consent_reference") ?? ""),
+      evidenceAttachmentIds: (bodyValue(body, "evidenceAttachmentIds", "evidence_attachment_ids") as string[] | undefined) ?? [],
+    };
     state.users.push(user);
     return json(route, user);
   }
   if (pathname === "/api/v1/access/permission-templates") {
-    const template = { id: `template-${state.permissionTemplates.length + 1}`, templateName: String(bodyValue(body, "templateName", "template_name") ?? "临时模板"), templateType: "temporary", status: "active", singleUse: Boolean(bodyValue(body, "singleUse", "single_use")) };
+    const permissions = (bodyValue(body, "permissionCodes", "permission_codes") as string[] | undefined) ?? [];
+    const template = {
+      id: `template-${state.permissionTemplates.length + 1}`,
+      templateName: String(bodyValue(body, "templateName", "template_name") ?? "临时模板"),
+      templateType: String(bodyValue(body, "templateType", "template_type") ?? "temporary"),
+      status: "active",
+      validFrom: bodyValue(body, "validFrom", "valid_from") ?? null,
+      validUntil: bodyValue(body, "validUntil", "valid_until") ?? null,
+      singleUse: Boolean(bodyValue(body, "singleUse", "single_use")),
+      permissions,
+      permissionCodes: permissions,
+    };
     state.permissionTemplates.push(template);
     return json(route, template);
   }
+  if (/^\/api\/v1\/access\/permission-templates\/[^/]+$/.test(pathname) && route.request().method() === "PUT") {
+    const id = pathname.split("/").at(-1)!;
+    const existing = state.permissionTemplates.find((template) => template.id === id);
+    const permissions = (bodyValue(body, "permissionCodes", "permission_codes") as string[] | undefined) ?? existing?.permissions ?? [];
+    const updated = {
+      ...(existing ?? { id }),
+      templateName: String(bodyValue(body, "templateName", "template_name") ?? existing?.templateName ?? id),
+      templateType: String(bodyValue(body, "templateType", "template_type") ?? existing?.templateType ?? "base"),
+      status: "active",
+      validFrom: bodyValue(body, "validFrom", "valid_from") ?? existing?.validFrom ?? null,
+      validUntil: bodyValue(body, "validUntil", "valid_until") ?? existing?.validUntil ?? null,
+      singleUse: Boolean(bodyValue(body, "singleUse", "single_use")),
+      permissions,
+      permissionCodes: permissions,
+    };
+    if (existing) Object.assign(existing, updated);
+    else state.permissionTemplates.push(updated);
+    return json(route, updated);
+  }
   if (/^\/api\/v1\/access\/permission-templates\/[^/]+\/copy$/.test(pathname)) {
-    const template = { id: "template-copy", templateName: String(bodyValue(body, "templateName", "template_name") ?? "普通员工01"), templateType: "copy", status: "active", singleUse: false };
+    const sourceId = pathname.split("/").at(-2)!;
+    const source = state.permissionTemplates.find((template) => template.id === sourceId);
+    const permissions = source?.permissions ?? [];
+    const template = { id: `template-copy-${state.permissionTemplates.length + 1}`, templateName: String(bodyValue(body, "templateName", "template_name") ?? "普通员工01"), templateType: "copy", status: "active", validFrom: source?.validFrom ?? null, validUntil: source?.validUntil ?? null, singleUse: Boolean(source?.singleUse), permissions, permissionCodes: permissions };
     state.permissionTemplates.push(template);
     return json(route, template);
   }
   if (/^\/api\/v1\/access\/permission-templates\/[^/]+\/apply$/.test(pathname)) {
-    return json(route, { status: Boolean(bodyValue(body, "singleUse", "single_use")) ? "single_use_applied" : "applied", singleUse: Boolean(bodyValue(body, "singleUse", "single_use")) });
+    const mode = String(bodyValue(body, "mode") ?? "append");
+    const targetUserIds = (bodyValue(body, "targetUserIds", "target_user_ids") as string[] | undefined) ?? [];
+    return json(route, { status: mode === "single_use" ? "single_use_applied" : "applied", singleUse: mode === "single_use", targetCount: targetUserIds.length });
+  }
+  const tableSessionAction = pathname.match(/^\/api\/v1\/bar\/table-sessions\/([^/]+)\/(transfer|merge|renew)$/);
+  if (tableSessionAction) {
+    const [, sessionId, action] = tableSessionAction;
+    const session = state.barTableSessions.find((item) => item.id === sessionId);
+    if (!session) return json(route, { code: "NOT_FOUND", message: "session not found" }, 404);
+    if (action === "transfer") {
+      session.tableId = String(bodyValue(body, "targetTableId", "target_table_id") ?? session.tableId);
+      session.sessionVersion = Number(session.sessionVersion ?? 1) + 1;
+      return json(route, { id: `adj-${action}-1`, sessionId, adjustmentType: "transfer", toTableId: session.tableId, status: "transferred" });
+    }
+    if (action === "merge") {
+      session.status = "merged";
+      session.sessionVersion = Number(session.sessionVersion ?? 1) + 1;
+      return json(route, { id: `adj-${action}-1`, sessionId, targetSessionId: bodyValue(body, "mergedSessionId", "merged_session_id"), adjustmentType: "merge", status: "merged" });
+    }
+    session.sessionVersion = Number(session.sessionVersion ?? 1) + 1;
+    return json(route, { id: `adj-${action}-1`, sessionId, renewedUntil: bodyValue(body, "renewedUntil", "renewed_until"), adjustmentType: "renew", status: "renewed" });
   }
   if (pathname === "/api/v1/platform/business-entities") return json(route, { id: "org-created", name: "Created Org", orgType: "platform", status: "active", createdAt: now });
   if (pathname === "/api/v1/platform/merchants") return json(route, { id: "merchant-created", organizationId: "org-created", displayName: "Created Merchant", companyName: "Created Company", mallBlockCode: "1F-A", areaSquareMeter: 128.5, leasedAreaSquareMeter: 120, secondaryContactName: "Jack", rentPerSquareMeter: 12.3, cooperationForm: "fixed_rent_plus_commission", status: "active", riskLevel: "normal" });
@@ -402,6 +469,7 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
   }
   if (/^\/api\/v1\/ticketing\/orders\/[^/]+\/issue$/.test(pathname)) return json(route, { id: pathname.split("/").at(-2), issueStatus: "issued", status: "issued" });
   if (pathname === "/api/v1/finance/ar-ap-items") return json(route, { id: "bill-created", billNo: "BILL-CREATED", merchantId: "merchant-1", totalAmount: 9900, status: "pending", createdAt: now });
+  if (pathname === "/api/v1/integration/polling-checks") return json(route, { id: "polling-check-1", status: "recorded", operatorNote: String(bodyValue(body, "operatorNote", "operator_note") ?? ""), checkedEndpoints: bodyValue(body, "checkedEndpoints", "checked_endpoints") ?? [], pendingCount: bodyValue(body, "pendingCount", "pending_count") ?? 0, sourceCount: bodyValue(body, "sourceCount", "source_count") ?? 0, productionBoundary: "platform_task_status_only_not_supplier_execution", checkedAt: now });
   if (/^\/api\/v1\/finance\/ar-ap-items\/[^/]+\/payments$/.test(pathname)) return json(route, { id: "payment-1", status: "partial", amount: bodyValue(body, "amount"), reason: bodyValue(body, "reason") });
   if (pathname === "/api/v1/bar/tables") return json(route, { id: "table-created", tableCode: "A02", tableName: "A02", capacity: 4, minSpendAmount: 10000, status: "active" });
   if (pathname === "/api/v1/bar/products") return json(route, { id: "drink-created", productName: "Mock Drink", category: "drink", priceAmount: 3000, status: "active" });

@@ -88,7 +88,7 @@ class TerminalDeviceControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bindBody("bind-denied")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -105,7 +105,7 @@ class TerminalDeviceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 
@@ -123,7 +123,7 @@ class TerminalDeviceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 
@@ -145,7 +145,7 @@ class TerminalDeviceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("RETURN_BLOCKED_PENDING_TASKS"));
+                .andExpect(jsonPath("$.detail_code").value("RETURN_BLOCKED_PENDING_TASKS"));
 
         verify(authorizationService).requirePermission("terminal.device.bind");
     }
@@ -274,7 +274,7 @@ class TerminalDeviceControllerTests {
 
         mockMvc.perform(get("/api/v1/terminals/kiosks/device_ticketing_1/config"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("DEVICE_CREDENTIAL_REQUIRED"));
+                .andExpect(jsonPath("$.detail_code").value("DEVICE_CREDENTIAL_REQUIRED"));
 
         verify(service).getKioskConfig("device_ticketing_1", null);
         verifyNoInteractions(authorizationService);
@@ -288,7 +288,7 @@ class TerminalDeviceControllerTests {
         mockMvc.perform(get("/api/v1/terminals/kiosks/device_ticketing_1/config")
                         .header("X-Device-Token", "wrong-token"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("DEVICE_CREDENTIAL_INVALID"));
+                .andExpect(jsonPath("$.detail_code").value("DEVICE_CREDENTIAL_INVALID"));
 
         verifyNoInteractions(authorizationService);
     }
@@ -341,7 +341,7 @@ class TerminalDeviceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("DEVICE_CREDENTIAL_REQUIRED"));
+                .andExpect(jsonPath("$.detail_code").value("DEVICE_CREDENTIAL_REQUIRED"));
 
         verify(service).recordKioskHeartbeat(eq("device_ticketing_1"), eq(null), any(KioskHeartbeatRequest.class));
         verifyNoInteractions(authorizationService);
@@ -363,7 +363,7 @@ class TerminalDeviceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("DEVICE_CREDENTIAL_INVALID"));
+                .andExpect(jsonPath("$.detail_code").value("DEVICE_CREDENTIAL_INVALID"));
 
         verifyNoInteractions(authorizationService);
     }

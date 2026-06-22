@@ -98,6 +98,15 @@ public class TraceabilityService {
         return repository.listStepsByInstance(processInstanceId);
     }
 
+    public TraceabilityAutoCaptureRate autoCaptureRate(Integer thresholdPercent) {
+        int threshold = thresholdPercent == null ? 80 : thresholdPercent;
+        if (threshold < 0 || threshold > 100) {
+            throw com.complex.platform.common.api.ApiException.badRequest(
+                    "VALIDATION_FAILED", "threshold_percent must be between 0 and 100");
+        }
+        return repository.autoCaptureRate(currentScope(), threshold);
+    }
+
     public List<TraceabilityResponsibilityRecord> listResponsibilities() {
         return repository.listResponsibilities(currentScope());
     }

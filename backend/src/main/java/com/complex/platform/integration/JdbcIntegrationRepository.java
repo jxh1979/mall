@@ -49,27 +49,6 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     }
 
     @Override
-    public OpenAppTokenRecord saveOpenToken(OpenAppTokenRecord token) {
-        jdbcTemplate.update("""
-                INSERT INTO open_app_tokens (
-                    id, app_key, token_hash, issued_at, expires_at, status, nonce, created_at
-                )
-                VALUES (
-                    :id, :app_key, :token_hash, :issued_at, :expires_at, :status, :nonce, :created_at
-                )
-                """, new MapSqlParameterSource()
-                .addValue("id", token.id())
-                .addValue("app_key", token.appKey())
-                .addValue("token_hash", token.tokenHash())
-                .addValue("issued_at", timestampWithTimeZone(token.issuedAt()))
-                .addValue("expires_at", timestampWithTimeZone(token.expiresAt()))
-                .addValue("status", token.status())
-                .addValue("nonce", token.nonce())
-                .addValue("created_at", timestampWithTimeZone(token.createdAt())));
-        return token;
-    }
-
-    @Override
     public Optional<OpenEndpointConfigRecord> findEndpointConfig(String endpointKey) {
         return jdbcTemplate.query("""
                 SELECT id, endpoint_key, provider_code, secret_ref, status,

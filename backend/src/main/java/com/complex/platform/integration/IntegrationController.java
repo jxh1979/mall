@@ -26,6 +26,7 @@ public class IntegrationController {
     private static final String ORDER_SYNC_MANAGE_PERMISSION = "integration.order_sync.manage";
     private static final String RETRY_VIEW_PERMISSION = "integration.retry.view";
     private static final String RETRY_MANAGE_PERMISSION = "integration.retry.manage";
+    private static final String POLLING_MANAGE_PERMISSION = "integration.retry.manage";
     private static final String COMPENSATION_VIEW_PERMISSION = "integration.compensation.view";
     private static final String COMPENSATION_MANAGE_PERMISSION = "integration.compensation.manage";
     private static final String RECONCILIATION_VIEW_PERMISSION = "integration.reconciliation.view";
@@ -133,6 +134,13 @@ public class IntegrationController {
         authorizationService.requirePermission(TEST_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.testProviderAdapterMock(id, request));
+    }
+
+    @PostMapping("/polling-checks")
+    public ApiResponse<IntegrationPollingCheckRecord> recordPollingCheck(@RequestBody IntegrationPollingCheckRequest request) {
+        authorizationService.requirePermission(POLLING_MANAGE_PERMISSION);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.recordPollingCheck(request));
     }
 
     @GetMapping("/retail/skus")

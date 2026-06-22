@@ -80,8 +80,8 @@ class AnalyticsControllerTests {
         when(service.dashboardDomain(anyString(), any())).thenReturn(overviewResponse());
         when(service.groupOverview()).thenReturn(groupOverviewResponse());
         when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
-        when(service.listMerchantHealthScores()).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
-        when(service.listAnalyticsMerchants()).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
+        when(service.listMerchantHealthScores(any())).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
+        when(service.listAnalyticsMerchants(any())).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
         when(service.listMetricAnomalies()).thenReturn(new PageResponse<>(List.of(metricAnomaly()), 1, 50, 1));
         when(service.listMetricDefinitions()).thenReturn(new PageResponse<>(List.of(metricDefinition()), 1, 50, 1));
         when(service.listRiskAlerts()).thenReturn(new PageResponse<>(List.of(riskAlert()), 1, 50, 1));
@@ -142,7 +142,7 @@ class AnalyticsControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bodyFor(path, false)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 

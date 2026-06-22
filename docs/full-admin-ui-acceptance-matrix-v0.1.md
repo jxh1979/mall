@@ -29,7 +29,7 @@
 | UI-ADM-GOV-004 | 合同审批归档 | 存在主体绑定 | 上传附件、填写日期、提交审批、归档 | 附件和审批链可追踪；日期 AI 识别需人工确认 | contracts/files | 文件上传 mock + 校验错误保留表单 |
 | UI-ADM-GOV-005 | 商户准入审批流水 | 已有商户档案、主体绑定、合同草稿 | 打开准入流水、核对三类准入来源、填写导出原因并导出准入审计片段 | 商户档案/主体绑定/合同摘要均可见；导出动作写入 /api/v1/evidence/events，只留痕不改业务状态 | platform/merchants + bindings + contracts + evidence/events | 空数据、缺主体、合同未审批均展示为待补齐 |
 | UI-ADM-GOV-006 | 主管复核与违规阻断 | 平台管理员/主管账号 | 查看复核策略、评估合同违规、三级主管审批放行 | 违规动作默认进入 pending_review；主管级别不足被拒；审批后状态 approved/rejected 可见 | supervisor-review-policies + supervisor-review evaluate/approve | 覆盖策略列表、默认阻断、审批成功、越权/缺幂等键由后端测试覆盖 |
-| UI-ADM-ACC-001 | 员工账号 | IT 管理员登录 | 新增账号、禁用账号、绑定企业微信、分配岗位 | 账号状态变化正确；离职禁用后无法登录 | users/wecom sync | 覆盖同步失败重试和禁用后权限消失 |
+| UI-ADM-ACC-001 | 员工账号 | IT/HR 管理员登录 | 新增账号、填写初始密码、选择账号类型、绑定 organization_id/merchant_id、承接同意凭据/证据附件、套用权限模板 | 账号创建成功；手机号不明文落库；销售/商户账号缺 merchant_id 不可提交；跨商户创建被后端拒绝；创建后写 access.user.changed，模板应用写 permission_template.applied | access/users + permission-templates | 覆盖空账号、空密码、手机号格式、组织必填、账号类型、模板应用、跨商户拒绝 |
 | UI-ADM-ACC-002 | 权限模板 | IT 管理员登录 | 复制模板、修改权限、创建临时模板、使用一次 | 原模板不变；临时模板到期或单次使用后失效 | permission templates | 覆盖到期、单次、越权编辑 |
 | UI-ADM-TKT-001 | 票务策略 | 票务经理登录 | 配置平日/周末/节假日价，创建派生票，发布 | 基础价优先；缺节假日价不可发布；发布后列表可查 | ticket policies | 覆盖固定价/派生价互斥和发布校验 |
 | UI-ADM-TKT-002 | 动态定价 | P2 功能开关开启 | 新建规则、模拟、发布、回滚 | 模拟结果可见；规则冲突提示；历史订单快照不变 | dynamic pricing | 覆盖模拟结果、冲突、回滚 |
@@ -39,7 +39,8 @@
 | UI-ADM-BAR-003 | 存酒 | 存在客户和库存 | 存入、领取、过期处理 | 高价值酒水必须在线校验；过期处理留痕 | stored wine/inventory | 覆盖离线禁止领取和在线失败提示 |
 | UI-ADM-BAR-004 | 销售提成 | 存在卡座消费 | 查看销售/非销售提成、调整、结算 | 销售卡座 15%，非销售 10%，不含通票；调整留痕 | commissions | 覆盖提成边界和财务审批 |
 | UI-ADM-AMU-001 | 项目与场次 | 游乐主管登录 | 创建项目、排场次、限流、关闭 | 容量限制正确；安全告知缺失不可开放 | amusement sessions | 覆盖容量边界和安全告知校验 |
-| UI-ADM-AMU-003 | 安全巡检/事故 | 存在安全事件 | 上报、上传附件、处理、关闭 | 高等级事故需审批；缺处理记录不可关闭 | incidents/files | 覆盖附件失败、重新打开 |
+| UI-ADM-AMU-002 | 团体/包场 | 游乐主管登录；有团体预约 | 查看团体/包场预约与容量占用 | 团体占用计入容量；跨项目越权预约被拒 | amusement group-bookings（`amusement.group_booking.view`） | 覆盖容量占用、空态、跨项目越权拒绝 |
+| UI-ADM-AMU-003 | 安全巡检/事故 | 存在安全事件 | 上报、上传附件、处理、关闭 | 高等级事故需审批；缺处理记录不可关闭；高/严重事故与硬超容自动停运（open→paused）| incidents/files | 覆盖附件失败、重新打开、自动停运联动 |
 | UI-ADM-INV-001 | 库存台账 | 仓库账号登录 | 入库、出库、盘点、调整 | 不允许负库存；差异处理需原因；高价值在线核销 | inventory ledger | 覆盖负库存和盘点差异 |
 | UI-ADM-FIN-001 | 应收应付台账 | 财务账号登录 | 生成应收、部分核销、调整、导出 | 原金额、已核销、余额正确；调整和导出留痕 | finance ledger | 覆盖部分核销、逾期、导出审计 |
 | UI-ADM-FIN-002 | 对账差异 | 存在第三方账单 | 导入对账、匹配、处理差异、关闭 | 差异原因必填；关闭后不可无痕改写 | reconciliation | 覆盖金额不一致和重复账单 |
@@ -49,6 +50,8 @@
 | UI-ADM-INT-002 | 回调/轮询/补偿 | 存在第三方事件 | 查看四类回流、登记轮询校验、立即重试、处理补偿 | 重复请求幂等；签名失败拒绝；轮询补偿来源明确；不得伪造第三方生产补偿执行 | integration events | 覆盖成功、失败、超时、限流、重复回调、内部补偿处理 |
 | UI-ADM-EVD-001 | 审计事件 | 审计账号登录 | 搜索、筛选、查看详情、导出并留痕 | 审计事件不可编辑；导出通过 evidence event 自身留痕；无匹配和读取失败可见 | audit events | 覆盖 trace_id 查询、前后值详情、导出 EventBatchRequest 和错误状态 |
 | UI-ADM-ANA-001 | 经营分析 | 总控/运营/财务账号登录；存在指标快照、定义和异常数据 | 查看指标快照、指标定义和异常，按业务域筛选，锁定复盘快照 | 三类数据均可见；筛选后只显示对应业务域；空数据显示“暂无经营指标”；锁定复盘只产生本地审计结果，不伪造 AI/BI 生产结论 | analytics/business-metric-snapshots + metric-definitions + metric-anomalies | 覆盖三接口聚合、业务域筛选、空状态、错误状态、窄屏和复盘锁定留痕 |
+| UI-ADM-ANA-002 | 集团总览 | 平台总控账号登录（无 merchant scope） | 查看多综合体集团级经营汇总 | 平台级跨综合体汇总可见；merchant-scoped 账号被 fail-closed 拒绝（PLATFORM_SCOPE_REQUIRED） | analytics/group-overview（`analytics.group.view`） | 覆盖平台汇总、商户账号越权拒绝、空状态 |
+| UI-ADM-RISK-001 | 风控预警 | 平台风控账号登录；有风险告警 | 查看高风险客户/员工/第三方/生产预警并处理 | 预警可见；处理写留痕；merchant-scoped 账号 fail-closed 拒绝（平台级分析） | analytics/risk-alerts（`analytics.risk_alert.view`/`analytics.risk_alert.manage`） | 覆盖预警列表、处理留痕、越权拒绝、空/错状态 |
 | UI-ADM-OPS-001 | 生产证据 | IT 管理员登录 | 登记 NAS/密钥/备份/恢复证据，更新状态 | 只保存 credential_ref/evidence_ref，不保存真实密钥；到期提醒可见 | ops readiness | 覆盖证据缺失、过期、已验证状态 |
 | UI-ADM-VIS-001 | 完整后台视觉回归 | 平台管理员登录；Mock API 有基础数据 | 桌面打开总控驾驶舱和生产 blocker 与证据页；移动端打开酒吧订单和动态定价页 | 截图基线稳定；无材料级横向溢出；导航、表格和主按钮不遮挡 | full-admin-visual | `tests/e2e/full-admin-visual.spec.ts` 覆盖 4 张截图基线 |
 

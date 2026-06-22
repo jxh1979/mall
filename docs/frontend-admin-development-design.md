@@ -831,7 +831,7 @@ apps/web/src
 | 酒吧开台 | 桌台、客户、员工、班次 | `bar.table.opened` |
 | 酒吧取消点单 | 原因、订单、员工 | `bar.order.cancelled` |
 | 存酒取用 | 客户确认、剩余量 | `bar.saved_bottle_picked_up` |
-| 库存报损 | 原因、图片、数量 | `bar.stock.damaged` |
+| 库存报损 | 原因、图片、数量 | `inventory.damaged` |
 | 游乐临时关闭 | 原因、项目、场次 | `amusement.session.closed` |
 | 安全巡检提交 | 巡检项、图片、签名 | `amusement.safety_inspection.submitted` |
 | 开放应用解锁 | 复核意见、失败日志 | `open_app.unlocked` |

@@ -1,6 +1,7 @@
 package com.complex.platform.common.api;
 
 import jakarta.validation.ConstraintViolationException;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,11 +18,42 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    // C2 错误码归一：OpenAPI ErrorResponse.code 的 10 个稳定枚举（顶层分支码）。
+    private static final Set<String> TOP_LEVEL_CODES = Set.of(
+            "PARAM_INVALID", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "STATE_CONFLICT",
+            "RISK_REVIEW_REQUIRED", "IDEMPOTENCY_CONFLICT", "RATE_LIMITED", "PROVIDER_UNAVAILABLE", "INTERNAL_ERROR");
+
+    /**
+     * 将细粒度业务错误码归一到 10 个顶层枚举之一：
+     * 细码本身已是枚举（如 IDEMPOTENCY_CONFLICT/RISK_REVIEW_REQUIRED/RATE_LIMITED/PROVIDER_UNAVAILABLE）→ 直接用；
+     * 否则按 HTTP 状态映射类目。细码经 detail_code 子字段返回，前端可下钻。
+     */
+    static String topLevelCode(HttpStatus status, String detailCode) {
+        if (detailCode != null && TOP_LEVEL_CODES.contains(detailCode)) {
+            return detailCode;
+        }
+        return switch (status) {
+            case UNAUTHORIZED -> "UNAUTHORIZED";
+            case FORBIDDEN -> "FORBIDDEN";
+            case NOT_FOUND -> "NOT_FOUND";
+            case CONFLICT -> "STATE_CONFLICT";
+            case TOO_MANY_REQUESTS -> "RATE_LIMITED";
+            case BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT -> "PROVIDER_UNAVAILABLE";
+            case BAD_REQUEST, METHOD_NOT_ALLOWED, UNPROCESSABLE_ENTITY -> "PARAM_INVALID";
+            case INTERNAL_SERVER_ERROR -> "INTERNAL_ERROR";
+            default -> status.is5xxServerError() ? "INTERNAL_ERROR" : "PARAM_INVALID";
+        };
+    }
+
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiResponse<Void>> handleApiException(ApiException exception) {
+        // 顶层 code = 归一枚举；detail_code = 原细码（业务码），保留细粒度供前端下钻/排查。
         return ResponseEntity
                 .status(exception.status())
-                .body(ApiResponse.error(exception.code(), exception.getMessage()));
+                .body(ApiResponse.error(
+                        topLevelCode(exception.status(), exception.code()),
+                        exception.code(),
+                        exception.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -31,35 +63,41 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining("; "));
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("VALIDATION_FAILED", message.isBlank() ? "validation failed" : message));
+                .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED",
+                        message.isBlank() ? "validation failed" : message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
     ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException exception) {
+        // 不透传 getMessage（可能含内部约束/参数名）；返回固定文案，避免内部实现细节泄露。
+        log.warn("constraint violation: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("VALIDATION_FAILED", exception.getMessage()));
+                .body(ApiResponse.error("PARAM_INVALID", "VALIDATION_FAILED", "request validation failed"));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(HttpMessageNotReadableException exception) {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("REQUEST_BODY_INVALID", "request body is invalid"));
+                .body(ApiResponse.error("PARAM_INVALID", "REQUEST_BODY_INVALID", "request body is invalid"));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException exception) {
+        log.warn("method not supported: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ApiResponse.error("METHOD_NOT_ALLOWED", exception.getMessage()));
+                .body(ApiResponse.error("PARAM_INVALID", "METHOD_NOT_ALLOWED", "http method is not allowed for this endpoint"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException exception) {
+        // 不透传 getMessage（可能含内部实现细节）；记录服务端日志，对外返回固定文案。
+        log.warn("illegal argument: {}", exception.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("BAD_REQUEST", exception.getMessage()));
+                .body(ApiResponse.error("PARAM_INVALID", "BAD_REQUEST", "request is invalid"));
     }
 
     @ExceptionHandler(Exception.class)
@@ -67,6 +105,6 @@ public class GlobalExceptionHandler {
         log.error("Unhandled API exception", exception);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("INTERNAL_ERROR", "internal server error"));
+                .body(ApiResponse.error("INTERNAL_ERROR", "INTERNAL_ERROR", "internal server error"));
     }
 }

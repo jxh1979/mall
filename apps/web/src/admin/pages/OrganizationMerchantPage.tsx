@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
+import { PermissionButton } from "../security/Can";
 
 const TEXT = {
   title: "组织与商户档案",
@@ -26,7 +27,7 @@ function display(value: unknown) {
   return JSON.stringify(value);
 }
 
-export function OrganizationMerchantPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
@@ -113,7 +114,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError 
               <label>合作形式<select data-testid="organization-merchant-cooperation" value={cooperationForm} onChange={(event) => setCooperationForm(event.target.value)}>{COOPERATION_FORMS.map((form) => <option key={form} value={form}>{form}</option>)}</select></label>
             </div>
             <div className="admin-form-row">
-              <button type="button" data-testid="organization-merchant-create" onClick={() => void createMerchant()}>创建商户档案</button>
+              <PermissionButton permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]} data-testid="organization-merchant-create" onClick={() => void createMerchant()}>创建商户档案</PermissionButton>
               <span className="admin-muted-action" data-testid="organization-merchant-boundary">{TEXT.boundary}</span>
             </div>
 

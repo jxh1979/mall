@@ -143,69 +143,6 @@ class IntegrationServiceTests {
                 assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
     }
 
-    @Test
-    void openAuthStoresOnlyTokenHashAndRejectsNonceReplay() {
-        long timestamp = NOW.toEpochMilli();
-        OpenAuthTokenRequest request = new OpenAuthTokenRequest(
-                "p0-open-app",
-                timestamp,
-                "nonce-auth",
-                authSignature("p0-open-app", timestamp, "nonce-auth")
-        );
-
-        OpenAuthTokenResponse response = service.issueOpenToken(request);
-
-        assertThat(response.token()).isNotBlank();
-        assertThat(repository.tokens).hasSize(1);
-        assertThat(repository.tokens.getFirst().tokenHash())
-                .hasSize(64)
-                .isNotEqualTo(response.token())
-                .isEqualTo(sha256(response.token()));
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("open_auth.succeeded");
-
-        assertThatThrownBy(() -> service.issueOpenToken(request))
-                .isInstanceOfSatisfying(ApiException.class, exception ->
-                        assertThat(exception.code()).isEqualTo("OPEN_NONCE_REPLAYED"));
-    }
-
-    @Test
-    void openAuthRejectsInvalidSignatureAndAuditsFailure() {
-        long timestamp = NOW.toEpochMilli();
-
-        assertThatThrownBy(() -> service.issueOpenToken(new OpenAuthTokenRequest(
-                "p0-open-app",
-                timestamp,
-                "nonce-invalid",
-                "bad-signature"
-        ))).isInstanceOfSatisfying(ApiException.class, exception ->
-                assertThat(exception.code()).isEqualTo("OPEN_SIGNATURE_INVALID"));
-
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("open_auth.failed");
-    }
-
-    @Test
-    void openAuthFailsClosedWhenCredentialSecretRefCannotBeResolved() {
-        long timestamp = NOW.toEpochMilli();
-        secrets.remove(OPEN_APP_SECRET_REF);
-
-        assertThatThrownBy(() -> service.issueOpenToken(new OpenAuthTokenRequest(
-                "p0-open-app",
-                timestamp,
-                "nonce-missing-secret",
-                "signature-not-used"
-        ))).isInstanceOfSatisfying(ApiException.class, exception ->
-                assertThat(exception.code()).isEqualTo("OPEN_SECRET_UNAVAILABLE"));
-
-        assertThat(repository.tokens).isEmpty();
-        assertThat(repository.nonces).isEmpty();
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("open_auth.failed");
-    }
 
     @Test
     void webhookPersistsEventAndDuplicateIdempotencyReturnsOriginalResult() {
@@ -213,24 +150,12 @@ class IntegrationServiceTests {
         payload.put("event_id", "evt-webhook");
         payload.put("idempotency_key", "idem-webhook");
         payload.put("payload", Map.of("normalized_status", "paid"));
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-webhook", payload);
 
-        WebhookAcceptedResponse first = service.receiveWebhook(
-                "p0-default",
-                "mock-provider",
-                "payment.paid",
-                signature,
-                null,
-                payload
-        );
-        WebhookAcceptedResponse second = service.receiveWebhook(
-                "p0-default",
-                "mock-provider",
-                "payment.paid",
-                signature,
-                null,
-                payload
-        );
+        // 合法重试：相同 idempotency_key + 新 nonce → 第二次幂等去重返回原结果。
+        WebhookAcceptedResponse first =
+                postWebhook("p0-default", "mock-provider", "payment.paid", "idem-webhook", payload);
+        WebhookAcceptedResponse second =
+                postWebhook("p0-default", "mock-provider", "payment.paid", "idem-webhook", payload);
 
         assertThat(first.eventId()).isEqualTo("evt-webhook");
         assertThat(first.deduplicated()).isFalse();
@@ -244,12 +169,49 @@ class IntegrationServiceTests {
     }
 
     @Test
+    void webhookRejectsReplayOfSameNonce() {
+        // 原报文重放（同 nonce + 同签名）→ OPEN_WEBHOOK_NONCE_REPLAYED，堵捕获报文重放。
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("event_id", "evt-replay");
+        payload.put("idempotency_key", "idem-replay");
+        payload.put("payload", Map.of("normalized_status", "paid"));
+
+        WebhookAcceptedResponse first =
+                postWebhook("p0-default", "mock-provider", "payment.paid", "idem-replay", payload, "nonce-fixed");
+        assertThat(first.deduplicated()).isFalse();
+
+        assertThatThrownBy(() ->
+                postWebhook("p0-default", "mock-provider", "payment.paid", "idem-replay", payload, "nonce-fixed"))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("OPEN_WEBHOOK_NONCE_REPLAYED"));
+    }
+
+    @Test
+    void webhookRejectsStaleTimestamp() {
+        // 时效性：过期 timestamp（超容差）→ OPEN_TIMESTAMP_STALE。
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("event_id", "evt-stale");
+        payload.put("idempotency_key", "idem-stale");
+        payload.put("payload", Map.of("normalized_status", "paid"));
+        long staleTs = NOW.toEpochMilli() - java.time.Duration.ofDays(2).toMillis();
+        String signature = webhookSignature(
+                "p0-default", "mock-provider", "payment.paid", "idem-stale", payload, staleTs, "nonce-stale");
+
+        assertThatThrownBy(() -> service.receiveWebhook(
+                "p0-default", "mock-provider", "payment.paid", signature, staleTs, "nonce-stale", null, payload))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("OPEN_TIMESTAMP_STALE"));
+    }
+
+    @Test
     void webhookRejectsSignatureWhenPayloadChanges() {
         Map<String, Object> signedPayload = new LinkedHashMap<>();
         signedPayload.put("event_id", "evt-webhook-tamper");
         signedPayload.put("idempotency_key", "idem-webhook-tamper");
         signedPayload.put("payload", Map.of("normalized_status", "paid"));
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-webhook-tamper", signedPayload);
+        long ts = NOW.toEpochMilli();
+        String signature = webhookSignature(
+                "p0-default", "mock-provider", "payment.paid", "idem-webhook-tamper", signedPayload, ts, "nonce-tamper");
 
         Map<String, Object> tamperedPayload = new LinkedHashMap<>();
         tamperedPayload.put("event_id", "evt-webhook-tamper");
@@ -261,6 +223,8 @@ class IntegrationServiceTests {
                 "mock-provider",
                 "payment.paid",
                 signature,
+                ts,
+                "nonce-tamper",
                 null,
                 tamperedPayload
         )).isInstanceOfSatisfying(ApiException.class, exception ->
@@ -273,9 +237,7 @@ class IntegrationServiceTests {
     void webhookWithoutMappingConfigStaysAcceptedEnvelopeOnly() {
         // 未注册任何 mock-provider 适配器 → 无映射配置 → accepted（回归现状）。
         Map<String, Object> payload = webhookPayload("evt-no-map", "idem-no-map");
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-no-map", payload);
-
-        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+        postWebhook("p0-default", "mock-provider", "payment.paid", "idem-no-map", payload);
 
         OpenApiEventRecord saved = repository.events.getFirst();
         assertThat(saved.eventStatus()).isEqualTo("accepted");
@@ -289,9 +251,7 @@ class IntegrationServiceTests {
                 "order_no", "payload.order_id",
                 "status", "payload.normalized_status")));
         Map<String, Object> payload = webhookPayload("evt-map", "idem-map");
-
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-map", payload);
-        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+        postWebhook("p0-default", "mock-provider", "payment.paid", "idem-map", payload);
 
         OpenApiEventRecord saved = repository.events.getFirst();
         assertThat(saved.eventStatus()).isEqualTo("mapped");
@@ -307,9 +267,7 @@ class IntegrationServiceTests {
                 "status", "payload.normalized_status",
                 "status_mapping", Map.of("paid", "SETTLED"))));
         Map<String, Object> payload = webhookPayload("evt-status", "idem-status");
-
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-status", payload);
-        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+        postWebhook("p0-default", "mock-provider", "payment.paid", "idem-status", payload);
 
         OpenApiEventRecord saved = repository.events.getFirst();
         assertThat(saved.eventStatus()).isEqualTo("mapped");
@@ -324,10 +282,8 @@ class IntegrationServiceTests {
         repository.providerAdapters.put("bad-adapter", webhookMappingAdapter(Map.of(
                 "order_no", List.of("not", "a", "path"))));
         Map<String, Object> payload = webhookPayload("evt-bad", "idem-bad");
-
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-bad", payload);
         WebhookAcceptedResponse response =
-                service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+                postWebhook("p0-default", "mock-provider", "payment.paid", "idem-bad", payload);
 
         assertThat(response.deduplicated()).isFalse();
         OpenApiEventRecord saved = repository.events.getFirst();
@@ -336,9 +292,9 @@ class IntegrationServiceTests {
         @SuppressWarnings("unchecked")
         Map<String, Object> failurePlaceholder = (Map<String, Object>) saved.resultJson().get("mapping");
         assertThat(failurePlaceholder).containsEntry("reason_code", "WEBHOOK_MAP_FAILURE");
-        // 幂等去重仍生效。
+        // 幂等去重仍生效（合法重试用新 nonce + 同 idempotency_key）。
         WebhookAcceptedResponse dup =
-                service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+                postWebhook("p0-default", "mock-provider", "payment.paid", "idem-bad", payload);
         assertThat(dup.deduplicated()).isTrue();
         assertThat(repository.events).hasSize(1);
     }
@@ -350,9 +306,7 @@ class IntegrationServiceTests {
                 webhookMappingAdapter(Map.of("order_no", "payload.order_id")), Map.of("order_no", "payload.order_id"), false);
         repository.providerAdapters.put("switch-off-adapter", disabledSwitch);
         Map<String, Object> payload = webhookPayload("evt-off", "idem-off");
-
-        String signature = webhookSignature("p0-default", "mock-provider", "payment.paid", "idem-off", payload);
-        service.receiveWebhook("p0-default", "mock-provider", "payment.paid", signature, null, payload);
+        postWebhook("p0-default", "mock-provider", "payment.paid", "idem-off", payload);
 
         OpenApiEventRecord saved = repository.events.getFirst();
         assertThat(saved.eventStatus()).isEqualTo("accepted");
@@ -834,12 +788,30 @@ class IntegrationServiceTests {
                 base.createdAt(), base.updatedAt());
     }
 
-    private String authSignature(String appKey, long timestamp, String nonce) {
-        return hmac(OPEN_APP_TEST_SECRET, "app_key=" + appKey + "\nnonce=" + nonce + "\ntimestamp=" + timestamp);
+
+    private final java.util.concurrent.atomic.AtomicInteger webhookNonceSeq = new java.util.concurrent.atomic.AtomicInteger();
+
+    /** 完整发起一次签名 webhook（自动唯一 nonce，代表一次合法传输/重试）。 */
+    private WebhookAcceptedResponse postWebhook(
+            String endpointKey, String provider, String event, String idempotencyKey, Map<String, Object> payload) {
+        return postWebhook(endpointKey, provider, event, idempotencyKey, payload,
+                "nonce-" + webhookNonceSeq.incrementAndGet());
     }
 
-    private String webhookSignature(String endpointKey, String provider, String event, String idempotencyKey, Map<String, Object> payload) {
-        return hmac(OPEN_WEBHOOK_TEST_SECRET, "endpoint_key=" + endpointKey + "\nevent=" + event + "\nidempotency_key=" + idempotencyKey + "\npayload_hash=" + payloadHash(payload) + "\nprovider=" + provider);
+    /** 完整发起一次签名 webhook（显式 nonce，用于原报文重放用例）。 */
+    private WebhookAcceptedResponse postWebhook(
+            String endpointKey, String provider, String event, String idempotencyKey,
+            Map<String, Object> payload, String nonce) {
+        long ts = NOW.toEpochMilli();
+        String signature = webhookSignature(endpointKey, provider, event, idempotencyKey, payload, ts, nonce);
+        return service.receiveWebhook(endpointKey, provider, event, signature, ts, nonce, null, payload);
+    }
+
+    private String webhookSignature(String endpointKey, String provider, String event, String idempotencyKey,
+            Map<String, Object> payload, long timestamp, String nonce) {
+        return hmac(OPEN_WEBHOOK_TEST_SECRET, "endpoint_key=" + endpointKey + "\nevent=" + event
+                + "\nidempotency_key=" + idempotencyKey + "\nnonce=" + nonce + "\npayload_hash=" + payloadHash(payload)
+                + "\nprovider=" + provider + "\ntimestamp=" + timestamp);
     }
 
     private String hmac(String key, String value) {
@@ -953,7 +925,6 @@ class IntegrationServiceTests {
     private static final class InMemoryIntegrationRepository implements IntegrationRepository {
         private final Map<String, OpenAppCredentialRecord> appCredentials = new LinkedHashMap<>();
         private final Map<String, OpenEndpointConfigRecord> endpointConfigs = new LinkedHashMap<>();
-        private final List<OpenAppTokenRecord> tokens = new ArrayList<>();
         private final List<String> nonces = new ArrayList<>();
         private final List<OpenApiEventRecord> events = new ArrayList<>();
         private final Map<String, ProviderAdapterRecord> providerAdapters = new LinkedHashMap<>();
@@ -978,12 +949,6 @@ class IntegrationServiceTests {
             }
             nonces.add(key);
             return true;
-        }
-
-        @Override
-        public OpenAppTokenRecord saveOpenToken(OpenAppTokenRecord token) {
-            tokens.add(token);
-            return token;
         }
 
         @Override

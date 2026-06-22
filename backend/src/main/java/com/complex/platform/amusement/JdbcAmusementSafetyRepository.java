@@ -213,6 +213,21 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 """, Map.of("incident_id", incidentId), this::mapAction);
     }
 
+    @Override
+    public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_projects
+                   SET open_status = :new_status,
+                       updated_at = NOW()
+                 WHERE id = :id
+                   AND open_status = :expected_status
+                """, new MapSqlParameterSource()
+                .addValue("id", projectId)
+                .addValue("expected_status", expectedCurrentStatus)
+                .addValue("new_status", newStatus));
+        return updated == 1;
+    }
+
     private MapSqlParameterSource noticeParameters(AmusementSafetyNoticeRecord record) {
         return new MapSqlParameterSource()
                 .addValue("id", record.id())

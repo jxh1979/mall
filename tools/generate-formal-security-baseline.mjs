@@ -21,6 +21,10 @@ const paths = {
   productionBearerFilter: path.join(root, "backend", "src", "main", "java", "com", "complex", "platform", "auth", "ProductionBearerAuthenticationFilter.java"),
   productionAuthMigration: path.join(root, "backend", "src", "main", "resources", "db", "migration", "V018__p0_production_auth_provider.sql"),
   productionAuthTest: path.join(root, "backend", "src", "test", "java", "com", "complex", "platform", "auth", "ProductionAuthJdbcIntegrationTests.java"),
+  dataIsolationSpec: path.join(root, "docs", "data-isolation-and-tenant-scope-security-spec-v0.1.md"),
+  domainOwnershipScopeCsv: path.join(root, "docs", "domain-ownership-scope-audit-v0.1.csv"),
+  tenantIsolationVerifier: path.join(root, "tools", "verify-tenant-isolation.mjs"),
+  tenantIsolationBaseline: path.join(root, "security-scans", "tenant-isolation-baseline.json"),
   ops160BackupScript: path.join(root, "ops", "160", "complex-backup.sh"),
   ops160RestoreDrillScript: path.join(root, "ops", "160", "complex-restore-drill.sh"),
   ops160EnvExample: path.join(root, "ops", "160", "complex.env.example"),
@@ -112,6 +116,10 @@ const productionAuthController = readOptional(paths.productionAuthController);
 const productionBearerFilter = readOptional(paths.productionBearerFilter);
 const productionAuthMigration = readOptional(paths.productionAuthMigration);
 const productionAuthTest = readOptional(paths.productionAuthTest);
+const dataIsolationSpec = readRequired(paths.dataIsolationSpec);
+const domainOwnershipScopeCsv = readRequired(paths.domainOwnershipScopeCsv);
+const tenantIsolationVerifier = readRequired(paths.tenantIsolationVerifier);
+const tenantIsolationBaseline = readOptional(paths.tenantIsolationBaseline);
 const ops160BackupScript = readOptional(paths.ops160BackupScript);
 const ops160RestoreDrillScript = readOptional(paths.ops160RestoreDrillScript);
 const ops160EnvExample = readOptional(paths.ops160EnvExample);
@@ -159,6 +167,16 @@ const sourceFindings = {
     ops160EnvExample,
   ].every((content) => content.includes("192.168.88.113")),
   productionLedgerHasCredentialPending: /\| PRD-CRED-001 \|[\s\S]*?\| pending_info \|/.test(ledgerText),
+  tenantIsolationFindingManaged: [
+    /DATA_ISOLATION_SPEC_AUTO_START/.test(dataIsolationSpec),
+    /verify:tenant-isolation/.test(dataIsolationSpec),
+    /SEC-.*TENANT-ISOLATION/.test(dataIsolationSpec) || /tenant-isolation/.test(dataIsolationSpec),
+    domainOwnershipScopeCsv.includes("scope_type"),
+    /UNSCOPED_DIRECT_READ/.test(tenantIsolationVerifier),
+    packageJson.scripts?.["verify:tenant-isolation"] === "node tools/verify-tenant-isolation.mjs",
+    packageJson.scripts?.["verify:delivery-gates"]?.includes("verify:tenant-isolation"),
+  ].every(Boolean),
+  tenantIsolationBaselineReady: tenantIsolationBaseline.trim().length > 0,
   productionCredentialLedgerVerifiable: [
     /## 4\.1 生产凭证明细台账模板/.test(ledgerText),
     /PRD-CRED-OPS-001/.test(ledgerText),
@@ -256,6 +274,22 @@ const findings = [
           ? "将 `//192.168.88.113/bn` 通过 SMB 挂载到 160 的 `/mnt/complex-nas-backup`，配置 `NAS_BACKUP_TARGET_DIR`、`REQUIRE_NAS_BACKUP_SYNC=true`、`ALLOW_UNENCRYPTED_BACKUPS=true` 并执行端到端同步和恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据"
           : "继续执行真实 NAS 端到端同步和恢复演练；生产凭证实际发放前按明细台账补责任人、到期日、credential_ref、提醒和轮换证据"))
       : "执行 NAS 恢复演练，建立密钥引用、到期提醒、轮换记录和回滚 runbook",
+  },
+  {
+    id: "SEC-P0-TENANT-ISOLATION-001",
+    severity: "P0",
+    title: "跨租户/跨商户越权 finding 系列必须由安全基线纳管",
+    status: sourceFindings.tenantIsolationFindingManaged ? "resolved" : "open",
+    blockingScope: sourceFindings.tenantIsolationFindingManaged
+      ? "已纳入安全基线生成器和交付闸口；继续通过 verify:tenant-isolation 防回归"
+      : "阻塞公开生产安全准入；未纳管前无法证明跨租户越权风险已进入正式闭环",
+    owner: "安全/后端/架构负责人",
+    evidence: sourceFindings.tenantIsolationFindingManaged
+      ? "`data-isolation-and-tenant-scope-security-spec-v0.1.md` §3A 自动基线、`domain-ownership-scope-audit-v0.1.csv`、`verify:tenant-isolation` 与 `tenant-isolation-baseline.json` 已纳入生成器"
+      : "安全 finding 台账缺少 SEC-*-TENANT-ISOLATION-*；或 tenant isolation 机审未接入交付闸口",
+    nextAction: sourceFindings.tenantIsolationFindingManaged
+      ? "后续新增带 scope 数据表时同步 CSV/迁移/Repository，并执行 `npm run verify:tenant-isolation` 与 `npm run verify:security-baseline`"
+      : "补跨租户越权 finding、CSV scope 登记、Repository 机审和回归测试后重新生成安全基线",
   },
   {
     id: "SEC-P1-DOCS-EXPOSURE-001",
@@ -406,6 +440,7 @@ const baseline = `# 正式安全基线 V1
 | 生产前置台账 | 已读取 MDM、NAS、密钥轮换、安全基线等状态 |
 | Spring Security 配置 | 已读取 \`SecurityConfig\` |
 | dev smoke 鉴权实现 | 已读取 \`AuthService\` 与 \`BearerAuthenticationFilter\` |
+| 数据隔离与租户 scope | 已读取 \`data-isolation-and-tenant-scope-security-spec-v0.1.md\`、scope CSV、\`verify-tenant-isolation.mjs\` 和 tenant-isolation baseline |
 
 ## threat-model-v1
 
@@ -416,6 +451,7 @@ const baseline = `# 正式安全基线 V1
 | 支付、退款、应收应付、对账 | 聚合支付优先、保留直连抽象 | 回调重放、退款冲正缺审计、日结后改账 | OpenAPI 声明幂等和审计事件 | 供应商资料到位后补验签、对账文件、补偿策略 |
 | Android 工作手机、平板、一体机 | 端侧边界已在文档和 OpenAPI 表达 | 未纳管设备生产使用 | 生产前置台账阻断 MDM pending_info | Android Enterprise/商业 MDM enroll 后才可生产使用 |
 | 开放平台与第三方 | 双向开放与 adapter 边界已定义 | 签名、防重放、字段映射供应商差异 | mock adapter 和 OpenAPI 先行 | 真实供应商 SDK/API 到位后补字段和异常码 |
+| 多租户/商户数据隔离 | scope 注入只来自安全 token；scope CSV、数据隔离规格和 \`verify:tenant-isolation\` 已形成机审链路 | Repository 漏 scope、请求体伪造 merchant_id、跨项目读写越权 | \`verify:tenant-isolation\` + 自动数据隔离基线 + SEC-P0-TENANT-ISOLATION-001 finding | 新增带租户数据的表必须同步 CSV、迁移、Repository scoped 通道和越权测试 |
 | 160 运维、NAS、密钥 | 已有 runbook、台账模板和恢复演练脚本 | ${sourceFindings.productionCredentialLedgerVerifiable ? (sourceFindings.nasRestoreDrillEvidenceFromNas ? "NAS 服务器已明确为 `192.168.88.113`，真实 NAS 挂载、同步备份和从 NAS 恢复演练 `restore.drill_completed` 已通过；生产凭证台账结构已可验证，真实凭证发放/轮换证据仍需补齐" : (sourceFindings.nasServerKnown ? "NAS 服务器已明确为 `192.168.88.113`，生产凭证台账结构已可验证；160 挂载/真实 NAS 同步与真实凭证发放/轮换证据仍需补齐" : "生产凭证台账结构已可验证，真实 NAS 同步目标与真实凭证发放/轮换证据仍需补齐")) : "无恢复演练、密钥轮换台账结构和证据不足"} | 当前不在报告中记录明文密钥 | ${sourceFindings.nasRestoreDrillEvidenceFromNas ? "固化自动挂载、定时备份、容量告警、到期提醒和轮换证据归档" : "完成 NAS 同步验证、真实 credential_ref、到期提醒和轮换证据归档"} |
 
 ## authz-review-v1

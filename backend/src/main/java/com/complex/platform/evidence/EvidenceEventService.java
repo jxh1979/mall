@@ -106,7 +106,11 @@ public class EvidenceEventService {
                     String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     Instant now = Instant.now();
                     String id = "att_" + slug(actual.idempotencyKey());
-                    String objectKey = "evidence/pending/" + id + "/" + slug(fileName);
+                    // F-CROSS-05 跨租户覆盖修复：object key 必须纳入 merchant scope 前缀，
+                    // 否则商户 A/B 用相同 idempotency_key + file_name 会算出同一 object key，互相覆盖证据对象。
+                    // 商户用户 → 其 merchantId 命名空间；平台管理员（无 scope）→ _platform 占位（避免字面 "null" 前缀）。
+                    String scopeSegment = merchantId == null ? "_platform" : merchantId;
+                    String objectKey = "evidence/" + scopeSegment + "/pending/" + id + "/" + slug(fileName);
                     return repository.saveAttachment(new EvidenceAttachmentRecord(
                             id,
                             fileName,
@@ -217,7 +221,10 @@ public class EvidenceEventService {
                             existing.businessType(),
                             existing.businessId(),
                             existing.attachmentRole(),
-                            requireText(actual.objectKey(), "object_key"),
+                            // F-CROSS-05 跨租户覆盖修复（complete 阶段）：忽略客户端提交的 object_key，
+                            // 用 upload-intent 已签发的原 key（existing.objectKey()，已含 merchant scope 前缀），
+                            // 防客户端对自己的 attachment 提交他商户命名空间 key、越权指向/覆盖他商户存储对象。
+                            existing.objectKey(),
                             existing.uploadUrl(),
                             "uploaded",
                             requireChecksum(actual.checksum()),
@@ -257,6 +264,13 @@ public class EvidenceEventService {
                         EvidenceAttachmentRecord att = repository.findAttachmentById(attachmentId)
                                 .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
                                         "attachment not found: " + attachmentId));
+                        // P1 越权修复：评审引用附件此前不校验附件归属（bindAttachment/completeAttachment 均有），
+                        // 可把他商户 attachment_id 写入自己 review，跨租户引用/泄露证据。
+                        Optional<String> attScope = authorizationService.currentMerchantScope();
+                        if (attScope.isPresent() && !attScope.get().equals(att.merchantId())) {
+                            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                    "attachment belongs to another merchant: " + attachmentId);
+                        }
                         if (!reqBusinessType.equals(att.businessType()) || !reqBusinessId.equals(att.businessId())) {
                             throw ApiException.badRequest("VALIDATION_FAILED",
                                     "attachment does not belong to the specified business object: " + attachmentId);

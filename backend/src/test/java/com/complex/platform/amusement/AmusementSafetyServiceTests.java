@@ -155,6 +155,29 @@ class AmusementSafetyServiceTests {
     }
 
     @Test
+    void highSeverityIncidentAutoPausesOpenProject() {
+        // 事故停运联动：high 事故对处于 open 的项目自动停运停售（open→paused）。
+        repository.seedProjectOpenStatus("prj_1", "open");
+        service.createIncident(incidentRequest("incident-autopause")); // severity=high, projectId=prj_1
+        assertThat(repository.projectOpenStatus.get("prj_1")).isEqualTo("paused");
+        assertThat(auditEventRepository.events)
+                .filteredOn(e -> "amusement.incident.created".equals(e.eventName()))
+                .isNotEmpty();
+    }
+
+    @Test
+    void lowSeverityIncidentDoesNotPauseProject() {
+        // 低风险事故不自动停运（仅 high/critical 停运）。
+        repository.seedProjectOpenStatus("prj_low", "open");
+        service.createIncident(new AmusementIncidentCreateRequest(
+                "incident-low", "create incident", List.of("att-photo"),
+                "prj_low", "amu_project_1", "session_1", "device_1", "customer_1",
+                "low", "Minor", "Minor issue", "staff_reporter", "staff_app",
+                Instant.parse("2026-06-15T09:00:00Z")));
+        assertThat(repository.projectOpenStatus.get("prj_low")).isEqualTo("open");
+    }
+
+    @Test
     void addIncidentActionChangesStatusAndRecordsAction() {
         AmusementIncidentRecord incident = service.createIncident(incidentRequest("incident-action-create"));
 
@@ -376,9 +399,23 @@ class AmusementSafetyServiceTests {
         private final Map<String, AmusementWaiverAcknowledgementRecord> acknowledgements = new LinkedHashMap<>();
         private final Map<String, AmusementIncidentRecord> incidents = new LinkedHashMap<>();
         private final List<AmusementIncidentActionRecord> actions = new ArrayList<>();
+        private final Map<String, String> projectOpenStatus = new LinkedHashMap<>();
         private int noticeSaveCount;
         private int acknowledgementSaveCount;
         private int incidentSaveCount;
+
+        void seedProjectOpenStatus(String projectId, String openStatus) {
+            projectOpenStatus.put(projectId, openStatus);
+        }
+
+        @Override
+        public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
+            if (!expectedCurrentStatus.equals(projectOpenStatus.get(projectId))) {
+                return false;
+            }
+            projectOpenStatus.put(projectId, newStatus);
+            return true;
+        }
 
         @Override
         public List<AmusementSafetyNoticeRecord> findAllSafetyNotices() {

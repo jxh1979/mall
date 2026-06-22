@@ -6,7 +6,6 @@ const openapiPath = path.join(root, "docs", "openapi", "openapi-p0.json");
 const openapi = JSON.parse(fs.readFileSync(openapiPath, "utf8"));
 
 const requiredRequestBodies = [
-  "OpenAuthTokenRequest",
   "Webhook",
   "CustomerTicketOrderRequest",
   "Verification",

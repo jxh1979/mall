@@ -1,6 +1,7 @@
 package com.complex.platform.config;
 
 import com.complex.platform.auth.BearerAuthenticationFilter;
+import com.complex.platform.auth.CustomerTokenAuthenticationFilter;
 import com.complex.platform.auth.ProductionBearerAuthenticationFilter;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
@@ -19,15 +20,18 @@ public class SecurityConfig {
 
     private final ObjectProvider<BearerAuthenticationFilter> bearerAuthenticationFilter;
     private final ObjectProvider<ProductionBearerAuthenticationFilter> productionBearerAuthenticationFilter;
+    private final ObjectProvider<CustomerTokenAuthenticationFilter> customerTokenAuthenticationFilter;
     private final Environment environment;
 
     public SecurityConfig(
             ObjectProvider<BearerAuthenticationFilter> bearerAuthenticationFilter,
             ObjectProvider<ProductionBearerAuthenticationFilter> productionBearerAuthenticationFilter,
+            ObjectProvider<CustomerTokenAuthenticationFilter> customerTokenAuthenticationFilter,
             Environment environment
     ) {
         this.bearerAuthenticationFilter = bearerAuthenticationFilter;
         this.productionBearerAuthenticationFilter = productionBearerAuthenticationFilter;
+        this.customerTokenAuthenticationFilter = customerTokenAuthenticationFilter;
         this.environment = environment;
     }
 
@@ -48,6 +52,10 @@ public class SecurityConfig {
         bearerAuthenticationFilter.ifAvailable(filter ->
                 http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class));
         productionBearerAuthenticationFilter.ifAvailable(filter ->
+                http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class));
+        // #14 钱包双路径：客人 token 过滤器在员工 Bearer 过滤器之后注册——仅当员工未认证时才写入客人主体，
+        // 保证"员工代客操作"时保留员工主体走 @GuardedAction 提成归属。
+        customerTokenAuthenticationFilter.ifAvailable(filter ->
                 http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class));
 
         return http.build();

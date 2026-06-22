@@ -75,13 +75,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         jdbcTemplate.update("""
                 INSERT INTO merchants (
                     id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
-                    settlement_entity_id, contact_name, contact_phone, mall_block_code, area_square_meter,
+                    settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                     leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                     rent_per_square_meter, cooperation_form, status, created_at, updated_at
                 )
                 VALUES (
                     :id, :merchant_name, :merchant_type, :business_entity_id, :contract_entity_id,
-                    :settlement_entity_id, :contact_name, :contact_phone, :mall_block_code, :area_square_meter,
+                    :settlement_entity_id, :contact_name, :contact_phone, :owner_person, :mall_block_code, :area_square_meter,
                     :leased_area_square_meter, :secondary_contact_name, :secondary_contact_phone,
                     :rent_per_square_meter, :cooperation_form, :status, :created_at, :updated_at
                 )
@@ -93,6 +93,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     settlement_entity_id = EXCLUDED.settlement_entity_id,
                     contact_name = EXCLUDED.contact_name,
                     contact_phone = EXCLUDED.contact_phone,
+                    owner_person = EXCLUDED.owner_person,
                     mall_block_code = EXCLUDED.mall_block_code,
                     area_square_meter = EXCLUDED.area_square_meter,
                     leased_area_square_meter = EXCLUDED.leased_area_square_meter,
@@ -110,7 +111,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public List<MerchantRecord> listMerchants() {
         return jdbcTemplate.query("""
                 SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
-                       settlement_entity_id, contact_name, contact_phone, mall_block_code, area_square_meter,
+                       settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at
                   FROM merchants
@@ -125,7 +126,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         if (businessEntityId == null) return listMerchants();
         return jdbcTemplate.query("""
                 SELECT id, merchant_name, merchant_type, business_entity_id, contract_entity_id,
-                       settlement_entity_id, contact_name, contact_phone, mall_block_code, area_square_meter,
+                       settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at
                   FROM merchants
@@ -345,6 +346,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("settlement_entity_id", merchant.settlementEntityId())
                 .addValue("contact_name", merchant.contactName())
                 .addValue("contact_phone", merchant.contactPhone())
+                .addValue("owner_person", merchant.ownerPerson())
                 .addValue("mall_block_code", merchant.mallBlockCode())
                 .addValue("area_square_meter", merchant.areaSquareMeter())
                 .addValue("leased_area_square_meter", merchant.leasedAreaSquareMeter())
@@ -443,6 +445,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("settlement_entity_id"),
                 resultSet.getString("contact_name"),
                 resultSet.getString("contact_phone"),
+                resultSet.getString("owner_person"),
                 resultSet.getString("mall_block_code"),
                 resultSet.getBigDecimal("area_square_meter"),
                 resultSet.getBigDecimal("leased_area_square_meter"),

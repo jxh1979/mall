@@ -105,7 +105,7 @@ class ProductionReadinessControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -177,13 +177,13 @@ class ProductionReadinessControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody("update-view-only")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
         mockMvc.perform(post("/api/v1/ops/production-readiness/checks")
                         .with(user("ops").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(checkBody("check-view-only")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -205,13 +205,13 @@ class ProductionReadinessControllerTests {
         mockMvc.perform(get("/api/v1/ops/production-readiness/items")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
         mockMvc.perform(post("/api/v1/ops/production-readiness/checks")
                         .with(user("ops").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(checkBody("check-manage-only")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -239,13 +239,13 @@ class ProductionReadinessControllerTests {
         mockMvc.perform(get("/api/v1/ops/production-readiness/items")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
         mockMvc.perform(put("/api/v1/ops/production-readiness/items/mdm-device-enrollment")
                         .with(user("ops").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateBody("update-check-only")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     private static ProductionReadinessItemResponse itemResponse(String id, ProductionReadinessStatus status) {

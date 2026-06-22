@@ -605,6 +605,18 @@ public class CustomerService {
         return requireCustomer(customerToken).id();
     }
 
+    /**
+     * #14 钱包双路径：解析客人 token → customerId，无效/过期/缺失返回 empty（不抛异常）。
+     * 供 CustomerTokenAuthenticationFilter 在过滤链中静默判定客人身份用（无效 token 直接跳过，由后续鉴权处理）。
+     */
+    public java.util.Optional<String> resolveCustomerIdQuietly(String customerToken) {
+        try {
+            return java.util.Optional.of(requireCustomer(customerToken).id());
+        } catch (RuntimeException exception) {
+            return java.util.Optional.empty();
+        }
+    }
+
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {

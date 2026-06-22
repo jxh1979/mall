@@ -695,7 +695,11 @@ public class WecomConversationService {
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.externalConversationId(), "external_conversation_id");
-        requireText(request.projectId(), "project_id");
+        String projectId = requireText(request.projectId(), "project_id");
+        // 堵越权注入：不再裸信客户端 projectId，必须是已登记项目，否则拒绝（防对任意/不存在项目注入会话）。
+        if (!repository.projectExists(projectId)) {
+            throw ApiException.badRequest("WECOM_PROJECT_NOT_FOUND", "project_id is not a registered project");
+        }
     }
 
     private void validatePolicyRequest(WecomRetentionPolicyRequest request) {

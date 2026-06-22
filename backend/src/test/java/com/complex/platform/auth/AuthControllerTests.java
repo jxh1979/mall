@@ -92,7 +92,7 @@ class AuthControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.data.access_token").doesNotExist());
     }
 
@@ -106,7 +106,7 @@ class AuthControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -131,7 +131,7 @@ class AuthControllerTests {
                                 }
                                 """.formatted(refreshToken)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -197,7 +197,7 @@ class AuthControllerTests {
                                 }
                                 """.formatted(refreshToken)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("REFRESH_TOKEN_INVALID"));
+                .andExpect(jsonPath("$.detail_code").value("REFRESH_TOKEN_INVALID"));
     }
 
     @Test
@@ -241,7 +241,7 @@ class AuthControllerTests {
                                 }
                                 """.formatted(refreshToken)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("REFRESH_TOKEN_INVALID"));
+                .andExpect(jsonPath("$.detail_code").value("REFRESH_TOKEN_INVALID"));
     }
 
     private JsonNode login() throws Exception {

@@ -46,6 +46,12 @@
 | 构建 | Maven | P0 唯一后端构建工具，Gradle 不作为正式后端主线 |
 | 部署 | systemd + Nginx | 服务名 `complex-api.service`，监听 `127.0.0.1:8080` |
 
+> 已实现修复（finding F-CROSS-05，2026-06-22，已在 160 编译通过）：作为跨域通用能力的证据附件上传（`createAttachmentUploadIntent` 签发上传凭据、`completeAttachment` 确认上传），此前存在跨租户越权风险，现已加固为两点：
+> 1. **object key 纳入商户 scope 前缀**：`createAttachmentUploadIntent` 生成的对象键统一以 `evidence/<merchantId 或 _platform>/...` 为前缀（平台级附件用 `_platform`），按租户隔离对象存储命名空间，防止跨商户路径覆盖。
+> 2. **completeAttachment 使用签发态原 key**：确认上传时改用 upload-intent 签发并持久化的原始对象键（`existing.objectKey()`），不再信任客户端在 complete 请求中提交的 key，杜绝客户端指向/覆盖他商户存储对象的越权。
+>
+> 说明：本能力为平台地基对象存储（MinIO）之上的跨域附件原语，供风险处置（data-risk-ai §13.6 `risk_alert_actions.attachment_urls`）、财务凭证、移动端补录（android-device-terminal §14.4 `/api/mobile/attachments/presign`）等场景复用；上传凭据的接口契约以 P0 OpenAPI 契约为权威。
+
 建议采用“模块化单体”作为第一阶段架构：一个 Spring Boot 应用内按业务域分包和分层，避免过早微服务化。后续票务、酒吧、游乐、第三方集成可以在同一应用内扩展模块，等业务边界稳定后再拆服务。
 
 ## 3. 工程结构

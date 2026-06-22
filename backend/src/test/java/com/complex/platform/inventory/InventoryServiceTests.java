@@ -103,6 +103,59 @@ class InventoryServiceTests {
     }
 
     @Test
+    void outboundConsumesBatchesByFefoEarliestExpiryFirst() {
+        // 2e：出库 FEFO 先到期先出。注入 2 批次（B 先到期 6/5、A 后到期 6/10）+ balance 10。
+        java.time.Instant now = java.time.Instant.now();
+        inventoryRepository.saveStockBatch(new InventoryStockBatchRecord(
+                "fefo-A", "item_fefo", "loc_fefo", "BA", null, 5,
+                java.time.Instant.parse("2026-06-10T00:00:00Z"), "active", List.of(), now, now, null));
+        inventoryRepository.saveStockBatch(new InventoryStockBatchRecord(
+                "fefo-B", "item_fefo", "loc_fefo", "BB", null, 5,
+                java.time.Instant.parse("2026-06-05T00:00:00Z"), "active", List.of(), now, now, null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-fefo", "item_fefo", "loc_fefo", 10, 0, 10, now, null, "wh_fefo"));
+
+        // 出库 6 → FEFO 先扣先到期 B(6/5) 5（consumed）+ A(6/10) 1（剩 4）。
+        service.createStockMovement(new StockMovementRequest(
+                "fefo-out", "out", List.of(), "loc_fefo", "bar_x",
+                List.of(Map.of("item_id", "item_fefo", "quantity", 6)), "tc-fefo"));
+
+        assertThat(inventoryRepository.listStockBatches())
+                .filteredOn(b -> "fefo-B".equals(b.id())).singleElement()
+                .satisfies(b -> {
+                    assertThat(b.quantity()).isZero();
+                    assertThat(b.status()).isEqualTo("consumed");
+                });
+        assertThat(inventoryRepository.listStockBatches())
+                .filteredOn(b -> "fefo-A".equals(b.id())).singleElement()
+                .satisfies(b -> {
+                    assertThat(b.quantity()).isEqualTo(4);
+                    assertThat(b.status()).isEqualTo("active");
+                });
+    }
+
+    @Test
+    void stockInRejectsPurchaseSourceTypeBypassToEnforceReceiveFlow() {
+        // 2e 进货查验 C9：采购类 source_type 不可经通用 stock-in 绕过采购 receive（资质卡控）。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createStockIn(new StockInRequest(
+                        "bypass-1", "x", List.of(), "purchase", "po-1", "wh_1",
+                        List.of(Map.of("item_id", "item_z", "quantity", 5)))))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code").isEqualTo("STOCK_IN_PURCHASE_BYPASS_FORBIDDEN");
+    }
+
+    @Test
+    void stockInFrozenWhileWarehouseHasActiveStocktake() {
+        // 2e 盘点冻结：库房有未关闭盘点单（counting）时该库房入库被冻结。
+        service.createStocktake(new CreateStocktakeRequest("st-freeze", "wh_frozen", null, null));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createStockIn(new StockInRequest(
+                        "freeze-in", "x", List.of(), "manual_inbound", "s1", "wh_frozen",
+                        List.of(Map.of("item_id", "item_f", "quantity", 5)))))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code").isEqualTo("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED");
+    }
+
+    @Test
     void stockInOutboundAndTransferUpdateIntegerBalancesAndAuditEvents() {
         InventoryItemRecord item = service.createInventoryItem(new InventoryItemRequest(
                 "item-create",
@@ -122,7 +175,7 @@ class InventoryServiceTests {
                 "stock-in",
                 "purchase",
                 List.of(),
-                "purchase",
+                "manual_inbound",
                 "purchase_1",
                 "warehouse_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 10))
@@ -1292,6 +1345,9 @@ class InventoryServiceTests {
     void recordVarianceComputesSignedVarianceQtyAndEstimatesAmountFromCost() {
         StocktakeRecord stocktake = service.createStocktake(
                 new CreateStocktakeRequest("st-var", "wh_main", null, null));
+        // 2e：系统账面 book_qty=10（盘点取系统账面值 item+warehouse 合计，非客户端传入）。
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-var-x", "item_x", "loc_var_x", 10, 0, 10, java.time.Instant.now(), null, "wh_main"));
         // book=10, counted=7 → variance_qty=-3（盘亏）；unit_cost=500 分 → amount=-1500。
         InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
                 "var-1", "item_x", null,
@@ -1311,6 +1367,9 @@ class InventoryServiceTests {
     void recordVarianceUsesExplicitAmountOverCostEstimate() {
         StocktakeRecord stocktake = service.createStocktake(
                 new CreateStocktakeRequest("st-var2", "wh_main", null, null));
+        // 2e：系统账面 book_qty=5。
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-var-y", "item_y", "loc_var_y", 5, 0, 5, java.time.Instant.now(), null, "wh_main"));
         InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
                 "var-2", "item_y", "BATCH-1",
                 new java.math.BigDecimal("5"), new java.math.BigDecimal("8"),
@@ -1340,6 +1399,74 @@ class InventoryServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("inventory.stocktake.variance_reviewed");
+    }
+
+    @Test
+    void approvedShortageVarianceReconcilesPhysicalBalanceToActualCount() {
+        // 盘点纠账：单 location 物料盘亏，复核通过后物理余额回写到实盘（10 → 7），消除账实背离。
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-recon", "wh_recon", null, null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-recon", "item_recon", "loc_recon", 10, 0, 10, java.time.Instant.now(), null, "wh_recon"));
+        // 系统 book=10，counted=7 → variance_qty=-3。
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-recon", "item_recon", null,
+                new java.math.BigDecimal("10"), new java.math.BigDecimal("7"),
+                "shortage", null, -1500L, null));
+
+        service.reviewVariance(stocktake.id(), variance.id(),
+                new ReviewVarianceRequest("rev-recon", "approved", "confirmed shortage"));
+
+        assertThat(inventoryRepository.findStockBalance("item_recon", "loc_recon").orElseThrow().availableQuantity())
+                .isEqualTo(7);
+    }
+
+    @Test
+    void approvedVarianceWithMultipleBalanceLocationsDistributesShortage() {
+        // 多 location 物料的 warehouse 级盘亏按行依次扣减分摊（不再死路）；全库房不足才抛冲突。
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-ambi", "wh_ambi", null, null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-ambi-1", "item_ambi", "loc_ambi_1", 6, 0, 6, java.time.Instant.now(), null, "wh_ambi"));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-ambi-2", "item_ambi", "loc_ambi_2", 4, 0, 4, java.time.Instant.now(), null, "wh_ambi"));
+        // 系统 book=10，counted=8 → -2 盘亏。
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-ambi", "item_ambi", null,
+                new java.math.BigDecimal("10"), new java.math.BigDecimal("8"),
+                "shortage", null, -1000L, null));
+
+        service.reviewVariance(stocktake.id(), variance.id(),
+                new ReviewVarianceRequest("rev-ambi", "approved", "shortage"));
+
+        // -2 从首行 loc_ambi_1 吸收：6→4，loc_ambi_2 不动；warehouse 合计 10→8 与实盘一致。
+        int total = inventoryRepository.findStockBalance("item_ambi", "loc_ambi_1").orElseThrow().availableQuantity()
+                + inventoryRepository.findStockBalance("item_ambi", "loc_ambi_2").orElseThrow().availableQuantity();
+        assertThat(total).isEqualTo(8);
+    }
+
+    @Test
+    void approvedShortageExceedingWarehouseBalanceThrowsInsufficient() {
+        // 盘亏超过全库房可用量 → 抛 INVENTORY_VARIANCE_RECONCILE_INSUFFICIENT（不静默背离）。
+        StocktakeRecord stocktake = service.createStocktake(
+                new CreateStocktakeRequest("st-insf", "wh_insf", null, null));
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-insf", "item_insf", "loc_insf", 3, 0, 3, java.time.Instant.now(), null, "wh_insf"));
+        // 系统 book=3，counted=0 → -3；但若并发已被扣空... 这里直接构造 book>可用：counted=0 book=3 可吸收。
+        // 用 counted=-? 不合法；改为 book=3 counted=0 可吸收（3）。为触发不足，另建一笔超额：
+        InventoryVarianceRecord variance = service.recordVariance(stocktake.id(), new RecordVarianceRequest(
+                "var-insf", "item_insf", null,
+                new java.math.BigDecimal("3"), new java.math.BigDecimal("0"),
+                "shortage", null, -1500L, null));
+        // 先把余额扣到不足（模拟并发出库后再批准盘亏）。
+        inventoryRepository.saveStockBalance(new StockBalanceRecord(
+                "bal-insf", "item_insf", "loc_insf", 1, 0, 1, java.time.Instant.now(), null, "wh_insf"));
+
+        assertThatThrownBy(() -> service.reviewVariance(stocktake.id(), variance.id(),
+                new ReviewVarianceRequest("rev-insf", "approved", "shortage")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("INVENTORY_VARIANCE_RECONCILE_INSUFFICIENT");
     }
 
     @Test
@@ -1704,6 +1831,14 @@ class InventoryServiceTests {
         }
 
         @Override
+        public int sumStockBalanceByItemAndWarehouse(String itemId, String warehouseId) {
+            return balances.values().stream()
+                    .filter(b -> itemId.equals(b.itemId()) && warehouseId.equals(b.warehouseId()))
+                    .mapToInt(StockBalanceRecord::quantity)
+                    .sum();
+        }
+
+        @Override
         public StockBalanceRecord saveStockBalance(StockBalanceRecord balance) {
             balances.put(balanceKey(balance.itemId(), balance.locationId()), balance);
             return balance;
@@ -1770,6 +1905,34 @@ class InventoryServiceTests {
         public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch) {
             stockBatches.put(batch.id(), batch);
             return batch;
+        }
+
+        @Override
+        public List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String itemId, String locationId) {
+            return stockBatches.values().stream()
+                    .filter(b -> itemId.equals(b.itemId()) && locationId.equals(b.locationId())
+                            && "active".equals(b.status()) && b.quantity() > 0)
+                    .sorted((a, b) -> {
+                        if (a.expireAt() == null && b.expireAt() != null) return 1;
+                        if (a.expireAt() != null && b.expireAt() == null) return -1;
+                        int e = a.expireAt() == null ? 0 : a.expireAt().compareTo(b.expireAt());
+                        return e != 0 ? e : a.createdAt().compareTo(b.createdAt());
+                    })
+                    .toList();
+        }
+
+        @Override
+        public int atomicDecreaseBatchQuantity(String batchId, int qty) {
+            InventoryStockBatchRecord b = stockBatches.get(batchId);
+            if (b == null || !"active".equals(b.status()) || b.quantity() < qty) {
+                return 0;
+            }
+            int newQty = b.quantity() - qty;
+            stockBatches.put(batchId, new InventoryStockBatchRecord(
+                    b.id(), b.itemId(), b.locationId(), b.batchNo(), b.supplierId(), newQty,
+                    b.expireAt(), newQty <= 0 ? "consumed" : b.status(), b.evidenceAttachmentIds(),
+                    b.createdAt(), java.time.Instant.now(), b.merchantId()));
+            return 1;
         }
 
         @Override
@@ -2053,6 +2216,12 @@ class InventoryServiceTests {
 
         @Override public List<StocktakeRecord> listStocktakes() {
             return new ArrayList<>(stocktakes.values());
+        }
+
+        @Override public boolean hasActiveStocktakeForWarehouse(String warehouseId) {
+            return stocktakes.values().stream()
+                    .anyMatch(s -> warehouseId.equals(s.warehouseId())
+                            && java.util.Set.of("counting", "reviewing").contains(s.status()));
         }
 
         @Override public List<StocktakeRecord> listStocktakesByMerchant(String merchantId) {

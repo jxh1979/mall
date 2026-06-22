@@ -9,6 +9,8 @@ public record AmusementSafetyInspectionRequest(
         String operatorNote,
         List<String> evidenceAttachmentIds,
         String projectId,
+        // 设备业务码（可空=项目级巡检；与核销 deviceId 同口径）。
+        String deviceId,
         String templateId,
         List<Map<String, Object>> items,
         String overallResult,

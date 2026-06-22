@@ -28,12 +28,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO ticket_types (
                     id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                     holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
-                    created_at, updated_at
+                    stock_quantity, sold_quantity, created_at, updated_at
                 )
                 VALUES (
                     :id, :ticket_name, :base_calendar_price_mode, :weekday_price_cent, :weekend_price_cent,
                     :holiday_price_cent, :stock_required, :status, :validity_days, :refresh_interval_seconds,
-                    :created_at, :updated_at
+                    :stock_quantity, :sold_quantity, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_name = EXCLUDED.ticket_name,
@@ -45,6 +45,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     status = EXCLUDED.status,
                     validity_days = EXCLUDED.validity_days,
                     refresh_interval_seconds = EXCLUDED.refresh_interval_seconds,
+                    stock_quantity = EXCLUDED.stock_quantity,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketTypeParameters(ticketType));
         return ticketType;
@@ -55,7 +56,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
-                       created_at, updated_at
+                       stock_quantity, sold_quantity, created_at, updated_at
                   FROM ticket_types
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapTicketType);
@@ -66,10 +67,38 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, ticket_name, base_calendar_price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
-                       created_at, updated_at
+                       stock_quantity, sold_quantity, created_at, updated_at
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
+    }
+
+    @Override
+    public boolean atomicDeductTicketStock(String ticketTypeId, int quantity) {
+        int updated = jdbcTemplate.update("""
+                UPDATE ticket_types
+                   SET sold_quantity = sold_quantity + :quantity,
+                       updated_at = :now
+                 WHERE id = :id
+                   AND (stock_quantity IS NULL OR sold_quantity + :quantity <= stock_quantity)
+                """, new MapSqlParameterSource()
+                .addValue("id", ticketTypeId)
+                .addValue("quantity", quantity)
+                .addValue("now", java.time.Instant.now().atOffset(java.time.ZoneOffset.UTC)));
+        return updated > 0;
+    }
+
+    @Override
+    public void releaseTicketStock(String ticketTypeId, int quantity) {
+        jdbcTemplate.update("""
+                UPDATE ticket_types
+                   SET sold_quantity = GREATEST(0, sold_quantity - :quantity),
+                       updated_at = :now
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", ticketTypeId)
+                .addValue("quantity", quantity)
+                .addValue("now", java.time.Instant.now().atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override
@@ -279,17 +308,41 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
-    public void markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt) {
-        jdbcTemplate.update("""
+    public int markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt) {
+        // F-TXN-04 并发双花修复：状态 CAS——仅当原记录仍为 success 且尚未冲正（reversed_at IS NULL）才翻转。
+        // 此前无 WHERE 守卫，service 层 reversedAt==null 读检与本翻转之间存在 TOCTOU：并发两路冲正可同时通过读检、
+        // 同时回滚 used_times（多次票回滚两次=权益虚增）。改 CAS 后并发只一路得 1，另一路得 0 → 调用方拒绝。
+        return jdbcTemplate.update("""
                 UPDATE ticket_verifications
                    SET status = 'reversed',
                        reversed_by = :reversed_by,
                        reversed_at = :reversed_at
                  WHERE id = :id
+                   AND status = 'success'
+                   AND reversed_at IS NULL
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("reversed_by", reversedBy)
                 .addValue("reversed_at", reversedAt.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int markTicketRefundApproved(String refundId, String approvedBy, java.time.Instant approvedAt) {
+        // F-TXN-04 并发双拨付修复：退款审批状态 CAS——仅当仍为 requested 才翻转 approved。
+        // 此前 approveRefund 读检 status=='requested' 与 saveTicketRefund 间 TOCTOU：并发两路可同时过读检、
+        // 各发一次 TicketRefundApprovedEvent（双拨付）。改 CAS 后并发只一路得 1，另一路得 0 → 调用方拒绝。
+        return jdbcTemplate.update("""
+                UPDATE ticket_refunds
+                   SET status = 'approved',
+                       approved_by = :approved_by,
+                       approved_at = :approved_at,
+                       updated_at = :approved_at
+                 WHERE id = :id
+                   AND status = 'requested'
+                """, new MapSqlParameterSource()
+                .addValue("id", refundId)
+                .addValue("approved_by", approvedBy)
+                .addValue("approved_at", approvedAt.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override
@@ -428,13 +481,16 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO ticket_orders (
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
                     sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
-                    dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at
+                    dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at,
+                    merchant_id
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
                     :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
-                    :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at
+                    :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at,
+                    :merchant_id
                 )
+                -- merchant_id（下单受理商户）下单时定，后续 update（出票/置 paid）不覆盖。
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -482,6 +538,40 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public List<TicketOrderRecord> listTicketOrdersByMerchant(String merchantId) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + """
+                 WHERE merchant_id = :merchant_id
+                 ORDER BY created_at DESC, id
+                """, Map.of("merchant_id", merchantId), rowMapper::mapTicketOrder);
+    }
+
+    @Override
+    public int atomicCancelUnpaidOrder(String orderId, java.time.Instant now) {
+        // 2a-5：原子取消未支付订单（仅 created+unpaid 可取消）。返回 1 时调用方才释放库存，防并发重复释放/释放已付订单库存。
+        return jdbcTemplate.update("""
+                UPDATE ticket_orders
+                   SET status = 'cancelled',
+                       updated_at = :now
+                 WHERE id = :id
+                   AND pay_status = 'unpaid'
+                   AND status = 'created'
+                """, new MapSqlParameterSource()
+                .addValue("id", orderId)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public List<TicketOrderRecord> listExpiredUnpaidOrders(java.time.Instant cutoff) {
+        // 2a-5：超时未支付订单（created+unpaid 且 created_at < cutoff），供定时任务释放库存。
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + """
+                 WHERE status = 'created'
+                   AND pay_status = 'unpaid'
+                   AND created_at < :cutoff
+                 ORDER BY created_at ASC, id
+                """, Map.of("cutoff", cutoff.atOffset(java.time.ZoneOffset.UTC)), rowMapper::mapTicketOrder);
+    }
+
+    @Override
     public TicketPaymentIntentRecord saveTicketPaymentIntent(TicketPaymentIntentRecord intent) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_payment_intents (
@@ -500,6 +590,12 @@ class JdbcTicketingRepository implements TicketingRepository {
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.ticketPaymentIntentParameters(intent));
         return intent;
+    }
+
+    @Override
+    public Optional<TicketPaymentIntentRecord> findTicketPaymentIntentById(String id) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketPaymentIntentSelect() + " WHERE id = :id",
+                Map.of("id", id), rowMapper::mapTicketPaymentIntent).stream().findFirst();
     }
 
     @Override
@@ -644,13 +740,26 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public long sumApprovedRefundAmountByOrderId(String orderId) {
+        Long result = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(refund_amount_cent), 0)
+                  FROM ticket_refunds
+                 WHERE target_id = :order_id
+                   AND status = 'approved'
+                """, Map.of("order_id", orderId), Long.class);
+        return result == null ? 0L : result;
+    }
+
+    @Override
     public Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt) {
+        // 2a-3 退款冻结：核销必须 status='active'（防退款冻结后经游乐 gateway 直连 atomicUseEntitlement 绕过 service 检查）。
         int rowCount = jdbcTemplate.update("""
                 UPDATE issued_entitlements
                    SET used_times = used_times + 1,
                        updated_at = :updated_at
                  WHERE id = :id
                    AND used_times < total_times
+                   AND status = 'active'
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
@@ -663,6 +772,7 @@ class JdbcTicketingRepository implements TicketingRepository {
     @Override
     public Optional<IssuedEntitlementRecord> atomicReverseEntitlement(String id, java.time.Instant updatedAt) {
         // R5 T5 核销冲正：回滚一次核销（used_times-1，下限 0）；曾用满（status 非 active）则恢复 active。
+        // 2a-3 退款冻结：status='refunded'（退款审批冻结）不可被冲正解冻 → WHERE 排除，避免"退款后冲正解冻再核销"。
         int rowCount = jdbcTemplate.update("""
                 UPDATE issued_entitlements
                    SET used_times = GREATEST(used_times - 1, 0),
@@ -670,6 +780,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        updated_at = :updated_at
                  WHERE id = :id
                    AND used_times > 0
+                   AND status <> 'refunded'
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
@@ -677,6 +788,21 @@ class JdbcTicketingRepository implements TicketingRepository {
             return Optional.empty();
         }
         return findIssuedEntitlementById(id);
+    }
+
+    @Override
+    public int freezeEntitlementForRefund(String id, java.time.Instant updatedAt) {
+        // 2a-3 退款冻结：退款审批通过 → 把未冻结的 active 权益置 refunded，使其不可再核销（含游乐 gateway 路径）。
+        // 仅冻结 active（幂等：已 refunded 返回 0）。
+        return jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET status = 'refunded',
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND status = 'active'
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("updated_at", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
     }
 
     @Override

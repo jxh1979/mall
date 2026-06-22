@@ -185,6 +185,8 @@ final class AmusementBookingService {
                 requireText(actual.sessionId(), "session_id"),
                 "SESSION_NOT_ACCEPTING_RESERVATION"
         );
+        // 2b 越权修复：创建预约也须校验项目归属（与 changeReservationStatus 一致），防商户对他商户项目/场次写入预约。
+        checkProjectOwnership(session.projectId());
         Instant now = Instant.now();
         return repository.saveReservation(new AmusementReservationRecord(
                 "reservation_" + slug(actual.idempotencyKey()),
@@ -222,6 +224,8 @@ final class AmusementBookingService {
                 requireText(actual.sessionId(), "session_id"),
                 "SESSION_NOT_ACCEPTING_ENTRY"
         );
+        // 2b 越权修复：创建排队也须校验项目归属，防跨商户写入排队。
+        checkProjectOwnership(session.projectId());
         Instant now = Instant.now();
         return repository.saveQueueEntry(new AmusementQueueEntryRecord(
                 "queue_" + slug(actual.idempotencyKey()),
@@ -261,6 +265,8 @@ final class AmusementBookingService {
                 requireText(actual.sessionId(), "session_id"),
                 "SESSION_NOT_ACCEPTING_GROUP_BOOKING"
         );
+        // 2b 越权修复：创建团体预订也须校验项目归属，防跨商户写入团体预订并经 approve 锁占他商户容量。
+        checkProjectOwnership(session.projectId());
         int partySize = positiveInteger(actual.partySize(), "party_size");
         int reservedCapacity = positiveInteger(actual.reservedCapacity(), "reserved_capacity");
         if (reservedCapacity > session.capacity()) {

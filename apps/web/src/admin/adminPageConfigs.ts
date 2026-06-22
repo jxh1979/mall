@@ -9,6 +9,8 @@ export type GenericAdminAction = {
   body?: Record<string, unknown>;
   result?: Record<string, unknown>;
   requiresRow?: boolean;
+  /** 该写动作所需权限码（与后端 x-permission 对齐）；缺省=无需额外权限（本地/只读动作）。 */
+  permission?: string[];
 };
 export type GenericAdminPageConfig = {
   pageId: string;
@@ -29,7 +31,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/platform/business-entity-bindings；变更调用 /api/v1/platform/business-entity-bindings/{id}/change。",
     dataSources: [{ label: "主体绑定", endpoint: "/api/v1/platform/business-entity-bindings" }],
     columns: [{ key: "businessObjectId", label: "业务对象" }, { key: "operatorSubject", label: "运营主体" }, { key: "contractSubject", label: "合同主体" }, { key: "settlementSubject", label: "结算主体" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "提交绑定变更", kind: "request", endpoint: "/api/v1/platform/business-entity-bindings/{id}/change", body: { reason: "完整后台验收变更", evidenceAttachmentIds: ["evidence-full-admin"] } },
+    primaryAction: { label: "提交绑定变更", kind: "request", permission: ["entity.binding.manage"], endpoint: "/api/v1/platform/business-entity-bindings/{id}/change", body: { reason: "完整后台验收变更", evidenceAttachmentIds: ["evidence-full-admin"] } },
   },
   "ADM-GOV-004": {
     pageId: "ADM-GOV-004", title: "合同审批与附件归档",
@@ -37,7 +39,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/platform/contracts；审批调用 /api/v1/platform/contracts/{contract_id}/approve。",
     dataSources: [{ label: "合同", endpoint: "/api/v1/platform/contracts" }],
     columns: [{ key: "merchantId", label: "商户" }, { key: "contractSubjectId", label: "合同主体" }, { key: "operationSubjectId", label: "运营主体" }, { key: "settlementSubjectId", label: "结算主体" }, { key: "effectiveDate", label: "生效日" }, { key: "expiryDate", label: "到期日" }, { key: "rentTerms", label: "租金条款" }, { key: "shareholderRatioForReport", label: "股东比例(报表)" }, { key: "attachmentIds", label: "附件" }, { key: "lifecycleStatus", label: "审批状态" }],
-    primaryAction: { label: "审批通过", kind: "request", endpoint: "/api/v1/platform/contracts/{contract_id}/approve", body: { idempotencyKey: "full-admin-contract-approve", operatorNote: "完整后台验收审批", evidenceAttachmentIds: ["evidence-full-admin"], decision: "approve", comment: "完整后台验收审批" } },
+    primaryAction: { label: "审批通过", kind: "request", permission: ["contract.lifecycle.approve"], endpoint: "/api/v1/platform/contracts/{contract_id}/approve", body: { idempotencyKey: "full-admin-contract-approve", operatorNote: "完整后台验收审批", evidenceAttachmentIds: ["evidence-full-admin"], decision: "approve", comment: "完整后台验收审批" } },
   },
   "ADM-GOV-006": {
     pageId: "ADM-GOV-006", title: "主管复核与违规阻断",
@@ -45,8 +47,8 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/platform/supervisor-review-policies；评估调用 /api/v1/platform/supervisor-review/evaluate；审批调用 /api/v1/platform/supervisor-review/{review_id}/approve。",
     dataSources: [{ label: "复核策略", endpoint: "/api/v1/platform/supervisor-review-policies" }],
     columns: [{ key: "policyCode", label: "策略" }, { key: "actionType", label: "动作" }, { key: "requiredLevel", label: "主管级别" }, { key: "blocksByDefault", label: "默认阻断" }, { key: "requiredEvidenceTypes", label: "所需证据" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "评估违规动作", kind: "request", endpoint: "/api/v1/platform/supervisor-review/evaluate", requiresRow: false, body: { idempotencyKey: "full-admin-supervisor-review-evaluate", operatorNote: "完整后台验收主管复核评估", evidenceAttachmentIds: ["evidence-full-admin"], actionType: "contract_violation", objectType: "contract", objectId: "contract-1", amountCent: 0, violationSummary: "合同主体与基础定义不一致" } },
-    secondaryAction: { label: "主管审批放行", kind: "request", endpoint: "/api/v1/platform/supervisor-review/review-demo/approve", requiresRow: false, body: { idempotencyKey: "full-admin-supervisor-review-approve", operatorNote: "完整后台验收主管审批", evidenceAttachmentIds: ["evidence-full-admin"], reviewerLevel: 3, decision: "approved", comment: "证据齐备，同意放行" } },
+    primaryAction: { label: "评估违规动作", kind: "request", permission: ["governance.supervisor_review.manage"], endpoint: "/api/v1/platform/supervisor-review/evaluate", requiresRow: false, body: { idempotencyKey: "full-admin-supervisor-review-evaluate", operatorNote: "完整后台验收主管复核评估", evidenceAttachmentIds: ["evidence-full-admin"], actionType: "contract_violation", objectType: "contract", objectId: "contract-1", amountCent: 0, violationSummary: "合同主体与基础定义不一致" } },
+    secondaryAction: { label: "主管审批放行", kind: "request", permission: ["governance.supervisor_review.manage"], endpoint: "/api/v1/platform/supervisor-review/review-demo/approve", requiresRow: false, body: { idempotencyKey: "full-admin-supervisor-review-approve", operatorNote: "完整后台验收主管审批", evidenceAttachmentIds: ["evidence-full-admin"], reviewerLevel: 3, decision: "approved", comment: "证据齐备，同意放行" } },
   },
   "ADM-TKT-002": {
     pageId: "ADM-TKT-002", title: "动态定价",
@@ -54,8 +56,8 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/ticketing/dynamic-pricing-rules；仿真调用 /api/v1/ticketing/dynamic-pricing/simulations；发布调用 /api/v1/ticketing/dynamic-pricing-rules/{id}/publish。",
     dataSources: [{ label: "动态规则", endpoint: "/api/v1/ticketing/dynamic-pricing-rules" }],
     columns: [{ key: "ruleName", label: "规则" }, { key: "salesChannel", label: "渠道" }, { key: "adjustmentType", label: "调整" }, { key: "adjustmentRate", label: "幅度" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "发布规则", kind: "request", endpoint: "/api/v1/ticketing/dynamic-pricing-rules/{id}/publish", body: { reason: "完整后台验收发布" } },
-    secondaryAction: { label: "价格仿真", kind: "request", endpoint: "/api/v1/ticketing/dynamic-pricing/simulations", body: { ticketTypeId: "ticket-1", visitDate: "2026-06-20", salesChannel: "web" }, requiresRow: false },
+    primaryAction: { label: "发布规则", kind: "request", permission: ["ticket.dynamic_pricing.publish"], endpoint: "/api/v1/ticketing/dynamic-pricing-rules/{id}/publish", body: { reason: "完整后台验收发布" } },
+    secondaryAction: { label: "价格仿真", kind: "request", permission: ["ticket.dynamic_pricing.simulate"], endpoint: "/api/v1/ticketing/dynamic-pricing/simulations", body: { ticketTypeId: "ticket-1", visitDate: "2026-06-20", salesChannel: "web" }, requiresRow: false },
   },
   "ADM-TKT-003": {
     pageId: "ADM-TKT-003", title: "出票与核销追踪",
@@ -63,7 +65,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/ticketing/orders；出票调用 /api/v1/ticketing/orders/{order_id}/issue。",
     dataSources: [{ label: "票务订单", endpoint: "/api/v1/ticketing/orders" }],
     columns: [{ key: "orderNo", label: "订单号" }, { key: "quantity", label: "数量" }, { key: "payStatus", label: "支付" }, { key: "issueStatus", label: "出票" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "触发出票", kind: "request", endpoint: "/api/v1/ticketing/orders/{order_id}/issue", body: { operatorNote: "完整后台验收出票" } },
+    primaryAction: { label: "触发出票", kind: "request", permission: ["ticket.ticket.issue"], endpoint: "/api/v1/ticketing/orders/{order_id}/issue", body: { operatorNote: "完整后台验收出票" } },
   },
   "ADM-BAR-002": {
     pageId: "ADM-BAR-002", title: "订单/出品/账单",
@@ -71,8 +73,8 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/bar/orders；结账调用 /api/v1/bar/orders/{order_id}/bill；出品调用 /api/v1/bar/orders/{order_id}/deliver。",
     dataSources: [{ label: "酒吧订单", endpoint: "/api/v1/bar/orders" }],
     columns: [{ key: "orderNo", label: "订单号" }, { key: "tableId", label: "卡座" }, { key: "totalAmount", label: "金额" }, { key: "status", label: "状态" }, { key: "createdAt", label: "时间" }],
-    primaryAction: { label: "生成账单", kind: "request", endpoint: "/api/v1/bar/orders/{order_id}/bill", body: { operatorNote: "完整后台验收账单" } },
-    secondaryAction: { label: "标记出品", kind: "request", endpoint: "/api/v1/bar/orders/{order_id}/deliver", body: { operatorNote: "完整后台验收出品" } },
+    primaryAction: { label: "生成账单", kind: "request", permission: ["bar.order.create"], endpoint: "/api/v1/bar/orders/{order_id}/bill", body: { operatorNote: "完整后台验收账单" } },
+    secondaryAction: { label: "标记出品", kind: "request", permission: ["bar.order.create"], endpoint: "/api/v1/bar/orders/{order_id}/deliver", body: { operatorNote: "完整后台验收出品" } },
   },
   "ADM-BAR-003": {
     pageId: "ADM-BAR-003", title: "存酒",
@@ -80,7 +82,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/inventory/saved-bottles；领取调用 /api/v1/inventory/saved-bottles/{id}/claim。",
     dataSources: [{ label: "存酒", endpoint: "/api/v1/inventory/saved-bottles" }],
     columns: [{ key: "savedNo", label: "存酒号" }, { key: "customerName", label: "客户" }, { key: "itemName", label: "酒水" }, { key: "quantity", label: "数量" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "在线领取核销", kind: "request", endpoint: "/api/v1/inventory/saved-bottles/{id}/claim", body: { claim_items: [{ claim_quantity: 1 }], operator_note: "完整后台验收领取", evidence_attachment_ids: ["att-saved-bottle-claim-1"], verification_code: "123456" } },
+    primaryAction: { label: "在线领取核销", kind: "request", permission: ["bar.saved_bottle.manage"], endpoint: "/api/v1/inventory/saved-bottles/{id}/claim", body: { claim_items: [{ claim_quantity: 1 }], operator_note: "完整后台验收领取", evidence_attachment_ids: ["att-saved-bottle-claim-1"], verification_code: "123456" } },
   },
   "ADM-BAR-004": {
     pageId: "ADM-BAR-004", title: "销售提成",
@@ -88,7 +90,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/bar/orders；计算调用 /api/v1/bar/bills/{bill_id}/commissions/calculate。",
     dataSources: [{ label: "可计提账单", endpoint: "/api/v1/bar/orders" }],
     columns: [{ key: "orderNo", label: "订单号" }, { key: "billId", label: "账单" }, { key: "sellerRole", label: "销售角色" }, { key: "commissionRate", label: "提成率" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "计算提成", kind: "request", endpoint: "/api/v1/bar/bills/{bill_id}/commissions/calculate", rowIdKey: "billId", body: { includeTicketAmount: false, salesRate: 0.15, nonSalesRate: 0.1 } },
+    primaryAction: { label: "计算提成", kind: "request", permission: ["bar.table_commission.calculate"], endpoint: "/api/v1/bar/bills/{bill_id}/commissions/calculate", rowIdKey: "billId", body: { includeTicketAmount: false, salesRate: 0.15, nonSalesRate: 0.1 } },
   },
   "ADM-AMU-003": {
     pageId: "ADM-AMU-003", title: "安全巡检/事故",
@@ -96,7 +98,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/amusement/safety-inspections；整改调用 /api/v1/amusement/safety-inspections/{id}/rectify。",
     dataSources: [{ label: "安全巡检", endpoint: "/api/v1/amusement/safety-inspections" }],
     columns: [{ key: "inspectionNo", label: "单号" }, { key: "projectName", label: "项目" }, { key: "riskLevel", label: "风险" }, { key: "rectificationStatus", label: "整改" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "提交整改", kind: "request", endpoint: "/api/v1/amusement/safety-inspections/{id}/rectify", body: { rectificationNote: "完整后台验收整改", evidenceAttachmentIds: ["evidence-full-admin"] } },
+    primaryAction: { label: "提交整改", kind: "request", permission: ["amusement.safety_inspection.rectify"], endpoint: "/api/v1/amusement/safety-inspections/{id}/rectify", body: { rectificationNote: "完整后台验收整改", evidenceAttachmentIds: ["evidence-full-admin"] } },
   },
   "ADM-INV-001": {
     pageId: "ADM-INV-001", title: "库存台账",
@@ -104,7 +106,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements；调整调用 /api/v1/inventory/stock-movements。",
     dataSources: [{ label: "物料", endpoint: "/api/v1/inventory/items" }, { label: "余额", endpoint: "/api/v1/inventory/stock-balances" }, { label: "流水", endpoint: "/api/v1/inventory/stock-movements" }],
     columns: [{ key: "__source", label: "来源" }, { key: "itemName", label: "物料" }, { key: "quantity", label: "数量" }, { key: "locationType", label: "位置" }, { key: "status", label: "状态" }],
-    primaryAction: { label: "登记调整", kind: "request", endpoint: "/api/v1/inventory/stock-movements", body: { from_location_id: "bar-main", to_location_id: "warehouse-main", items: [{ item_id: "item-1", quantity: 1, unit: "bottle" }], trace_code: "TRACE-ADMIN-001", operator_note: "完整后台验收调整", evidence_attachment_ids: ["att-stock-movement-1"] } },
+    primaryAction: { label: "登记调整", kind: "request", permission: ["inventory.stock.move"], endpoint: "/api/v1/inventory/stock-movements", body: { from_location_id: "bar-main", to_location_id: "warehouse-main", items: [{ item_id: "item-1", quantity: 1, unit: "bottle" }], trace_code: "TRACE-ADMIN-001", operator_note: "完整后台验收调整", evidence_attachment_ids: ["att-stock-movement-1"] } },
   },
   "ADM-FIN-002": {
     pageId: "ADM-FIN-002", title: "对账差异",
@@ -120,8 +122,8 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "\u8bfb\u53d6 /api/v1/merchant-service/work-orders\uff1b\u6d3e\u5355\u8c03\u7528 /api/v1/merchant-service/work-orders/{id}/assign\uff1b\u5173\u95ed\u8c03\u7528 /api/v1/merchant-service/work-orders/{id}/close\u3002",
     dataSources: [{ label: "\u5546\u6237\u5de5\u5355", endpoint: "/api/v1/merchant-service/work-orders" }],
     columns: [{ key: "workOrderType", label: "\u7c7b\u578b" }, { key: "title", label: "\u6807\u9898" }, { key: "priority", label: "\u4f18\u5148\u7ea7" }, { key: "status", label: "\u72b6\u6001" }, { key: "ownerDepartment", label: "\u8d23\u4efb\u90e8\u95e8" }],
-    primaryAction: { label: "\u6d3e\u5355", kind: "request", endpoint: "/api/v1/merchant-service/work-orders/{id}/assign", body: { operatorNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u6d3e\u5355", ownerDepartment: "property", ownerUserId: "staff_owner", operatorUserId: "staff_ops", evidenceAttachmentIds: ["evidence-full-admin"] } },
-    secondaryAction: { label: "\u5173\u95ed\u5de5\u5355", kind: "request", endpoint: "/api/v1/merchant-service/work-orders/{id}/close", body: { operatorNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u5173\u95ed", resolution: "\u5df2\u5904\u7406\u5e76\u5b8c\u6210\u5546\u6237\u56de\u8bbf", satisfactionScore: 5, operatorUserId: "staff_ops", evidenceAttachmentIds: ["evidence-full-admin"] } },
+    primaryAction: { label: "\u6d3e\u5355", kind: "request", permission: ["merchant.service_work_order.assign"], endpoint: "/api/v1/merchant-service/work-orders/{id}/assign", body: { operatorNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u6d3e\u5355", ownerDepartment: "property", ownerUserId: "staff_owner", operatorUserId: "staff_ops", evidenceAttachmentIds: ["evidence-full-admin"] } },
+    secondaryAction: { label: "\u5173\u95ed\u5de5\u5355", kind: "request", permission: ["merchant.service_work_order.close"], endpoint: "/api/v1/merchant-service/work-orders/{id}/close", body: { operatorNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u5173\u95ed", resolution: "\u5df2\u5904\u7406\u5e76\u5b8c\u6210\u5546\u6237\u56de\u8bbf", satisfactionScore: 5, operatorUserId: "staff_ops", evidenceAttachmentIds: ["evidence-full-admin"] } },
   },
   "ADM-MER-002": {
     pageId: "ADM-MER-002", title: "商户授权工作台",
@@ -145,7 +147,7 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     evidence: "读取 /api/v1/analytics/risk-alerts；处理调用 /api/v1/analytics/risk-alerts/{id}/resolve。",
     dataSources: [{ label: "风控预警", endpoint: "/api/v1/analytics/risk-alerts" }],
     columns: [{ key: "alertType", label: "类型" }, { key: "riskLevel", label: "等级" }, { key: "summary", label: "摘要" }, { key: "status", label: "状态" }, { key: "createdAt", label: "时间" }],
-    primaryAction: { label: "处理预警", kind: "request", endpoint: "/api/v1/analytics/risk-alerts/{id}/resolve", body: { resolution: "完整后台验收处理" } },
+    primaryAction: { label: "处理预警", kind: "request", permission: ["analytics.risk_alert.manage"], endpoint: "/api/v1/analytics/risk-alerts/{id}/resolve", body: { resolution: "完整后台验收处理" } },
   },
   "ADM-EVD-001": {
     pageId: "ADM-EVD-001", title: "审计事件",

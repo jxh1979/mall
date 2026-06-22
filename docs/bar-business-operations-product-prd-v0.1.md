@@ -132,7 +132,7 @@ flowchart TD
   C -- 是 --> D["核销赠饮"]
   D --> D1["生成 0 元兑换点单（order_source=entitlement_redeem）"]
   D1 --> E["写入酒吧账单或赠饮记录"]
-  E --> E1["按出品扣减对应吧台库存（bar.stock.consumed）"]
+  E --> E1["按出品扣减对应吧台库存（inventory stock movement（movement_type=redeem_consume/order_consume））"]
   C -- 否 --> F["拒绝或人工处理"]
   E1 --> G["回写票务权益状态"]
   F --> H["进入异常留痕"]

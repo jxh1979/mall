@@ -482,13 +482,22 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
-    public boolean lockedDailyCloseExistsForDate(LocalDate businessDate) {
+    public boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId) {
+        // F-OPS-09：商户级日结锁。与 lockArApItemsForDailyClose 同口径——
+        // merchantId 非空（商户 scope 调用方）：仅本商户封账（scope_type='merchant' AND scope_id=:merchant_id）拦截，
+        //   他商户封账不冻结本商户写入；
+        // merchantId 为空（平台口径调用方）：该经营日任一 locked 日结即拦截（平台口径写入受所有封账约束）。
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("merchant_id", merchantId);
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                   FROM finance_daily_closes
                  WHERE business_date = :business_date
                    AND status = 'locked'
-                """, Map.of("business_date", businessDate), Integer.class);
+                   AND (:merchant_id IS NULL
+                        OR (scope_type = 'merchant' AND scope_id = :merchant_id))
+                """, params, Integer.class);
         return count != null && count > 0;
     }
 
@@ -543,7 +552,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                 SELECT (SELECT COALESCE(SUM(settlement_amount_cent), 0)
                           FROM bar_bill_settlements
                          WHERE settled_at >= :from
-                           AND settled_at < :to) AS amount_cent,
+                           AND settled_at < :to
+                           AND reversed = FALSE) AS amount_cent,
                        (SELECT COALESCE(SUM(amount_cent), 0)
                           FROM bar_bill_adjustments
                          WHERE adjustment_type = 'refund'
@@ -552,7 +562,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                        (SELECT COUNT(*)
                           FROM bar_bill_settlements
                          WHERE settled_at >= :from
-                           AND settled_at < :to) AS order_count
+                           AND settled_at < :to
+                           AND reversed = FALSE) AS order_count
                 """, businessDate, fromInclusive, toExclusive);
     }
 
@@ -764,11 +775,11 @@ class JdbcFinanceRepository implements FinanceRepository {
     public CamAllocationRecord saveCamAllocation(CamAllocationRecord allocation) {
         jdbcTemplate.update("""
                 INSERT INTO cam_allocations (
-                    id, allocation_batch_id, merchant_id, period, total_amount_cent,
+                    id, allocation_batch_id, merchant_id, period, settlement_period, total_amount_cent,
                     weight_bps, allocated_amount_cent, ar_ap_item_id, created_at
                 )
                 VALUES (
-                    :id, :allocation_batch_id, :merchant_id, :period, :total_amount_cent,
+                    :id, :allocation_batch_id, :merchant_id, :period, :settlement_period, :total_amount_cent,
                     :weight_bps, :allocated_amount_cent, :ar_ap_item_id, :created_at
                 )
                 ON CONFLICT (id) DO NOTHING
@@ -777,6 +788,10 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("allocation_batch_id", allocation.allocationBatchId())
                 .addValue("merchant_id", allocation.merchantId())
                 .addValue("period", allocation.period())
+                // 2d-1 修复：运行期写入 settlement_period（沿用 period，符合 V121 设计意图）。
+                // 此前不写 → 恒 NULL → true-up 的 sumCamPrepaidByMerchantAndPeriod 永远匹配不到 → prepaid=0
+                // → 实际应摊全额当新增应收重挂（对已预收金额重复入账）。
+                .addValue("settlement_period", allocation.period())
                 .addValue("total_amount_cent", allocation.totalAmountCent())
                 .addValue("weight_bps", allocation.weightBps())
                 .addValue("allocated_amount_cent", allocation.allocatedAmountCent())
@@ -806,6 +821,17 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE settlement_period = :settlement_period
                    AND trued_up = FALSE
                 """, new MapSqlParameterSource().addValue("settlement_period", settlementPeriod));
+    }
+
+    @Override
+    public long countCamTrueUpRunsForPeriod(String settlementPeriod) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM cam_trueup_runs
+                 WHERE settlement_period = :settlement_period
+                """, new MapSqlParameterSource()
+                .addValue("settlement_period", settlementPeriod), Long.class);
+        return count == null ? 0L : count;
     }
 
     @Override

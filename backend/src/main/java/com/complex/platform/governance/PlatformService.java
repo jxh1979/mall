@@ -1,5 +1,6 @@
 package com.complex.platform.governance;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
@@ -33,15 +34,20 @@ public class PlatformService {
     private final PlatformRepository repository;
     private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
+    // F-AUTHZ-02 治理写仅平台：治理写方法（建商户/法律实体绑定/合同/项目空间等）首行经
+    // requirePlatformScope() fail-closed 拒 merchant-scoped 主体，防权限被下放给商户角色后越权治理。
+    private final AuthorizationService authorizationService;
 
     public PlatformService(
             PlatformRepository repository,
             AuditedOperationExecutor operations,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.operations = operations;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
     }
 
     public PageResponse<BusinessEntityRecord> listBusinessEntities() {
@@ -59,6 +65,7 @@ public class PlatformService {
     }
 
     public BusinessEntityRecord createBusinessEntity(BusinessEntityRequest request) {
+        authorizationService.requirePlatformScope();
         return executeWrite(
                 "createBusinessEntity",
                 idempotencyKey(request),
@@ -102,6 +109,7 @@ public class PlatformService {
     }
 
     public MerchantRecord createMerchant(MerchantProfileRequest request) {
+        authorizationService.requirePlatformScope();
         return saveMerchant(
                 "createMerchant",
                 "mch_" + UUID.randomUUID(),
@@ -110,6 +118,7 @@ public class PlatformService {
     }
 
     public MerchantRecord updateMerchant(String merchantId, MerchantProfileRequest request) {
+        authorizationService.requirePlatformScope();
         return saveMerchant(
                 "updateMerchant:" + merchantId,
                 requireText(merchantId, "merchant_id"),
@@ -132,6 +141,7 @@ public class PlatformService {
     }
 
     public ProjectRecord createProject(ProjectRequest request) {
+        authorizationService.requirePlatformScope();
         return executeWrite(
                 "createProject",
                 idempotencyKey(request),
@@ -176,6 +186,7 @@ public class PlatformService {
     }
 
     public SpaceRecord createSpace(SpaceRequest request) {
+        authorizationService.requirePlatformScope();
         return executeWrite(
                 "createSpace",
                 idempotencyKey(request),
@@ -235,6 +246,7 @@ public class PlatformService {
     }
 
     public BusinessEntityBindingRecord createBusinessEntityBinding(BusinessEntityBindingRequest request) {
+        authorizationService.requirePlatformScope();
         return executeWrite(
                 "createBusinessEntityBinding",
                 idempotencyKey(request),
@@ -273,6 +285,7 @@ public class PlatformService {
     }
 
     public BusinessEntityBindingRecord changeBusinessEntityBinding(String id, StatusChangeRequest request) {
+        authorizationService.requirePlatformScope();
         String bindingId = requireText(id, "id");
         return executeWrite(
                 "changeBusinessEntityBinding:" + bindingId,
@@ -348,6 +361,7 @@ public class PlatformService {
     }
 
     public ContractRecord createContractDraft(ContractDraftRequest request) {
+        authorizationService.requirePlatformScope();
         return executeWrite(
                 "createContractDraft",
                 idempotencyKey(request),
@@ -383,6 +397,7 @@ public class PlatformService {
     }
 
     public ContractRecord approveContract(String contractId, ApprovalRequest request) {
+        authorizationService.requirePlatformScope();
         String id = requireText(contractId, "contract_id");
         return executeWrite(
                 "approveContract:" + id,
@@ -452,6 +467,7 @@ public class PlatformService {
                             trimToNull(request.settlementEntityId()),
                             trimToNull(request.contactName()),
                             trimToNull(request.contactPhone()),
+                            trimToNull(request.ownerPerson()),
                             trimToNull(request.mallBlockCode()),
                             request.areaSquareMeter(),
                             request.leasedAreaSquareMeter(),

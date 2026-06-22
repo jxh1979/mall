@@ -39,10 +39,10 @@ public class FinanceService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final String CURRENCY_CNY = "CNY";
     private static final Set<String> DIRECTIONS = Set.of("receivable", "payable");
-    // P1#13/#14：库存差异(inventory_difference) + 综合体计费三源(turnover_rent/cam/deposit) 入账来源。
+    // P1#13/#14 + R1-LOOP-01：库存差异、综合体计费三源、卡座销售提成入账来源。
     private static final Set<String> SOURCE_TYPES = Set.of(
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
-            "inventory_difference", "turnover_rent", "cam", "deposit");
+            "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -138,6 +138,71 @@ public class FinanceService {
         );
     }
 
+    public ArApLedgerExportRecord exportArApItems() {
+        try {
+            Optional<String> scope = authorizationService.currentMerchantScope();
+            List<ArApItemRecord> items = scope.isPresent()
+                    ? repository.listArApItemsByMerchant(scope.get())
+                    : repository.listArApItems();
+            ArApLedgerExportRecord export = new ArApLedgerExportRecord(
+                    "arap_export_" + UUID.randomUUID().toString().replace("-", ""),
+                    "csv",
+                    items.size(),
+                    List.copyOf(items),
+                    arApCsv(items),
+                    Instant.now()
+            );
+            auditEventService.recordSuccess(
+                    "finance_ar_ap.exported",
+                    "finance.ar_ap.view",
+                    "ar_ap_export",
+                    export.id(),
+                    "req_" + UUID.randomUUID(),
+                    null,
+                    Map.of("row_count", export.rowCount(), "format", export.format())
+            );
+            return export;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "finance_ar_ap.export_failed",
+                    "finance.ar_ap.view",
+                    "ar_ap_export",
+                    "unknown",
+                    "req_" + UUID.randomUUID(),
+                    null,
+                    exception instanceof ApiException apiException ? apiException.code() : "INTERNAL_ERROR"
+            );
+            throw exception;
+        }
+    }
+
+    private String arApCsv(List<ArApItemRecord> items) {
+        StringBuilder csv = new StringBuilder("item_no,direction,counterparty_id,source_type,source_id,amount_cent,paid_amount_cent,unpaid_amount_cent,currency,due_date,accounting_period,status\n");
+        for (ArApItemRecord item : items) {
+            csv.append(csv(item.itemNo())).append(',')
+                    .append(csv(item.direction())).append(',')
+                    .append(csv(item.counterpartyId())).append(',')
+                    .append(csv(item.sourceType())).append(',')
+                    .append(csv(item.sourceId())).append(',')
+                    .append(item.amountCent()).append(',')
+                    .append(item.paidAmountCent()).append(',')
+                    .append(item.unpaidAmountCent()).append(',')
+                    .append(csv(item.currency())).append(',')
+                    .append(csv(item.dueDate() == null ? null : item.dueDate().toString())).append(',')
+                    .append(csv(item.accountingPeriod())).append(',')
+                    .append(csv(item.status())).append('\n');
+        }
+        return csv.toString();
+    }
+
+    private String csv(String value) {
+        String safe = value == null ? "" : value;
+        if (safe.contains(",") || safe.contains("\n") || safe.contains("\"")) {
+            return "\"" + safe.replace("\"", "\"\"") + "\"";
+        }
+        return safe;
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "finance.ar_ap.manage", admissionAction = "finance.locked_backfill", objectType = "ar_ap_item")
     @Transactional
     public ArApItemRecord createArApItem(ArApItemRequest request) {
@@ -180,7 +245,9 @@ public class FinanceService {
         if (businessDate == null) {
             return false;
         }
-        return repository.lockedDailyCloseExistsForDate(businessDate);
+        // F-OPS-09：按调用方 merchant scope 判定——商户 scope 仅看本商户封账，平台口径看全部封账。
+        return repository.lockedDailyCloseExistsForDate(
+                businessDate, authorizationService.currentMerchantScope().orElse(null));
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
@@ -238,6 +305,10 @@ public class FinanceService {
         if (!"created".equals(intent.status())) {
             throw ApiException.conflict("PAYMENT_INTENT_NOT_PENDING", "payment intent is not pending");
         }
+        // F2 内部核算归集：支付意图确认成功（created→succeeded，本方法早返回保证单次）即为收入确认点——
+        // 票务/储值/会员（及经票务权益的游乐）收入按 direction=internal_accounting 写内部核算台账，供对账/内部核算下钻。
+        // 按裁定 C1，internal_accounting 不并入 revenue.net（net 仍取业务表）。同事务（@Transactional）写入。
+        recordInternalAccountingRevenue(intent.id(), intent.businessOrderType(), intent.businessOrderId(), intent.amountCent());
         return repository.savePaymentIntent(new PaymentIntentRecord(
                 intent.id(),
                 intent.businessOrderType(),
@@ -248,6 +319,52 @@ public class FinanceService {
                 "succeeded",
                 intent.createdAt(),
                 Instant.now()));
+    }
+
+    /**
+     * F2 内部核算归集：每笔成功支付意图生成一条 direction=internal_accounting 的内部核算台账（平台自营经营收入归集）。
+     * 幂等键 = paymentIntentId（每笔支付意图唯一，markPaymentIntentSucceeded 早返回保证单次触发）——
+     * 修正此前用 businessOrderType+businessOrderId 派生 id 的缺陷：储值/会员的 businessOrderId=customerId，
+     * 同客户多次充值/开通会命中同一 id 被 ON CONFLICT DO UPDATE 覆盖、少计收入。source_type/source_id 仍记业务单维度供追溯。
+     * 内部核算=已确认收入，paid=amount、unpaid=0、settled；不并入 revenue.net（C1）；无 merchant scope（平台口径）。
+     */
+    private void recordInternalAccountingRevenue(String paymentIntentId, String sourceType, String sourceId, long amountCent) {
+        String type = trimToNull(sourceType);
+        String id = trimToNull(sourceId);
+        String intentId = trimToNull(paymentIntentId);
+        if (type == null || id == null || intentId == null || amountCent <= 0) {
+            return;
+        }
+        String key = slug(intentId);
+        String itemId = "arap_internal_" + key;
+        Instant now = Instant.now();
+        // F-OPS-02：内部核算入账须遵守日结锁，禁止向已封账经营日补写收入（与 createArApItem/recordInboundAr 同口径）。
+        // F-OPS-09：内部核算=平台口径（merchant_id=null，见上方方法注释），按平台口径判锁（受任一封账约束）。
+        java.time.LocalDate businessDate = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        if (repository.lockedDailyCloseExistsForDate(businessDate, null)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "business date " + businessDate + " is locked; use the backfill adjustment workflow");
+        }
+        repository.saveArApItem(new ArApItemRecord(
+                itemId,
+                "INTACC-" + key,
+                "internal_accounting",
+                "platform_self",
+                type,
+                id,
+                amountCent,
+                amountCent,
+                0L,
+                CURRENCY_CNY,
+                businessDate,
+                null,
+                "settled",
+                now,
+                now,
+                null
+        ));
+        repository.saveArApItemSource(new ArApItemSourceRecord(
+                "arap_src_internal_" + key, itemId, type, id, amountCent, now));
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register", admissionAction = "finance.offline_payment_confirm", objectType = "finance_offline_payment_confirmation")
@@ -624,6 +741,15 @@ public class FinanceService {
         Instant now = Instant.now();
         String approver = authorizationService.currentActor().id();
 
+        // F-OPS-07 职责分离（SoD）：补录审批是唯一涉及资金的 finance 审批链（locked backfill：审批通过会写入
+        // ar_ap_items 金额变动）。禁止"发起人 = 审批人"自审自批——无论 approve 还是 reject，决策人都不得是该
+        // 工单的发起人（requested_by），否则发起人可绕过第二人复核自行放行（或自行撤销）资金调整。
+        // 发起人信息可得：requestedBy 在 createAdjustment 时由 currentActor().id() 写入、永不为空。
+        if (approver != null && approver.equals(adjustment.requestedBy())) {
+            throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
+                    "the requester of a backfill adjustment cannot decide it; a different approver is required");
+        }
+
         if (approve) {
             // 审批通过：真正写入金额变动（带符号），同步刷新 paid/unpaid/status，并留痕。
             long newAmountCent = item.amountCent() + adjustment.adjustmentAmountCent();
@@ -692,15 +818,17 @@ public class FinanceService {
         String sourceType = optionalEnum(actual.sourceType(), SOURCE_TYPES, "source_type");
         long amountCent = requirePositive(actual.amountCent(), "amount_cent");
         LocalDate dueDate = requireDate(actual.dueDate(), "due_date");
+        // F-OPS-09：用本条目将落账的 merchant scope 判锁，与下方 ArApItemRecord.merchantId 同口径——
+        // 商户 scope 仅受本商户封账约束，平台口径受任一封账约束。
+        Optional<String> scope = authorizationService.currentMerchantScope();
         // R5 T7 硬拦截：禁止向已锁定经营日新增/回填台账，必须走补录审批。
-        if (repository.lockedDailyCloseExistsForDate(dueDate)) {
+        if (repository.lockedDailyCloseExistsForDate(dueDate, scope.orElse(null))) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "business date " + dueDate + " is locked; use the backfill adjustment workflow");
         }
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
         String id = "arap_" + slug;
-        Optional<String> scope = authorizationService.currentMerchantScope();
         ArApItemRecord item = new ArApItemRecord(
                 id,
                 "ARAP" + now.toEpochMilli() + "-" + slug.substring(0, Math.min(12, slug.length())),
@@ -740,30 +868,40 @@ public class FinanceService {
         // 现场/工作机收款时请求携带 deviceId → 触发硬门控；后台台账类登记无设备上下文 → 留空安全跳过。
         requireManagedDeviceForFinanceAction(actual.deviceId(), "finance.payment");
 
-        // P0 fix: SELECT FOR UPDATE prevents concurrent reads from both seeing unpaid > 0
-        // and both writing a payment, which would silently double-charge the ledger.
+        return settleArApItem(
+                arApItemId,
+                amountCent,
+                requireText(actual.paymentMethod(), "payment_method"),
+                actual.paymentTime(),
+                trimToNull(actual.bankFlowRef()),
+                actual.idempotencyKey());
+    }
+
+    /**
+     * ar_ap 台账结算回写公共逻辑（FOR UPDATE 行锁防并发双扣 + 跨商户校验 + 锁定日拦截 + 登记 payment + 回写 paid/unpaid/status）。
+     * 供 registerPayment（在线/后台登记收付款）与 F1 confirmOffline（线下确认收款关联应收）共用，保证回款口径一致。
+     */
+    private ArApPaymentResponse settleArApItem(
+            String arApItemId, long amountCent, String paymentMethod,
+            Instant paymentTime, String bankFlowRef, String idempotencyKey) {
         ArApItemRecord current = repository.findArApItemByIdForUpdate(arApItemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "AR/AP item not found"));
-
-        // P1 fix: reject cross-merchant writes
+        // 跨商户写入拒绝。
         checkMerchantOwnership(current.merchantId());
-
         // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。
         requireNotLocked(current.id());
-
         if (amountCent > current.unpaidAmountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "payment amount exceeds unpaid amount");
         }
         Instant now = Instant.now();
-        // P0 fix: include arApItemId in the slug so the same idempotency key used on two
-        // different items produces two different payment IDs, preventing ON CONFLICT overwrite.
+        // 主键纳入 arApItemId，同一幂等键用于不同台账项产生不同 paymentId，避免 ON CONFLICT 覆盖。
         ArApPaymentRecord payment = repository.saveArApPayment(new ArApPaymentRecord(
-                "arap_pay_" + slug(arApItemId + "_" + actual.idempotencyKey()),
+                "arap_pay_" + slug(arApItemId + "_" + idempotencyKey),
                 current.id(),
                 amountCent,
-                requireText(actual.paymentMethod(), "payment_method"),
-                actual.paymentTime() == null ? now : actual.paymentTime(),
-                trimToNull(actual.bankFlowRef()),
+                paymentMethod,
+                paymentTime == null ? now : paymentTime,
+                bankFlowRef,
                 now
         ));
         long paidAmountCent = current.paidAmountCent() + amountCent;
@@ -872,7 +1010,7 @@ public class FinanceService {
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
         long amountCent = requirePositive(actual.amountCent(), "amount_cent");
         String currency = trimToDefault(actual.currency(), CURRENCY_CNY);
-        String channel = requireText(actual.channel(), "channel");
+        String channel = PaymentChannelPolicy.requirePaymentIntentChannel(actual.channel());
 
         // 支付渠道开关（payment.gateway.enabled，后台可配，默认关）。
         //   关 → 不调外部渠道，支付意图标 reserved（占位，由 markPaymentIntentSucceeded 内部确认，不阻塞）。
@@ -906,17 +1044,36 @@ public class FinanceService {
         if (!pathPaymentId.equals(bodyPaymentId)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "payment_id must match path");
         }
+        // 2d-2 修复（用户裁定：必须关联内部支付意图）：确认线下收款必须对应一个真实支付意图，
+        // 且金额一致——堵"凭空对任意 paymentId 字符串伪造已确认线下收款（任意金额）"。
+        // 归属为平台财务口径（payment_intents 无 merchant 列），靠 finance.payment.register 权限治理不授商户角色。
+        PaymentIntentRecord intent = repository.findPaymentIntentById(bodyPaymentId)
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "payment intent not found"));
+        long confirmedAmount = requirePositive(actual.amountCent(), "amount_cent");
+        if (confirmedAmount != intent.amountCent()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "confirmed amount must equal payment intent amount");
+        }
         Instant now = Instant.now();
-        return repository.saveOfflinePaymentConfirmation(new OfflinePaymentConfirmationRecord(
-                "offline_confirm_" + slug(actual.idempotencyKey()),
-                pathPaymentId,
-                requirePositive(actual.amountCent(), "amount_cent"),
-                requireEnum(actual.paymentMethod(), OFFLINE_PAYMENT_METHODS, "payment_method"),
-                actual.confirmedAt() == null ? now : actual.confirmedAt(),
-                actual.evidenceAttachmentIds() == null ? List.of() : List.copyOf(actual.evidenceAttachmentIds()),
-                "confirmed",
-                now
-        ));
+        String paymentMethod = requireEnum(actual.paymentMethod(), OFFLINE_PAYMENT_METHODS, "payment_method");
+        OfflinePaymentConfirmationRecord confirmation = repository.saveOfflinePaymentConfirmation(
+                new OfflinePaymentConfirmationRecord(
+                        "offline_confirm_" + slug(actual.idempotencyKey()),
+                        pathPaymentId,
+                        confirmedAmount,
+                        paymentMethod,
+                        actual.confirmedAt() == null ? now : actual.confirmedAt(),
+                        actual.evidenceAttachmentIds() == null ? List.of() : List.copyOf(actual.evidenceAttachmentIds()),
+                        "confirmed",
+                        now
+                ));
+        // F1 财务统一台账：线下确认收款若显式关联应收应付台账项，则同事务回写 ar_ap（登记 payment + paid/unpaid/status），
+        // 闭合"线下确认与回款台账平行、ar_ap 永不回写"的资金缺口。回写口径与 registerArApPayment 完全一致（共用 settleArApItem）。
+        String arApItemId = trimToNull(actual.arApItemId());
+        if (arApItemId != null) {
+            settleArApItem(arApItemId, confirmedAmount, paymentMethod,
+                    actual.confirmedAt(), null, actual.idempotencyKey());
+        }
+        return confirmation;
     }
 
     /**
@@ -1029,15 +1186,15 @@ public class FinanceService {
         if (!INVENTORY_VARIANCE_REASONS.contains(variance.reason())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "inventory variance reason is invalid");
         }
-        // R6-D08 科目方向：
-        //   supplier_fault → 向供应商挂应付索赔 payable；
+        // 科目方向（用户裁定 C3 对齐 §6D）：
+        //   supplier_fault → 向供应商挂应付索赔 payable（真实对外债务）；
         //   overage（盘盈，冲成本）→ payable（账面成本回冲）；
-        //   damage/shortage（报损/盘亏，计损益）→ receivable。
+        //   damage/shortage（报损/盘亏）→ internal_accounting 内部核算损耗成本（非对外债权债务，不并入 net）。
         String direction;
         if ("supplier_fault".equals(variance.reason()) || "overage".equals(variance.reason())) {
             direction = "payable";
         } else {
-            direction = "receivable";
+            direction = "internal_accounting";
         }
         long amountCent = Math.abs(variance.varianceAmountCent());
         if (amountCent <= 0) {
@@ -1189,6 +1346,9 @@ public class FinanceService {
         long allocatedSoFar = 0;
         for (int i = 0; i < shares.size(); i++) {
             CamAllocationRequest.CamShare share = shares.get(i);
+            // P1 越权修复：CAM 分摊此前不校验各 share 归属（trueUp 有、allocate 漏），可凭空给他商户挂应收。
+            // 与 trueUp 一致：平台管理员放行（可跨商户分摊）；商户用户仅能含自身。
+            checkMerchantOwnership(share.merchantId());
             long allocated;
             if (i == shares.size() - 1) {
                 // 末位归入剩余差额，保证逐分守恒。
@@ -1245,6 +1405,14 @@ public class FinanceService {
         if (totalWeight != BPS_DENOMINATOR) {
             throw ApiException.badRequest("CAM_WEIGHTS_NOT_FULL",
                     "share weights must sum to 10000 bps; got " + totalWeight);
+        }
+
+        // P0 资金修复：同一 settlement_period 此前可用不同幂等键重复 true-up，导致已预收被重复计入、多退少补翻倍
+        // （trued_up 标记写而不读、run_id 含幂等键）。合法重试用同一幂等键，会被外层幂等短路、不会进入此处；
+        // 因此此处再次进入必为不同键，按"同期已 true-up"硬拒绝。
+        if (repository.countCamTrueUpRunsForPeriod(settlementPeriod) > 0) {
+            throw ApiException.conflict("CAM_TRUEUP_ALREADY_DONE",
+                    "CAM true-up for settlement_period " + settlementPeriod + " has already been completed");
         }
 
         Instant now = Instant.now();
@@ -1324,13 +1492,22 @@ public class FinanceService {
             String idempotencyKey,
             String merchantId) {
         LocalDate dueDate = LocalDate.now();
-        if (repository.lockedDailyCloseExistsForDate(dueDate)) {
+        // F-OPS-09：派生台账按本条目归属 merchantId 判锁（与下方 ArApItemRecord.merchantId 同口径）；
+        // merchantId 为空（平台口径派生）则受任一封账约束。
+        if (repository.lockedDailyCloseExistsForDate(dueDate, merchantId)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "business date " + dueDate + " is locked; use the backfill adjustment workflow");
         }
         Instant now = Instant.now();
         String slug = slug(sourceType + "_" + idempotencyKey);
         String id = "arap_" + slug;
+        // internal_accounting（内部核算损耗/归集）非对外债权债务：登记即已确认，paid=amount、unpaid=0、settled；
+        // receivable/payable 维持待收/待付（unpaid=amount）。
+        boolean internalAccounting = "internal_accounting".equals(direction);
+        long paidAmountCent = internalAccounting ? amountCent : 0L;
+        long unpaidAmountCent = internalAccounting ? 0L : amountCent;
+        String status = internalAccounting ? "settled"
+                : ("receivable".equals(direction) ? "pending_collection" : "pending_payment");
         ArApItemRecord item = new ArApItemRecord(
                 id,
                 "ARAP" + now.toEpochMilli() + "-" + slug.substring(0, Math.min(12, slug.length())),
@@ -1339,12 +1516,12 @@ public class FinanceService {
                 sourceType,
                 sourceId,
                 amountCent,
-                0L,
-                amountCent,
+                paidAmountCent,
+                unpaidAmountCent,
                 CURRENCY_CNY,
                 dueDate,
                 null,
-                "receivable".equals(direction) ? "pending_collection" : "pending_payment",
+                status,
                 now,
                 now,
                 merchantId);

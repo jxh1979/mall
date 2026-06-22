@@ -25,6 +25,10 @@ public interface TraceabilityRepository {
 
     List<TraceabilityStepRecord> listStepsByInstance(String processInstanceId);
 
+    default TraceabilityAutoCaptureRate autoCaptureRate(String merchantScope, int thresholdPercent) {
+        return new TraceabilityAutoCaptureRate(0, 0, 100.0, thresholdPercent, true);
+    }
+
     TraceabilityResponsibilityRecord saveResponsibility(TraceabilityResponsibilityRecord record);
 
     Optional<TraceabilityResponsibilityRecord> findResponsibilityById(String id);

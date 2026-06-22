@@ -5,6 +5,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, AuditEventRow } from "../types";
+import { PermissionButton } from "../security/Can";
 
 const TEXT = {
   title: "审计事件",
@@ -63,7 +64,7 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-export function AuditEventsPage({ api, user, setActionResult, setGlobalError }: AdminPageProps) {
+export function AuditEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<AuditEventRow[]>([]);
   const [query, setQuery] = React.useState("");
   const [exportReason, setExportReason] = React.useState("验收导出审计事件");
@@ -150,7 +151,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError }: 
         </div>
         <div className="admin-form-row">
           <button type="button" data-testid="audit-events-show-detail" disabled={!selected} onClick={() => setShowDetail((value) => !value)}>{TEXT.detail}</button>
-          <button type="button" data-testid="audit-events-export" disabled={busyAction !== ""} onClick={() => void exportAuditEvents()}>{TEXT.export}</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["evidence.event.create"]} data-testid="audit-events-export" disabled={busyAction !== ""} onClick={() => void exportAuditEvents()}>{TEXT.export}</PermissionButton>
           <span className="admin-muted-action" data-testid="audit-events-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="audit-events-form-error" className="admin-inline-error">{formError}</div> : null}

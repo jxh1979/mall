@@ -298,7 +298,8 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("overall_status"),
                 resultSet.getString("current_segment"),
                 readList(resultSet.getString("evidence_attachment_ids")),
-                instant(resultSet, "created_at")
+                instant(resultSet, "created_at"),
+                resultSet.getString("merchant_id")
         );
     }
 

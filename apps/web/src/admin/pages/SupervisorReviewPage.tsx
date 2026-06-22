@@ -3,6 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import { PermissionButton } from "../security/Can";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, SupervisorReviewPolicyRow } from "../types";
@@ -52,7 +53,9 @@ function reviewIdFrom(result: unknown) {
   return "";
 }
 
-export function SupervisorReviewPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+const SUPERVISOR_REVIEW_PERMISSION = "governance.supervisor_review.manage";
+
+export function SupervisorReviewPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<SupervisorReviewPolicyRow[]>([]);
   const [latestReviewId, setLatestReviewId] = React.useState("review-demo");
   const [actionType, setActionType] = React.useState("contract_violation");
@@ -150,13 +153,21 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError }: A
           <label>{TEXT.approvalComment}<input data-testid="supervisor-review-approval-comment" value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="supervisor-review-actions">
-          <button type="button" data-testid="supervisor-review-evaluate" disabled={busyAction !== ""} onClick={() => void evaluateViolation()}>{TEXT.evaluate}</button>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[SUPERVISOR_REVIEW_PERMISSION]}
+            disabled={busyAction !== ""}
+            data-testid="supervisor-review-evaluate"
+            onClick={() => void evaluateViolation()}
+          >{TEXT.evaluate}</PermissionButton>
           <HighRiskConfirm
             label={TEXT.approve}
             impact={`将放行复核记录 ${latestReviewId}，被阻断的高风险动作随即生效并写入主管审批留痕。`}
             disabled={busyAction !== ""}
             precheck={validateApprove}
             onConfirm={() => void approveReview()}
+            permissionsState={effectivePermissions}
+            permissions={[SUPERVISOR_REVIEW_PERMISSION]}
             data-testid="supervisor-review-approve"
           />
         </div>

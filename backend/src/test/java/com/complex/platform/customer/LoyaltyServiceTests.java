@@ -7,6 +7,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.ticketing.VerificationReversedEvent;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -277,6 +278,111 @@ class LoyaltyServiceTests {
         long deducted = service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 10000);
         assertThat(deducted).isEqualTo(20);
         assertThat(repo.points.get("c1").balance()).isZero();
+    }
+
+    // ===================== F-TXN-03（裁决#3）核销冲正回滚积分 =====================
+
+    /**
+     * 核销冲正回滚积分（与"核销→confirm"对称）：confirm 把订单积分入账后，
+     * VerificationReversedEvent 经消费者全额冲减该订单已 confirmed 积分。
+     */
+    @Test
+    void verificationReversalFullyDeductsConfirmedPoints() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+        LoyaltyPointsConsumer consumer = new LoyaltyPointsConsumer(service);
+
+        // 支付入 pending → 履约 confirm（计余额 100）。
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        service.confirmPoints("ticket_order", "o1");
+        assertThat(repo.points.get("c1").balance()).isEqualTo(100);
+
+        // 核销冲正：全额冲减已 confirmed 的 100 → 余额 0，落一条以核销冲正专用单据为键的 deduct 流水。
+        consumer.onVerificationReversed(new VerificationReversedEvent(
+                "ver_1", "rev_1", "ent_1", "o1", "mch_1", 1));
+        assertThat(repo.points.get("c1").balance()).isZero();
+        assertThat(repo.pointsLedger).anyMatch(l -> "ver_1".equals(l.sourceDocId())
+                && "ticket_verification_reversal".equals(l.sourceDocType())
+                && "deduct".equals(l.changeType()) && l.pointsDelta() == -100);
+    }
+
+    /** 冲正幂等：同一核销重复冲正事件只冲减一次（冲正专用幂等键 (ticket_verification_reversal, verificationId)）。 */
+    @Test
+    void verificationReversalIsIdempotentPerVerification() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+        LoyaltyPointsConsumer consumer = new LoyaltyPointsConsumer(service);
+
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        service.confirmPoints("ticket_order", "o1");
+
+        VerificationReversedEvent event = new VerificationReversedEvent("ver_1", "rev_1", "ent_1", "o1", "mch_1", 1);
+        consumer.onVerificationReversed(event);
+        consumer.onVerificationReversed(event);
+        consumer.onVerificationReversed(event);
+
+        assertThat(repo.points.get("c1").balance()).isZero();
+        assertThat(repo.pointsLedger.stream()
+                .filter(l -> "ticket_verification_reversal".equals(l.sourceDocType()))
+                .count()).isEqualTo(1);
+    }
+
+    /**
+     * 冲正专用幂等键不与退款 deduct 冲突：核销冲正用 (ticket_verification_reversal, verificationId)，
+     * 退款用 (ticket_refund, refundId)，各自独立幂等行——不因键相同被误判为重放。
+     * （此处仅验证两条 deduct 流水可共存、键不同；冲正与退款叠加的业务口径见交付报告"待确认点"。）
+     */
+    @Test
+    void reversalDeductUsesDistinctIdempotencyKeyFromRefund() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+        LoyaltyPointsConsumer consumer = new LoyaltyPointsConsumer(service);
+
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        service.confirmPoints("ticket_order", "o1");
+
+        // 先冲正（全额）：余额 100→0，落 ticket_verification_reversal/ver_1 deduct 行。
+        consumer.onVerificationReversed(new VerificationReversedEvent("ver_1", "rev_1", "ent_1", "o1", "mch_1", 1));
+        // 退款用不同单据键：不被冲正行的幂等命中而拒绝，落独立 ticket_refund/r1 deduct 行（余额已 0，actualDeduct=0）。
+        service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 10000);
+
+        assertThat(repo.pointsLedger).anyMatch(l -> "ticket_verification_reversal".equals(l.sourceDocType())
+                && "ver_1".equals(l.sourceDocId()) && "deduct".equals(l.changeType()));
+        assertThat(repo.pointsLedger).anyMatch(l -> "ticket_refund".equals(l.sourceDocType())
+                && "r1".equals(l.sourceDocId()) && "deduct".equals(l.changeType()));
+    }
+
+    /** 无订单（直接发放无 orderId）的核销冲正：无积分可冲减，消费者跳过，不落任何 deduct 流水。 */
+    @Test
+    void verificationReversalWithoutOrderIsNoop() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+        LoyaltyPointsConsumer consumer = new LoyaltyPointsConsumer(service);
+
+        consumer.onVerificationReversed(new VerificationReversedEvent("ver_1", "rev_1", "ent_1", null, "mch_1", 1));
+        consumer.onVerificationReversed(new VerificationReversedEvent("ver_2", "rev_2", "ent_2", "  ", "mch_1", 1));
+
+        assertThat(repo.pointsLedger).noneMatch(l -> "deduct".equals(l.changeType()));
+    }
+
+    /** 未履约即冲正：积分仍 pending（未 confirmed），冲正无可冲减（deductPoints 只冲 confirmed），余额不变。 */
+    @Test
+    void verificationReversalOnPendingOnlyOrderDeductsNothing() {
+        InMemoryLoyaltyRepository repo = seededRepo();
+        AuditEventService audit = new AuditEventService(new RecordingAudit());
+        LoyaltyService service = serviceAt(repo, audit, T0);
+        LoyaltyPointsConsumer consumer = new LoyaltyPointsConsumer(service);
+
+        service.earnPointsPending("c1", 100, "ticket_order", "o1", "buy", null);
+        // 未 confirm 即冲正：confirmed=0，无可冲减 → 余额仍 0，无 deduct 流水。
+        consumer.onVerificationReversed(new VerificationReversedEvent("ver_1", "rev_1", "ent_1", "o1", "mch_1", 1));
+
+        assertThat(repo.points.get("c1").balance()).isZero();
+        assertThat(repo.pointsLedger).noneMatch(l -> "deduct".equals(l.changeType()));
     }
 
     // ===================== P2 缺口：积分入账审计留痕 + 转赠客人端自助口径 =====================

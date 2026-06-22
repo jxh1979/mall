@@ -266,4 +266,4 @@
 > - `r1-third-party-capability-switch-and-mock-strategy-20260618.md`（第三方能力开关与 mock 策略，15 项能力开关）
 > - `r1-pending-supplier-information-backfill-checklist-20260618.md`（待后续供应商资料补齐清单）
 >
-> 本轮发现并登记的待处理项：迁移已到 V054 而 v0.2 审计/数据隔离规格仍停在 V052（计数漂移复发，R1-FINDING-A）；`sms_notification` 能力开关未并入主开关矩阵（S12，登录链路硬依赖）；安全 finding 台账仍缺跨租户越权系列（ISO-GAP-01）。
+> 本轮发现并登记的待处理项已收口更新：R1-FINDING-A 计数漂移已通过 `docs:data-isolation-spec` / `verify:data-isolation-spec` 与 OpenAPI 生成矩阵治理；`sms_notification` 能力开关、跨租户越权 finding 台账等仍按对应当前文档和生产/安全台账跟踪。

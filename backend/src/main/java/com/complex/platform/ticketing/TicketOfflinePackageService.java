@@ -1,5 +1,6 @@
 package com.complex.platform.ticketing;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
@@ -14,16 +15,32 @@ public class TicketOfflinePackageService {
 
     private final TicketingRepository repository;
     private final AuditEventService auditEventService;
+    // P1 越权修复：离线权益包此前 scope 取自请求参数（merchant_id 传 null 即返回全平台有效权益）。
+    // 改为商户用户强制使用自身 scope；平台管理员（scope 为空）保留请求过滤。可为 null=兼容测试构造。
+    private final AuthorizationService authorizationService;
 
-    public TicketOfflinePackageService(TicketingRepository repository, AuditEventService auditEventService) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public TicketOfflinePackageService(
+            TicketingRepository repository,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
+    }
+
+    public TicketOfflinePackageService(TicketingRepository repository, AuditEventService auditEventService) {
+        this(repository, auditEventService, null);
     }
 
     OfflinePackageResponse getOfflineEntitlements(String merchantId, String venueId, int limit) {
         try {
+            // P1 越权修复：商户用户强制按自身商户范围取数，忽略请求中的 merchant_id；平台管理员沿用请求过滤。
+            String effectiveMerchantId = authorizationService == null
+                    ? trimToNull(merchantId)
+                    : authorizationService.currentMerchantScope().orElse(trimToNull(merchantId));
             List<OfflineEntitlementResponse> entitlements = repository.listOfflineEntitlements(
-                    trimToNull(merchantId), trimToNull(venueId), limit <= 0 ? DEFAULT_OFFLINE_LIMIT : limit
+                    effectiveMerchantId, trimToNull(venueId), limit <= 0 ? DEFAULT_OFFLINE_LIMIT : limit
             );
             auditEventService.recordSuccess("terminal.offline_entitlements.viewed", "terminal.device.bind", "offline_entitlement", "all", null, null, Map.of("count", entitlements.size()));
             Instant now = Instant.now();

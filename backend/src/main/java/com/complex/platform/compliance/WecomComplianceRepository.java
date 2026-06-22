@@ -14,6 +14,9 @@ public interface WecomComplianceRepository {
 
     Optional<WecomRetentionPolicyRecord> findEffectivePolicy(String projectId);
 
+    /** 校验 projectId 是否为已登记项目（堵 syncWecom 裸信客户端 projectId 向任意/不存在项目注入会话）。 */
+    boolean projectExists(String projectId);
+
     // 会话
     WecomConversationRecord saveConversation(WecomConversationRecord record);
 

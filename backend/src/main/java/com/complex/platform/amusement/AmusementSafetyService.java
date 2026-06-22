@@ -295,6 +295,13 @@ public class AmusementSafetyService {
         ));
         // 双写统一责任链（fail-safe，不阻塞事件创建主链；孤岛 amusement_incidents 仍权威）。
         reportToUnifiedRiskAlerts(record);
+        // 事故停运联动：high/critical 安全事故自动停运停售（项目 open→paused，CAS 幂等：仅当前为 open 才流转，
+        // 已 paused/maintenance/closed 不重复动作、不报错）。消除"出事故仍照常售票/核销"的安全敞口；
+        // 恢复营业须走巡检/检修复核流程（reopen），不在此自动恢复。
+        boolean autoPaused = false;
+        if ("high".equals(record.severity()) || "critical".equals(record.severity())) {
+            autoPaused = repository.updateProjectOpenStatus(record.projectId(), "open", "paused");
+        }
         auditEventService.recordSuccess(
                 "amusement.incident.created",
                 "amusement.incident.create",
@@ -302,7 +309,8 @@ public class AmusementSafetyService {
                 record.id(),
                 requestId(),
                 request.idempotencyKey(),
-                Map.of("status", record.status(), "severity", record.severity())
+                Map.of("status", record.status(), "severity", record.severity(),
+                        "project_auto_paused", autoPaused)
         );
         return record;
     }

@@ -67,6 +67,15 @@ public class StaffService {
 
     @GuardedAction(permission = "staff.profile.submit")
     public StaffProfileRecord submitRegistration(StaffRegistrationRequest request) {
+        // F-AUTHZ-02 防跨商户越权注册：员工注册非裁决#2的治理写（merchant.profile/entity.binding/
+        // contract.draft/governance.space.manage），故用 merchant scope 守卫而非 requirePlatformScope——
+        // 平台管理员可为任意商户注册；merchant-scoped 调用者只能为本商户注册，允许商户自助管本商户员工。
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(trimToNull(request.merchantId()))) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "cannot register staff for another merchant");
+            }
+        });
         try {
             return idempotencyService.execute(
                     "submitStaffRegistration",

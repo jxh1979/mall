@@ -70,7 +70,7 @@ public class SupplyContractService {
         );
     }
 
-    @GuardedAction(capability = "inventory.stock.move")
+    @GuardedAction(capability = "inventory.supply_contract.manage")
     @Transactional
     public SupplyContractRecord createSupplyContract(SupplyContractCreateRequest request) {
         return executeWrite(
@@ -119,7 +119,7 @@ public class SupplyContractService {
         );
     }
 
-    @GuardedAction(capability = "inventory.stock.move")
+    @GuardedAction(capability = "inventory.purchase.approve")
     @Transactional
     public SupplyContractRecord approveSupplyContract(String contractId, SupplyContractApproveRequest request) {
         String id = requireText(contractId, "contract_id");

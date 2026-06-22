@@ -31,8 +31,12 @@ final class OpenPlatformCrypto {
         return "app_key=" + appKey + "\nnonce=" + nonce + "\ntimestamp=" + timestamp;
     }
 
-    String webhookCanonical(String endpointKey, String provider, String event, String idempotencyKey, String payloadHash) {
-        return "endpoint_key=" + endpointKey + "\nevent=" + event + "\nidempotency_key=" + idempotencyKey + "\npayload_hash=" + payloadHash + "\nprovider=" + provider;
+    String webhookCanonical(String endpointKey, String provider, String event, String idempotencyKey,
+            String payloadHash, long timestamp, String nonce) {
+        // 纳入 nonce + timestamp 防重放：每次传输需带新鲜 timestamp 与唯一 nonce 并参与签名。
+        return "endpoint_key=" + endpointKey + "\nevent=" + event + "\nidempotency_key=" + idempotencyKey
+                + "\nnonce=" + nonce + "\npayload_hash=" + payloadHash + "\nprovider=" + provider
+                + "\ntimestamp=" + timestamp;
     }
 
     String payloadHash(Map<String, Object> payload) {

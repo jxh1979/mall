@@ -1,7 +1,9 @@
 package com.complex.platform.ticketing;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
@@ -29,6 +31,8 @@ public class TicketingService {
     private final TicketCredentialService credentialService;
     private final TicketOfflinePackageService offlinePackageService;
     private final TicketingOperationExecutor operations;
+    // P1 越权修复：核销/权益列表按调用者商户范围过滤（记录含 merchant_id）。可为 null=兼容既有测试构造（不过滤）。
+    private final AuthorizationService authorizationService;
 
     public TicketingService(
             TicketingRepository repository,
@@ -39,7 +43,8 @@ public class TicketingService {
             TicketVerificationService verificationService,
             TicketCredentialService credentialService,
             TicketOfflinePackageService offlinePackageService,
-            TicketingOperationExecutor operations
+            TicketingOperationExecutor operations,
+            AuthorizationService authorizationService
     ) {
         this.repository = repository;
         this.catalogService = catalogService;
@@ -50,6 +55,24 @@ public class TicketingService {
         this.credentialService = credentialService;
         this.offlinePackageService = offlinePackageService;
         this.operations = operations;
+        this.authorizationService = authorizationService;
+    }
+
+    /**
+     * P1 越权修复：核销/权益列表按调用者商户范围过滤——商户用户仅见自身 merchant_id 数据，
+     * 平台管理员/无商户范围者（empty）见全部。authorizationService 为 null（兼容测试）时不过滤。
+     */
+    private <T> java.util.List<T> filterByMerchantScope(
+            java.util.List<T> rows, java.util.function.Function<T, String> merchantIdOf) {
+        if (authorizationService == null) {
+            return rows;
+        }
+        java.util.Optional<String> scope = authorizationService.currentMerchantIdQuietly();
+        if (scope.isEmpty()) {
+            return rows;
+        }
+        String merchantId = scope.get();
+        return rows.stream().filter(row -> merchantId.equals(merchantIdOf.apply(row))).toList();
     }
 
     public PageResponse<TicketTypeRecord> listTicketTypes() {
@@ -213,6 +236,40 @@ public class TicketingService {
         );
     }
 
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")
+    @Transactional
+    public TicketOrderRecord confirmTicketOrderPayment(String orderId, ConfirmTicketOrderPaymentRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        return operations.executeWrite(
+                "confirmTicketOrderPayment:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketOrderRecord.class,
+                TicketingWriteOperation.CONFIRM_TICKET_ORDER_PAYMENT,
+                () -> orderService.confirmPayment(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.order.create")
+    @Transactional
+    public TicketOrderRecord cancelTicketOrder(String orderId, StatusChangeRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        return operations.executeWrite(
+                "cancelTicketOrder:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketOrderRecord.class,
+                TicketingWriteOperation.CANCEL_TICKET_ORDER,
+                () -> orderService.cancelOrder(id)
+        );
+    }
+
+    // 系统定时任务入口（2a-5）：取消超时未支付订单并回补库存。无认证上下文/无审计包装，由 TicketOrderExpiryJob 触发。
+    @Transactional
+    public int cancelExpiredUnpaidTicketOrders(java.time.Instant cutoff) {
+        return orderService.cancelExpiredUnpaidOrders(cutoff);
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "ticket.ticket.issue")
     @Transactional
     public IssuedTicketResponse issueTicketOrder(String orderId, StatusChangeRequest request) {
@@ -244,14 +301,15 @@ public class TicketingService {
     public PageResponse<IssuedEntitlementRecord> listIssuedEntitlements() {
         return operations.readPage(
                 TicketingReadOperation.LIST_ISSUED_ENTITLEMENTS,
-                repository::listIssuedEntitlements
+                () -> filterByMerchantScope(repository.listIssuedEntitlements(), IssuedEntitlementRecord::merchantId)
         );
     }
 
     public PageResponse<TicketOrderRecord> listTicketOrders() {
+        // 行级隔离（V135）：按调用方 scope 过滤——平台看全部、商户仅见自身受理订单（堵 ticket.order.read 下放后的跨租户泄露）。
         return operations.readPage(
                 TicketingReadOperation.LIST_TICKET_ORDERS,
-                repository::listTicketOrders
+                orderService::listOrdersInScope
         );
     }
 
@@ -360,7 +418,7 @@ public class TicketingService {
     public PageResponse<VerificationRecord> listVerifications() {
         return operations.readPage(
                 TicketingReadOperation.LIST_VERIFICATIONS,
-                repository::listVerifications
+                () -> filterByMerchantScope(repository.listVerifications(), VerificationRecord::merchantId)
         );
     }
 

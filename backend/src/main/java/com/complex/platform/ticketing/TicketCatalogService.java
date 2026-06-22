@@ -48,7 +48,10 @@ public class TicketCatalogService {
                 // 后续若需按票种配置刷新窗口，再扩展 TicketTypeRequest + 此处赋值（取值 {30,60}）。
                 null,
                 now,
-                now
+                now,
+                // P0 修复（V133）：库存上限取自请求（可空=不限量）；已售从 0 起。
+                actual.stockQuantity(),
+                0
         ));
     }
 
@@ -158,7 +161,10 @@ public class TicketCatalogService {
                 current.validityDays(),
                 current.refreshIntervalSeconds(),
                 current.createdAt(),
-                now
+                now,
+                // P0 修复（V133）：发布时保留既有库存上限与已售数，避免被置空/清零。
+                current.stockQuantity(),
+                current.soldQuantity()
         ));
     }
 

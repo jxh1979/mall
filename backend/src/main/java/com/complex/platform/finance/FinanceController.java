@@ -45,6 +45,12 @@ public class FinanceController {
         return ApiResponse.ok(service.listArApItems());
     }
 
+    @GetMapping("/ar-ap-items/export")
+    public ApiResponse<ArApLedgerExportRecord> exportArApItems() {
+        authorizationService.requirePermission("finance.ar_ap.view");
+        return ApiResponse.ok(service.exportArApItems());
+    }
+
     @PostMapping("/ar-ap-items")
     public ApiResponse<ArApItemRecord> createArApItem(@RequestBody ArApItemRequest request) {
         authorizationService.requirePermission("finance.ar_ap.manage");

@@ -701,8 +701,10 @@ public class InventoryService {
                     }
                     String itemId = requireText(actual.itemId(), "item_id");
                     String reason = normalizeAllowed(actual.reason(), INVENTORY_VARIANCE_REASONS, "reason");
-                    java.math.BigDecimal bookQty = actual.bookQty() == null
-                            ? java.math.BigDecimal.ZERO : actual.bookQty();
+                    // 2e 盘点冻结：book_qty 取系统账面值（item 在该 warehouse 全部 location 的 quantity 合计），
+                    // 不信客户端传入——此前 bookQty 由前端决定，盘点差异基线可被任意操纵，盘点公信力为零。
+                    java.math.BigDecimal bookQty = java.math.BigDecimal.valueOf(
+                            repository.sumStockBalanceByItemAndWarehouse(itemId, stocktake.warehouseId()));
                     java.math.BigDecimal countedQty = actual.countedQty() == null
                             ? java.math.BigDecimal.ZERO : actual.countedQty();
                     // variance_qty = counted − book（带符号）。
@@ -775,6 +777,77 @@ public class InventoryService {
                     if (affected != 1) {
                         throw ApiException.conflict("INVENTORY_VARIANCE_NOT_PENDING",
                                 "inventory variance was reviewed concurrently");
+                    }
+                    // 盘点纠账：复核通过即把物理库存余额回写到实盘，消除账实持续背离。delta=variance_qty=counted−book（warehouse 合计口径）。
+                    // 差异为 item 级（无 location 维度），按 (item,warehouse) 的余额行回写：
+                    //   盘盈(+)：累加到首个已有 location（无行则建库房级 location=warehouseId）；
+                    //   盘亏(−)：按行依次扣减直至吸收完（多库位也能纠账，消除"多行即死路"）；全库房可用量不足才抛冲突（不静默背离）。同事务原子。
+                    if ("approved".equals(decision)) {
+                        int delta = variance.varianceQty() == null ? 0 : variance.varianceQty().intValue();
+                        if (delta != 0) {
+                            StocktakeRecord stocktake = loadStocktakeScoped(stId);
+                            List<StockBalanceRecord> rows = repository.listStockBalances().stream()
+                                    .filter(b -> variance.itemId().equals(b.itemId())
+                                            && stocktake.warehouseId().equals(b.warehouseId()))
+                                    .toList();
+                            if (delta > 0) {
+                                String targetLocation = rows.isEmpty()
+                                        ? stocktake.warehouseId() : rows.get(0).locationId();
+                                repository.atomicIncreaseStockBalance(
+                                        variance.itemId(), targetLocation, delta,
+                                        "bal_recon_" + slug(vId), variance.merchantId(), stocktake.warehouseId());
+                                // 裁决#7 守恒账本：盘盈纠账改了余额，同事务（@Transactional reviewVariance）补写一条
+                                // inventory_stock_movements（count_correction，盘盈 → 目标库位入），否则按流水重建对不平。
+                                repository.saveStockMovement(new StockMovementRecord(
+                                        "movement_" + slug(vId + ":variance_recon"),
+                                        "count_correction",
+                                        variance.itemId(),
+                                        null,
+                                        targetLocation,
+                                        delta,
+                                        "inventory_variance",
+                                        variance.id(),
+                                        null,
+                                        null,
+                                        List.of(),
+                                        "completed",
+                                        now,
+                                        variance.merchantId()));
+                            } else {
+                                int remaining = -delta;
+                                for (StockBalanceRecord row : rows) {
+                                    if (remaining <= 0) {
+                                        break;
+                                    }
+                                    int take = Math.min(remaining, Math.max(0, row.availableQuantity()));
+                                    if (take > 0 && repository.atomicDecreaseStockBalance(
+                                            variance.itemId(), row.locationId(), take) == 1) {
+                                        remaining -= take;
+                                        // 守恒账本：盘亏逐库位扣减，按库位各补一条流水（source=该库位），
+                                        // 多库位也能逐位回放对平，避免合并一条导致重建在库位维度漂移。
+                                        repository.saveStockMovement(new StockMovementRecord(
+                                                "movement_" + slug(vId + ":variance_recon:" + row.locationId()),
+                                                "count_correction",
+                                                variance.itemId(),
+                                                row.locationId(),
+                                                null,
+                                                take,
+                                                "inventory_variance",
+                                                variance.id(),
+                                                null,
+                                                null,
+                                                List.of(),
+                                                "completed",
+                                                now,
+                                                variance.merchantId()));
+                                    }
+                                }
+                                if (remaining > 0) {
+                                    throw ApiException.conflict("INVENTORY_VARIANCE_RECONCILE_INSUFFICIENT",
+                                            "warehouse balance insufficient to reconcile the approved shortage; manual adjustment required");
+                                }
+                            }
+                        }
                     }
                     return new InventoryVarianceRecord(
                             variance.id(), variance.stocktakeId(), variance.itemId(), variance.batchNo(),
@@ -1207,6 +1280,7 @@ public class InventoryService {
                                 "dispatch segment is robot-passive; use robot-report");
                     }
                     TraceHandoverRecord header = requireHandover(id);
+                    enforceHandoverOwnership(header);
                     TraceHandoverStepRecord step = requireStep(id, segment);
                     String operator = authorizationService.currentActor().id();
                     Instant now = Instant.now();
@@ -1244,6 +1318,7 @@ public class InventoryService {
                     String robotTaskRef = requireText(actual.robotTaskRef(), "robot_task_ref");
                     String status = trimToDefault(actual.status(), "delivered");
                     TraceHandoverRecord header = requireHandover(id);
+                    enforceHandoverOwnership(header);
                     TraceHandoverStepRecord step = requireStep(id, ROBOT_SEGMENT);
                     Instant now = Instant.now();
                     // T14 关联：机器人段被动留痕写 integration_robot_task_events(handover_id)。
@@ -1299,6 +1374,8 @@ public class InventoryService {
                     TraceHandoverExceptionRecord exception = repository.findTraceHandoverExceptionByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound(
                                     "HANDOVER_EXCEPTION_NOT_FOUND", "trace handover exception not found"));
+                    // 2e 溯源归属：复核异常须校验所属 handover 归属（防携他人 exceptionId 跨租户复核、篡改责任链结论）。
+                    enforceHandoverOwnership(requireHandover(exception.handoverId()));
                     if (!"pending".equals(exception.reviewStatus())) {
                         throw ApiException.conflict("HANDOVER_EXCEPTION_NOT_PENDING",
                                 "trace handover exception is not pending");
@@ -1319,9 +1396,11 @@ public class InventoryService {
             String handoverId, String traceCode, String itemId, String deviceId,
             String fromStaffId, String toStaffId, String handoverResult) {
         Instant now = Instant.now();
+        // 2e 溯源归属：创建交接链时记录归属商户（currentMerchantScope），供三方法跨租户校验。
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
         TraceHandoverRecord header = repository.saveTraceHandover(new TraceHandoverRecord(
                 handoverId, traceCode, itemId, fromStaffId, toStaffId, deviceId,
-                handoverResult, "in_progress", HANDOVER_SEGMENTS.getFirst(), List.of(), now));
+                handoverResult, "in_progress", HANDOVER_SEGMENTS.getFirst(), List.of(), now, merchantId));
         for (int i = 0; i < HANDOVER_SEGMENTS.size(); i++) {
             String segment = HANDOVER_SEGMENTS.get(i);
             boolean robot = ROBOT_SEGMENT.equals(segment);
@@ -1521,7 +1600,7 @@ public class InventoryService {
     private TraceHandoverRecord withOverall(TraceHandoverRecord h, String overall, String currentSegment) {
         TraceHandoverRecord updated = new TraceHandoverRecord(
                 h.id(), h.traceCode(), h.itemId(), h.fromStaffId(), h.toStaffId(), h.deviceId(),
-                h.handoverResult(), overall, currentSegment, h.evidenceAttachmentIds(), h.createdAt());
+                h.handoverResult(), overall, currentSegment, h.evidenceAttachmentIds(), h.createdAt(), h.merchantId());
         if ("exception".equals(overall)) {
             auditEventService.recordSuccess(
                     "inventory.handover_exception_raised", "inventory.handover.scan",
@@ -1529,6 +1608,16 @@ public class InventoryService {
                     Map.of("handover_id", h.id(), "segment", currentSegment == null ? "" : currentSegment));
         }
         return updated;
+    }
+
+    // 2e 溯源归属：交接三方法（scan/report/review）按 currentMerchantScope 校验 handover 归属，防跨租户篡改责任链。
+    private void enforceHandoverOwnership(TraceHandoverRecord header) {
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(header.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "access to another merchant's trace handover is not allowed");
+            }
+        });
     }
 
     private TraceHandoverChainView chainView(String handoverId) {

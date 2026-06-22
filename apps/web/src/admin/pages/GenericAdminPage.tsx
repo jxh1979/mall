@@ -3,6 +3,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import type { AdminPageProps, AdminRoute } from "../types";
 import { genericAdminPageConfigs, type GenericAdminAction } from "../adminPageConfigs";
+import { PermissionButton } from "../security/Can";
 
 type GenericRow = Record<string, unknown>;
 
@@ -26,6 +27,10 @@ function displayValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function rowKey(row: GenericRow, index: number): string {
+  return `${displayValue(row.id)}-${index}`;
+}
+
 function resolveEndpoint(endpoint: string, action: GenericAdminAction, row: GenericRow | undefined) {
   return endpoint.replace(/\{[^}]+\}/g, () => {
     const key = action.rowIdKey ?? "id";
@@ -34,11 +39,13 @@ function resolveEndpoint(endpoint: string, action: GenericAdminAction, row: Gene
   });
 }
 
-export function GenericAdminPage({ route, api, setActionResult }: AdminPageProps & { route: AdminRoute }) {
+export function GenericAdminPage({ route, api, setActionResult, effectivePermissions }: AdminPageProps & { route: AdminRoute }) {
   const config = genericAdminPageConfigs[route.pageId];
   const [groups, setGroups] = React.useState<LoadedGroup[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // 行选择：写动作不再硬绑 rows[0]，由用户显式选中目标行（默认第一行，兼容既有单行场景）。
+  const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
 
   const fetchData = React.useCallback(async () => {
     if (!config || config.contractGap || config.dataSources.length === 0) {
@@ -66,10 +73,18 @@ export function GenericAdminPage({ route, api, setActionResult }: AdminPageProps
     void fetchData();
   }, [fetchData]);
 
+  // 数据刷新后清空过期选择，避免选中行失效仍残留。
+  React.useEffect(() => {
+    setSelectedKey(null);
+  }, [groups]);
+
   if (!config) return <div className="admin-state admin-error">页面配置缺失：{route.pageId}</div>;
+  const pageId = config.pageId;
 
   const rows = groups.flatMap((group) => group.rows);
-  const firstRow = rows[0];
+  const selectedRow = selectedKey != null
+    ? rows.find((row, index) => rowKey(row, index) === selectedKey)
+    : rows[0];
 
   async function runAction(action: GenericAdminAction) {
     if (action.kind === "local") {
@@ -77,11 +92,11 @@ export function GenericAdminPage({ route, api, setActionResult }: AdminPageProps
       return;
     }
     if (!action.endpoint) return;
-    if (action.requiresRow !== false && !firstRow) {
-      setActionResult({ action: action.label, status: "blocked", reason: "当前没有可操作记录" });
+    if (action.requiresRow !== false && !selectedRow) {
+      setActionResult({ action: action.label, status: "blocked", reason: "请先选择一行记录再操作" });
       return;
     }
-    const endpoint = resolveEndpoint(action.endpoint, action, firstRow);
+    const endpoint = resolveEndpoint(action.endpoint, action, selectedRow);
     const method = action.method ?? "POST";
     const body = action.body ?? { operatorNote: "完整后台验收操作" };
     const result = method === "PATCH" ? await api.patch<unknown>(endpoint, body) : method === "PUT" ? await api.put<unknown>(endpoint, body) : await api.post<unknown>(endpoint, body);
@@ -89,14 +104,34 @@ export function GenericAdminPage({ route, api, setActionResult }: AdminPageProps
     await fetchData();
   }
 
+  function renderAction(action: GenericAdminAction, kind: "primary" | "secondary") {
+    const rowRequired = action.kind === "request" && action.requiresRow !== false;
+    return (
+      <PermissionButton
+        permissionsState={effectivePermissions}
+        permissions={action.permission ?? []}
+        disabled={rowRequired && !selectedRow}
+        deniedHint="当前账号无此操作权限"
+        data-testid={`generic-${kind}-action-${pageId}`}
+        onClick={() => void runAction(action)}
+      >
+        {action.label}
+      </PermissionButton>
+    );
+  }
+
+  const needsRowSelection = !config.contractGap && rows.length > 0
+    && ((config.primaryAction?.kind === "request" && config.primaryAction.requiresRow !== false)
+      || (config.secondaryAction?.kind === "request" && config.secondaryAction.requiresRow !== false));
+
   return (
     <section className="admin-generic-page" data-testid="admin-generic-page">
       <AdminPageHeader title={config.title} description={config.description} />
       <div className="admin-generic-toolbar">
         <div className="admin-generic-evidence" data-testid="admin-generic-evidence">接口证据：{config.evidence}</div>
         <div className="admin-generic-actions">
-          {config.primaryAction ? <button type="button" data-testid={`generic-primary-action-${config.pageId}`} onClick={() => void runAction(config.primaryAction!)}>{config.primaryAction.label}</button> : null}
-          {config.secondaryAction ? <button type="button" data-testid={`generic-secondary-action-${config.pageId}`} onClick={() => void runAction(config.secondaryAction!)}>{config.secondaryAction.label}</button> : null}
+          {config.primaryAction ? renderAction(config.primaryAction, "primary") : null}
+          {config.secondaryAction ? renderAction(config.secondaryAction, "secondary") : null}
         </div>
       </div>
       <AuditTrailHint event={`${config.pageId}.read/action`} />
@@ -111,8 +146,29 @@ export function GenericAdminPage({ route, api, setActionResult }: AdminPageProps
       ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="admin-generic-table">
-            <thead><tr>{config.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
-            <tbody>{rows.map((row, index) => <tr key={`${displayValue(row.id)}-${index}`}>{config.columns.map((column) => <td key={column.key}>{displayValue(row[column.key])}</td>)}</tr>)}</tbody>
+            <thead><tr>{needsRowSelection ? <th aria-label="选择">选择</th> : null}{config.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead>
+            <tbody>{rows.map((row, index) => {
+              const key = rowKey(row, index);
+              const isSelected = selectedRow != null && key === selectedKey
+                || (selectedKey == null && index === 0);
+              return (
+                <tr key={key} data-selected={isSelected ? "true" : undefined}>
+                  {needsRowSelection ? (
+                    <td>
+                      <input
+                        type="radio"
+                        name={`generic-row-${config.pageId}`}
+                        checked={Boolean(isSelected)}
+                        onChange={() => setSelectedKey(key)}
+                        data-testid={`generic-row-select-${index}`}
+                        aria-label={`选择第 ${index + 1} 行`}
+                      />
+                    </td>
+                  ) : null}
+                  {config.columns.map((column) => <td key={column.key}>{displayValue(row[column.key])}</td>)}
+                </tr>
+              );
+            })}</tbody>
           </table>
         </div>
       )}

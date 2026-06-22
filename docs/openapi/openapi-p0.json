@@ -80,50 +80,6 @@
     }
   ],
   "paths": {
-    "/api/open/auth/token": {
-      "post": {
-        "tags": [
-          "open-platform"
-        ],
-        "operationId": "openAuthToken",
-        "summary": "开放平台获取令牌",
-        "security": [
-          {
-            "OpenAppSignature": []
-          }
-        ],
-        "x-permission": "not_applicable",
-        "x-data-scope": "open-app",
-        "x-terminal-allowed": [],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "open_auth.succeeded",
-        "x-audit-event-failure": "open_auth.failed",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/OpenAuthTokenRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          },
-          "502": {
-            "$ref": "#/components/responses/Error"
-          },
-          "504": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "open-app-credential",
-        "x-invocation-channel": [
-          "server-to-server"
-        ]
-      }
-    },
     "/api/open/d/{endpoint_key}/events/{event_id}": {
       "get": {
         "tags": [
@@ -633,7 +589,14 @@
             "$ref": "#/components/responses/Page"
           },
           "403": {
-            "$ref": "#/components/responses/Error"
+            "description": "权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope 仅可读取本商户账号，越界查询拒绝）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/Error"
@@ -647,7 +610,7 @@
         ],
         "operationId": "createAccessUser",
         "summary": "创建权限用户",
-        "description": "用于创建权限用户。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "后台手动创建工作人员/商户/销售账号。必须绑定 organization_id；销售、商户员工、商户管理员必须绑定 merchant_id；密码仅用于写入生产登录凭证哈希；手机号不落明文。",
         "x-permission": "access.user.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -1824,7 +1787,7 @@
         ],
         "operationId": "createAmusementVerification",
         "summary": "游乐权益核销",
-        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→扣场次容量→留痕。失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(场次容量耗尽，已消费权益回补)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。",
+        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用场次/点位设备/项目安全三维容量→留痕。多人票任一受控维度余量不足 N 时整单拒绝并回补权益。失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(场次容量耗尽，已消费权益回补)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。",
         "x-permission": "amusement.verification.execute",
         "x-failure-codes": [
           "TICKET_NOT_FOUND",
@@ -1832,7 +1795,8 @@
           "ENTITLEMENT_USED",
           "ENTITLEMENT_NOT_AMUSEMENT",
           "ENTITLEMENT_NOT_FOR_PROJECT",
-          "SESSION_CAPACITY_EXHAUSTED"
+          "SESSION_CAPACITY_EXHAUSTED",
+          "SAFETY_INSPECTION_EXPIRED"
         ],
         "x-data-scope": "project-amusement-point",
         "x-terminal-allowed": [
@@ -1852,7 +1816,14 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
-            "$ref": "#/components/responses/Error"
+            "description": "状态冲突；含安全巡检失效拒绝 `detail_code=SAFETY_INSPECTION_EXPIRED`（开放前/营业中巡检过期或阻断项未关闭，整单拒绝并回补权益）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/Error"
@@ -3861,7 +3832,14 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
-            "$ref": "#/components/responses/Error"
+            "description": "状态冲突；含 `detail_code=DAY_CLOSE_LOCKED`（对应主体/日期日结已锁定，直接写应收应付台账被拒，须改走锁定后补录审批流程）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/Error"
@@ -4208,7 +4186,14 @@
             "$ref": "#/components/responses/Success"
           },
           "403": {
-            "$ref": "#/components/responses/Error"
+            "description": "权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（退款对象订单/流水不属于当前商户 scope，禁止跨商户发起退款）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "409": {
             "$ref": "#/components/responses/Error"
@@ -9727,7 +9712,14 @@
             "$ref": "#/components/responses/Error"
           },
           "403": {
-            "$ref": "#/components/responses/Error"
+            "description": "权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope 不得查看其他商户账号的有效权限集）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/Error"
@@ -9907,7 +9899,14 @@
             "$ref": "#/components/responses/Error"
           },
           "403": {
-            "$ref": "#/components/responses/Error"
+            "description": "权限不足或自审批拒绝；含 `detail_code=SELF_APPROVAL_FORBIDDEN`（补录申请人不得审批本人发起的锁定后补录工单，须由不同上级审批）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/Error"
@@ -12760,6 +12759,83 @@
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/StatusChangeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/amusement/projects/{id}/devices": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementDevices",
+        "summary": "查询游乐项目游乐设备",
+        "x-permission": "amusement.device.view",
+        "x-data-scope": "project-amusement",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.device.viewed",
+        "x-audit-event-failure": "amusement.device.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "Id 路径参数；必须引用当前数据范围内存在且允许访问的游乐项目记录。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "createAmusementDevice",
+        "summary": "维护游乐项目游乐设备",
+        "x-permission": "amusement.device.manage",
+        "x-data-scope": "project-amusement",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.device.changed",
+        "x-audit-event-failure": "amusement.device.change_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "Id 路径参数；必须引用当前数据范围内存在且允许访问的游乐项目记录。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AmusementDeviceRequest"
         },
         "responses": {
           "200": {
@@ -19795,6 +19871,411 @@
           }
         }
       }
+    },
+    "/api/v1/evidence/traceability/auto-capture-rate": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "operationId": "getTraceabilityAutoCaptureRate",
+        "summary": "查询业务流程追溯自动采集率",
+        "description": "用于验收 R1-LOOP-07：统计当前数据范围内流程步骤的自动采集率，避免仅有人工备注而缺少可验证留痕。返回 data 结构为 TraceabilityAutoCaptureRate。",
+        "x-auth-context": "staff-token",
+        "x-permission": "evidence.timeline.view",
+        "x-data-scope": "project-object",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "evidence.traceability_auto_capture_rate_viewed",
+        "x-audit-event-failure": "evidence.traceability_auto_capture_rate_view_failed",
+        "parameters": [
+          {
+            "name": "threshold_percent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 80
+            },
+            "description": "自动采集率验收阈值百分比；缺省为 80。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/entitlement-redemptions": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarEntitlementRedemptions",
+        "summary": "查询酒吧酒水权益兑换台账",
+        "description": "查询由票务赠饮核销产生的酒吧兑换承接记录，按当前商户范围隔离。",
+        "x-auth-context": "staff-token",
+        "x-permission": "bar.entitlement.read",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.entitlement_redemption.viewed",
+        "x-audit-event-failure": "bar.entitlement_redemption.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/entitlement-redemptions/drink": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "redeemBarDrinkEntitlement",
+        "summary": "酒水权益兑换承接",
+        "description": "承接已完成票务核销的赠饮权益领取结果。调用方必须先通过 /api/v1/ticketing/verifications 完成权益核销；本接口只按 verification_id 返回对应 bar_gift_redemptions，并记录酒吧侧领取审计。",
+        "x-auth-context": "staff-token",
+        "x-permission": "bar.entitlement.redeem",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.entitlement_redeemed",
+        "x-audit-event-failure": "bar.entitlement_redeem_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/BarEntitlementDrinkRedemptionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/reservations/{id}/entry-allowance/verify": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "verifyBarReservationEntryAllowance",
+        "summary": "卡座免通票入场名额校验",
+        "x-permission": "bar.table.guest_checkin",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "kiosk"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.table_guest.entry_allowance_verified",
+        "x-audit-event-failure": "bar.table_guest.entry_allowance_verify_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id",
+            "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/Verification"
+        },
+        "responses": {
+          "200": {
+            "description": "校验结果；allowed=false 表示业务拒绝且不消耗名额。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/BarReservationEntryAllowanceVerificationRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token",
+        "description": "用于卡座预约入场名额预校验：不生成票务权益、不抵扣最低消费、不消耗名额；正式放行仍调用 check-in-guest，并在事务中锁定 reservation 防并发超额。"
+      }
+    },
+    "/api/v1/finance/ar-ap-items/export": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "exportArApItems",
+        "summary": "导出应收应付台账快照",
+        "description": "导出当前权限范围内的应收应付台账 JSON/CSV 快照；该接口只代表平台侧导出留痕，不改变财务数据。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.ar_ap.view",
+        "x-data-scope": "project-entity",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "finance_ar_ap.exported",
+        "x-audit-event-failure": "finance_ar_ap.export_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/integration/polling-checks": {
+      "post": {
+        "tags": [
+          "integration"
+        ],
+        "operationId": "recordIntegrationPollingCheck",
+        "summary": "登记第三方定时轮询校验快照",
+        "description": "登记 Webhook + 定时轮询一致性校验的平台代理侧留痕；不代表供应商生产补偿已执行。",
+        "x-auth-context": "staff-token",
+        "x-permission": "integration.retry.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "integration.polling_check.recorded",
+        "x-audit-event-failure": "integration.polling_check.record_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "operator_note",
+                  "checked_endpoints"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "operator_note": {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  "checked_endpoints": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 255
+                    }
+                  },
+                  "pending_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "source_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/ticketing/orders/{order_id}/confirm-payment": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "confirmTicketOrderPayment",
+        "summary": "确认票务订单支付成功（回写 paid）",
+        "x-permission": "finance.payment.register",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "kiosk"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_order.payment_confirmed",
+        "x-audit-event-failure": "ticket_order.payment_confirm_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "票务订单 id（路径参数，必填）。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ConfirmTicketOrderPaymentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/ticketing/orders/{order_id}/cancel": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "cancelTicketOrder",
+        "summary": "取消未支付票务订单（回补库存）",
+        "x-permission": "ticket.order.create",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "kiosk"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_order.cancelled",
+        "x-audit-event-failure": "ticket_order.cancel_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderId",
+            "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StatusChangeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -20799,22 +21280,6 @@
           }
         }
       },
-      "OpenAuthTokenRequest": {
-        "required": true,
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/OpenAuthTokenRequest"
-            },
-            "example": {
-              "app_key": "app_meituan_demo",
-              "timestamp": 1718179200000,
-              "nonce": "n_20260612_000001",
-              "signature": "hex_hmac_sha256_signature"
-            }
-          }
-        }
-      },
       "ProviderAdapterTestRequest": {
         "required": true,
         "content": {
@@ -21604,6 +22069,16 @@
           }
         }
       },
+      "AmusementDeviceRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AmusementDeviceRequest"
+            }
+          }
+        }
+      },
       "StatusChangeRequest": {
         "required": false,
         "content": {
@@ -21730,6 +22205,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ClaimEntitlementSessionRequest"
+            }
+          }
+        }
+      },
+      "BarEntitlementDrinkRedemptionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BarEntitlementDrinkRedemptionRequest"
+            }
+          }
+        }
+      },
+      "ConfirmTicketOrderPaymentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ConfirmTicketOrderPaymentRequest"
             }
           }
         }
@@ -21965,6 +22460,11 @@
               "INTERNAL_ERROR"
             ],
             "description": "稳定错误码，用于前端分支处理、接口自动化和供应商联调。",
+            "maxLength": 128
+          },
+          "detail_code": {
+            "type": "string",
+            "description": "细粒度业务错误码（如 BAR_BILL_NOT_FOUND / TICKET_SOLD_OUT），供前端下钻、客服排查、供应商联调；顶层 code 为 10 个稳定枚举之一。",
             "maxLength": 128
           },
           "message": {
@@ -22484,6 +22984,11 @@
             "description": "第二联系人手机号；保存和展示必须遵守脱敏规则。",
             "maxLength": 20,
             "pattern": "^\\+?[0-9]{6,20}$"
+          },
+          "owner_person": {
+            "type": "string",
+            "description": "负责人姓名；商户经营责任主体自然人，区别于第一/第二联系人（日常对接人），治理 HTML 商户档案要求。",
+            "maxLength": 120
           },
           "rent_per_square_meter": {
             "type": "number",
@@ -25750,40 +26255,6 @@
           }
         }
       },
-      "OpenAuthTokenRequest": {
-        "type": "object",
-        "description": "请求载荷 `OpenAuthTokenRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
-        "additionalProperties": false,
-        "required": [
-          "app_key",
-          "timestamp",
-          "nonce",
-          "signature"
-        ],
-        "properties": {
-          "app_key": {
-            "type": "string",
-            "description": "OpenAuthTokenRequest.app_key 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
-            "maxLength": 128
-          },
-          "timestamp": {
-            "type": "integer",
-            "description": "时间字段；使用 ISO 8601 或后端约定日期格式，必须带有明确时区或业务日期语义。",
-            "minimum": 0,
-            "maximum": 999999999999
-          },
-          "nonce": {
-            "type": "string",
-            "description": "OpenAuthTokenRequest.nonce 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
-            "maxLength": 255
-          },
-          "signature": {
-            "type": "string",
-            "description": "OpenAuthTokenRequest.signature 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
-            "maxLength": 512
-          }
-        }
-      },
       "ProviderAdapterTestRequest": {
         "type": "object",
         "description": "请求载荷 `ProviderAdapterTestRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
@@ -26028,7 +26499,8 @@
         "additionalProperties": false,
         "required": [
           "username",
-          "account_type"
+          "account_type",
+          "organization_id"
         ],
         "properties": {
           "idempotency_key": {
@@ -26058,40 +26530,47 @@
           "password": {
             "type": "string",
             "maxLength": 128,
-            "description": "权限用户.password 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+            "description": "初始密码；管理端手动建号时必须填写，生产环境写入 auth_credentials 的 bcrypt 哈希，不返回明文。"
           },
           "phone": {
             "type": "string",
             "maxLength": 20,
-            "description": "权限用户.phone 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+            "description": "手机号；后端不落明文，仅保存不可逆 phone_hash。非强制实名场景可留空。"
           },
           "account_type": {
             "type": "string",
             "enum": [
-              "platform_admin",
-              "merchant_admin",
               "staff",
-              "sales"
+              "sales",
+              "supervisor",
+              "merchant_admin",
+              "merchant"
             ],
-            "description": "权限用户.account_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+            "description": "后台可创建的账号类型；禁止通过普通建号接口创建 platform_admin。销售人员用于卡座销售提成归属，商户/销售类型必须绑定 merchant_id。"
           },
           "organization_id": {
             "type": "string",
             "maxLength": 64,
-            "description": "权限用户.organization_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+            "description": "账号所属运营/组织主体 ID；后台手动建号必须绑定，用于权限范围、留痕和审计。"
           },
           "merchant_id": {
             "type": "string",
             "maxLength": 64,
-            "description": "权限用户.merchant_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+            "description": "账号所属商户 ID；销售、商户员工、商户管理员必须绑定，平台/组织员工可为空。"
           },
           "status": {
             "type": "string",
             "enum": [
               "active",
+              "invited",
               "disabled"
             ],
-            "description": "权限用户.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+            "description": "账号状态；active 可登录，invited 表示待激活，disabled 禁用。"
+          },
+          "consent_reference": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "员工手动录入的同意/授权凭据编号；可指向附件、HR 工单或线下授权记录。"
           }
         }
       },
@@ -29379,6 +29858,64 @@
           }
         }
       },
+      "AmusementDeviceRequest": {
+        "type": "object",
+        "description": "请求载荷 `AmusementDeviceRequest`（游乐项目下游乐设备建档/维护）；登记设备编码、名称、所属点位与状态，作为容量配置 device_id 与安全巡检对象来源。",
+        "additionalProperties": false,
+        "required": [
+          "device_code",
+          "device_name"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复建档同一游乐设备。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注；用于解释设备建档或维护变更原因，进入审计留痕。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表；用于绑定设备验收、说明或现场凭证。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "device_code": {
+            "type": "string",
+            "description": "游乐设备编码；同一游乐项目内唯一，作为容量配置 device_id 与巡检对象引用键。",
+            "maxLength": 64
+          },
+          "device_name": {
+            "type": "string",
+            "description": "游乐设备名称；面向运营展示。",
+            "maxLength": 128
+          },
+          "location_point_id": {
+            "type": "string",
+            "description": "所属点位 ID（可空）；用于点位/设备两级容量与核销放行口径。",
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "description": "设备状态；省略默认 active。停用后不参与容量校验与核销放行。",
+            "enum": [
+              "active",
+              "maintenance",
+              "disabled"
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用（省略默认 true）；停用后该设备不再参与三维容量校验与核销放行。"
+          }
+        }
+      },
       "BarTableSpaceAssignmentRequest": {
         "type": "object",
         "description": "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space 对该桌台关联账单（bar_bill→table_id→space_id）真实生效。bar_tables 无可派生源，无法 SQL 自动回填，须运营录入。",
@@ -29785,6 +30322,199 @@
             "maxLength": 64
           }
         }
+      },
+      "TraceabilityAutoCaptureRate": {
+        "type": "object",
+        "description": "业务流程追溯自动采集率统计结果；用于验证扫码、设备、接口等自动采集步骤是否达到 P0 可追溯闭环阈值。",
+        "additionalProperties": false,
+        "required": [
+          "total_steps",
+          "auto_captured_steps",
+          "auto_capture_rate_percent",
+          "threshold_percent",
+          "meets_threshold"
+        ],
+        "properties": {
+          "total_steps": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "当前数据范围内纳入统计的流程步骤总数。"
+          },
+          "auto_captured_steps": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "采集方式为自动或半自动的步骤数，例如二维码扫码、设备上报、接口回调。"
+          },
+          "auto_capture_rate_percent": {
+            "type": "number",
+            "format": "double",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "自动采集率，单位为百分比，保留 1 位小数。"
+          },
+          "threshold_percent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "验收阈值百分比，默认 80。"
+          },
+          "meets_threshold": {
+            "type": "boolean",
+            "description": "自动采集率是否达到阈值。"
+          }
+        }
+      },
+      "BarEntitlementDrinkRedemptionRequest": {
+        "type": "object",
+        "description": "酒吧酒水权益兑换承接请求。权益消费权威仍是 /api/v1/ticketing/verifications；本接口按 verification_id 承接已由票务核销产生的赠饮桥表，避免酒吧端绕过票务直接扣权益。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "verification_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复承接同一赠饮核销时必须返回同一结果，不能重复扣权益或重复扣库存。",
+            "maxLength": 128
+          },
+          "verification_id": {
+            "type": "string",
+            "description": "票务核销成功后生成的 verification id。",
+            "maxLength": 64
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "酒吧领取操作备注；进入审计。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "领取现场证据附件 id 列表；可空。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        }
+      },
+      "BarReservationEntryAllowanceVerificationRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "reservation_id",
+          "bar_id",
+          "table_id",
+          "guest_identifier",
+          "allowed",
+          "reason_code",
+          "checked_in_count",
+          "allowed_guest_count",
+          "remaining_guest_count",
+          "verified_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "幂等校验记录 ID，不消耗卡座免通票入场名额。"
+          },
+          "reservation_id": {
+            "type": "string",
+            "description": "订台/卡座预约 ID。"
+          },
+          "bar_id": {
+            "type": "string",
+            "description": "预约所属酒吧；免通票入场仅限该酒吧。"
+          },
+          "table_id": {
+            "type": "string",
+            "description": "预约绑定的卡座/桌台。"
+          },
+          "guest_identifier": {
+            "type": "string",
+            "description": "本次校验的客人凭据摘要或业务凭据。"
+          },
+          "allowed": {
+            "type": "boolean",
+            "description": "是否允许作为卡座免通票名额进入。false 不消耗名额。"
+          },
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "BAR_RESERVATION_NOT_CHECKINABLE",
+              "BAR_SCOPE_MISMATCH",
+              "FREE_GUEST_QUOTA_EXHAUSTED"
+            ],
+            "description": "拒绝原因或 allowed；用于工作手机/闸机展示和留痕。"
+          },
+          "checked_in_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "该预约已消耗的免通票入场人数。"
+          },
+          "allowed_guest_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "该预约配置的免通票入场名额。"
+          },
+          "remaining_guest_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "校验时剩余名额；最终核销仍以 check-in 接口事务锁为准。"
+          },
+          "device_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "工作手机/闸机/一体机设备 ID。"
+          },
+          "staff_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "操作员工 ID。"
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "校验相关证据附件 ID。"
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "校验时间。"
+          }
+        },
+        "additionalProperties": false,
+        "description": "酒吧预约entryallowance核销record请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
+      },
+      "ConfirmTicketOrderPaymentRequest": {
+        "type": "object",
+        "description": "请求载荷 `ConfirmTicketOrderPaymentRequest`（2a-2 票务支付回写闭环）；payment_intent_id 必填，服务端据其校验归属（须属本订单）与金额（须等于订单金额）后置支付意图 succeeded 并回写订单 pay_status=paid。内部确认与真实回调共用本入口。",
+        "additionalProperties": false,
+        "required": [
+          "payment_intent_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复确认必须返回同一处理结果，避免重复回写 / 重复入账。",
+            "maxLength": 128
+          },
+          "payment_intent_id": {
+            "type": "string",
+            "description": "被确认的票务支付意图 id（必填，须属本订单且金额相符）。",
+            "maxLength": 128
+          },
+          "gateway_ref": {
+            "type": "string",
+            "description": "真实第三方回调渠道流水号（可空）；内部 staff/对账确认可留空，仅作留痕。",
+            "maxLength": 128
+          }
+        }
       }
     }
   },
@@ -29808,7 +30538,6 @@
   "x-p0-example-coverage": {
     "strategy": "P0 first covers high-risk write flows and external integration flows; full operation examples are P1 documentation hardening.",
     "request_bodies": [
-      "OpenAuthTokenRequest",
       "Webhook",
       "CustomerTicketOrderRequest",
       "Verification",

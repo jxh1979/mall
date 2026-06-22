@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 public class IntegrationService {
 
     private static final long OPEN_SIGNATURE_TOLERANCE_MILLIS = 300_000;
-    private static final long OPEN_TOKEN_TTL_SECONDS = 3_600;
     private static final String OPEN_PERMISSION = "not_applicable";
     private final IntegrationRepository repository;
     private final AuditEventService auditEventService;
@@ -63,52 +62,6 @@ public class IntegrationService {
                 repository, clock, auditEventService, terminalSwitchGuard);
     }
 
-    public OpenAuthTokenResponse issueOpenToken(OpenAuthTokenRequest request) {
-        String appKey = request == null ? null : request.appKey();
-        String nonce = request == null ? null : request.nonce();
-        try {
-            OpenAppCredentialRecord credential = verifyOpenSignature(new OpenSignatureRequest(
-                    appKey,
-                    request == null ? null : request.timestamp(),
-                    nonce,
-                    request == null ? null : request.signature()
-            ), null, true);
-            Instant issuedAt = clock.instant();
-            Instant expiresAt = issuedAt.plusSeconds(OPEN_TOKEN_TTL_SECONDS);
-            String rawToken = openPlatformCrypto.newRawToken();
-            repository.saveOpenToken(new OpenAppTokenRecord(
-                    UUID.randomUUID().toString(),
-                    credential.appKey(),
-                    openPlatformCrypto.sha256(rawToken),
-                    issuedAt,
-                    expiresAt,
-                    "active",
-                    nonce,
-                    issuedAt
-            ));
-            auditEventService.recordSuccess(
-                    "open_auth.succeeded",
-                    OPEN_PERMISSION,
-                    "open_app_credential",
-                    credential.appKey(),
-                    requestId(),
-                    null,
-                    Map.of("app_key", credential.appKey())
-            );
-            return new OpenAuthTokenResponse(rawToken, "Bearer", expiresAt);
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    "open_auth.failed",
-                    OPEN_PERMISSION,
-                    "open_app_credential",
-                    blankToUnknown(appKey),
-                    requestId(),
-                    null,
-                    errorCode(exception)
-            );
-            throw exception;
-        }
-    }
 
     public OpenEventResultResponse getOpenEventResult(String endpointKey, String eventId, OpenSignatureRequest request) {
         try {
@@ -144,6 +97,8 @@ public class IntegrationService {
             String provider,
             String event,
             String signature,
+            Long timestamp,
+            String nonce,
             String idempotencyKey,
             Map<String, Object> payload
     ) {
@@ -153,6 +108,11 @@ public class IntegrationService {
             requireText(provider, "provider");
             requireText(event, "event");
             requireText(resolvedIdempotencyKey, "idempotency_key");
+            // 防重放：要求新鲜 timestamp + 唯一 nonce，二者参与签名（与 open auth 路径一致）。
+            requireText(nonce, "nonce");
+            String resolvedNonce = nonce.trim();
+            long resolvedTimestamp = timestamp == null ? 0L : timestamp;
+            rejectStaleTimestamp(resolvedTimestamp);
             OpenEndpointConfigRecord endpoint = repository.findEndpointConfig(endpointKey)
                     .filter(config -> "active".equals(config.status()))
                     .orElseThrow(() -> ApiException.unauthorized("OPEN_ENDPOINT_DISABLED", "open endpoint is disabled"));
@@ -160,7 +120,14 @@ public class IntegrationService {
                 throw ApiException.unauthorized("OPEN_WEBHOOK_REJECTED", "open webhook endpoint is not enabled");
             }
             String payloadHash = openPlatformCrypto.payloadHash(payload);
-            openPlatformCrypto.verifySignature(signature, openPlatformCrypto.webhookCanonical(endpointKey, provider, event, resolvedIdempotencyKey, payloadHash), resolveSecret(endpoint.secretRef()), "OPEN_WEBHOOK_SIGNATURE_INVALID");
+            openPlatformCrypto.verifySignature(signature, openPlatformCrypto.webhookCanonical(
+                    endpointKey, provider, event, resolvedIdempotencyKey, payloadHash, resolvedTimestamp, resolvedNonce),
+                    resolveSecret(endpoint.secretRef()), "OPEN_WEBHOOK_SIGNATURE_INVALID");
+            // 签名通过后预留 nonce（以 endpoint_key 为命名空间）：同一传输（同 nonce）再发即拒，堵原报文重放。
+            // 合法重试应换新 nonce + 复用 idempotency_key，下方幂等去重返回原结果。
+            if (!repository.reserveOpenNonce(endpointKey, resolvedNonce, resolvedTimestamp)) {
+                throw ApiException.unauthorized("OPEN_WEBHOOK_NONCE_REPLAYED", "open webhook nonce was already used");
+            }
 
             WebhookAcceptedResponse response = repository.findOpenEventByIdempotency(endpointKey, provider, resolvedIdempotencyKey)
                     .map(existing -> new WebhookAcceptedResponse(existing.id(), true))
@@ -336,6 +303,48 @@ public class IntegrationService {
             );
             throw exception;
         }
+    }
+
+    public IntegrationPollingCheckRecord recordPollingCheck(IntegrationPollingCheckRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        requireText(request.idempotencyKey(), "idempotency_key");
+        requireText(request.operatorNote(), "operator_note");
+        List<String> checkedEndpoints = safeList(request.checkedEndpoints()).stream()
+                .filter(endpoint -> endpoint != null && !endpoint.isBlank())
+                .distinct()
+                .toList();
+        if (checkedEndpoints.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "checked_endpoints is required");
+        }
+        int pendingCount = nonNegative(request.pendingCount(), "pending_count");
+        int sourceCount = nonNegative(request.sourceCount(), "source_count");
+        if (sourceCount < checkedEndpoints.size()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "source_count must cover checked_endpoints");
+        }
+        List<String> evidenceAttachmentIds = safeList(request.evidenceAttachmentIds());
+        return operationSupport.executeWrite(
+                "recordPollingCheck:" + String.join(",", checkedEndpoints),
+                request.idempotencyKey(),
+                request,
+                IntegrationPollingCheckRecord.class,
+                "integration.polling_check.recorded",
+                "integration.polling_check.record_failed",
+                "integration.retry.manage",
+                "integration_polling_check",
+                () -> new IntegrationPollingCheckRecord(
+                        "polling_check_" + UUID.randomUUID().toString().replace("-", ""),
+                        "recorded",
+                        request.operatorNote().trim(),
+                        checkedEndpoints,
+                        pendingCount,
+                        sourceCount,
+                        evidenceAttachmentIds,
+                        clock.instant(),
+                        "platform_task_status_only_not_supplier_execution"
+                )
+        );
     }
 
     public PageResponse<IntegrationOrderSyncRecord> listOrderSyncs() {

@@ -81,8 +81,8 @@ class AnalyticsServiceTests {
         assertThat(service.listCustomerIntents().items()).extracting(CustomerIntentRecord::intentId).contains("intent_1");
         assertThat(service.getP0OverviewDashboard().snapshotKey()).isEqualTo("p0_overview_today");
         assertThat(service.listBusinessMetricSnapshots().items()).extracting(BusinessMetricSnapshotRecord::metricKey).contains("gmv_amount_cents");
-        assertThat(service.listMerchantHealthScores().items()).extracting(MerchantHealthScoreRecord::merchantId).contains("merchant_1");
-        assertThat(service.listAnalyticsMerchants().items()).extracting(MerchantSummaryRecord::merchantId).contains("merchant_1");
+        assertThat(service.listMerchantHealthScores(java.util.Optional.empty()).items()).extracting(MerchantHealthScoreRecord::merchantId).contains("merchant_1");
+        assertThat(service.listAnalyticsMerchants(java.util.Optional.empty()).items()).extracting(MerchantSummaryRecord::merchantId).contains("merchant_1");
         assertThat(service.listMetricAnomalies().items()).extracting(MetricAnomalyRecord::id).contains("anomaly_1");
         assertThat(service.listMetricDefinitions().items()).extracting(MetricDefinitionRecord::metricKey).contains("gmv_amount_cents");
         assertThat(service.listRiskAlerts().items()).extracting(RiskAlertRecord::id).contains("alert_1");

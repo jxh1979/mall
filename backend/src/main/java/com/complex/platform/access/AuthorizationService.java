@@ -18,6 +18,13 @@ import org.springframework.stereotype.Service;
 @ConditionalOnBean(AccessRepository.class)
 public class AuthorizationService implements CallerScopeResolver {
 
+    // #14 钱包双路径：客人自助主体可自行执行的权限白名单（仅作用于本人账户，由控制器按客人 token 绑定）。
+    // 仅限客人端 App/小程序自助场景：储值充值/确认、储值消费、付费会员订阅。退款/冻结/会员管理等仍为员工专属。
+    private static final java.util.Set<String> CUSTOMER_SELF_SERVICE_PERMISSIONS = java.util.Set.of(
+            "customer.stored_value.topup",
+            "customer.stored_value.consume",
+            "customer.membership.subscribe");
+
     private final AccessRepository accessRepository;
 
     public AuthorizationService(AccessRepository accessRepository) {
@@ -31,6 +38,12 @@ public class AuthorizationService implements CallerScopeResolver {
             deny(permissionCode);
         }
         if (isPlatformAdminBridge(actor)) {
+            return;
+        }
+        // #14 钱包双路径：客人自助桥——客人主体（CustomerTokenAuthenticationFilter 写入，accountType=customer）
+        // 对白名单内的自助权限直接放行（动作已由控制器按客人 token 绑定到本人账户）。员工代客路径主体为员工，
+        // 不走此桥，仍按 staff 权限正常校验并归属提成。非白名单权限的客人主体一律走下方常规校验（必然 deny）。
+        if (isCustomerSelfServiceBridge(actor) && CUSTOMER_SELF_SERVICE_PERMISSIONS.contains(permissionCode)) {
             return;
         }
 
@@ -72,7 +85,18 @@ public class AuthorizationService implements CallerScopeResolver {
 
     /** 指定用户的有效权限集（平台管理用；调用方须先校验 {@code access.user.view}）。 */
     public EffectivePermissions effectivePermissionsForUser(String userId) {
-        boolean wildcard = accessRepository.findUserById(userId)
+        Optional<AccessUser> target = accessRepository.findUserById(userId);
+        // F-AUTHZ-01 跨租户读修复：平台管理员（无 merchant scope）放行可读任意用户；merchant-scoped 调用方
+        // （商户管理员）只能读同 merchant_id 的目标用户，否则按 enforceMerchantScope 范式抛 CROSS_MERCHANT_FORBIDDEN，
+        // 防"按 userId 读他商户/平台管理员的完整权限清单"。目标 user 不存在时不在此泄露归属，交由下方按 userId 计算（空集）。
+        currentMerchantScope().ifPresent(scope -> {
+            String targetMerchantId = target.map(AccessUser::merchantId).orElse(null);
+            if (!scope.equals(targetMerchantId)) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's user is not allowed");
+            }
+        });
+        boolean wildcard = target
                 .map(user -> "active".equals(user.status())
                         && "platform_admin".equals(normalize(user.accountType())))
                 .orElse(false);
@@ -303,9 +327,52 @@ public class AuthorizationService implements CallerScopeResolver {
         }
     }
 
+    /**
+     * 平台合规口径守卫：企微会话/留痕/风控等平台级合规数据按 projectId 归属，不按 merchant 切片。
+     * 此方法 fail-closed 拒绝任何 merchant-scoped 调用方（持 merchantId 的商户用户），
+     * 把"治理层确保 wecom.* 不授商户角色"落到代码层防御——即使权限被错误下放给商户角色，
+     * 商户用户也无法越权调阅他项目的合规会话。平台管理员与无 merchantId 的平台合规员放行。
+     */
+    public void requirePlatformComplianceScope() {
+        AccessActor actor = currentActor();
+        if (isPlatformAdminBridge(actor)) {
+            return;
+        }
+        String merchantId = actor.merchantId();
+        if (merchantId != null && !merchantId.isBlank()) {
+            throw ApiException.forbidden(
+                    "PLATFORM_COMPLIANCE_SCOPE_REQUIRED",
+                    "platform compliance data is not accessible to a merchant-scoped caller");
+        }
+    }
+
+    /**
+     * 平台口径守卫：平台级聚合分析（无 merchant 维度的指标定义/风控规则/风险告警/员工评分/机器人/
+     * AI 质检/客户意图等）不向商户切片，fail-closed 拒绝 merchant-scoped 调用方，
+     * 防"权限被下放给商户角色即可拉取全平台分析数据"的越权读。平台管理员/无 merchantId 平台员放行。
+     */
+    public void requirePlatformScope() {
+        AccessActor actor = currentActor();
+        if (isPlatformAdminBridge(actor)) {
+            return;
+        }
+        String merchantId = actor.merchantId();
+        if (merchantId != null && !merchantId.isBlank()) {
+            throw ApiException.forbidden(
+                    "PLATFORM_SCOPE_REQUIRED",
+                    "platform-level analytics is not accessible to a merchant-scoped caller");
+        }
+    }
+
     private boolean isPlatformAdminBridge(AccessActor actor) {
         return "active".equals(actor.status())
                 && "platform_admin".equals(normalize(actor.accountType()));
+    }
+
+    /** #14：客人自助主体（由客人 token 过滤器写入）。仅对 {@link #CUSTOMER_SELF_SERVICE_PERMISSIONS} 放行。 */
+    private boolean isCustomerSelfServiceBridge(AccessActor actor) {
+        return "active".equals(actor.status())
+                && "customer".equals(normalize(actor.accountType()));
     }
 
     private boolean isActive(AccessRepository.PermissionEffect effect, Instant checkedAt) {

@@ -52,6 +52,7 @@ public class BarOperationExecutor {
         if (value instanceof BarTableSessionAdjustmentRecord record) return record.id();
         if (value instanceof BarReservationRecord record) return record.id();
         if (value instanceof BarDepositRuleRecord record) return record.id();
+        if (value instanceof BarReservationEntryAllowanceVerificationRecord record) return record.reservationId();
         if (value instanceof BarTableGuestCheckinRecord record) return record.id();
         if (value instanceof BarProductRecord record) return record.id();
         if (value instanceof BarOrderRecord record) return record.id();
@@ -63,6 +64,7 @@ public class BarOperationExecutor {
         if (value instanceof BarBillAdjustmentRecord record) return record.id();
         if (value instanceof BarBillOperationRecord record) return record.id();
         if (value instanceof BarCommissionCalculationRecord record) return record.id();
+        if (value instanceof BarGiftRedemptionRecord record) return record.id();
         if (value instanceof PaymentIntentRecord record) return record.id();
         return null;
     }

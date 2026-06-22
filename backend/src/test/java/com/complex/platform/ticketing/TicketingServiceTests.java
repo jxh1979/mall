@@ -13,6 +13,7 @@ import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
@@ -65,7 +66,8 @@ class TicketingServiceTests {
                 verificationService,
                 new TicketCredentialService(verificationService, auditEventService),
                 new TicketOfflinePackageService(ticketingRepository, auditEventService),
-                new TicketingOperationExecutor(operations)
+                new TicketingOperationExecutor(operations),
+                authorizationService
         );
     }
 
@@ -212,9 +214,9 @@ class TicketingServiceTests {
                 .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(1);
     }
 
-    // R5 TODO#1：binding.num_people=4 → 出票权益 num_people=4 → 核销 verified_people=4（端到端，接 T5）。
+    // 2a-4（用户裁定）：binding.num_people=4 → 购买即 fan-out 为 4 张独立单人票（各 num_people=1），各自独立核销。
     @Test
-    void issueAndVerifyPropagateNumPeopleFromBinding() {
+    void multiPersonBindingFansOutIntoIndependentSinglePersonTickets() {
         Instant now = Instant.now();
         ticketingRepository.saveTicketType(new TicketTypeRecord(
                 "tt_np4", "Group Pass", "weekday_weekend_holiday", 9900L, 11900L, 12900L,
@@ -227,19 +229,23 @@ class TicketingServiceTests {
 
         IssuedTicketResponse issued = service.issueTicketTypeDirectly("tt_np4", new TicketIssueRequest(
                 "np4-issue", "issue", List.of(), "order_np4", "manual", List.of("qr")));
-        String code = issued.issuedEntitlements().getFirst().entitlementCode();
-        // 出票权益 num_people 随 binding 写入（替换此前默认 1）。
-        assertThat(ticketingRepository.findIssuedEntitlementByCode(code))
-                .get().extracting(IssuedEntitlementRecord::numPeople).isEqualTo(4);
+        // 4 人票 fan-out 为 4 张独立票（quantity 1 × num_people 4）。
+        assertThat(issued.issuedEntitlements()).hasSize(4);
+        // 每张均为独立单人票（num_people=1），共享有效期、各自独立核销。
+        assertThat(ticketingRepository.issuedEntitlements.values())
+                .filteredOn(e -> "order_np4".equals(e.orderId()))
+                .hasSize(4)
+                .allSatisfy(e -> assertThat(e.numPeople()).isEqualTo(1));
 
+        // 核销其中一张 → verified_people=1（独立单人核销，占 1 容量/扣 1 次）。
+        String code = issued.issuedEntitlements().getFirst().entitlementCode();
         service.createVerification(new VerificationRequest(
                 "np4-verify", "qr", code, "dev_1", "gate_1", Map.of()));
-        // 核销 verified_people 随权益 num_people 生效。
         assertThat(ticketingRepository.verifications.values())
                 .filteredOn(v -> "success".equals(v.status()))
                 .singleElement()
                 .extracting(VerificationRecord::verifiedPeople)
-                .isEqualTo(4);
+                .isEqualTo(1);
     }
 
     // R5 T5：核销冲正回滚 used_times，原记录置 reversed，新建 reversed 记录指向原记录。
@@ -300,6 +306,56 @@ class TicketingServiceTests {
         // used_times 不被二次回滚（仍为 0，不会变负）。
         assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
                 .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(0);
+    }
+
+    // F-TXN-04 并发双花：markVerificationReversed 是状态 CAS——首次得 1（success+未冲正），二次得 0（已 reversed）。
+    // 锁定并发唯一闸：两路冲正只一路 CAS 胜出，另一路得 0 → service 据此拒绝，不二次回滚 used_times。
+    @Test
+    void markVerificationReversedIsCasAndSecondCallReturnsZero() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("reverse-cas");
+        VerificationResponse success = service.createVerification(new VerificationRequest(
+                "reverse-cas-1", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+
+        java.time.Instant now = java.time.Instant.now();
+        // 首次 CAS：success 且 reversed_at IS NULL → 翻转，返回 1。
+        assertThat(ticketingRepository.markVerificationReversed(success.id(), "supervisor_1", now)).isEqualTo(1);
+        // 二次 CAS（模拟并发败方/重复）：已 reversed（reversed_at 非空）→ 不翻转，返回 0。
+        assertThat(ticketingRepository.markVerificationReversed(success.id(), "supervisor_2", now)).isZero();
+        // reversed_by 不被二次覆盖（败方不得篡改胜方留痕）。
+        assertThat(ticketingRepository.findVerificationById(success.id()))
+                .get().extracting(VerificationRecord::reversedBy).isEqualTo("supervisor_1");
+    }
+
+    // F-TXN-04 并发双花（多次票）：核销冲正先以状态 CAS 抢闸、再回滚 used_times。
+    // 模拟并发：手工对同一核销先抢得冲正闸（markVerificationReversed=1）后，service.reverseVerification 再次冲正该核销
+    // 必须被拒（CAS 败方），且【不】二次回滚 used_times（多次票 used_times 不被多减、不虚增权益）。
+    @Test
+    void reverseRejectedWhenVerificationAlreadyReversedConcurrently() {
+        IssuedEntitlementRecord entitlement = issueSingleEntitlement("reverse-concurrent");
+        // 多次票：核销两次，used_times=2。
+        service.createVerification(new VerificationRequest(
+                "reverse-concurrent-a", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+        VerificationResponse second = service.createVerification(new VerificationRequest(
+                "reverse-concurrent-b", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+        assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
+                .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(2);
+
+        // 模拟并发胜方：抢先把第二条核销置 reversed（CAS 得手），但此处【不】回滚 used_times（保持 used_times=2 以暴露双减风险）。
+        assertThat(ticketingRepository.markVerificationReversed(second.id(), "winner", java.time.Instant.now()))
+                .isEqualTo(1);
+
+        // 并发败方：service 冲正同一核销被拒、回滚前即止。
+        // （本顺序化模拟里 original 已读到 reversed，先被 status!=success 读检拦下；真正并发中两路都读到 success 时，
+        //  则由 markVerificationReversed 的状态 CAS 兜底——败方得 0 → 抛 ALREADY_REVERSED。两道都在回滚 used_times 之前。）
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.reverseVerification(second.id(),
+                        new com.complex.platform.ticketing.dto.VerificationReverseRequest("reverse-concurrent-rev", "并发重复冲正"),
+                        "loser"))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageMatching(".*(reversed|reversible).*");
+
+        // used_times 未被败方二次回滚（仍为 2；真实并发中胜方那一路才回滚到 1）。修复前败方会把它再减一次=1（双减虚增）。
+        assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
+                .get().extracting(IssuedEntitlementRecord::usedTimes).isEqualTo(2);
     }
 
     @Test
@@ -587,6 +643,90 @@ class TicketingServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("payment.intent_created", "ticket.issued");
+    }
+
+    @Test
+    void confirmPaymentWritesBackPaidAndIsIdempotent() {
+        TicketTypeRecord ticketType = createTicketType("confirm-pay-ticket");
+        EntitlementTemplateRecord template = createTemplate("confirm-pay-template", 1, 5000L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "confirm-pay-bind", "bind", List.of(), template.id(), 1, 1, 5000L, "default", 1, null));
+        // 非 admin 渠道下单 → 初始 unpaid。
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "confirm-pay-create", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "web", "13800138000", "customer_confirm"));
+        assertThat(order.payStatus()).isEqualTo("unpaid");
+
+        // 闭环前置：非 admin 渠道未支付不可出票。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.issueTicketOrder(order.id(),
+                        new StatusChangeRequest("confirm-pay-early", "issue", "early", List.of())))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+
+        TicketPaymentIntentRecord intent = service.createTicketOrderPayIntent(order.id(), new PaymentIntentRequest(
+                "confirm-pay-intent", "pay", List.of(), "ticket_order", order.id(), order.amountCent(), "CNY", "aggregate_pay"));
+
+        // 确认支付 → 回写 paid，意图置 succeeded。
+        TicketOrderRecord paid = service.confirmTicketOrderPayment(order.id(), new ConfirmTicketOrderPaymentRequest(
+                "confirm-pay-do", intent.id(), "gw-ref-1"));
+        assertThat(paid.payStatus()).isEqualTo("paid");
+        assertThat(ticketingRepository.findTicketPaymentIntentById(intent.id()))
+                .get().extracting(TicketPaymentIntentRecord::status).isEqualTo("succeeded");
+
+        // 幂等：再次确认仍 paid、不报错。
+        TicketOrderRecord paidAgain = service.confirmTicketOrderPayment(order.id(), new ConfirmTicketOrderPaymentRequest(
+                "confirm-pay-do-2", intent.id(), null));
+        assertThat(paidAgain.payStatus()).isEqualTo("paid");
+
+        // 已 paid → 非 admin 渠道现在可出票。
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "confirm-pay-issue", "issue", "issue after pay", List.of()));
+        assertThat(ticketingRepository.issuedEntitlements).isNotEmpty();
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("ticket_order.payment_confirmed");
+    }
+
+    @Test
+    void cancelUnpaidOrderAndExpiryJobReclaimWhilePaidOrderCannotBeCancelled() {
+        TicketTypeRecord ticketType = createTicketType("cancel-ticket");
+        EntitlementTemplateRecord template = createTemplate("cancel-template", 1, 5000L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "cancel-bind", "bind", List.of(), template.id(), 1, 1, 5000L, "default", 1, null));
+
+        // (1) 手动取消未付订单 → cancelled；幂等；取消后不可确认支付（防超卖）。
+        TicketOrderRecord order1 = service.createTicketOrder(new TicketOrderRequest(
+                "cancel-o1", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "web", "13800138000", "c1"));
+        TicketOrderRecord cancelled = service.cancelTicketOrder(order1.id(), new StatusChangeRequest(
+                "cancel-o1-do", "cancel", "user cancel", List.of()));
+        assertThat(cancelled.status()).isEqualTo("cancelled");
+        assertThat(service.cancelTicketOrder(order1.id(), new StatusChangeRequest(
+                "cancel-o1-do2", "cancel", "again", List.of())).status()).isEqualTo("cancelled");
+        TicketPaymentIntentRecord intent1 = service.createTicketOrderPayIntent(order1.id(), new PaymentIntentRequest(
+                "cancel-o1-pay", "pay", List.of(), "ticket_order", order1.id(), order1.amountCent(), "CNY", "aggregate_pay"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirmTicketOrderPayment(order1.id(),
+                        new ConfirmTicketOrderPaymentRequest("cancel-o1-confirm", intent1.id(), null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+
+        // (2) 已付订单不可取消。
+        TicketOrderRecord order2 = service.createTicketOrder(new TicketOrderRequest(
+                "cancel-o2", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "web", "13800138000", "c2"));
+        TicketPaymentIntentRecord intent2 = service.createTicketOrderPayIntent(order2.id(), new PaymentIntentRequest(
+                "cancel-o2-pay", "pay", List.of(), "ticket_order", order2.id(), order2.amountCent(), "CNY", "aggregate_pay"));
+        service.confirmTicketOrderPayment(order2.id(), new ConfirmTicketOrderPaymentRequest("cancel-o2-confirm", intent2.id(), null));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.cancelTicketOrder(order2.id(),
+                        new StatusChangeRequest("cancel-o2-do", "cancel", "x", List.of())))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+
+        // (3) 超时任务取消未付订单（cutoff 取未来 → 命中刚下的未付单）。
+        TicketOrderRecord order3 = service.createTicketOrder(new TicketOrderRequest(
+                "cancel-o3", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "web", "13800138000", "c3"));
+        int released = service.cancelExpiredUnpaidTicketOrders(java.time.Instant.now().plusSeconds(60));
+        assertThat(released).isGreaterThanOrEqualTo(1);
+        assertThat(ticketingRepository.findTicketOrderById(order3.id()))
+                .get().extracting(TicketOrderRecord::status).isEqualTo("cancelled");
     }
 
     @Test
@@ -882,6 +1022,27 @@ class TicketingServiceTests {
     }
 
     @Test
+    void refundRejectedAfterAnyEntitlementVerified() {
+        // F-TXN-03 退款联动：核销一张则整票不可退、核销后不可退（仅全未核销可退）。
+        IssuedEntitlementRecord entitlement = issueOrderEntitlement("refund-verified");
+        TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
+        // 标记该订单的权益已核销一张（usedTimes 0→1）。
+        ticketingRepository.saveIssuedEntitlement(entitlement.useOnce(Instant.now()));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
+                        "refund-after-verify",
+                        "refund",
+                        List.of(),
+                        order.id(),
+                        order.amountCent(),
+                        "customer request",
+                        "original"
+                )))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("TICKET_ORDER_VERIFIED_NO_REFUND"));
+    }
+
+    @Test
     void approveTicketRefundRejectsAlreadyApprovedRefund() {
         IssuedEntitlementRecord entitlement = issueOrderEntitlement("refund-reapprove");
         TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
@@ -905,6 +1066,101 @@ class TicketingServiceTests {
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                 .extracting("code")
                 .isEqualTo("TICKET_REFUND_NOT_APPROVABLE");
+    }
+
+    @Test
+    void approvedRefundFreezesEntitlementSoItCannotBeVerified() {
+        TicketTypeRecord ticketType = createTicketType("refund-freeze-ticket");
+        EntitlementTemplateRecord template = createTemplate("refund-freeze-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "refund-freeze-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 1, null));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "refund-freeze-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_freeze"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "refund-freeze-issue", "issue", "issue", List.of()));
+        IssuedEntitlementRecord ent = ticketingRepository.listIssuedEntitlementsByOrderId(order.id()).get(0);
+        assertThat(ent.status()).isEqualTo("active");
+
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "refund-freeze-request", "refund", List.of(), order.id(), order.amountCent(), "customer request", "original"));
+        service.approveTicketRefund(refund.id(), new StatusChangeRequest(
+                "refund-freeze-approve", "approve", "approved", List.of()));
+
+        // 退款审批生效 → 权益冻结为 refunded。
+        assertThat(ticketingRepository.findIssuedEntitlementById(ent.id()))
+                .get().extracting(IssuedEntitlementRecord::status).isEqualTo("refunded");
+        // 冻结后核销被拒（直连 atomicUseEntitlement，覆盖游乐 gateway 无 service 状态检查的路径）。
+        assertThat(ticketingRepository.atomicUseEntitlement(ent.id(), java.time.Instant.now())).isEmpty();
+    }
+
+    @Test
+    void fullRefundApprovalReleasesTicketStock() {
+        // 票务退款打款：全额退款审批 → 回补该票种库存（限量名额返还，与下单即扣对称）。
+        TicketTypeRecord ticketType = createTicketType("refund-stock-ticket");
+        EntitlementTemplateRecord template = createTemplate("refund-stock-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "refund-stock-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 1, null));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "refund-stock-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_stock"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "refund-stock-issue", "issue", "issue", List.of()));
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "refund-stock-request", "refund", List.of(), order.id(), order.amountCent(), "customer request", "original"));
+
+        service.approveTicketRefund(refund.id(), new StatusChangeRequest(
+                "refund-stock-approve", "approve", "approved", List.of()));
+
+        assertThat(ticketingRepository.releasedStock).contains(ticketType.id() + ":" + order.quantity());
+    }
+
+    @Test
+    void partialRefundApprovalDoesNotReleaseTicketStock() {
+        // 部分退款不回补库存（金额维度无法精确映射名额数，保守不超额释放）。
+        TicketTypeRecord ticketType = createTicketType("refund-partial-ticket");
+        EntitlementTemplateRecord template = createTemplate("refund-partial-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "refund-partial-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 1, null));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "refund-partial-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_partial"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "refund-partial-issue", "issue", "issue", List.of()));
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "refund-partial-request", "refund", List.of(), order.id(), order.amountCent() / 2, "partial", "original"));
+
+        service.approveTicketRefund(refund.id(), new StatusChangeRequest(
+                "refund-partial-approve", "approve", "approved", List.of()));
+
+        assertThat(ticketingRepository.releasedStock).isEmpty();
+    }
+
+    @Test
+    void cumulativePartialRefundsReachingFullReleaseStockExactlyOnce() {
+        // 回归：分两次各退 50%（累计 100%）→ 第二次审批"恰好跨过全额阈值"时回补一次库存，且只一次。
+        TicketTypeRecord ticketType = createTicketType("refund-cumul-ticket");
+        EntitlementTemplateRecord template = createTemplate("refund-cumul-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "refund-cumul-bind", "bind", List.of(), template.id(), 1, 1, 9900L, "default", 1, null));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "refund-cumul-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "customer_refund_cumul"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "refund-cumul-issue", "issue", "issue", List.of()));
+        long half = order.amountCent() / 2;
+
+        TicketRefundRecord r1 = service.requestTicketRefund(new TicketRefundRequest(
+                "refund-cumul-1", "refund", List.of(), order.id(), half, "partial1", "original"));
+        service.approveTicketRefund(r1.id(), new StatusChangeRequest("refund-cumul-app1", "approve", "approved", List.of()));
+        // 第一次（50%）不回补。
+        assertThat(ticketingRepository.releasedStock).isEmpty();
+
+        TicketRefundRecord r2 = service.requestTicketRefund(new TicketRefundRequest(
+                "refund-cumul-2", "refund", List.of(), order.id(), order.amountCent() - half, "partial2", "original"));
+        service.approveTicketRefund(r2.id(), new StatusChangeRequest("refund-cumul-app2", "approve", "approved", List.of()));
+        // 第二次累计达全额 → 恰回补一次。
+        assertThat(ticketingRepository.releasedStock).containsExactly(ticketType.id() + ":" + order.quantity());
     }
 
     @Test
@@ -1940,7 +2196,13 @@ class TicketingServiceTests {
         private final Map<String, TicketCredentialRecord> credentials = new LinkedHashMap<>();
         private final Map<String, TicketRefundRecord> refunds = new LinkedHashMap<>();
         private final Map<String, TicketRefundLineRecord> refundLines = new LinkedHashMap<>();
+        private final List<String> releasedStock = new ArrayList<>();
         private int entitlementTemplateSaveCount;
+
+        @Override
+        public void releaseTicketStock(String ticketTypeId, int quantity) {
+            releasedStock.add(ticketTypeId + ":" + quantity);
+        }
 
         @Override
         public TicketTypeRecord saveTicketType(TicketTypeRecord ticketType) {
@@ -2034,10 +2296,11 @@ class TicketingServiceTests {
         }
 
         @Override
-        public void markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt) {
+        public int markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt) {
             VerificationRecord v = verifications.get(id);
-            if (v == null) {
-                return;
+            // F-TXN-04：模拟状态 CAS——仅 status='success' 且未冲正（reversed_at IS NULL）才翻转，返回受影响行数。
+            if (v == null || !"success".equals(v.status()) || v.reversedAt() != null) {
+                return 0;
             }
             verifications.put(id, new VerificationRecord(
                     v.id(), v.verificationNo(), v.entitlementId(), v.entitlementCode(), v.credentialType(),
@@ -2045,6 +2308,7 @@ class TicketingServiceTests {
                     v.clientTaskId(), v.createdAt(), v.nonce(), v.staffId(), v.merchantId(), v.windowValid(),
                     v.signatureValid(), v.verifiedPeople(), v.reversesVerificationId(), reversedBy, reversedAt
             ));
+            return 1;
         }
 
         @Override
@@ -2108,6 +2372,11 @@ class TicketingServiceTests {
         }
 
         @Override
+        public List<TicketOrderRecord> listTicketOrders() {
+            return new ArrayList<>(ticketOrders.values());
+        }
+
+        @Override
         public List<TicketOrderRecord> listTicketOrdersByCustomerId(String customerId) {
             return ticketOrders.values().stream()
                     .filter(order -> customerId.equals(order.customerId()))
@@ -2115,9 +2384,43 @@ class TicketingServiceTests {
         }
 
         @Override
+        public List<TicketOrderRecord> listTicketOrdersByMerchant(String merchantId) {
+            return ticketOrders.values().stream()
+                    .filter(order -> merchantId.equals(order.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public int atomicCancelUnpaidOrder(String orderId, java.time.Instant now) {
+            TicketOrderRecord order = ticketOrders.get(orderId);
+            if (order == null || !"unpaid".equals(order.payStatus()) || !"created".equals(order.status())) {
+                return 0;
+            }
+            ticketOrders.put(orderId, new TicketOrderRecord(
+                    order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
+                    order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
+                    order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
+                    order.payStatus(), order.issueStatus(), "cancelled", order.createdAt(), now, order.merchantId()));
+            return 1;
+        }
+
+        @Override
+        public List<TicketOrderRecord> listExpiredUnpaidOrders(java.time.Instant cutoff) {
+            return ticketOrders.values().stream()
+                    .filter(o -> "created".equals(o.status()) && "unpaid".equals(o.payStatus())
+                            && o.createdAt() != null && o.createdAt().isBefore(cutoff))
+                    .toList();
+        }
+
+        @Override
         public TicketPaymentIntentRecord saveTicketPaymentIntent(TicketPaymentIntentRecord intent) {
             paymentIntents.put(intent.id(), intent);
             return intent;
+        }
+
+        @Override
+        public Optional<TicketPaymentIntentRecord> findTicketPaymentIntentById(String id) {
+            return Optional.ofNullable(paymentIntents.get(id));
         }
 
         @Override
@@ -2155,6 +2458,19 @@ class TicketingServiceTests {
         }
 
         @Override
+        public int markTicketRefundApproved(String refundId, String approvedBy, java.time.Instant approvedAt) {
+            TicketRefundRecord r = refunds.get(refundId);
+            // F-TXN-04：模拟状态 CAS——仅 status='requested' 才翻转 approved，返回受影响行数。
+            if (r == null || !"requested".equals(r.status())) {
+                return 0;
+            }
+            refunds.put(refundId, new TicketRefundRecord(
+                    r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(),
+                    "approved", approvedBy, approvedAt, r.createdAt(), approvedAt));
+            return 1;
+        }
+
+        @Override
         public Optional<TicketRefundRecord> findTicketRefundById(String id) {
             return Optional.ofNullable(refunds.get(id));
         }
@@ -2182,9 +2498,18 @@ class TicketingServiceTests {
         }
 
         @Override
+        public long sumApprovedRefundAmountByOrderId(String orderId) {
+            return refunds.values().stream()
+                    .filter(r -> orderId.equals(r.targetId()))
+                    .filter(r -> "approved".equals(r.status()))
+                    .mapToLong(TicketRefundRecord::refundAmountCent)
+                    .sum();
+        }
+
+        @Override
         public java.util.Optional<IssuedEntitlementRecord> atomicUseEntitlement(String id, java.time.Instant updatedAt) {
             IssuedEntitlementRecord entitlement = issuedEntitlements.get(id);
-            if (entitlement == null || entitlement.remainingTimes() <= 0) {
+            if (entitlement == null || entitlement.remainingTimes() <= 0 || !"active".equals(entitlement.status())) {
                 return java.util.Optional.empty();
             }
             IssuedEntitlementRecord updated = entitlement.useOnce(updatedAt);
@@ -2195,7 +2520,7 @@ class TicketingServiceTests {
         @Override
         public java.util.Optional<IssuedEntitlementRecord> atomicReverseEntitlement(String id, java.time.Instant updatedAt) {
             IssuedEntitlementRecord entitlement = issuedEntitlements.get(id);
-            if (entitlement == null || entitlement.usedTimes() <= 0) {
+            if (entitlement == null || entitlement.usedTimes() <= 0 || "refunded".equals(entitlement.status())) {
                 return java.util.Optional.empty();
             }
             IssuedEntitlementRecord updated = new IssuedEntitlementRecord(
@@ -2208,6 +2533,23 @@ class TicketingServiceTests {
             );
             issuedEntitlements.put(id, updated);
             return java.util.Optional.of(updated);
+        }
+
+        @Override
+        public int freezeEntitlementForRefund(String id, java.time.Instant updatedAt) {
+            IssuedEntitlementRecord entitlement = issuedEntitlements.get(id);
+            if (entitlement == null || !"active".equals(entitlement.status())) {
+                return 0;
+            }
+            issuedEntitlements.put(id, new IssuedEntitlementRecord(
+                    entitlement.id(), entitlement.entitlementCode(), entitlement.ticketTypeId(), entitlement.orderId(),
+                    entitlement.entitlementTemplateId(), entitlement.entitlementType(), entitlement.merchantId(),
+                    entitlement.venueId(), entitlement.pointId(), entitlement.totalTimes(),
+                    entitlement.usedTimes(), entitlement.valueAmountCent(),
+                    "refunded", entitlement.validFrom(), entitlement.validTo(), entitlement.createdAt(), updatedAt,
+                    entitlement.numPeople(), entitlement.allocatedRevenueCent()
+            ));
+            return 1;
         }
 
         @Override

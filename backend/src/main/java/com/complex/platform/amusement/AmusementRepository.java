@@ -54,6 +54,27 @@ public interface AmusementRepository {
     /** 按 id 查询容量配置（用于归属隔离校验与停用）。 */
     Optional<AmusementCapacityConfigRecord> findCapacityConfigById(String id);
 
+    /** 写入/更新游乐设备主数据（amusement_devices，V143）。按 id 幂等 upsert。 */
+    AmusementDeviceRecord saveDevice(AmusementDeviceRecord device);
+
+    /** 列出项目全部设备主数据明细（管理端读取）。 */
+    List<AmusementDeviceRecord> listDevicesByProject(String projectId);
+
+    /** 按 id 查询设备主数据（用于归属隔离校验）。 */
+    Optional<AmusementDeviceRecord> findDeviceById(String id);
+
+    /** 按 (project_id, device_code) 查询设备主数据（桥接旧 device_id 字符串，唯一）。 */
+    Optional<AmusementDeviceRecord> findDeviceByCode(String projectId, String deviceCode);
+
+    /** 回填设备最近一次 PASS 巡检时间（巡检设备级化链路冗余字段，加速核销校验与到期计算）。 */
+    void updateDeviceLastPassInspection(String projectId, String deviceCode, java.time.Instant inspectedAt);
+
+    /** 项目级缺省安全检查周期（amusement_projects.safety_check_interval_hours，缺省 24 小时）。 */
+    int findProjectSafetyCheckIntervalHours(String projectId);
+
+    /** 项目级巡检 PASS 生效时回填该项目全部设备的最近 PASS 巡检时间（项目级巡检覆盖全设备）。 */
+    void updateProjectDevicesLastPass(String projectId, java.time.Instant inspectedAt);
+
     /**
      * P0 清单#6 查询项目「超容处置策略」（V104 amusement_over_capacity_policy）：
      * 运营容量（软上限）与处置模式（block_hard 硬阻断+软告警 / warn_only 仅告警留痕不阻断）。

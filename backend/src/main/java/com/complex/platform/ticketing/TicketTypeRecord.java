@@ -18,6 +18,29 @@ public record TicketTypeRecord(
         // 为空则回退默认 60 秒（向后兼容）。
         Integer refreshIntervalSeconds,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        // P0 修复（V133）：按票种总量限量。stockQuantity 为 null=不限量；soldQuantity=已售/已占数量。
+        Integer stockQuantity,
+        int soldQuantity
 ) {
+    /**
+     * 向后兼容构造：旧 12 参签名（无库存字段）→ 库存不限量（stockQuantity=null）、soldQuantity=0。
+     * 供既有调用点/测试不改而仍编译；需设置库存的路径（创建/发布/映射）使用全参构造器。
+     */
+    public TicketTypeRecord(
+            String id,
+            String ticketName,
+            String baseCalendarPriceMode,
+            Long weekdayPriceCent,
+            Long weekendPriceCent,
+            Long holidayPriceCent,
+            boolean stockRequired,
+            String status,
+            Integer validityDays,
+            Integer refreshIntervalSeconds,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(id, ticketName, baseCalendarPriceMode, weekdayPriceCent, weekendPriceCent, holidayPriceCent,
+                stockRequired, status, validityDays, refreshIntervalSeconds, createdAt, updatedAt, null, 0);
+    }
 }

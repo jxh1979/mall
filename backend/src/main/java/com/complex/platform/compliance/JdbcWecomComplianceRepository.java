@@ -84,6 +84,17 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
     }
 
     @Override
+    public boolean projectExists(String projectId) {
+        if (projectId == null || projectId.isBlank()) {
+            return false;
+        }
+        Boolean exists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS(SELECT 1 FROM projects WHERE id = :id)",
+                Map.of("id", projectId), Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
     public WecomConversationRecord saveConversation(WecomConversationRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO wecom_conversations (

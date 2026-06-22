@@ -407,6 +407,20 @@ final class JdbcBarRowMapper {
         );
     }
 
+    // 2c-2 提成防重：按 bill_id 读取提成计算（calculateCommission 查重守卫用）。
+    BarCommissionCalculationRecord mapCommission(java.sql.ResultSet resultSet, int rowNumber) throws java.sql.SQLException {
+        return new BarCommissionCalculationRecord(
+                resultSet.getString("id"),
+                resultSet.getString("bill_id"),
+                resultSet.getString("sales_staff_id"),
+                resultSet.getString("sales_role_type"),
+                resultSet.getLong("commission_base_cent"),
+                resultSet.getInt("commission_rate_bp"),
+                resultSet.getLong("commission_amount_cent"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "created_at")
+        );
+    }
 
     private List<String> readStringList(String value) {
         try {

@@ -361,23 +361,27 @@ public class AnalyticsService {
         );
     }
 
-    public PageResponse<MerchantHealthScoreRecord> listMerchantHealthScores() {
+    public PageResponse<MerchantHealthScoreRecord> listMerchantHealthScores(Optional<String> scope) {
+        // 行级隔离：merchant-scoped 调用方仅见自身健康分；平台口径（scope 空）见全量。
         return readPage(
                 "analytics.merchant_health.viewed",
                 "analytics.merchant_health.viewed_failed",
                 "analytics.dashboard.view",
                 "analytics_merchant_health_score",
-                repository::listMerchantHealthScores
+                () -> scope.map(repository::listMerchantHealthScoresByMerchant)
+                        .orElseGet(repository::listMerchantHealthScores)
         );
     }
 
-    public PageResponse<MerchantSummaryRecord> listAnalyticsMerchants() {
+    public PageResponse<MerchantSummaryRecord> listAnalyticsMerchants(Optional<String> scope) {
+        // 行级隔离：merchant-scoped 调用方仅见自身经营摘要；平台口径见全量。
         return readPage(
                 "analytics.merchant_summary.viewed",
                 "analytics.merchant_summary.viewed_failed",
                 "analytics.dashboard.view",
                 "analytics_merchant_summary",
-                repository::listAnalyticsMerchants
+                () -> scope.map(repository::listAnalyticsMerchantsByMerchant)
+                        .orElseGet(repository::listAnalyticsMerchants)
         );
     }
 

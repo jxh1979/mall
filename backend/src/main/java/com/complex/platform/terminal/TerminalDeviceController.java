@@ -109,6 +109,13 @@ public class TerminalDeviceController {
             @RequestBody CapabilitySwitchRequest request
     ) {
         authorizationService.requirePermission("terminal.switch.manage");
+        // F-CROSS-01 最小收口：终端能力开关是平台级能力（terminal_capability_switches 仅 global/device scope，
+        // 无 merchant 维度；权限 terminal.switch.manage domain=terminal 仅授 platform_admin）。fail-closed 拒绝
+        // merchant-scoped 主体修改平台级开关，防"权限被错误下放给商户角色即可开关他域（财务 payment.gateway/
+        // 风控 wecom.ai_qc）能力"的跨域提权。
+        // 注：按"目标能力 capability_code → 调用者授权域"逐能力校验属 BLOCKED——代码库无能力分域映射，需产品给定
+        //     capability→domain 清单后方可实现（不臆造分域）。
+        authorizationService.requirePlatformScope();
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updateCapabilitySwitch(id, request));
     }

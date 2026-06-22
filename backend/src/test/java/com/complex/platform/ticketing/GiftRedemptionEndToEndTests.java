@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  * bar_gift_redemptions 桥表落地。修 R5「无端到端验收」缺口。
  *
  * <p>生产落地形态：当前赠饮→吧台 SKU 无映射来源(itemRef=null)，故实际库存扣减跳过、inventory_movement_id 留空、
- * redemption.note 标注 TODO；链路（核销→0元单→出品事件→桥表）全打通且可追溯。
+ * redemption.note 标注未配置 SKU；链路（核销→0元单→出品事件→桥表）全打通且可追溯。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
@@ -61,7 +61,7 @@ class GiftRedemptionEndToEndTests {
                 barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow();
         assertThat(redemption.status()).isEqualTo("delivered");
         assertThat(redemption.barId()).isEqualTo(barId);
-        // 无 SKU 映射来源：扣减跳过、movement 留空、note 标注 TODO。
+        // 无 SKU 映射来源：扣减跳过、movement 留空、note 标注未配置 SKU。
         assertThat(redemption.inventoryMovementId()).isNull();
         assertThat(redemption.note()).contains("no item mapping source");
 
@@ -77,7 +77,7 @@ class GiftRedemptionEndToEndTests {
         assertThat(deliverEvents).isEqualTo(1);
     }
 
-    // R5 TODO#2：gift_drink 模板配 bar_item_ref=item_X → 核销 → 事件 itemRef=item_X →
+    // R5 已落地#2：gift_drink 模板配 bar_item_ref=item_X → 核销 → 事件 itemRef=item_X →
     // BarGiftConsumer 对 item_X 走 redeem_consume 扣减（接 T15）。
     @Test
     void giftDrinkWithBarItemRefDecreasesStockViaRedeemConsume() {
@@ -145,7 +145,14 @@ class GiftRedemptionEndToEndTests {
         assertThat(barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow().status())
                 .isEqualTo("delivered");
 
-        verificationService.reverseVerification(response.id(), "customer left", "staff_1");
+        // P0 越权修复后 reverseVerification 会按调用者商户范围校验归属；冲正在生产中必有认证主体（ticket.verify.reverse）。
+        // 此处以平台管理员上下文驱动（scope 为空=放行），契合"已认证主体发起冲正"的真实场景。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        try {
+            verificationService.reverseVerification(response.id(), "customer left", "staff_1");
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
 
         assertThat(barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow().status())
                 .isEqualTo("reversed");
@@ -193,7 +200,7 @@ class GiftRedemptionEndToEndTests {
                     created_at, updated_at)
                 VALUES (?, 'Gift Type', 'fixed', FALSE, 'active', ?, ?)
                 """, typeId, ts, ts);
-        // R5 TODO#2：模板配 bar_item_ref（可空）——赠饮→吧台 SKU 映射来源。
+        // R5 已落地#2：模板配 bar_item_ref（可空）——赠饮→吧台 SKU 映射来源。
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
                     default_value_cent, status, bar_item_ref, created_at, updated_at)

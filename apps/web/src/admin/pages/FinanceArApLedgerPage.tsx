@@ -19,6 +19,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
   const [reason, setReason] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
   const [query, setQuery] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
@@ -80,6 +81,24 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
     }
   }
 
+
+  async function exportLedger() {
+    setExporting(true);
+    setFormError("");
+    setGlobalError(null);
+    try {
+      const result = await api.get<Record<string, unknown>>("/api/v1/finance/ar-ap-items/export");
+      setActionResult({ action: "ledger_export", status: "exported", result });
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "应收应付导出失败";
+      setFormError(message);
+      setGlobalError(message);
+      setActionResult({ action: "ledger_export", status: "failed", message });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <section data-testid="finance-ledger-page">
       <AdminPageHeader title="应收应付台账" description="P0 完整台账支持应收、应付、部分核销、余额和调整原因留痕。" />
@@ -97,9 +116,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
             permissions={[PAYMENT_PERMISSION]}
             data-testid="finance-payment-submit"
           />
-          {/* TODO 接口未就绪：后端无应收应付导出接口（FinanceController 无 export 端点），
-              此前为“假留痕”仅 setActionResult。禁用并提示，避免误导操作。 */}
-          <button type="button" data-testid="finance-export" disabled title="导出接口未就绪：后端暂无 /finance 导出端点">导出（接口未就绪）</button>
+          <button type="button" data-testid="finance-export" disabled={exporting} onClick={() => void exportLedger()}>{exporting ? "导出中" : "导出台账"}</button>
         </div>
         {formError ? <div data-testid="finance-ledger-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-list-toolbar" data-testid="finance-ledger-filter">

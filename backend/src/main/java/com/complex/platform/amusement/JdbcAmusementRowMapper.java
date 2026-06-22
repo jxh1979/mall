@@ -78,6 +78,22 @@ final class JdbcAmusementRowMapper {
         );
     }
 
+    AmusementDeviceRecord mapDevice(ResultSet rs, int rowNum) throws SQLException {
+        return new AmusementDeviceRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("device_code"),
+                rs.getString("name"),
+                rs.getString("status"),
+                (Integer) rs.getObject("safety_check_interval_hours"),
+                rs.getString("location_point_id"),
+                instant(rs, "last_pass_inspection_at"),
+                rs.getString("merchant_id"),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at")
+        );
+    }
+
     AmusementProjectRuleRecord mapProjectRule(ResultSet rs, int rowNum) throws SQLException {
         return new AmusementProjectRuleRecord(
                 rs.getString("id"),
@@ -131,6 +147,7 @@ final class JdbcAmusementRowMapper {
         return new AmusementSafetyInspectionRecord(
                 rs.getString("id"),
                 rs.getString("project_id"),
+                rs.getString("device_id"),
                 rs.getString("template_id"),
                 readJson(rs.getString("items_json"), ITEM_LIST_TYPE),
                 rs.getString("overall_result"),
@@ -163,7 +180,8 @@ final class JdbcAmusementRowMapper {
                 rs.getString("verification_result"),
                 rs.getString("failure_reason"),
                 readJson(rs.getString("evidence_attachment_ids"), STRING_LIST_TYPE),
-                instant(rs, "created_at")
+                instant(rs, "created_at"),
+                rs.getInt("verified_people")
         );
     }
 

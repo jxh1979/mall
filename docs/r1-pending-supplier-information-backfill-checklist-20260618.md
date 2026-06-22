@@ -37,8 +37,8 @@
 | SEC-P2-CSRF-API-001 | 安全 | open_for_prod_review | 后端/前端/安全 | 认证方案定稿时按 Bearer/SameSite/双提交复核 |
 
 ## 3. 本轮新增登记项（R1）
-- **ISO-GAP-01（P0，安全/工程）**：`security-scans/findings-register-v1.md` 仍无跨租户越权 finding 系列（V044–V052 修的问题在权威台账不可见），需补 `SEC-*-TENANT-ISOLATION-*`。责任人：安全。
-- **R1-FINDING-A（P1，文档治理）**：迁移已到 V054，但 v0.2 审计 / 数据隔离规格仍停在 V052 → 需补登 V053/V054 并改为脚本生成。责任人：技术负责人。
+- **ISO-GAP-01（P0，安全/工程）**：已关闭（2026-06-21）。`SEC-P0-TENANT-ISOLATION-001` 已由安全基线生成器写入 `security-scans/findings-register-v1.md` 与 `formal-security-baseline-v1.md`，`verify:tenant-isolation` 已通过。责任人后续维护 scope CSV / Repository scoped 通道 / 闸口。
+- **R1-FINDING-A（P1，文档治理）**：已关闭（2026-06-21）。数据隔离规格已新增 §3A 自动迁移隔离基线，并提供 `docs:data-isolation-spec` / `verify:data-isolation-spec`，后续由技术负责人维护脚本闸口而非手抄迁移计数。
 - **S12 落地（P0，登录链路）**：`sms_notification` 开关并入主矩阵 + `-latest.json` + supplier-mock 样例。责任人：IT。
 
 ## 4. 解锁与回填纪律

@@ -237,6 +237,20 @@ public class BarService {
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.table.guest_checkin")
     @Transactional
+    public BarReservationEntryAllowanceVerificationRecord verifyReservationEntryAllowance(String reservationId, VerificationRequest request) {
+        String id = operations.requireText(reservationId, "reservation_id");
+        return operations.executeWrite(
+                "verifyBarReservationEntryAllowance:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarReservationEntryAllowanceVerificationRecord.class,
+                BarWriteOperation.VERIFY_RESERVATION_ENTRY_ALLOWANCE,
+                () -> entryService.verifyGuestEntryAllowance(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.guest_checkin")
+    @Transactional
     public BarTableGuestCheckinRecord checkInReservationGuest(String reservationId, VerificationRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
         return operations.executeWrite(

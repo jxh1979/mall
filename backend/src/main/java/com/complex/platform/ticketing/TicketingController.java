@@ -6,6 +6,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
@@ -168,6 +169,26 @@ public class TicketingController {
         authorizationService.requirePermission("finance.payment_intent.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTicketOrderPayIntent(orderId, request));
+    }
+
+    @PostMapping("/ticketing/orders/{order_id}/confirm-payment")
+    public ApiResponse<TicketOrderRecord> confirmTicketOrderPayment(
+            @PathVariable("order_id") String orderId,
+            @RequestBody ConfirmTicketOrderPaymentRequest request
+    ) {
+        authorizationService.requirePermission("finance.payment.register");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.confirmTicketOrderPayment(orderId, request));
+    }
+
+    @PostMapping("/ticketing/orders/{order_id}/cancel")
+    public ApiResponse<TicketOrderRecord> cancelTicketOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("ticket.order.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.cancelTicketOrder(orderId, request));
     }
 
     @PostMapping("/ticketing/orders/{order_id}/issue")

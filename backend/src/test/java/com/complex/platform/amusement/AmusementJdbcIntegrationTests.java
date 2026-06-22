@@ -147,6 +147,7 @@ class AmusementJdbcIntegrationTests {
         repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 "inspection_jdbc",
                 "project_jdbc",
+                null,
                 "template_jdbc",
                 List.of(Map.of("name", "restraint", "result", "pass")),
                 "pass",
@@ -185,7 +186,8 @@ class AmusementJdbcIntegrationTests {
                 "success",
                 null,
                 List.of("att_verification"),
-                now
+                now,
+                1
         ));
         repository.saveManualOverride(new AmusementManualOverrideRecord(
                 "override_jdbc",
@@ -342,7 +344,7 @@ class AmusementJdbcIntegrationTests {
         repository.saveProject(new AmusementProjectRecord(
                 "project_space_8", "Space8 Coaster", 2, "open", "template_space_8", Map.of(), "point_space_8", now, now, "merchant_space_8"));
         repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
-                "inspection_space_8", "project_space_8", "template_space_8",
+                "inspection_space_8", "project_space_8", null, "template_space_8",
                 List.of(Map.of("name", "restraint", "result", "pass")),
                 "pass", "submitted", "none", "not_required",
                 now, now, null, null, "passed", List.of(), now, now,

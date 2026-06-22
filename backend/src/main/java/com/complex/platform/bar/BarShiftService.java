@@ -97,6 +97,14 @@ public class BarShiftService {
         if (!"open".equals(shift.status())) {
             throw ApiException.conflict("BAR_SHIFT_NOT_OPEN", "only an open bar shift can be closed");
         }
+        // F-OPS-06 现金交接持有人校验：班结如指定交接下一班，接班持有人必须是「另一个人」——
+        // 现金钱箱责任链须真实移交，禁止把钱箱「交接」给本班收银员自己（伪交接规避对账责任）。
+        // 接班人是否在册由其下一班 openShift（按 cashier_user_id 开班）自然建立，此处先拦自交接。
+        String handoverToUserId = trimToNull(actual.handoverToUserId());
+        if (handoverToUserId != null && handoverToUserId.equals(shift.cashierUserId())) {
+            throw ApiException.conflict("BAR_SHIFT_HANDOVER_TO_SELF",
+                    "cash drawer handover must target a different holder, not the outgoing cashier");
+        }
         long declaredCash = nonNegative(actual.declaredCashCent(), "declared_cash_cent");
         Instant now = Instant.now();
         // 按班次时间窗口 [openedAt, now) 聚合系统应收（各支付方式 / 退款 / 小费）。只读，不改账单。
@@ -130,7 +138,7 @@ public class BarShiftService {
                 cashDiff,
                 shift.cashDiffThresholdCent(),
                 needsReview,
-                trimToNull(actual.handoverToUserId()),
+                handoverToUserId,
                 trimToNull(actual.note()) == null ? shift.note() : trimToNull(actual.note()),
                 shift.openedByUserId(),
                 actor,

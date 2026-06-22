@@ -81,7 +81,7 @@ class AccessControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -120,7 +120,7 @@ class AccessControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -136,7 +136,7 @@ class AccessControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -189,7 +189,7 @@ class AccessControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -222,7 +222,7 @@ class AccessControllerTests {
         mockMvc.perform(get("/api/v1/access/users/usr_target/effective-permissions")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test

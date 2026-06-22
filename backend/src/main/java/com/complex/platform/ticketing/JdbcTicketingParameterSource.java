@@ -30,6 +30,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("status", ticketType.status())
                 .addValue("validity_days", ticketType.validityDays())
                 .addValue("refresh_interval_seconds", ticketType.refreshIntervalSeconds())
+                .addValue("stock_quantity", ticketType.stockQuantity())
+                .addValue("sold_quantity", ticketType.soldQuantity())
                 .addValue("created_at", timestampWithTimeZone(ticketType.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(ticketType.updatedAt()));
     }
@@ -191,7 +193,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("issue_status", order.issueStatus())
                 .addValue("status", order.status())
                 .addValue("created_at", timestampWithTimeZone(order.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(order.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(order.updatedAt()))
+                .addValue("merchant_id", order.merchantId());
     }
 
     MapSqlParameterSource ticketPaymentIntentParameters(TicketPaymentIntentRecord intent) {

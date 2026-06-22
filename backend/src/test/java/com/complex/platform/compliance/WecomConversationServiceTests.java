@@ -85,6 +85,18 @@ class WecomConversationServiceTests {
     }
 
     @Test
+    void syncRejectedWhenProjectIdNotRegistered() {
+        // 堵越权注入：syncWecom 不再裸信客户端 projectId，未登记项目一律拒绝，不落库。
+        repository.knownProjects.add("proj_other"); // 只认 proj_other；syncRequest 用 proj_1 → 应拒
+        assertThatThrownBy(() -> service.syncConversation(syncRequest("ext-bad-proj", "普通消息")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("WECOM_PROJECT_NOT_FOUND");
+        assertThat(repository.conversations).isEmpty();
+        assertThat(repository.messages).isEmpty();
+    }
+
+    @Test
     void syncStoresRedactedDisplayContentAndKeepsRawReference() {
         // 开关开（mock 默认不抛）→ 落库脱敏：展示内容无明文手机号/身份证，原文以引用形式保留。
         WecomSyncResult result = service.syncConversation(
@@ -486,6 +498,14 @@ class WecomConversationServiceTests {
         @Override
         public List<WecomRetentionPolicyRecord> findAllRetentionPolicies() {
             return new ArrayList<>(policies);
+        }
+
+        final java.util.Set<String> knownProjects = new java.util.HashSet<>();
+
+        @Override
+        public boolean projectExists(String projectId) {
+            // 默认（未显式登记项目时）放行，保持既有同步测试不变；登记后只认已登记项目，供越权拒绝用例。
+            return knownProjects.isEmpty() || knownProjects.contains(projectId);
         }
 
         @Override

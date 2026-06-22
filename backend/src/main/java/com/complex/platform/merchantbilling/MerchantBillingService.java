@@ -142,14 +142,25 @@ public class MerchantBillingService {
     }
 
     private MerchantBillRecord createBillOnce(MerchantBillCreateRequest request) {
+        String merchantId = requireText(request.merchantId(), "merchant_id");
+        // P0 越权修复：createBill 此前不校验调用者商户范围，商户 A 可凭请求体为商户 B 建账单。
+        // 平台管理员（scope 为空）可代任意商户建单；商户用户必须等于自身 scope。
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(merchantId)) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "creating a bill for another merchant is not allowed");
+            }
+        });
         ArApItemRecord item = findArApItem(request.arApItemId());
         validateArApReference(request, item);
         List<MerchantBillLineRecord> lines = buildLines(request);
         Instant now = Instant.now();
-        String slug = slug(request.idempotencyKey());
+        // P0 串户修复：主键此前为 mbill_+slug(idempotencyKey) 不含 scope，两商户同幂等键 → 主键碰撞，
+        // ON CONFLICT(id) DO UPDATE 静默覆盖前者整行。主键纳入 merchant_id 隔离。
+        String slug = slug(merchantId + "_" + request.idempotencyKey());
         MerchantBillRecord record = new MerchantBillRecord(
                 "mbill_" + slug,
-                requireText(request.merchantId(), "merchant_id"),
+                merchantId,
                 trimToNull(request.arApItemId()),
                 "MBILL" + now.toEpochMilli() + "-" + slug.substring(0, Math.min(12, slug.length())),
                 requireDate(request.billPeriodStart(), "bill_period_start"),
@@ -338,13 +349,15 @@ public class MerchantBillingService {
 
     private List<MerchantBillLineRecord> buildLines(MerchantBillCreateRequest request) {
         Instant now = Instant.now();
-        String billId = "mbill_" + slug(request.idempotencyKey());
+        // P0 串户修复：与账单主键口径一致，slug 纳入 merchant_id（否则 bill_id 外键悬空 / 跨租户行撞键）。
+        String scopedSlug = slug(requireText(request.merchantId(), "merchant_id") + "_" + request.idempotencyKey());
+        String billId = "mbill_" + scopedSlug;
         List<MerchantBillLineRequest> lineRequests = request.lines();
         List<MerchantBillLineRecord> result = new ArrayList<>();
         for (int i = 0; i < lineRequests.size(); i++) {
             MerchantBillLineRequest line = lineRequests.get(i);
             result.add(new MerchantBillLineRecord(
-                    "mbill_line_" + slug(request.idempotencyKey()) + "_" + i,
+                    "mbill_line_" + scopedSlug + "_" + i,
                     billId,
                     normalizeAllowed(line.feeType(), "fee_type", FEE_TYPES),
                     requireText(line.description(), "description"),

@@ -29,6 +29,14 @@ public interface BarRepository {
 
     Optional<BarReservationRecord> findReservationById(String id);
 
+    /**
+     * 卡座免通票入场名额核销前锁定 reservation 行，保证并发工作手机不会同时读到相同剩余额度。
+     * 内存实现可退化为普通查询；JDBC 实现必须 SELECT ... FOR UPDATE。
+     */
+    default Optional<BarReservationRecord> findReservationByIdForUpdate(String id) {
+        return findReservationById(id);
+    }
+
     /** R5 T16：保存订台定金规则。 */
     default BarDepositRuleRecord saveDepositRule(BarDepositRuleRecord rule) {
         return rule;
@@ -111,6 +119,15 @@ public interface BarRepository {
 
     Optional<BarBillRecord> findBillById(String id);
 
+    // 2c-2：行锁读取账单（settle/commission 序列化防 TOCTOU）。
+    Optional<BarBillRecord> findBillByIdForUpdate(String id);
+
+    // 2c-2：按 bill_id 查已有提成计算（计提查重守卫）。
+    Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId);
+
+    // 2c-3 reopen 冲正：把账单现有结算流水标 reversed（聚合排除，防反结→重结双计）。返回受影响行数。
+    int markBillSettlementsReversed(String billId);
+
     BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment);
 
     List<BarBillAdjustmentRecord> listBillAdjustments(String billId);
@@ -122,6 +139,9 @@ public interface BarRepository {
     BarCommissionCalculationRecord saveCommissionCalculation(BarCommissionCalculationRecord calculation);
 
     BarTableSessionRecord saveTableSession(BarTableSessionRecord session);
+
+    // 2c-5 卡座并发：DB 级乐观锁 CAS（WHERE session_version = expected）。返回 false=版本被并发改动。
+    boolean updateTableSessionIfVersionMatches(BarTableSessionRecord session, long expectedVersion);
 
     List<BarTableSessionRecord> listTableSessions(Optional<String> merchantScope);
 

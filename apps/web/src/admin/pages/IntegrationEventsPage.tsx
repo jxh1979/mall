@@ -116,29 +116,20 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     }
   }
 
-  // TODO 接口未就绪：后端 IntegrationController 无“轮询校验登记/记录”写接口，
-  // 该动作只是前端的一致性自检快照，不落库。状态标注 not_persisted 避免误判为已留痕。
-  function logPollingCheck() {
+  async function logPollingCheck() {
     if (!pollingNote.trim()) {
       setFormError("轮询校验说明不能为空。");
       return;
     }
-    setFormError("");
-    setGlobalError(null);
-    setActionResult({
-      action: "integration_polling_checked",
-      status: "not_persisted",
-      persistedToBackend: false,
-      note: "后端暂无轮询校验登记接口，本结果仅为前端一致性自检快照，未落库。",
-      audit: "webhook_plus_polling_verified",
-      operatorNote: pollingNote,
-      idempotencyKey: nextKey(),
-      evidenceAttachmentIds: ["att-integration-polling"],
-      checkedEndpoints: ENDPOINTS.map((endpoint) => endpoint.endpoint),
-      pendingCount,
-      sourceCount: ENDPOINTS.length,
-      productionBoundary: "platform_task_status_only_not_supplier_execution",
-    });
+    const request = {
+      idempotency_key: nextKey(),
+      operator_note: pollingNote,
+      evidence_attachment_ids: ["att-integration-polling"],
+      checked_endpoints: ENDPOINTS.map((endpoint) => endpoint.endpoint),
+      pending_count: pendingCount,
+      source_count: ENDPOINTS.length,
+    };
+    await runAction("integration_polling_checked", request, () => api.post("/api/v1/integration/polling-checks", request));
   }
 
   function validateRetry() {
@@ -204,7 +195,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
           <label>{TEXT.compensationNote}<input data-testid="integration-events-compensation-note" value={compensationNote} onChange={(event) => setCompensationNote(event.target.value)} /></label>
         </div>
         <div className="admin-form-row">
-          <button type="button" data-testid="integration-events-log-polling" disabled={busyAction !== ""} onClick={logPollingCheck}>{TEXT.logPolling}</button>
+          <button type="button" data-testid="integration-events-log-polling" disabled={busyAction !== ""} onClick={() => void logPollingCheck()}>{TEXT.logPolling}</button>
           <HighRiskConfirm
             label={TEXT.runRetry}
             impact="将立即触发选中重试任务并更新平台任务状态与审计；仅代表平台侧重试，不等于供应商生产补偿已执行。"

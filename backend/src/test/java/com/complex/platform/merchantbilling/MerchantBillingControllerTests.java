@@ -106,7 +106,7 @@ class MerchantBillingControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -165,7 +165,7 @@ class MerchantBillingControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test

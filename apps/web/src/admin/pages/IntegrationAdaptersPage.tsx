@@ -3,8 +3,9 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, ProviderAdapterRow } from "../types";
+import { PermissionButton } from "../security/Can";
 
-export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<ProviderAdapterRow[]>([]);
   const [credentialRef, setCredentialRef] = React.useState("");
   const [formError, setFormError] = React.useState("");
@@ -41,8 +42,8 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError }
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-form-row">
           <input data-testid="integration-credential-ref" value={credentialRef} onChange={(event) => setCredentialRef(event.target.value)} placeholder="cred://..." />
-          <button type="button" data-testid="integration-save" onClick={() => void saveAdapter()}>保存适配器</button>
-          <button type="button" data-testid="integration-test-mock" onClick={() => void testMock()}>Mock 测试</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.create"]} data-testid="integration-save" onClick={() => void saveAdapter()}>保存适配器</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.test"]} data-testid="integration-test-mock" onClick={() => void testMock()}>Mock 测试</PermissionButton>
         </div>
         {formError ? <div data-testid="integration-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-table-scroll">

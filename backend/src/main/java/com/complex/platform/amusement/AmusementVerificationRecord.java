@@ -15,6 +15,7 @@ public record AmusementVerificationRecord(
         String verificationResult,
         String failureReason,
         List<String> evidenceAttachmentIds,
-        Instant createdAt
+        Instant createdAt,
+        int verifiedPeople
 ) {
 }

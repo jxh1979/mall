@@ -96,6 +96,42 @@ final class JdbcBarBillingRepository {
                 """, Map.of("id", id), rowMapper::mapBill).stream().findFirst();
     }
 
+    // 2c-2 结算/计提行锁：SELECT ... FOR UPDATE 序列化并发 settle/commission，防 TOCTOU 重复结算/重复计提。
+    public Optional<BarBillRecord> findBillByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, bill_no, order_id, bar_id, merchant_id, table_id, reservation_id,
+                       subtotal_amount_cent, discount_amount_cent, deposit_deduct_amount_cent,
+                       payable_amount_cent, paid_amount_cent, currency, payment_status,
+                       settlement_status, sales_staff_id, sales_role_type, created_at, updated_at,
+                       reopened, reopened_by_user_id, reopened_at, reopen_reason, reopen_count, tip_amount_cent
+                  FROM bar_bills
+                 WHERE id = :id
+                 FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapBill).stream().findFirst();
+    }
+
+    // 2c-2 提成防重：按 bill_id 查已有提成计算（calculateCommission 查重守卫用，避免同一账单多幂等键重复计提）。
+    public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) {
+        return jdbcTemplate.query("""
+                SELECT id, bill_id, sales_staff_id, sales_role_type, commission_base_cent,
+                       commission_rate_bp, commission_amount_cent, status, created_at
+                  FROM bar_commission_calculations
+                 WHERE bill_id = :bill_id
+                 ORDER BY created_at ASC, id
+                 LIMIT 1
+                """, Map.of("bill_id", billId), rowMapper::mapCommission).stream().findFirst();
+    }
+
+    // 2c-3 reopen 冲正：把账单现有结算流水标 reversed（聚合侧排除），避免反结→重结被双计。
+    public int markBillSettlementsReversed(String billId) {
+        return jdbcTemplate.update("""
+                UPDATE bar_bill_settlements
+                   SET reversed = TRUE
+                 WHERE bill_id = :bill_id
+                   AND reversed = FALSE
+                """, Map.of("bill_id", billId));
+    }
+
     public BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment) {
         jdbcTemplate.update("""
                 INSERT INTO bar_bill_adjustments (
@@ -270,6 +306,7 @@ final class JdbcBarBillingRepository {
                   JOIN bar_bills b ON b.id = s.bill_id
                  WHERE b.bar_id = :bar_id
                    AND s.cashier_staff_id = :cashier_user_id
+                   AND s.reversed = FALSE
                    AND s.settled_at >= :from_ts AND s.settled_at < :to_ts""" + merchantFilter,
                 new HashMap<>(params.getValues()));
         long cash = ((Number) row.get("cash_cent")).longValue();
@@ -298,6 +335,7 @@ final class JdbcBarBillingRepository {
                        SELECT 1 FROM bar_bill_settlements s
                         WHERE s.bill_id = b.id
                           AND s.cashier_staff_id = :cashier_user_id
+                          AND s.reversed = FALSE
                           AND s.settled_at >= :from_ts AND s.settled_at < :to_ts
                    )""" + merchantFilter,
                 new HashMap<>(params.getValues()), Long.class);

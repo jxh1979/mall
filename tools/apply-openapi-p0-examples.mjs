@@ -9,12 +9,6 @@ const yamlPath = path.join(root, "docs", "openapi", "openapi-p0.yaml");
 const openapi = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
 
 const requestBodyExamples = {
-  OpenAuthTokenRequest: {
-    app_key: "app_meituan_demo",
-    timestamp: 1718179200000,
-    nonce: "n_20260612_000001",
-    signature: "hex_hmac_sha256_signature"
-  },
   Webhook: {
     event_id: "evt_provider_20260612_000001",
     event_type: "payment.paid",

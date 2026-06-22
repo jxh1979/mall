@@ -75,6 +75,8 @@ final class InventoryStockMovementService {
                     Map<String, Object> item = firstItem(actual.items(), "items");
                     String itemId = requireItemText(item, "item_id");
                     String locationId = requireItemText(item, "location_id");
+                    // 盘点期冻结：盘点进行中（counting/reviewing）不得经调整单偷改库存基线（与 stock-in/movement 一致）。
+                    requireNoActiveStocktake(locationId);
                     int quantity = requirePositiveItemQuantity(item, "quantity");
                     String adjustmentType = requireText(actual.adjustmentType(), "adjustment_type");
                     // P1-4: 白名单校验
@@ -112,7 +114,26 @@ final class InventoryStockMovementService {
                         increaseBalance(itemId, locationId, quantity);
                     } else {
                         decreaseBalance(itemId, locationId, quantity);
+                        consumeBatchesFefo(itemId, locationId, quantity);
                     }
+                    // 裁决#7 守恒账本：即时调整改了余额，必须在同事务补写一条 inventory_stock_movements，
+                    // 否则"按流水重建库存"对不平、内部人经调整单报损/盘溢无流水痕迹。
+                    // movement_type = adjustmentType（gain/loss/damage/waste，DB 无 CHECK 约束，取值落在合理集合）；
+                    // gain（增加）→ 目标库位入；loss/damage/waste（减少）→ 源库位出。
+                    boolean adjustmentIncrease = "gain".equals(adjustmentType);
+                    saveMovement(
+                            "movement_" + slug(actual.idempotencyKey() + ":" + itemId + ":adjust"),
+                            adjustmentType,
+                            itemId,
+                            adjustmentIncrease ? null : locationId,
+                            adjustmentIncrease ? locationId : null,
+                            quantity,
+                            "inventory_stock_adjustment",
+                            adjustmentId,
+                            null,
+                            safeList(actual.evidenceAttachmentIds()),
+                            merchantId
+                    );
                     return repository.saveStockAdjustment(new StockAdjustmentRecord(
                             adjustmentId,
                             itemId,
@@ -143,12 +164,24 @@ final class InventoryStockMovementService {
                 () -> {
                     StockInRequest actual = requireRequest(request);
                     String warehouseId = requireText(actual.warehouseId(), "warehouse_id");
+                    requireNoActiveStocktake(warehouseId);
+                    // 2e 进货查验 C9：堵采购旁路——采购类入库必须走 PurchaseRequestService.receive（经供应商资质卡控），
+                    // 不可经通用 stock-in 以 source_type=purchase 绕过资质/查验直接入库不合格品/无证货。
+                    String inboundSourceType = requireText(actual.sourceType(), "source_type");
+                    if (java.util.Set.of("purchase", "procurement", "purchase_request", "purchase_inbound")
+                            .contains(inboundSourceType.toLowerCase(java.util.Locale.ROOT))) {
+                        throw ApiException.badRequest("STOCK_IN_PURCHASE_BYPASS_FORBIDDEN",
+                                "purchase inbound must go through the purchase request receive flow (supplier qualification gate);"
+                                        + " direct stock-in cannot use a purchase source_type");
+                    }
                     String merchantId = authorizationService.currentMerchantScope().orElse(null);
                     StockMovementRecord last = null;
                     for (Map<String, Object> item : requireItems(actual.items(), "items")) {
                         String itemId = requireItemText(item, "item_id");
                         int quantity = requirePositiveItemQuantity(item, "quantity");
                         increaseBalance(itemId, warehouseId, quantity);
+                        createInboundBatch(actual.idempotencyKey(), itemId, warehouseId, quantity, merchantId,
+                                parseOptionalExpireAt(item));
                         last = saveMovement(
                                 "movement_" + slug(actual.idempotencyKey() + ":" + itemId + ":in"),
                                 "inbound",
@@ -185,8 +218,13 @@ final class InventoryStockMovementService {
             int quantity,
             List<String> evidenceAttachmentIds
     ) {
+        // 盘点期冻结：盘点进行中（counting/reviewing）的库房/库位不得经采购到货入库污染盘点基线。
+        requireNoActiveStocktake(warehouseId);
+        requireNoActiveStocktake(locationId);
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         increaseBalance(itemId, locationId, quantity, warehouseId);
+        // 采购到货批次：expire_at 暂由 PurchaseRequestService 侧不带（后续可由采购单行携带增强）。
+        createInboundBatch(idempotencySeed, itemId, locationId, quantity, merchantId, null);
         return saveMovement(
                 "movement_" + slug(idempotencySeed + ":" + itemId + ":purchase_in"),
                 "inbound",
@@ -275,9 +313,11 @@ final class InventoryStockMovementService {
         String targetLocationId = trimToNull(actual.toLocationId());
         if (decreaseSource) {
             requireText(sourceLocationId, "from_location_id");
+            requireNoActiveStocktake(sourceLocationId);
         }
         if (increaseTarget) {
             requireText(targetLocationId, "to_location_id");
+            requireNoActiveStocktake(targetLocationId);
         }
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         StockMovementRecord last = null;
@@ -286,6 +326,7 @@ final class InventoryStockMovementService {
             int quantity = requirePositiveItemQuantity(item, "quantity");
             if (decreaseSource) {
                 decreaseBalance(itemId, sourceLocationId, quantity);
+                consumeBatchesFefo(itemId, sourceLocationId, quantity);
             }
             if (increaseTarget) {
                 increaseBalance(itemId, targetLocationId, quantity);
@@ -355,6 +396,75 @@ final class InventoryStockMovementService {
         int affected = repository.atomicDecreaseStockBalance(itemId, locationId, quantity);
         if (affected == 0) {
             throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
+        }
+    }
+
+    // 2e：入库创建批次行（FEFO 扣减的数据基础，供过期/召回/先进先出追溯）。
+    // expireAt 由入库请求携带（item.expire_at）→ 落 inventory_stock_batches.expire_at，使 FEFO（expire_at ASC NULLS LAST）真正生效；
+    // 缺省 null 时退化按 created_at（FIFO）。supplier 仍缺省 null（后续增强）。
+    private void createInboundBatch(String idSeed, String itemId, String locationId, int quantity,
+            String merchantId, Instant expireAt) {
+        Instant now = Instant.now();
+        repository.saveStockBatch(new InventoryStockBatchRecord(
+                "batch_" + slug(idSeed + ":" + itemId + ":" + locationId),
+                itemId,
+                locationId,
+                "B" + now.toEpochMilli() + "-" + itemId,
+                null,
+                quantity,
+                expireAt,
+                "active",
+                List.of(),
+                now,
+                now,
+                merchantId));
+    }
+
+    // 从入库 item map 读取可选 expire_at（ISO-8601 instant，如 2026-12-31T00:00:00Z）；缺省/非法 → null（退化 FIFO）。
+    private Instant parseOptionalExpireAt(Map<String, Object> item) {
+        Object raw = item == null ? null : item.get("expire_at");
+        if (raw == null || raw.toString().isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(raw.toString().trim());
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    // 2e：出库 FEFO 逐批扣减批次 quantity（先到期先出，涵盖 FIFO）。balance 已权威原子扣减，批次为追溯层；
+    // 历史库存无对应批次（过渡期）时 remaining>0 不阻断出库（balance 是权威，批次缺口仅影响追溯完整性）。
+    private void consumeBatchesFefo(String itemId, String locationId, int quantity) {
+        int remaining = quantity;
+        // 有界重试：每轮按 FEFO 重取活跃批次逐批 CAS 扣减；某批 CAS 失败（并发被改）则下一轮重取最新值再扣，
+        // 避免并发下"扣一遍就放弃"导致批次少扣、与 balance 漂移。本轮无任何成功扣减（无可消费批次）即停。
+        for (int attempt = 0; attempt < 5 && remaining > 0; attempt++) {
+            boolean progressed = false;
+            for (InventoryStockBatchRecord batch : repository.listActiveBatchesForConsumption(itemId, locationId)) {
+                if (remaining <= 0) {
+                    break;
+                }
+                int take = Math.min(remaining, batch.quantity());
+                if (take > 0 && repository.atomicDecreaseBatchQuantity(batch.id(), take) > 0) {
+                    remaining -= take;
+                    progressed = true;
+                }
+            }
+            if (!progressed) {
+                break;
+            }
+        }
+        // remaining>0 仅当无足够 active 批次（历史库存过渡期/批次缺口）：balance 已权威原子扣减，
+        // 批次为追溯辅助层，不阻断出库（既有裁定：balance 权威）。
+    }
+
+    // 2e 盘点冻结：库房存在未关闭盘点单（counting/reviewing）时该库房出入库冻结，避免盘点期间库存变动致差异基线失真。
+    // 参数为出入库 location/warehouse 标识（库房级库存 location 即 warehouse_id；子库位/消费点不命中库房盘点，不误冻结）。
+    private void requireNoActiveStocktake(String warehouseOrLocationId) {
+        if (warehouseOrLocationId != null && repository.hasActiveStocktakeForWarehouse(warehouseOrLocationId)) {
+            throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED",
+                    "warehouse has an active stocktake; stock movements are frozen until it closes");
         }
     }
 

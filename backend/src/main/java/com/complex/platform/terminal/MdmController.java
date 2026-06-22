@@ -35,6 +35,10 @@ public class MdmController {
     @GetMapping("/app-whitelist")
     public ApiResponse<PageResponse<MdmAppWhitelistRecord>> listAppWhitelist() {
         authorizationService.requirePermission("mdm.policy.manage");
+        // F-CROSS-02 最小收口：MDM 白名单是平台级清单（mdm_app_whitelist 仅 global/project/device_model scope，
+        // 无 merchant_id 列；权限 mdm.policy.manage domain=terminal 仅授 platform_admin）。fail-closed 拒绝
+        // merchant-scoped 主体读取，防"权限被下放给商户角色即可读全平台白名单"。
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listAppWhitelist());
     }
 
@@ -44,6 +48,8 @@ public class MdmController {
             @RequestBody MdmAppWhitelistRequest request
     ) {
         authorizationService.requirePermission("mdm.policy.manage");
+        // F-CROSS-02 最小收口：白名单平台级，fail-closed 拒绝 merchant-scoped 主体写入，防跨商户篡改/覆盖。
+        authorizationService.requirePlatformScope();
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.upsertAppWhitelist(id, request));
     }
@@ -51,6 +57,8 @@ public class MdmController {
     @GetMapping("/site-whitelist")
     public ApiResponse<PageResponse<MdmSiteWhitelistRecord>> listSiteWhitelist() {
         authorizationService.requirePermission("mdm.policy.manage");
+        // F-CROSS-02 最小收口：白名单平台级，fail-closed 拒绝 merchant-scoped 主体读取。
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listSiteWhitelist());
     }
 
@@ -60,6 +68,8 @@ public class MdmController {
             @RequestBody MdmSiteWhitelistRequest request
     ) {
         authorizationService.requirePermission("mdm.policy.manage");
+        // F-CROSS-02 最小收口：白名单平台级，fail-closed 拒绝 merchant-scoped 主体写入，防跨商户篡改/覆盖。
+        authorizationService.requirePlatformScope();
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.upsertSiteWhitelist(id, request));
     }

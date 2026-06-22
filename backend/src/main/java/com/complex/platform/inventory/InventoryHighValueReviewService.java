@@ -204,6 +204,38 @@ public class InventoryHighValueReviewService {
             if (affected == 0) {
                 throw ApiException.conflict("STOCK_INSUFFICIENT", "available stock is insufficient");
             }
+            // 2e：高价值复核 approve 扣减（报损/盘点差异）也 FEFO 逐批扣批次 quantity，与 stock-movement 出库口径一致。
+            int remaining = adjustment.quantity();
+            for (InventoryStockBatchRecord batch : repository.listActiveBatchesForConsumption(
+                    adjustment.itemId(), adjustment.locationId())) {
+                if (remaining <= 0) {
+                    break;
+                }
+                int take = Math.min(remaining, batch.quantity());
+                if (repository.atomicDecreaseBatchQuantity(batch.id(), take) > 0) {
+                    remaining -= take;
+                }
+            }
+            // 裁决#7 守恒账本：高价值报损/盘点差异 approve 时才真正扣减余额，必须在同事务（@Transactional review）
+            // 补写一条 inventory_stock_movements，否则此前 pending_review 阶段未写、approve 落账亦无流水，
+            // "按流水重建库存"将缺这笔核减、内部人高价值报损无痕迹。
+            // movement_type 忠实取 adjustment_type（报损族 loss/damage/waste、盘点差异 count_correction，均为减少 → 源库位出）。
+            repository.saveStockMovement(new StockMovementRecord(
+                    "movement_" + slug(adjustment.id() + ":hv_approve"),
+                    adjustment.adjustmentType(),
+                    adjustment.itemId(),
+                    adjustment.locationId(),
+                    null,
+                    adjustment.quantity(),
+                    "inventory_stock_adjustment",
+                    adjustment.id(),
+                    null,
+                    null,
+                    adjustment.evidenceAttachmentIds(),
+                    "completed",
+                    Instant.now(),
+                    adjustment.merchantId()
+            ));
             repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "completed"));
         }
     }

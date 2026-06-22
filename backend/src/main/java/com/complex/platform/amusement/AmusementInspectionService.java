@@ -163,6 +163,9 @@ final class AmusementInspectionService {
         String projectId = requireText(actual.projectId(), "project_id");
         repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
+        // P1 越权修复：创建巡检此前唯独漏 checkProjectOwnership（submit/rectify/recheck 均有），
+        // 可对他商户项目造巡检并经 evaluateOpenEligibility 干预其开放状态。
+        checkProjectOwnership(projectId);
         String templateId = trimToNull(actual.templateId());
         if (templateId != null) {
             repository.findSafetyTemplateById(templateId)
@@ -172,6 +175,20 @@ final class AmusementInspectionService {
             throw ApiException.badRequest("VALIDATION_FAILED", "items is required");
         }
         String overall = enumOrDefault(actual.overallResult(), "pending_rectification", OVERALL_RESULTS, "overall_result");
+        // 2b 防伪造 pass：overall=pass 不可由请求方凭空指定开放高风险设备——
+        // (1) 任一检查项 result=fail 时与项级结论矛盾，不得判 pass；(2) pass 必须有证据（必拍）。
+        if ("pass".equals(overall)) {
+            boolean anyItemFailed = actual.items().stream()
+                    .anyMatch(item -> item != null && "fail".equals(String.valueOf(item.get("result"))));
+            if (anyItemFailed) {
+                throw ApiException.conflict("SAFETY_INSPECTION_PASS_CONFLICTS_ITEMS",
+                        "overall_result cannot be pass when any inspection item result is fail");
+            }
+            if (actual.evidenceAttachmentIds() == null || actual.evidenceAttachmentIds().isEmpty()) {
+                throw ApiException.badRequest("SAFETY_INSPECTION_EVIDENCE_REQUIRED",
+                        "pass inspection requires evidence attachments");
+            }
+        }
         Instant now = Instant.now();
         // V114 结构化补强：巡检人结构化落库；inspection_result 直接派生自 overall_result（同枚举域，便于看板/审计读结构化字段）；
         // 异常标记：overall 非 pass 即异常，abnormal_note 取请求填报。
@@ -179,6 +196,7 @@ final class AmusementInspectionService {
         return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 "inspection_" + slug(actual.idempotencyKey()),
                 projectId,
+                trimToNull(actual.deviceId()),
                 templateId,
                 List.copyOf(actual.items()),
                 overall,
@@ -219,9 +237,10 @@ final class AmusementInspectionService {
                 now
         ));
         boolean blocked = "fail".equals(existing.overallResult()) || "pending_rectification".equals(existing.overallResult());
-        return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
+        AmusementSafetyInspectionRecord saved = repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 existing.id(),
                 existing.projectId(),
+                existing.deviceId(),
                 existing.templateId(),
                 existing.items(),
                 existing.overallResult(),
@@ -241,6 +260,24 @@ final class AmusementInspectionService {
                 existing.abnormalFound(),
                 existing.abnormalNote()
         ));
+        // F-OPS-04：巡检 PASS 提交即生效，刷新设备最近 PASS 巡检时间，供核销有效期校验（过期则阻断核销）。
+        if ("pass".equals(existing.overallResult())) {
+            refreshDeviceLastPass(existing.projectId(), existing.deviceId(), existing.inspectedAt());
+        }
+        return saved;
+    }
+
+    /**
+     * F-OPS-04：巡检 PASS 生效时刷新设备最近 PASS 巡检时间。设备级巡检（device_id 非空）刷新单设备，
+     * 项目级巡检（device_id 空）覆盖刷新该项目全部设备；inspectedAt 为空回退当前时刻。
+     */
+    private void refreshDeviceLastPass(String projectId, String deviceId, Instant inspectedAt) {
+        Instant at = inspectedAt == null ? Instant.now() : inspectedAt;
+        if (deviceId != null && !deviceId.isBlank()) {
+            repository.updateDeviceLastPassInspection(projectId, deviceId, at);
+        } else {
+            repository.updateProjectDevicesLastPass(projectId, at);
+        }
     }
 
     private AmusementSafetyInspectionRecord rectifySafetyInspectionInternal(String inspectionId, AmusementSafetyActionRequest request) {
@@ -264,6 +301,7 @@ final class AmusementInspectionService {
         return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 existing.id(),
                 existing.projectId(),
+                existing.deviceId(),
                 existing.templateId(),
                 existing.items(),
                 existing.overallResult(),
@@ -296,6 +334,14 @@ final class AmusementInspectionService {
         if (!"submitted".equals(existing.rectificationStatus())) {
             throw ApiException.conflict("RECTIFICATION_NOT_SUBMITTED", "rectification must be submitted before recheck");
         }
+        // 2b 防伪造 pass（与 submit 路径一致）：复检判 pass 翻转 overallResult、解锁恢复营业，必须有影像证据留痕，
+        // 不得凭空空证据复检通过开放高风险设备。证据可经动作附件或巡检证据任一提供。
+        if ("pass".equals(result)
+                && (actual.attachmentIds() == null || actual.attachmentIds().isEmpty())
+                && (actual.evidenceAttachmentIds() == null || actual.evidenceAttachmentIds().isEmpty())) {
+            throw ApiException.badRequest("SAFETY_INSPECTION_EVIDENCE_REQUIRED",
+                    "pass recheck requires evidence attachments");
+        }
         Instant now = Instant.now();
         repository.saveSafetyAction(new AmusementSafetyActionRecord(
                 "safety_action_" + slug(actual.idempotencyKey()),
@@ -309,6 +355,7 @@ final class AmusementInspectionService {
         return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 existing.id(),
                 existing.projectId(),
+                existing.deviceId(),
                 existing.templateId(),
                 existing.items(),
                 result,
@@ -346,9 +393,10 @@ final class AmusementInspectionService {
         // 取舍：安全巡检审批是独立恢复路径（无需依赖独立检修单也能恢复），故对 maintenance 与 closed 均尝试恢复；
         // 项目已处运营态（open/paused）则不强翻——避免与暂停线/检修线冲突（paused 为人工暂停，不由巡检审批顶替）。
         reopenProjectIfBlocked(existing.projectId());
-        return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
+        AmusementSafetyInspectionRecord saved = repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 existing.id(),
                 existing.projectId(),
+                existing.deviceId(),
                 existing.templateId(),
                 existing.items(),
                 existing.overallResult(),
@@ -368,6 +416,9 @@ final class AmusementInspectionService {
                 existing.abnormalFound(),
                 existing.abnormalNote()
         ));
+        // F-OPS-04：批准恢复营业即巡检 PASS 生效（前置已校验 overall=pass），刷新设备最近 PASS 巡检时间。
+        refreshDeviceLastPass(existing.projectId(), existing.deviceId(), existing.inspectedAt());
+        return saved;
     }
 
     /**

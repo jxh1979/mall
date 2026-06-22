@@ -14,6 +14,9 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.entry.FaceVerificationPort;
+import com.complex.platform.entry.FaceVerificationResult;
+import com.complex.platform.entry.FaceVerificationRouter;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.TraceabilityRepository;
@@ -25,6 +28,7 @@ import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -56,7 +60,8 @@ class BarServiceTests {
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
-        BarEntryService entryService = new BarEntryService(barRepository, authorizationService, auditEventService);
+        BarEntryService entryService = new BarEntryService(
+                barRepository, authorizationService, auditEventService, FaceVerificationRouter.alwaysDisabled());
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
@@ -109,6 +114,25 @@ class BarServiceTests {
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void settleBillRejectsWhenBelowTableMinimumConsumption() {
+        // 2c-1 低消硬阻断：桌低消 50000（createReservation helper 内建），消费仅 10000 → 结算被拒。
+        BarReservationRecord reservation = createReservation("mincon", "bar_1", 2);
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-mincon", "create product", List.of(), "bar_1", "Soda", "spirit",
+                10000L, null, null, "active", null, null, false));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-mincon", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), "staff_sales", List.of(), "offline"));
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-mincon", "create bill", List.of(), "offline", false, 0));
+
+        assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-mincon", "settle", List.of(), "pay_m", bill.payableAmountCent(), "aggregate_pay")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("BAR_MIN_CONSUMPTION_NOT_MET");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -260,6 +284,65 @@ class BarServiceTests {
     // ─────────────────────────────────────────────────────────────────────────
     // Existing tests — preserved intact with updated assertions
     // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void verifyReservationEntryAllowanceDoesNotConsumeQuotaAndReportsRemaining() {
+        BarReservationRecord reservation = createReservation("reservation-verify", "bar_1", 1);
+
+        BarReservationEntryAllowanceVerificationRecord verified = service.verifyReservationEntryAllowance(
+                reservation.id(),
+                verification("verify-1", "guest_1", "bar_1")
+        );
+
+        assertThat(verified.allowed()).isTrue();
+        assertThat(verified.reasonCode()).isEqualTo("allowed");
+        assertThat(verified.checkedInCount()).isZero();
+        assertThat(verified.remainingGuestCount()).isEqualTo(1);
+        assertThat(barRepository.guestCheckins).isEmpty();
+        assertThat(barRepository.lockedReservations).isEmpty();
+    }
+
+    @Test
+    void verifyReservationEntryAllowanceRejectsWrongBarCancelledAndExhaustedWithoutConsuming() {
+        BarReservationRecord reservation = createReservation("reservation-denied", "bar_1", 1);
+
+        BarReservationEntryAllowanceVerificationRecord wrongBar = service.verifyReservationEntryAllowance(
+                reservation.id(),
+                verification("verify-wrong-bar", "guest_1", "bar_2")
+        );
+        assertThat(wrongBar.allowed()).isFalse();
+        assertThat(wrongBar.reasonCode()).isEqualTo("BAR_SCOPE_MISMATCH");
+
+        service.checkInReservationGuest(reservation.id(), verification("checkin-quota", "guest_1", "bar_1"));
+        BarReservationEntryAllowanceVerificationRecord exhausted = service.verifyReservationEntryAllowance(
+                reservation.id(),
+                verification("verify-exhausted", "guest_2", "bar_1")
+        );
+        assertThat(exhausted.allowed()).isFalse();
+        assertThat(exhausted.reasonCode()).isEqualTo("FREE_GUEST_QUOTA_EXHAUSTED");
+        assertThat(exhausted.remainingGuestCount()).isZero();
+
+        BarReservationRecord cancelled = barRepository.saveReservation(new BarReservationRecord(
+                "reservation_cancelled", "bar_1", null, "table_1", "customer_1", Instant.now(),
+                1, 1, 0L, "not_required", "staff", null, "cancelled", "web", null,
+                List.of(), Instant.now(), Instant.now(), null));
+        BarReservationEntryAllowanceVerificationRecord cancelledResult = service.verifyReservationEntryAllowance(
+                cancelled.id(),
+                verification("verify-cancelled", "guest_3", "bar_1")
+        );
+        assertThat(cancelledResult.allowed()).isFalse();
+        assertThat(cancelledResult.reasonCode()).isEqualTo("BAR_RESERVATION_NOT_CHECKINABLE");
+        assertThat(barRepository.guestCheckins).hasSize(1);
+    }
+
+    @Test
+    void checkInLocksReservationBeforeConsumingFreeGuestQuota() {
+        BarReservationRecord reservation = createReservation("reservation-lock", "bar_1", 1);
+
+        service.checkInReservationGuest(reservation.id(), verification("checkin-lock", "guest_1", "bar_1"));
+
+        assertThat(barRepository.lockedReservations).contains(reservation.id());
+    }
 
     @Test
     void checkInConsumesOnlyReservationFreeGuestQuotaAndRejectsExhaustion() {
@@ -471,6 +554,19 @@ class BarServiceTests {
                 new CommissionCalculateRequest("commission-payable-1", bill.id(), true, false));
         // A5(REQ-26b 增强)：销售提成贯通 finance 应付台账
         assertThat(receivableLedgerService.commissionPayables).isNotEmpty();
+    }
+
+    @Test
+    void calculateCommissionIsIdempotentPerBillAndDoesNotDoublePostPayable() {
+        // 2c-2 提成防重：同一账单不同幂等键重复计提 → 返回首次结果，不重复建提成、不重复过账 finance 应付。
+        BarBillRecord bill = billForOrder("commission-dup", "staff_sales");
+        BarCommissionCalculationRecord first = service.calculateCommission(bill.id(),
+                new CommissionCalculateRequest("commission-dup-1", bill.id(), true, false));
+        int payablesAfterFirst = receivableLedgerService.commissionPayables.size();
+        BarCommissionCalculationRecord second = service.calculateCommission(bill.id(),
+                new CommissionCalculateRequest("commission-dup-2", bill.id(), true, false));
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(receivableLedgerService.commissionPayables).hasSize(payablesAfterFirst);
     }
 
     @Test
@@ -948,6 +1044,24 @@ class BarServiceTests {
                         PaymentIntentRecord::status
                 )
                 .containsExactly("bar_bill", bill.id(), bill.payableAmountCent(), "aggregate_pay", "created");
+    }
+
+    @Test
+    void barBillPayIntentRejectsUnknownPaymentChannel() {
+        BarBillRecord bill = billForOrder("pay-intent-bad-channel", "staff_sales");
+
+        assertThatThrownBy(() -> service.createBillPayIntent(bill.id(), new PaymentIntentRequest(
+                "pay-intent-bad-channel",
+                "create intent",
+                List.of(),
+                "bar_bill",
+                bill.id(),
+                bill.payableAmountCent(),
+                "CNY",
+                "unsupported_gateway"
+        )))
+                .isInstanceOf(ApiException.class)
+                .hasFieldOrPropertyWithValue("code", "VALIDATION_FAILED");
     }
 
     @Test
@@ -1733,7 +1847,9 @@ class BarServiceTests {
     }
 
     @Test
-    void ageVerificationStoresAdapterBoundaryResultAndEvidence() {
+    void ageVerificationInheritsEntryGateExemptionAndIgnoresClientSelfReport() {
+        // P0-5 / X-03：客户端自报 result=failed / review_status=manual_review 不再被采信；
+        // 本期人脸闸默认关 → 继承入场闸豁免、非阻塞放行，标注 provider_code=entry_gate_exempt（证据仍留存）。
         BarAgeVerificationRecord record = service.createAgeVerification(new VerificationRequest(
                 "age-check",
                 "provider_result",
@@ -1750,10 +1866,36 @@ class BarServiceTests {
                         BarAgeVerificationRecord::reviewStatus,
                         BarAgeVerificationRecord::evidenceAttachmentIds
                 )
-                .containsExactly("failed", "placeholder", "manual_review", List.of("att_1"));
+                .containsExactly("passed", "entry_gate_exempt", "accepted", List.of("att_1"));
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("bar.age_verification.rejected");
+                .contains("bar.age_verification.passed");
+    }
+
+    @Test
+    void ageVerificationRejectsWhenEntryFaceGateFailsClosed() {
+        // 真实接入后人脸闸 fail-closed（未通过 / 未成年）→ bar 售酒继承拒绝结论（即便客户端自报 passed）。
+        FaceVerificationPort failingGate =
+                request -> FaceVerificationResult.failed("provider_x", "underage", "identity under 18");
+        BarEntryService failClosedEntry = new BarEntryService(
+                barRepository, authorizationService, new AuditEventService(auditEventRepository), failingGate);
+
+        BarAgeVerificationRecord record = failClosedEntry.createAgeVerification(new VerificationRequest(
+                "age-check-fail",
+                "provider_result",
+                "face-session-2",
+                "device_age_2",
+                "bar_1",
+                Map.of("result", "passed", "evidence_attachment_ids", List.of("att_2"))
+        ));
+
+        assertThat(record)
+                .extracting(
+                        BarAgeVerificationRecord::result,
+                        BarAgeVerificationRecord::providerCode,
+                        BarAgeVerificationRecord::reviewStatus
+                )
+                .containsExactly("rejected", "face_inherited", "rejected");
     }
 
     @Test
@@ -1872,6 +2014,7 @@ class BarServiceTests {
     void renewTableSessionAppendsRenewalAdjustmentAndIncrementsVersion() {
         BarTableRecord table = createTable("renew", "bar_1", "active", 50000L);
         BarTableSessionRecord session = createSession("renew", table.id(), "bar_1", "merchant_1");
+        Instant renewedUntil = Instant.now().plus(Duration.ofHours(6));
 
         BarTableSessionAdjustmentRecord adjustment = service.renewTableSession(
                 session.id(),
@@ -1879,7 +2022,7 @@ class BarServiceTests {
                         "renew-once",
                         "guest extends time",
                         List.of("att_renew"),
-                        Instant.parse("2026-06-21T02:00:00Z"),
+                        renewedUntil,
                         20000L,
                         0L,
                         1000L,
@@ -1896,7 +2039,7 @@ class BarServiceTests {
                         BarTableSessionAdjustmentRecord::additionalMinConsumptionCent,
                         BarTableSessionAdjustmentRecord::additionalServiceFeeCent
                 )
-                .containsExactly("renew", Instant.parse("2026-06-21T02:00:00Z"), 20000L, 1000L);
+                .containsExactly("renew", renewedUntil, 20000L, 1000L);
         assertThat(barRepository.findTableSessionById(session.id()))
                 .get()
                 .extracting(BarTableSessionRecord::sessionVersion, BarTableSessionRecord::status)
@@ -2549,6 +2692,17 @@ class BarServiceTests {
     }
 
     @Test
+    void closeShiftRejectsHandoverToOutgoingCashierSelf() {
+        // F-OPS-06：现金钱箱交接必须移交他人；交接给本班收银员自己 = 伪交接规避对账责任，拒绝。
+        BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
+                "open-self", "bar_1", "cashier_self", null, 0L, 0L, null));
+        assertThatThrownBy(() -> service.closeShift(shift.id(), new BarShiftCloseRequest(
+                "close-self", 0L, "cashier_self", null)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("BAR_SHIFT_HANDOVER_TO_SELF"));
+    }
+
+    @Test
     void closeShiftAggregatesRefundWithinWindow() {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
                 "open-refund", "bar_1", "cashier_refund", null, 0L, 0L, null));
@@ -2684,6 +2838,7 @@ class BarServiceTests {
         private final Map<String, BarTableSessionRecord> tableSessions = new LinkedHashMap<>();
         private final List<BarTableSessionAdjustmentRecord> tableSessionAdjustments = new ArrayList<>();
         private final List<BarTableGuestCheckinRecord> guestCheckins = new ArrayList<>();
+        private final List<String> lockedReservations = new ArrayList<>();
         private final List<BarProductionTicketRecord> productionTickets = new ArrayList<>();
         private final List<BarProductionTicketEventRecord> productionTicketEvents = new ArrayList<>();
         private final List<BarCommissionCalculationRecord> commissions = new ArrayList<>();
@@ -2728,6 +2883,12 @@ class BarServiceTests {
         @Override
         public Optional<BarReservationRecord> findReservationById(String id) {
             return Optional.ofNullable(reservations.get(id));
+        }
+
+        @Override
+        public Optional<BarReservationRecord> findReservationByIdForUpdate(String id) {
+            lockedReservations.add(id);
+            return findReservationById(id);
         }
 
         @Override
@@ -2893,6 +3054,16 @@ class BarServiceTests {
         }
 
         @Override
+        public Optional<BarBillRecord> findBillByIdForUpdate(String id) {
+            return Optional.ofNullable(bills.get(id));
+        }
+
+        @Override
+        public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) {
+            return commissions.stream().filter(c -> billId.equals(c.billId())).findFirst();
+        }
+
+        @Override
         public BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment) {
             billAdjustments.add(adjustment);
             return adjustment;
@@ -2933,6 +3104,11 @@ class BarServiceTests {
         @Override
         public List<BarBillSettlementRecord> listBillSettlements(String billId) {
             return billSettlements.stream().filter(s -> billId.equals(s.billId())).toList();
+        }
+
+        @Override
+        public int markBillSettlementsReversed(String billId) {
+            return (int) billSettlements.stream().filter(s -> billId.equals(s.billId())).count();
         }
 
         @Override
@@ -3038,6 +3214,16 @@ class BarServiceTests {
         public BarTableSessionRecord saveTableSession(BarTableSessionRecord session) {
             tableSessions.put(session.id(), session);
             return session;
+        }
+
+        @Override
+        public boolean updateTableSessionIfVersionMatches(BarTableSessionRecord session, long expectedVersion) {
+            BarTableSessionRecord current = tableSessions.get(session.id());
+            if (current == null || current.sessionVersion() != expectedVersion) {
+                return false;
+            }
+            tableSessions.put(session.id(), session);
+            return true;
         }
 
         @Override

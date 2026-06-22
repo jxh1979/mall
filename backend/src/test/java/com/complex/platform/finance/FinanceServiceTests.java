@@ -123,6 +123,40 @@ class FinanceServiceTests {
     }
 
     @Test
+    void createPayableItemAcceptsEmployeeCommissionSourceForBarSeatCommission() {
+        ArApItemRecord created = service.createArApItem(new ArApItemRequest(
+                "arap-employee-commission-source",
+                "bar table commission payable",
+                List.of("att_commission"),
+                "payable",
+                "staff_sales_001",
+                "employee_commission",
+                "commission_001",
+                19320L,
+                LocalDate.parse("2026-06-30"),
+                "2026-06"
+        ));
+
+        assertThat(created)
+                .extracting(
+                        ArApItemRecord::direction,
+                        ArApItemRecord::sourceType,
+                        ArApItemRecord::sourceId,
+                        ArApItemRecord::amountCent,
+                        ArApItemRecord::status
+                )
+                .containsExactly("payable", "employee_commission", "commission_001", 19320L, "pending_payment");
+        assertThat(financeRepository.arApItemSources.values())
+                .extracting(
+                        ArApItemSourceRecord::arApItemId,
+                        ArApItemSourceRecord::sourceType,
+                        ArApItemSourceRecord::sourceId,
+                        ArApItemSourceRecord::amountCent
+                )
+                .containsExactly(tuple(created.id(), "employee_commission", "commission_001", 19320L));
+    }
+
+    @Test
     void duplicateIdempotencyKeyDoesNotCreateDuplicateItem() {
         ArApItemRequest request = itemRequest("arap-idempotent", "payable", 88000L);
 
@@ -189,7 +223,7 @@ class FinanceServiceTests {
                 "project_audit_1",
                 false
         ));
-        service.createPaymentIntent(new PaymentIntentRequest(
+        PaymentIntentRecord auditIntent = service.createPaymentIntent(new PaymentIntentRequest(
                 "payment-intent-audit",
                 "create",
                 List.of(),
@@ -199,11 +233,12 @@ class FinanceServiceTests {
                 "CNY",
                 "mock"
         ));
-        service.confirmOfflinePayment("payment_intent_1", new OfflinePaymentConfirmRequest(
+        // 2d-2：confirmOffline 现要求关联真实支付意图且金额一致 → 用 createPaymentIntent 返回的 id 与金额。
+        service.confirmOfflinePayment(auditIntent.id(), new OfflinePaymentConfirmRequest(
                 "offline-confirm-audit",
                 "confirm",
                 List.of("attachment_1"),
-                "payment_intent_1",
+                auditIntent.id(),
                 128800L,
                 "cash",
                 Instant.parse("2026-06-14T00:05:00Z")
@@ -227,6 +262,86 @@ class FinanceServiceTests {
                         "finance_offline_payment.confirmed",
                         "finance_refund.created"
                 );
+    }
+
+    @Test
+    void confirmOfflineWithArApItemWritesBackLedger() {
+        // F1 财务统一台账：线下确认收款关联应收台账项 → 同事务回写 ar_ap（paid/unpaid/status）+ 登记 payment。
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-f1-offline", "receivable", 50000L));
+        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().unpaidAmountCent()).isEqualTo(50000L);
+        PaymentIntentRecord intent = service.createPaymentIntent(new PaymentIntentRequest(
+                "payment-intent-f1", "create", List.of(), "ar_ap_item", item.id(), 50000L, "CNY", "mock"));
+
+        service.confirmOfflinePayment(intent.id(), new OfflinePaymentConfirmRequest(
+                "offline-confirm-f1",
+                "confirm",
+                List.of("attachment_f1"),
+                intent.id(),
+                50000L,
+                "cash",
+                Instant.parse("2026-06-14T00:05:00Z"),
+                item.id()));
+
+        ArApItemRecord settled = financeRepository.findArApItemById(item.id()).orElseThrow();
+        assertThat(settled.paidAmountCent()).isEqualTo(50000L);
+        assertThat(settled.unpaidAmountCent()).isEqualTo(0L);
+        assertThat(settled.status()).isEqualTo("settled");
+    }
+
+    @Test
+    void paymentIntentSucceededRecordsInternalAccountingLedger() {
+        // F2：支付意图确认成功 → 生成 direction=internal_accounting 内部核算台账（幂等、settled、不并入 net）。
+        PaymentIntentRecord intent = service.createPaymentIntent(new PaymentIntentRequest(
+                "payment-intent-f2", "create", List.of(), "ticket_order", "order_f2_1", 80000L, "CNY", "mock"));
+        service.markPaymentIntentSucceeded(intent.id());
+
+        ArApItemRecord internal = financeRepository.listArApItems().stream()
+                .filter(i -> "internal_accounting".equals(i.direction()) && "order_f2_1".equals(i.sourceId()))
+                .findFirst().orElseThrow();
+        assertThat(internal.paidAmountCent()).isEqualTo(80000L);
+        assertThat(internal.unpaidAmountCent()).isEqualTo(0L);
+        assertThat(internal.status()).isEqualTo("settled");
+
+        // 幂等：再次确认（已 succeeded 早返回）不新增。
+        int countBefore = (int) financeRepository.listArApItems().stream()
+                .filter(i -> "internal_accounting".equals(i.direction())).count();
+        service.markPaymentIntentSucceeded(intent.id());
+        int countAfter = (int) financeRepository.listArApItems().stream()
+                .filter(i -> "internal_accounting".equals(i.direction())).count();
+        assertThat(countAfter).isEqualTo(countBefore);
+    }
+
+    @Test
+    void internalAccountingLedgerKeyedPerPaymentIntentNotPerBusinessOrder() {
+        // 回归：同一 businessOrderId（如储值充值的 customerId）的两笔支付意图必须各生成独立内部核算台账，
+        // 不被 ON CONFLICT DO UPDATE 覆盖（修正 id 仅按 type+businessOrderId 派生导致的少计）。
+        PaymentIntentRecord first = service.createPaymentIntent(new PaymentIntentRequest(
+                "intent-dup-1", "create", List.of(), "stored_value_topup", "customer_dup", 10000L, "CNY", "mock"));
+        PaymentIntentRecord second = service.createPaymentIntent(new PaymentIntentRequest(
+                "intent-dup-2", "create", List.of(), "stored_value_topup", "customer_dup", 20000L, "CNY", "mock"));
+        service.markPaymentIntentSucceeded(first.id());
+        service.markPaymentIntentSucceeded(second.id());
+
+        long count = financeRepository.listArApItems().stream()
+                .filter(i -> "internal_accounting".equals(i.direction()) && "customer_dup".equals(i.sourceId()))
+                .count();
+        assertThat(count).isEqualTo(2L); // 两笔独立归集，未被覆盖
+        long total = financeRepository.listArApItems().stream()
+                .filter(i -> "internal_accounting".equals(i.direction()) && "customer_dup".equals(i.sourceId()))
+                .mapToLong(ArApItemRecord::amountCent).sum();
+        assertThat(total).isEqualTo(30000L);
+    }
+
+    @Test
+    void confirmOfflineWithoutArApItemLeavesLedgerUntouched() {
+        // 向后兼容：不带 arApItemId 的纯平台收款确认不创建/不回写任何 ar_ap 台账。
+        PaymentIntentRecord intent = service.createPaymentIntent(new PaymentIntentRequest(
+                "payment-intent-f1b", "create", List.of(), "ticket_order", "order_f1b", 30000L, "CNY", "mock"));
+        int before = financeRepository.arApPaymentCount();
+        service.confirmOfflinePayment(intent.id(), new OfflinePaymentConfirmRequest(
+                "offline-confirm-f1b", "confirm", List.of(), intent.id(), 30000L, "cash",
+                Instant.parse("2026-06-14T00:05:00Z")));
+        assertThat(financeRepository.arApPaymentCount()).isEqualTo(before);
     }
 
     @Test
@@ -543,6 +658,17 @@ class FinanceServiceTests {
         // device 上下文缺失（PaymentIntentRequest 无 device_id）→ 门控安全跳过。
         org.mockito.Mockito.verify(mdmService, org.mockito.Mockito.never())
                 .requireManagedForHighRiskAction(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void createPaymentIntentRejectsUnknownChannel() {
+        FinanceService svc = financeWithGatewaySwitch(false);
+
+        assertThatThrownBy(() -> svc.createPaymentIntent(new PaymentIntentRequest(
+                "pi-bad-channel", "create", List.of(), "ticket_order", "order_bad_channel",
+                5000L, "CNY", "unsupported_gateway")))
+                .isInstanceOf(ApiException.class)
+                .hasFieldOrPropertyWithValue("code", "VALIDATION_FAILED");
     }
 
     // ─── 跨模块闭环②a：deviceId 真实启用门控（现场/工作机发起携带 device_id） ───────────────
@@ -883,6 +1009,8 @@ class FinanceServiceTests {
                 "adj-req-1", "backfill", List.of(), item.id(), 5000L, "late invoice"));
         assertThat(requested.approvalStatus()).isEqualTo("pending");
 
+        // P0 B-01 职责分离：审批人必须不同于发起人。
+        stubActor("staff_finance_supervisor");
         // 审批通过：金额变动入账。
         ArApAdjustmentRecord approved = service.approveAdjustment(requested.id(),
                 new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-1", "ok", List.of(), "approve"));
@@ -890,6 +1018,29 @@ class FinanceServiceTests {
         assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(105000L);
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
                 .contains("finance.locked_backfill_requested", "finance.locked_backfill_approved");
+    }
+
+    @Test
+    void backfillSelfDecisionForbiddenBySeparationOfDuties() {
+        stubActor("staff_finance_self");
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-sod", "receivable", 100000L));
+        service.createDailyClose(new DailyCloseRequest(
+                "daily-close-backfill-sod", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_sod", false));
+        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
+                "adj-req-sod", "backfill", List.of(), item.id(), 5000L, "self decision attempt"));
+
+        // F-OPS-07 / B-01：发起人既不能自审批、也不能自拒绝（A 版 SoD：无论 approve 还是 reject）。
+        assertThatThrownBy(() -> service.approveAdjustment(requested.id(),
+                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-sod-a", "ok", List.of(), "approve")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("SELF_APPROVAL_FORBIDDEN");
+        assertThatThrownBy(() -> service.approveAdjustment(requested.id(),
+                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-sod-r", "no", List.of(), "reject")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("SELF_APPROVAL_FORBIDDEN");
+        // 两次自决策均被拒，金额未变。
+        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(100000L);
     }
 
     @Test
@@ -902,6 +1053,8 @@ class FinanceServiceTests {
 
         ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
                 "adj-req-2", "backfill", List.of(), item.id(), 7000L, "disputed"));
+        // F-OPS-07 SoD（A 版）拦 approve+reject：拒绝人也必须不同于发起人。
+        stubActor("staff_finance_2_reviewer");
         ArApAdjustmentRecord rejected = service.approveAdjustment(requested.id(),
                 new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-2", "no", List.of(), "reject"));
 
@@ -929,15 +1082,17 @@ class FinanceServiceTests {
     // ─── P1#13 库存差异 → AR/AP（R6-D08）──────────────────────────────────────
 
     @Test
-    void approvedShortageVarianceIsPostedAsReceivable() {
+    void approvedShortageVarianceIsPostedAsInternalAccountingCost() {
         financeRepository.seedVariance("var_shortage", "shortage", -50000L, "approved", null);
 
         ArApItemRecord item = service.postInventoryVariance(new com.complex.platform.finance.dto.InventoryVariancePostRequest(
                 "post-shortage", "note", List.of(), "var_shortage", "loss_account"));
 
         assertThat(item.sourceType()).isEqualTo("inventory_difference");
-        assertThat(item.direction()).isEqualTo("receivable");      // 盘亏计损益 → receivable
-        assertThat(item.amountCent()).isEqualTo(50000L);           // 取绝对值
+        assertThat(item.direction()).isEqualTo("internal_accounting"); // C3：盘亏/报损 → 内部核算损耗成本
+        assertThat(item.status()).isEqualTo("settled");                // 内部核算非待收/待付
+        assertThat(item.unpaidAmountCent()).isEqualTo(0L);
+        assertThat(item.amountCent()).isEqualTo(50000L);               // 取绝对值
         assertThat(item.sourceId()).isEqualTo("var_shortage");
         assertThat(financeRepository.findInventoryVarianceById("var_shortage").orElseThrow().postedArApItemId())
                 .isEqualTo(item.id());
@@ -1426,6 +1581,10 @@ class FinanceServiceTests {
             return arApPayments.get(payment.id());
         }
 
+        int arApPaymentCount() {
+            return arApPayments.size();
+        }
+
         // 记录服务层是否走了 FOR UPDATE 加锁读取路径（P1 并发红线断言）。
         final List<String> forUpdatePaymentReads = new ArrayList<>();
         final List<String> forUpdateBalanceReads = new ArrayList<>();
@@ -1467,6 +1626,11 @@ class FinanceServiceTests {
         public PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent) {
             paymentIntents.put(paymentIntent.id(), paymentIntent);
             return paymentIntent;
+        }
+
+        @Override
+        public Optional<PaymentIntentRecord> findPaymentIntentById(String id) {
+            return Optional.ofNullable(paymentIntents.get(id));
         }
 
         @Override
@@ -1566,9 +1730,13 @@ class FinanceServiceTests {
         }
 
         @Override
-        public boolean lockedDailyCloseExistsForDate(LocalDate businessDate) {
+        public boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId) {
+            // F-OPS-09：镜像 JdbcFinanceRepository 商户级口径——
+            // merchantId 为空看任一 locked 日结；非空仅看 scope_type='merchant' AND scope_id=merchantId。
             return dailyCloses.values().stream()
-                    .anyMatch(dc -> businessDate.equals(dc.businessDate()) && "locked".equals(dc.status()));
+                    .filter(dc -> businessDate.equals(dc.businessDate()) && "locked".equals(dc.status()))
+                    .anyMatch(dc -> merchantId == null
+                            || ("merchant".equals(dc.scopeType()) && merchantId.equals(dc.scopeId())));
         }
 
         @Override

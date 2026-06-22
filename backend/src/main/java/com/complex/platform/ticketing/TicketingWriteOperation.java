@@ -13,6 +13,8 @@ enum TicketingWriteOperation implements AuditedOperation {
     ISSUE_TICKET_TYPE_DIRECTLY("ticket_order.issued", "ticket_order.issued_failed", "ticket.order.create", "issued_entitlement"),
     CREATE_TICKET_ORDER("ticket_order.created", "ticket_order.create_failed", "ticket.order.create", "ticket_order"),
     CREATE_TICKET_ORDER_PAY_INTENT("payment.intent_created", "payment.intent_failed", "finance.payment_intent.create", "ticket_payment_intent"),
+    CONFIRM_TICKET_ORDER_PAYMENT("ticket_order.payment_confirmed", "ticket_order.payment_confirm_failed", "finance.payment.register", "ticket_order"),
+    CANCEL_TICKET_ORDER("ticket_order.cancelled", "ticket_order.cancel_failed", "ticket.order.create", "ticket_order"),
     ISSUE_TICKET_ORDER("ticket.issued", "ticket.issue_failed", "ticket.ticket.issue", "issued_entitlement"),
     PUBLISH_TICKET_TYPE("ticket_price.published", "ticket_price.publish_failed", "ticket.product.manage", "ticket_type"),
     REQUEST_TICKET_REFUND("ticket_refund.requested", "ticket_refund.request_failed", "ticket.refund.request", "ticket_refund"),

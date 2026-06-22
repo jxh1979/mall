@@ -59,6 +59,25 @@ final class JdbcBarSessionRepository {
         return session;
     }
 
+    // 2c-5 卡座并发：DB 级乐观锁 CAS。WHERE session_version = expected 序列化并发 transfer/merge/renew，
+    // 返回 false 表示版本已被并发改动（saveTableSession 的 ON CONFLICT 无版本条件，内存比对在并发下被覆盖绕过）。
+    public boolean updateTableSessionIfVersionMatches(BarTableSessionRecord session, long expectedVersion) {
+        int rows = jdbcTemplate.update("""
+                UPDATE bar_table_sessions SET
+                    bar_id = :bar_id, merchant_id = :merchant_id, business_date = :business_date,
+                    table_id = :table_id, reservation_id = :reservation_id, customer_id = :customer_id,
+                    guest_count = :guest_count, min_consumption_snapshot_cent = :min_consumption_snapshot_cent,
+                    allowed_pass_free_guest_count_snapshot = :allowed_pass_free_guest_count_snapshot,
+                    sales_staff_id = :sales_staff_id, service_staff_id = :service_staff_id,
+                    status = :status, opened_at = :opened_at, closed_at = :closed_at,
+                    source_session_id = :source_session_id, session_version = :session_version,
+                    updated_at = :updated_at
+                 WHERE id = :id
+                   AND session_version = :expected_version
+                """, parameterSource.tableSessionParameters(session).addValue("expected_version", expectedVersion));
+        return rows == 1;
+    }
+
     public List<BarTableSessionRecord> listTableSessions(Optional<String> merchantScope) {
         if (merchantScope.isEmpty()) {
             return jdbcTemplate.query("""

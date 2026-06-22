@@ -150,17 +150,24 @@ class JdbcAccessRepository implements AccessRepository {
     public AccessUser createUser(AccessUser user) {
         jdbcTemplate.update("""
                 INSERT INTO access_users (
-                    id, username, account_type, organization_id, merchant_id, status, created_at
+                    id, username, account_type, organization_id, merchant_id, status, created_at,
+                    phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
                 )
                 VALUES (
-                    :id, :username, :account_type, :organization_id, :merchant_id, :status, :created_at
+                    :id, :username, :account_type, :organization_id, :merchant_id, :status, :created_at,
+                    :phone_hash, :created_via, :consent_reference, :evidence_attachment_ids, :operator_note
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     username = EXCLUDED.username,
                     account_type = EXCLUDED.account_type,
                     organization_id = EXCLUDED.organization_id,
                     merchant_id = EXCLUDED.merchant_id,
-                    status = EXCLUDED.status
+                    status = EXCLUDED.status,
+                    phone_hash = EXCLUDED.phone_hash,
+                    created_via = EXCLUDED.created_via,
+                    consent_reference = EXCLUDED.consent_reference,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    operator_note = EXCLUDED.operator_note
                 """, new MapSqlParameterSource()
                 .addValue("id", user.id())
                 .addValue("username", user.username())
@@ -168,14 +175,20 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("organization_id", user.organizationId())
                 .addValue("merchant_id", user.merchantId())
                 .addValue("status", user.status())
-                .addValue("created_at", timestampWithTimeZone(user.createdAt())));
+                .addValue("created_at", timestampWithTimeZone(user.createdAt()))
+                .addValue("phone_hash", user.phoneHash())
+                .addValue("created_via", user.createdVia())
+                .addValue("consent_reference", user.consentReference())
+                .addValue("evidence_attachment_ids", encodeEvidenceIds(user.evidenceAttachmentIds()))
+                .addValue("operator_note", user.operatorNote()));
         return user;
     }
 
     @Override
     public List<AccessUser> listUsers() {
         return jdbcTemplate.query("""
-                SELECT id, username, account_type, organization_id, merchant_id, status, created_at
+                SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
+                       phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
                   FROM access_users
                  ORDER BY username
                 """, this::mapUser);
@@ -185,7 +198,8 @@ class JdbcAccessRepository implements AccessRepository {
     public List<AccessUser> listUsers(String organizationId) {
         if (organizationId == null) return listUsers();
         return jdbcTemplate.query("""
-                SELECT id, username, account_type, organization_id, merchant_id, status, created_at
+                SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
+                       phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
                   FROM access_users
                  WHERE organization_id = :organization_id
                  ORDER BY username
@@ -197,7 +211,8 @@ class JdbcAccessRepository implements AccessRepository {
         // 商户面 scoped 读通道：按 access_users.merchant_id = token scope 过滤（AC-ISO-1，§4）。
         if (merchantId == null) return listUsers();
         return jdbcTemplate.query("""
-                SELECT id, username, account_type, organization_id, merchant_id, status, created_at
+                SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
+                       phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
                   FROM access_users
                  WHERE merchant_id = :merchant_id
                  ORDER BY username
@@ -207,7 +222,8 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     public Optional<AccessUser> findUserById(String userId) {
         List<AccessUser> result = jdbcTemplate.query("""
-                SELECT id, username, account_type, organization_id, merchant_id, status, created_at
+                SELECT id, username, account_type, organization_id, merchant_id, status, created_at,
+                       phone_hash, created_via, consent_reference, evidence_attachment_ids, operator_note
                   FROM access_users
                  WHERE id = :id
                 """, Map.of("id", userId), this::mapUser);
@@ -665,8 +681,35 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getString("organization_id"),
                 resultSet.getString("merchant_id"),
                 resultSet.getString("status"),
-                nullableInstant(resultSet, "created_at")
+                nullableInstant(resultSet, "created_at"),
+                resultSet.getString("phone_hash"),
+                resultSet.getString("created_via"),
+                resultSet.getString("consent_reference"),
+                decodeEvidenceIds(resultSet.getString("evidence_attachment_ids")),
+                resultSet.getString("operator_note")
         );
+    }
+
+    private String encodeEvidenceIds(List<String> evidenceAttachmentIds) {
+        if (evidenceAttachmentIds == null || evidenceAttachmentIds.isEmpty()) {
+            return null;
+        }
+        return String.join(",", evidenceAttachmentIds.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .toList());
+    }
+
+    private List<String> decodeEvidenceIds(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (String item : value.split(",")) {
+            if (!item.isBlank()) {
+                result.add(item);
+            }
+        }
+        return result;
     }
 
     private StaffLevelRecord mapStaffLevel(ResultSet resultSet, int rowNumber) throws SQLException {

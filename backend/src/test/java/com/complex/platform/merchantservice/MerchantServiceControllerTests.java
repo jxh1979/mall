@@ -88,7 +88,7 @@ class MerchantServiceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -144,7 +144,7 @@ class MerchantServiceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -293,7 +293,7 @@ class MerchantServiceControllerTests {
 
         mockMvc.perform(request.with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
 
         verify(authorizationService).requirePermission(permissionCode);
     }
@@ -317,7 +317,7 @@ class MerchantServiceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     private MerchantWorkOrderRecord record(String id, String status) {

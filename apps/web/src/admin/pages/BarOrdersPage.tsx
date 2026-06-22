@@ -6,6 +6,7 @@ import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
+import { PermissionButton } from "../security/Can";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -78,7 +79,7 @@ function firstBillId(order: BarOrderRow | undefined) {
   return firstBill(order)?.id ?? order?.billId ?? "";
 }
 
-export function BarOrdersPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
@@ -172,14 +173,16 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError }: AdminPag
         </div>
 
         <div className="admin-form-row" data-testid="bar-order-actions">
-          <button type="button" data-testid="bar-order-create-bill" disabled={busyAction !== ""} onClick={() => void createBill()}>{TEXT.createBill}</button>
-          <button type="button" data-testid="bar-order-deliver" disabled={busyAction !== ""} onClick={() => void markDelivered()}>{TEXT.deliver}</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order.create"]} data-testid="bar-order-create-bill" disabled={busyAction !== ""} onClick={() => void createBill()}>{TEXT.createBill}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order.create"]} data-testid="bar-order-deliver" disabled={busyAction !== ""} onClick={() => void markDelivered()}>{TEXT.deliver}</PermissionButton>
           <HighRiskConfirm
             label={TEXT.settle}
             impact="将对选中账单发起资金结算并写入支付/结算留痕，结算后不可撤销。"
             disabled={busyAction !== ""}
             precheck={validateSettle}
             onConfirm={() => void settleBill()}
+            permissionsState={effectivePermissions}
+            permissions={["finance.payment.register"]}
             data-testid="bar-order-settle"
           />
           <span className="admin-muted-action" data-testid="bar-order-pos-boundary">{TEXT.posBoundary}</span>

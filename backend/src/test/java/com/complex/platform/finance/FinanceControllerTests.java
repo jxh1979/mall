@@ -83,7 +83,7 @@ class FinanceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 
@@ -99,6 +99,27 @@ class FinanceControllerTests {
                 .andExpect(jsonPath("$.data.total").value(1));
 
         verify(authorizationService).requirePermission("finance.ar_ap.view");
+    }
+
+    @Test
+    void exportArApItemsUsesViewPermissionAndReturnsCsvSnapshot() throws Exception {
+        when(service.exportArApItems()).thenReturn(new ArApLedgerExportRecord(
+                "arap_export_1",
+                "csv",
+                1,
+                List.of(arApItem()),
+                "item_no,direction,status\nARAP202606140001,receivable,pending_collection",
+                Instant.parse("2026-06-14T00:10:00Z")
+        ));
+
+        mockMvc.perform(get("/api/v1/finance/ar-ap-items/export")
+                        .with(user("finance").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.row_count").value(1))
+                .andExpect(jsonPath("$.data.csv_text").value(org.hamcrest.Matchers.containsString("ARAP202606140001")));
+
+        verify(authorizationService).requirePermission("finance.ar_ap.view");
+        verify(service).exportArApItems();
     }
 
     @Test

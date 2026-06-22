@@ -18,7 +18,7 @@ graph TB
     WEB["前端 Web<br/>(admin / customer / legacy)"]
     ANDROID["Android 终端<br/>(工作手机/平板/kiosk)"]
     API["后端 API<br/>Java 21 + Spring Boot 4"]
-    DB[("PostgreSQL<br/>Flyway V001..V124")]
+    DB[("PostgreSQL<br/>Flyway V001..V148")]
   end
 
   subgraph External["外部依赖 (能力开关默认 off + mock)"]
@@ -97,13 +97,13 @@ graph TB
 
 ```mermaid
 graph LR
-  UI["前端/终端"] -->|"REST + Bearer"| CTRL["Controller<br/>(28 个)"]
-  CTRL -->|"@GuardedAction<br/>权限+终端开关+准入闸"| SVC["Service<br/>(58 个)"]
+  UI["前端/终端"] -->|"REST + Bearer"| CTRL["Controller<br/>(29 个)"]
+  CTRL -->|"@GuardedAction<br/>权限+终端开关+准入闸"| SVC["Service<br/>(60 个)"]
   SVC -->|"JdbcTemplate<br/>scope 注入"| REPO["Repository (JDBC)"]
   REPO --> PG[("PostgreSQL")]
   SVC -->|"事件"| AUD["audit_events / risk_alerts"]
   SVC -. "幂等键" .-> IDEM["IdempotencyService"]
-  CTRL -. "OpenAPI 契约" .-> OAS["openapi-p0 (386 op)"]
+  CTRL -. "OpenAPI 契约" .-> OAS["openapi-p0 (410 op)"]
 ```
 
 每个写动作经 `@GuardedAction`（权限点 + 终端开关 + 准入闸 AdmissionGuard）→ Service（业务+幂等+留痕）→ JDBC Repository（强制注入 merchant_id/project_id scope）→ PostgreSQL，并发布审计事件；异常进统一责任链 `risk_alerts`。
@@ -133,7 +133,7 @@ sequenceDiagram
 ```mermaid
 graph TB
   MAIN["main.tsx<br/>(路径前缀分流,默认 admin)"]
-  MAIN --> ADM["AdminApp<br/>管理后台(31页,路由级 lazy 分包)"]
+  MAIN --> ADM["AdminApp<br/>管理后台(33页,路由级 lazy 分包)"]
   MAIN --> CUST["CustomerApp<br/>客人端(购票/订台/积分/验票)"]
   MAIN --> LEG["LegacyConsoleApp<br/>(已退役,跳转 admin)"]
   ADM --> APIc["后端 REST"]
@@ -143,7 +143,7 @@ graph TB
 
 ## 6. 交付闸口与验证（Delivery Gates）
 
-`verify:delivery-gates`（约 50 子闸聚合）+ `verify:p0-contract` + `verify:tenant-isolation --strict` + 后端 `mvn test`（1251）+ 前端 `e2e`（42）+ semgrep。生产上线由 `verify:production-blockers` 把关（外部依赖未到位即阻断）。
+`verify:delivery-gates`（约 50 子闸聚合）+ `verify:p0-contract` + `verify:tenant-isolation --strict` + 后端 `mvn test`（1412）+ 前端 `e2e`（42）+ semgrep。生产上线由 `verify:production-blockers` 把关（外部依赖未到位即阻断）。
 
 ---
 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 状态：现行 ｜ 配套：`README.md` / `README.en.md` / `docs/documentation-map-v0.1.md`

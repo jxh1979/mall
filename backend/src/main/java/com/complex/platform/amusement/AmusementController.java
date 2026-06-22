@@ -137,6 +137,22 @@ public class AmusementController {
         return ApiResponse.ok(service.createCapacityConfig(id, request));
     }
 
+    @GetMapping("/projects/{id}/devices")
+    public ApiResponse<PageResponse<AmusementDeviceRecord>> listDevices(@PathVariable String id) {
+        authorizationService.requirePermission("amusement.device.view");
+        return ApiResponse.ok(service.listDevices(id));
+    }
+
+    @PostMapping("/projects/{id}/devices")
+    public ApiResponse<AmusementDeviceRecord> createDevice(
+            @PathVariable String id,
+            @RequestBody(required = false) AmusementDeviceRequest request
+    ) {
+        authorizationService.requirePermission("amusement.device.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createDevice(id, request));
+    }
+
     @PostMapping("/capacity-config/{configId}/disable")
     public ApiResponse<AmusementCapacityConfigRecord> disableCapacityConfig(
             @PathVariable String configId,

@@ -88,7 +88,7 @@ class AmusementSafetyControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -222,7 +222,7 @@ class AmusementSafetyControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(incidentCreateJson(null)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     private String incidentCreateJson(String idempotencyKey) {

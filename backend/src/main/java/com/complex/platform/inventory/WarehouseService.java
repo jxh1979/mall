@@ -67,7 +67,7 @@ public class WarehouseService {
         );
     }
 
-    @GuardedAction(capability = "inventory.stock.move")
+    @GuardedAction(capability = "inventory.warehouse.manage")
     @Transactional
     public WarehouseRecord createWarehouse(WarehouseCreateRequest request) {
         return executeWrite(

@@ -607,6 +607,11 @@ class SupplyChainT6ServiceTests {
         @Override public Optional<StockBalanceRecord> findStockBalance(String i, String l) {
             return Optional.ofNullable(balances.get(i + ":" + l));
         }
+        @Override public int sumStockBalanceByItemAndWarehouse(String i, String w) {
+            return balances.values().stream()
+                    .filter(b -> i.equals(b.itemId()) && w.equals(b.warehouseId()))
+                    .mapToInt(StockBalanceRecord::quantity).sum();
+        }
         @Override public StockBalanceRecord saveStockBalance(StockBalanceRecord b) {
             balances.put(b.itemId() + ":" + b.locationId(), b);
             return b;
@@ -614,7 +619,9 @@ class SupplyChainT6ServiceTests {
         @Override public List<StockBalanceRecord> listStockBalances() {
             return new ArrayList<>(balances.values());
         }
-        @Override public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord b) { throw nyi(); }
+        @Override public InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord b) { return b; }
+        @Override public List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String i, String l) { return List.of(); }
+        @Override public int atomicDecreaseBatchQuantity(String b, int q) { return 0; }
         @Override public List<InventoryStockBatchRecord> listStockBatches() { throw nyi(); }
         @Override public InventoryRiskAlertRecord saveRiskAlert(InventoryRiskAlertRecord a) { throw nyi(); }
         @Override public List<InventoryRiskAlertRecord> listRiskAlerts() { throw nyi(); }
@@ -699,6 +706,9 @@ class SupplyChainT6ServiceTests {
         // ── V108/V126：盘点单 + 库存差异明细写入侧（T6 测试不直接覆盖，未用方法抛 nyi）。 ──
         @Override public StocktakeRecord saveStocktake(StocktakeRecord stocktake) {
             throw nyi();
+        }
+        @Override public boolean hasActiveStocktakeForWarehouse(String warehouseId) {
+            return false;
         }
         @Override public Optional<StocktakeRecord> findStocktakeById(String id) {
             throw nyi();

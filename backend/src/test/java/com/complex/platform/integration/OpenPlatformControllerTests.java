@@ -52,44 +52,22 @@ class OpenPlatformControllerTests {
     }
 
     @Test
-    void openAuthTokenAllowsServerToServerRequestWithoutStaffAuthentication() throws Exception {
-        when(service.issueOpenToken(any(OpenAuthTokenRequest.class))).thenReturn(new OpenAuthTokenResponse(
-                "raw-token-once",
-                "Bearer",
-                Instant.parse("2026-06-14T00:30:00Z")
-        ));
-
-        mockMvc.perform(post("/api/open/auth/token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "app_key": "p0-open-app",
-                                  "timestamp": 1781424000000,
-                                  "nonce": "nonce-controller",
-                                  "signature": "signature"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("OK"))
-                .andExpect(jsonPath("$.data.token").value("raw-token-once"))
-                .andExpect(jsonPath("$.data.token_type").value("Bearer"));
-
-        verify(service).issueOpenToken(any(OpenAuthTokenRequest.class));
-    }
-
-    @Test
     void openWebhookAcceptsServerToServerRequestAndDoesNotNeedStaffAuthentication() throws Exception {
         when(service.receiveWebhook(
                 eq("p0-default"),
                 eq("mock-provider"),
                 eq("payment.paid"),
                 eq("signature"),
+                eq(1781424000000L),
+                eq("nonce-controller"),
                 eq("idem-controller"),
                 any()
         )).thenReturn(new WebhookAcceptedResponse("evt-controller", false));
 
         mockMvc.perform(post("/api/open/d/p0-default/webhooks/mock-provider/payment.paid")
                         .header("X-Webhook-Signature", "signature")
+                        .header("X-Open-Timestamp", "1781424000000")
+                        .header("X-Open-Nonce", "nonce-controller")
                         .header("X-Idempotency-Key", "idem-controller")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -114,7 +92,7 @@ class OpenPlatformControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
 
         verifyNoInteractions(service);
     }
@@ -133,25 +111,6 @@ class OpenPlatformControllerTests {
                 .andExpect(jsonPath("$.data.event_id").value("evt-controller"))
                 .andExpect(jsonPath("$.data.event_status").value("accepted"))
                 .andExpect(jsonPath("$.data.result.normalized_status").value("paid"));
-    }
-
-    @Test
-    void openInvalidSignatureReturnsUnauthorizedBusinessCode() throws Exception {
-        when(service.issueOpenToken(any(OpenAuthTokenRequest.class)))
-                .thenThrow(ApiException.unauthorized("OPEN_SIGNATURE_INVALID", "open signature is invalid"));
-
-        mockMvc.perform(post("/api/open/auth/token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "app_key": "p0-open-app",
-                                  "timestamp": 1781424000000,
-                                  "nonce": "nonce-invalid",
-                                  "signature": "bad-signature"
-                                }
-                                """))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("OPEN_SIGNATURE_INVALID"));
     }
 
     @TestConfiguration

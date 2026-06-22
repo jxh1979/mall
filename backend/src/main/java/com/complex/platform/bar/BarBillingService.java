@@ -6,6 +6,7 @@ import static com.complex.platform.bar.BarValidation.*;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.finance.PaymentChannelPolicy;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import java.time.Instant;
@@ -14,16 +15,12 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.springframework.stereotype.Service;
 
 @Service
 public class BarBillingService {
 
     private static final String CURRENCY_CNY = "CNY";
-    private static final Set<String> SETTLE_CHANNELS =
-            Set.of("aggregate_pay", "cash", "pos", "bank_transfer", "other");
-
     private final BarRepository repository;
     private final BarReceivableLedgerService receivableLedgerService;
     private final AuthorizationService authorizationService;
@@ -100,7 +97,7 @@ public class BarBillingService {
                 businessOrderId,
                 amountCent,
                 trimToDefault(actual.currency(), CURRENCY_CNY),
-                requireText(actual.channel(), "channel"),
+                PaymentChannelPolicy.requirePaymentIntentChannel(actual.channel()),
                 "created",
                 now,
                 now
@@ -109,11 +106,27 @@ public class BarBillingService {
 
     BarBillRecord settleBill(String billId, BarBillSettleRequest request) {
         BarBillSettleRequest actual = requireRequest(request);
-        BarBillRecord bill = repository.findBillById(billId)
+        // 2c-2：行锁读取账单，序列化并发结算（配合 settled 守卫防 TOCTOU 重复结算）。
+        BarBillRecord bill = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
         checkMerchantOwnership(bill.merchantId());
         if ("settled".equals(bill.settlementStatus())) {
             throw ApiException.conflict("BAR_BILL_ALREADY_SETTLED", "bar bill is already settled");
+        }
+        // 2c-1 低消硬阻断（用户裁定 + PRD §617/716）：未满足最低消费不可结账。
+        // 低消基数 = 实际消费 subtotal + 已补差 min_spend_top_up（运营补足低消的手段），不含 tip/deposit/service_fee。
+        if (bill.tableId() != null) {
+            BarTableRecord table = repository.findTableById(bill.tableId()).orElse(null);
+            if (table != null && table.minConsumptionCent() > 0) {
+                long topUp = repository.listBillAdjustments(bill.id()).stream()
+                        .filter(a -> "min_spend_top_up".equals(a.adjustmentType()))
+                        .mapToLong(BarBillAdjustmentRecord::amountCent)
+                        .sum();
+                if (bill.subtotalAmountCent() + topUp < table.minConsumptionCent()) {
+                    throw ApiException.conflict("BAR_MIN_CONSUMPTION_NOT_MET",
+                            "table minimum consumption not met; add consumption or apply min_spend_top_up before settle");
+                }
+            }
         }
         requireText(actual.paymentId(), "payment_id");
         // V091：结算应收含小费（payable + tip）。小费为代收（归属服务员/交班结算），不计入低消/提成基数。
@@ -126,10 +139,7 @@ public class BarBillingService {
         }
         Instant now = Instant.now();
         // A2/A3：结算渠道（统一词表，与 finance 对账归并）+ 现金/POS 收款留痕 + D4 权威事件。
-        String channel = trimToDefault(actual.paymentChannel(), "aggregate_pay");
-        if (!SETTLE_CHANNELS.contains(channel)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "unsupported settle_channel: " + channel);
-        }
+        String channel = PaymentChannelPolicy.requireSettlementChannel(actual.paymentChannel(), "aggregate_pay");
         repository.saveBillSettlement(new BarBillSettlementRecord(
                 "settle_" + slug(actual.idempotencyKey()),
                 bill.id(),
@@ -402,12 +412,32 @@ public class BarBillingService {
         if (bodyBillId != null && !billId.equals(bodyBillId)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "bill_id must match path");
         }
-        BarBillRecord bill = repository.findBillById(billId)
+        // 2c-2：行锁读取账单，序列化并发计提。
+        BarBillRecord bill = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "bar bill not found"));
         checkMerchantOwnership(bill.merchantId());
+        // 2c-2 提成防重：同一账单已计提则返回已有（幂等），不重复建提成台账与 finance 应付，杜绝多幂等键刷提成。
+        java.util.Optional<BarCommissionCalculationRecord> existingCommission = repository.findCommissionByBillId(bill.id());
+        if (existingCommission.isPresent()) {
+            return existingCommission.get();
+        }
         String roleType = trimToNull(bill.salesStaffId()) == null ? "non_sales" : "sales";
         int rateBp = "sales".equals(roleType) ? 1500 : 1000;
-        long base = Math.max(0L, bill.subtotalAmountCent() - bill.discountAmountCent());
+        // 裁决#4 / 开发文档 §6.9A.2：提成基数 = 可计提消费额 − 排除项合计。
+        // 排除项中"免单(waiver)/退款(refund)"已落 bar_bill_adjustments（V079），按净额扣除：
+        // waiver+refund 为减项，其 V124 反向冲销 waiver_reversal/refund_reversal（退菜退酒被拒时撤销原减免）回加，
+        // 避免免单/退款被撤销后仍少发提成。仅统计 applied 态记录（applyBillAdjustment/void 流程均落 applied）。
+        // 注意：文档另列的赠酒成本(gift)/抹零(round_off)/通票/票务权益/卡座入场名额抵扣，
+        // 当前 bar_bill_adjustments 无对应 adjustment_type、账单与提成表亦无对应列，无法在不新增字段下扣除（见交付报告 BLOCKED）。
+        long commissionExcluded = repository.listBillAdjustments(bill.id()).stream()
+                .filter(a -> "applied".equals(a.status()))
+                .mapToLong(a -> switch (a.adjustmentType()) {
+                    case "waiver", "refund" -> a.amountCent();
+                    case "waiver_reversal", "refund_reversal" -> -a.amountCent();
+                    default -> 0L;
+                })
+                .sum();
+        long base = Math.max(0L, bill.subtotalAmountCent() - bill.discountAmountCent() - commissionExcluded);
         long amount = base * rateBp / 10_000L;
         BarCommissionCalculationRecord saved = repository.saveCommissionCalculation(new BarCommissionCalculationRecord(
                 "commission_" + billSlug(actual.idempotencyKey()),
@@ -455,6 +485,9 @@ public class BarBillingService {
         Instant now = Instant.now();
         BarBillRecord reopened = BarBillRecords.billReopened(bill, requestedBy, reason, now);
         repository.saveBill(reopened);
+        // 2c-3 reopen 冲正：把原结算流水标 reversed，使 finance 对账聚合 + analytics 营收聚合排除，
+        // 避免反结→重结后原结算与重结算同窗口双计入对账/net。
+        repository.markBillSettlementsReversed(bill.id());
         auditEventService.recordSuccess("bar.bill_reopened", "bar.bill.reopen", "bar_bill",
                 bill.id(), null, key,
                 Map.of("reopen_count", reopened.reopenCount(), "payable_amount_cent", reopened.payableAmountCent()));

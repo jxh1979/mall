@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,12 +36,14 @@ class AccessServiceTests {
 
     private InMemoryAccessRepository accessRepository;
     private InMemoryAuditEventRepository auditEventRepository;
+    private RecordingCredentialProvisioner credentialProvisioner;
     private AccessService service;
 
     @BeforeEach
     void setUp() {
         accessRepository = new InMemoryAccessRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
+        credentialProvisioner = new RecordingCredentialProvisioner();
         accessRepository.knownPermissions.add("ops.production_readiness.view");
         accessRepository.knownPermissions.add("ops.production_readiness.check");
         AuthorizationService authorizationService = new AuthorizationService(accessRepository);
@@ -48,7 +51,8 @@ class AccessServiceTests {
                 accessRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                authorizationService
+                authorizationService,
+                credentialProvisioner
         );
         authenticateAsPlatformAdmin("seed-org");
     }
@@ -135,6 +139,12 @@ class AccessServiceTests {
         ));
 
         assertThat(result.applications()).hasSize(2);
+        assertThat(result.applications())
+                .allSatisfy(application -> {
+                    assertThat(application.validFrom()).isEqualTo(Instant.parse("2026-06-14T00:00:00Z"));
+                    assertThat(application.validUntil()).isEqualTo(Instant.parse("2026-06-15T00:00:00Z"));
+                    assertThat(application.singleUse()).isTrue();
+                });
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("permission_template.applied");
@@ -190,7 +200,7 @@ class AccessServiceTests {
 
     @Test
     void createAccessUserWithAllowedAccountTypeSucceeds() {
-        for (String type : List.of("staff", "merchant", "supervisor")) {
+        for (String type : List.of("staff", "merchant", "supervisor", "sales", "merchant_admin")) {
             AccessUser user = service.createAccessUser(new AccessUserRequest(
                     "user-type-" + type,
                     null,
@@ -200,11 +210,83 @@ class AccessServiceTests {
                     null,
                     type,
                     "seed-org",
-                    null,
+                    Set.of("merchant", "merchant_admin", "sales").contains(type) ? "merchant-1" : null,
                     "active"
             ));
             assertThat(user.accountType()).isEqualTo(type);
         }
+    }
+
+    @Test
+    void createAccessUserRequiresOrganizationScope() {
+        assertThatThrownBy(() -> service.createAccessUser(new AccessUserRequest(
+                "user-missing-org",
+                "manual entry consent evidence",
+                List.of("ev_consent_manual_001"),
+                "manual_missing_org",
+                "change-me-123",
+                "13800000000",
+                "staff",
+                null,
+                "merchant-1",
+                "active"
+        ))).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status().value()).isEqualTo(400);
+            assertThat(e.code()).isEqualTo("VALIDATION_FAILED");
+        });
+    }
+
+    @Test
+    void createAccessUserStoresManualEvidenceAndProvisionsCredential() {
+        AccessUser user = service.createAccessUser(new AccessUserRequest(
+                "user-manual-evidence",
+                "后台手动录入，已取得员工授权",
+                List.of("ev_consent_manual_003", "ev_hr_ticket_001"),
+                "manual_evidence",
+                "change-me-123",
+                "13800000002",
+                "sales",
+                "seed-org",
+                "merchant-1",
+                "active",
+                "consent_staff_manual_003"
+        ));
+
+        assertThat(user.phoneHash()).hasSize(64).doesNotContain("13800000002");
+        assertThat(user.createdVia()).isEqualTo("manual_admin");
+        assertThat(user.consentReference()).isEqualTo("consent_staff_manual_003");
+        assertThat(user.evidenceAttachmentIds()).containsExactly("ev_consent_manual_003", "ev_hr_ticket_001");
+        assertThat(user.operatorNote()).contains("员工授权");
+        assertThat(credentialProvisioner.requests)
+                .anySatisfy(request -> {
+                    assertThat(request.userId()).isEqualTo(user.id());
+                    assertThat(request.password()).isEqualTo("change-me-123");
+                    assertThat(request.status()).isEqualTo("active");
+                });
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("access.user.changed");
+    }
+
+    @Test
+    void merchantScopedCreatorCannotCreateUserForAnotherMerchant() {
+        authenticateAsMerchantUser("usr_merchant_a", "merchant-a-admin", "org_a", "merchant_a");
+
+        assertThatThrownBy(() -> service.createAccessUser(new AccessUserRequest(
+                "user-cross-merchant",
+                "manual entry consent evidence",
+                List.of("ev_consent_manual_002"),
+                "manual_cross_merchant",
+                "change-me-123",
+                "13800000001",
+                "staff",
+                "org_a",
+                "merchant_b",
+                "active"
+        ))).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status().value()).isEqualTo(403);
+            assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+        });
     }
 
     // ── P0(R3 修复): 职级与薪资分配 REQ-60/61 ──────────────────────────────
@@ -400,6 +482,18 @@ class AccessServiceTests {
         assertThat(page.items()).extracting(AccessUser::id).contains("usr_org_a_2", "usr_org_b_2");
     }
 
+    @Test
+    void listAccessUsersFiltersToCurrentMerchantWhenMerchantScoped() {
+        accessRepository.users.put("usr_merchant_a_1", new AccessUser("usr_merchant_a_1", "ma1", "staff", "org_a", "merchant_a", "active", Instant.now()));
+        accessRepository.users.put("usr_merchant_b_1", new AccessUser("usr_merchant_b_1", "mb1", "staff", "org_a", "merchant_b", "active", Instant.now()));
+        authenticateAsMerchantUser("usr_req_merchant_a", "merchant-a-admin", "org_a", "merchant_a");
+
+        var page = service.listAccessUsers();
+
+        assertThat(page.items()).extracting(AccessUser::id).containsExactly("usr_merchant_a_1");
+        assertThat(page.items()).extracting(AccessUser::id).doesNotContain("usr_merchant_b_1");
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private void authenticateAsPlatformAdmin(String organizationId) {
@@ -420,6 +514,28 @@ class AccessServiceTests {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 user, "token", List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
         ));
+    }
+
+    private void authenticateAsMerchantUser(String id, String username, String organizationId, String merchantId) {
+        AuthService.UserRecord user = new AuthService.UserRecord(
+                id, username, "hash", "merchant", organizationId, merchantId, "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                user, "token", List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
+        ));
+    }
+
+    private static final class RecordingCredentialProvisioner implements AccessCredentialProvisioner {
+        final List<CredentialProvisionRequest> requests = new ArrayList<>();
+
+        @Override
+        public void provisionCredential(String userId, String password, String status, Instant now) {
+            requests.add(new CredentialProvisionRequest(userId, password, status, now));
+        }
+    }
+
+    private record CredentialProvisionRequest(String userId, String password, String status, Instant now) {
     }
 
     private static final class InMemoryAccessRepository implements AccessRepository {

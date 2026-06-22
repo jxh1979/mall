@@ -72,6 +72,12 @@
 - 导入只生成候选和错误，不直接改写正式 `floor_plan_shapes`。
 - 若没有任何合法候选，任务状态为 `failed`。
 
+> 已实现修复（finding F-CROSS-10，2026-06-22，已在 160 编译通过）：在已有 `source_payload ≤ 1,000,000 字符` 上限之外，新增解析阶段的资源上限以防 DoS（小体积 payload 仍可展开为海量节点/顶点）：
+> - **节点（候选形状）数上限 2000**：单次导入解析出的候选形状数超过 2000 时抛 `FLOOR_PLAN_IMPORT_TOO_MANY_NODES`。
+> - **单形状顶点数上限 1000**：任一形状的多边形顶点数超过 1000 时抛 `FLOOR_PLAN_IMPORT_TOO_MANY_POINTS`。
+>
+> 两项上限在解析候选时即校验并快速失败，与既有 1MB payload 上限互补，避免恶意/异常 SVG 或标准 JSON 撑爆解析与候选落库。
+
 ### 3.2 查询导入任务
 
 `GET /api/v1/floor-plans/{id}/imports`

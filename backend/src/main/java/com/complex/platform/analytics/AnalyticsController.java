@@ -41,12 +41,14 @@ public class AnalyticsController {
     @GetMapping("/ai-quality/results")
     public ApiResponse<PageResponse<AiQualityResultRecord>> listAiQualityResults() {
         authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listAiQualityResults());
     }
 
     @GetMapping("/ai-quality/tasks")
     public ApiResponse<PageResponse<AiQualityTaskRecord>> listAiQualityTasks() {
         authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listAiQualityTasks());
     }
 
@@ -56,12 +58,14 @@ public class AnalyticsController {
     ) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.generateLocalLlmAiQualitySuggestion(request));
     }
 
     @GetMapping("/customer-intents")
     public ApiResponse<PageResponse<CustomerIntentRecord>> listCustomerIntents() {
         authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listCustomerIntents());
     }
 
@@ -81,42 +85,48 @@ public class AnalyticsController {
     @GetMapping("/group-overview")
     public ApiResponse<GroupOverviewResponse> getGroupOverview() {
         authorizationService.requirePermission("analytics.group.view");
+        // 集团总览为平台级跨商户汇总：fail-closed 拒绝 merchant-scoped 调用方（与其它平台级分析端点纵深防御一致）。
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.groupOverview());
     }
 
     @GetMapping("/business-metric-snapshots")
     public ApiResponse<PageResponse<BusinessMetricSnapshotRecord>> listBusinessMetricSnapshots() {
         authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listBusinessMetricSnapshots());
     }
 
     @GetMapping("/merchant-health")
     public ApiResponse<PageResponse<MerchantHealthScoreRecord>> listMerchantHealthScores() {
         authorizationService.requirePermission("analytics.dashboard.view");
-        return ApiResponse.ok(service.listMerchantHealthScores());
+        return ApiResponse.ok(service.listMerchantHealthScores(authorizationService.currentMerchantScope()));
     }
 
     @GetMapping("/merchants")
     public ApiResponse<PageResponse<MerchantSummaryRecord>> listAnalyticsMerchants() {
         authorizationService.requirePermission("analytics.dashboard.view");
-        return ApiResponse.ok(service.listAnalyticsMerchants());
+        return ApiResponse.ok(service.listAnalyticsMerchants(authorizationService.currentMerchantScope()));
     }
 
     @GetMapping("/metric-anomalies")
     public ApiResponse<PageResponse<MetricAnomalyRecord>> listMetricAnomalies() {
         authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listMetricAnomalies());
     }
 
     @GetMapping("/metric-definitions")
     public ApiResponse<PageResponse<MetricDefinitionRecord>> listMetricDefinitions() {
         authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listMetricDefinitions());
     }
 
     @GetMapping("/risk-alerts")
     public ApiResponse<PageResponse<RiskAlertRecord>> listRiskAlerts() {
         authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listRiskAlerts());
     }
 
@@ -124,6 +134,7 @@ public class AnalyticsController {
     public ApiResponse<RiskAlertRecord> createRiskAlert(@RequestBody(required = false) RiskAlertRequest request) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.createRiskAlert(request));
     }
 
@@ -134,24 +145,28 @@ public class AnalyticsController {
     ) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.resolveRiskAlert(id, request));
     }
 
     @GetMapping("/risk-rules")
     public ApiResponse<PageResponse<RiskRuleRecord>> listRiskRules() {
         authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listRiskRules());
     }
 
     @GetMapping("/robot")
     public ApiResponse<PageResponse<RobotMetricRecord>> getRobotAnalytics() {
         authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.getRobotAnalytics());
     }
 
     @GetMapping("/staff-service-score")
     public ApiResponse<PageResponse<StaffServiceScoreRecord>> listStaffServiceScores() {
         authorizationService.requirePermission("analytics.risk_alert.view");
+        authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.listStaffServiceScores());
     }
 }

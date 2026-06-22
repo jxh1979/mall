@@ -3,6 +3,7 @@ package com.complex.platform.ticketing;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
@@ -17,6 +18,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TicketOrderService {
@@ -45,6 +47,11 @@ public class TicketOrderService {
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
         int quantity = requirePositive(actual.quantity(), "quantity");
+        // P0 修复（V133）：限量票种原子扣减库存，防止超卖（stock_quantity 为 null=不限量，仅计数）。
+        // createTicketOrder 已由 executeWrite 幂等包裹，重放不会重复进入此处、不会双扣。
+        if (!repository.atomicDeductTicketStock(ticketType.id(), quantity)) {
+            throw ApiException.conflict("TICKET_SOLD_OUT", "ticket type stock is insufficient");
+        }
         LocalDate visitDate = actual.visitDate() == null ? LocalDate.now() : actual.visitDate();
         String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
         TicketPriceRuleRecord priceRule = null;
@@ -87,8 +94,16 @@ public class TicketOrderService {
                 "not_issued",
                 "created",
                 now,
-                now
+                now,
+                // 行级隔离（V135）：记录下单受理/销售商户（平台下单为 null），供订单列表按 scope 过滤。
+                resolveMerchantId()
         ));
+    }
+
+    // 行级隔离（V135）：订单列表按调用方 scope 过滤——平台（scope 空）看全部，商户仅看自身受理的订单。
+    List<TicketOrderRecord> listOrdersInScope() {
+        String scope = resolveMerchantId();
+        return scope == null ? repository.listTicketOrders() : repository.listTicketOrdersByMerchant(scope);
     }
 
     TicketPaymentIntentRecord createPaymentIntent(String orderId, PaymentIntentRequest request) {
@@ -122,6 +137,86 @@ public class TicketOrderService {
                 now,
                 now
         ));
+    }
+
+    /**
+     * 确认票务订单支付成功（2a-2 支付回写闭环）：校验支付意图归属与金额后，置意图 succeeded 并回写订单 pay_status=paid。
+     *
+     * <p>修因果倒置：此前非 admin 渠道无支付成功回调，订单永卡 unpaid 无法出票（issueOrder 反写 paid 是错误来源）。
+     * 现 paid 由支付确认产生（内部确认 / 真实回调共用本入口）；出票仍要求 paid（admin 渠道豁免不变）。
+     */
+    TicketOrderRecord confirmPayment(String orderId, ConfirmTicketOrderPaymentRequest request) {
+        ConfirmTicketOrderPaymentRequest actual = requireRequest(request);
+        TicketOrderRecord order = repository.findTicketOrderById(requireText(orderId, "order_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+        // 2a-5：已取消（超时释放/手动取消）的订单不可再确认支付，防止"取消已释放库存 → 又确认 paid"导致超卖。
+        if ("cancelled".equals(order.status())) {
+            throw ApiException.conflict("ORDER_CANCELLED", "ticket order has been cancelled");
+        }
+        String intentId = requireText(actual.paymentIntentId(), "payment_intent_id");
+        TicketPaymentIntentRecord intent = repository.findTicketPaymentIntentById(intentId)
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "payment intent not found"));
+        // 归属校验：支付意图必须属于本订单，防止用他单意图把任意订单标记已付。
+        if (!order.id().equals(intent.businessOrderId()) || !"ticket_order".equals(intent.businessOrderType())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "payment intent does not belong to this ticket order");
+        }
+        // 金额校验：意图金额必须等于订单金额，防止少付标记已付。
+        if (intent.amountCent() != order.amountCent()) {
+            throw ApiException.conflict("PAYMENT_AMOUNT_MISMATCH", "payment intent amount does not equal ticket order amount");
+        }
+        Instant now = Instant.now();
+        // 支付意图置 succeeded（幂等：已 succeeded 跳过）。
+        if (!"succeeded".equals(intent.status())) {
+            repository.saveTicketPaymentIntent(new TicketPaymentIntentRecord(
+                    intent.id(), intent.businessOrderType(), intent.businessOrderId(), intent.amountCent(),
+                    intent.currency(), intent.channel(), "succeeded", intent.createdAt(), now));
+        }
+        // 回写订单 paid（幂等：已 paid 直接返回）。merchant_id 等字段保持原值。
+        if ("paid".equals(order.payStatus())) {
+            return order;
+        }
+        return repository.updateTicketOrder(new TicketOrderRecord(
+                order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
+                order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
+                order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
+                "paid", order.issueStatus(), order.status(), order.createdAt(), now, order.merchantId()));
+    }
+
+    /**
+     * 取消未支付订单（2a-5）：原子置 cancelled 并回补限量库存（与下单即扣对称）。
+     * 仅 created+unpaid 可取消；原子 UPDATE 返回 1 才释放库存，防并发/重复释放、防释放已付订单库存。
+     */
+    @Transactional
+    TicketOrderRecord cancelOrder(String orderId) {
+        // 取消+释放同事务：原子置 cancelled 的 UPDATE 与回补库存的 UPDATE 要么同时提交、要么同时回滚，
+        // 杜绝"已置 cancelled 但 releaseTicketStock 未执行"导致 sold_quantity 永久虚高、限量票永久少卖。
+        // 由 TicketingService（跨 bean）调用，Spring 事务代理生效。
+        TicketOrderRecord order = repository.findTicketOrderById(requireText(orderId, "order_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+        int cancelled = repository.atomicCancelUnpaidOrder(order.id(), Instant.now());
+        if (cancelled == 0) {
+            if ("cancelled".equals(order.status())) {
+                return order; // 幂等：已取消直接返回。
+            }
+            throw ApiException.conflict("ORDER_NOT_CANCELLABLE", "only unpaid created orders can be cancelled");
+        }
+        repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
+        return repository.findTicketOrderById(order.id()).orElse(order);
+    }
+
+    /**
+     * 系统定时任务（2a-5）：取消所有超时未支付订单并回补库存。无认证上下文，直接走原子方法（每单独立原子取消+释放）。
+     * @return 实际释放库存的订单数。
+     */
+    int cancelExpiredUnpaidOrders(Instant cutoff) {
+        int released = 0;
+        for (TicketOrderRecord order : repository.listExpiredUnpaidOrders(cutoff)) {
+            if (repository.atomicCancelUnpaidOrder(order.id(), Instant.now()) > 0) {
+                repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
+                released++;
+            }
+        }
+        return released;
     }
 
     IssuedTicketResponse issueOrder(String orderId, StatusChangeRequest request) {
@@ -170,7 +265,8 @@ public class TicketOrderService {
                 "issued",
                 order.status(),
                 order.createdAt(),
-                Instant.now()
+                Instant.now(),
+                order.merchantId()
         ));
         // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
         // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额折算（每元 1 分）。
@@ -221,37 +317,42 @@ public class TicketOrderService {
             String merchantId = template.merchantId() != null ? template.merchantId() : issuerMerchantId;
             String venueId = template.venueId();
             String pointId = template.pointId();
+            // 2a-4（用户裁定）：购买 N 人票即生成 N 张独立门票——numPeople=N 的 binding 展开为 N 张独立权益
+            // （每张 numPeople=1，各自独立核销、共享有效期、过期作废）。从根上消除"权益 used_times+1 vs 游乐容量+N"错位。
+            int peopleCount = Math.max(1, binding.numPeople());
             for (int i = 0; i < binding.quantity(); i++) {
-                String entitlementCode = "P0-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
-                // 待确认项#1：每张权益分配收入（无订单则 null）。业态归属由 entitlement_type + merchant_id 在聚合侧映射。
-                Long allocatedRevenue = allocations == null ? null : allocations[allocationIndex];
-                IssuedEntitlementRecord entitlement = new IssuedEntitlementRecord(
-                        "ent_" + UUID.randomUUID().toString().replace("-", ""),
-                        entitlementCode,
-                        ticketTypeId,
-                        orderId,
-                        template.id(),
-                        template.entitlementType(),
-                        merchantId,
-                        venueId,
-                        pointId,
-                        binding.totalTimes(),
-                        0,
-                        binding.valueAmountCent(),
-                        "active",
-                        now,
-                        validTo,
-                        now,
-                        now,
-                        // R5 TODO#1：核销人数来源——票种该权益绑定(binding) 的 num_people。
-                        // binding 默认 1（单人票，向后兼容）；联合票/多人票 binding 配 >1 即随之生效。
-                        // 核销时 verified_people = entitlement.numPeople()（接 R5 T5）。
-                        binding.numPeople(),
-                        allocatedRevenue
-                );
-                repository.saveIssuedEntitlement(entitlement);
-                responses.add(new IssuedEntitlementResponse(entitlementCode));
+                // 待确认项#1：每张（多人）票分配收入（无订单则 null），再在其 N 张独立票间整数平分（不丢分）。
+                Long unitRevenue = allocations == null ? null : allocations[allocationIndex];
                 allocationIndex++;
+                long[] perPersonRevenue = unitRevenue == null ? null : allocateEvenly(unitRevenue, peopleCount);
+                for (int p = 0; p < peopleCount; p++) {
+                    String entitlementCode = "P0-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+                    Long allocatedRevenue = perPersonRevenue == null ? null : perPersonRevenue[p];
+                    IssuedEntitlementRecord entitlement = new IssuedEntitlementRecord(
+                            "ent_" + UUID.randomUUID().toString().replace("-", ""),
+                            entitlementCode,
+                            ticketTypeId,
+                            orderId,
+                            template.id(),
+                            template.entitlementType(),
+                            merchantId,
+                            venueId,
+                            pointId,
+                            binding.totalTimes(),
+                            0,
+                            binding.valueAmountCent(),
+                            "active",
+                            now,
+                            validTo,
+                            now,
+                            now,
+                            // fan-out 后每张为独立单人票：numPeople=1，核销 verified_people=1、游乐占 1 容量。
+                            1,
+                            allocatedRevenue
+                    );
+                    repository.saveIssuedEntitlement(entitlement);
+                    responses.add(new IssuedEntitlementResponse(entitlementCode));
+                }
             }
         }
         return new IssuedTicketResponse(responses);

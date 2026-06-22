@@ -23,10 +23,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class EvidenceEventController {
 
     private final EvidenceEventService service;
+    private final TraceabilityService traceabilityService;
     private final AuthorizationService authorizationService;
 
-    public EvidenceEventController(EvidenceEventService service, AuthorizationService authorizationService) {
+    public EvidenceEventController(
+            EvidenceEventService service,
+            TraceabilityService traceabilityService,
+            AuthorizationService authorizationService
+    ) {
         this.service = service;
+        this.traceabilityService = traceabilityService;
         this.authorizationService = authorizationService;
     }
 
@@ -86,5 +92,13 @@ public class EvidenceEventController {
     ) {
         authorizationService.requirePermission("evidence.timeline.view");
         return ApiResponse.ok(service.getTimeline(objectType, objectId));
+    }
+
+    @GetMapping("/traceability/auto-capture-rate")
+    public ApiResponse<TraceabilityAutoCaptureRate> getAutoCaptureRate(
+            @RequestParam(name = "threshold_percent", defaultValue = "80") int thresholdPercent
+    ) {
+        authorizationService.requirePermission("evidence.timeline.view");
+        return ApiResponse.ok(traceabilityService.autoCaptureRate(thresholdPercent));
     }
 }

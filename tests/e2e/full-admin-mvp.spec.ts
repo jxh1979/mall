@@ -40,7 +40,14 @@ test.describe("full admin MVP acceptance", () => {
 
     await expect(page.getByTestId("admin-page-title")).toContainText("员工账号");
     await page.getByTestId("access-user-name").fill("new-staff");
-    await page.getByTestId("access-user-role").fill("BAR_MANAGER");
+    await page.getByTestId("access-user-password").fill("ChangeMe@123");
+    await page.getByTestId("access-user-phone").fill("13800000001");
+    await page.getByTestId("access-user-account-type").selectOption("sales");
+    await page.getByTestId("access-user-org").fill("org-1");
+    await page.getByTestId("access-user-merchant").fill("merchant-1");
+    await page.getByTestId("access-user-status").selectOption("active");
+    await page.getByTestId("access-user-consent").fill("consent-staff-001");
+    await page.getByTestId("access-user-evidence").fill("ev-staff-001,ev-hr-001");
     await expect(page.getByTestId("access-user-template")).toBeVisible();
     await page.getByTestId("access-user-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("创建员工并赋权");
@@ -48,9 +55,17 @@ test.describe("full admin MVP acceptance", () => {
 
     await page.getByTestId("admin-nav-ADM-ACC-002").click();
     await expect(page).toHaveURL(/\/admin\/access\/permission-templates$/);
+    await page.getByTestId("permission-template-name").fill("普通员工01");
+    await page.getByTestId("permission-template-type").selectOption("temporary");
+    await page.getByTestId("permission-template-valid-until").fill("2026-07-01T10:00");
+    await page.getByTestId("permission-template-single-use").check();
+    await page.getByTestId("permission-code-access.permission_template.view").check();
+    await page.getByTestId("permission-code-bar.table_session.view").check();
+    await page.getByTestId("permission-template-save").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("保存权限模板");
     await page.getByTestId("permission-template-copy").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("复制模板");
-    await page.getByTestId("permission-template-single-use").check();
+    await page.getByTestId("permission-template-target-users").fill("user-1,user-2");
     await page.getByTestId("permission-template-apply").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("单次有效");
   });
@@ -83,7 +98,19 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("bar-checkin-count").fill("4");
     await page.getByTestId("bar-checkin-submit").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("checked_in");
-    await expect(page.getByTestId("bar-transfer-action")).toContainText("需主管审批");
+
+    await page.getByTestId("bar-session-select-session-1").check();
+    await page.getByTestId("bar-transfer-target-table").fill("table-2");
+    await page.getByTestId("bar-transfer-submit").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("transferred");
+
+    await page.getByTestId("bar-merge-target-session").fill("session-2");
+    await page.getByTestId("bar-merge-submit").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("merged");
+
+    await page.getByTestId("bar-renew-minutes").fill("60");
+    await page.getByTestId("bar-renew-submit").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("renewed");
   });
 
   test("ADM-MVP-05 finance ledger requires adjustment reason and supports partial payment", async ({ page }) => {

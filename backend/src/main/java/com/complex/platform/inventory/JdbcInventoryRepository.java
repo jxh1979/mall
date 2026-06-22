@@ -199,6 +199,18 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
+    public int sumStockBalanceByItemAndWarehouse(String itemId, String warehouseId) {
+        // 2e 盘点冻结：系统账面值 = 该 item 在该 warehouse 全部 location 的 quantity 合计（盘点 book_qty 取此，而非客户端传入）。
+        Integer sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(quantity), 0)
+                  FROM inventory_stock_balances
+                 WHERE item_id = :item_id
+                   AND warehouse_id = :warehouse_id
+                """, Map.of("item_id", itemId, "warehouse_id", warehouseId), Integer.class);
+        return sum == null ? 0 : sum;
+    }
+
+    @Override
     public StockBalanceRecord saveStockBalance(StockBalanceRecord balance) {
         jdbcTemplate.update("""
                 INSERT INTO inventory_stock_balances (
@@ -249,6 +261,35 @@ class JdbcInventoryRepository implements InventoryRepository {
                     updated_at = EXCLUDED.updated_at
                 """, stockBatchParameters(batch));
         return batch;
+    }
+
+    @Override
+    public List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String itemId, String locationId) {
+        // 2e FEFO（先到期先出，涵盖 FIFO）：item+location 的 active 批次按 expire_at 升序（NULL 最后）、created_at 升序。
+        return jdbcTemplate.query("""
+                SELECT id, item_id, location_id, batch_no, supplier_id, quantity,
+                       expire_at, status, evidence_attachment_ids, created_at, updated_at, merchant_id
+                  FROM inventory_stock_batches
+                 WHERE item_id = :item_id
+                   AND location_id = :location_id
+                   AND status = 'active'
+                   AND quantity > 0
+                 ORDER BY expire_at ASC NULLS LAST, created_at ASC, id
+                """, Map.of("item_id", itemId, "location_id", locationId), rowMapper::mapStockBatch);
+    }
+
+    @Override
+    public int atomicDecreaseBatchQuantity(String batchId, int qty) {
+        // 2e：原子扣减批次 quantity（CAS，quantity>=qty 才扣），扣至 0 时 status→consumed。
+        return jdbcTemplate.update("""
+                UPDATE inventory_stock_batches
+                   SET quantity = quantity - :qty,
+                       status = CASE WHEN quantity - :qty <= 0 THEN 'consumed' ELSE status END,
+                       updated_at = NOW()
+                 WHERE id = :id
+                   AND quantity >= :qty
+                   AND status = 'active'
+                """, Map.of("id", batchId, "qty", qty));
     }
 
     @Override
@@ -509,11 +550,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_trace_handovers (
                     id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
-                    handover_result, overall_status, current_segment, evidence_attachment_ids, created_at
+                    handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id
                 )
                 VALUES (
                     :id, :trace_code, :item_id, :from_staff_id, :to_staff_id, :device_id,
-                    :handover_result, :overall_status, :current_segment, CAST(:evidence_attachment_ids AS jsonb), :created_at
+                    :handover_result, :overall_status, :current_segment, CAST(:evidence_attachment_ids AS jsonb), :created_at, :merchant_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     trace_code = EXCLUDED.trace_code,
@@ -533,7 +574,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<TraceHandoverRecord> findTraceHandoverByIdForUpdate(String id) {
         return jdbcTemplate.query("""
                 SELECT id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
-                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at
+                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id
                   FROM inventory_trace_handovers
                  WHERE id = :id
                    FOR UPDATE
@@ -1029,7 +1070,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("overall_status", handover.overallStatus())
                 .addValue("current_segment", handover.currentSegment())
                 .addValue("evidence_attachment_ids", writeList(handover.evidenceAttachmentIds()))
-                .addValue("created_at", offset(handover.createdAt()));
+                .addValue("created_at", offset(handover.createdAt()))
+                .addValue("merchant_id", handover.merchantId());
     }
 
     private MapSqlParameterSource traceHandoverStepParameters(TraceHandoverStepRecord step) {
@@ -1475,6 +1517,18 @@ class JdbcInventoryRepository implements InventoryRepository {
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapStocktake);
+    }
+
+    @Override
+    public boolean hasActiveStocktakeForWarehouse(String warehouseId) {
+        // 2e 盘点冻结：该库房存在 counting/reviewing（未关闭）盘点单时，出入库须冻结，避免盘点期间库存变动致差异基线失真。
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM stocktake
+                 WHERE warehouse_id = :warehouse_id
+                   AND status IN ('counting', 'reviewing')
+                """, Map.of("warehouse_id", warehouseId), Integer.class);
+        return count != null && count > 0;
     }
 
     @Override

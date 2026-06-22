@@ -21,11 +21,32 @@ import org.springframework.web.bind.annotation.RestController;
 public class BarController {
 
     private final BarService service;
+    private final BarEntitlementRedemptionService entitlementRedemptionService;
     private final AuthorizationService authorizationService;
 
-    public BarController(BarService service, AuthorizationService authorizationService) {
+    public BarController(
+            BarService service,
+            BarEntitlementRedemptionService entitlementRedemptionService,
+            AuthorizationService authorizationService
+    ) {
         this.service = service;
+        this.entitlementRedemptionService = entitlementRedemptionService;
         this.authorizationService = authorizationService;
+    }
+
+    @GetMapping("/entitlement-redemptions")
+    public ApiResponse<PageResponse<BarGiftRedemptionRecord>> listEntitlementRedemptions() {
+        authorizationService.requirePermission("bar.entitlement.read");
+        return ApiResponse.ok(entitlementRedemptionService.listRedemptions());
+    }
+
+    @PostMapping("/entitlement-redemptions/drink")
+    public ApiResponse<BarGiftRedemptionRecord> redeemDrinkEntitlement(
+            @RequestBody(required = false) BarEntitlementDrinkRedemptionRequest request
+    ) {
+        authorizationService.requirePermission("bar.entitlement.redeem");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(entitlementRedemptionService.redeemDrink(request));
     }
 
     @PostMapping("/age-verifications")
@@ -317,6 +338,16 @@ public class BarController {
         authorizationService.requirePermission("bar.table.guest_checkin");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.checkInReservationGuest(id, request));
+    }
+
+    @PostMapping("/reservations/{id}/entry-allowance/verify")
+    public ApiResponse<BarReservationEntryAllowanceVerificationRecord> verifyReservationEntryAllowance(
+            @PathVariable String id,
+            @RequestBody(required = false) VerificationRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.guest_checkin");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.verifyReservationEntryAllowance(id, request));
     }
 
     @GetMapping("/tables")

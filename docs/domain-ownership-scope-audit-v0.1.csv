@@ -3,9 +3,11 @@ access_users,direct,merchant_id,merchant_id column on access_users,ready for pro
 amusement_capacity_config,direct,project_id,project_id column on amusement_capacity_config,ready for project/merchant scoped query enforcement,covered
 amusement_capacity_snapshot,direct,project_id,project_id column on amusement_capacity_snapshot,ready for project/merchant scoped query enforcement,covered
 amusement_device_statuses,direct,project_id,project_id column on amusement_device_statuses,ready for project/merchant scoped query enforcement,covered
+amusement_devices,direct,project_id,project_id column on amusement_devices,ready for project/merchant scoped query enforcement,covered
 amusement_group_bookings,direct,project_id,project_id column on amusement_group_bookings,ready for project/merchant scoped query enforcement,covered
 amusement_incident_actions,inherited,inspection/incident id,inspection/incident id -> amusement project/session scope,must join through scope path before multi-complex rollout,covered
 amusement_incidents,direct,project_id,project_id column on amusement_incidents,ready for project/merchant scoped query enforcement,covered
+amusement_inspection_tasks,direct,project_id,project_id column on amusement_inspection_tasks,ready for project/merchant scoped query enforcement,covered
 amusement_maintenance_record,direct,project_id,project_id column on amusement_maintenance_record,ready for project/merchant scoped query enforcement,covered
 amusement_manual_overrides,direct,project_id,project_id column on amusement_manual_overrides,ready for project/merchant scoped query enforcement,covered
 amusement_over_capacity_policy,direct,project_id,project_id column on amusement_over_capacity_policy,ready for project/merchant scoped query enforcement,covered
@@ -137,7 +139,7 @@ inventory_suppliers,direct,merchant_id,merchant_id column on inventory_suppliers
 inventory_trace_codes,direct,merchant_id,merchant_id column on inventory_trace_codes,ready for project/merchant scoped query enforcement,covered
 inventory_trace_handover_exceptions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 inventory_trace_handover_steps,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
-inventory_trace_handovers,inherited,movement/batch linkage,movement/batch linkage -> inventory_stock_movements/batches,must join through scope path before multi-complex rollout,covered
+inventory_trace_handovers,direct,merchant_id,merchant_id column on inventory_trace_handovers,ready for project/merchant scoped query enforcement,covered
 inventory_variance,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 issued_entitlements,direct,venue_id,venue_id column on issued_entitlements,ready for project/merchant scoped query enforcement,covered
 mall_floor_plans,direct,project_id,project_id column on mall_floor_plans,ready for project/merchant scoped query enforcement,covered
@@ -197,7 +199,7 @@ terminal_sync_tasks,inherited,terminal/device id,terminal/device id -> venue/pro
 ticket_credentials,inherited,order_id/entitlement_id,order_id/entitlement_id -> ticket_orders/issued_entitlements -> ticket_type/project scope,must join through scope path before multi-complex rollout,covered
 ticket_dynamic_pricing_rules,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_order_items,inherited,order_id,order_id -> ticket_orders -> ticket_type/project scope,must join through scope path before multi-complex rollout,covered
-ticket_orders,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+ticket_orders,direct,merchant_id,merchant_id column on ticket_orders,ready for project/merchant scoped query enforcement,covered
 ticket_payment_intents,inherited,order_id,order_id -> ticket_orders -> ticket_type/project scope,must join through scope path before multi-complex rollout,covered
 ticket_price_rules,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 ticket_refund_lines,inherited,refund_id,refund_id -> ticket_refunds -> order_id -> ticket_orders,must join through scope path before multi-complex rollout,covered

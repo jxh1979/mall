@@ -18,6 +18,16 @@ public record TraceHandoverRecord(
         String overallStatus,
         String currentSegment,
         List<String> evidenceAttachmentIds,
-        Instant createdAt
+        Instant createdAt,
+        // 2e 溯源归属（V139）：交接归属商户（currentMerchantScope）；三方法按此校验跨租户。
+        String merchantId
 ) {
+    // 兼容构造（11 参，无 merchantId）：默认 null，保留既有调用点（如平台级/旧测试）。
+    public TraceHandoverRecord(
+            String id, String traceCode, String itemId, String fromStaffId, String toStaffId, String deviceId,
+            String handoverResult, String overallStatus, String currentSegment,
+            List<String> evidenceAttachmentIds, Instant createdAt) {
+        this(id, traceCode, itemId, fromStaffId, toStaffId, deviceId, handoverResult, overallStatus,
+                currentSegment, evidenceAttachmentIds, createdAt, null);
+    }
 }

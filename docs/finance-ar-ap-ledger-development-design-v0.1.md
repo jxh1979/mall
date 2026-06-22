@@ -111,7 +111,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `reviewed_at` | timestamp | 否 | 复核时间 |
 | `created_by` | uuid | 是 | 创建人 |
 
-## 5. 状态机
+> **✅ 已实现修复（F-OPS-07，2026-06-22，已在 .160 编译通过）**：补录/调整审批 `decideAdjustment`（finance 域唯一涉资金审批链）落地**职责分离（SoD）**——审批人 `approver`（写入 `reviewer_id`）**不得等于**发起人 `requested_by`（`created_by`），**自审自批抛 `SELF_APPROVAL_FORBIDDEN`**。与 §7「发起调整 / 审批调整」分属不同权限、§8 反模式「日结锁定后直接改金额→走调整/冲正审批」一致：影响金额的调整必须经第二人复核，发起人不能给自己的调整单放行。
 
 | 状态 | 含义 | 可进入条件 |
 |---|---|---|
@@ -132,6 +132,10 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 2. 已锁定日结关联的台账不得直接改金额，只能走 `ar_ap_adjustments`。
 3. 缺少 `business_entity_binding_id`、`settlement_subject_id`、`due_date`、`amount_total` 时不得进入确认态。
 4. 同一 `source_type + source_id + direction` 默认不得重复生成，重复必须走调整或冲正。
+
+> **✅ 已实现修复（F-OPS-01 / F-OPS-09，2026-06-22，已在 .160 编译通过）**：
+> - **F-OPS-01 运行期权威台账 append-only（`delete_only` 口径）**：`ar_ap_items` 纳入 append-only 保护，但口径为 **`delete_only`——仅禁物理 `DELETE`，保留合法 `UPDATE`** 供 `amount_paid`/`amount_unpaid`/`status` 等收付款回写（与硬规则 1 的余额公式、§5 状态机流转一致）。**金额修正一律走冲正分录**（`ar_ap_adjustments`，§4.3 `reversal`/`manual_correction`），不得物理删除原行重建。即：台账行只增不删、状态/已收付金额可合法 UPDATE 回写、金额修正走调整冲正。
+> - **F-OPS-09 日结判锁加 merchant scope 过滤**：日结判锁 `lockedDailyCloseExistsForDate` 加 **merchant scope 过滤**——`finance_daily_closes` 以 `scope_type`/`scope_id` 表达封账归属，**仅 `scope_type='merchant'` 才约束该商户**，与锁定落账 `lockArApItemsForDailyClose` 口径一致：仅商户级封账冻结该商户台账，**非 merchant scope（如平台/门店级）封账不跨冻**该商户。消除"任意 scope 的当日封账都冻结全部台账"的过冻。
 
 ## 6. 生成流程
 
@@ -154,6 +158,10 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 1. 库存差异先生成独立差异批次。
 2. 财务日结只显示潜在影响金额，不自动改锁定日结。
 3. 经审批后进入应收应付或财务调整台账。
+
+### 6.4 内部核算入账（已实现修复）
+
+> **✅ 已实现修复（F-OPS-02，2026-06-22，已在 .160 编译通过）**：内部核算入账 `recordInternalAccountingRevenue`（平台自营酒吧/游乐内部经营收入归集，对应 §1「内部核算」行、§4.1 `direction=internal_accounting`）**写台账前校验日结锁**——若目标经营日已封账（存在该经营日的锁定日结，判锁口径见 §5 硬规则 F-OPS-09 的 merchant scope 过滤），**禁止向已封账经营日补写内部核算收入**，与硬规则 2「已锁定日结关联的台账不得直接改金额」同源：已封账日的内部核算收入修正同样须走 `ar_ap_adjustments` 补录审批（§4.3），不得直接补写绕过封账。
 
 ## 6D. 库存差异→应收应付资金回写（stocktake/variance→AP）
 

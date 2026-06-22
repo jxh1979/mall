@@ -235,6 +235,15 @@ final class JdbcBarCatalogRepository {
                 """, Map.of("id", id), rowMapper::mapReservation).stream().findFirst();
     }
 
+    public Optional<BarReservationRecord> findReservationByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM bar_reservations
+                 WHERE id = :id
+                 FOR UPDATE
+                """, Map.of("id", id), rowMapper::mapReservation).stream().findFirst();
+    }
+
     public int countGuestCheckins(String reservationId) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)::int

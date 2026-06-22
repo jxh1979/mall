@@ -1,6 +1,7 @@
 package com.complex.platform.analytics;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
+import com.complex.platform.common.BusinessDayResolver;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * T12 经营看板 ETL（实现 B：@Scheduled 刷新快照）。
@@ -58,15 +60,26 @@ public class DashboardAggregationJob {
 
     private final AnalyticsRepository repository;
     private final Clock clock;
+    private final BusinessDayResolver businessDayResolver;
 
     @Autowired
+    public DashboardAggregationJob(AnalyticsRepository repository, BusinessDayResolver businessDayResolver) {
+        this(repository, Clock.systemUTC(), businessDayResolver);
+    }
+
+    // 测试便捷构造（默认 cutoff 经营日口径）。
     public DashboardAggregationJob(AnalyticsRepository repository) {
-        this(repository, Clock.systemUTC());
+        this(repository, Clock.systemUTC(), new BusinessDayResolver(4));
     }
 
     DashboardAggregationJob(AnalyticsRepository repository, Clock clock) {
+        this(repository, clock, new BusinessDayResolver(4));
+    }
+
+    DashboardAggregationJob(AnalyticsRepository repository, Clock clock, BusinessDayResolver businessDayResolver) {
         this.repository = repository;
         this.clock = clock;
+        this.businessDayResolver = businessDayResolver;
     }
 
     /** @Scheduled 薄包装：默认关闭，仅在 analytics.dashboard-etl.scheduled.enabled=true 时注册。 */
@@ -77,6 +90,9 @@ public class DashboardAggregationJob {
     }
 
     /** 直接可调用的聚合入口：聚合 businessDate 当日七类指标并 upsert 快照。 */
+    // 2d-4：整批 upsert 包一个事务，避免并发/中途失败造成快照集撕裂（平台/商户/project 行跨运行不一致）。
+    // 注：scheduledRefresh 同类自调用时 @Transactional 不生效（Spring AOP self-invocation 限制），对外部触发生效。
+    @Transactional
     public void refreshSnapshots(LocalDate businessDate) {
         Instant now = Instant.now(clock);
 
@@ -300,15 +316,12 @@ public class DashboardAggregationJob {
         merchantIds.addAll(barRefundByMerchant.keySet());
         merchantIds.addAll(ticketAllocatedByMerchant.keySet());
         merchantIds.addAll(ticketRefundByMerchant.keySet());
-        BigDecimal barRevenueTotal = BigDecimal.ZERO;
-        BigDecimal barRefundTotal = BigDecimal.ZERO;
+        BigDecimal platformNetFromMerchants = BigDecimal.ZERO;
         for (String merchantId : merchantIds) {
             BigDecimal revenue = nonNull(barRevenueByMerchant.get(merchantId));
             BigDecimal refund = nonNull(barRefundByMerchant.get(merchantId));
             BigDecimal ticketShare = nonNull(ticketAllocatedByMerchant.get(merchantId));
             BigDecimal ticketRefundShare = nonNull(ticketRefundByMerchant.get(merchantId));
-            barRevenueTotal = barRevenueTotal.add(revenue);
-            barRefundTotal = barRefundTotal.add(refund);
             if (merchantId != null && !merchantId.isBlank()) {
                 BigDecimal merchantNet = ticketShare
                         .add(revenue)
@@ -320,13 +333,13 @@ public class DashboardAggregationJob {
                         PROJECTION_ETL,
                         now
                 );
+                platformNetFromMerchants = platformNetFromMerchants.add(merchantNet);
             }
         }
-        // 平台行级 net：售票实付 + Σ酒吧实收 − 售票退款 − Σ酒吧退款（第三方回流不计）。
-        BigDecimal platformNet = nonNull(ticketRevenue)
-                .add(barRevenueTotal)
-                .subtract(nonNull(ticketRefund))
-                .subtract(barRefundTotal);
+        // 2d-3（用户裁定：平台=Σ商户防漂移）：平台 net 取 Σ各商户 net，确保平台与商户口径强一致，
+        // 消除"direct 出票 / 无 merchant 归属售票造成平台 ≥ Σ商户"的漂移。
+        // §8B 六源含第三方：第三方回流目前尚未聚合（无独立数据源），纳入为预留（第三方=0），接入后并入各商户 net。
+        BigDecimal platformNet = platformNetFromMerchants;
         repository.upsertMetricSnapshot(
                 new MetricSnapshotKey(REVENUE_NET, "finance", PERIOD_DAILY, businessDate, SEGMENT_PLATFORM, null),
                 platformNet,
@@ -341,6 +354,7 @@ public class DashboardAggregationJob {
     }
 
     private LocalDate today() {
-        return LocalDate.ofInstant(Instant.now(clock), ZoneOffset.UTC);
+        // 2d-4：经营日统一走 BusinessDayResolver（cutoff 切日），替换裸 UTC 自然日，避免跨日边界落错经营日。
+        return businessDayResolver.businessDate(Instant.now(clock));
     }
 }

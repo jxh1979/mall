@@ -150,6 +150,9 @@ final class IntegrationOperationSupport {
         if (saved instanceof AdapterTestRecord record) {
             return record.id();
         }
+        if (saved instanceof IntegrationPollingCheckRecord record) {
+            return record.id();
+        }
         return "unknown";
     }
 }

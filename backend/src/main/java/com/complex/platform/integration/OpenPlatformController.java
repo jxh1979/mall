@@ -21,11 +21,6 @@ public class OpenPlatformController {
         this.service = service;
     }
 
-    @PostMapping("/auth/token")
-    public ApiResponse<OpenAuthTokenResponse> issueToken(@RequestBody OpenAuthTokenRequest request) {
-        return ApiResponse.ok(service.issueOpenToken(request));
-    }
-
     @GetMapping("/d/{endpoint_key}/events/{event_id}")
     public ApiResponse<OpenEventResultResponse> getEventResult(
             @PathVariable("endpoint_key") String endpointKey,
@@ -48,11 +43,14 @@ public class OpenPlatformController {
             @PathVariable String provider,
             @PathVariable String event,
             @RequestHeader(value = "X-Webhook-Signature", required = false) String signature,
+            @RequestHeader(value = "X-Open-Timestamp", required = false) Long timestamp,
+            @RequestHeader(value = "X-Open-Nonce", required = false) String nonce,
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyHeader,
             @RequestBody(required = false) Map<String, Object> payload
     ) {
         String idempotencyKey = idempotencyKey(idempotencyHeader, payload);
-        return ApiResponse.ok(service.receiveWebhook(endpointKey, provider, event, signature, idempotencyKey, payload));
+        return ApiResponse.ok(service.receiveWebhook(
+                endpointKey, provider, event, signature, timestamp, nonce, idempotencyKey, payload));
     }
 
     private String idempotencyKey(String headerValue, Map<String, Object> payload) {

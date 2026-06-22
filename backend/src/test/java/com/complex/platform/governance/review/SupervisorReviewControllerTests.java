@@ -71,7 +71,7 @@ class SupervisorReviewControllerTests {
         mockMvc.perform(get("/api/v1/platform/supervisor-review-policies")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -87,7 +87,7 @@ class SupervisorReviewControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -108,7 +108,7 @@ class SupervisorReviewControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -206,7 +206,7 @@ class SupervisorReviewControllerTests {
         mockMvc.perform(get("/api/v1/platform/supervisor-review-policies")
                         .with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
 
         // evaluate 需要 manage 权限
         doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
@@ -224,7 +224,7 @@ class SupervisorReviewControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
 
         // approve 需要 approve 权限
         doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
@@ -241,7 +241,7 @@ class SupervisorReviewControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
 
         verify(authorizationService).requirePermission("governance.supervisor_review.view");
         verify(authorizationService).requirePermission("governance.supervisor_review.manage");

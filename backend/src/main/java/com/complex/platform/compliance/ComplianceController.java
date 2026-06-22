@@ -95,6 +95,8 @@ public class ComplianceController {
         // 原文调阅最小授权：raw 需 wecom.view_raw，脱敏展示需 wecom.view。
         boolean raw = "raw".equalsIgnoreCase(mode);
         authorizationService.requirePermission(raw ? "wecom.view_raw" : "wecom.view");
+        // 平台合规口径 fail-closed：拒绝 merchant-scoped 调用方越权调阅他项目会话（即便权限被误授商户角色）。
+        authorizationService.requirePlatformComplianceScope();
         String viewerUserId = authorizationService.currentActor().id();
         return ApiResponse.ok(wecomConversationService.viewMessages(id, mode, viewerUserId, approvalRef));
     }
@@ -107,6 +109,7 @@ public class ComplianceController {
             @RequestParam(value = "conversation_id", required = false) String conversationId
     ) {
         authorizationService.requirePermission("wecom.risk_hit.view");
+        authorizationService.requirePlatformComplianceScope();
         return ApiResponse.ok(wecomConversationService.listRiskHits(status, conversationId));
     }
 
@@ -117,6 +120,7 @@ public class ComplianceController {
     ) {
         // 复核处置 reviewing/confirmed/dismissed：高敏操作，需 wecom.risk_hit.review。
         authorizationService.requirePermission("wecom.risk_hit.review");
+        authorizationService.requirePlatformComplianceScope();
         String reviewerId = authorizationService.currentActor().id();
         return ApiResponse.ok(wecomConversationService.reviewRiskHit(
                 id,
@@ -128,6 +132,7 @@ public class ComplianceController {
     @GetMapping("/wecom/retention-policies")
     public ApiResponse<PageResponse<WecomRetentionPolicyRecord>> listWecomRetentionPolicies() {
         authorizationService.requirePermission("wecom.retention.manage");
+        authorizationService.requirePlatformComplianceScope();
         return ApiResponse.ok(wecomConversationService.listRetentionPolicies());
     }
 
@@ -136,6 +141,7 @@ public class ComplianceController {
             @RequestBody WecomRetentionPolicyRequest request
     ) {
         authorizationService.requirePermission("wecom.retention.manage");
+        authorizationService.requirePlatformComplianceScope();
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(wecomConversationService.upsertRetentionPolicy(request));
     }

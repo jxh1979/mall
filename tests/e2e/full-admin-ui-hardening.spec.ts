@@ -23,7 +23,7 @@ test.describe("full admin UI hardening acceptance", () => {
 
     await openNav(page, "ADM-ACC-001");
     await expect(page.getByTestId("access-users-page")).toBeVisible();
-    await expect(page.getByTestId("access-users-table").locator("thead")).toContainText("岗位角色");
+    await expect(page.getByTestId("access-users-table").locator("thead")).toContainText("账号类型");
 
     await openNav(page, "ADM-ACC-002");
     await expect(page.getByTestId("permission-templates-page")).toBeVisible();

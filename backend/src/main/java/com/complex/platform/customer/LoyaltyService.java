@@ -30,6 +30,11 @@ public class LoyaltyService {
 
     private static final long BASIS_POINTS_DENOMINATOR = 10_000L;
 
+    // P1 安全兜底默认（仅当项目未配置 points_transfer_limit 时套用，防止无限额批量转赠套现）。
+    // 这是安全封顶默认，非业务最终口径；运营须按积分经济在 points_transfer_limit 表显式配置覆盖。
+    private static final long DEFAULT_DAILY_POINTS_LIMIT = 100_000L;
+    private static final int DEFAULT_DAILY_COUNT_LIMIT = 50;
+
     private final CustomerRepository repository;
     private final AuditEventService auditEventService;
     private final Clock clock;
@@ -536,7 +541,13 @@ public class LoyaltyService {
         requireCustomer(toCustomerId);
 
         // 风控：日限额 / 日次数（按 UTC 自然日窗口）。
-        CustomerPointsTransferLimitRecord limit = repository.findPointsTransferLimit(projectId).orElse(null);
+        // P1 安全修复（fail-closed）：此前未配置 limit 即整段跳过风控 → 可批量转赠聚合/套现。
+        // 改为未配置时套用保守安全默认（封顶而非放行）。注意：DEFAULT_* 为安全兜底默认，数值需运营按积分经济核定。
+        CustomerPointsTransferLimitRecord limit = repository.findPointsTransferLimit(projectId)
+                .orElseGet(() -> new CustomerPointsTransferLimitRecord(
+                        "default", projectId,
+                        DEFAULT_DAILY_POINTS_LIMIT, DEFAULT_DAILY_COUNT_LIMIT,
+                        "active", now, now));
         if (limit != null) {
             LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
             Instant dayStart = today.atStartOfDay(ZoneOffset.UTC).toInstant();

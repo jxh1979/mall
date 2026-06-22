@@ -241,7 +241,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 
 **处置模式**：
 - `block_hard`（默认）：达安全容量（硬上限，V083）阻断放行 + 达运营容量（软上限）告警放行，**均落 incident + 事件**。
-- `warn_only`：达任一上限均不阻断，但**必落 incident + 事件**。
+- `warn_only`：**安全容量（硬上限）仍阻断（F-OPS-03 不可旁路、触发自动停运）**，运营容量（软上限）告警放行；二者均**必落 incident + 事件**（`disposal_mode` 仅作留痕标注）。
 
 **权限点**：容量配置 `amusement.capacity_config.manage`；超容事件随核销 capability。
 
@@ -250,7 +250,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 **G/W/T 验收**：
 - G: 项目配置 operating_capacity=80、安全容量=100、disposal_mode=block_hard。W: 核销使在场达 80。T: 告警放行，落 `amusement.incident.over_capacity`（incident_type=over_capacity）。
 - G: 同上、在场达 100。W: 再核销。T: 硬阻断（SESSION_CAPACITY_EXHAUSTED 口径），落 over_capacity incident + 事件。
-- G: disposal_mode=warn_only。W: 在场达安全容量。T: 不阻断但必落 incident + 事件。
+- G: disposal_mode=warn_only。W: 在场达安全容量。T: **仍硬阻断（SESSION_CAPACITY_EXHAUSTED，F-OPS-03 不可旁路）**，必落 incident + 事件。
 - G: 项目未配置 over_capacity_policy。W: 核销。T: 退化为仅硬上限阻断、无软上限告警（向后兼容）。
 
 ---

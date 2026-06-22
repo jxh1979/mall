@@ -21,6 +21,7 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -53,11 +54,14 @@ class BarControllerTests {
     private BarService service;
 
     @Autowired
+    private BarEntitlementRedemptionService redemptionService;
+
+    @Autowired
     private AuthorizationService authorizationService;
 
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(service, authorizationService);
+        Mockito.reset(service, redemptionService, authorizationService);
         when(service.createAgeVerification(any(VerificationRequest.class))).thenReturn(ageVerification());
         when(service.calculateCommission(eq("bill_1"), any(CommissionCalculateRequest.class))).thenReturn(commission(1500, 19320L));
         when(service.createBillPayIntent(eq("bill_1"), any(PaymentIntentRequest.class))).thenReturn(paymentIntent());
@@ -79,6 +83,7 @@ class BarControllerTests {
         when(service.listReservations()).thenReturn(new PageResponse<>(List.of(reservation()), 1, 50, 1));
         when(service.createReservation(any(BarReservationRequest.class))).thenReturn(reservation());
         when(service.checkInReservationGuest(eq("reservation_1"), any(VerificationRequest.class))).thenReturn(checkin());
+        when(service.verifyReservationEntryAllowance(eq("reservation_1"), any(VerificationRequest.class))).thenReturn(entryAllowance());
         when(service.listTables()).thenReturn(new PageResponse<>(List.of(table()), 1, 50, 1));
         when(service.createTable(any(BarTableRequest.class))).thenReturn(table());
         when(service.openTable(eq("table_1"), any(OpenBarTableRequest.class))).thenReturn(openedTable());
@@ -87,6 +92,8 @@ class BarControllerTests {
         when(service.transferTableSession(eq("session_1"), any(BarTableTransferRequest.class))).thenReturn(adjustment("transfer"));
         when(service.mergeTableSessions(eq("session_1"), any(BarTableMergeRequest.class))).thenReturn(adjustment("merge"));
         when(service.renewTableSession(eq("session_1"), any(BarTableRenewRequest.class))).thenReturn(adjustment("renew"));
+        when(redemptionService.redeemDrink(any(BarEntitlementDrinkRedemptionRequest.class))).thenReturn(giftRedemption());
+        when(redemptionService.listRedemptions()).thenReturn(new PageResponse<>(List.of(giftRedemption()), 1, 50, 1));
     }
 
     @ParameterizedTest
@@ -112,6 +119,7 @@ class BarControllerTests {
             "GET,/api/v1/bar/reservations,bar.reservation.view",
             "POST,/api/v1/bar/reservations,bar.reservation.create",
             "POST,/api/v1/bar/reservations/reservation_1/check-in-guest,bar.table.guest_checkin",
+            "POST,/api/v1/bar/reservations/reservation_1/entry-allowance/verify,bar.table.guest_checkin",
             "GET,/api/v1/bar/tables,bar.table.view",
             "POST,/api/v1/bar/tables,bar.table.manage",
             "POST,/api/v1/bar/tables/table_1/open,bar.table.open_close",
@@ -119,7 +127,9 @@ class BarControllerTests {
             "POST,/api/v1/bar/table-sessions,bar.table_session.create",
             "POST,/api/v1/bar/table-sessions/session_1/transfer,bar.table_session.transfer",
             "POST,/api/v1/bar/table-sessions/session_1/merge,bar.table_session.merge",
-            "POST,/api/v1/bar/table-sessions/session_1/renew,bar.table_session.renew"
+            "POST,/api/v1/bar/table-sessions/session_1/renew,bar.table_session.renew",
+            "POST,/api/v1/bar/entitlement-redemptions/drink,bar.entitlement.redeem",
+            "GET,/api/v1/bar/entitlement-redemptions,bar.entitlement.read"
     })
     void barRoutesUseExactOpenApiPermission(String method, String path, String permission) throws Exception {
         if ("GET".equals(method)) {
@@ -153,12 +163,14 @@ class BarControllerTests {
             "/api/v1/bar/products",
             "/api/v1/bar/reservations",
             "/api/v1/bar/reservations/reservation_1/check-in-guest",
+            "/api/v1/bar/reservations/reservation_1/entry-allowance/verify",
             "/api/v1/bar/tables",
             "/api/v1/bar/tables/table_1/open",
             "/api/v1/bar/table-sessions",
             "/api/v1/bar/table-sessions/session_1/transfer",
             "/api/v1/bar/table-sessions/session_1/merge",
-            "/api/v1/bar/table-sessions/session_1/renew"
+            "/api/v1/bar/table-sessions/session_1/renew",
+            "/api/v1/bar/entitlement-redemptions/drink"
     })
     void writeRoutesRejectMissingIdempotencyKey(String path) throws Exception {
         mockMvc.perform(post(path)
@@ -166,12 +178,44 @@ class BarControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bodyFor(path, false)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
+    }
+
+
+
+    @Test
+    void listEntitlementRedemptionsReturnsGiftLedger() throws Exception {
+        mockMvc.perform(get("/api/v1/bar/entitlement-redemptions")
+                        .with(user("bar").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].verification_id").value("ver_1"));
+
+        verify(authorizationService).requirePermission("bar.entitlement.read");
+        verify(redemptionService).listRedemptions();
+    }
+
+    @Test
+    void redeemDrinkReturnsExistingGiftRedemptionRecord() throws Exception {
+        mockMvc.perform(post("/api/v1/bar/entitlement-redemptions/drink")
+                        .with(user("bar").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key":"bar-gift-once","verification_id":"ver_1","operator_note":"guest claims gift drink","evidence_attachment_ids":["att_1"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.verification_id").value("ver_1"))
+                .andExpect(jsonPath("$.data.status").value("delivered"));
+
+        verify(authorizationService).requirePermission("bar.entitlement.redeem");
+        verify(redemptionService).redeemDrink(any(BarEntitlementDrinkRedemptionRequest.class));
     }
 
     private String bodyFor(String path, boolean withIdempotencyKey) {
         String idempotency = withIdempotencyKey ? "\"idempotency_key\":\"bar-once\"," : "";
+        if (path.contains("entitlement-redemptions")) {
+            return "{" + idempotency + "\"verification_id\":\"ver_1\",\"operator_note\":\"guest claims gift drink\",\"evidence_attachment_ids\":[\"att_1\"]}";
+        }
         if (path.contains("table-sessions") && path.endsWith("/transfer")) {
             return "{" + idempotency + """
                     "target_table_id":"table_2","reason":"guest wants larger card seat","requested_by_user_id":"supervisor_1","session_version":1}
@@ -255,6 +299,25 @@ class BarControllerTests {
                 """;
     }
 
+
+    private BarGiftRedemptionRecord giftRedemption() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new BarGiftRedemptionRecord(
+                "gift_1",
+                "ent_1",
+                "ver_1",
+                "order_gift_1",
+                "bar_1",
+                "merchant_1",
+                "sku_beer",
+                "movement_1",
+                "delivered",
+                "gift redeemed; stock decreased via redeem_consume",
+                now,
+                now
+        );
+    }
+
     private BarTableRecord table() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new BarTableRecord("table_1", "bar_1", null, "T-bar_once", "A1", "card_seat", 2, 2, 50000L, "CNY", "active", now, now);
@@ -272,6 +335,10 @@ class BarControllerTests {
 
     private BarTableGuestCheckinRecord checkin() {
         return new BarTableGuestCheckinRecord("checkin_1", "reservation_1", "bar_1", "table_1", "guest_1", "accepted", 1, "dev_1", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"));
+    }
+
+    private BarReservationEntryAllowanceVerificationRecord entryAllowance() {
+        return new BarReservationEntryAllowanceVerificationRecord("verify_1", "reservation_1", "bar_1", "table_1", "guest_1", true, "allowed", 0, 2, 2, "dev_1", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"));
     }
 
     private BarAgeVerificationRecord ageVerification() {
@@ -445,6 +512,11 @@ class BarControllerTests {
         @Bean
         BarService barService() {
             return Mockito.mock(BarService.class);
+        }
+
+        @Bean
+        BarEntitlementRedemptionService barEntitlementRedemptionService() {
+            return Mockito.mock(BarEntitlementRedemptionService.class);
         }
 
         @Bean

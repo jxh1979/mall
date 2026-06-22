@@ -14,7 +14,7 @@ public record EntitlementTemplateRecord(
         String merchantId,
         String venueId,
         String pointId,
-        // R5 TODO#2：gift_drink 模板指向的吧台商品/库存 item（template 级，可空）。
+        // R5 已落地#2：gift_drink 模板指向的吧台商品/库存 item（template 级，可空）。
         // 赠饮核销时取此作为 itemRef 发 ticket.gift_verified；为空则下游跳过库存扣减（接 R5 T15）。
         String barItemRef,
         Instant createdAt,

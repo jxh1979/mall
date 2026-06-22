@@ -55,9 +55,12 @@ class EvidenceEventControllerTests {
     @Autowired
     private AuthorizationService authorizationService;
 
+    @Autowired
+    private TraceabilityService traceabilityService;
+
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(service, authorizationService);
+        Mockito.reset(service, authorizationService, traceabilityService);
     }
 
     @Test
@@ -79,7 +82,7 @@ class EvidenceEventControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 
@@ -299,6 +302,22 @@ class EvidenceEventControllerTests {
         verify(authorizationService).requirePermission("evidence.timeline.view");
     }
 
+    @Test
+    void autoCaptureRateUsesTimelinePermissionAndReturnsThresholdResult() throws Exception {
+        when(traceabilityService.autoCaptureRate(80))
+                .thenReturn(new TraceabilityAutoCaptureRate(10, 9, 90.0, 80, true));
+
+        mockMvc.perform(get("/api/v1/evidence/traceability/auto-capture-rate?threshold_percent=80")
+                        .with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total_steps").value(10))
+                .andExpect(jsonPath("$.data.auto_captured_steps").value(9))
+                .andExpect(jsonPath("$.data.auto_capture_rate_percent").value(90.0))
+                .andExpect(jsonPath("$.data.meets_threshold").value(true));
+
+        verify(authorizationService).requirePermission("evidence.timeline.view");
+    }
+
     @TestConfiguration
     static class TestBeans {
         @Bean
@@ -309,6 +328,11 @@ class EvidenceEventControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
+        }
+
+        @Bean
+        TraceabilityService traceabilityService() {
+            return Mockito.mock(TraceabilityService.class);
         }
 
         @Bean

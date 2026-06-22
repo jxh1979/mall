@@ -132,6 +132,27 @@ class JdbcTraceabilityRepository implements TraceabilityRepository {
     }
 
     @Override
+    public TraceabilityAutoCaptureRate autoCaptureRate(String merchantScope, int thresholdPercent) {
+        String where = merchantScope == null ? "" : "WHERE i.merchant_id = :merchant_id";
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("merchant_id", merchantScope);
+        return jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) AS total_steps,
+                       COALESCE(SUM(CASE WHEN s.auto_captured THEN 1 ELSE 0 END), 0) AS auto_steps
+                  FROM business_process_step_records s
+                  JOIN business_process_instances i ON i.id = s.process_instance_id
+                """ + where,
+                params,
+                (rs, rowNum) -> {
+                    long total = rs.getLong("total_steps");
+                    long automatic = rs.getLong("auto_steps");
+                    double percent = total == 0 ? 100.0 : (automatic * 100.0) / total;
+                    double rounded = Math.round(percent * 10.0) / 10.0;
+                    return new TraceabilityAutoCaptureRate(
+                            total, automatic, rounded, thresholdPercent, rounded >= thresholdPercent);
+                });
+    }
+
+    @Override
     public TraceabilityResponsibilityRecord saveResponsibility(TraceabilityResponsibilityRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO service_responsibility_records (

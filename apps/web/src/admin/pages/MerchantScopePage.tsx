@@ -21,22 +21,38 @@ function display(value: unknown) {
   return String(value);
 }
 
-function matchesMerchant(merchantId: string | null | undefined, rowMerchantId?: string) {
-  return !merchantId || rowMerchantId === merchantId;
+// 平台口径账号（如 platform_admin）无 merchantId 时是合法的全量监督；商户账号缺 merchantId 则是越权风险。
+function isPlatformOversight(accountType: string | undefined) {
+  return accountType === "platform_admin";
+}
+
+function matchesMerchant(merchantId: string | null | undefined, rowMerchantId: string | undefined, platformOversight: boolean) {
+  if (platformOversight) return true; // 平台监督口径：看全量
+  if (!merchantId) return false;      // 商户账号缺 merchantId：fail-safe 不放行（不再看全量）
+  return rowMerchantId === merchantId;
 }
 
 export function MerchantScopePage({ api, user, setActionResult, setGlobalError }: AdminPageProps) {
   const [workOrders, setWorkOrders] = React.useState<MerchantScopeWorkOrderRow[]>([]);
   const [bills, setBills] = React.useState<MerchantScopeBillRow[]>([]);
 
+  const platformOversight = isPlatformOversight(user.accountType);
+  // fail-safe：商户类账号缺 merchantId（配置异常）→ 空集 + 报错，绝不回退到看全量。
+  const scopeMissing = !platformOversight && !user.merchantId;
+
   const { loading, error, reload } = useAdminResource(
     async () => {
+      if (scopeMissing) {
+        setWorkOrders([]);
+        setBills([]);
+        throw new Error("当前账号缺少商户授权范围（merchantId），无法展示任何商户数据，请联系管理员配置。");
+      }
       const [workOrderRows, billRows] = await Promise.all([
         api.get<MerchantScopeWorkOrderRow[]>("/api/v1/merchant-service/work-orders"),
         api.get<MerchantScopeBillRow[]>("/api/v1/merchant-billing/bills"),
       ]);
-      setWorkOrders(workOrderRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId)));
-      setBills(billRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId)));
+      setWorkOrders(workOrderRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId, platformOversight)));
+      setBills(billRows.filter((row) => matchesMerchant(user.merchantId, row.merchantId, platformOversight)));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -50,7 +66,7 @@ export function MerchantScopePage({ api, user, setActionResult, setGlobalError }
     setActionResult({
       status: "merchant_scope_confirmed",
       audit: "merchant_authorized_scope_checked",
-      merchantId: user.merchantId ?? "all-visible",
+      merchantId: user.merchantId ?? (platformOversight ? "platform-all" : "unscoped"),
       authorizedScopes,
       workOrderCount: workOrders.length,
       billCount: bills.length,

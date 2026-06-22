@@ -33,6 +33,8 @@
 | nas_smb_backup | NAS SMB 备份恢复 | on | yes | PRD-CRED-NAS-001, PRD-NAS-AUTOMOUNT-001, PRD-NAS-SCHEDULE-001, PRD-NAS-ALERT-001, PRD-NAS-DRILL-CADENCE-001 | SEC-P0-OPS-RECOVERY-001 | 不建议关闭。若关闭，必须先指定等效备份恢复目标；否则不能宣称生产可恢复。 | 开启后必须固化 //192.168.88.113/bn 到 160 本地挂载点、定时备份、容量/失败告警和周期性恢复演练。 |
 | sms_notification | 短信通知 | off | no | PRD-CRED-3P-001 |  | 关闭后不调用真实短信供应商；登录验证码走 mock OTP loopback（非生产固定码 000000），生产无供应商时 fail-closed 拒绝登录；催缴、告警等短信能力降级为人工或站内留痕。 | 开启后必须补齐短信供应商签名/模板报备、API/SDK、credential_ref、发送回执、限频与失败补偿和生产证据。 |
 
+> **人脸/年龄能力（`bar_face_age`）的两个具体开关**（2026-06-22 P0-4/P0-5 落地）：`face.verification.enabled`（V146，entry 域入场闸实时年龄/人脸核验裁决，bar 售酒继承其结论）与 `integration.face_age.sync`（V071，T14 第三方供应商数据对账/同步）。二者职责不同、独立开关（与 payment 的 `payment.gateway.enabled` vs `integration.payment.sync` 同范式），本期均默认关。入场闸关 → bar 售酒年龄核验**继承「入场闸豁免」**（`provider_code=entry_gate_exempt`）非阻塞放行 + 制度兜底，**不展示「自动人脸已通过」**（对齐本文 §5 验收 #6，修复 X-03 客户端自报缺省 passed）；接入供应商 + 开启后入场闸 fail-closed 判龄，bar 自动继承 PASSED/FAILED（`face_inherited`）。
+
 ## 4. 后台手动工作人员录入需求
 
 新增后台用户录入渠道：平台管理员、IT 管理员或 HR 可在后台手动创建工作人员账号，录入员工账号、手机号、组织、商户、岗位/角色、权限模板、临时权限时效或单次有效设置，并写入审计事件。企业微信关闭时，后台手动录入是默认员工入口；企业微信开启后，企业微信同步结果只能作为辅助来源，不能绕过后台权限审批和留痕。

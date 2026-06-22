@@ -450,6 +450,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM bar_bill_settlements
                  WHERE settled_at >= :start
                    AND settled_at < :end
+                   AND reversed = FALSE
                  GROUP BY merchant_id
                 """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))

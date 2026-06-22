@@ -159,7 +159,11 @@ public class BarTableSessionService {
         Instant now = Instant.now();
         repository.saveTable(tableWithStatus(sourceTable, "pending_clear", now));
         repository.saveTable(tableWithStatus(targetTable, "opened", now));
-        BarTableSessionRecord updated = repository.saveTableSession(sessionMovedToTable(session, targetTable, now));
+        // 2c-5：DB 级乐观锁 CAS（替代仅内存比对的 requireSessionVersion），防并发转台双重占用。
+        BarTableSessionRecord updated = sessionMovedToTable(session, targetTable, now);
+        if (!repository.updateTableSessionIfVersionMatches(updated, session.sessionVersion())) {
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+        }
         return repository.saveTableSessionAdjustment(newAdjustment(
                 "transfer",
                 updated,
@@ -201,8 +205,14 @@ public class BarTableSessionService {
         BarTableRecord mergedTable = repository.findTableById(merged.tableId())
                 .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "merged bar table not found"));
         Instant now = Instant.now();
-        BarTableSessionRecord updatedPrimary = repository.saveTableSession(sessionWithNextVersion(primary, now));
-        repository.saveTableSession(sessionMergedInto(merged, primary.id(), now));
+        // 2c-5：两个 session 均走 DB 级乐观锁 CAS，防并发合台重复占用。
+        BarTableSessionRecord updatedPrimary = sessionWithNextVersion(primary, now);
+        if (!repository.updateTableSessionIfVersionMatches(updatedPrimary, primary.sessionVersion())) {
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+        }
+        if (!repository.updateTableSessionIfVersionMatches(sessionMergedInto(merged, primary.id(), now), merged.sessionVersion())) {
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+        }
         repository.saveTable(tableWithStatus(mergedTable, "pending_clear", now));
         return repository.saveTableSessionAdjustment(newAdjustment(
                 "merge",
@@ -240,7 +250,11 @@ public class BarTableSessionService {
         long additionalMinConsumption = nonNegative(actual.additionalMinConsumptionCent(), "additional_min_consumption_cent");
         long additionalDeposit = nonNegative(actual.additionalDepositAmountCent(), "additional_deposit_amount_cent");
         long additionalServiceFee = nonNegative(actual.additionalServiceFeeCent(), "additional_service_fee_cent");
-        BarTableSessionRecord updated = repository.saveTableSession(sessionWithNextVersion(session, now));
+        // 2c-5：DB 级乐观锁 CAS，防并发续台重复追加低消/押金。
+        BarTableSessionRecord updated = sessionWithNextVersion(session, now);
+        if (!repository.updateTableSessionIfVersionMatches(updated, session.sessionVersion())) {
+            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "bar table session changed concurrently");
+        }
         return repository.saveTableSessionAdjustment(newAdjustment(
                 "renew",
                 updated,

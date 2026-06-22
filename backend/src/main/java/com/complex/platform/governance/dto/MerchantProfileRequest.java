@@ -14,6 +14,7 @@ public record MerchantProfileRequest(
         String settlementEntityId,
         String contactName,
         String contactPhone,
+        String ownerPerson,
         String mallBlockCode,
         BigDecimal areaSquareMeter,
         BigDecimal leasedAreaSquareMeter,

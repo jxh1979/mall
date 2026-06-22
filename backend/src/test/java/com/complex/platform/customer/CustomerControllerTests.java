@@ -223,7 +223,7 @@ class CustomerControllerTests {
     void customerPrivateEndpointWithoutTokenReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/api/v1/customer/orders"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("CUSTOMER_UNAUTHENTICATED"));
+                .andExpect(jsonPath("$.detail_code").value("CUSTOMER_UNAUTHENTICATED"));
     }
 
     @Test
@@ -393,7 +393,7 @@ class CustomerControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("idempotency_key is required"));
     }
 

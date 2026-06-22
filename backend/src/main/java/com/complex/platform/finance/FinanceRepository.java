@@ -81,6 +81,14 @@ public interface FinanceRepository {
     default void markCamAllocationsTruedUp(String settlementPeriod) {
     }
 
+    /**
+     * P0 资金修复：某 settlementPeriod 已存在的 CAM true-up 批次数。
+     * 用于阻断同期重复 true-up（同幂等键重放已被外层幂等短路，再次进入必为不同键）。default 返回 0 兼容测试双子。
+     */
+    default long countCamTrueUpRunsForPeriod(String settlementPeriod) {
+        return 0L;
+    }
+
     /** 写一条 CAM true-up 批次。default 原样返回兼容既有测试双子。 */
     default CamTrueUpRunRecord saveCamTrueUpRun(CamTrueUpRunRecord run) {
         return run;
@@ -177,8 +185,21 @@ public interface FinanceRepository {
     /** 查目标台账项当前的 locked_day_close_id（empty=未锁定），用于硬拦截。 */
     Optional<String> findArApItemLockedDayCloseId(String arApItemId);
 
-    /** 该经营日是否已存在 locked 状态的日结（用于拦截向已锁定经营日新增/回填台账）。 */
-    boolean lockedDailyCloseExistsForDate(LocalDate businessDate);
+    /**
+     * 该经营日是否已存在会锁定本调用方台账的 locked 日结（用于拦截向已锁定经营日新增/回填台账）。
+     *
+     * <p>F-OPS-09（裁决#9 日结锁商户级）：原实现只按 {@code business_date + status='locked'} 判定，
+     * 无 scope 过滤，导致任一商户封账即冻结全平台该经营日的 AR/AP 写入。本方法与
+     * {@link #lockArApItemsForDailyClose(String, java.time.LocalDate, String)} 的锁定口径对齐：
+     * <ul>
+     *   <li>{@code merchantId == null}（平台口径调用方）：该经营日任一 locked 日结即拦截
+     *       （平台口径写入受所有封账约束，与平台锁定 locks-all 语义一致）。</li>
+     *   <li>{@code merchantId != null}（商户 scope 调用方）：仅当存在
+     *       {@code scope_type='merchant' AND scope_id=:merchant_id} 的 locked 日结才拦截，
+     *       即只受本商户封账约束，他商户封账不冻结本商户写入。</li>
+     * </ul>
+     */
+    boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId);
 
     /**
      * 六源汇总聚合：按经营日窗口 [fromInclusive, toExclusive) 聚合源表，得到 amount/refund/count。

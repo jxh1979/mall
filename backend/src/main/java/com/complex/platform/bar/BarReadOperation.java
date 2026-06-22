@@ -12,7 +12,8 @@ enum BarReadOperation implements AuditedOperation {
     LIST_TABLE_SESSIONS("bar.table_session.viewed", "bar.table_session.view_failed", "bar.table_session.view", "bar_table_session"),
     LIST_BILL_OPERATIONS("bar.bill_operations.viewed", "bar.bill_operations.view_failed", "bar.bill.split_merge", "bar_bill_operation"),
     LIST_TABLES_WITHOUT_SPACE("bar.table_space_backlog.viewed", "bar.table_space_backlog.view_failed", "bar.table.manage", "bar_table"),
-    LIST_SHIFTS("bar.shift.viewed", "bar.shift.view_failed", "bar.shift.manage", "bar_shift");
+    LIST_SHIFTS("bar.shift.viewed", "bar.shift.view_failed", "bar.shift.manage", "bar_shift"),
+    LIST_GIFT_REDEMPTIONS("bar.entitlement_redemption.viewed", "bar.entitlement_redemption.view_failed", "bar.entitlement.read", "bar_gift_redemption");
 
     private final String successEvent;
     private final String failureEvent;

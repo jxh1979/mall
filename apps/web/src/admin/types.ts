@@ -97,17 +97,41 @@ export type AccessUserRow = {
   username: string;
   accountType: string;
   status?: string;
+  phone?: string | null;
+  phoneHash?: string | null;
   organizationId?: string | null;
+  merchantId?: string | null;
+  createdVia?: string | null;
+  consentReference?: string | null;
+  evidenceAttachmentIds?: string[];
+  operatorNote?: string | null;
+};
+
+export type PermissionDefinitionRow = {
+  permissionCode?: string;
+  code?: string;
+  permissionName?: string;
+  name?: string;
+  domain?: string;
+  riskLevel?: string;
+  requiresApproval?: boolean;
+  status?: string;
 };
 
 export type PermissionTemplateRow = {
   id: string;
+  templateCode?: string;
   templateName?: string;
   name?: string;
+  description?: string | null;
   templateType?: string;
+  sourceTemplateId?: string | null;
   status?: string;
+  validFrom?: string | null;
   validUntil?: string | null;
   singleUse?: boolean;
+  permissionCodes?: string[];
+  permissions?: string[];
 };
 
 
@@ -196,6 +220,24 @@ export type BarReservationRow = {
   reservedAt?: string;
   createdAt?: string;
 };
+
+export type BarTableSessionRow = {
+  id: string;
+  barId?: string;
+  merchantId?: string;
+  businessDate?: string;
+  tableId?: string;
+  reservationId?: string;
+  customerId?: string;
+  guestCount?: number;
+  status?: string;
+  salesStaffId?: string;
+  serviceStaffId?: string;
+  openedAt?: string;
+  closedAt?: string | null;
+  sessionVersion?: number;
+};
+
 
 export type BarBillRow = {
   id?: string;

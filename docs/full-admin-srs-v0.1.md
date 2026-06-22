@@ -90,9 +90,11 @@
 - Given 主体绑定变更，When 审批通过，Then 历史合同和历史结算保持原快照，新业务使用新绑定。
 
 ### FR-ADM-ACC-001：账号与权限模板
-系统应支持员工账号、岗位、数据范围、基础权限模板、复制模板、临时模板。临时模板可设置有效期或单次有效。
+系统应支持员工账号、账号类型、组织/商户数据范围、初始登录凭证、基础权限模板、复制模板、临时模板。后台手动录入是企业微信关闭时的默认员工入口；必须承接同意/授权凭据或证据附件，手机号只保存不可逆哈希。临时模板可设置有效期或单次有效。
 
 验收标准：
+- Given IT/HR 管理员手动创建员工账号，When 提交员工账号、初始密码、organization_id、账号类型和可选 consent_reference/evidence_attachment_ids，Then 系统创建 access_user，写入 auth_credentials 哈希凭证，手机号不落明文，并记录 access.user.changed。
+- Given 商户范围管理员手动创建账号，When 请求 merchant_id 与自身 merchant_id 不一致，Then 系统拒绝并返回 CROSS_MERCHANT_FORBIDDEN。
 - Given 管理员复制“普通员工”模板为“普通员工01”，When 修改模板权限，Then 原模板不受影响，新模板记录来源模板。
 - Given 临时模板设置单次有效，When 被使用一次后，Then 系统自动失效并记录使用结果。
 - Given 临时模板到期，When 员工再次访问相关页面，Then 系统按失效后权限重新拦截。

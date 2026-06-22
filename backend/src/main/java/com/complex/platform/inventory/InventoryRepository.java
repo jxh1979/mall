@@ -28,11 +28,20 @@ public interface InventoryRepository {
 
     Optional<StockBalanceRecord> findStockBalance(String itemId, String locationId);
 
+    // 2e 盘点冻结：系统账面合计（item+warehouse），盘点 book_qty 取此而非客户端传入，防伪造。
+    int sumStockBalanceByItemAndWarehouse(String itemId, String warehouseId);
+
     StockBalanceRecord saveStockBalance(StockBalanceRecord balance);
 
     List<StockBalanceRecord> listStockBalances();
 
     InventoryStockBatchRecord saveStockBatch(InventoryStockBatchRecord batch);
+
+    // 2e 批次扣减：FEFO 排序的可消费 active 批次（先到期先出）。
+    List<InventoryStockBatchRecord> listActiveBatchesForConsumption(String itemId, String locationId);
+
+    // 2e 批次扣减：原子扣减批次 quantity（CAS，扣至 0 → consumed）。返回受影响行数。
+    int atomicDecreaseBatchQuantity(String batchId, int qty);
 
     List<InventoryStockBatchRecord> listStockBatches();
 
@@ -156,6 +165,9 @@ public interface InventoryRepository {
     List<StocktakeRecord> listStocktakes();
 
     List<StocktakeRecord> listStocktakesByMerchant(String merchantId);
+
+    // 2e 盘点冻结：该库房是否存在未关闭（counting/reviewing）盘点单——出入库据此冻结。
+    boolean hasActiveStocktakeForWarehouse(String warehouseId);
 
     InventoryVarianceRecord saveInventoryVariance(InventoryVarianceRecord variance);
 

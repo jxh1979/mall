@@ -550,7 +550,7 @@ class MerchantBillingServiceTests {
         }
 
         @Override
-        public boolean lockedDailyCloseExistsForDate(LocalDate businessDate) {
+        public boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId) {
             return false;
         }
 

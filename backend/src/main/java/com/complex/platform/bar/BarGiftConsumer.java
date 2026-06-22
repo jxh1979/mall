@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  *
  * <p><b>幂等</b>：bar_gift_redemptions 的 verification_id 唯一键保证一次核销至多一单；重复事件即跳过。
  *
- * <p><b>赠饮→吧台 SKU 映射来源结论</b>：来源为权益模板 entitlement_templates.bar_item_ref（R5 TODO#2 已接通）。
+ * <p><b>赠饮→吧台 SKU 映射来源结论</b>：来源为权益模板 entitlement_templates.bar_item_ref（R5 已落地#2 已接通）。
  * gift_drink 模板配置 bar_item_ref 后，事件携带该 itemRef，下游对该 item 走 redeem_consume 扣减；
  * 模板未配置(itemRef=null)时跳过扣减并在 redemption.note 标注（向后兼容）。运营配置入口（创建 DTO 透传）为后续工作。
  *
@@ -94,7 +94,7 @@ public class BarGiftConsumer {
                 now
         ));
 
-        // 3) 解析赠饮→吧台 SKU 映射：当前无可靠来源（itemRef=null）→ 跳过实际扣减，仅留痕。
+        // 3) 解析赠饮→吧台 SKU 映射：itemRef 为空时无可扣减 SKU → 跳过实际扣减，仅留痕。
         String itemRef = trimToNull(event.itemRef());
         String inventoryMovementId = null;
         String note;
@@ -124,7 +124,7 @@ public class BarGiftConsumer {
                 note = "gift redeemed; stock decrease skipped (insufficient stock)";
             }
         } else {
-            note = "gift redeemed; stock decrease skipped (no item mapping source — TODO 票种/权益模板配置 SKU 映射)";
+            note = "gift redeemed; stock decrease skipped (no item mapping source configured)";
         }
 
         // 4) 出品 deliver 事件（回填 inventory_movement_id 关联库存流水）。

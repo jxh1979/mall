@@ -12,6 +12,7 @@ public record AmusementEntitlementView(
         String status,
         Instant validFrom,
         Instant validTo,
-        int remainingTimes
+        int remainingTimes,
+        int numPeople
 ) {
 }

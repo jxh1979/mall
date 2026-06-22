@@ -39,7 +39,9 @@ final class JdbcTicketingRowMapper {
                 nullableInteger(resultSet, "validity_days"),
                 nullableInteger(resultSet, "refresh_interval_seconds"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                nullableInteger(resultSet, "stock_quantity"),
+                resultSet.getInt("sold_quantity")
         );
     }
 
@@ -204,6 +206,21 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("currency"),
                 resultSet.getString("pay_status"),
                 resultSet.getString("issue_status"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("merchant_id")
+        );
+    }
+
+    TicketPaymentIntentRecord mapTicketPaymentIntent(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new TicketPaymentIntentRecord(
+                resultSet.getString("id"),
+                resultSet.getString("business_order_type"),
+                resultSet.getString("business_order_id"),
+                resultSet.getLong("amount_cent"),
+                resultSet.getString("currency"),
+                resultSet.getString("channel"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at")

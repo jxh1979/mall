@@ -44,17 +44,20 @@ class DashboardAggregationJobNetRevenueTests {
         // 第三方回流（revenue.thirdparty 未就绪 / 不参与聚合）即便存在也不计入 net。
         repository.ticketRevenue = new BigDecimal("100000");
         repository.ticketRefund = new BigDecimal("10000");
+        // 2d-3：售票分摊到商户（生产中 paid 订单出票必分摊到 entitlement.merchant）；平台 net 取 Σ商户 net（防漂移）。
+        repository.ticketAllocated = orderedMap("merchant_a", "70000", "merchant_b", "30000");
+        repository.ticketRefundByMerchant = orderedMap("merchant_a", "7000", "merchant_b", "3000");
         repository.barRevenue = orderedMap("merchant_a", "80000", "merchant_b", "20000");
         repository.barRefund = orderedMap("merchant_a", "5000");
 
         DashboardAggregationJob job = new DashboardAggregationJob(repository);
         job.refreshSnapshots(BUSINESS_DATE);
 
-        // 平台 net = 100000 + (80000+20000) − 10000 − 5000 = 185000。
+        // 商户 net：A=70000+80000−7000−5000=138000；B=30000+20000−3000=47000。
+        assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("138000");
+        assertThat(repository.upserts.get(netKey("merchant_b"))).isEqualByComparingTo("47000");
+        // 平台 net = Σ商户 net = 138000 + 47000 = 185000（防漂移：平台=Σ商户，售票+酒吧−退款全经商户口径）。
         assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("185000");
-        // 商户行级 net = 本商户酒吧实收 − 本商户酒吧退款。
-        assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("75000");
-        assertThat(repository.upserts.get(netKey("merchant_b"))).isEqualByComparingTo("20000");
         // 售票退款单列（平台口径）。
         assertThat(repository.upserts.get(DashboardAggregationJob.REVENUE_TICKET_REFUND + "|platform"))
                 .isEqualByComparingTo("10000");
@@ -117,9 +120,10 @@ class DashboardAggregationJobNetRevenueTests {
 
         new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
 
-        // 商户 net 仅含可归属的 70000；平台 net 维持 100000（差额 30000 是 direct 出票，保守不归商户、不重复）。
+        // 2d-3 防漂移：商户 net=可归属 70000；平台 net=Σ商户=70000（direct 出票 30000 无 merchant 归属，
+        // 不计入平台，消除"平台≥Σ商户"漂移）。direct 出票本无订单收入，不计入平台口径是正确语义。
         assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("70000");
-        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("100000");
+        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("70000");
     }
 
     @Test
@@ -128,6 +132,9 @@ class DashboardAggregationJobNetRevenueTests {
         CapturingAnalyticsRepository sameDay = new CapturingAnalyticsRepository();
         sameDay.ticketRevenue = new BigDecimal("50000");
         sameDay.ticketRefund = new BigDecimal("8000");
+        // 2d-3：售票分摊到商户，平台=Σ商户。
+        sameDay.ticketAllocated = orderedMap("merchant_a", "50000");
+        sameDay.ticketRefundByMerchant = orderedMap("merchant_a", "8000");
         sameDay.barRevenue = orderedMap("merchant_a", "0");
         sameDay.barRefund = Map.of();
         new DashboardAggregationJob(sameDay).refreshSnapshots(BUSINESS_DATE);
@@ -137,6 +144,8 @@ class DashboardAggregationJobNetRevenueTests {
         CapturingAnalyticsRepository noRefund = new CapturingAnalyticsRepository();
         noRefund.ticketRevenue = new BigDecimal("50000");
         noRefund.ticketRefund = BigDecimal.ZERO;
+        // 2d-3：售票分摊到商户，平台=Σ商户。
+        noRefund.ticketAllocated = orderedMap("merchant_a", "50000");
         noRefund.barRevenue = orderedMap("merchant_a", "0");
         noRefund.barRefund = Map.of();
         new DashboardAggregationJob(noRefund).refreshSnapshots(BUSINESS_DATE);
@@ -200,6 +209,9 @@ class DashboardAggregationJobNetRevenueTests {
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
         repository.ticketRevenue = new BigDecimal("100000");
         repository.ticketRefund = new BigDecimal("10000");
+        // 2d-3：售票分摊到商户，平台=Σ商户=185000。
+        repository.ticketAllocated = orderedMap("merchant_a", "70000", "merchant_b", "30000");
+        repository.ticketRefundByMerchant = orderedMap("merchant_a", "7000", "merchant_b", "3000");
         repository.barRevenue = orderedMap("merchant_a", "80000", "merchant_b", "20000");
         repository.barRefund = orderedMap("merchant_a", "5000");
 

@@ -77,6 +77,11 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public Optional<BarReservationRecord> findReservationByIdForUpdate(String id) {
+        return catalog.findReservationByIdForUpdate(id);
+    }
+
+    @Override
     public BarDepositRuleRecord saveDepositRule(BarDepositRuleRecord rule) {
         return catalog.saveDepositRule(rule);
     }
@@ -275,6 +280,21 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public Optional<BarBillRecord> findBillByIdForUpdate(String id) {
+        return billing.findBillByIdForUpdate(id);
+    }
+
+    @Override
+    public Optional<BarCommissionCalculationRecord> findCommissionByBillId(String billId) {
+        return billing.findCommissionByBillId(billId);
+    }
+
+    @Override
+    public int markBillSettlementsReversed(String billId) {
+        return billing.markBillSettlementsReversed(billId);
+    }
+
+    @Override
     public BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment) {
         return billing.saveBillAdjustment(adjustment);
     }
@@ -302,6 +322,11 @@ class JdbcBarRepository implements BarRepository {
     @Override
     public BarTableSessionRecord saveTableSession(BarTableSessionRecord session) {
         return sessionRepository.saveTableSession(session);
+    }
+
+    @Override
+    public boolean updateTableSessionIfVersionMatches(BarTableSessionRecord session, long expectedVersion) {
+        return sessionRepository.updateTableSessionIfVersionMatches(session, expectedVersion);
     }
 
     @Override

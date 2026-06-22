@@ -77,6 +77,8 @@
 | 游乐安全巡检提交 | `amusement.safety_inspection.submit` | 巡检员、游乐主管 | 高 | 否 | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | 开放前必检，阻断项自动暂停 |
 | 游乐安全整改/复检 | `amusement.safety_inspection.rectify` / `amusement.safety_inspection.recheck` | 游乐运营、巡检员、游乐主管 | 高 | 可配置 | `amusement.safety_inspection.rectification_submitted` / `amusement.safety_inspection.rechecked` | 严重项未复检通过不得恢复 |
 | 游乐严重项恢复开放 | `amusement.safety_inspection.approve_reopen` | 游乐主管、安全负责人、总控授权人 | 高 | 是 | `amusement.safety_inspection.reopened` / `amusement.safety_inspection.reopen_rejected` | 复检通过后仍需主管审批 |
+| 游乐设备查看 | `amusement.device.view` | 游乐员工、游乐主管、平台管理员、授权运维 | 低（normal） | 否 | `amusement.device.viewed` / `amusement.device.view_failed` | 只读；按 `project-amusement` 数据范围返回项目下游乐设备 |
+| 游乐设备建档/维护 | `amusement.device.manage` | 游乐主管、平台管理员 | 高 | 是 | `amusement.device.changed` / `amusement.device.change_failed` | `device_code` 项目内唯一，作为容量配置 device_id 与巡检对象来源；高风险写需审批与幂等 |
 | 应收应付台账维护 | `finance.ar_ap.manage` | 财务 | 高 | 是 | `finance_ar_ap.changed` | P0 必须完整支持 |
 | 收付款登记 | `finance.payment.register` | 财务、出纳 | 高 | 是 | `finance_payment.registered` | 与聚合支付/线下凭证联动 |
 | 日结锁定/解锁申请 | `finance.daily_close.lock` / `finance.daily_close.unlock_request` | 财务主管、总控授权人 | 高 | 是 | `finance_daily_close.changed` | 锁定后不得直接改金额 |
@@ -144,7 +146,7 @@
 
 | 权限编码/通用状态 | 用途 | 授权口径 |
 |---|---|---|
-| `access.user.view` | 账号列表/账号查看接口 | 平台管理员、HR 权限管理员、运营主管按数据范围查看 |
+| `access.user.view` | 账号列表/账号查看接口 | 平台管理员、HR 权限管理员、运营主管按数据范围查看；**F-AUTHZ-01 跨租户读收口**：非平台 scope 仅可读本商户账号，越界查询返回 403 `CROSS_MERCHANT_FORBIDDEN`（详见 §3.3） |
 | `access.user.manage` | 账号创建/维护接口 | 平台管理员、HR 权限管理员，高风险变更需留痕 |
 | `amusement.device_status.view` | 游乐设备状态查看 | 游乐主管、平台管理员、授权运维查看 |
 | `amusement.project.manage` | 游乐项目规则维护 | 游乐主管、平台管理员维护，影响开放规则时需复核 |
@@ -164,6 +166,15 @@
 | `ticket.verify.view` | 票务核销记录查看 | 票务、现场主管、客服、审计按数据范围查看 |
 | `public` | 公开访问通用状态 | 不是员工权限码；必须配合 `x-auth-context=public` 和公开数据范围 |
 | `authenticated` | 已登录通用状态 | 不是岗位权限码；必须配合 `x-auth-context=staff-token` 或对应认证上下文 |
+
+### 3.3 治理写入与跨租户读收口（F-AUTHZ，2026-06-22 登记）
+
+> 本节登记两条授权治理口径，作为 §3/§3.1/§3.2 既有权限码的横切约束（仅追加，不改既有行）。约束在 Service/授权层强制，违反时按下表错误码拒绝并留痕。
+
+| 编号 | 约束 | 适用范围 | 拒绝错误码 | 实现要点 |
+|---|---|---|---|---|
+| F-AUTHZ-02 | 治理写仅平台 | 平台治理对象写接口（`governance.*` 维护、`entity.binding.manage`、平台级配置等仅平台可变更的对象） | 403 `FORBIDDEN`（跨租户写一律拒绝） | 写路径调用 `requirePlatformScope()`：仅平台 scope（`currentMerchantScope()` 为空/平台）可执行治理写；商户 scope 即便被全开放也不得写平台全局对象 |
+| F-AUTHZ-01 | `access.user.view` 跨租户读收口 | 账号读接口 `listAccessUsers`、`getUserEffectivePermissions` 等以 `access.user.view` 授权的查询 | 403 `CROSS_MERCHANT_FORBIDDEN` | 非平台 scope 仅可读本商户账号；按 `currentMerchantScope()` 过滤，越界查询其他商户账号或其有效权限集时拒绝并记失败事件 |
 
 ## 4. 端侧权限边界
 
@@ -203,6 +214,7 @@
 | 2026-06-13 | V0.1 OpenAPI 权限补充 | 补齐当前 OpenAPI 缺失的 17 个接口级权限码/通用状态；接口级完整权限清单以 `p0-openapi-contract-closure-appendix-v0.1.md` 为准 |
 | 2026-06-13 | V0.1 生产前置权限收口 | 新增生产前置责任状态查看、维护和准入检查三项权限 |
 | 2026-06-19 | R6 全闭环(2026-06-19) | 追加 §8 "商户侧授权范围全开放的权限点逐一映射"，按酒吧/游乐/餐饮零售商户列出授权范围内可用权限点清单与不可见边界（仅追加，未改既有行） |
+| 2026-06-22 | V0.1 游乐设备权限与 F-AUTHZ 收口 | §3 新增 `amusement.device.view`（domain=amusement，风险 normal）与 `amusement.device.manage`（风险 high，需审批）；新增 §3.3 登记 F-AUTHZ-02 治理写仅平台（`requirePlatformScope`）与 F-AUTHZ-01 `access.user.view` 跨租户读收口（`CROSS_MERCHANT_FORBIDDEN`）；§3.2 `access.user.view` 行补注 F-AUTHZ-01。仅追加，未改既有权限码与既有行。 |
 
 ## 8. 商户侧授权范围全开放的权限点逐一映射
 

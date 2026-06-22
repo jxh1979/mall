@@ -11,12 +11,18 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,23 +30,47 @@ public class AccessService {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
-    private static final Set<String> ALLOWED_ACCOUNT_TYPES = Set.of("staff", "merchant", "supervisor");
+    private static final Set<String> ALLOWED_ACCOUNT_TYPES = Set.of("staff", "merchant", "merchant_admin", "supervisor", "sales");
 
     private final AccessRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final AccessCredentialProvisioner credentialProvisioner;
 
+    @Autowired
     public AccessService(
+            AccessRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            ObjectProvider<AccessCredentialProvisioner> credentialProvisioner
+    ) {
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                credentialProvisioner.getIfAvailable(AccessCredentialProvisioner::noop));
+    }
+
+    AccessService(
             AccessRepository repository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             AuthorizationService authorizationService
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService, AccessCredentialProvisioner.noop());
+    }
+
+    AccessService(
+            AccessRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            AccessCredentialProvisioner credentialProvisioner
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.credentialProvisioner = credentialProvisioner == null ? AccessCredentialProvisioner.noop() : credentialProvisioner;
     }
 
     public PageResponse<PermissionTemplate> listPermissionTemplates() {
@@ -144,12 +174,15 @@ public class AccessService {
                                 }
                             }
                         }
+                        PermissionTemplate template = repository.findTemplateById(id)
+                                .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND", "permission template not found: " + id));
+                        boolean singleUse = template.singleUse() || "single_use".equalsIgnoreCase(trimToDefault(request.mode(), "append"));
                         PermissionTemplateApplyResult result = new PermissionTemplateApplyResult(repository.applyTemplate(
                                 id,
                                 safeList(request.targetUserIds()),
-                                null,
-                                null,
-                                false,
+                                template.validFrom(),
+                                template.validUntil(),
+                                singleUse,
                                 "access-api"
                         ));
                         auditEventService.recordSuccess(
@@ -242,6 +275,7 @@ public class AccessService {
     }
 
     public TemporaryGrant createTemporaryGrant(TemporaryGrantRequest request) {
+        AccessActor actor = authorizationService.currentActor();
         try {
             return idempotencyService.execute(
                     "createTemporaryGrant",
@@ -249,6 +283,18 @@ public class AccessService {
                     request,
                     () -> {
                         requireKnownPermissions(request.permissionCodes());
+                        // P0 A-01：临时授权必须校验目标用户租户归属，禁止跨组织/向平台用户越权授权
+                        // （与 applyPermissionTemplate 同范式，fail-closed）。
+                        if (!authorizationService.isPlatformAdmin(actor)) {
+                            AccessUser targetUser = repository.findUserById(request.targetUserId())
+                                    .orElseThrow(() -> ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                                            "target user not found in your organization: " + request.targetUserId()));
+                            if (actor.organizationId() == null
+                                    || !actor.organizationId().equals(targetUser.organizationId())) {
+                                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                                        "cannot grant to a user in another organization: " + request.targetUserId());
+                            }
+                        }
                         TemporaryGrant grant = new TemporaryGrant(
                                 UUID.randomUUID().toString(),
                                 request.targetUserId(),
@@ -341,8 +387,14 @@ public class AccessService {
 
     public PageResponse<AccessUser> listAccessUsers() {
         AccessActor actor = authorizationService.currentActor();
-        String orgId = authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId();
-        List<AccessUser> users = repository.listUsers(orgId);
+        List<AccessUser> users;
+        if (authorizationService.isPlatformAdmin(actor)) {
+            users = repository.listUsers();
+        } else if (!isBlank(actor.merchantId())) {
+            users = repository.listUsersByMerchant(actor.merchantId());
+        } else {
+            users = repository.listUsers(actor.organizationId());
+        }
         auditEventService.recordSuccess(
                 "access.user.viewed",
                 "access.user.view",
@@ -356,28 +408,64 @@ public class AccessService {
     }
 
     public AccessUser createAccessUser(AccessUserRequest request) {
+        AccessActor actor = authorizationService.currentActor();
         try {
             return idempotencyService.execute(
                     "createAccessUser",
                     request.idempotencyKey(),
                     request,
                     () -> {
-                        String accountType = trimToDefault(request.accountType(), "staff");
+                        String username = requireText(request.username(), "username");
+                        String accountType = normalizeAccountType(trimToDefault(request.accountType(), "staff"));
                         if (!ALLOWED_ACCOUNT_TYPES.contains(accountType)) {
                             throw ApiException.badRequest("INVALID_ACCOUNT_TYPE",
                                     "accountType '" + accountType + "' is not permitted; allowed values: " + ALLOWED_ACCOUNT_TYPES);
                         }
+                        String organizationId = requireText(request.organizationId(), "organization_id");
+                        if (!authorizationService.isPlatformAdmin(actor)
+                                && !isBlank(actor.organizationId())
+                                && !actor.organizationId().equals(organizationId)) {
+                            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                                    "cannot create a user in another organization: " + organizationId);
+                        }
+                        String merchantId = trimToNull(request.merchantId());
+                        if (!isBlank(actor.merchantId())) {
+                            if (merchantId == null) {
+                                merchantId = actor.merchantId();
+                            } else if (!actor.merchantId().equals(merchantId)) {
+                                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                                        "cannot create a user in another merchant: " + merchantId);
+                            }
+                        }
+                        if (requiresMerchantScope(accountType) && merchantId == null) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id is required for merchant-scoped staff accounts");
+                        }
+                        Instant now = Instant.now();
                         AccessUser user = new AccessUser(
-                                "usr_" + slug(request.username()),
-                                trimToDefault(request.username(), "user"),
+                                "usr_" + slug(username),
+                                username,
                                 accountType,
-                                request.organizationId(),
-                                request.merchantId(),
+                                organizationId,
+                                merchantId,
                                 trimToDefault(request.status(), "active"),
-                                Instant.now()
+                                now,
+                                hashNullable(request.phone()),
+                                "manual_admin",
+                                trimToNull(request.consentReference()),
+                                safeList(request.evidenceAttachmentIds()),
+                                trimToNull(request.operatorNote())
                         );
                         AccessUser saved = repository.createUser(user);
-                        auditEventService.recordSuccess("access.user.changed", "access.user.manage", "access_user", saved.id(), null, request.idempotencyKey(), Map.of());
+                        credentialProvisioner.provisionCredential(saved.id(), request.password(), saved.status(), now);
+                        auditEventService.recordSuccess(
+                                "access.user.changed",
+                                "access.user.manage",
+                                "access_user",
+                                saved.id(),
+                                null,
+                                request.idempotencyKey(),
+                                accessUserAuditMetadata(saved, request.password() != null && !request.password().isBlank())
+                        );
                         return saved;
                     },
                     AccessUser.class
@@ -386,6 +474,63 @@ public class AccessService {
             auditEventService.recordFailure("access.user.changed_failed", "access.user.manage", "access_user", null, null, request == null ? null : request.idempotencyKey(), codeOf(exception));
             throw exception;
         }
+    }
+
+    private String normalizeAccountType(String accountType) {
+        return accountType == null ? "staff" : accountType.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean requiresMerchantScope(String accountType) {
+        return Set.of("merchant", "merchant_admin", "sales").contains(accountType);
+    }
+
+    private String requireText(String value, String fieldName) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", fieldName + " is required");
+        }
+        return trimmed;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private String hashNullable(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(trimmed.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 algorithm is required", exception);
+        }
+    }
+
+    private Map<String, Object> accessUserAuditMetadata(AccessUser user, boolean credentialProvisioned) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("account_type", user.accountType());
+        metadata.put("organization_id", user.organizationId());
+        metadata.put("merchant_id", user.merchantId() == null ? "" : user.merchantId());
+        metadata.put("created_via", user.createdVia());
+        metadata.put("evidence_count", user.evidenceAttachmentIds().size());
+        metadata.put("has_consent_reference", user.consentReference() != null && !user.consentReference().isBlank());
+        metadata.put("credential_provisioned", credentialProvisioned);
+        return metadata;
     }
 
     public PageResponse<StaffLevelRecord> listStaffLevels() {

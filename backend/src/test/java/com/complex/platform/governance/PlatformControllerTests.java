@@ -93,7 +93,7 @@ class PlatformControllerTests {
                                 }
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("PERMISSION_DENIED"));
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
     }
 
     @Test
@@ -108,7 +108,7 @@ class PlatformControllerTests {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     @Test
@@ -123,6 +123,7 @@ class PlatformControllerTests {
                         null,
                         "Jane",
                         "18800000011",
+                        "Owner Wang",
                         "1F-A",
                         BigDecimal.valueOf(128.50),
                         BigDecimal.valueOf(120.00),

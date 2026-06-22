@@ -310,6 +310,11 @@ stateDiagram-v2
 > **待业务确认**：超容是否需要"阻断进一步放行"（达上限即硬阻断，与现有 `session_full` 拒绝一致）vs "仅告警 + 留痕"（允许主管扩容/人工放行但必落 over_capacity 事件）。两种口径对放行控制流影响不同，需业务拍板后再固化是否在安全上限维做硬阻断。
 >
 > **业务确认(2026-06-19)** `R6 业务确认回填(2026-06-19)`：超容处置确认为**默认 硬上限阻断 + 软上限告警放行（两类均落 `amusement.incident.over_capacity` 事件）**，且**处置模式后台可切换为"仅告警 + 留痕（不阻断）"**。即：处置模式后台可配，默认硬阻断（达硬上限即 `session_full` 拒绝）+ 软上限告警放行（允许放行但落事件），可切换为仅告警留痕（不阻断、必落事件）。此项不再为待定项。
+>
+> **✅ 已实现修复（F-OPS-03，2026-06-22，已在 .160 编译通过）**：上条"处置模式后台可切换为仅告警留痕"的可切换语义**严格限定在软上限（运营容量）一侧**，硬上限（安全容量）不受处置模式影响——收口口径如下：
+> 1. **硬安全容量禁 `warn_only` 旁路**：处置模式 `warn_only` 仅作用于**软上限（运营容量）**告警放行；**硬上限（项目安全容量 `default_capacity` 维度）任何处置模式都阻断核销**（达硬上限恒 `session_full` 拒绝），不存在"切到 warn_only 即可超过安全容量放行"的旁路。即 warn_only 放宽的是运营容量告警，绝不放宽安全容量阻断。
+> 2. **over_capacity 事件 severity 恒 `high` 触发自动停运**：硬上限维超容落 `amusement.incident.over_capacity` 事件时 `severity` **恒为 `high`**，并据此自动把项目 `open → paused`（停运），不依赖人工处置。软上限告警放行落的 over_capacity 事件按告警口径，不强制停运。
+> 3. 与 §5.1 状态机一致：自动停运走 `open → paused`（§5.1 已有 `open --> paused` 流转），恢复仍按既有 paused→open 路径。
 
 离线核销时（P1 预留，P0 不启用）：
 
@@ -351,6 +356,14 @@ stateDiagram-v2
 
 > **检修单位口径（修订说明 2026-06-07，amuse-3 / 《统一口径基准》D7 供应商）：**
 > "检修单位作为供应商记录"明确为**复用供应链 `suppliers` 主数据**，不另建独立维保供应商表。检修记录用 `maintenance_vendor_id` 外键引用 `suppliers.id`，且该供应商 `supplier_category ∈ {maintenance, service}`（维保/服务类）。供应链侧供应商档案需支持 `supplier_category` 区分物料类与维保/服务类——此为引用口径，对齐方以 supply-chain 开发设计为准，**本文不编辑供应链文件**。`engineer_id` 指向该供应商下的工程师（或以 `engineer_name` 文本留痕，便于外部工程师无系统账号场景）。
+
+> **✅ 已实现修复（F-OPS-04，2026-06-22，已在 .160 编译通过）**：把"按周期生成定期检修任务 + 每设备安全检查周期 + 巡检过期阻断核销"从散文落为可编码结构，本节第 1 步"按项目、设备、点位和检修周期生成定期检修任务"现有真实承载：
+> 1. **新增设备主数据 `amusement_devices`**：每设备携带安全检查周期 `safety_check_interval_hours`；该列为空时**回退项目级缺省 24h**（即设备未单独配置周期时按 24 小时判定）。
+> 2. **核销准入增加巡检时效判定**：核销前置 `evaluateOpenEligibility` 在原"最近 PASS 巡检存在"基础上，增加**"最近 PASS 巡检须在该设备 `safety_check_interval_hours` 周期内有效"**判定；超过周期（巡检过期）返回新原因 **`SAFETY_INSPECTION_EXPIRED`** 阻断核销（与 §5.5 既有 `project_closed`/`project_not_allowed` 等失败原因并列，但语义独立指向"巡检超期"）。
+> 3. **PASS 巡检刷新设备时效锚点**：巡检结果 PASS 时刷新 `amusement_devices.last_pass_inspection_at`，作为上条周期判定的起算锚点；下次核销据此 + `safety_check_interval_hours` 判定是否仍在有效期内。
+> 4. **定期任务承载表 + 薄调度**：本节"按周期生成定期检修任务"由新表 **`amusement_inspection_tasks`** + **`AmusementInspectionTaskJob`**（薄 `@Scheduled` 任务）承载；调度骨架已就位，**实际按周期批量生成任务的填充逻辑列阶段4待实现**（薄壳已落、不空跑误判为已完成）。
+
+> **设备主数据与巡检任务表口径（F-OPS-04，2026-06-22）**：本次新增的 `amusement_devices`（设备主数据，含 `safety_check_interval_hours`/`last_pass_inspection_at`）与 `amusement_inspection_tasks`（定期检修任务）为承载上述周期判定与任务生成的真实表；与 §7.9 历史 `amusement_device`（单数，原设备表）的字段收敛/合并以真实迁移为准，§6.6.1 周期判定与核销准入以本组新表字段为准。
 
 ### 6.7 事故处理流程
 
@@ -527,6 +540,15 @@ stateDiagram-v2
 | enabled | boolean | 是否启用 |
 
 > 修订说明（2026-06-07，amuse-1）：原表缺点位/设备维度容量字段，导致三维度容量第三维无处落地。本次补 `capacity`/`max_concurrent`。若同一点位下多设备需独立配额或需按时段差异化配额，使用 7.x `amusement_capacity_config` 表细化，本表字段作为默认值。
+
+> **✅ 已实现修复（F-OPS-04，2026-06-22，已在 .160 编译通过）**：设备主数据已落表 `amusement_devices`，在本表（历史 `amusement_device`）字段基础上补两列承载"每设备安全检查周期"与核销准入巡检时效判定：
+>
+> | 增补列 | 类型 | 说明 |
+> |---|---|---|
+> | `safety_check_interval_hours` | int | 每设备安全检查周期（小时）；为空回退**项目级缺省 24h**。核销准入 `evaluateOpenEligibility` 据此判定"最近 PASS 巡检是否仍在周期内有效"，过期返回 `SAFETY_INSPECTION_EXPIRED` 阻断核销（见 §6.6.1） |
+> | `last_pass_inspection_at` | timestamptz | 最近一次 PASS 巡检时间；巡检 PASS 时刷新，作为周期判定起算锚点 |
+>
+> 另新增 `amusement_inspection_tasks`（定期检修任务表）承载 §6.6.1"按周期生成定期检修任务"，由薄 `@Scheduled` `AmusementInspectionTaskJob` 调度（任务生成填充逻辑阶段4待实现）。表名/字段最终以真实迁移为准。
 
 ### 7.10 amusement_device_status_log
 
@@ -836,6 +858,15 @@ stateDiagram-v2
 | PUT | `/devices/{id}` | 更新设备 |
 | POST | `/devices/{id}/status` | 变更设备状态 |
 | GET | `/devices/{id}/status-logs` | 状态历史 |
+
+> **✅ 已实现修复（F-OPS-04，2026-06-22，已在 .160 编译通过）**：设备 CRUD 端点已落地并按 dot 风格权限码（《统一口径基准》D3）接入权限校验：
+>
+> | 方法 | 路径 | 说明 | 权限 |
+> |---|---|---|---|
+> | GET | `/projects/{id}/devices` | 查询项目设备（含 `safety_check_interval_hours`/`last_pass_inspection_at`，见 §7.9） | `amusement.device.view` |
+> | POST | `/projects/{id}/devices` | 新增设备主数据（可配每设备安全检查周期） | `amusement.device.manage` |
+>
+> 设备主数据为 §6.6.1 巡检周期判定与核销准入 `SAFETY_INSPECTION_EXPIRED` 阻断的配置来源；正式路径仍以 OpenAPI/追溯附录为事实源（见 §8 开篇收口口径）。
 
 ### 8.7 巡检 API
 
@@ -1202,3 +1233,5 @@ P0 完成时必须满足：
 | 2026-06-18 D6 字段口径统一 | 改 | §6.4/§7.4/§7.12/§7.13/§7.14 | 以真实迁移 V014 为准：容量计数列统一 `used_capacity`（弃用 `checked_in_count`）；`amusement_safety_inspections` 列出真实列并把 `session_id/device_id/inspector_id/reviewed_by` 标为「目标增补字段（P0，尚未迁移）」；`amusement_safety_inspection_items`、`amusement_safety_template_items`（含 `severity`）标为整表目标增补；与 `amusement-p0-safety-inspection-spec` §4 口径一致 | 消除文档「声称已存在」与真实迁移不符的假象（三方字段口径统一） |
 | 2026-06-18 D11 游乐现状标注 | 增 | 顶部横幅后 | 新增 D11 现状补强：①现场核销未校验票务权益 ②approveReopen 不联动 open_status、无项目级 pause/resume 端点 ③检修表/`/maintenance-records`/`/confirm-resume` 缺失 ④三维度容量仅场次单维（capacity_config/snapshot 未实现），每条写「现状→目标→候选验收口径（已升正式验收）」 | 让 §6/§7/§8/§16 中「声称已落地」但真实缺失的能力对齐真实迁移/代码 |
 | 2026-06-19 R5业务HTML缺口审计 F11 | 增/改 | §6.4/§7.15/§11/§13 | 超容/争议口径对齐(P0)：incident_type 增 over_capacity 独立枚举；超容除报警/拒绝外必须落 amusement.incident.over_capacity 事件；游客争议 complaint 入口+状态机确认 P0；与 F2 统一异常责任链衔接 source_domain=amusement；补验收与"硬阻断 vs 仅告警留痕"待业务确认 | 业务HTML #amusement 把超容/游客争议列 P0，但代码超容仅报警不落事件、incident_type 无 over_capacity（Grep 佐证：§7.15 枚举、JdbcAmusementRepository 安全上限维 check、V024 无 incident_type CHECK） |
+| 2026-06-22 已实现修复回写 | 注 | §6.4 | F-OPS-03：硬安全容量禁 warn_only 旁路——warn_only 仅作用软上限告警放行，硬上限任何处置模式都阻断核销；over_capacity 事件 severity 恒 high 触发自动停运 open→paused | 回写 .160 已编译通过的修复（F-OPS-03） |
+| 2026-06-22 已实现修复回写 | 注/增 | §6.6.1/§7.9/§8.6 | F-OPS-04：新增 amusement_devices 主数据 + 每设备 safety_check_interval_hours（空回退项目级 24h）；evaluateOpenEligibility 增"最近 PASS 巡检须在设备周期内有效"判定，过期返回 SAFETY_INSPECTION_EXPIRED 阻断核销；PASS 刷新 last_pass_inspection_at；新表 amusement_inspection_tasks + 薄 @Scheduled AmusementInspectionTaskJob（阶段4待实现）；新增设备 CRUD 端点 GET/POST /projects/{id}/devices（权限 amusement.device.view/manage） | 回写 .160 已编译通过的修复（F-OPS-04 + §6.6.1） |

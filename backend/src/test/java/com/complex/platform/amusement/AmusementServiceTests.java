@@ -71,7 +71,11 @@ class AmusementServiceTests {
 
     /** 注册一张有效的游乐权益（active、无有效期限制、剩余 times 次、type 默认 amusement_single）。 */
     private void registerAmusementEntitlement(String credentialPayload, int totalTimes) {
-        entitlementGateway.register(credentialPayload, "amusement_single", "active", null, null, totalTimes);
+        registerAmusementEntitlement(credentialPayload, totalTimes, 1);
+    }
+
+    private void registerAmusementEntitlement(String credentialPayload, int totalTimes, int numPeople) {
+        entitlementGateway.register(credentialPayload, "amusement_single", "active", null, null, totalTimes, numPeople);
     }
 
     @AfterEach
@@ -228,6 +232,7 @@ class AmusementServiceTests {
                 "inspect",
                 List.of("att_fail"),
                 project.id(),
+                null,
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
@@ -269,8 +274,9 @@ class AmusementServiceTests {
         AmusementSafetyInspectionRecord inspection = service.createSafetyInspection(new AmusementSafetyInspectionRequest(
                 "inspection-pass",
                 "inspect",
-                List.of(),
+                List.of("att_pass"),
                 project.id(),
+                null,
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "pass")),
                 "pass",
@@ -278,6 +284,18 @@ class AmusementServiceTests {
                 "inspector_pass",
                 null
         ));
+
+        // 2b 防伪造 pass 专项：pass 无证据被拒；item result=fail 与 overall=pass 矛盾被拒。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createSafetyInspection(
+                new AmusementSafetyInspectionRequest("insp-noev", "inspect", List.of(), project.id(),
+                        null, project.safetyTemplateId(), List.of(Map.of("name", "restraint", "result", "pass")),
+                        "pass", Instant.parse("2026-06-14T08:00:00Z"), "inspector_x", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createSafetyInspection(
+                new AmusementSafetyInspectionRequest("insp-conflict", "inspect", List.of("att_x"), project.id(),
+                        null, project.safetyTemplateId(), List.of(Map.of("name", "restraint", "result", "fail")),
+                        "pass", Instant.parse("2026-06-14T08:00:00Z"), "inspector_x", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
 
         AmusementSafetyInspectionRecord submitted = service.submitSafetyInspection(
                 inspection.id(),
@@ -298,6 +316,7 @@ class AmusementServiceTests {
                 "inspect",
                 List.of(),
                 project.id(),
+                null,
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
@@ -345,6 +364,7 @@ class AmusementServiceTests {
                 "inspect",
                 List.of(),
                 project.id(),
+                null,
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
@@ -407,6 +427,7 @@ class AmusementServiceTests {
                 "inspect",
                 List.of(),
                 project.id(),
+                null,
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
@@ -461,6 +482,7 @@ class AmusementServiceTests {
                 "inspect",
                 List.of(),
                 blockedProject.id(),
+                null,
                 blockedProject.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "fail")),
                 "fail",
@@ -535,6 +557,35 @@ class AmusementServiceTests {
         assertThat(auditEventRepository.events)
                 .filteredOn(event -> "amusement.verification_succeeded".equals(event.eventName()))
                 .hasSize(1);
+    }
+
+    @Test
+    void multiPersonAmusementEntitlementClaimsCapacityAtomicallyByPeopleCount() {
+        AmusementProjectRecord project = createProject("multi-people", createTemplate("multi-people-tpl").id(), "open", 100);
+        submitPassingInspection(project, "multi-people");
+        AmusementSessionRecord enoughSession = createSession("multi-people-enough", project.id(), 5, "open");
+        registerAmusementEntitlement("credential-multi-4", 1, 4);
+
+        AmusementVerificationRecord record = service.createVerification(verification(
+                "verify-multi-4", project.id(), enoughSession.id(), "credential-multi-4"));
+
+        assertThat(record.verificationResult()).isEqualTo("success");
+        assertThat(record.verifiedPeople()).isEqualTo(4);
+        assertThat(amusementRepository.findSessionById(enoughSession.id()))
+                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(4);
+        assertThat(entitlementGateway.usedTimes("credential-multi-4")).isEqualTo(1);
+
+        AmusementSessionRecord tightSession = createSession("multi-people-tight", project.id(), 3, "open");
+        registerAmusementEntitlement("credential-multi-denied", 1, 4);
+
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-multi-denied", project.id(), tightSession.id(), "credential-multi-denied")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        assertThat(amusementRepository.findSessionById(tightSession.id()))
+                .get().extracting(AmusementSessionRecord::usedCapacity).isEqualTo(0);
+        assertThat(entitlementGateway.usedTimes("credential-multi-denied")).isEqualTo(0);
     }
 
     @Test
@@ -775,8 +826,9 @@ class AmusementServiceTests {
     }
 
     @Test
-    void warnOnlyDisposalModeDoesNotBlockHardOverCapacityButStillRecordsIncidentAndEvent() {
-        // 处置模式 warn_only：硬上限耗尽亦不阻断（留痕放行），但必落 over_capacity incident + 发事件。
+    void warnOnlyDisposalModeDoesNotBypassHardOverCapacityAndStillRecordsIncidentAndEvent() {
+        // F-OPS-03（裁决 #6）：warn_only 仅作用于软上限；硬上限=安全容量=人身安全红线，
+        // 任何处置模式都必须阻断并回补权益（未被白扣），且仍落 over_capacity incident + 发事件。
         AmusementProjectRecord project = createProject("oc-warn", createTemplate("oc-warn-tpl").id(), "open", 1);
         submitPassingInspection(project, "oc-warn");
         AmusementSessionRecord session = createSession("oc-warn-session", project.id(), 100, "open");
@@ -788,12 +840,13 @@ class AmusementServiceTests {
         assertThat(service.createVerification(verification("v-oc-warn-1", project.id(), session.id(), "credential-oc-warn-1"))
                 .verificationResult()).isEqualTo("success");
 
-        // 第二次达硬上限：warn_only 不阻断，仍放行（留痕），且不回补权益。
-        assertThat(service.createVerification(verification("v-oc-warn-2", project.id(), session.id(), "credential-oc-warn-2"))
-                .verificationResult()).isEqualTo("success");
-        assertThat(entitlementGateway.usedTimes("credential-oc-warn-2")).isEqualTo(1);
+        // 第二次达硬上限：warn_only 也不得旁路，必须阻断并回补权益（未被白扣）。
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "v-oc-warn-2", project.id(), session.id(), "credential-oc-warn-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
+        assertThat(entitlementGateway.usedTimes("credential-oc-warn-2")).isEqualTo(0);
 
-        // 两次（第一次软超容达运营容量 + 第二次硬超容留痕）均落 over_capacity 事件。
+        // 两次（第一次软超容达运营容量 + 第二次硬超容阻断）均落 over_capacity 事件。
         assertThat(safetyRepository.incidents())
                 .extracting(AmusementIncidentRecord::incidentType)
                 .containsOnly("over_capacity");
@@ -943,8 +996,9 @@ class AmusementServiceTests {
 
     @Test
     void configureOverCapacityPolicyActuallyEnablesSoftWarnDuringVerification() {
-        // 关键端到端：通过写入端点配 warn_only + operating_capacity=1 后，超容判定真正走告警分支而非阻断。
-        AmusementProjectRecord project = createProject("ocp-warn", createTemplate("ocp-warn-tpl").id(), "open", 1);
+        // 关键端到端：配 operating_capacity 软上限后，达软上限走【告警放行】分支（不阻断）；
+        // 硬上限（安全容量=项目 capacity）设足够大不触发硬阻断，验证 hasOperatingCapacity 软告警链已接线。
+        AmusementProjectRecord project = createProject("ocp-warn", createTemplate("ocp-warn-tpl").id(), "open", 100);
         submitPassingInspection(project, "ocp-warn");
         AmusementSessionRecord session = createSession("ocp-warn-session", project.id(), 100, "open");
         service.configureOverCapacityPolicy(project.id(),
@@ -953,15 +1007,38 @@ class AmusementServiceTests {
         registerAmusementEntitlement("credential-ocp-warn-1", 1);
         registerAmusementEntitlement("credential-ocp-warn-2", 1);
 
-        // 第一次占满硬上限（1/1）成功。
+        // 第一次：达运营容量（软上限 1）→ 告警但放行成功。
         assertThat(service.createVerification(verification("v-ocp-warn-1", project.id(), session.id(), "credential-ocp-warn-1"))
                 .verificationResult()).isEqualTo("success");
-        // 第二次达硬上限：warn_only 不阻断而放行（走告警分支，配置经写入端点持久化后生效）。
+        // 第二次：超运营容量（软上限）→ 仍告警放行成功（硬上限 100 未触发）。
         assertThat(service.createVerification(verification("v-ocp-warn-2", project.id(), session.id(), "credential-ocp-warn-2"))
                 .verificationResult()).isEqualTo("success");
         assertThat(safetyRepository.incidents())
                 .extracting(AmusementIncidentRecord::incidentType)
                 .containsOnly("over_capacity");
+    }
+
+    @Test
+    void hardSafetyCapacityCannotBeBypassedEvenUnderWarnOnly() {
+        // F-OPS-03（裁决#6）：硬上限=安全容量=人身安全红线，warn_only 处置模式不可旁路；
+        // 达硬上限一律阻断（SESSION_CAPACITY_EXHAUSTED）并触发自动停运，不因处置模式降级。
+        AmusementProjectRecord project = createProject("ocp-hard", createTemplate("ocp-hard-tpl").id(), "open", 1);
+        submitPassingInspection(project, "ocp-hard");
+        AmusementSessionRecord session = createSession("ocp-hard-session", project.id(), 100, "open");
+        service.configureOverCapacityPolicy(project.id(),
+                new ConfigureOverCapacityPolicyRequest("ocp-hard-key", null, List.of(),
+                        1, AmusementOverCapacityPolicy.MODE_WARN_ONLY, true));
+        registerAmusementEntitlement("credential-ocp-hard-1", 1);
+        registerAmusementEntitlement("credential-ocp-hard-2", 1);
+
+        // 第一次占满硬上限（1/1）成功。
+        assertThat(service.createVerification(verification("v-ocp-hard-1", project.id(), session.id(), "credential-ocp-hard-1"))
+                .verificationResult()).isEqualTo("success");
+        // 第二次达硬上限：即便 warn_only 也必须阻断（不可旁路安全容量）。
+        assertThatThrownBy(() -> service.createVerification(
+                verification("v-ocp-hard-2", project.id(), session.id(), "credential-ocp-hard-2")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("SESSION_CAPACITY_EXHAUSTED");
     }
 
     @Test
@@ -1814,8 +1891,9 @@ class AmusementServiceTests {
         AmusementSafetyInspectionRecord inspection = service.createSafetyInspection(new AmusementSafetyInspectionRequest(
                 "inspection-pass-" + key,
                 "inspect",
-                List.of(),
+                List.of("att_pass"),
                 project.id(),
+                null,
                 project.safetyTemplateId(),
                 List.of(Map.of("name", "restraint", "result", "pass")),
                 "pass",
@@ -1840,6 +1918,11 @@ class AmusementServiceTests {
     /** 清单#6：仅承载超容 over_capacity incident 落库的最小内存 safety 仓储。 */
     private static final class InMemorySafetyRepository implements AmusementSafetyRepository {
         private final Map<String, AmusementIncidentRecord> incidents = new LinkedHashMap<>();
+
+        @Override
+        public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
+            return false; // 该 fake 不跟踪项目状态；事故停运联动在 AmusementSafetyServiceTests 专项验证。
+        }
 
         @Override
         public AmusementIncidentRecord saveIncident(AmusementIncidentRecord record) {
@@ -2021,6 +2104,61 @@ class AmusementServiceTests {
         @Override
         public Optional<AmusementCapacityConfigRecord> findCapacityConfigById(String id) {
             return Optional.ofNullable(capacityConfigs.get(id));
+        }
+
+        // V143 设备主数据内存桩（amusement_devices）。
+        private final Map<String, AmusementDeviceRecord> devices = new LinkedHashMap<>();
+
+        @Override
+        public AmusementDeviceRecord saveDevice(AmusementDeviceRecord device) {
+            devices.put(device.id(), device);
+            return device;
+        }
+
+        @Override
+        public List<AmusementDeviceRecord> listDevicesByProject(String projectId) {
+            return devices.values().stream()
+                    .filter(record -> projectId.equals(record.projectId()))
+                    .toList();
+        }
+
+        @Override
+        public Optional<AmusementDeviceRecord> findDeviceById(String id) {
+            return Optional.ofNullable(devices.get(id));
+        }
+
+        @Override
+        public Optional<AmusementDeviceRecord> findDeviceByCode(String projectId, String deviceCode) {
+            return devices.values().stream()
+                    .filter(d -> projectId.equals(d.projectId()) && deviceCode.equals(d.deviceCode()))
+                    .findFirst();
+        }
+
+        @Override
+        public void updateDeviceLastPassInspection(String projectId, String deviceCode, java.time.Instant inspectedAt) {
+            devices.values().stream()
+                    .filter(d -> projectId.equals(d.projectId()) && deviceCode.equals(d.deviceCode()))
+                    .findFirst()
+                    .ifPresent(d -> devices.put(d.id(), new AmusementDeviceRecord(
+                            d.id(), d.projectId(), d.deviceCode(), d.name(), d.status(),
+                            d.safetyCheckIntervalHours(), d.locationPointId(), inspectedAt,
+                            d.merchantId(), d.createdAt(), inspectedAt)));
+        }
+
+        @Override
+        public int findProjectSafetyCheckIntervalHours(String projectId) {
+            return 24;
+        }
+
+        @Override
+        public void updateProjectDevicesLastPass(String projectId, java.time.Instant inspectedAt) {
+            devices.values().stream()
+                    .filter(d -> projectId.equals(d.projectId()))
+                    .toList()
+                    .forEach(d -> devices.put(d.id(), new AmusementDeviceRecord(
+                            d.id(), d.projectId(), d.deviceCode(), d.name(), d.status(),
+                            d.safetyCheckIntervalHours(), d.locationPointId(), inspectedAt,
+                            d.merchantId(), d.createdAt(), inspectedAt)));
         }
 
         // 清单#6：超容处置策略夹具（运营容量软上限 + 处置模式）。
@@ -2210,8 +2348,9 @@ class AmusementServiceTests {
             List<String> controlled = new ArrayList<>();
             List<String> incremented = new ArrayList<>();
 
+            int peopleCount = Math.max(context.peopleCount(), 1);
             controlled.add("session");
-            if (!incrementSessionUsedCapacityIfAvailable(context.sessionId())) {
+            if (!incrementSessionUsedCapacityIfAvailable(context.sessionId(), peopleCount)) {
                 return new CapacityClaimResult(false, "session", controlled);
             }
             incremented.add("session");
@@ -2221,29 +2360,42 @@ class AmusementServiceTests {
             if (pointDeviceLimit != null) {
                 controlled.add("point_device");
                 String key = "pd|" + pointDeviceKey(context.projectId(), context.locationPointId(), context.deviceId());
-                if (snapshotOccupied.getOrDefault(key, 0) >= pointDeviceLimit) {
-                    rollback(incremented, context);
+                if (snapshotOccupied.getOrDefault(key, 0) + peopleCount > pointDeviceLimit) {
+                    rollback(incremented, context, peopleCount);
                     return new CapacityClaimResult(false, "point_device", controlled);
                 }
-                snapshotOccupied.merge(key, 1, Integer::sum);
+                snapshotOccupied.merge(key, peopleCount, Integer::sum);
                 incremented.add("point_device");
             }
 
             if (context.projectSafetyCapacity() > 0) {
                 controlled.add("project_safety");
                 String key = "proj|" + context.projectId();
-                if (snapshotOccupied.getOrDefault(key, 0) >= context.projectSafetyCapacity()) {
-                    rollback(incremented, context);
+                if (snapshotOccupied.getOrDefault(key, 0) + peopleCount > context.projectSafetyCapacity()) {
+                    rollback(incremented, context, peopleCount);
                     return new CapacityClaimResult(false, "project_safety", controlled);
                 }
-                snapshotOccupied.merge(key, 1, Integer::sum);
+                snapshotOccupied.merge(key, peopleCount, Integer::sum);
                 incremented.add("project_safety");
             }
 
             return new CapacityClaimResult(true, null, controlled);
         }
 
-        private void rollback(List<String> incremented, CapacityClaimContext context) {
+        private boolean incrementSessionUsedCapacityIfAvailable(String sessionId, int peopleCount) {
+            AmusementSessionRecord session = sessions.get(sessionId);
+            if (session == null || peopleCount <= 0 || session.usedCapacity() + session.lockedCapacity() + peopleCount > session.capacity()) {
+                return false;
+            }
+            Instant now = Instant.parse("2026-06-14T12:00:00Z");
+            sessions.put(sessionId, new AmusementSessionRecord(
+                    session.id(), session.projectId(), session.startTime(), session.endTime(), session.capacity(),
+                    session.usedCapacity() + peopleCount, session.lockedCapacity(), session.status(),
+                    session.evidenceAttachmentIds(), session.createdAt(), now));
+            return true;
+        }
+
+        private void rollback(List<String> incremented, CapacityClaimContext context, int peopleCount) {
             for (String dimension : incremented) {
                 switch (dimension) {
                     case "session" -> {
@@ -2657,8 +2809,13 @@ class AmusementServiceTests {
 
         void register(String credentialPayload, String entitlementType, String status,
                       Instant validFrom, Instant validTo, int totalTimes) {
+            register(credentialPayload, entitlementType, status, validFrom, validTo, totalTimes, 1);
+        }
+
+        void register(String credentialPayload, String entitlementType, String status,
+                      Instant validFrom, Instant validTo, int totalTimes, int numPeople) {
             FakeEntitlement entitlement = new FakeEntitlement(
-                    "ent_" + UUID.randomUUID(), entitlementType, status, validFrom, validTo, totalTimes);
+                    "ent_" + UUID.randomUUID(), entitlementType, status, validFrom, validTo, totalTimes, numPeople);
             byCredential.put(credentialPayload, entitlement);
             byId.put(entitlement.id, entitlement);
         }
@@ -2671,7 +2828,8 @@ class AmusementServiceTests {
             }
             return Optional.of(new AmusementEntitlementView(
                     entitlement.id, entitlement.entitlementType, entitlement.status,
-                    entitlement.validFrom, entitlement.validTo, entitlement.totalTimes - entitlement.usedTimes));
+                    entitlement.validFrom, entitlement.validTo, entitlement.totalTimes - entitlement.usedTimes,
+                    entitlement.numPeople));
         }
 
         @Override
@@ -2704,16 +2862,18 @@ class AmusementServiceTests {
             private final Instant validFrom;
             private final Instant validTo;
             private final int totalTimes;
+            private final int numPeople;
             private int usedTimes;
 
             private FakeEntitlement(String id, String entitlementType, String status,
-                                    Instant validFrom, Instant validTo, int totalTimes) {
+                                    Instant validFrom, Instant validTo, int totalTimes, int numPeople) {
                 this.id = id;
                 this.entitlementType = entitlementType;
                 this.status = status;
                 this.validFrom = validFrom;
                 this.validTo = validTo;
                 this.totalTimes = totalTimes;
+                this.numPeople = numPeople;
             }
         }
     }

@@ -9,8 +9,6 @@ public interface IntegrationRepository {
 
     boolean reserveOpenNonce(String appKey, String nonce, long timestamp);
 
-    OpenAppTokenRecord saveOpenToken(OpenAppTokenRecord token);
-
     Optional<OpenEndpointConfigRecord> findEndpointConfig(String endpointKey);
 
     Optional<OpenApiEventRecord> findOpenEventByIdempotency(String endpointKey, String providerCode, String idempotencyKey);

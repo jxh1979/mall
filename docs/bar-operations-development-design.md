@@ -289,7 +289,7 @@ sequenceDiagram
 | 取消点单必须填写原因 | 高价值商品取消需主管权限 |
 | 赠送必须有权限 | 赠饮、免单、折扣都要留痕 |
 | 酒水兑换权益不直接等于点单 | 先核销票务权益，再生成兑换类订单或账单抵扣 |
-| 售酒前必须通过年龄核验 | 门口已核验通过方可入场；点酒时做二次复核（`age_verified`），未成年（`refuse_reason=underage`）禁止售酒，醉酒可人工拒售（`intoxicated`），拒售须记原因码并留痕（finding bar-1 / 合规 C1） |
+| 售酒年龄继承入场闸（豁免逐单复核） | 全部售酒点在入场闸内 → 门口统一人脸闸核验年龄，酒水环节豁免逐单复核、**继承入场闸结论**（X-03 修复：不再信客户端自报 `result`）：入场闸开关 `face.verification.enabled` 关时 `provider_code=entry_gate_exempt` 非阻塞放行（场内豁免 + 制度兜底，残留风险已知会），开关开真实接入后 fail-closed 判龄、bar 继承 `face_inherited` 的 PASSED/FAILED；未成年（`refuse_reason=underage`）禁止售酒，醉酒仍可人工拒售（`intoxicated`），拒售须记原因码并留痕（finding bar-1 / 合规 C1 / X-03） |
 
 #### 5.2.2 低消计算
 
@@ -397,7 +397,7 @@ P0 规则：
 3. 可上传票据照片。
 4. 确认后生成 `inbound` 库存流水。
 5. 增加总库库存。
-6. 写入 `bar.stock.inbound_confirmed` 事件。
+6. 写入 `inventory.inbound_confirmed` 事件。
 
 #### 5.4.2 总库调拨到吧台
 
@@ -406,7 +406,7 @@ P0 规则：
 3. 总库减少，吧台库存增加。
 4. 生成一条 `transfer_out` 和一条 `transfer_in` 流水。
 5. 可创建机器人补货任务。
-6. 写入 `bar.stock.transferred` 事件。
+6. 写入 `inventory.transferred` 事件。
 
 #### 5.4.3 销售扣减
 
@@ -433,7 +433,7 @@ P2：
 |---|---|---|
 | 票务库存锁定/释放/售出 | 必须做 | 票务库存由 `ticket_inventories` 承载，支付、取消、退款必须影响库存桶 |
 | 权益核销次数扣减 | 必须做 | 权益 `remaining_times` 与核销记录必须事务一致 |
-| 整瓶酒销售/吧台买酒 | 必须扣减 | 明确 SKU、数量和库存位置，必须形成 `bar.stock.consumed` |
+| 整瓶酒销售/吧台买酒 | 必须扣减 | 明确 SKU、数量和库存位置，必须形成 `inventory stock movement（movement_type=redeem_consume/order_consume）` |
 | 按杯销售 | 必须按标准容量扣减 | 按 `standard_pour_volume` 扣减，实际超量记损耗 |
 | 赠饮/酒水兑换权益 | 必须扣减 | 核销后生成 0 元兑换点单，出品时扣减吧台库存 |
 | 积分兑换礼物/酒水 | 必须扣减 | 兑换成功并领取时扣减礼物或酒水库存 |
@@ -452,7 +452,7 @@ P2：
 4. 系统计算盘盈盘亏。
 5. 差异超过阈值时需要审批；**高价值物料的盘点差异必须同时上传照片和视频双证据**（`photo_refs` 与 `video_refs` 均必填）。<!-- 增（2026-06-07）：finding supply-3，盘点差异高价值双证据强制（原文未提证据） -->
 6. 审批通过后生成盘点调整库存流水（盘亏走 `count_adjust`，盘盈/报溢走 `surplus`，见 §6.16）。<!-- 改（2026-06-07）：finding supply-5，盘盈/报溢独立为 surplus 类型 -->
-7. 写入 `bar.stock.counted` 和风险事件。
+7. 写入 `inventory.counted` 和风险事件。
 
 #### 5.4.5 报损
 
@@ -460,7 +460,7 @@ P2：
 2. 选择物料、数量、原因。
 3. 高价值酒水必须**同时上传照片和视频双证据**（`photo_refs` 与 `video_refs` 均必填）并经主管审批。<!-- 改（2026-06-07）：finding supply-3，报损高价值由"仅照片"升为"照片和视频"双证据 -->
 4. 审批通过后扣减库存。
-5. 写入 `bar.stock.damaged` 事件。
+5. 写入 `inventory.damaged` 事件。
 
 ## 6. 数据库表结构
 
@@ -726,6 +726,13 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 4. 同一 `bill_id` 在同一结算周期只能生成一条主提成记录；复杂多人分摊、阶梯提成、活动倍率进入 P1。
 5. 日结锁定后提成基数或销售归属变更，只能追加调整/冲正记录，不得覆盖原记录。
 
+> 已实现修复（finding F-TXN-05，2026-06-22，已在 160 编译通过）：`calculateCommission` 的提成基数 `commission_base` 此前仅按 `subtotal − discount` 计算，未扣除免单（waiver）与退款（refund），导致已免/已退金额仍被计提。现已改为在 `subtotal − discount` 基础上**额外扣除免单与退款净额**——按 `bar_bill_adjustments` 中处于 applied 态的调整净额计算，并对 `waiver_reversal`/`refund_reversal` 反向回加，使提成基数与账单实际可计提消费额一致。这与本表"通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单、抹零和不可计提调整不得进入提成基数"的口径对齐。
+>
+> 待实现（finding F-TXN-05，口径已与业主确认，2026-06-22，代码尚未实现，仅文档登记）：
+> - **赠品（gift）按内部价从提成扣除**：赠送酒水/礼品应以内部价（成本价口径）从提成基数中剔除，不得按售价计提；当前计算尚未纳入 gift 扣除。
+> - **抹零**：经业主确认**无抹零业务**，提成基数无需处理抹零项。
+> - **低消补差**：低消是开台前提而非提成排除项，不从提成基数中扣除。
+
 ### 6.10 bar_bill_payments 账单支付表
 
 > 修订说明（2026-06-07）：依 finding bar-3，现金/POS 为 P0 必须支持（PRD §2/§9/§11 与原始需求援引法律不可后置），故 `payment_method` 枚举把 `cash`、`pos`（银行卡，原 `bank_card`）纳入 P0，并补现金/POS 进账所需的收款人(`cashier_staff_id`)与 POS 流水号(`pos_transaction_no`)字段，使其进入账单、日结、对账可编码。
@@ -747,6 +754,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 - 现金与 POS 支付必须由授权员工在平板上记录，进账单写入收款人 `cashier_staff_id`；POS 还须录入 `pos_transaction_no`。
 - 现金/POS 支付结果与扫码支付一并进入账单结算、当日**日结**与**对账**：日结按 `payment_method` 分项汇总，对账时现金/POS 进账与员工交班、POS 机流水核对。
 - 现金/POS 支付完成写入 `payment.cash_received` / `payment.pos_received` 事件（见 §9.2、基准 D4），不得使用不存在的 `payment.success`。
+- 班结现金交接持有人校验（F-OPS-06，`BarShiftService.closeShift`）：班结如指定交接下一班（`handover_to_user_id`），接班持有人必须是「另一个人」，禁止把现金钱箱「交接」给本班收银员自己（伪交接规避对账责任）→ `BAR_SHIFT_HANDOVER_TO_SELF`；接班人是否在册由其下一班 `openShift`（按 `cashier_user_id` 开班）自然建立。班结另由现金差异阈值（`needs_review` 进复核）+ 商户归属（`CROSS_MERCHANT_FORBIDDEN`）双控。
 
 ### 6.11 saved_bottles 存酒表
 
@@ -872,7 +880,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `status` | varchar | 库存流水状态 |
 
 > 修订说明（2026-06-07）：
-> - 依 finding bar-2，新增 `actual_pour_volume`、`loss_volume` 记录按杯出品的单次实际出量与差异损耗。扣减规则：`loss_volume = actual_pour_volume - standard_pour_volume`（取自 §6.6 `bar_products`）；当 `loss_volume > loss_threshold` 时生成**损耗异常事件**（`bar.stock.loss_exception`，见 §9.4）进入异常核查。
+> - 依 finding bar-2，新增 `actual_pour_volume`、`loss_volume` 记录按杯出品的单次实际出量与差异损耗。扣减规则：`loss_volume = actual_pour_volume - standard_pour_volume`（取自 §6.6 `bar_products`）；当 `loss_volume > loss_threshold` 时生成**损耗异常事件**（`inventory.loss_exception`，见 §9.4）进入异常核查。
 > - 依 finding supply-5，`movement_type` 新增 `surplus`（报溢/盘盈/异常增加）独立枚举，与 `count_adjust`（盘点调整）区分，使报溢可单独走审批+证据流程，并便于数据分析区分报损/报溢数量与金额。
 
 ### 6.17 bar_recipes 配方表
@@ -1032,7 +1040,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 - 真正的权益扣次仍由票务系统 `/api/verifications` 完成。
 - 酒吧系统在票务核销成功后生成兑换类订单；卡座预约入场名额由酒吧预约系统校验，不作为票务低消抵扣权益。
-- **赠饮/兑换核销扣库存为 P0 确定规则（finding bar-7）**：酒水权益核销成功后，统一生成 **0 元兑换点单**（`bar_orders.order_source = entitlement_redeem`，明细 `is_gift = true`），出品时按该点单触发对应**吧台库存位置**扣减，写入 `bar.stock.consumed`（`source_type = order`，`source_id` 为兑换点单），库存相应减少。不再停留在"建议生成 0 元点单"的待决层面。<!-- 改（2026-06-07）：finding bar-7，赠饮核销→0元兑换点单→库存扣减定为 P0 确定闭环 -->
+- **赠饮/兑换核销扣库存为 P0 确定规则（finding bar-7）**：酒水权益核销成功后，统一生成 **0 元兑换点单**（`bar_orders.order_source = entitlement_redeem`，明细 `is_gift = true`），出品时按该点单触发对应**吧台库存位置**扣减，写入 `inventory stock movement（movement_type=redeem_consume/order_consume）`（`source_type = order`，`source_id` 为兑换点单），库存相应减少。不再停留在"建议生成 0 元点单"的待决层面。<!-- 改（2026-06-07）：finding bar-7，赠饮核销→0元兑换点单→库存扣减定为 P0 确定闭环 -->
 
 ## 8. 权限边界
 
@@ -1130,14 +1138,14 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 | 事件编码 | 触发点 | 关键载荷 |
 |---|---|---|
-| `bar.stock.inbound_confirmed` | 入库确认 | 物料、批次、数量、成本 |
-| `bar.stock.transferred` | 调拨 | 来源、目标、数量 |
-| `bar.stock.consumed` | 销售或出品消耗 | 商品、物料、数量 |
-| `bar.stock.loss_exception` | 杯卖出品损耗超阈值 | 商品、标准出量、实际出量、损耗量、阈值、出品人 |
-| `bar.stock.counted` | 盘点 | 账面、实盘、差异 |
-| `bar.stock.surplus` | 报溢/盘盈 | 物料、数量、原因、证据、审批人 |
-| `bar.stock.damaged` | 报损 | 物料、数量、原因、证据（高价值含 photo_refs+video_refs） |
-| `bar.stock.reversed` | 冲正 | 原流水、原因 |
+| `inventory.inbound_confirmed` | 入库确认 | 物料、批次、数量、成本 |
+| `inventory.transferred` | 调拨 | 来源、目标、数量 |
+| `inventory stock movement（movement_type=redeem_consume/order_consume）` | 销售或出品消耗 | 商品、物料、数量 |
+| `inventory.loss_exception` | 杯卖出品损耗超阈值 | 商品、标准出量、实际出量、损耗量、阈值、出品人 |
+| `inventory.counted` | 盘点 | 账面、实盘、差异 |
+| `inventory.surplus_recorded` | 报溢/盘盈 | 物料、数量、原因、证据、审批人 |
+| `inventory.damaged` | 报损 | 物料、数量、原因、证据（高价值含 photo_refs+video_refs） |
+| `inventory.reversed` | 冲正 | 原流水、原因 |
 | `bar.goods.received_by_kitchen` | 后厨扫码接收 | 追踪码、订单、后厨员工、设备、点位 |
 | `bar.goods.picked_up_by_service` | 服务员从后厨取走 | 追踪码、订单、服务员、设备、点位 |
 | `bar.goods.delivered_to_customer` | 送达客人或卡座 | 追踪码、订单、服务员、桌台或卡座 |
@@ -1372,7 +1380,7 @@ P0 完成时必须能演示：
 | 问题 | 已确认结论 | 依据 |
 |---|---|---|
 | 酒吧账单支付方式 | **P0 支持**客人扫码、平板扫客人付款码、**现金、POS（银行卡）**，均进入账单/日结/对账；现金/POS 记收款人，POS 记流水号（见 §6.10） | finding bar-3、PRD §2/§9/§11 |
-| 酒水兑换权益是否自动生成 0 元点单 | **生成** 0 元兑换点单（`order_source=entitlement_redeem`）并触发 `bar.stock.consumed` 扣减吧台库存（见 §7.8） | finding bar-7 |
+| 酒水兑换权益是否自动生成 0 元点单 | **生成** 0 元兑换点单（`order_source=entitlement_redeem`）并触发 `inventory stock movement（movement_type=redeem_consume/order_consume）` 扣减吧台库存（见 §7.8） | finding bar-7 |
 | 视频证据是否强制 | **高价值**报损、盘点差异、存酒作废、账单作废**强制同时上传照片和视频**双证据（`photo_refs`+`video_refs`）；普通点单可选（见 §5.4.4/§5.4.5/§5.3.4/§8） | finding supply-3 |
 | 一体机订台 + 订金是否 P0 | **P0**：`bar_reservations` 与订金规则、`deposit_status`、来源/终端/责任人/设备/点位字段、退没收规则在 P0 落地（见 §6.3、§13.1） | finding kiosk-1/2/3 |
 | 低消是否允许用票务卡座权益抵扣 | **不允许**：票务、通票和卡座预约入场名额不抵扣低消；低消只按酒吧实际点单/套餐/简餐等消费金额计算 | 2026-06-10 总控拍板 |
@@ -1482,7 +1490,7 @@ P0 完成时必须能演示：
 | 2026-06-07 | 改 | §6.12 saved_bottle_movements | evidence_ref 区分 photo_refs/video_refs | finding supply-3 |
 | 2026-06-07 | 改 | §6.13 bar_inventory_items | 增 is_high_value/high_value_threshold 支撑高价值自动判定 | finding supply-4（配合 supply-3 双证据落地） |
 | 2026-06-07 | 改 | §6.16 bar_stock_movements | 增 actual_pour_volume/loss_volume；movement_type 增 surplus | finding bar-2、supply-5 |
-| 2026-06-07 | 改 | §7.8 票务权益承接 | 赠饮/兑换核销→0 元兑换点单→bar.stock.consumed 定为 P0 闭环 | finding bar-7 |
+| 2026-06-07 | 改 | §7.8 票务权益承接 | 赠饮/兑换核销→0 元兑换点单→inventory stock movement（movement_type=redeem_consume/order_consume） 定为 P0 闭环 | finding bar-7 |
 | 2026-06-07 | 改 | §9.1/§9.2/§9.4 事件 | 事件命名对齐 D4（order.sales_attributed/table.service_assigned/table.service_changed/bar.order_delivered/payment.cash_received·pos_received/exception.first_handled）；增损耗异常/报溢/订金结算/订台事件 | finding 事件命名、基准 D4、bar-2/supply-5/kiosk-2 |
 | 2026-06-07 | 改 | §10.1 与票务 | 补入场年龄核验留痕字段（对齐合规 C1） | finding bar-1、合规 C1 |
 | 2026-06-07 | 改 | §11 页面清单 | 增"酒吧入场/年龄核验""订台管理"P0 页面；看板状态改 D7 集合 | finding bar-1/kiosk-1/bar-5 |

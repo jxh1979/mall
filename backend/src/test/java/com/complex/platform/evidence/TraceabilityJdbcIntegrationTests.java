@@ -93,6 +93,34 @@ class TraceabilityJdbcIntegrationTests {
                 .doesNotContain(b.id());
     }
 
+    @Test
+    void autoCaptureRateCountsScopedStepsAgainstThreshold() {
+        TestSecurityActors.asMerchantUser("mch_A");
+        TraceabilityProcessInstanceRecord a = traceabilityService.recordProcessInstance(
+                new TraceabilityProcessInstanceRecord(null, "saved_bottle_lifecycle", "saved_bottle", "saved_1", "prj_1",
+                        null, null, null, null, null, "registered", null, null, null));
+        traceabilityService.recordStep(new TraceabilityStepRecord(null, a.id(), "scan", "扫码", "staff", "staff_1",
+                "staff_work_phone", "dev_1", null, null, true, "qr_scan", false, null, null));
+        traceabilityService.recordStep(new TraceabilityStepRecord(null, a.id(), "manual_note", "人工备注", "staff", "staff_1",
+                "web", null, null, null, false, "manual_input", true, null, null));
+
+        TestSecurityActors.asMerchantUser("mch_B");
+        TraceabilityProcessInstanceRecord b = traceabilityService.recordProcessInstance(
+                new TraceabilityProcessInstanceRecord(null, "table_service", "table", "table_2", "prj_1",
+                        null, null, null, null, null, "opened", null, null, null));
+        traceabilityService.recordStep(new TraceabilityStepRecord(null, b.id(), "scan", "扫码", "staff", "staff_2",
+                "staff_work_phone", "dev_2", null, null, true, "qr_scan", false, null, null));
+
+        TestSecurityActors.asMerchantUser("mch_A");
+        TraceabilityAutoCaptureRate rate = traceabilityService.autoCaptureRate(80);
+
+        assertThat(rate.totalSteps()).isEqualTo(2);
+        assertThat(rate.autoCapturedSteps()).isEqualTo(1);
+        assertThat(rate.autoCaptureRatePercent()).isEqualTo(50.0);
+        assertThat(rate.thresholdPercent()).isEqualTo(80);
+        assertThat(rate.meetsThreshold()).isFalse();
+    }
+
     private TraceabilityResponsibilityRecord responsibilityFor(String orderId) {
         return new TraceabilityResponsibilityRecord(null, orderId, null, null, null, "staff_p", List.of(),
                 null, null, null, null, null, null, null, null, null, null, null, null);

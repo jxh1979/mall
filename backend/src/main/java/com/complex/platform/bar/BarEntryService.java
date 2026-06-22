@@ -4,6 +4,9 @@ import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.entry.FaceVerificationPort;
+import com.complex.platform.entry.FaceVerificationRequest;
+import com.complex.platform.entry.FaceVerificationResult;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.time.Instant;
@@ -19,31 +22,58 @@ public class BarEntryService {
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
+    private final FaceVerificationPort faceVerificationGate;
 
     public BarEntryService(
             BarRepository repository,
             AuthorizationService authorizationService,
-            AuditEventService auditEventService
+            AuditEventService auditEventService,
+            FaceVerificationPort faceVerificationGate
     ) {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
+        this.faceVerificationGate = faceVerificationGate;
     }
 
     BarAgeVerificationRecord createAgeVerification(VerificationRequest request) {
         VerificationRequest actual = requireRequest(request);
         Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
-        String result = trimToDefault(textFromMap(context, "result", "verification_result"), "passed");
-        String reviewStatus = trimToDefault(textFromMap(context, "review_status", "reviewStatus"), "accepted");
+        String credentialPayload = requireText(actual.credentialPayload(), "credential_payload");
+        // P0-5 / X-03 安全修复：不再信客户端自报 result（原缺省 "passed" 可被客户端伪造年龄核验）。
+        // 业务口径（年龄合规裁决）：全部售酒点都在入场闸内 → 酒水环节豁免逐单年龄核验，由统一入场人脸闸
+        // 裁决年龄，bar 环节“继承”入场闸结论。本期人脸闸开关默认关 → 闸返回 RESERVED → 非阻塞放行并标注豁免
+        // （制度兜底，残留风险已知会）；接入真实厂商后闸 fail-closed 判龄，此处自动继承 PASSED/FAILED。
+        FaceVerificationResult gate = faceVerificationGate.verifyEntry(FaceVerificationRequest.of(
+                credentialPayload, trimToNull(actual.deviceId()), actual.pointId(), "bar_age_inherit"));
+        String result;
+        String providerCode;
+        String reviewStatus;
+        if (gate.isRejected()) {
+            // 人脸闸明确拒绝（真实接入后 fail-closed：未通过 / 无通过记录 / 未成年）→ 售酒拒绝。
+            result = "rejected";
+            providerCode = "face_inherited";
+            reviewStatus = "rejected";
+        } else if (gate.requiresExemptionFallback()) {
+            // 闸关闭 / 未接厂商（本期）→ 场内豁免、非阻塞放行，来源标注为入场闸豁免（而非客户端自报）。
+            result = "passed";
+            providerCode = "entry_gate_exempt";
+            reviewStatus = "accepted";
+        } else {
+            // 闸通过（真实接入后 ≥18 周岁实名人脸核验通过）→ 继承放行。
+            result = "passed";
+            providerCode = "face_inherited";
+            reviewStatus = "accepted";
+        }
         Instant now = Instant.now();
         return repository.saveAgeVerification(new BarAgeVerificationRecord(
                 "age_" + slug(actual.idempotencyKey()),
                 trimToDefault(textFromMap(context, "business_id", "bar_id", "barId"), actual.pointId()),
-                requireText(actual.credentialPayload(), "credential_payload"),
+                credentialPayload,
                 trimToNull(actual.deviceId()),
                 trimToNull(textFromMap(context, "staff_id", "staffId")),
                 result,
-                "placeholder",
+                providerCode,
                 reviewStatus,
                 safeList(listFromMap(context, "evidence_attachment_ids", "evidenceAttachmentIds")),
                 now
@@ -299,8 +329,17 @@ public class BarEntryService {
     }
 
     private BarReservationRecord requireReservation(String reservationId) {
-        return repository.findReservationById(requireText(reservationId, "reservation_id"))
+        BarReservationRecord reservation = repository.findReservationById(requireText(reservationId, "reservation_id"))
                 .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+        // P0 越权修复：预订全链（pay-deposit/checkin/cancel/verify）此前不校验归属，可枚举他商户 reservationId
+        // 取消订台、触发他商户定金没收/退款。平台管理员 scope 为空=放行；商户用户须匹配预订 merchant_id。
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(reservation.merchantId())) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's reservation is not allowed");
+            }
+        });
+        return reservation;
     }
 
     private BarReservationRecord withDeposit(
@@ -337,36 +376,91 @@ public class BarEntryService {
         );
     }
 
+    BarReservationEntryAllowanceVerificationRecord verifyGuestEntryAllowance(String reservationId, VerificationRequest request) {
+        return evaluateGuestEntryAllowance(reservationId, request, false);
+    }
+
     BarTableGuestCheckinRecord checkInGuest(String reservationId, VerificationRequest request) {
-        VerificationRequest actual = requireRequest(request);
-        BarReservationRecord reservation = repository.findReservationById(reservationId)
-                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
-        if ("cancelled".equals(reservation.status())) {
-            throw ApiException.conflict("BAR_RESERVATION_NOT_CHECKINABLE", "reservation is cancelled");
-        }
-        Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
-        String verificationBarId = trimToDefault(textFromMap(context, "bar_id", "barId"), actual.pointId());
-        if (!reservation.barId().equals(verificationBarId)) {
-            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "card-seat free entry is limited to the reserved bar");
-        }
-        int checkedIn = repository.countGuestCheckins(reservation.id());
-        if (checkedIn >= reservation.allowedPassFreeGuestCount()) {
-            throw ApiException.conflict("FREE_GUEST_QUOTA_EXHAUSTED", "card-seat free guest quota is exhausted");
+        BarReservationEntryAllowanceVerificationRecord allowance = evaluateGuestEntryAllowance(reservationId, request, true);
+        if (!allowance.allowed()) {
+            throwDeniedAllowance(allowance.reasonCode());
         }
         Instant now = Instant.now();
         return repository.saveGuestCheckin(new BarTableGuestCheckinRecord(
-                "checkin_" + slug(actual.idempotencyKey()),
+                "checkin_" + slug(requireRequest(request).idempotencyKey()),
+                allowance.reservationId(),
+                allowance.barId(),
+                allowance.tableId(),
+                allowance.guestIdentifier(),
+                "accepted",
+                allowance.checkedInCount() + 1,
+                allowance.deviceId(),
+                allowance.staffId(),
+                allowance.evidenceAttachmentIds(),
+                now
+        ));
+    }
+
+    private BarReservationEntryAllowanceVerificationRecord evaluateGuestEntryAllowance(
+            String reservationId,
+            VerificationRequest request,
+            boolean lockReservation
+    ) {
+        VerificationRequest actual = requireRequest(request);
+        BarReservationRecord reservation = (lockReservation
+                ? repository.findReservationByIdForUpdate(reservationId)
+                : repository.findReservationById(reservationId))
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+        // 2c-4 越权修复：入场核验子链（verify/check-in-guest）此前绕过 requireReservation，仅信客户端 bar_id，
+        // 可枚举他商户 reservationId 跨商户核销入场、耗尽其免费名额。补与 requireReservation 一致的归属校验。
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(reservation.merchantId())) {
+                throw ApiException.forbidden(
+                        "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's reservation is not allowed");
+            }
+        });
+        Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
+        String verificationBarId = trimToDefault(textFromMap(context, "bar_id", "barId"), actual.pointId());
+        int checkedIn = repository.countGuestCheckins(reservation.id());
+        int allowedGuests = Math.max(0, reservation.allowedPassFreeGuestCount());
+        int remaining = Math.max(allowedGuests - checkedIn, 0);
+        String reason = "allowed";
+        boolean allowed = true;
+        if ("cancelled".equals(reservation.status())) {
+            allowed = false;
+            reason = "BAR_RESERVATION_NOT_CHECKINABLE";
+        } else if (!reservation.barId().equals(verificationBarId)) {
+            allowed = false;
+            reason = "BAR_SCOPE_MISMATCH";
+        } else if (checkedIn >= allowedGuests) {
+            allowed = false;
+            reason = "FREE_GUEST_QUOTA_EXHAUSTED";
+        }
+        return new BarReservationEntryAllowanceVerificationRecord(
+                "entry_allowance_" + slug(actual.idempotencyKey()),
                 reservation.id(),
                 reservation.barId(),
                 reservation.tableId(),
                 requireText(actual.credentialPayload(), "credential_payload"),
-                "accepted",
-                checkedIn + 1,
+                allowed,
+                reason,
+                checkedIn,
+                allowedGuests,
+                remaining,
                 trimToNull(actual.deviceId()),
                 trimToNull(textFromMap(context, "staff_id", "staffId")),
                 safeList(listFromMap(context, "evidence_attachment_ids", "evidenceAttachmentIds")),
-                now
-        ));
+                Instant.now()
+        );
+    }
+
+    private void throwDeniedAllowance(String reasonCode) {
+        switch (reasonCode) {
+            case "BAR_RESERVATION_NOT_CHECKINABLE" -> throw ApiException.conflict(reasonCode, "reservation is cancelled");
+            case "BAR_SCOPE_MISMATCH" -> throw ApiException.conflict(reasonCode, "card-seat free entry is limited to the reserved bar");
+            case "FREE_GUEST_QUOTA_EXHAUSTED" -> throw ApiException.conflict(reasonCode, "card-seat free guest quota is exhausted");
+            default -> throw ApiException.conflict(reasonCode, "card-seat free entry is not allowed");
+        }
     }
 
     private List<String> listFromMap(Map<String, Object> map, String... names) {

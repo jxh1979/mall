@@ -3,6 +3,7 @@ package com.complex.platform.governance;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -18,6 +19,7 @@ import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
+import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -26,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -47,8 +50,16 @@ class PlatformServiceTests {
         service = new PlatformService(
                 platformRepository,
                 operations,
-                auditEventService
+                auditEventService,
+                new AuthorizationService(null)
         );
+        // F-AUTHZ-02：治理写方法现首行 requirePlatformScope()，以平台管理员身份运行既有写用例。
+        TestSecurityActors.asPlatformAdmin();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TestSecurityActors.clear();
     }
 
     @Test
@@ -64,6 +75,7 @@ class PlatformServiceTests {
                 null,
                 "Jane",
                 "18800000011",
+                null,
                 null,
                 null,
                 null,
@@ -141,6 +153,7 @@ class PlatformServiceTests {
                 "be_settlement",
                 "Jane Contact",
                 "18800000012",
+                "Owner Li",
                 "1F-A",
                 BigDecimal.valueOf(128.50),
                 BigDecimal.valueOf(120.00),
@@ -154,6 +167,7 @@ class PlatformServiceTests {
         assertThat(updated.id()).isEqualTo("mch_existing");
         assertThat(updated.merchantName()).isEqualTo("P0 Merchant");
         assertThat(updated.mallBlockCode()).isEqualTo("1F-A");
+        assertThat(updated.ownerPerson()).isEqualTo("Owner Li");
         assertThat(updated.areaSquareMeter()).isEqualByComparingTo("128.50");
         assertThat(updated.leasedAreaSquareMeter()).isEqualByComparingTo("120.00");
         assertThat(updated.secondaryContactName()).isEqualTo("Jack Contact");

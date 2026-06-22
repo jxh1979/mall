@@ -33,6 +33,7 @@ public class AmusementService {
     private static final Set<String> SESSION_STATUSES = Set.of("scheduled", "open", "closed", "cancelled");
     private static final Set<String> OVERRIDE_TYPES = Set.of("allow", "deny", "pause", "resume");
     private static final Set<String> RULE_TYPES = Set.of("age", "height", "weight", "capacity", "safety_notice", "manual");
+    private static final Set<String> DEVICE_STATUSES = Set.of("active", "inactive", "maintenance", "retired");
 
     // 游乐权益类前缀（§6.4/§12.1：游乐只消费票务生成的游乐权益）。
     // entitlement_type 以 "amusement" 开头视为游乐类（amusement_single / amusement_pass / 游乐通票等）。
@@ -206,7 +207,7 @@ public class AmusementService {
         String id = requireText(projectId, "project_id");
         checkProjectOwnership(id);
         try {
-            AmusementOpenEligibilityResponse response = evaluateOpenEligibility(id, null);
+            AmusementOpenEligibilityResponse response = evaluateOpenEligibility(id, null, null);
             if (response.allowed()) {
                 auditEventService.recordSuccess(
                         "amusement.open_eligibility.viewed",
@@ -356,6 +357,35 @@ public class AmusementService {
                 "amusement.capacity_config.manage",
                 "amusement_capacity_config",
                 () -> disableCapacityConfigInternal(id)
+        );
+    }
+
+    public PageResponse<AmusementDeviceRecord> listDevices(String projectId) {
+        String id = requireText(projectId, "project_id");
+        checkProjectOwnership(id);
+        return readPage(
+                "amusement.device.viewed",
+                "amusement.device.view_failed",
+                "amusement.device.view",
+                "amusement_device",
+                () -> repository.listDevicesByProject(id)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "amusement.device.manage")
+    @Transactional
+    public AmusementDeviceRecord createDevice(String projectId, AmusementDeviceRequest request) {
+        String id = requireText(projectId, "project_id");
+        return executeWrite(
+                "createAmusementDevice:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                AmusementDeviceRecord.class,
+                "amusement.device.changed",
+                "amusement.device.change_failed",
+                "amusement.device.manage",
+                "amusement_device",
+                () -> createDeviceInternal(id, request)
         );
     }
 
@@ -905,6 +935,31 @@ public class AmusementService {
         ));
     }
 
+    private AmusementDeviceRecord createDeviceInternal(String projectId, AmusementDeviceRequest request) {
+        AmusementDeviceRequest actual = requireRequest(request);
+        checkProjectOwnership(projectId);
+        String deviceCode = requireText(actual.deviceCode(), "device_code");
+        String status = enumOrDefault(actual.status(), "active", DEVICE_STATUSES, "status");
+        if (actual.safetyCheckIntervalHours() != null) {
+            positiveInteger(actual.safetyCheckIntervalHours(), "safety_check_interval_hours");
+        }
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        Instant now = Instant.now();
+        return repository.saveDevice(new AmusementDeviceRecord(
+                "amusement_device_" + slug(actual.idempotencyKey()),
+                projectId,
+                deviceCode,
+                trimToNull(actual.name()),
+                status,
+                actual.safetyCheckIntervalHours(),
+                trimToNull(actual.locationPointId()),
+                null,
+                merchantId,
+                now,
+                now
+        ));
+    }
+
     private AmusementCapacityConfigRecord disableCapacityConfigInternal(String configId) {
         AmusementCapacityConfigRecord existing = repository.findCapacityConfigById(configId)
                 .orElseThrow(() -> ApiException.notFound("CAPACITY_CONFIG_NOT_FOUND", "capacity config not found"));
@@ -942,7 +997,9 @@ public class AmusementService {
         if (!"open".equals(session.status())) {
             throw ApiException.conflict("SESSION_NOT_OPEN", "session is not open");
         }
-        AmusementOpenEligibilityResponse eligibility = evaluateOpenEligibility(project.id(), null);
+        // F-OPS-04：核销针对具体设备时传 deviceId，准入闸校验该设备巡检有效期（过期则 SAFETY_INSPECTION_EXPIRED）。
+        String deviceId = trimToNull(actual.deviceId());
+        AmusementOpenEligibilityResponse eligibility = evaluateOpenEligibility(project.id(), null, deviceId);
         if (!eligibility.allowed()) {
             throw ApiException.conflict("SAFETY_BLOCKED", "safety gate blocked amusement verification");
         }
@@ -971,6 +1028,7 @@ public class AmusementService {
             throw ApiException.conflict("ENTITLEMENT_NOT_FOR_PROJECT", "entitlement is not bound to this project");
         }
 
+        int peopleCount = Math.max(entitlement.numPeople(), 1);
         // §6.4 步骤 4/6：先消费票务权益（原子扣 used_times），再按三维度扣容量。
         // 顺序与回滚：权益扣减失败不扣容量；容量任一维度扣减失败则回补权益（补偿），保证两者一致。
         if (!entitlementGateway.consumeEntitlement(entitlement.id())) {
@@ -978,7 +1036,6 @@ public class AmusementService {
         }
         String pointId = trimToNull(textFromMap(actual.businessContext(),
                 "location_point_id", "locationPointId", "point_id", "pointId"));
-        String deviceId = trimToNull(actual.deviceId());
         // 清单#6 超容处置策略（§6.4/§7.18 + R6-D10）：硬上限阻断+软上限告警放行，均落
         // amusement.incident.over_capacity 事件；处置模式后台可切换（block_hard 默认/warn_only 仅告警留痕不阻断）。
         AmusementOverCapacityPolicy policy = repository.findOverCapacityPolicy(project.id());
@@ -991,19 +1048,16 @@ public class AmusementService {
                     session.id(),
                     pointId,
                     deviceId,
-                    project.capacity()
+                    project.capacity(),
+                    peopleCount
             ));
             if (!claim.claimed()) {
-                // 硬上限（安全容量）耗尽：无论处置模式均落 over_capacity incident + 发事件。
+                // F-OPS-03（裁决 #6）：硬上限=安全容量=人身安全红线，任何处置模式都不可旁路。
+                // warn_only 仅作用于软上限（运营容量），对硬上限无效；硬超容一律阻断并由
+                // recordOverCapacity(severity=high) 触发自动停运。catch 块负责回补已消费权益。
                 // 留痕与失败审计同语义（与既有 recordFailure 一致，同事务内尽力写入）。
                 recordOverCapacity(project, session, deviceId, "hard",
                         claim.exhaustedDimension(), policy);
-                if (policy.isWarnOnly()) {
-                    // 仅告警留痕不阻断：硬上限亦放行（已落 incident+事件），不回补权益，继续核销。
-                    // 注意：warn_only 下容量维度未实际 +1（防超卖逻辑保持原子），仅作留痕放行。
-                    return repository.saveVerification(saveVerificationRecord(project, session, credential,
-                            deviceId, staffId, actual, now));
-                }
                 throw ApiException.conflict("SESSION_CAPACITY_EXHAUSTED",
                         "session capacity exhausted (dimension=" + claim.exhaustedDimension() + ")");
             }
@@ -1021,7 +1075,7 @@ public class AmusementService {
             });
         }
         return repository.saveVerification(saveVerificationRecord(project, session, credential,
-                deviceId, staffId, actual, now));
+                deviceId, staffId, actual, now, peopleCount));
     }
 
     private AmusementVerificationRecord saveVerificationRecord(
@@ -1031,7 +1085,8 @@ public class AmusementService {
             String deviceId,
             String staffId,
             VerificationRequest actual,
-            Instant now
+            Instant now,
+            int verifiedPeople
     ) {
         return new AmusementVerificationRecord(
                 "verification_" + slug(actual.idempotencyKey()),
@@ -1043,7 +1098,8 @@ public class AmusementService {
                 "success",
                 null,
                 List.of(),
-                now
+                now,
+                verifiedPeople
         );
     }
 
@@ -1063,8 +1119,9 @@ public class AmusementService {
             AmusementOverCapacityPolicy policy
     ) {
         Instant now = Instant.now();
-        // 硬超容（block_hard 下阻断）严重度更高；软超容/仅告警留痕为 medium。
-        String severity = "hard".equals(overType) && !policy.isWarnOnly() ? "high" : "medium";
+        // F-OPS-03（裁决 #6）：硬超容=安全容量红线，严重度恒 high（触发自动停运），
+        // 不因 warn_only 处置模式降级；软超容/运营容量为 medium。
+        String severity = "hard".equals(overType) ? "high" : "medium";
         String incidentId = "ami_oc_" + slug(project.id() + ":" + session.id() + ":"
                 + overType + ":" + now.toEpochMilli());
         AmusementIncidentRecord incident = safetyRepository.saveIncident(new AmusementIncidentRecord(
@@ -1098,6 +1155,11 @@ public class AmusementService {
                 project.id(),
                 "amusement over capacity: type=" + overType + ", dimension=" + dimension,
                 "incident=" + incident.id() + "; over_type=" + overType + "; dimension=" + dimension);
+        // 事故停运联动：硬超容（severity=high）自动停运停售（open→paused，CAS 幂等），与 createIncident 高危事故一致，
+        // 消除"硬超容仍照常核销售票"的安全敞口；恢复营业须走巡检/检修复核（reopen），不自动恢复。
+        if ("high".equals(incident.severity())) {
+            safetyRepository.updateProjectOpenStatus(project.id(), "open", "paused");
+        }
         auditEventService.recordSuccess(
                 "amusement.incident.over_capacity",
                 "amusement.verification.execute",
@@ -1219,7 +1281,7 @@ public class AmusementService {
         });
     }
 
-    private AmusementOpenEligibilityResponse evaluateOpenEligibility(String projectId, String sessionId) {
+    private AmusementOpenEligibilityResponse evaluateOpenEligibility(String projectId, String sessionId, String deviceId) {
         AmusementProjectRecord project = repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));
         List<String> reasons = new ArrayList<>();
@@ -1236,6 +1298,20 @@ public class AmusementService {
                         reasons.add("SAFETY_REOPEN_PENDING");
                     }
                 }, () -> reasons.add("MISSING_SAFETY_INSPECTION"));
+        // F-OPS-04（裁决#6）：设备级巡检有效期。核销针对具体已注册设备时，校验该设备最近 PASS 巡检在周期内；
+        // 周期取设备级配置（缺省回退项目级，默认 24h）。设备未注册主数据则跳过（向后兼容存量自由 device_id）。
+        if (deviceId != null) {
+            repository.findDeviceByCode(projectId, deviceId).ifPresent(device -> {
+                int intervalHours = device.safetyCheckIntervalHours() != null
+                        ? device.safetyCheckIntervalHours()
+                        : repository.findProjectSafetyCheckIntervalHours(projectId);
+                Instant lastPass = device.lastPassInspectionAt();
+                if (lastPass == null
+                        || lastPass.plus(java.time.Duration.ofHours(intervalHours)).isBefore(Instant.now())) {
+                    reasons.add("SAFETY_INSPECTION_EXPIRED");
+                }
+            });
+        }
         if (!repository.listActiveBlockingProjectRules(projectId).isEmpty()) {
             reasons.add("PROJECT_RULE_BLOCKED");
         }
@@ -1353,6 +1429,9 @@ public class AmusementService {
             return record.id();
         }
         if (response instanceof AmusementCapacityConfigRecord record) {
+            return record.id();
+        }
+        if (response instanceof AmusementDeviceRecord record) {
             return record.id();
         }
         if (response instanceof AmusementOverCapacityPolicy record) {

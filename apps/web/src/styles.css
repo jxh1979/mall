@@ -1747,6 +1747,66 @@ body {
   gap: 8px;
 }
 
+
+.admin-permission-template-form,
+.admin-permission-apply-row {
+  align-items: end;
+}
+
+.admin-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-permission-domain {
+  min-width: 0;
+  padding: 12px;
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-border);
+  border-radius: var(--adm-radius);
+  box-shadow: var(--adm-shadow-sm);
+}
+
+.admin-permission-domain legend {
+  padding: 0 6px;
+  color: var(--adm-text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-permission-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: start;
+  padding: 7px 0;
+  font-size: 12.5px;
+  color: var(--adm-text);
+  border-top: 1px solid var(--adm-border);
+}
+
+.admin-permission-option:first-of-type {
+  border-top: 0;
+}
+
+.admin-permission-option input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.admin-permission-option span,
+.admin-permission-option small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-permission-option small {
+  grid-column: 2;
+  color: var(--adm-text-3);
+}
+
 /* ============================================================
    数据表（.admin-table 映射原型 .dtable）
    ============================================================ */
@@ -1961,6 +2021,10 @@ body {
   .admin-form-row select,
   .admin-form-row button {
     width: 100%;
+  }
+
+  .admin-permission-grid {
+    grid-template-columns: 1fr;
   }
 
   .admin-generic-toolbar {

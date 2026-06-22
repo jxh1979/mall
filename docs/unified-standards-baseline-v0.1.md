@@ -133,10 +133,10 @@
 - 实证：`FinanceServiceTests`（turnover_rent / 保证金四动作 / CamTrueUp under/over/exact）、`DepositLedgerRecord`（action=collect|refund|deduct|forfeit）、`InventoryVarianceRecord` + `InventoryVariancePostRequest`（盘亏/报损→损益对手方、供应商责任→供应商 AP）。权威细化见 spec（P1#14 综合体计费 + P2#④ CAM true-up）。
 
 ### D14.2 游乐超容术语（硬上限 vs 软上限）
-- **硬上限（安全容量，hard cap）**：安全容量上限，达上限**阻断**核销（除非处置模式 `warn_only`，则留痕放行不阻断）。
+- **硬上限（安全容量，hard cap）**：安全容量上限，达上限**一律阻断**核销（F-OPS-03：人身安全红线，处置模式 `block_hard`/`warn_only` 均**不可旁路**，SESSION_CAPACITY_EXHAUSTED 口径，并触发自动停运）。
 - **软上限（运营容量，soft cap）**：运营容量上限，达上限**告警放行**（不阻断）。
-- **over_capacity（超容）**：无论硬上限阻断、软上限告警放行还是 `warn_only` 留痕放行，均落 `over_capacity` incident 并发 `amusement.incident.over_capacity` 事件（超容必留痕）。
-- 实证：`AmusementServiceTests`（安全容量=硬上限阻断、运营容量=软上限告警放行、warn_only 留痕放行，均落 over_capacity 事件）。
+- **over_capacity（超容）**：无论硬上限阻断还是软上限告警放行，均落 `over_capacity` incident 并发 `amusement.incident.over_capacity` 事件（超容必留痕）；`disposal_mode` 仅作 incident 留痕标注，不改变硬上限阻断行为。
+- 实证：`AmusementServiceTests`（安全容量=硬上限恒阻断且 `warn_only` 不可旁路、运营容量=软上限告警放行，均落 over_capacity 事件）。
 
 ### D14.3 积分状态机术语（pending → confirmed → deducted/reversed）
 - **pending（支付入账未可用）**：支付成功即写 pending，**不计入可用余额**（pending 不可花）。

@@ -58,3 +58,13 @@ finance:
   # 经营日切时点（小时, 0-23），凌晨该点切自然日。财务确认默认 04:00。
   # 此前的流水归前一经营日；T7 日结六源汇总与 T12 看板 ETL 统一按此分桶。
   business-day-cutoff-hour: ${COMPLEX_BUSINESS_DAY_CUTOFF_HOUR:4}
+
+ticket:
+  credential:
+    signing:
+      # P0-3/X-01 门票二维码 HMAC 签名密钥（业务HTML business-system-map:692-693「二维码必须带签名」）。
+      # 生产必须由 env COMPLEX_TICKET_SIGNING_SECRET 注入强随机密钥；下方 dev 默认仅供本地/测试，切勿用于生产
+      # （核销端按相同密钥校验，密钥泄漏即可伪造合法二维码签名）。
+      secret: ${COMPLEX_TICKET_SIGNING_SECRET:complex-dev-ticket-signing-secret-change-me}
+      # 签名密钥版本，写入 ticket_credentials.signature_version，为后续密钥轮转预留。
+      version: ${COMPLEX_TICKET_SIGNING_VERSION:v1}

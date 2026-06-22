@@ -307,7 +307,7 @@ flowchart TD
   D1 -- approve --> F["生成流水/落账"]
   D1 -- reject --> R["回滚，不影响余额"]
   E --> F
-  F --> G["count_adjust / damage / surplus 流水并更新余额"]
+  F --> G["count_correction / damage|loss|waste / gain 流水并更新余额"]
   G --> H["写盘点/报损/报溢事件与风险事件"]
 ```
 
@@ -316,7 +316,14 @@ flowchart TD
 - **高价值判定（supply-4）：** 生效阈值 = 物品 `high_value_threshold`（非空时）否则平台默认 `high_value_threshold`（单位：分）。满足"批次成本金额 ≥ 生效阈值"或物品 `is_high_value=true` 即判高价值。
 - **双证据（supply-3）：** 高价值场景报损/作废/盘点差异**必须同时**上传照片与视频（`photo_refs` 与 `video_refs` 均非空），并建域内复核记录由主管复核；非高价值证据可选。
 - **域内复核（T6）：** 高价值触发后建 `inventory_high_value_reviews`（`subject_type ∈ {damage_report, stock_variance, saved_bottle_void}`，`review_status ∈ {pending, approved, rejected}`），由 `InventoryHighValueReviewService` 在库存域内闭环，替换原"仅校验附件数≥2"且不接入 governance `SupervisorReviewService`。
-- **报溢（supply-5）：** 盘盈/异常增加用独立流水类型 `surplus`，单独走审批 + 证据，与盘亏 `count_adjust` 区分方向。
+- **报溢（supply-5）：** 盘盈/异常增加落 `movement_type=gain` 流水（增加方向），单独走审批 + 证据，与盘亏/报损（`loss`/`damage`/`waste`）及盘点差异纠账（`count_correction`）区分方向。（注：取值以代码白名单为准，见 §6.13 权威口径；旧文档所称 `surplus`/`count_adjust` 在代码中不存在。）
+
+> 已实现修复（finding F-OPS-05，裁决#7「库存守恒账本」，2026-06-22，已在 160 编译通过）：此前以下三条落账路径只改写 `stock_balances` 库存余额、却未补写 `stock_movements` 流水，导致余额变更无对应流水、账本不守恒、无法逐位重建：
+> 1. **库存即时调整**（人工增减）；
+> 2. **高价值报损/盘点单 approve 落账**（域内复核通过后的扣减/作废生效，见 §5.4 主管 approve 分支）；
+> 3. **盘点差异纠账**（盘盈/盘亏调整）。
+>
+> 现已改为三路在**同一事务**内补写 `stock_movements`（§6.13），`movement_type` 取自代码白名单 `{gain, loss, damage, waste, count_correction}`（= `adjustment_type`，V046 CHECK；`movement_type` 列本身无 DB 约束）：报损取 `damage`/`loss`/`waste`，盘点差异纠账取 `count_correction`，盘盈/增加取 `gain`（即时调整按增减方向落 `gain` 或 `loss`/`damage`/`waste`）。由此 `stock_movements` 成为唯一的库存守恒账本——任意时点的库存余额均可由流水逐位重建，余额表退化为可重算的物化结果。
 
 ## 6. 数据库表结构
 
@@ -571,13 +578,14 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `consume` | 售卖消耗 | 正常售卖/出品扣减 |
 | `redeem_consume` | 积分兑换消耗 | 积分兑换礼物扣减（pass-2，扣礼品库） |
 | `gift_claim_consume` | 礼物领取消耗 | 礼物/权益领取确认扣减（pass-2，扣礼品库） |
-| `damage` | 报损 | 损耗/过期/破损扣减 |
-| `surplus` | 报溢 | 盘盈/异常增加（supply-5，单独审批+证据） |
-| `count_adjust` | 盘点调整 | 盘亏调整 |
-| `reverse` | 冲正 | 原流水反向冲正 |
+| `damage` | 报损 | 损耗/破损扣减（库存调整 `adjustment_type` 之一） |
+| `loss` | 报损/丢失 | 丢失/损耗扣减（库存调整 `adjustment_type` 之一） |
+| `waste` | 废弃 | 过期/废弃扣减（库存调整 `adjustment_type` 之一） |
+| `gain` | 增加/报溢 | 盘盈/异常增加（库存调整 `adjustment_type` 之一） |
+| `count_correction` | 盘点纠正 | 盘点差异纠账（盘盈/盘亏，库存调整 `adjustment_type` 之一） |
 
-> 设计说明：`redeem_consume`/`gift_claim_consume`（pass-2）为本设计相对 bar-operations 的新增类型；`surplus` 两系统均已落地（bar §6.16 本轮同步新增，依据 supply-5），口径一致。`photo_refs`/`video_refs` 分列（supply-3），对高价值流水均置必填。
-> 修订说明（2026-06-07 收口）：原注解称 `surplus` 为「相对 bar-operations 新增」，但 bar-operations §6.16 本轮已同步新增 surplus，故改为「两系统均已落地、口径一致」以免误导读者以为 bar 侧无 surplus。依据 finding newdocs-4、supply-5。
+> 权威口径（2026-06-22 收口，以代码为准）：库存调整/盘点/报损报溢落账实际写入的 `movement_type` 取自服务白名单 `InventoryStockMovementService.ALLOWED_ADJUSTMENT_TYPES = {gain, loss, damage, waste, count_correction}`，与 `inventory_stock_adjustments.adjustment_type` 的 DB CHECK（V046 `chk_stock_adjustment_type IN ('gain','loss','damage','waste','count_correction')`）一致。注意 **`stock_movements.movement_type` 列本身无 DB CHECK 约束**（V012 仅 `movement_type VARCHAR(64) NOT NULL`），取值正确性由服务白名单/`adjustment_type` 保证，故枚举以代码白名单为准。此前文档列出的 `surplus`/`count_adjust`/`reverse` 在代码中并不存在（已分别对应到 `gain`/`count_correction`、冲正按增减方向取对应调整类型），本轮按代码事实修正。
+> 设计说明：`redeem_consume`/`gift_claim_consume`（pass-2）为本设计相对 bar-operations 的新增类型；`photo_refs`/`video_refs` 分列（supply-3），对高价值流水均置必填。`inbound/outbound/transfer_in/transfer_out/consume` 为出入库/调拨/正常消耗类流水类型（由各业务路径直接写入），不受上述调整白名单约束。
 
 ### 6.14 stock_balances 库存余额表（物化/视图）
 
@@ -850,7 +858,7 @@ P0 完成时必须能演示：
 4. 生成入库批次与 inbound 流水，库存余额增加。
 5. 总库调拨到礼品库/消耗品库，两侧流水与余额正确。
 6. 对高价值物品报损时，系统自动判定高价值并强制要求同时上传照片和视频，建库存域内 `inventory_high_value_reviews(pending)`、主管在库存域内 approve 后才扣减（不走 governance supervisor_review，T6/supply-3/4）。
-7. 报溢用独立 surplus 流水并走审批（supply-5）。
+7. 报溢/盘盈用增加方向流水（`movement_type=gain`，以代码白名单为准，见 §6.13）并走审批（supply-5）。
 8. 会员/票务调用兑换预占：库存充足则预占礼品库、库存不足则拒绝兑换；领取确认后生成 redeem_consume/gift_claim_consume 流水并扣减余额，重复请求幂等（pass-2）。
 9. 全流程写入事件中心，事件命名符合 D4。
 
@@ -1010,3 +1018,4 @@ P0 完成时必须能演示：
 | 2026-06-18 | 增（D11） | R5 横幅 | 现状标注补“唯一码主数据”缺口：`items.is_traceable` 仅标记位，平台物品唯一二维码主数据本身无独立表/无生成绑定流程，码—批次—物品溯源链未建模；交接条补指向 r5-spec-T17 | R5 收口 D11：横幅原缺“唯一码主数据写死/未建”一条 |
 | 2026-06-18 | 增（D14） | §13A（新增） | 新增“成熟酒水/餐饮供应链深度能力规划”章：P1（批次效期 FIFO、效期预警、供应商对账/AP 桥接 finance、安全库存/补货点、单位换算瓶↔杯）/P2（配方 BOM、采购退货、供应商评分/比价、自动补货预测），逐条标能力/业务链价值/市场参考/验收口径，注明 P1/P2 规划级、非本期 P0 | R5 收口 D14：补市场深度规划补章，对标成熟进销存/WMS 标配 |
 | 2026-06-18 | 改（D5 终稿） | §3.1/§3.2/§4.2/§4.3/§5.4/§6.4/§6.5/§6.7/§6.12/§6.17（新增）/§7.2/§7.3/§7.7（新增）/§11/§12/§13 | 供应链三处粒度分歧统一收口为 r5-spec-T6 权威口径（业务确认）：①供应合同审批由 6 态收口为审批三态 `draft/approved/rejected` + 合同生命周期 `status` 三态 `active/suspended/expired` 分列；②采购周期由独立 `purchase_cycles` 表收口为「扩 `inventory_purchase_requests` 状态机 `submitted/approved/rejected/ordered/expected/arrived/received` + `inventory_purchase_request_events` 留痕表」，stock_batches `purchase_cycle_id`→`purchase_request_id`；③高价值复核收口为库存域内自建 `inventory_high_value_reviews`（subject_type `damage_report/stock_variance/saved_bottle_void`、review_status `pending/approved/rejected`）+ `InventoryHighValueReviewService`，不走 governance supervisor_review | R5 收口 D5 终稿：三处分歧 2026-06-18 业务确认统一以 r5-spec-T6 为权威 |
+| 2026-06-22 | 改 | §6.13 movement_type 枚举 + §5.4（mermaid/报溢规则/F-OPS-05 修复说明） | 调整/盘点/报损报溢落账的 `movement_type` 枚举以代码为准修正为 `{gain, loss, damage, waste, count_correction}`（= `InventoryStockMovementService.ALLOWED_ADJUSTMENT_TYPES` + V046 `chk_stock_adjustment_type` CHECK；`stock_movements.movement_type` 列本身无 DB CHECK，V012）。删除代码中不存在的 `surplus`/`count_adjust`/`reverse`（分别归并到 `gain`/`count_correction`、冲正按增减方向取对应调整类型）。`inbound/outbound/transfer_in/transfer_out/consume/redeem_consume/gift_claim_consume` 出入库/调拨/消耗类型保留 | 代码↔文档不一致以代码为准；裁决#7 F-OPS-05 库存守恒账本 |

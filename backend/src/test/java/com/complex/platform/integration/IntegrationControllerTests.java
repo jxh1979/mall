@@ -90,6 +90,17 @@ class IntegrationControllerTests {
         when(service.createReconciliationBatch(any(ReconciliationBatchRequest.class))).thenReturn(batch());
         when(service.listReconciliationDifferences()).thenReturn(new PageResponse<>(List.of(difference("open")), 1, 50, 1));
         when(service.createReconciliationDifference(any(ReconciliationDifferenceRequest.class))).thenReturn(difference("open"));
+        when(service.recordPollingCheck(any(IntegrationPollingCheckRequest.class))).thenReturn(new IntegrationPollingCheckRecord(
+                "polling_check_1",
+                "recorded",
+                "webhook and polling verified",
+                List.of("/api/v1/integration/retry-tasks"),
+                1,
+                4,
+                List.of("att-integration-polling"),
+                Instant.parse("2026-06-18T10:00:00Z"),
+                "platform_task_status_only_not_supplier_execution"
+        ));
         when(service.resolveReconciliationDifference(eq("difference_1"), any(ReconciliationDifferenceResolveRequest.class))).thenReturn(difference("resolved"));
     }
 
@@ -152,7 +163,7 @@ class IntegrationControllerTests {
         for (Endpoint endpoint : writeEndpointsMissingIdempotency()) {
             perform(endpoint)
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
         }
     }
 
@@ -197,6 +208,7 @@ class IntegrationControllerTests {
                 new Endpoint("POST", "/api/v1/integration/reconciliation/differences/difference_1/resolve", "integration.reconciliation.resolve", differenceResolveBody("difference-resolve")),
                 new Endpoint("POST", "/api/v1/integration/reconciliation/channel-auto", "integration.reconciliation.manage", channelReconcileBody("channel-recon")),
                 new Endpoint("GET", "/api/v1/integration/retail/skus", "integration.provider_adapter.view", null),
+                new Endpoint("POST", "/api/v1/integration/polling-checks", "integration.retry.manage", pollingCheckBody("polling-check")),
                 new Endpoint("GET", "/api/v1/integration/retry-tasks", "integration.retry.view", null),
                 new Endpoint("POST", "/api/v1/integration/retry-tasks", "integration.retry.manage", taskBody("retry-create")),
                 new Endpoint("POST", "/api/v1/integration/retry-tasks/retry_1/run-now", "integration.retry.manage", statusChangeBody("retry-now")),
@@ -218,6 +230,7 @@ class IntegrationControllerTests {
                 new Endpoint("POST", "/api/v1/integration/provider-adapters/adapter-controller/mark-production-ready", "integration.provider_adapter.production_ready", statusChangeBodyWithoutIdempotency()),
                 new Endpoint("POST", "/api/v1/integration/provider-adapters/adapter-controller/test-mock", "integration.provider_adapter.test", mockTestBodyWithoutIdempotency()),
                 new Endpoint("POST", "/api/v1/integration/order-syncs", "integration.order_sync.manage", orderSyncBodyWithoutIdempotency()),
+                new Endpoint("POST", "/api/v1/integration/polling-checks", "integration.retry.manage", pollingCheckBodyWithoutIdempotency()),
                 new Endpoint("POST", "/api/v1/integration/retry-tasks", "integration.retry.manage", taskBodyWithoutIdempotency()),
                 new Endpoint("POST", "/api/v1/integration/retry-tasks/retry_1/run-now", "integration.retry.manage", statusChangeBodyWithoutIdempotency()),
                 new Endpoint("POST", "/api/v1/integration/compensation-tasks", "integration.compensation.manage", taskBodyWithoutIdempotency()),
@@ -294,6 +307,23 @@ class IntegrationControllerTests {
 
     private String mockTestBodyWithoutIdempotency() {
         return mockTestBody("").replace("\"idempotency_key\": \"\",", "");
+    }
+
+    private String pollingCheckBody(String idempotencyKey) {
+        return """
+                {
+                  "idempotency_key": "%s",
+                  "operator_note": "webhook and polling verified",
+                  "checked_endpoints": ["/api/v1/integration/retry-tasks"],
+                  "pending_count": 1,
+                  "source_count": 4,
+                  "evidence_attachment_ids": ["att-integration-polling"]
+                }
+                """.formatted(idempotencyKey);
+    }
+
+    private String pollingCheckBodyWithoutIdempotency() {
+        return pollingCheckBody("").replace("\"idempotency_key\": \"\",", "");
     }
 
     private String orderSyncBody(String idempotencyKey) {

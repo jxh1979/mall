@@ -7,6 +7,7 @@ import java.util.Map;
 public record AmusementSafetyInspectionRecord(
         String id,
         String projectId,
+        String deviceId,
         String templateId,
         List<Map<String, Object>> items,
         String overallResult,

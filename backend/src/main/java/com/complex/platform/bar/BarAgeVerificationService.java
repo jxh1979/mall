@@ -30,7 +30,7 @@ public class BarAgeVerificationService {
                     () -> {
                         BarAgeVerificationRecord record = entryService.createAgeVerification(request);
                         if ("passed".equals(record.result()) || "accepted".equals(record.result())) {
-                            auditEventService.recordSuccess("bar.age_verification.passed", "bar.entry.age_verify", "bar_age_verification", record.id(), null, key, Map.of("result", record.result()));
+                            auditEventService.recordSuccess("bar.age_verification.passed", "bar.entry.age_verify", "bar_age_verification", record.id(), null, key, Map.of("result", record.result(), "provider_code", record.providerCode()));
                         } else {
                             auditEventService.recordFailure("bar.age_verification.rejected", "bar.entry.age_verify", "bar_age_verification", record.id(), null, key, "AGE_VERIFICATION_REJECTED");
                         }

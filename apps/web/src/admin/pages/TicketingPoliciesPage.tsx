@@ -1,8 +1,9 @@
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import type { AdminPageProps } from "../types";
+import { PermissionButton } from "../security/Can";
 
-export function TicketingPoliciesPage({ api, setActionResult }: AdminPageProps) {
+export function TicketingPoliciesPage({ api, setActionResult, effectivePermissions }: AdminPageProps) {
   const [weekday, setWeekday] = React.useState("");
   const [weekend, setWeekend] = React.useState("");
   const [holiday, setHoliday] = React.useState("");
@@ -48,7 +49,7 @@ export function TicketingPoliciesPage({ api, setActionResult }: AdminPageProps) 
         <input data-testid="ticket-weekday-price" type="number" min={0} step="0.01" value={weekday} onChange={(event) => setWeekday(event.target.value)} placeholder="平日价" />
         <input data-testid="ticket-weekend-price" type="number" min={0} step="0.01" value={weekend} onChange={(event) => setWeekend(event.target.value)} placeholder="周末价" />
         <input data-testid="ticket-holiday-price" type="number" min={0} step="0.01" value={holiday} onChange={(event) => setHoliday(event.target.value)} placeholder="节假日价" />
-        <button type="button" data-testid="ticket-publish" onClick={() => void publish()} disabled={busy}>发布策略</button>
+        <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.product.manage"]} data-testid="ticket-publish" onClick={() => void publish()} disabled={busy}>发布策略</PermissionButton>
       </div>
       <div data-testid="ticket-derived-preview" className="admin-preview">新人票按基础价 8 折派生；学生票按基础价 7 折派生；多人票和渠道价可改为固定价。</div>
       {error ? <div data-testid="ticket-policy-error" className="admin-inline-error">{error}</div> : null}

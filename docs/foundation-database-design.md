@@ -1,7 +1,7 @@
 # 地基系统数据库设计第一版
 
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
-> 本设计多处表/字段为"有设计无迁移"，以真实 Flyway V001–V124 为准收口（V099–V124 新增表/列见 §11 `文档goalP1(2026-06-20)`）：
+> 本设计多处表/字段为"有设计无迁移"，以真实 Flyway V001–V148 为准收口（V099–V124 新增表/列见 §11 `文档goalP1(2026-06-20)`；V143–V148 见 §11.23–§11.28 `文档goalP1(2026-06-22)`）：
 > - **准入两表**：`contract_admission_rules`(§238)、`admission_audits`(§259) 迁移**零命中**；审批层级实际落 `supervisor_review_decisions`(V057)。§449"admission_audits.approval_level"为过期落点。
 > - **空间四级模型**：设计的 `complex_projects/venues/areas/location_points` 四级表代码零落地，真实迁移是扁平单表 `spaces`(V005，`space_type` 自由文本无枚举)。该四级模型已过期，需作废或重写。
 > - **员工三表**：`staff_profiles`/`staff_device_credentials`/`employee_notices` **零落地**；`staff_device_credentials`（员工 Keystore 公钥/不可逆指纹）与 `terminal_device_credentials`(V011，kiosk 随机 token) 是**两套不同实体**，不可混用；`employee_notices` 无写入方，合规同意凭据未落地。
@@ -1808,9 +1808,9 @@ erDiagram
 19. 订单获取、销售归属、卡座服务、异常第一处理人和财务调整能通过业务过程实例和步骤记录形成时间线。
 20. 每条事件至少能保留项目、区域、点位、设备和发生时间，为后续视频候选片段匹配预留条件。
 
-## 11. V099–V124 新增表与列设计（`文档goalP1(2026-06-20)`）
+## 11. V099–V148 新增表与列设计（`文档goalP1(2026-06-20)` / `文档goalP1(2026-06-22)`）
 
-> 本节标注 `文档goalP1(2026-06-20)`，依据真实 Flyway 迁移 V099–V124 逐脚本核对回填（非臆造），统一口径：金额=整数分（`*_cent`/`*_amount_cent`/`*_bps` 基点）、状态/枚举均落 CHECK、隔离键沿用 `merchant_id`（商户维）/`project_id`（综合体维）、附件/证据用 JSONB、时间用 TIMESTAMPTZ。迁移号为各表/列的权威落点。
+> 本节标注 `文档goalP1(2026-06-20)`（V099–V124）与 `文档goalP1(2026-06-22)`（V143–V148 补回填），依据真实 Flyway 迁移逐脚本核对回填（非臆造），统一口径：金额=整数分（`*_cent`/`*_amount_cent`/`*_bps` 基点）、状态/枚举均落 CHECK、隔离键沿用 `merchant_id`（商户维）/`project_id`（综合体维）、附件/证据用 JSONB、时间用 TIMESTAMPTZ。迁移号为各表/列的权威落点。
 
 ### 11.1 准入策略 seed（V099 → `supervisor_review_policies`，不建新表）
 
@@ -1878,6 +1878,7 @@ V103 建立跨域异常汇聚层，统一上报→认领→转交→升级→关
 - 隔离键：`project_id`、`merchant_id`（均可空，带 partial 索引）；幂等唯一索引 `uq_risk_alerts_idempotency_key`。
 
 **`risk_alert_actions`（责任链流水，append-only）**：`action_id` PK、`alert_id` NOT NULL FK → `risk_alerts(alert_id)` ON DELETE CASCADE、`action_type` NOT NULL、`actor_id` NOT NULL、`from_status`、`to_status` NOT NULL、`reason` TEXT、`evidence_refs` JSONB NOT NULL DEFAULT `[]`、`created_at`。
+> append-only 强制（V140）：本表已贴 DELETE 阻断触发器（`complex_block_mutation`），DELETE 抛 `COMPLEX_APPEND_ONLY_VIOLATION`；删 `risk_alerts` 父行的级联删除会触发本表 trigger 致整事务回滚——`ON DELETE CASCADE` 在此被等价中止为"不可级联抹除留痕"（效果等价 RESTRICT 且更鲁棒，故未改 FK）。生产运行时用受限角色 `complex_app`（被 REVOKE DELETE）双重兜底。
 - CHECK：`action_type` IN (report/claim/transfer/escalate/resolve/dismiss)；`evidence_refs` 必须为 JSON 数组。
 - seed 权限：`risk_alert.report/claim/transfer/escalate/resolve/dismiss/view`（evidence 域），授 role_platform_admin。
 - 真实事件名：`exception.reported`/`exception.claimed`/`exception.transferred`/`exception.escalated`/`exception.resolved`/`exception.dismissed`（PRD §4.1 字典中 `exception.first_handled` 为漂移，代码真实为 `exception.claimed`）。
@@ -1994,6 +1995,113 @@ V120 给 `merchant_service_work_orders`（V022）增 `sla_breached` BOOLEAN NOT 
 
 V124 把 `bar_bill_adjustments` 的 `chk_bar_bill_adjustment_type` 扩为现状五种 ∪ {`waiver_reversal`,`refund_reversal`}（驳回 void 时对称回滚已施加副作用：未结账单 waiver→waiver_reversal 加回应付；已结账单 refund→refund_reversal 加回应付+对冲退款应收、携带 refunded_at 使经营日 refund 净额归零）；放宽 `chk_bar_bill_adjustment_refunded_at`：仅 refund/refund_reversal 携带 refunded_at，其余类型不得带。无新表/新列。真实事件名：`bar.order_item_void_decided`（BarWriteOperation DECIDE_ORDER_ITEM_VOID）。
 
+### 11.23 游乐设备安全检查周期子系统（V143 → `amusement_devices` + `amusement_inspection_tasks` 新表 + `amusement_projects`/`amusement_safety_inspections` 改列）
+
+> 本小节标注 `文档goalP1(2026-06-22)`。V143 修复 F-OPS-04（安全检查无「每设备 / 按周期」承载），并对齐 amusement 开发设计 §6.6.1（按周期生成到期检查任务工单）。此前 `amusement_safety_inspections`（V114 结构化）只能挂项目级巡检，缺设备主数据与每设备检查周期，无法表达「某台设备 N 小时内必须有一次 PASS 巡检，否则核销/运行阻断」；本迁移补设备主表 + 每设备/项目级缺省检查周期 + 到期任务工单。
+
+**新表 `amusement_devices`（游乐设备主数据，桥接旧 `device_id` 字符串）**：
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | VARCHAR(64) PK | |
+| `project_id` | VARCHAR(64) NOT NULL | FK → `amusement_projects(id)` ON DELETE CASCADE（设备随项目级联） |
+| `device_code` | VARCHAR(128) NOT NULL | 设备业务码，桥接旧 `amusement_safety_inspections.device_id` 字符串 |
+| `name` | VARCHAR | 设备名称 |
+| `status` | VARCHAR(32) NOT NULL DEFAULT `active` | 设备状态 |
+| `safety_check_interval_hours` | INTEGER | 每设备检查周期（小时）；**空=回退项目级缺省** `amusement_projects.safety_check_interval_hours` |
+| `location_point_id` | VARCHAR(64) | 设备所在点位 nullable |
+| `last_pass_inspection_at` | TIMESTAMPTZ | 最近一次 PASS 巡检时间（冗余列，加速核销/运行期检查周期校验） nullable |
+| `merchant_id` | VARCHAR(64) | 归属游乐商户（隔离键） nullable |
+| `created_at` / `updated_at` | TIMESTAMPTZ | |
+
+- CHECK：`status` IN (active/inactive/maintenance/retired)。
+- 唯一约束：`UNIQUE(project_id, device_code)`（项目内设备业务码唯一）。
+- 隔离键：`project_id`（综合体/项目维）、`merchant_id`（商户维）。
+
+**`amusement_projects` 改列**：增 `safety_check_interval_hours` INTEGER NOT NULL DEFAULT 24（项目级缺省检查周期，设备未单独配置时回退此值），CHECK `safety_check_interval_hours > 0`。
+
+**`amusement_safety_inspections` 改列**：增 `device_id` VARCHAR(128)（=设备业务码 `amusement_devices.device_code`；**可空=项目级巡检覆盖该项目全部设备**）；新增索引 `(project_id, device_id, inspected_at DESC)`（按设备取最近巡检，支撑 `last_pass_inspection_at` 派生与到期校验）。既有结构化列（inspector_id/inspection_result/abnormal_found 等，V114）不动。
+
+**新表 `amusement_inspection_tasks`（到期检查任务工单，§6.6.1 按周期生成）**：
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | VARCHAR(64) PK | |
+| `project_id` | VARCHAR(64) NOT NULL | FK → `amusement_projects(id)` |
+| `device_id` | VARCHAR(64) | FK → `amusement_devices(id)` ON DELETE CASCADE；**空=项目级任务**（覆盖全项目） nullable |
+| `due_at` | TIMESTAMPTZ NOT NULL | 本次检查到期时间（按检查周期生成） |
+| `status` | VARCHAR(16) NOT NULL DEFAULT `pending` | 任务状态 |
+| `generated_at` | TIMESTAMPTZ | 工单生成时间 |
+| `completed_inspection_id` | VARCHAR(64) | 完成本任务的巡检记录 id nullable |
+| `completed_at` | TIMESTAMPTZ | 完成时间 nullable |
+| `merchant_id` | VARCHAR(64) | 隔离键 nullable |
+| `created_at` / `updated_at` | TIMESTAMPTZ | |
+
+- CHECK：`status` IN (pending/completed/overdue/cancelled)。
+- 防重唯一索引：`(project_id, COALESCE(device_id,''), due_at)`（同设备/项目同一到期时点至多一条工单；`device_id` 空值以空串归一参与去重，保证项目级任务亦不重复）。
+- 隔离键：`project_id`、`merchant_id`。
+- 真实事件名：`amusement.inspection.task_generated` / `amusement.inspection.task_completed` / `amusement.inspection.task_overdue`（以代码为准）。
+
+### 11.24 游乐设备权限 seed（V144 → 不建表，seed `permissions` + `role_permissions`）
+
+V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到 `permissions`，并授 `role_platform_admin`（写 `role_permissions`）：
+
+| permission_code | domain | risk | requires_approval | 用途 |
+|---|---|---|---|---|
+| `amusement.device.view` | amusement | normal | FALSE | 查看游乐设备主数据 |
+| `amusement.device.manage` | amusement | high | TRUE | 维护游乐设备主数据（增改设备/检查周期，高风险需审批） |
+
+- 幂等：seed 走 `ON CONFLICT DO NOTHING`（与 §11 其余权限 seed 同源口径）。
+
+### 11.25 资金权威台账不可篡改（V145 → `ar_ap_items` 纳入 append-only `delete_only`，修复 F-OPS-01）
+
+> 本小节标注 `文档goalP1(2026-06-22)`，修复 F-OPS-01（运行期资金权威主表可被物理删除，留痕可被抹除）。背景：V140 已对应付/应收域施加 append-only 防篡改保护，但**只覆盖了 `ar_ap_payments`（immutable，禁 INSERT 后的一切 UPDATE/DELETE）与 `ar_ap_item_sources`（delete_only，仅禁 DELETE）**，唯独运行期权威主表 `ar_ap_items`（被 §11.10 库存差异、§11.12 抽成/保证金/CAM、§11.21 CAM true-up 等多处生成应收/应付分录）被遗漏，仍可物理删除。V145 补齐该缺口。
+
+**`ar_ap_items` 纳入 append-only 的 `delete_only` 类**：
+
+- 贴 `trg_append_only_d` 触发器，复用 V140 既有的 `complex_block_mutation()` 触发器函数；**仅拦截 DELETE**（抛 `COMPLEX_APPEND_ONLY_VIOLATION`），**保留合法 UPDATE**——`ar_ap_items` 运行期需要回写 paid/unpaid、`status` 等履约态，UPDATE 不可禁。
+- 金额修正口径：错误金额不得删除原行，须走**冲正分录**（反向 `ar_ap_items` 记录对冲），保证台账只增不减、全程可追溯。
+- 生产兜底：生产受限运行角色 `complex_app` 对 `ar_ap_items` 执行 REVOKE DELETE（与 §11.5 `risk_alert_actions` 双重兜底口径一致：触发器 + 角色权限双重阻断）。
+- 与 V140 既有保护的关系（补齐后应付/应收域完整覆盖）：
+
+| 表 | append-only 类别 | 落点 |
+|---|---|---|
+| `ar_ap_payments` | immutable（禁 UPDATE+DELETE） | V140 |
+| `ar_ap_item_sources` | delete_only（仅禁 DELETE） | V140 |
+| `ar_ap_items` | delete_only（仅禁 DELETE，保留 UPDATE） | **V145（本次补齐）** |
+
+- 无新表/新列（仅加触发器 + 角色 REVOKE）。
+
+### 11.26 人脸入场闸能力开关 seed（V146 → 不建表，seed `terminal_capability_switches` 一行，修复 X-02）
+
+> 本小节标注 `文档goalP1(2026-06-22)`，修复 X-02（访客 18+ 人脸入场闸完全缺失）。背景：业务 HTML（全场 18+，统一人脸入场核验闸保证场内皆 ≥18 周岁）要求入场处实名人脸闸判龄、fail-closed。本期按用户口径「第三方/人脸一律预留接口 + 能力开关默认关」落地脚手架（仿 V093 支付渠道 `payment.gateway.enabled`）：端口/路由/占位见 `com.complex.platform.entry` 包（`FaceVerificationPort` + `DisabledFaceVerificationGate`/`ReservedFaceVerificationGate`/`FaceVerificationRouter`）。真实判龄（按实名身份证出生日期 + 活体、fail-closed）待接供应商 + 建实名身份模型后启用——当前系统无访客实名/身份证模型（仅 `customers.birth_date` 自报，用于生日营销），故本期仅脚手架。
+
+**seed 能力开关 `face.verification.enabled` = FALSE（默认关）**：
+
+- 行 `tcs_face_verification_off`：`terminal_type='*'`（跨端通配）、`scope_type='global'`、`scope_id='global'`、`enabled=FALSE`，`ON CONFLICT (terminal_type, capability_code, scope_type, scope_id) DO NOTHING`。
+- 为何显式 seed false：T2 `resolveEffectiveSwitch` 语义为「无显式行=默认开启」（opt-out），人脸闸要求「默认关」，故必须显式插入 false 行；`FaceVerificationRouter` 另对「读不到开关」fail-safe→当作关（绝不误连厂商）。
+- **与 `integration.face_age.sync`（V071，T14 第三方脚手架）的区别**：后者语义=第三方人脸/年龄供应商的数据对账/同步（integration 域 `ThirdPartyScaffoldingService`）；`face.verification.enabled` 语义=入场闸实时年龄/人脸核验裁决（entry 域），bar 售酒年龄继承其结论。二者职责不同、独立开关（与 payment 域 `integration.payment.sync` vs `payment.gateway.enabled` 同范式）。
+- 关闭期业务口径（对齐 `integration-capability-switches` 验收 #6 + 修复 X-03）：bar 售酒年龄核验不再信客户端自报，改为继承入场闸结论——闸关 → `provider_code=entry_gate_exempt` 非阻塞放行（场内豁免、制度兜底，残留风险已知会），不展示「自动人脸已通过」；闸开真实接入后 fail-closed 判龄，bar 自动继承 PASSED/FAILED（`provider_code=face_inherited`）。
+- 无新表/新列（仅 seed 一行开关）。开关由现有 `TerminalDeviceController.updateCapabilitySwitch`（`terminal.switch.manage`，平台权限）切换，无需新增权限。
+
+### 11.27 商户负责人列（V147 → `merchants` 补 `owner_person`，修复 C-5）
+
+> 本小节标注 `文档goalP1(2026-06-22)`，修复 C-5（治理 HTML platform-governance-map :429「建立商户档案、运营主体、负责人、第一联系人和第二联系人」缺「负责人」承载）。`merchants`（V005）此前仅有 `contact_name`/`contact_phone`（第一联系人）+ 后续补的 `secondary_contact_name`/`secondary_contact_phone`（第二联系人），无独立「负责人」字段。
+
+- `ALTER TABLE merchants ADD COLUMN IF NOT EXISTS owner_person VARCHAR(120)`（可空，向后兼容存量商户）。
+- 语义：负责人=商户经营责任主体自然人；联系人=日常对接人，二者区分。
+- 代码侧全链补列：`MerchantRecord` / `dto.MerchantProfileRequest` 补 `ownerPerson`，`JdbcPlatformRepository` INSERT/UPDATE/SELECT/rowmap 补 `owner_person`，OpenAPI `MerchantProfileRequest` schema（yaml+json）补 `owner_person`。
+- 注：本文档 §2.2 merchants 旧设计表（列 `legal_person` 等）与真实迁移不符（头部已标「有设计无迁移」），以迁移为准；owner_person 权威落点为本节。
+
+### 11.28 主管复核决策留痕防篡改（V148 → `supervisor_review_decisions` 纳入 append-only `delete_only`，修复 F-CROSS-06）
+
+> 本小节标注 `文档goalP1(2026-06-22)`，修复 F-CROSS-06（治理留痕可篡改：准入闸/复核决策表可被物理 DELETE 抹除）。`supervisor_review_decisions`（V057 起，记录 block/approve/reject 治理决策）此前不在 V140 append-only 清单内。
+
+- 纳入 `delete_only`：贴 `trg_append_only_d` 触发器（复用 V140 `complex_block_mutation()`），仅禁 DELETE、保留合法 UPDATE（评估 pending → 复核 approved/rejected 的状态回写）。
+- 生产受限运行角色 `complex_app` REVOKE DELETE（触发器 + 角色双重纵深，与 V140/V145 同口径）。
+- 全代码库零 DELETE 该表（核验通过），无业务/测试影响；无新表/新列（仅加触发器 + 角色 REVOKE）。
+- 注：核心留痕 `audit_events`/`evidence_events` 等已在 V140 immutable；本节补齐遗漏的治理决策表。隔离列（`merchant_id`/`project_id`）为独立后续子项（需 `SupervisorReviewDecisionRecord` 构造点改造 + 读过滤接线）。
+
 ## 10. 下一步
 
 > 修订说明（2026-06-07）：依据基准 D10（A1 用户 2026-06-07 拍板迁移 Java），技术栈已确定，不再是「待选择」。原「下一步进入技术栈选择」按 D10 修正为「按既定技术栈搭建骨架」。
@@ -2050,3 +2158,4 @@ V124 把 `bar_bill_adjustments` 的 `chk_bar_bill_adjustment_type` 扩为现状�
 | 2026-06-10 总控拍板 | 增 | 2.10 / 2.10.1 / 建表顺序 | 扩展 `merchant_credentials` 承载证照/资质/保险到期字段；新增 `contract_key_dates` 合同关键日期表，采用一事项一记录 | 合同关键日期、证照/资质/保险到期字段 P0 颗粒度建议，推荐方案 B |
 | 2026-06-10 P0 执行矩阵补齐 | 增/改 | 1 / 3.13.1-3.13.5 / 7.2 / 建表顺序 | 补 CNY 币种口径、权限模板四表、最终权限计算纳入基础/临时模板和显式拒绝 | 用户确认权限模板机制和币类默认按建议执行 |
 | 2026-06-20 `文档goalP1` | 增 | 导言 / §11 V099–V124 新增表与列设计 | 覆盖范围导言由 V001–V065 改为 V001–V124；新增 §11 逐表回填 V099–V124 的新表/新列（含迁移号、关键列+类型、CHECK、外键、隔离键、用途、真实事件名）：V099 准入策略 seed、V100 customer_points_ledger 入账列、V101 audit_events 分类/主体列、V102 saved_bottle_transfers+saved_bottles 改列、V103 risk_alerts/risk_alert_actions、V104 amusement_over_capacity_policy+incident_type、V105 对账差异 expected/actual/source、V106 wecom_risk_hits、V107 设备生命周期+MDM 处置列、V108 stocktake/inventory_variance、V109 渠道语义列、V110 turnover_rent_rules/deposit_ledger/cam_allocations、V111 终端开关 CHECK、V112 supplier_qualifications/settlement_methods、V113 票种刷新窗口、V114 巡检结构化+入口点位、V115 集团总览权限、V116/V123 检修单位外键、V117 void 审批回写、V120 工单 SLA 列、V121 cam_trueup_runs/lines+退款方向、V124 bar void 反向冲销 | 逐脚本 Grep V099–V124 迁移核对回填，不臆造 |
+| 2026-06-22 `文档goalP1` | 增/改 | 导言 / §11 标题与导语 / §11.23–§11.25 / 变更日志 | 覆盖范围导言由 V001–V124 改为 V001–V145；§11 标题/导语扩为 V099–V145。新增三小节回填 V143–V145：**§11.23（V143）游乐设备安全检查周期子系统**——新表 `amusement_devices`（设备主数据，UNIQUE(project_id,device_code)、每设备 safety_check_interval_hours 空则回退项目级、last_pass_inspection_at 冗余）、`amusement_inspection_tasks`（到期检查工单，防重唯一索引 (project_id,COALESCE(device_id,''),due_at)）；`amusement_projects` 增 safety_check_interval_hours NOT NULL DEFAULT 24（CHECK>0）；`amusement_safety_inspections` 增 device_id + 索引 (project_id,device_id,inspected_at DESC)。**§11.24（V144）**游乐设备权限 seed `amusement.device.view`(normal)/`amusement.device.manage`(high,requires_approval) 入 permissions+role_permissions(role_platform_admin)。**§11.25（V145）**`ar_ap_items` 纳入 append-only delete_only（贴 trg_append_only_d / 复用 V140 complex_block_mutation()，仅禁 DELETE 保留 UPDATE，金额修正走冲正分录，complex_app REVOKE DELETE）——补齐 V140 仅护 ar_ap_payments(immutable)/ar_ap_item_sources(delete_only) 而遗漏运行期权威主表的缺口 | F-OPS-04 + amusement §6.6.1（V143）；F-OPS-01（V145）；逐脚本核对 V143–V145 迁移回填，不臆造 |

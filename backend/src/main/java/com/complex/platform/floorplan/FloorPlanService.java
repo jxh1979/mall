@@ -33,6 +33,12 @@ public class FloorPlanService {
     private static final Set<String> IMPORT_TASK_STATUSES = Set.of("parsed", "failed", "published", "cancelled");
     private static final Set<String> IMPORT_CANDIDATE_STATUSES = Set.of("pending", "published", "rejected");
 
+    // F-CROSS-10 导入边界（DoS/资源耗尽防护）：除既有 source_payload 字符上限（1_000_000，见
+    // validateImportCreateRequest）外，再限解析出的候选形状（节点）数与单形状顶点数。
+    // 一个 <1MB 的 payload 仍可塞入海量小多边形或单个超多顶点多边形撑爆解析/落库，故 parse 后强制上限。
+    private static final int MAX_IMPORT_CANDIDATES = 2_000;
+    private static final int MAX_IMPORT_POLYGON_POINTS = 1_000;
+
     private final FloorPlanRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
@@ -274,6 +280,7 @@ public class FloorPlanService {
     private FloorPlanImportTaskRecord createImportTaskOnce(String floorPlanId, FloorPlanImportCreateRequest request) {
         Instant now = Instant.now();
         FloorPlanImportParseResult parseResult = importParser.parse(request.sourceFormat(), request.sourcePayload());
+        enforceImportLimits(parseResult);
         String taskId = "fpi_" + slug(request.idempotencyKey());
         String status = parseResult.candidates().isEmpty() ? "failed" : "parsed";
         FloorPlanImportTaskRecord task = repository.saveImportTask(new FloorPlanImportTaskRecord(
@@ -523,6 +530,25 @@ public class FloorPlanService {
         String payload = requireText(request.sourcePayload(), "source_payload");
         if (payload.length() > 1_000_000) {
             throw ApiException.badRequest("VALIDATION_FAILED", "source_payload exceeds 1000000 characters");
+        }
+    }
+
+    /**
+     * F-CROSS-10 导入边界：解析完成后强制节点数 / 单形状顶点数上限，超限抛 badRequest（不落库）。
+     * 防止 &lt;1MB 的 payload 经海量小多边形或单个超多顶点多边形撑爆解析结果与落库。
+     */
+    private void enforceImportLimits(FloorPlanImportParseResult parseResult) {
+        List<FloorPlanImportParseResult.CandidateDraft> candidates = parseResult.candidates();
+        if (candidates.size() > MAX_IMPORT_CANDIDATES) {
+            throw ApiException.badRequest("FLOOR_PLAN_IMPORT_TOO_MANY_NODES",
+                    "import exceeds the maximum of " + MAX_IMPORT_CANDIDATES + " shapes");
+        }
+        for (FloorPlanImportParseResult.CandidateDraft candidate : candidates) {
+            int pointCount = candidate.polygonPoints() == null ? 0 : candidate.polygonPoints().size();
+            if (pointCount > MAX_IMPORT_POLYGON_POINTS) {
+                throw ApiException.badRequest("FLOOR_PLAN_IMPORT_TOO_MANY_POINTS",
+                        "a shape exceeds the maximum of " + MAX_IMPORT_POLYGON_POINTS + " polygon points");
+            }
         }
     }
 

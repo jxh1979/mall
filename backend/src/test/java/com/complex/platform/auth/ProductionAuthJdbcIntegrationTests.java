@@ -104,7 +104,7 @@ class ProductionAuthJdbcIntegrationTests {
                                 }
                                 """.formatted(refreshToken)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("REFRESH_TOKEN_INVALID"));
+                .andExpect(jsonPath("$.detail_code").value("REFRESH_TOKEN_INVALID"));
 
         mockMvc.perform(post("/api/v1/auth/logout")
                         .header("Authorization", "Bearer " + rotatedAccessToken)
@@ -188,7 +188,7 @@ class ProductionAuthJdbcIntegrationTests {
                                 }
                                 """))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
+                .andExpect(jsonPath("$.detail_code").value("ACCOUNT_LOCKED"));
     }
 
     @Test

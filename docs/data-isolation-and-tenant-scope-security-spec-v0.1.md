@@ -2,12 +2,12 @@
 
 > 创建日期：2026-06-18
 > 状态：权威安全规格（补齐此前缺口——隔离模型此前仅存在于各迁移 .sql 注释中，无单一权威文档）。
-> 适用范围：开发、测试、安全、验收。本文档化的是**已实现**的迁移 V044–V052 与既有 scope 过滤行为，不引入新需求。
+> 适用范围：开发、测试、安全、验收。当前迁移 scope 基线以 §3A 自动生成区块为准；历史人工清单仅作解释背景，不再作为迁移版本上限。
 > 关联：盘点表 `docs/domain-ownership-scope-audit-v0.1.csv`（逐表 scope 映射，本规格正式引用并解释它）；越权必测口径 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md`（"数据范围穿透"）、`docs/full-admin-ui-acceptance-matrix-v0.1.md`（UI-ADM-MER-002）。
 
 机器识别标记：DATA_ISOLATION_SPEC_READY、TENANT_SCOPE_INJECTION_FROM_TOKEN_ONLY、SCOPE_AUDIT_CSV_AUTHORITATIVE_LINK。
 
-> 补登（2026-06-18，附加不删原文）：迁移基线已推进到 **V061**。本规格 §3 逐表清单与 §6 缺口表已扩展登记至 V044–V061（含 V055/V057/V059/V060/V061 新增带租户数据的表）。上文「V044–V052」为初版范围声明，实际覆盖以 §3/§6 现行内容为准。
+> 计数漂移修订（2026-06-21）：历史补登中的 V061 也是快照。当前真实迁移覆盖以 §3A 自动迁移隔离基线为准，由 `npm run docs:data-isolation-spec` 生成、`npm run verify:data-isolation-spec` 校验。
 
 ## 1. 隔离边界与 scope 语义
 
@@ -33,7 +33,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 - 读取：repository 提供 `listXxxByMerchant(scope)` 等按 scope 过滤的方法；平台级（scope 为空）才走全量 `listXxx()`。参考实现：`FinanceService.listArApItems()`（`currentMerchantScope().isPresent() ? listArApItemsByMerchant : listArApItems`）。
 - 旧行兼容：隔离列均为 **nullable**（`ADD COLUMN IF NOT EXISTS … VARCHAR`），存量旧行 `merchant_id IS NULL`；部分索引 `WHERE merchant_id IS NOT NULL` 只对已落 scope 的行建索引。**回填策略**见 §5。
 
-## 3. 已落隔离列清单（迁移 V044–V052，逐表）
+## 3. 历史人工隔离列清单（初版快照，仅作背景）
 
 | 迁移 | 表 | 列 | 类型 | 索引/约束 |
 |---|---|---|---|---|
@@ -54,6 +54,115 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 > 注：迁移用 retrofit 方式事后加列，类型为 `VARCHAR`；早期 dev-design 文档把 merchant_id 写成 `uuid`，以本规格与迁移现实为准（待回头修正 design 文档，P2）。完整逐表 scope 映射见 `domain-ownership-scope-audit-v0.1.csv`。
 
+<!-- DATA_ISOLATION_SPEC_AUTO_START -->
+### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V145**，发现 **100** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+| 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
+|---|---|---|---|---|
+| `access_users` | `merchant_id` + `organization_id` | direct | V003 | `V003__p0_access_permission_authz_slice.sql` |
+| `amusement_capacity_config` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
+| `amusement_capacity_snapshot` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
+| `amusement_device_statuses` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_devices` | `merchant_id` + `project_id` | direct | V143 | `V143__amusement_device_safety_cycle.sql` |
+| `amusement_group_bookings` | `project_id` | direct | V035 | `V035__p2_amusement_group_private_bookings.sql` |
+| `amusement_incidents` | `merchant_id` + `project_id` | direct | V024, V049 | `V024__p1_amusement_safety_waiver_incident.sql`<br>`V049__amusement_security_fixes.sql` |
+| `amusement_inspection_tasks` | `merchant_id` + `project_id` | direct | V143 | `V143__amusement_device_safety_cycle.sql` |
+| `amusement_maintenance_record` | `merchant_id` + `project_id` | direct | V081 | `V081__amusement_maintenance_record.sql` |
+| `amusement_manual_overrides` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_over_capacity_policy` | `project_id` | direct | V104 | `V104__amusement_incident_type_over_capacity.sql` |
+| `amusement_project_entitlements` | `project_id` | direct | V082 | `V082__amusement_project_entitlement_binding.sql` |
+| `amusement_project_rules` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_projects` | `merchant_id` + `space_id` | direct | V049, V084 | `V049__amusement_security_fixes.sql`<br>`V084__object_space_mapping.sql` |
+| `amusement_queue_entries` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_reservations` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_safety_inspections` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_safety_notices` | `merchant_id` + `project_id` | direct | V024, V049 | `V024__p1_amusement_safety_waiver_incident.sql`<br>`V049__amusement_security_fixes.sql` |
+| `amusement_safety_templates` | `merchant_id` | direct | V049 | `V049__amusement_security_fixes.sql` |
+| `amusement_sessions` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_verifications` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_waiver_acknowledgements` | `project_id` | direct | V024 | `V024__p1_amusement_safety_waiver_incident.sql` |
+| `analytics_dashboard_snapshots` | `project_id` | direct | V017 | `V017__p0_analytics_ai_quality_risk_dashboard.sql` |
+| `analytics_merchant_health_scores` | `merchant_id` | direct | V017 | `V017__p0_analytics_ai_quality_risk_dashboard.sql` |
+| `analytics_merchant_summaries` | `merchant_id` | direct | V017 | `V017__p0_analytics_ai_quality_risk_dashboard.sql` |
+| `ar_ap_items` | `merchant_id` | direct | V044 | `V044__finance_security_isolation.sql` |
+| `audit_events` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
+| `bar_bill_settlements` | `merchant_id` | direct | V062 | `V062__bar_bill_settlement_channel.sql` |
+| `bar_bills` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
+| `bar_deposit_rules` | `merchant_id` | direct | V073 | `V073__bar_reservation_deposit.sql` |
+| `bar_gift_redemptions` | `merchant_id` | direct | V072 | `V072__bar_gift_redemption.sql` |
+| `bar_order_item_voids` | `merchant_id` | direct | V091 | `V091__bar_pos_depth.sql` |
+| `bar_orders` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
+| `bar_production_tickets` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
+| `bar_products` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
+| `bar_reservations` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
+| `bar_shifts` | `merchant_id` + `project_id` | direct | V095 | `V095__bar_shift_handover.sql` |
+| `bar_table_session_adjustments` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
+| `bar_table_sessions` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
+| `bar_tables` | `merchant_id` + `space_id` | direct | V047, V084 | `V047__bar_security_merchant_isolation.sql`<br>`V084__object_space_mapping.sql` |
+| `business_entity_bindings` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
+| `business_process_instances` | `merchant_id` + `project_id` + `venue_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
+| `cam_allocations` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
+| `cam_trueup_lines` | `merchant_id` | direct | V121 | `V121__cam_trueup_and_refund_direction.sql` |
+| `compliance_expiry_items` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
+| `compliance_reminders` | `merchant_id` | direct | V051 | `V051__compliance_security_fixes.sql` |
+| `contract_key_dates` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
+| `contract_spaces` | `space_id` | inherited-or-location-scope | V080 | `V080__contract_scope_and_spaces.sql` |
+| `contracts` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
+| `customer_birthday_rules` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
+| `customer_check_in_tiers` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
+| `customer_member_levels` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
+| `customer_membership_plans` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
+| `customer_memberships` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
+| `customer_points_rules` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
+| `customer_points_transfer_limits` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
+| `customer_redemption_catalog_items` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
+| `customer_stored_value_accounts` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
+| `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
+| `entitlement_sessions` | `merchant_id` + `project_id` | direct | V129 | `V129__entitlement_sessions.sql` |
+| `entitlement_templates` | `merchant_id` + `venue_id` | direct | V075 | `V075__entitlement_merchant_and_ticket_validity.sql` |
+| `evidence_attachments` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
+| `evidence_events` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
+| `evidence_reviews` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
+| `inventory_items` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_purchase_requests` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_risk_alerts` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_stock_adjustments` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_stock_balances` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_stock_batches` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_stock_movements` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_supplier_reconciliations` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_suppliers` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_trace_codes` | `merchant_id` | direct | V128 | `V128__inventory_trace_codes.sql` |
+| `inventory_trace_handovers` | `merchant_id` | direct | V139 | `V139__inventory_trace_handover_merchant_id.sql` |
+| `issued_entitlements` | `merchant_id` + `venue_id` | direct | V006 | `V006__p0_ticketing_verification.sql` |
+| `mall_floor_plans` | `merchant_id` + `project_id` | direct | V023, V052 | `V023__p1_floor_plan_polygons.sql`<br>`V052__floorplan_merchant_isolation.sql` |
+| `merchant_bill_disputes` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
+| `merchant_bill_dunning_records` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
+| `merchant_bills` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
+| `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
+| `projects` | `merchant_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
+| `risk_alerts` | `merchant_id` + `project_id` | direct | V103 | `V103__unified_risk_alerts.sql` |
+| `roles` | `organization_id` | direct | V048 | `V048__access_role_organization_isolation.sql` |
+| `saved_bottles` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `service_responsibility_records` | `merchant_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
+| `spaces` | `merchant_id` + `project_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
+| `staff_level_assignments` | `merchant_id` + `organization_id` | direct | V055 | `V055__access_staff_levels_and_salary.sql` |
+| `staff_profiles` | `merchant_id` + `project_id` | direct | V086 | `V086__staff_tables.sql` |
+| `stocktake` | `merchant_id` | direct | V108 | `V108__inventory_variance_to_ap.sql` |
+| `supplier_qualifications` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
+| `supplier_settlement_methods` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
+| `supply_contracts` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
+| `terminal_devices` | `merchant_id` + `venue_id` | direct | V007 | `V007__p0_terminal_evidence.sql` |
+| `ticket_orders` | `merchant_id` | direct | V135 | `V135__ticket_orders_merchant_id.sql` |
+| `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |
+| `turnover_rent_rules` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
+| `warehouses` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
+| `wecom_conversations` | `project_id` | direct | V087 | `V087__wecom_compliance.sql` |
+| `wecom_risk_hits` | `project_id` | direct | V106 | `V106__wecom_risk_hits_and_rules.sql` |
+
+> 自动基线说明：本区块只证明“迁移中出现了 scope 字段”，不替代 `verify:tenant-isolation` 对 Repository scope 过滤的机审，也不替代越权 E2E/单测。
+<!-- DATA_ISOLATION_SPEC_AUTO_END -->
+
 ## 4. 运行时越权拦截与验收标准（Given/When/Then）
 
 每个**查询和写入** operation 必测两条（与 `p0-openapi-operation-acceptance-matrix-v0.1.md:272-273` 绑定）：
@@ -69,7 +178,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 - **AC-ISO-3 平台级**：Given 平台管理员（scope 空）→ 可见全量。
 - **AC-ISO-4 旧行可见性**：明确 `merchant_id IS NULL` 旧行对商户角色是否可见（默认：不可见，除非显式回填）。
 
-逐表用例应覆盖 §3 全部表。建议新增脚本闸口 `verify:tenant-isolation`（占位，见 §6）做契约级守卫。
+逐表用例应覆盖 §3/§3A 全部应隔离表；`verify:tenant-isolation` 已作为契约级守卫纳入交付闸口。
 
 ## 5. 旧行回填策略（待执行）
 
@@ -81,8 +190,8 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 | 编号 | 缺口 | 级别 |
 |---|---|---|
-| ISO-GAP-01 | 安全 finding 台账 `security-scans/findings-register-v1.md` / `formal-security-baseline-v1.md` **无跨租户越权 finding 系列**（V044–V061 修的安全问题在权威台账不可见）→ 应补 `SEC-*-TENANT-ISOLATION-*` 条目（2026-06-18 已在 findings-register-v1.md 末尾手工补登 manual-tenant-isolation 小节，待生成器纳管）| P0 |
-| ISO-GAP-02 | 无 `verify:tenant-isolation` 自动闸口；隔离目前靠人工/单测，机审基线只统计 OpenAPI auth context，验不到 DB 行级隔离（待建）| P1 |
+| ISO-GAP-01 | **已关闭（2026-06-21）**：安全基线生成器已自动纳管 `SEC-P0-TENANT-ISOLATION-001`，`findings-register-v1.md` / `formal-security-baseline-v1.md` 均由 `docs:security-baseline` 生成；`verify:tenant-isolation` 已纳入交付闸口并通过 | Closed |
+| ISO-GAP-02 | **已关闭（2026-06-21）**：`verify:tenant-isolation` 自动闸口已落地并接入 `verify:delivery-gates`，可检查 repository scope 注入与新增表登记 | Closed |
 | ISO-GAP-03 | V049 amusement 4 表的 merchant_id **无索引**（其余域均建了部分索引）→ 性能/一致性缺口 | P1 |
 | ISO-GAP-04 | V044–V061 缺 TDD 风格实现/回归 plan（对齐 `superpowers/plans/2026-06-15-security-audit-fixes.md` 的 V038/V039 记录）→ 详见本节末「ISO-GAP-04 TDD 回归 plan 待补」 | P1 |
 | ISO-GAP-05 | dev-design（bar/amusement/foundation）把 merchant_id 写成 `uuid`，与迁移 `VARCHAR` retrofit 不符 | P2 |
@@ -107,11 +216,11 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 - V060：`customer_points_rules`（direct project_id，综合体级）
 - V061：`saved_bottles`（direct merchant_id；新增 customer_phone 等敏感字段加密为 ISO-GAP-06）
 
-该 plan 应对齐 `verify:tenant-isolation`（ISO-GAP-02）契约闸口，作为机审守卫与单测的回归底座。
+该 plan 已对齐 `verify:tenant-isolation`（ISO-GAP-02）契约闸口，作为机审守卫与单测的回归底座。
 
 ## 6A. 租户隔离机审闸口与越权台账（verify:tenant-isolation）
 
-> 修正(2026-06-19 R5业务HTML缺口审计 F8/F9/F10)：依据业务HTML/治理HTML「商户看不到其他商户 / 平台全局」，与本规格 §6 缺口登记——**ISO-GAP-02** 自认"无 `verify:tenant-isolation` 自动闸口；隔离靠人工/单测，机审基线只统计 OpenAPI auth context，验不到 DB 行级隔离（待建）"，**ISO-GAP-01** 自认权威安全 finding 台账"无跨租户越权 finding 系列"（手工补登待生成器纳管）。本章把"机审闸口 + 越权台账"补成可落地规格，闭合"机审可发现未隔离查询、越权请求被拒并留痕"。
+> 修正(2026-06-21)：`verify:tenant-isolation` 自动闸口与 `SEC-P0-TENANT-ISOLATION-001` finding 已由安全基线生成器纳管，闭合“机审可发现未隔离查询、越权风险进入台账、修复后回归”的治理链路。
 
 ### 6A.1 CI 机审闸口（`verify:tenant-isolation`）
 
@@ -126,7 +235,7 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 
 ### 6A.2 越权 finding 台账（证据留痕）
 
-- **台账落点：** 在权威安全 finding 台账（`security-scans/findings-register-v1.md` / `formal-security-baseline-v1.md`）补 `SEC-*-TENANT-ISOLATION-*` 系列条目（对齐 ISO-GAP-01），由生成器纳管，不再仅手工补登。
+- **台账落点：** 权威安全 finding 台账（`security-scans/findings-register-v1.md` / `formal-security-baseline-v1.md`）已由生成器纳管 `SEC-P0-TENANT-ISOLATION-001`（对齐 ISO-GAP-01），后续同类条目不得仅手工补登。
 - **每条 finding 记录证据：** 构造的越权请求（跨商户/跨项目读或写）、token 的真实 scope、请求体中尝试越权的 scope、实际结果（被拒/被忽略写入 token scope）、对应表与用例编号（AC-ISO-1/2/3/4，见 §4、§6 ISO-GAP-04 表清单）。
 - **机审发现项入台账：** `verify:tenant-isolation` 扫出的"未隔离查询/未登记表"也作为 finding 入台账并跟踪闭环，形成"机审发现 → 台账登记 → 修复 → 回归"链路。
 
@@ -136,7 +245,7 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 - **机审可发现未隔离查询：** 故意引入一条"应隔离表缺 scope 注入"或"新增表未登记 CSV/§3"的变更，`verify:tenant-isolation` 必须判失败并阻断；修复后通过。
 - **回归底座对齐：** 验收用例集对齐 §6 ISO-GAP-04 表清单（V044–V061）与 AC-ISO-1/2/3/4 四条，作为机审与单测共用回归底座。
 
-> **待业务确认：** `verify:tenant-isolation` 机审闸口纳入哪条 CI 流水（避免与现有 gate 如 `verify:openapi-closure`、安全基线机审冲突或重复阻断），由治理/工程负责人裁定接入点与阻断级别。
+> **已收口：** `verify:tenant-isolation` 已纳入 `verify:delivery-gates`，与 OpenAPI、矩阵、迁移、安全基线闸口共同作为交付阻断检查。
 
 ## 7. V050 主管复核持久化数据模型（此前仅在 .sql，本规格补字段级文档）
 
@@ -164,3 +273,14 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 ## 8. 字段级验收 = 与盘点 CSV 双向绑定
 
 本规格 §3 表 ↔ `domain-ownership-scope-audit-v0.1.csv` 逐行对应。任何新增带租户数据的表，必须：(1) 在 CSV 增行并标 scope_type/scope_source；(2) 在本规格 §3 增行；(3) 补 AC-ISO-1/2 用例。CSV 不再是 orphan，由本规格正式承接解释。
+
+## 9. append-only 防篡改与受限运行时角色（V140）
+
+审计/证据/流水/留痕表的不可变性由 DB 层硬强制，不依赖应用自觉：
+
+- **触发器（全环境生效，对 superuser/owner 亦触发）**：通用阻断函数 `complex_block_mutation()`，UPDATE/DELETE 命中即抛 `COMPLEX_APPEND_ONLY_VIOLATION`。
+  - **不可变表（UPDATE+DELETE 双锁，15 张）**：`audit_events`、`evidence_events`、`customer_stored_value_transactions`、`deposit_ledger`、`risk_alert_actions`、`ar_ap_payments`、`integration_robot_task_events`、`terminal_device_status_events`、`inventory_purchase_request_events`、`integration_video_access_audits`、`wecom_access_audits`、`cam_trueup_lines`、`cam_trueup_runs`、`integration_read_ledger`、`permission_template_usage_logs`。
+  - **永久留痕表（仅 DELETE 锁，保留幂等 UPDATE，15 张）**：`evidence_reviews`/`evidence_attachments`、`ar_ap_item_sources`、`bar_production_ticket_events`、`open_api_events`、`inventory_stock_movements`、`finance_reconciliation_differences`/`batches`、`ticket_payment_intents`/`finance_payment_intents`、`inventory_trace_handovers`/`steps`/`exceptions`、`ticket_refund_lines`、`customer_points_ledger`。
+- **CASCADE 中止**：删父业务行的级联删除触达受保护子表即触发 trigger 整事务回滚——等价 `ON DELETE CASCADE → RESTRICT` 的资金/审计保护，且比 FK 改造更鲁棒（未改 FK）。
+- **受限运行时角色 `complex_app`（生产）**：迁移 V140 以 owner 身份创建受限 role，REVOKE 不可变表 UPDATE/DELETE、永久留痕表 DELETE；运行时连接（`application-prod.yml` 的 `spring.datasource`）改用 `complex_app`，Flyway 仍以 owner 跑 DDL。`complex_app` 无 DDL 权限，无法 `DROP TRIGGER` 或 `SET session_replication_role` 绕过。未配置 app 专用 env 时回退 owner 凭证（向后兼容）。
+- **最小权限基线**：上述受限 role + append-only 触发器纳入安全基线检查项（`formal-security-baseline`）。
