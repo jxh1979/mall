@@ -35,7 +35,7 @@
 - **验收（GWT）**：Given 员工提交注册，When 后台审批通过，Then 生成角色与凭证；换机时 Given 旧凭证，When 绑新机，Then 旧凭证 superseded 且新机待审生效；Root 设备绑定即失效并进复核。
 - **依赖**：无（底座）。**解锁**：T9。
 - **claims 同步**：staff_profiles/staff_device_credentials/employee_notices → present。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T1-staff-tables-dev-design-20260618.md`（V066 DDL + 状态机 + Service + 9 端点 + 事件 + 权限点 + 验收 GWT + 测试计划）。
+- **可编码规格（已出）**：`docs/r5-spec-T1-staff-tables-dev-design-20260618.md`（V066 DDL + 状态机 + Service + 9 端点 + 事件 + 权限点 + 验收 GWT + 测试计划）。
 
 #### T2 能力开关 7 维模型 + 后端拒绝拦截器 — 裁决⑥（+ 支撑裁决③第三方开关）
 - **迁移**：扩 `capability_switch` 支持 scope=全局/项目/商户/业务系统/模块/设备/版本（7 维 + CHECK）。
@@ -45,7 +45,7 @@
 - **验收**：Given 某端/模块开关关闭，When 调用其业务接口，Then 后端拒绝 + 留痕；前端隐藏仅作辅助。
 - **依赖**：无（底座）。**解锁**：T11、T14。
 - **claims 同步**：terminal.access_rejected → present（业务场景）。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T2-T3-pre-action-gates-dev-design-20260618.md`（与 T3 合并：统一 @GuardedAction 切面闸口链；T2=开关 7 维优先级 device>…>global、默认开启、fail-closed、拒绝留痕）。
+- **可编码规格（已出）**：`docs/r5-spec-T2-T3-pre-action-gates-dev-design-20260618.md`（与 T3 合并：统一 @GuardedAction 切面闸口链；T2=开关 7 维优先级 device>…>global、默认开启、fail-closed、拒绝留痕）。
 
 #### T3 准入校验共享组件 + supervisor_review 接线 — 裁决⑧
 - **裁决**：**统一走 supervisor_review，不建 admission_audits/contract_admission_rules**。
@@ -53,7 +53,7 @@
 - **事件**：复用既有事件或统一命名（避免再发 `contract.blocked` 死名，向代码看齐 `contract.lifecycle_changed` 或补权威名——择一收口）。
 - **验收**：超合同/超空间动作在任一业务域被阻断，可经配置层级审批放行并留痕。
 - **依赖**：supervisor_review（V050/V057 已在）。**解锁**：T10。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T2-T3-pre-action-gates-dev-design-20260618.md`（T3=supervisor_review_policies 外部化替换硬编码 List.of、三态 allow/warn/block、AdmissionGuard 组件、admission.* 事件收口 REQ-42/68 死名）。
+- **可编码规格（已出）**：`docs/r5-spec-T2-T3-pre-action-gates-dev-design-20260618.md`（T3=supervisor_review_policies 外部化替换硬编码 List.of、三态 allow/warn/block、AdmissionGuard 组件、admission.* 事件收口 REQ-42/68 死名）。
 
 ---
 
@@ -64,40 +64,40 @@
 - **Service**：`TicketVerificationService` 核销端**强制校验**当前 30/60s 刷新窗口 + nonce 防重放（同 nonce/过窗口拒绝），使截图窗口内失效。**HMAC 签名版本化 → P1**（本期不做，留字段位）。
 - **验收**：Given 过刷新窗口或重放 nonce 的二维码，When 核销，Then 拒绝；窗口内有效凭证可核销。
 - **依赖**：无。**claims**：保持 signature_version=absent（P1）；新增刷新窗口校验落地后更新备注。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T4-ticket-anticounterfeit-dev-design-20260618.md`（刷新窗口校验+nonce 防重放唯一索引+核对维度 staff_id/merchant_id+签名 P1 预留；建议与 T5 合并迁移）。
+- **可编码规格（已出）**：`docs/r5-spec-T4-ticket-anticounterfeit-dev-design-20260618.md`（刷新窗口校验+nonce 防重放唯一索引+核对维度 staff_id/merchant_id+签名 P1 预留；建议与 T5 合并迁移）。
 
 #### T5 多人票核销 + 核销冲正 — 裁决②
 - **迁移**：`issued_entitlements` 补 `num_people`；`ticket_verifications` 补 `verified_people`、`reversed` 状态。
 - **Service**：多人票核销（一次核多人 vs 拆次，按 PRD 口径）；`POST /verifications/{id}/reverse` 冲正端点 + 结算冲正。
 - **验收**：多人票按 num_people 校验核销人数；误核销可冲正并回滚权益/结算。
 - **依赖**：建议在 T4 之后（同域同表）。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T5-multiperson-reverse-dev-design-20260618.md`（issued_entitlements.num_people+ticket_verifications.verified_people/reverse 关联+reversed 态 CHECK+冲正回滚联动；与 T4 合并迁移）。
+- **可编码规格（已出）**：`docs/r5-spec-T5-multiperson-reverse-dev-design-20260618.md`（issued_entitlements.num_people+ticket_verifications.verified_people/reverse 关联+reversed 态 CHECK+冲正回滚联动；与 T4 合并迁移）。
 
 #### T6 供应链三模式 + 采购周期 + 结构化库房 — 裁决④
 - **迁移**：`supply_contracts`(+`contract_mode` CHECK: platform_self_use/merchant_self_purchase/platform_purchase_distribution、供货范围/价格口径/账期/有效期/审批状态/可采购范围)；采购周期状态机（申请→审批→下单→预计到货→实际到货→入库确认）；`warehouses`(+`warehouse_type`: 总库/酒吧库/吧台库/消耗品库/礼品库/存酒区)。
 - **Service**：合同模式卡控可采购范围；采购全状态流转；库存挂结构化库房/库位。
 - **验收**：三模式合同可配置并卡控采购；采购单可全状态流转；库存按结构化库房归集。
 - **依赖**：无（供应链域较独立，工作量大，可单独排）。**claims**：supply_contracts/warehouses → present。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T6-supply-chain-dev-design-20260618.md`（supply_contracts 三模式+warehouses 六类型+采购周期状态机 submitted→…→received+inventory_purchase_request_events+域内 inventory_high_value_reviews）。
+- **可编码规格（已出）**：`docs/r5-spec-T6-supply-chain-dev-design-20260618.md`（supply_contracts 三模式+warehouses 六类型+采购周期状态机 submitted→…→received+inventory_purchase_request_events+域内 inventory_high_value_reviews）。
 
 #### T7 日结锁定 + 补录审批 + 多源汇总 — 裁决⑤
 - **迁移**：`ar_ap_adjustments`、`ar_ap_items.locked_day_close_id`、补录审批状态机；`finance_daily_closes` 补汇总金额字段。
 - **Service**：锁定后硬拦截直改影响金额；补录需上级审批通过；日结聚合票务/酒吧/游乐/供应链/第三方流水。
 - **验收**：Given 已锁定日结，When 直改影响金额，Then 被拒；走审批通过后可补录并留痕；日结金额=真实多源汇总。
 - **依赖**：无。**未决**：聚合口径待财务确认（见第四节）。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T7-daily-close-lock-dev-design-20260618.md`（finance_daily_close_summaries 六源+locked_day_close_id 锁定拦截+ar_ap_adjustments 补录审批闭环+difference_type 四类 CHECK；前置：ar_ap/reconciliation 两套表 owner 收口）。
+- **可编码规格（已出）**：`docs/r5-spec-T7-daily-close-lock-dev-design-20260618.md`（finance_daily_close_summaries 六源+locked_day_close_id 锁定拦截+ar_ap_adjustments 补录审批闭环+difference_type 四类 CHECK；前置：ar_ap/reconciliation 两套表 owner 收口）。
 
 #### T8 企微平台侧合规能力 — 裁决⑥
 - **迁移**：会话留存表 + 留存策略（可配置期限）、到期归档/销毁/匿名化、脱敏链、查看访问审计表。
 - **Service**：会话同步接口（按第三方原则预留 + 开关）；`@Scheduled` 到期处理；查看不脱敏原文走最小授权 + 审批并写访问审计；普通展示按权限脱敏。
 - **验收**：留存策略可配；到期触发归档/销毁/匿名化；查看原文产生审计记录。
 - **依赖**：T2（开关）。**未决**：留存期限参数、企微授权配置 owner。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T8-wecom-compliance-dev-design-20260618.md`（wecom_conversations/messages/retention_policies(默认180天)/access_audits+到期归档销毁匿名化定时+脱敏 AiTextRedactor+原文最小授权审批审计+同步 webhook 受 T2 开关门控）。
+- **可编码规格（已出）**：`docs/r5-spec-T8-wecom-compliance-dev-design-20260618.md`（wecom_conversations/messages/retention_policies(默认180天)/access_audits+到期归档销毁匿名化定时+脱敏 AiTextRedactor+原文最小授权审批审计+同步 webhook 受 T2 开关门控）。
 
 #### T9 设备凭证 Android 端 — 裁决⑨
 - **端侧**：Android App 注册、Keystore 设备公钥/不可逆指纹生成与绑定、Root/调试检测、换机解绑重绑；私人手机仅注册/通知/状态，不进现场业务。
 - **依赖**：**T1（后端三表）**。**MDM 阻断**：按第三方原则预留 + 开关（不阻塞本任务）。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T9-staff-device-android-dev-design-20260618.md`（端侧 Keystore 设备凭证+不可逆指纹哈希+Play Integrity/Root 检测+换机 supersedes+仅注册/通知/状态；复用 TerminalApiClient/TerminalModels；MDM 自有侧暂缓）。
+- **可编码规格（已出）**：`docs/r5-spec-T9-staff-device-android-dev-design-20260618.md`（端侧 Keystore 设备凭证+不可逆指纹哈希+Play Integrity/Root 检测+换机 supersedes+仅注册/通知/状态；复用 TerminalApiClient/TerminalModels；MDM 自有侧暂缓）。
 
 #### T10 业务动作埋点准入校验 — 裁决⑧
 - **范围**：票务/酒吧/游乐/结算业务动作前内嵌调用 T3 准入组件。
@@ -122,12 +122,12 @@
 - **改造**：新增后端 effective-permissions 拉取接口；前端 `PermissionGate` 按后端 DENY 优先结果渲染。
 - **验收**：前端权限渲染与后端 DENY 优先一致。
 - **依赖**：access 模块（已在）。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T13-frontend-effective-permissions-dev-design-20260618.md`（后端新增 effectivePermissions(DENY 优先 grants/denies)+GET /access/effective-permissions+前端 PermissionGate 改读后端集替硬编码角色映射+DENY 优先+fail-safe）。
+- **可编码规格（已出）**：`docs/r5-spec-T13-frontend-effective-permissions-dev-design-20260618.md`（后端新增 effectivePermissions(DENY 优先 grants/denies)+GET /access/effective-permissions+前端 PermissionGate 改读后端集替硬编码角色映射+DENY 优先+fail-safe）。
 
 #### T14 第三方接口/开关预留骨架 — 裁决③通用原则
 - **范围**：餐饮/零售 POS、机器人、视频监控、第三方售票、企微同步的接口/Webhook/字段映射/开关骨架占位；视频"点位+时间锚点"字段（是否本期建表见未决）。
 - **依赖**：T2（开关）。**口径**：只做接口/开关/映射占位，真实回流/对账/被动留痕待厂商资料 + 开关开启后交付。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T14-thirdparty-scaffolding-dev-design-20260618.md`（统一四件套 webhook 受开关门控+integration_robot_task_events 被动留痕对接 T17+integration_video_anchors 点位时间锚点+调阅审计；不把占位当真实闭环）。
+- **可编码规格（已出）**：`docs/r5-spec-T14-thirdparty-scaffolding-dev-design-20260618.md`（统一四件套 webhook 受开关门控+integration_robot_task_events 被动留痕对接 T17+integration_video_anchors 点位时间锚点+调阅审计；不把占位当真实闭环）。
 
 ---
 
@@ -135,15 +135,15 @@
 
 #### T15 赠饮核销→0 元点单→扣吧台库存（REQ-23，PRD §126 已 P0）
 - bar/ticketing 打通：核销赠饮权益事件→生成 0 元点单→出品扣库存；`bar_production_ticket_events` 补 `inventory_movement_id`。验收：赠饮核销后吧台库存相应减少且可对账。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T15-gift-redeem-stock-dev-design-20260618.md`（事件驱动 ticket.gift_verified→0 元 bar_order→redeem_consume 扣减→inventory_movement_id 关联+bar_gift_redemptions 幂等+冲正回补）。
+- **可编码规格（已出）**：`docs/r5-spec-T15-gift-redeem-stock-dev-design-20260618.md`（事件驱动 ticket.gift_verified→0 元 bar_order→redeem_consume 扣减→inventory_movement_id 关联+bar_gift_redemptions 幂等+冲正回补）。
 
 #### T16 订台定金闭环（REQ-25 已裁决 P0）
 - `createReservation` 落真实定金金额/状态（去硬编码 0）；到店抵扣、取消退/没收。验收：付定金可回查、到店抵扣、取消按规则退/没收。**已裁决**：后台可配固定额/比例 + 退没收时限可配。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T16-reservation-deposit-dev-design-20260618.md`（bar_deposit_rules 固定额/比例+cancel_free_before_minutes+定金支付/到店抵扣/取消退没收闭环+deposit_status CHECK）。
+- **可编码规格（已出）**：`docs/r5-spec-T16-reservation-deposit-dev-design-20260618.md`（bar_deposit_rules 固定额/比例+cancel_free_before_minutes+定金支付/到店抵扣/取消退没收闭环+deposit_status CHECK）。
 
 #### T17 扫码交接全链状态机（REQ-38/44 P0）
 - `inventory_trace_handovers` 改多段状态机（出库核验→配送→后厨接收→服务员取走→送达）+ 缺口/重复/差异异常进复核（去单条平面 accepted）。验收：交接逐段可追责、缺口进复核。**已裁决**：员工扫码主动 + 机器人上报被动；缺口/重复/差异进复核。
-- **可编码规格（已出）**：`docs/_archive/20260622-workspace-tidy/r5-r6-round-specs/r5-spec-T17-trace-handover-chain-dev-design-20260618.md`（表头+inventory_trace_handover_steps 五段链 staff/robot+inventory_trace_handover_exceptions gap/duplicate/diff 复核）。
+- **可编码规格（已出）**：`docs/r5-spec-T17-trace-handover-chain-dev-design-20260618.md`（表头+inventory_trace_handover_steps 五段链 staff/robot+inventory_trace_handover_exceptions gap/duplicate/diff 复核）。
 
 > 另含 **P1**（不进本期 P0，登记备查）：通用异常处理人链路（risk_alerts 状态机/转派升级）、三层过程留痕 TraceabilityService 对外端点与串联、游乐检修联动 open_status + 现场权益校验、高价值报损/存酒作废复核接入 supervisor_review、联合通票跨商户权益归属。
 
