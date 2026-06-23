@@ -1,4 +1,5 @@
 import { Alert, Button, Card, Divider, Form, Input, List, Result, Space, Tag, Typography } from "antd";
+import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
@@ -64,22 +65,15 @@ export function BarInvitationPage({ service }: { service: CustomerService }): Re
             <div style={{ marginTop: 16 }} data-testid="invitation-detail">
               <Space direction="vertical" style={{ width: "100%" }}>
                 <Text>卡座可进人数：{invitation.capacity} · 已确认 {invitation.confirmedCount} · 已入场 {invitation.enteredCount} · 剩余 {invitation.remaining}</Text>
-                <Text type="secondary">邀请函二维码口令（转发给朋友，朋友在「确认收到的邀请」处确认占名额）：</Text>
+                <Text type="secondary">邀请函二维码（出示/转发给朋友，朋友扫码或在「确认收到的邀请」处输入口令确认占名额）：</Text>
                 <div
-                  data-testid="invitation-token"
-                  style={{
-                    fontFamily: "monospace",
-                    wordBreak: "break-all",
-                    background: "#0f172a",
-                    color: "#a7f3d0",
-                    padding: 16,
-                    borderRadius: 8,
-                  }}
+                  data-testid="invitation-qr"
+                  style={{ background: "#fff", padding: 16, borderRadius: 8, width: "fit-content" }}
                 >
-                  {invitation.invitationToken}
+                  <QRCodeSVG value={invitation.invitationToken ?? ""} size={180} level="M" />
                 </div>
-                <Paragraph copyable={{ text: invitation.invitationToken ?? "" }} data-testid="invitation-token-copy">
-                  <Text type="secondary">点击复制并转发口令</Text>
+                <Paragraph copyable={{ text: invitation.invitationToken ?? "" }} data-testid="invitation-token">
+                  口令（可复制转发）：<Text code>{invitation.invitationToken}</Text>
                 </Paragraph>
                 <Divider style={{ margin: "8px 0" }}>已确认成员</Divider>
                 <List
