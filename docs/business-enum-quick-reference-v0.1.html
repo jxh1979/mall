@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>综合体管理系统 · 业务枚举速查表 V0.1</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif; color: #1b1d21; max-width: 1000px; margin: 0 auto; padding: 24px 18px 60px; line-height: 1.7; background:#fafafa; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .sub { color:#6b7280; margin: 0 0 20px; font-size: 14px; }
+  h2 { font-size: 18px; margin: 28px 0 10px; padding: 6px 12px; background:#1b1d21; color:#fff; border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; background:#fff; box-shadow: 0 1px 2px rgba(0,0,0,.05); border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
+  td { border-bottom: 1px solid #eef0f3; padding: 9px 12px; vertical-align: top; font-size: 14px; }
+  tr:last-child td { border-bottom: none; }
+  td.k { width: 200px; font-weight: 600; background:#f6f7f9; color:#0f172a; }
+  .note { color:#9ca3af; font-size: 12px; }
+  .stage { color:#b45309; font-size: 12px; }
+  .tip { background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:10px 14px; font-size:13px; color:#7c2d12; margin: 18px 0; }
+</style>
+</head>
+<body>
+  <h1>综合体管理系统 · 业务枚举速查表</h1>
+  <p class="sub">V0.1 ｜ 2026-06-23 ｜ 给业务同事快速查“系统支持哪几种 / 有哪几个状态 / 按什么规则”。状态枚举为业务口径，最终以后台配置为准。标“后续/二期”的为规划上线阶段。</p>
+
+  <div class="tip">用法：左列是“问题”（如“账单有哪几个状态”），右列是“答案”。配套两份业务地图（业务系统地图 / 平台治理地图）使用。</div>
+
+  <h2>一、票务与权益</h2>
+  <table>
+    <tr><td class="k">票种</td><td>平日票、周末票、节假日票（基础价）；成人票、学生票、儿童票；多人票（双人 / 家庭 / 团队）；新人票；会员价、渠道价、动态价；多次票、通票</td></tr>
+    <tr><td class="k">通票类型</td><td>酒吧通票、游乐通票、酒吧+游乐联合通票、含餐饮/零售优惠折扣的组合通票</td></tr>
+    <tr><td class="k">权益类型</td><td>入场、游乐、酒水（赠饮/兑换券）、卡座免通票入场名额、餐饮券、零售券、服务权益、积分兑换礼物</td></tr>
+    <tr><td class="k">餐饮/零售券两种用法</td><td>折扣型（享优惠、不用逐张回传）、券核销型（持券到第三方核销、需逐张回传）</td></tr>
+    <tr><td class="k">资格判定</td><td>新人（按手机号自动判）、学生票（人工审核+学信网）、多人票（同一时段一次性全部核销）</td></tr>
+    <tr><td class="k">订单状态</td><td>待支付、已支付、已出票、部分核销、已完成、退款中、部分退款、已全退、已取消、已关闭、异常</td></tr>
+    <tr><td class="k">票/权益状态</td><td>未使用、部分使用、已使用、已过期、已冻结、已退款、已作废</td></tr>
+    <tr><td class="k">核销记录状态</td><td>预检通过、成功、拒绝/失败、人工放行、已冲正、待复核、异常</td></tr>
+    <tr><td class="k">退款单状态</td><td>已申请、审批中、已通过、已驳回、处理中、成功、失败、已取消</td></tr>
+    <tr><td class="k">有效期类型</td><td>永久 / 固定天数 / 按自然年</td></tr>
+    <tr><td class="k">退款规则</td><td>未使用可退；同一票有一张核销则整票不可退；权益到期：全未核销自动退款、有核销则其余作废</td></tr>
+  </table>
+
+  <h2>二、会员与积分</h2>
+  <table>
+    <tr><td class="k">会员等级</td><td>按累计积分自动升级；有升有降（按保级阈值、保级周期、宽限期判定）<span class="stage">（升降规则后续上线）</span></td></tr>
+    <tr><td class="k">积分获取方式</td><td>按消费金额、按核销张数、按活动、签到、生日</td></tr>
+    <tr><td class="k">积分明细类型</td><td>获取、扣减、兑换消耗、过期、调整</td></tr>
+    <tr><td class="k">积分过期方式</td><td>按获取批次先进先出到期清零、整账按年统一清零</td></tr>
+    <tr><td class="k">兑换发放状态</td><td>待发放、已发放、已取消、异常</td></tr>
+    <tr><td class="k">现场领取状态</td><td>待领取、已领取、已拒绝、人工放行、异常</td></tr>
+    <tr><td class="k">会员忠诚度扩展</td><td>连续签到、生日加倍 <span class="stage">（后续上线）</span>；储值预付卡、付费会员订阅 <span class="stage">（后续二期）</span>；积分转赠 <span class="stage">（更后续）</span></td></tr>
+  </table>
+
+  <h2>三、酒吧经营</h2>
+  <table>
+    <tr><td class="k">桌台/卡座/吧台位状态</td><td>空闲、已预留、已开台、待清台、停用、异常</td></tr>
+    <tr><td class="k">账单状态</td><td>待结、部分支付、已结、部分退款、已退款、异常</td></tr>
+    <tr><td class="k">订台定金状态</td><td>未支付、已支付、到店已抵扣、已退还、已没收</td></tr>
+    <tr><td class="k">点酒方式</td><td>按杯、按瓶、套餐（按杯按标准出酒量扣库存、超出记损耗）</td></tr>
+    <tr><td class="k">支付方式</td><td>客人扫码、扫客人付款码、现金（记收款人）、POS（记流水号+收款人）</td></tr>
+    <tr><td class="k">销售提成</td><td>销售人员卡座 15%、非销售 10%；不计提成：通票、票务权益、卡座入场名额、赠酒成本、退款、免单、抹零</td></tr>
+    <tr><td class="k">退菜退酒</td><td>出品前撤单（不计损耗）、出品后退品（按是否回库处理）；高价值退酒走退款冲正+证据+主管审批</td></tr>
+    <tr><td class="k">高危动作（需审批/双证据）</td><td>反结、沽清、免单、抹零、账单调整、存酒作废（照片+视频）</td></tr>
+  </table>
+
+  <h2>四、游乐运营</h2>
+  <table>
+    <tr><td class="k">项目开放状态</td><td>未开放、准备中、开放中、暂停、检修中、已关闭、异常</td></tr>
+    <tr><td class="k">场次状态</td><td>未开始、入场中、已满员、进行中、已结束、取消、异常</td></tr>
+    <tr><td class="k">容量双阈值</td><td>运营容量（软上限，告警放行）、安全容量（硬上限，阻断+自动停运，不可绕过）</td></tr>
+    <tr><td class="k">安全严重度</td><td>提醒、警告、阻断、重大</td></tr>
+    <tr><td class="k">巡检任务状态</td><td>草稿、已提交、通过/警告/阻断、整改中、已复检、等待主管恢复、已恢复、取消</td></tr>
+    <tr><td class="k">越界类型</td><td>物理越界（超空间）、经营范围越界（超合同范围）</td></tr>
+    <tr><td class="k">团体/包场</td><td>团体（批量预订）、包场（整场/时段，占用整场次容量）</td></tr>
+  </table>
+
+  <h2>五、供应链与库存</h2>
+  <table>
+    <tr><td class="k">供应合同模式</td><td>平台自用、商户自采、平台统一采购后分销给商户</td></tr>
+    <tr><td class="k">库房分类</td><td>总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区</td></tr>
+    <tr><td class="k">物品大类</td><td>酒类、消耗品、礼品、其他物料</td></tr>
+    <tr><td class="k">库存流水类型</td><td>入库、出库、调拨、销售消耗、报损、报溢、盘点调整、积分兑换消耗、礼物领取消耗</td></tr>
+    <tr><td class="k">高价值判定</td><td>成本 ≥ 阈值 或 被手工标记；报损/盘点差异/存酒作废须照片+视频双证据+主管复核</td></tr>
+  </table>
+
+  <h2>六、财务结算与对账</h2>
+  <table>
+    <tr><td class="k">对账口径</td><td>按订单、按核销、按合同、按渠道、按日结</td></tr>
+    <tr><td class="k">对账差异四类</td><td>金额差异、数量差异、状态差异、缺失差异（单边缺失）</td></tr>
+    <tr><td class="k">日结状态</td><td>待生成、待确认、有差异、已确认、已锁定、已归档</td></tr>
+    <tr><td class="k">差异处理状态</td><td>待识别、待处理、待复核、已关闭、已忽略</td></tr>
+    <tr><td class="k">结算状态</td><td>草稿、待复核、已确认、已调整、已归档</td></tr>
+    <tr><td class="k">合作模式</td><td>自营、租赁、联营、代运营、服务商接入</td></tr>
+    <tr><td class="k">退款资金流向</td><td>在线原路退回、现金现场退（双人/上级复核）、第三方券走第三方；非原路退款触发风控</td></tr>
+    <tr><td class="k">物业费</td><td>每平米固定单价 × 商户面积、按期计费、不退不补（替代旧 CAM 公摊）</td></tr>
+    <tr><td class="k">开票状态</td><td>待开票、开票中、已开票、已红冲、已作废、开票失败</td></tr>
+  </table>
+
+  <h2>七、第三方接入</h2>
+  <table>
+    <tr><td class="k">接入的外部系统</td><td>团购渠道（美团/大众点评/抖音）、企业微信、餐饮 POS、零售 POS、聚合支付、配送机器人、视频监控</td></tr>
+    <tr><td class="k">统一原则</td><td>预留接口 + 后台开关默认关 + 不阻塞自研 + 不伪造对账结果</td></tr>
+    <tr><td class="k">接入状态</td><td>待接入、联调中、已启用、暂停、异常、已停用、归档</td></tr>
+    <tr><td class="k">回流结果状态</td><td>待接收、已接收、已匹配、待处理、已入账口径、已忽略、异常</td></tr>
+  </table>
+
+  <h2>八、留痕与风控</h2>
+  <table>
+    <tr><td class="k">风险四级</td><td>低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）</td></tr>
+    <tr><td class="k">事件状态</td><td>已记录、待补充、待复核、已确认、已驳回、已关闭、已归档（只能作废/冲正、不能删除）</td></tr>
+    <tr><td class="k">主管复核强制项</td><td>人工放行、免单、退款、调账、高价值报损/盘点差异/存酒作废、敏感视频或企微原文查看</td></tr>
+  </table>
+
+  <h2>九、平台治理</h2>
+  <table>
+    <tr><td class="k">四类主体</td><td>经营对象、运营主体、合同主体、结算主体（可分属不同公司，同一经营对象下唯一绑定）</td></tr>
+    <tr><td class="k">合作模式五类</td><td>自营、租赁、联营、代运营、服务商接入</td></tr>
+    <tr><td class="k">职级</td><td>M1–M10，每级分上 / 中 / 下（共 30 档）</td></tr>
+    <tr><td class="k">终端十端</td><td>客人 App、小程序、Web、平板、员工工作手机、员工私人手机、商户门户、商户 App、一体机、移动管理端</td></tr>
+    <tr><td class="k">最终权限计算</td><td>角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝（拒绝优先）</td></tr>
+    <tr><td class="k">终端开关优先级</td><td>全局 &gt; 综合体 &gt; 商户 &gt; 业务系统 &gt; 模块 &gt; 版本/设备 &gt; 灰度；拉取失败按“兜底关闭”</td></tr>
+    <tr><td class="k">综合体项目状态</td><td>草稿、待启用、已启用、暂停、终止、归档</td></tr>
+    <tr><td class="k">商户/运营主体状态</td><td>待准入、试运营、正常、暂停、终止、归档、黑名单</td></tr>
+    <tr><td class="k">合同状态</td><td>草拟、待确认、待生效、已生效、续签中、已到期、已终止、归档</td></tr>
+    <tr><td class="k">员工状态</td><td>待入职、在职、试岗、停岗、离职</td></tr>
+    <tr><td class="k">设备状态</td><td>待领用、在用、待归还、维修中、挂失、报废、归档</td></tr>
+    <tr><td class="k">权限状态</td><td>草稿、已启用、暂停、已停用、归档</td></tr>
+  </table>
+
+  <p class="note" style="margin-top:24px;">注：本表为业务口径速查，状态名称最终以系统后台配置为准；标“后续/二期”的能力为规划上线阶段、非现已全部落地。</p>
+</body>
+</html>
