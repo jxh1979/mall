@@ -194,8 +194,10 @@ public class BarGiftConsumer {
                     "movement_" + slug("gift_reverse:" + verificationId),
                     "redeem_consume",
                     redemption.itemRef(),
-                    STOCK_LOCATION_DEFAULT,
+                    // P1-5 修复：赠饮冲正是「返库」(余额 +1)，流水方向须为入库(source=null→target=default)，与余额恢复同向；
+                    // 此前误写出库形态(source=default,target=null)，致按流水重建库存重复扣减、账实偏差累积。
                     null,
+                    STOCK_LOCATION_DEFAULT,
                     1,
                     "bar_gift_redemption_reverse",
                     redemption.barOrderId(),

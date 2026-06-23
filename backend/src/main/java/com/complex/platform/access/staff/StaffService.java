@@ -311,6 +311,9 @@ public class StaffService {
                         StaffDeviceCredentialRecord credential = repository.findCredentialById(credId)
                                 .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND",
                                         "staff device credential not found: " + credId));
+                        // P1-2 越权修复：完整性上报此前不校验凭证归属，任意已认证用户可按 credId 跨商户吊销他人设备凭证（DoS）。
+                        // 改为按调用者商户范围校验凭证所属员工档案归属（与 revokeCredential 同范式；平台 scope 放行）。
+                        requireProfileInScope(credential.staffProfileId());
                         String status = trimToNull(request.integrityStatus());
                         if (status == null
                                 || !(status.equals("trusted") || INTEGRITY_FAILURES.contains(status))) {

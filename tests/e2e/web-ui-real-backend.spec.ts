@@ -80,4 +80,20 @@ test.describe("real backend UI acceptance", () => {
       await expect(page.getByText("同源 API")).toBeVisible();
     }
   });
+
+  // P1-12（A8-03 红线补强）：UI 验收矩阵 §5 红线要求"权限拦截必须有服务端拒绝证据，不能只靠前端隐藏"。
+  // 此前真实后端 E2E 仅覆盖健康/登录/页面加载，缺红线断言。本用例以 API 级（不依赖 UI 选择器/账号 seed，最稳）
+  // 校验：无认证直接访问受保护业务端点，真实后端必须拒绝（非 2xx，期望 401/403），而非返回数据。
+  test("REAL-UI-03 protected business endpoints reject unauthenticated access (server-side denial, not just frontend hiding)", async ({ request }) => {
+    await expectRealBackendReady(request);
+    for (const path of [
+      "/api/v1/finance/ar-ap-items",
+      "/api/v1/platform/merchants",
+      "/api/v1/access/users",
+    ]) {
+      const res = await request.get(`${backendBaseUrl}${path}`);
+      // 服务端拒绝证据：未认证请求绝不能被成功服务（res.ok()=2xx）；预期 401/403。
+      expect(res.ok(), `${path} should be denied without auth but returned ${res.status()}`).toBeFalsy();
+    }
+  });
 });

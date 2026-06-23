@@ -40,16 +40,14 @@ import org.springframework.stereotype.Component;
  *       objectType 不支持解析 / 解析不到 space → 放行（不阻断）。数据源 contract_spaces + contracts。</li>
  * </ul>
  *
- * <h3>异常口径（P0：over_* fail-closed）</h3>
+ * <h3>异常口径（C3 用户裁决：所有 trigger 统一 fail-closed）</h3>
  * <ul>
- *   <li><b>over_contract_scope / over_space 求值异常</b>（DB 故障等）→ <b>fail-closed 保守进复核</b>：
- *       违反合同/超空间是高风险越界，不可因数据故障而放行，改为按策略 approval_level 建 pending 复核
- *       并写 {@code admission.eval_failed_closed} 留痕（reason=eval_error），由上一级/上两级/最高权限放行。</li>
- *   <li><b>over_space 无法解析到 space</b>（resolveSpaceId 返回 empty，含对象无空间映射 / 行缺失 /
- *       space 为空）→ <b>fail-closed 进复核</b>：配置了 over_space 策略却解析不到空间，无法确认"在租赁内"，
- *       保守进复核而非静默放行（消除原 silent pass fail-open）。</li>
- *   <li><b>expired / qualification_abnormal / permission_insufficient / always 求值异常</b>→ 维持原
- *       <b>fail-open 放行</b>（这些非"越界"语义，沿用不误伤风格），写 {@code admission.eval_skipped} 留痕。</li>
+ *   <li><b>任何 trigger 求值异常</b>（DB 故障等）→ <b>统一 fail-closed 保守进复核</b>：与终端开关/人脸闸
+ *       fail-closed 口径一致，按策略 approval_level 建 pending 复核并写 {@code admission.eval_failed_closed}
+ *       留痕（reason=eval_error），由上一级/上两级/最高权限放行。包括 expired / qualification_abnormal /
+ *       permission_insufficient / always 等非越界类——此前对非越界类 fail-open 放行（admission.eval_skipped），
+ *       C3 后一并改为 fail-closed（DB 抖动期相关受控动作被暂时拦截，可用性略降，安全优先）。</li>
+ *   <li><b>over_space 无法解析到 space</b>（resolveSpaceId 返回 empty）→ fail-closed 进复核（同上）。</li>
  *   <li><b>无商户上下文</b>（平台管理员 / 无 merchant 员工）对 over_* → 仍放行（合法越权角色，不误伤运营）。</li>
  * </ul>
  */
@@ -131,10 +129,6 @@ public class AdmissionGuard {
                 "action blocked pending supervisor review: " + pending.reviewId());
     }
 
-    /** over_* 越界类 trigger（违反合同范围 / 超空间）：求值异常时 fail-closed 进复核而非 fail-open 放行。 */
-    private static boolean isOverScopeTrigger(String triggerMode) {
-        return "over_contract_scope".equals(triggerMode) || "over_space".equals(triggerMode);
-    }
 
     /**
      * 按 policy.trigger_mode 对真实数据求值：是否触发受控处置（返回 true=触发，按 outcome 处置）。
@@ -185,24 +179,11 @@ public class AdmissionGuard {
                 default -> false; // 未知 trigger_mode（DB CHECK 约束兜底）→ 放行
             };
         } catch (RuntimeException exception) {
-            if (isOverScopeTrigger(triggerMode)) {
-                // P0 fail-closed：over_* 越界类求值异常不放行，保守命中进复核并留痕。
-                auditEventService.recordSuccess(
-                        "admission.eval_failed_closed",
-                        "admission.review",
-                        "supervisor_review",
-                        objectId == null ? actionType : objectId,
-                        null,
-                        null,
-                        Map.of("action_type", actionType, "object_type", objectType == null ? "" : objectType,
-                                "policy_code", policy.policyCode(), "trigger_mode", triggerMode,
-                                "reason", "eval_error")
-                );
-                return true;
-            }
-            // fail-open：非越界类 trigger 求值异常不误伤业务，放行并留痕。
+            // C3（用户裁决：统一 fail-closed）：任何 trigger 的求值异常（DB 故障等）一律保守进复核、不放行，
+            // 与终端开关/人脸闸 fail-closed 口径一致；非越界类（合同过期/资质异常/权限不足/职责分离等）亦不再
+            // fail-open 放行。代价：DB 抖动期相关受控动作被暂时拦截（可用性略降，安全优先），由审批层级放行。
             auditEventService.recordSuccess(
-                    "admission.eval_skipped",
+                    "admission.eval_failed_closed",
                     "admission.review",
                     "supervisor_review",
                     objectId == null ? actionType : objectId,
@@ -212,7 +193,7 @@ public class AdmissionGuard {
                             "policy_code", policy.policyCode(), "trigger_mode", triggerMode,
                             "reason", "eval_error")
             );
-            return false;
+            return true;
         }
     }
 

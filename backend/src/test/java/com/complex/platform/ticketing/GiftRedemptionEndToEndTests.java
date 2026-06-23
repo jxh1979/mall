@@ -10,6 +10,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -43,6 +45,18 @@ class GiftRedemptionEndToEndTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void authenticate() {
+        // 生产中核销/冲正必有已认证主体；P0-2 后在线核销主链会按调用者商户范围校验归属。
+        // E2E 默认以平台管理员上下文驱动（scope 为空=放行），契合真实调用形态；跨商户用例内部另行覆盖。
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+    }
+
+    @AfterEach
+    void clearAuth() {
+        com.complex.platform.support.TestSecurityActors.clear();
+    }
 
     @Test
     void giftDrinkVerificationCreatesZeroAmountGiftOrderAndRedemptionThroughEvent() {
@@ -156,6 +170,45 @@ class GiftRedemptionEndToEndTests {
 
         assertThat(barRepository.findGiftRedemptionByVerification(response.id()).orElseThrow().status())
                 .isEqualTo("reversed");
+    }
+
+    @Test
+    void crossMerchantOnlineVerificationIsForbidden() {
+        // P0-2 回归：A 商户核销端不得核销 B 商户客人的票（跨租户烧票 IDOR）；在线核销主链现按调用者商户范围校验归属。
+        String suffix = Long.toString(System.nanoTime());
+        String code = "gift-code-xm-" + suffix;
+        seedGiftEntitlementForMerchant(code, "bar_xm_" + suffix, "merchant_b");
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_a");
+        try {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                    verificationService.createVerification(new VerificationRequest(
+                            "req-xm-" + suffix, "qr", code, "device_t15", "bar_xm_" + suffix, Map.of())))
+                    .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                            e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
+    }
+
+    private void seedGiftEntitlementForMerchant(String code, String barId, String merchantId) {
+        Instant now = Instant.now();
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        String typeId = "tt_" + code;
+        String templateId = "et_" + code;
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status,
+                    created_at, updated_at)
+                VALUES (?, 'Gift Type', 'fixed', FALSE, 'active', ?, ?)
+                """, typeId, ts, ts);
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
+                    default_value_cent, status, bar_item_ref, created_at, updated_at)
+                VALUES (?, 'Gift Drink', 'gift_drink', 1, 0, 'active', NULL, ?, ?)
+                """, templateId, ts, ts);
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + code, code, typeId, "order_" + code, templateId, "gift_drink",
+                merchantId, null, barId, 1, 0, 0L, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null));
     }
 
     private void seedBarTable(String barId) {

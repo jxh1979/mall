@@ -1,8 +1,11 @@
 package com.complex.platform.gate;
 
+import com.complex.platform.access.AccessActor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -31,10 +34,35 @@ final class GateRequestContext {
         scopes.put("version", header("X-Client-Version"));
         scopes.put("module", header("X-Module-Code"));
         scopes.put("business_system", header("X-Business-System"));
-        scopes.put("merchant", header("X-Merchant-Id"));
+        // C1 修复（数据隔离规格§2：scope 注入只能来自安全 token，绝不取请求参数）：merchant 维度一律以登录令牌为准——
+        // 令牌带 merchant（商户主体）→ 强制用令牌值、忽略可伪造的 X-Merchant-Id（防商户改/删头绕过本商户关停开关）；
+        // 令牌无 merchant（平台/客人主体）→ 回退请求头（平台为可信运维上下文）。project 暂无令牌来源，维持请求头（小残留）。
+        scopes.put("merchant", tokenMerchantOrHeader());
         scopes.put("project", header("X-Project-Id"));
         scopes.put("global", "global");
         return scopes;
+    }
+
+    /** merchant scope 解析：优先安全令牌的 merchant_id，令牌无则回退 X-Merchant-Id 头。 */
+    private static String tokenMerchantOrHeader() {
+        String tokenMerchant = tokenMerchantId();
+        if (tokenMerchant != null && !tokenMerchant.isBlank()) {
+            return tokenMerchant;
+        }
+        return header("X-Merchant-Id");
+    }
+
+    /** 当前登录主体（AccessActor）的 merchant_id；无认证/非员工主体返回 null。 */
+    private static String tokenMerchantId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof AccessActor actor) {
+                return actor.merchantId();
+            }
+        } catch (RuntimeException ignored) {
+            // best-effort：无安全上下文（如异步/测试）→ null，回退请求头。
+        }
+        return null;
     }
 
     /** 当前请求的 business_system（X-Business-System 头），无=null。 */

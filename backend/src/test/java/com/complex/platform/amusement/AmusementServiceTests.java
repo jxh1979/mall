@@ -535,6 +535,39 @@ class AmusementServiceTests {
     }
 
     @Test
+    void deviceInspectionExpiryBlocksVerificationEvenWhenRequestOmitsDeviceId() {
+        // P0-3 回归：项目级巡检 PASS（旧路径会放行），但项目下有一台在役(active)设备从未通过巡检
+        // （lastPass=null=超期）。核销请求不传 deviceId（最常见形态）仍必须被巡检超期项目级兜底阻断，杜绝绕过。
+        AmusementProjectRecord project = projectWithTemplate("dev-expiry");
+        submitPassingInspection(project, "dev-expiry");
+        AmusementSessionRecord session = createSession("dev-expiry-session", project.id(), 5, "open");
+        service.createDevice(project.id(), new AmusementDeviceRequest(
+                "dev-expiry-create", null, List.of(), project.id(),
+                "DEV-EXP-1", "过山车A", "active", 24, null));
+        registerAmusementEntitlement("credential-dev-expiry", 1);
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-dev-expiry", project.id(), session.id(), "credential-dev-expiry")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SAFETY_BLOCKED");
+    }
+
+    @Test
+    void retiredDeviceWithExpiredInspectionDoesNotBlockProjectVerification() {
+        // 对照：退役(retired)设备即便巡检超期也不在役、不参与项目级兜底；项目级巡检 PASS → 正常放行成功。
+        AmusementProjectRecord project = projectWithTemplate("dev-retired");
+        submitPassingInspection(project, "dev-retired");
+        AmusementSessionRecord session = createSession("dev-retired-session", project.id(), 5, "open");
+        service.createDevice(project.id(), new AmusementDeviceRequest(
+                "dev-retired-create", null, List.of(), project.id(),
+                "DEV-RET-1", "退役设备", "retired", 24, null));
+        registerAmusementEntitlement("credential-dev-retired", 1);
+        AmusementVerificationRecord response = service.createVerification(verification(
+                "verify-dev-retired", project.id(), session.id(), "credential-dev-retired"));
+        assertThat(response).isNotNull();
+    }
+
+    @Test
     void verificationIncrementsUsedCapacityOnlyOnSuccessAndIsIdempotent() {
         AmusementProjectRecord project = projectWithTemplate("verify-success");
         submitPassingInspection(project, "verify-success");

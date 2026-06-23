@@ -457,6 +457,47 @@ class AccessServiceTests {
         });
     }
 
+    // ── P0-1: 发证不得超出授权人自身权限 + apply 模板归属校验 ──────────────
+
+    @Test
+    void createTemporaryGrantRejectsGrantingPermissionActorDoesNotHold() {
+        // P0-1：非平台管理员不得授予超出自身有效权限的权限码（自我/横向提权防护）。
+        // 目标用户同组织（cross-org 校验通过），但授权人本身无该权限 → GRANT_EXCEEDS_OWN_PERMISSIONS。
+        accessRepository.users.put("usr_org_a_t", new AccessUser(
+                "usr_org_a_t", "org-a-target", "staff", "org_a", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_org_a_actor", "org-a-actor", "org_a");
+        assertThatThrownBy(() -> service.createTemporaryGrant(new TemporaryGrantRequest(
+                "grant-escalate", "grant", List.of(), "usr_org_a_t",
+                List.of("ops.production_readiness.check"),
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"),
+                false, "escalate"))).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status().value()).isEqualTo(403);
+            assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS");
+        });
+    }
+
+    @Test
+    void applyPlatformOwnedTemplateByOrgUserToSameOrgUserIsForbidden() {
+        // A1-05：apply 必须校验模板归属——非平台管理员不得套用平台/他组织模板（即便目标用户同组织），
+        // 否则可借平台模板把高权限项下发给本组织用户提权。
+        service.createPermissionTemplate(new PermissionTemplateRequest(
+                "create-platform-tpl", "seed", List.of(), "Platform Template", "temporary",
+                null, List.of("ops.production_readiness.check"), "project",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-15T00:00:00Z"), false));
+        accessRepository.users.put("usr_org_a_same", new AccessUser(
+                "usr_org_a_same", "org-a-same", "staff", "org_a", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_org_a_actor2", "org-a-actor2", "org_a");
+        assertThatThrownBy(() -> service.applyPermissionTemplate("tpl_create_platform_tpl",
+                new PermissionTemplateApplyRequest("apply-platform", "apply", List.of(),
+                        "tpl_create_platform_tpl", List.of("usr_org_a_same"), "merge")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status().value()).isEqualTo(403);
+            assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN");
+        });
+    }
+
     // ── P0: listAccessUsers 只返回本组织用户 ──────────────────────────────
 
     @Test

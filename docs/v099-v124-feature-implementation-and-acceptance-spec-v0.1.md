@@ -63,7 +63,7 @@ OpenAPI 端点的权限码以 **`x-permission`** 扩展字段落在每个 operat
 
 **事件**（grep 后端真实常量，`admission.*`）：
 - `admission.blocked`（命中 over_*，先卡住）、`admission.review`、`admission.escalated`、`admission.released`、`admission.warned`。
-- **fail-closed 证据事件**：`admission.eval_failed_closed`（判定异常按卡住处理）、`admission.space_unresolved_closed`（空间无法解析按卡住处理）、`admission.eval_skipped`。
+- **fail-closed 证据事件**：`admission.eval_failed_closed`（判定异常按卡住处理）、`admission.space_unresolved_closed`（空间无法解析按卡住处理）。**（2026-06-23 C3：准入闸已统一 fail-closed，原非越界类 fail-open 的 `admission.eval_skipped` 不再发出，所有 trigger 求值异常一律落 `admission.eval_failed_closed`。）**
 
 **状态流转**：业务动作 → AdmissionGuard 命中 over_* 策略 → `block` → 建 supervisor_review(pending) → 上 N 级审批放行/驳回。
 

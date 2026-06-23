@@ -260,6 +260,18 @@ class BarServiceTests {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
+    void waiverRejectsNegativeAmountWithValidationFailed() {
+        // P1-13：金额下界负向测试——免单(waiver)负数金额必须被 positive() 拒绝（防负额免单=变相加钱）。
+        BarBillRecord bill = billForOrder("neg-waiver", "staff_sales");
+        assertThatThrownBy(() -> service.applyBillAdjustment(
+                bill.id(),
+                new BarBillAdjustmentRequest("bill-neg-waiver", "neg", List.of(), "waiver", -5000L, "neg waiver", null)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
     void billAdjustmentRecordsAuthenticatedActorAsRequestedByUserIdIgnoringRequestBody() {
         BarBillRecord bill = billForOrder("audit-actor", "staff_sales");
 

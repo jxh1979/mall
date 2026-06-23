@@ -146,6 +146,8 @@ public class TicketVerificationService {
 
     VerificationPreviewResponse previewVerification(VerificationRequest request) {
         IssuedEntitlementRecord entitlement = entitlementByCredential(request);
+        // P0-2 越权修复：预览同样会泄露他商户权益明细（剩余次数/人数/有效期），按调用者商户范围校验归属（平台 scope 放行）。
+        enforceMerchantScope(entitlement.merchantId());
         Instant now = Instant.now();
         boolean withinValidity = (entitlement.validFrom() == null || !now.isBefore(entitlement.validFrom()))
                 && (entitlement.validTo() == null || !now.isAfter(entitlement.validTo()));
@@ -186,6 +188,8 @@ public class TicketVerificationService {
                 ? entitlementByCredential(request)
                 : repository.findIssuedEntitlementById(credential.entitlementId())
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+        // P0-2 越权修复：人工放行同样按调用者商户范围校验权益归属，禁止对他商户权益创建放行记录（平台 scope 放行）。
+        enforceMerchantScope(entitlement.merchantId());
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
                 "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
@@ -308,6 +312,9 @@ public class TicketVerificationService {
                 ? entitlementByCredential(request)
                 : repository.findIssuedEntitlementById(credential.entitlementId())
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "entitlement not found"));
+        // P0-2 越权修复：在线核销主链此前未做商户归属校验，A 商户核销端可凭票号/权益码核销 B 商户客人的票
+        // （跨租户烧票 IDOR）。消费权益前按调用者商户范围校验归属（与 refresh/reverse 同范式；平台 scope 放行）。
+        enforceMerchantScope(entitlement.merchantId());
         Instant now = Instant.now();
         // P1 清单#19：动态二维码 window_valid 真实计算——非动态凭证（直接凭权益码）无刷新窗口概念，window_valid=null。
         Boolean windowValid = credential == null ? null : isCredentialWindowValid(credential, now);

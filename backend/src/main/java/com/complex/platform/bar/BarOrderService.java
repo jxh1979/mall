@@ -416,6 +416,10 @@ public class BarOrderService {
         if ("delivered".equals(item.deliveryStatus())) {
             throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_DELIVERED", "bar order item is already delivered");
         }
+        // P1-6 修复：已撤单(voided)明细不得再次出品（此前仅拦 delivered，撤单后换幂等键可二次扣库存并复活为 delivered）。
+        if ("voided".equals(item.deliveryStatus())) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_VOIDED", "voided bar order item cannot be delivered");
+        }
     }
 
     private void requireCompleteDeliveryQuantity(BarOrderItemRecord item, int quantity) {
@@ -894,6 +898,10 @@ public class BarOrderService {
             return null;
         }
         checkMerchantOwnership(bill.merchantId());
+        // P1-4 修复：billId 由客户端提供，此前仅校验同商户、未校验账单归属本订单，可把退款/冲减作用到任意同商户他单账单。
+        if (!bill.orderId().equals(item.orderId())) {
+            throw ApiException.conflict("BAR_BILL_ORDER_MISMATCH", "bill does not belong to the voided item's order");
+        }
         boolean settled = "settled".equals(bill.settlementStatus());
         long amount = item.amountCent();
         long beforePayable = bill.payableAmountCent();
@@ -904,6 +912,9 @@ public class BarOrderService {
         // 已结账单退酒资金回退 → finance refund 应付台账（含 DAY_CLOSE_LOCKED 校验在 finance 层强拦截）。
         String arApItemId = null;
         if (settled) {
+            // C4/P1-3 修复：退酒触发真实退款（settled→refund）必须额外持「退款」高危权限，与正规退款入口
+            // (applyBillAdjustment refund) 口径一致，堵住凭「退酒」权限绕过退款审批把关的暗道。
+            authorizationService.requirePermission("bar.bill.refund");
             BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
                     .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "bar order not found"));
             arApItemId = receivableLedgerService.createRefundPayable(

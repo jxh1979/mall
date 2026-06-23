@@ -194,6 +194,16 @@ class FinanceServiceTests {
     }
 
     @Test
+    void createArApItemRejectsNegativeAmountWithValidationFailed() {
+        // P1-13：金额下界负向测试——createArApItem 负数金额必须被 requirePositive 拒绝（填补"只测上界"的真空，
+        // 防负额反向操纵台账：负应收=凭空冲减）。
+        assertThatThrownBy(() -> service.createArApItem(itemRequest("arap-negative", "receivable", -5000L)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
     void overpaymentFailsWithValidationFailed() {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-overpay", "receivable", 5000L));
 

@@ -71,8 +71,9 @@ class AppendOnlyEnforcementJdbcIntegrationTests {
                 "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
                         + "WHERE t.tgname = 'trg_append_only_d' AND c.relname IN "
                         + "('ticket_payment_intents','finance_payment_intents','ticket_refund_lines',"
-                        + "'inventory_stock_movements','customer_points_ledger')",
+                        + "'inventory_stock_movements','customer_points_ledger','finance_daily_closes')",
                 Integer.class);
-        assertThat(count).isEqualTo(5);
+        // P1-9（V149）：日结锁表 finance_daily_closes 纳入 delete_only，故由 5 → 6。
+        assertThat(count).isEqualTo(6);
     }
 }

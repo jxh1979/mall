@@ -303,8 +303,8 @@
       "req": "REQ-65",
       "table": "merchants",
       "column": "owner_person",
-      "expected": "absent",
-      "note": "R4-G1 DRIFT: 矩阵称含'负责人'，merchants 仅 contact_name+secondary_contact 无独立负责人列"
+      "expected": "present",
+      "note": "V147 已加 merchants.owner_person 独立负责人列（C-5，治理HTML:429）；原 R4-G1 DRIFT 已闭合（2026-06-23 回写）"
     },
     {
       "req": "REQ-21",

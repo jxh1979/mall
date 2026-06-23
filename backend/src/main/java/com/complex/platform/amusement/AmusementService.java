@@ -1312,6 +1312,27 @@ public class AmusementService {
                 }
             });
         }
+        // P0-3 修复（F-OPS-04 项目级兜底）：核销请求的 deviceId 由客户端可选传入、且存量可为未注册自由字符串，
+        // 仅靠上方单设备校验可被「不传 / 乱传未注册 deviceId」整体绕过。此处不依赖 deviceId——只要项目下存在
+        // 「在役(active)」设备且其最近 PASS 巡检超期或从未巡检，即阻断该项目核销入场（业务红线：设备巡检超期 →
+        // 停止该设备/项目核销入场，直到完成合格巡检）。退役/停用/检修(inactive/retired/maintenance)设备不在役、不参与兜底。
+        if (!reasons.contains("SAFETY_INSPECTION_EXPIRED")) {
+            int projectIntervalHours = repository.findProjectSafetyCheckIntervalHours(projectId);
+            Instant safetyNow = Instant.now();
+            boolean anyActiveDeviceExpired = repository.listDevicesByProject(projectId).stream()
+                    .filter(device -> "active".equals(device.status()))
+                    .anyMatch(device -> {
+                        int intervalHours = device.safetyCheckIntervalHours() != null
+                                ? device.safetyCheckIntervalHours()
+                                : projectIntervalHours;
+                        Instant lastPass = device.lastPassInspectionAt();
+                        return lastPass == null
+                                || lastPass.plus(java.time.Duration.ofHours(intervalHours)).isBefore(safetyNow);
+                    });
+            if (anyActiveDeviceExpired) {
+                reasons.add("SAFETY_INSPECTION_EXPIRED");
+            }
+        }
         if (!repository.listActiveBlockingProjectRules(projectId).isEmpty()) {
             reasons.add("PROJECT_RULE_BLOCKED");
         }

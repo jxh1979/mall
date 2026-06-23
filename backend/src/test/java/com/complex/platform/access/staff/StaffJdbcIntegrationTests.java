@@ -173,6 +173,20 @@ class StaffJdbcIntegrationTests {
     }
 
     @Test
+    void integrityReportRejectsCrossMerchantCredentialRevocation() {
+        // P1-2 回归：商户 A 的调用者不得对商户 B 的设备凭证上报完整性异常（按 credId 跨商户吊销=DoS）。
+        StaffProfileRecord mB = approvedProfile("merchant_b");
+        StaffDeviceCredentialRecord cred = service.bindCredential(new StaffDeviceBindRequest(
+                key(), null, mB.id(), "pubkey-xm", "fp-hash-xm"));
+        // 切换为 merchant_a 调用者：跨商户凭证归属校验应拒绝。
+        com.complex.platform.support.TestSecurityActors.asMerchantUser("merchant_a");
+        assertThatThrownBy(() -> service.reportIntegrity(cred.id(),
+                new StaffDeviceIntegrityReportRequest(key(), null, "root_detected")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    @Test
     void checkConstraintRejectsIllegalBindStatusEnum() {
         StaffProfileRecord staff = approvedProfile(null);
         assertThatThrownBy(() -> jdbcTemplate.update("""

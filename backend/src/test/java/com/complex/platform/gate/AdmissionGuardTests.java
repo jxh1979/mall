@@ -337,15 +337,20 @@ class AdmissionGuardTests {
     // ── 异常口径：非越界类 fail-open 放行；over_* 越界类 fail-closed 进复核 ──────
 
     @Test
-    void evalErrorFailsOpenAndRecordsEvalSkippedForNonOverScopeTrigger() {
-        // expired（非越界类）求值异常 → 维持 fail-open 放行 + admission.eval_skipped 留痕。
+    void evalErrorFailsClosedToReviewForNonOverScopeTriggerAfterC3() {
+        // C3（用户裁决统一 fail-closed）：expired（非越界类）求值异常 → 改为 fail-closed 进复核
+        // + admission.eval_failed_closed 留痕 + 抛 ADMISSION_BLOCKED（此前为 fail-open 放行 eval_skipped）。
         when(policyRepo.findEnabledPolicy(any(), any())).thenReturn(Optional.of(policy("expired", "block", 2)));
         when(authz.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
         when(factRepo.isContractExpiredForMerchant("m1")).thenThrow(new RuntimeException("db down"));
+        when(reviewService.blockForAdmission(any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(decision("r_expired_closed"));
 
-        assertThatCode(() -> guard.check("act", "obj", "o1")).doesNotThrowAnyException();
-        assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("admission.eval_skipped");
-        verify(reviewService, never()).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
+        assertThatThrownBy(() -> guard.check("act", "obj", "o1"))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("ADMISSION_BLOCKED"));
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("admission.eval_failed_closed");
+        verify(reviewService).blockForAdmission(any(), any(), any(), any(), any(), anyInt());
     }
 
     @Test

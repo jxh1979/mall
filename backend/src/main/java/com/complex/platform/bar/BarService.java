@@ -472,7 +472,7 @@ public class BarService {
         );
     }
 
-    @com.complex.platform.gate.GuardedAction(permission = "bar.order_item.void")
+    @com.complex.platform.gate.GuardedAction(permission = "bar.order_item.void_decide")
     @Transactional
     public BarOrderItemVoidRecord decideOrderItemVoid(String voidId, BarOrderItemVoidDecisionRequest request) {
         String id = operations.requireText(voidId, "void_id");

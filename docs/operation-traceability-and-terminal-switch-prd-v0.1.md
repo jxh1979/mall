@@ -190,7 +190,7 @@ flowchart TD
 | `bar.order_delivered` | 酒吧订单送达 |
 | `payment.cash_received` | 现金收款确认 |
 | `payment.pos_received` | POS 收款确认 |
-| `contract.blocked` | 合同或基础定义违规命中、准入流程被卡住（修订说明 2026-06-07 新增，trace-3）。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `contract.blocked` 代码**零命中**，准入卡住的代码真实事件名为 **`admission.blocked`**（`SupervisorReviewService.blockForAdmission`），另有 `admission.warned`/`admission.review`/`admission.eval_failed_closed`/`admission.space_unresolved_closed`/`admission.eval_skipped`（`AdmissionGuard`）。映射：**`contract.blocked`（字典名）→ `admission.blocked`（代码名）**；准入超范围/超空间策略见 §11.1（V099）。 |
+| `contract.blocked` | 合同或基础定义违规命中、准入流程被卡住（修订说明 2026-06-07 新增，trace-3）。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `contract.blocked` 代码**零命中**，准入卡住的代码真实事件名为 **`admission.blocked`**（`SupervisorReviewService.blockForAdmission`），另有 `admission.warned`/`admission.review`/`admission.eval_failed_closed`/`admission.space_unresolved_closed`（`AdmissionGuard`；**2026-06-23 C3：准入闸已统一 fail-closed，原非越界类 fail-open 的 `admission.eval_skipped` 不再发出，所有 trigger 求值异常一律落 `admission.eval_failed_closed`**）。映射：**`contract.blocked`（字典名）→ `admission.blocked`（代码名）**；准入超范围/超空间策略见 §11.1（V099）。 |
 | `contract.released` | 合同准入经上级审核放行（修订说明 2026-06-07 新增，trace-3）。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `contract.released` 代码**零命中**，复核放行的代码真实事件名为 **`admission.released`**（驳回为 `admission.escalated`，`SupervisorReviewService`）。映射：**`contract.released`（字典名）→ `admission.released`（代码名）**。 |
 | `exception.reported` | 异常被发现或上报（代码命中：`RiskAlertService.report`，V103 统一异常责任链） |
 | `exception.first_handled` | 异常第一处理人接单。**`文档goalP1(2026-06-20)` 漂移修正**：字典名 `exception.first_handled` 代码**零命中**，认领接单的代码真实事件名为 **`exception.claimed`**（`RiskAlertService.claim`，V103）。映射：**`exception.first_handled`（字典名）→ `exception.claimed`（代码名）**。 |

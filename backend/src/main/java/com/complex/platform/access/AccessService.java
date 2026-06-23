@@ -176,6 +176,19 @@ public class AccessService {
                         }
                         PermissionTemplate template = repository.findTemplateById(id)
                                 .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND", "permission template not found: " + id));
+                        // A1-05：apply 必须校验模板归属——非平台管理员只能套用本组织拥有的模板，
+                        // 禁止借平台模板/他组织模板把高权限项下发给本组织用户（与 update/copy 同范式）。
+                        if (!authorizationService.isPlatformAdmin(actor)) {
+                            if (template.ownerScopeId() == null
+                                    || !template.ownerScopeId().equals(actor.organizationId())) {
+                                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                                        "cannot apply a template owned by another scope: " + id);
+                            }
+                        }
+                        // P0-1：套用模板授予的权限码不得超出授权人自身有效权限（堵 copy-then-apply 提权）。
+                        requireActorCanGrant(repository.findTemplateItems(id).stream()
+                                .map(PermissionTemplateItem::permissionCode)
+                                .toList());
                         boolean singleUse = template.singleUse() || "single_use".equalsIgnoreCase(trimToDefault(request.mode(), "append"));
                         PermissionTemplateApplyResult result = new PermissionTemplateApplyResult(repository.applyTemplate(
                                 id,
@@ -252,6 +265,8 @@ public class AccessService {
                     request,
                     () -> {
                         requireKnownPermissions(request.permissionCodes());
+                        // P0-1：角色不得包含超出创建人自身有效权限的权限码（提权防护）。
+                        requireActorCanGrant(request.permissionCodes());
                         RoleRecord role = new RoleRecord(
                                 "role_" + slug(request.roleName()),
                                 trimToDefault(request.roleName(), "role"),
@@ -271,6 +286,24 @@ public class AccessService {
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("role.change_failed", "access.role.manage", "role", null, null, request == null ? null : request.idempotencyKey(), codeOf(exception));
             throw exception;
+        }
+    }
+
+    /**
+     * P0-1 提权防护：发证/授权动作不得授予超出「授权人自身有效权限」的权限码。
+     * 平台管理员（wildcard）可授予任意权限；其余主体所授权限码必须 ⊆ 自身有效授予集（denies 已扣减）。
+     */
+    private void requireActorCanGrant(List<String> permissionCodes) {
+        EffectivePermissions self = authorizationService.effectivePermissions();
+        if (self.wildcard()) {
+            return;
+        }
+        java.util.Set<String> own = new java.util.HashSet<>(self.grants());
+        for (String code : safeList(permissionCodes)) {
+            if (code != null && !own.contains(code)) {
+                throw ApiException.forbidden("GRANT_EXCEEDS_OWN_PERMISSIONS",
+                        "cannot grant a permission you do not hold: " + code);
+            }
         }
     }
 
@@ -295,6 +328,8 @@ public class AccessService {
                                         "cannot grant to a user in another organization: " + request.targetUserId());
                             }
                         }
+                        // P0-1：临时授权不得授予超出授权人自身有效权限的权限码（提权防护）。
+                        requireActorCanGrant(request.permissionCodes());
                         TemporaryGrant grant = new TemporaryGrant(
                                 UUID.randomUUID().toString(),
                                 request.targetUserId(),

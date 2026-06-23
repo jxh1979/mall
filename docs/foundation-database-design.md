@@ -2102,6 +2102,15 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 - 全代码库零 DELETE 该表（核验通过），无业务/测试影响；无新表/新列（仅加触发器 + 角色 REVOKE）。
 - 注：核心留痕 `audit_events`/`evidence_events` 等已在 V140 immutable；本节补齐遗漏的治理决策表。隔离列（`merchant_id`/`project_id`）为独立后续子项（需 `SupervisorReviewDecisionRecord` 构造点改造 + 读过滤接线）。
 
+### 11.29 日结锁定治理表留痕防篡改（V149 → `finance_daily_closes` 纳入 append-only `delete_only`，修复 A2-02/P1-9）
+
+> 本小节标注 `文档goalP1(2026-06-23)`，修复 A2-02/P1-9（日结锁本身可被物理 DELETE 抹除，绕过「封账后须上级审批补录」铁律，且事后无法从 DB 约束层证明锁从未被动过）。所有资金台账（`ar_ap_items`[V145]/`ar_ap_payments`[V140]、`deposit_ledger`、`cam_trueup_*` 等）均已 append-only，唯独「日结锁」治理表 `finance_daily_closes` 此前无 DB 层防护。
+
+- 纳入 `delete_only`：贴 `trg_append_only_d` 触发器（复用 V140 `complex_block_mutation()`），仅禁 DELETE、保留合法 UPDATE（`saveDailyClose` ON CONFLICT DO UPDATE status 状态回写）。
+- 生产受限运行角色 `complex_app` REVOKE DELETE（触发器 + 角色双重纵深，与 V140/V145/V148 同口径）。
+- 残留说明：经 UPDATE 翻转锁状态（locked→其它）属应用层职责——finance 域无 reopen 路径（grep 确认），补录一律走 `ar_ap_adjustments` 审批链；DB 层防删确保锁记录不可被悄悄抹除，是纵深防御关键一环。
+- 无新表/新列（仅加触发器 + 角色 REVOKE）；`AppendOnlyEnforcementJdbcIntegrationTests` 的 delete_only 计数 5→6（含本表）。
+
 ## 10. 下一步
 
 > 修订说明（2026-06-07）：依据基准 D10（A1 用户 2026-06-07 拍板迁移 Java），技术栈已确定，不再是「待选择」。原「下一步进入技术栈选择」按 D10 修正为「按既定技术栈搭建骨架」。
