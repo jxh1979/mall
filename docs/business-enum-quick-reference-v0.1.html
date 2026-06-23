@@ -14,13 +14,12 @@
   tr:last-child td { border-bottom: none; }
   td.k { width: 200px; font-weight: 600; background:#f6f7f9; color:#0f172a; }
   .note { color:#9ca3af; font-size: 12px; }
-  .stage { color:#b45309; font-size: 12px; }
   .tip { background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:10px 14px; font-size:13px; color:#7c2d12; margin: 18px 0; }
 </style>
 </head>
 <body>
   <h1>综合体管理系统 · 业务枚举速查表</h1>
-  <p class="sub">V0.1 ｜ 2026-06-23 ｜ 给业务同事快速查“系统支持哪几种 / 有哪几个状态 / 按什么规则”。状态枚举为业务口径，最终以后台配置为准。标“后续/二期”的为规划上线阶段。</p>
+  <p class="sub">V0.1 ｜ 2026-06-23 ｜ 给业务同事快速查“系统支持哪几种 / 有哪几个状态 / 按什么规则”。状态枚举为业务口径，最终以后台配置为准。</p>
 
   <div class="tip">用法：左列是“问题”（如“账单有哪几个状态”），右列是“答案”。配套两份业务地图（业务系统地图 / 平台治理地图）使用。</div>
 
@@ -41,13 +40,13 @@
 
   <h2>二、会员与积分</h2>
   <table>
-    <tr><td class="k">会员等级</td><td>按累计积分自动升级；有升有降（按保级阈值、保级周期、宽限期判定）<span class="stage">（升降规则后续上线）</span></td></tr>
+    <tr><td class="k">会员等级</td><td>按累计积分自动升级；有升有降（按保级阈值、保级周期、宽限期判定）</td></tr>
     <tr><td class="k">积分获取方式</td><td>按消费金额、按核销张数、按活动、签到、生日</td></tr>
     <tr><td class="k">积分明细类型</td><td>获取、扣减、兑换消耗、过期、调整</td></tr>
     <tr><td class="k">积分过期方式</td><td>按获取批次先进先出到期清零、整账按年统一清零</td></tr>
     <tr><td class="k">兑换发放状态</td><td>待发放、已发放、已取消、异常</td></tr>
     <tr><td class="k">现场领取状态</td><td>待领取、已领取、已拒绝、人工放行、异常</td></tr>
-    <tr><td class="k">会员忠诚度扩展</td><td>连续签到、生日加倍 <span class="stage">（后续上线）</span>；储值预付卡、付费会员订阅 <span class="stage">（后续二期）</span>；积分转赠 <span class="stage">（更后续）</span></td></tr>
+    <tr><td class="k">会员忠诚度扩展</td><td>连续签到、生日加倍；储值预付卡、付费会员订阅；积分转赠</td></tr>
   </table>
 
   <h2>三、酒吧经营</h2>
@@ -126,6 +125,6 @@
     <tr><td class="k">权限状态</td><td>草稿、已启用、暂停、已停用、归档</td></tr>
   </table>
 
-  <p class="note" style="margin-top:24px;">注：本表为业务口径速查，状态名称最终以系统后台配置为准；标“后续/二期”的能力为规划上线阶段、非现已全部落地。</p>
+  <p class="note" style="margin-top:24px;">注：本表为业务口径速查，状态名称最终以系统后台配置为准。</p>
 </body>
 </html>
