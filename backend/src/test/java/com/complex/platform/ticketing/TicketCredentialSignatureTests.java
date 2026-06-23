@@ -1,6 +1,7 @@
 package com.complex.platform.ticketing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -53,6 +54,14 @@ class TicketCredentialSignatureTests {
     }
 
     // ---- 签名器算法层 ----
+
+    @Test
+    void prodProfileRejectsDefaultSigningSecret() {
+        assertThatThrownBy(() -> new TicketCredentialSigner(
+                TicketCredentialSigner.DEV_SIGNING_SECRET, "v1", true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("COMPLEX_TICKET_SIGNING_SECRET");
+    }
 
     @Test
     void signIsDeterministicConstantTimeAndKeyIsolated() {

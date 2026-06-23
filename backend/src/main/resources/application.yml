@@ -68,3 +68,10 @@ ticket:
       secret: ${COMPLEX_TICKET_SIGNING_SECRET:complex-dev-ticket-signing-secret-change-me}
       # 签名密钥版本，写入 ticket_credentials.signature_version，为后续密钥轮转预留。
       version: ${COMPLEX_TICKET_SIGNING_VERSION:v1}
+
+bar:
+  invitation:
+    signing:
+      # V155 订卡邀请函二维码 HMAC 签名密钥。
+      # 生产必须由 env COMPLEX_BAR_INVITATION_SIGNING_SECRET 注入强随机密钥；下方 dev 默认仅供本地/测试，切勿用于生产。
+      secret: ${COMPLEX_BAR_INVITATION_SIGNING_SECRET:complex-dev-bar-invitation-secret-change-me}

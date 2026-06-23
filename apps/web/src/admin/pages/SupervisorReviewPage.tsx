@@ -57,7 +57,7 @@ const SUPERVISOR_REVIEW_PERMISSION = "governance.supervisor_review.manage";
 
 export function SupervisorReviewPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<SupervisorReviewPolicyRow[]>([]);
-  const [latestReviewId, setLatestReviewId] = React.useState("review-demo");
+  const [latestReviewId, setLatestReviewId] = React.useState("");
   const [actionType, setActionType] = React.useState("contract_violation");
   const [objectType, setObjectType] = React.useState("contract");
   const [objectId, setObjectId] = React.useState("contract-1");
@@ -76,6 +76,11 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   const blockedCount = rows.filter((row) => row.blocksByDefault).length;
   const activeCount = rows.filter((row) => (row.status ?? "active") === "active").length;
   const maxRequiredLevel = rows.reduce((max, row) => Math.max(max, row.requiredLevel ?? 0), 0);
+  const hasPendingReview = latestReviewId.trim().length > 0;
+
+  function resetPendingReview() {
+    if (latestReviewId) setLatestReviewId("");
+  }
 
   const { busyAction, formError, setFormError, runAction } = useAdminAction({
     reload,
@@ -108,6 +113,10 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
   }
 
   function validateApprove() {
+    if (!hasPendingReview) {
+      setFormError("请先评估违规动作并生成待复核记录");
+      return false;
+    }
     if (!approvalComment.trim()) {
       setFormError("审批意见不能为空");
       return false;
@@ -144,11 +153,11 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
         </div>
 
         <div className="admin-form-grid" data-testid="supervisor-review-form">
-          <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => setActionType(event.target.value)}><option value="contract_violation">contract_violation</option><option value="base_definition_violation">base_definition_violation</option><option value="billing_discount">billing_discount</option><option value="manual_release">manual_release</option></select></label>
-          <label>{TEXT.objectType}<input data-testid="supervisor-review-object-type" value={objectType} onChange={(event) => setObjectType(event.target.value)} /></label>
-          <label>{TEXT.objectId}<input data-testid="supervisor-review-object-id" value={objectId} onChange={(event) => setObjectId(event.target.value)} /></label>
-          <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => setAmountCent(event.target.value)} /></label>
-          <label>{TEXT.violationSummary}<input data-testid="supervisor-review-violation-summary" value={violationSummary} onChange={(event) => setViolationSummary(event.target.value)} /></label>
+          <label>{TEXT.actionType}<select data-testid="supervisor-review-action-type" value={actionType} onChange={(event) => { setActionType(event.target.value); resetPendingReview(); }}><option value="contract_violation">contract_violation</option><option value="base_definition_violation">base_definition_violation</option><option value="billing_discount">billing_discount</option><option value="manual_release">manual_release</option></select></label>
+          <label>{TEXT.objectType}<input data-testid="supervisor-review-object-type" value={objectType} onChange={(event) => { setObjectType(event.target.value); resetPendingReview(); }} /></label>
+          <label>{TEXT.objectId}<input data-testid="supervisor-review-object-id" value={objectId} onChange={(event) => { setObjectId(event.target.value); resetPendingReview(); }} /></label>
+          <label>{TEXT.amountCent}<input data-testid="supervisor-review-amount-cent" type="number" value={amountCent} onChange={(event) => { setAmountCent(event.target.value); resetPendingReview(); }} /></label>
+          <label>{TEXT.violationSummary}<input data-testid="supervisor-review-violation-summary" value={violationSummary} onChange={(event) => { setViolationSummary(event.target.value); resetPendingReview(); }} /></label>
           <label>{TEXT.reviewerLevel}<input data-testid="supervisor-review-reviewer-level" type="number" value={reviewerLevel} onChange={(event) => setReviewerLevel(event.target.value)} /></label>
           <label>{TEXT.approvalComment}<input data-testid="supervisor-review-approval-comment" value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} /></label>
         </div>
@@ -162,8 +171,8 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
           >{TEXT.evaluate}</PermissionButton>
           <HighRiskConfirm
             label={TEXT.approve}
-            impact={`将放行复核记录 ${latestReviewId}，被阻断的高风险动作随即生效并写入主管审批留痕。`}
-            disabled={busyAction !== ""}
+            impact={`将放行复核记录 ${latestReviewId || "未生成"}，被阻断的高风险动作随即生效并写入主管审批留痕。`}
+            disabled={busyAction !== "" || !hasPendingReview}
             precheck={validateApprove}
             onConfirm={() => void approveReview()}
             permissionsState={effectivePermissions}
@@ -171,6 +180,7 @@ export function SupervisorReviewPage({ api, setActionResult, setGlobalError, eff
             data-testid="supervisor-review-approve"
           />
         </div>
+        <div className="admin-muted-action" data-testid="supervisor-review-current-review">当前待审批 review_id：{latestReviewId || "未生成"}</div>
         <div className="admin-muted-action" data-testid="supervisor-review-boundary">{TEXT.boundary}</div>
         {formError ? <div data-testid="supervisor-review-error" className="admin-inline-error">{formError}</div> : null}
 

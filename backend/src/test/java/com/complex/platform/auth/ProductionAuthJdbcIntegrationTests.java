@@ -29,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
         "complex.auth.production.seed-admin.username=p0_prod_test_admin",
         "complex.auth.production.seed-admin.password=p0_prod_test_password",
         "complex.auth.failed-login.max-attempts=3",
-        "complex.auth.failed-login.lock-duration=PT15M"
+        "complex.auth.failed-login.lock-duration=PT15M",
+        "ticket.credential.signing.secret=prod-test-ticket-signing-secret-32-bytes-minimum",
+        "bar.invitation.signing.secret=prod-test-bar-invitation-signing-secret-32-bytes-minimum"
 })
 @Transactional
 class ProductionAuthJdbcIntegrationTests {

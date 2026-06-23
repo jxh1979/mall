@@ -265,6 +265,8 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("supervisor-review-table")).toContainText("contract_violation");
         await expect(page.getByTestId("supervisor-review-table")).toContainText("base_definition_violation");
         await expect(page.getByTestId("supervisor-review-boundary")).toContainText("违规动作必须先阻断");
+        await expect(page.getByTestId("supervisor-review-current-review")).toContainText("未生成");
+        await expect(page.getByTestId("supervisor-review-approve")).toBeDisabled();
         continue;
       }
       if (spec.pageId === "ADM-RISK-001") {
@@ -381,11 +383,14 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("att-admission-audit-export");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-006")!);
+    await expect(page.getByTestId("supervisor-review-approve")).toBeDisabled();
     await page.getByTestId("supervisor-review-violation-summary").fill("合同主体与基础定义不一致");
     await page.getByTestId("supervisor-review-evaluate").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("supervisor_review_evaluated");
     await expect(page.getByTestId("admin-action-result")).toContainText("pending_review");
     await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
+    await expect(page.getByTestId("supervisor-review-current-review")).toContainText("review-demo");
+    await expect(page.getByTestId("supervisor-review-approve")).toBeEnabled();
     await page.getByTestId("supervisor-review-approval-comment").fill("证据齐备，同意放行");
     await page.getByTestId("supervisor-review-approve").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("supervisor_review_approved");

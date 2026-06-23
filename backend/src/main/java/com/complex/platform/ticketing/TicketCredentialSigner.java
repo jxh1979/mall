@@ -1,12 +1,16 @@
 package com.complex.platform.ticketing;
 
+import com.complex.platform.common.crypto.SigningSecretGuard;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,13 +29,27 @@ import org.springframework.stereotype.Component;
 @Component
 public class TicketCredentialSigner {
 
+    static final String DEV_SIGNING_SECRET = "complex-dev-ticket-signing-secret-change-me";
+
     private final String secret;
     private final String version;
 
+    @Autowired
     public TicketCredentialSigner(
             @Value("${ticket.credential.signing.secret:complex-dev-ticket-signing-secret-change-me}") String secret,
-            @Value("${ticket.credential.signing.version:v1}") String version) {
-        this.secret = secret;
+            @Value("${ticket.credential.signing.version:v1}") String version,
+            Environment environment) {
+        this(secret, version, environment.acceptsProfiles(Profiles.of("prod")));
+    }
+
+    TicketCredentialSigner(String secret, String version) {
+        this(secret, version, false);
+    }
+
+    TicketCredentialSigner(String secret, String version, boolean productionProfile) {
+        this.secret = SigningSecretGuard.requireUsableHmacSecret(
+                "ticket.credential.signing.secret", "COMPLEX_TICKET_SIGNING_SECRET",
+                secret, DEV_SIGNING_SECRET, productionProfile);
         this.version = version;
     }
 

@@ -1,11 +1,15 @@
 package com.complex.platform.bar;
 
+import com.complex.platform.common.crypto.SigningSecretGuard;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,11 +24,25 @@ import org.springframework.stereotype.Component;
 @Component
 public class BarInvitationTokenSigner {
 
+    static final String DEV_SIGNING_SECRET = "complex-dev-bar-invitation-secret-change-me";
+
     private final String secret;
 
+    @Autowired
     public BarInvitationTokenSigner(
-            @Value("${bar.invitation.signing.secret:complex-dev-bar-invitation-secret-change-me}") String secret) {
-        this.secret = secret;
+            @Value("${bar.invitation.signing.secret:complex-dev-bar-invitation-secret-change-me}") String secret,
+            Environment environment) {
+        this(secret, environment.acceptsProfiles(Profiles.of("prod")));
+    }
+
+    BarInvitationTokenSigner(String secret) {
+        this(secret, false);
+    }
+
+    BarInvitationTokenSigner(String secret, boolean productionProfile) {
+        this.secret = SigningSecretGuard.requireUsableHmacSecret(
+                "bar.invitation.signing.secret", "COMPLEX_BAR_INVITATION_SIGNING_SECRET",
+                secret, DEV_SIGNING_SECRET, productionProfile);
     }
 
     /**

@@ -12268,8 +12268,8 @@
           "customer"
         ],
         "operationId": "listCustomerMembershipPlans",
-        "summary": "付费会员档位列表（客人端）",
-        "x-permission": "not_applicable",
+        "summary": "付费会员档位列表（客人端公开展示）",
+        "x-permission": "public",
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
@@ -12298,7 +12298,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "public"
       }
     },
     "/api/v1/customer/membership-benefits": {

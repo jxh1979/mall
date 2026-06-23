@@ -48,7 +48,6 @@ export const genericAdminPageConfigs: Record<string, GenericAdminPageConfig> = {
     dataSources: [{ label: "复核策略", endpoint: "/api/v1/platform/supervisor-review-policies" }],
     columns: [{ key: "policyCode", label: "策略" }, { key: "actionType", label: "动作" }, { key: "requiredLevel", label: "主管级别" }, { key: "blocksByDefault", label: "默认阻断" }, { key: "requiredEvidenceTypes", label: "所需证据" }, { key: "status", label: "状态" }],
     primaryAction: { label: "评估违规动作", kind: "request", permission: ["governance.supervisor_review.manage"], endpoint: "/api/v1/platform/supervisor-review/evaluate", requiresRow: false, body: { idempotencyKey: "full-admin-supervisor-review-evaluate", operatorNote: "完整后台验收主管复核评估", evidenceAttachmentIds: ["evidence-full-admin"], actionType: "contract_violation", objectType: "contract", objectId: "contract-1", amountCent: 0, violationSummary: "合同主体与基础定义不一致" } },
-    secondaryAction: { label: "主管审批放行", kind: "request", permission: ["governance.supervisor_review.manage"], endpoint: "/api/v1/platform/supervisor-review/review-demo/approve", requiresRow: false, body: { idempotencyKey: "full-admin-supervisor-review-approve", operatorNote: "完整后台验收主管审批", evidenceAttachmentIds: ["evidence-full-admin"], reviewerLevel: 3, decision: "approved", comment: "证据齐备，同意放行" } },
   },
   "ADM-TKT-002": {
     pageId: "ADM-TKT-002", title: "动态定价",

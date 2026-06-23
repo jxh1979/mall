@@ -228,12 +228,12 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project, project-device, public-project-bar, self | 22 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 21 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
-| `public` | public | customer, none, public-project | 4 | login, customerPhoneLogin, listCustomerTicketProducts, getSystemHealth | 已在权限矩阵正文出现 |
+| `public` | public | customer, none, project, public-project | 5 | login, customerPhoneLogin, listCustomerTicketProducts, getSystemHealth, listCustomerMembershipPlans | 已在权限矩阵正文出现 |
 | `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.dismiss` | staff-token | platform | 1 | dismissRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.escalate` | staff-token | platform | 1 | escalateRiskAlert | OpenAPI 补充，以本附录为准 |
@@ -607,8 +607,8 @@
 | `customer.membership_benefits_viewed_failed` | failure | `customerMembershipBenefits` | `GET` | `/api/v1/customer/membership-benefits` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
 | `customer.membership_plans_admin_viewed` | success | `listMembershipPlans` | `GET` | `/api/v1/loyalty/membership-plans` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
 | `customer.membership_plans_admin_viewed_failed` | failure | `listMembershipPlans` | `GET` | `/api/v1/loyalty/membership-plans` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
-| `customer.membership_plans_viewed` | success | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.membership_plans_viewed_failed` | failure | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.membership_plans_viewed` | success | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `customer.membership_plans_viewed_failed` | failure | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.membership.subscribe` | success | `customerMembershipSubscribe` | `POST` | `/api/v1/customer/memberships/subscribe` | CUS-客人端 | `customer.membership.subscribe` | 接口级事件，以本附录为准 |
 | `customer.membership.subscribe_failed` | failure | `customerMembershipSubscribe` | `POST` | `/api/v1/customer/memberships/subscribe` | CUS-客人端 | `customer.membership.subscribe` | 接口级事件，以本附录为准 |
 | `customer.memberships_viewed` | success | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
@@ -1299,7 +1299,7 @@
 | CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | web, miniapp, app | 已在任务映射正文出现 |
 | CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | 付费会员档位列表（客人端） | `not_applicable` | `customer.membership_plans_viewed` / `customer.membership_plans_viewed_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | 付费会员档位列表（客人端公开展示） | `public` | `customer.membership_plans_viewed` / `customer.membership_plans_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | 客人付费会员列表 | `customer.membership.view` | `customer.memberships_viewed` / `customer.memberships_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | 查询积分兑换商品目录 | `not_applicable` | `customer.points.redemption_items_viewed` / `customer.points.redemption_items_view_failed` | app, miniapp, web | operation 级补充 |

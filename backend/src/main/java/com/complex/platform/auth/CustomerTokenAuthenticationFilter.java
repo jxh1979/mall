@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * #14 钱包双路径：把携带有效 {@code X-Customer-Token} 的客人请求解析为 SecurityContext 中的"客人 principal"
+ * #14 钱包双路径：把携带有效 {@code X-Customer-Token} 或 {@code Authorization: Bearer <customer-token>} 的客人请求解析为 SecurityContext 中的"客人 principal"
  * （{@link AccessActor} accountType=customer），使 {@code /api/v1/customer/**} 下的 {@code @GuardedAction}
  * 自助动作不再因无认证主体而抛 UNAUTHENTICATED。
  *
@@ -55,7 +55,7 @@ public class CustomerTokenAuthenticationFilter extends OncePerRequestFilter {
                 && SecurityContextHolder.getContext().getAuthentication().isAuthenticated();
         CustomerService resolver = customerService.getIfAvailable();
         if (customerPath && !alreadyAuthenticated && resolver != null) {
-            String customerToken = request.getHeader("X-Customer-Token");
+            String customerToken = resolveCustomerToken(request);
             resolver.resolveCustomerIdQuietly(customerToken).ifPresent(customerId -> {
                 AccessActor actor = new AccessActor(
                         customerId, customerId, "customer", null, null, "active");
@@ -65,5 +65,17 @@ public class CustomerTokenAuthenticationFilter extends OncePerRequestFilter {
             });
         }
         filterChain.doFilter(request, response);
+    }
+
+    private String resolveCustomerToken(HttpServletRequest request) {
+        String customerToken = request.getHeader("X-Customer-Token");
+        if (customerToken != null && !customerToken.isBlank()) {
+            return customerToken.trim();
+        }
+        String authorization = request.getHeader("Authorization");
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            return authorization.substring("Bearer ".length()).trim();
+        }
+        return customerToken;
     }
 }
