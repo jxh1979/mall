@@ -1473,8 +1473,7 @@ body {
   padding: 28px 34px 60px;
 }
 
-.admin-content > section,
-.admin-content > .admin-generic-page {
+.admin-content > section {
   max-width: 1180px;
   margin: 0 auto;
 }
@@ -1555,8 +1554,7 @@ body {
 .admin-preview,
 .admin-result,
 .admin-chart-panel,
-.admin-form-row,
-.admin-generic-toolbar {
+.admin-form-row {
   background: var(--adm-surface);
   border: 1px solid var(--adm-border);
   border-radius: var(--adm-radius);
@@ -1599,7 +1597,6 @@ body {
   box-shadow: none;
 }
 
-.admin-state.admin-gap,
 .admin-denied {
   text-align: left;
   color: var(--adm-warn);
@@ -1619,15 +1616,7 @@ body {
   padding: 14px;
 }
 
-.admin-generic-toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 0;
-  padding: 15px 18px;
-}
-
+/* 各专属页"接口证据"横幅共享样式：类名沿用 generic 前缀，但 GenericAdminPage 删除后仍被 22 个专属页使用，勿当死样式删除 */
 .admin-generic-evidence {
   font-size: 12.5px;
   line-height: 1.6;
@@ -1686,7 +1675,6 @@ body {
 .admin-auth-panel button,
 .admin-form-row button,
 .admin-secondary-button,
-.admin-generic-actions button,
 .admin-state button,
 .admin-pager button {
   display: inline-flex;
@@ -1708,7 +1696,6 @@ body {
 .admin-auth-panel button:hover,
 .admin-form-row button:hover,
 .admin-secondary-button:hover,
-.admin-generic-actions button:hover,
 .admin-state button:hover,
 .admin-pager button:hover {
   filter: brightness(1.15);
@@ -1720,33 +1707,11 @@ body {
 }
 
 .admin-auth-panel button:disabled,
-.admin-form-row button:disabled,
-.admin-generic-actions button:disabled {
+.admin-form-row button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   filter: none;
 }
-
-/* 次级操作（工具条第二个按钮）描边化 */
-.admin-generic-actions button:last-child:not(:first-child) {
-  color: var(--adm-text-2);
-  background: var(--adm-surface);
-  border-color: var(--adm-border);
-}
-
-.admin-generic-actions button:last-child:not(:first-child):hover {
-  filter: none;
-  background: var(--adm-surface-3);
-  border-color: var(--adm-border-strong);
-  color: var(--adm-text);
-}
-
-.admin-generic-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 
 .admin-permission-template-form,
 .admin-permission-apply-row {
@@ -1810,7 +1775,6 @@ body {
 /* ============================================================
    数据表（.admin-table 映射原型 .dtable）
    ============================================================ */
-.admin-generic-page,
 .admin-content > section {
   display: grid;
   gap: 14px;
@@ -2025,11 +1989,6 @@ body {
 
   .admin-permission-grid {
     grid-template-columns: 1fr;
-  }
-
-  .admin-generic-toolbar {
-    flex-direction: column;
-    align-items: stretch;
   }
 }
 

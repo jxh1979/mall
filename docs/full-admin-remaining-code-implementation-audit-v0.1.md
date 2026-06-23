@@ -7,8 +7,8 @@
 ## 代码证据
 
 - 路由与权限入口：apps/web/src/admin/adminRoutes.ts
-- 页面配置与接口证据：apps/web/src/admin/adminPageConfigs.ts
-- 通用后台页面渲染、空/错/加载状态、操作执行：apps/web/src/admin/pages/GenericAdminPage.tsx
+- 页面配置与接口证据：apps/web/src/admin/adminPageConfigs.ts（已于 2026-06-23 删除：全部页面已专用化，该配置成为永不渲染的死配置）
+- 通用后台页面渲染、空/错/加载状态、操作执行：apps/web/src/admin/pages/GenericAdminPage.tsx（已于 2026-06-23 删除：永不渲染，未知路由由 AdminApp default 内联占位兜底）
 - 票务动态定价专用页：apps/web/src/admin/pages/DynamicPricingPage.tsx
 - 票务出票与核销追踪专用页：apps/web/src/admin/pages/TicketOrdersPage.tsx
 - 酒吧订单/出品/账单专用页：apps/web/src/admin/pages/BarOrdersPage.tsx
@@ -63,7 +63,7 @@
 - 已关闭：ADM-AMU-001 项目与场次已从 GenericAdminPage 升级为专用页面，覆盖项目、场次、容量摘要、新增场次、幂等键和证据附件；不替代安全巡检和事故闭环。
 - 已关闭：ADM-AMU-002 团体/包场已从 GenericAdminPage 升级为专用页面，覆盖团体预约、容量占用、释放原因、释放容量、幂等键和证据附件；不得静默覆盖预约和核销证据。
 - 已关闭：ADM-MER-002 商户授权工作台已从 GenericAdminPage 升级为专用页面，覆盖授权工单/账单分表展示、商户角色数据范围过滤、授权范围确认留痕和平台页越权拦截；后端数据范围策略仍是安全边界。
-- 已关闭：完整后台 30 个页面均已具备专用页面或首批既有专用实现；`GenericAdminPage` 仅作为兜底组件保留，不再承载当前页面矩阵中的业务页面。
+- 已关闭：完整后台 30 个页面均已具备专用页面或首批既有专用实现；`GenericAdminPage` 与 `adminPageConfigs` 已于 2026-06-23 删除（永不渲染的死配置），未知路由由 `AdminApp` default 内联占位兜底。
 - P2：对账差异关闭当前为本地留痕动作，后续如需真实审批/导出任务，应补正式 API。经营分析复盘锁定只生成本地审计结果；集成事件页已接入 P1 内部重试/补偿写接口，但真实供应商执行仍需生产证据闭环。
 
 ## 验收结果

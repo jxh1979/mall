@@ -15,7 +15,7 @@
   - 验证：**全量后端 673 测试（670+3）0 失败 0 错误 BUILD SUCCESS**；9 个锁定该契约的 controller 测试仍全过 → 行为字节级不变；`git diff --check` 通过。
 - **① useAdminResource — 全面完成（29/29 页）** — 新增 `apps/web/src/admin/hooks/useAdminResource.ts`（ref 持有最新 fetcher/onError 避免重取死循环；增加可选 `onStart` 覆盖"load 开头清全局错误"的变体）。全部 29 个使用旧 `load` 样板的页面已迁移，保留全部 testid 与可见行为。
   - 特殊处理：`DynamicPricingPage`、`TicketOrdersPage` 的 `runAction` 已有名为 `reload` 的形参，迁移时把 hook 返回别名为 `reloadResource` 避免遮蔽。runAction 页的 `await load()` 统一改 `await reload()`。
-  - 未纳入：`GenericAdminPage`（有意保留自有 loading/contractGap 与 testid，见谨慎区③）；`TicketingPoliciesPage` 的 `setError` 是表单校验非数据加载。
+  - 未纳入：`GenericAdminPage`（迁移时有意保留，见谨慎区③；该组件与 `adminPageConfigs` 已于 2026-06-23 整体删除）；`TicketingPoliciesPage` 的 `setError` 是表单校验非数据加载。
   - 验证：typecheck 0；web 单测 16 passed；**Playwright UI 28 passed**；`npm run build` 0；`verify:full-admin-matrix` 0（30 页齐全）；**`verify:delivery-gates` exit 0**。
 
 ## 1. 后端（按风险/收益比排序）
@@ -65,7 +65,7 @@
 | ⑤ | 22 页各自 `const TEXT={…}`，转义风格不一 | `TicketOrdersPage.tsx:11`(\u) vs `AuditEventsPage.tsx:11`(明文) | 仅统一转义风格，**不合并文案值** | 中（可见文案/可能被断言） | 半内部 |
 
 **谨慎区**：
-- **③ `GenericAdminPage` 套用 `AdminDataState`**：会丢 `admin-generic-error/empty/contract-gap` testid（`GenericAdminPage.tsx:104,106,110`），**几乎确定破坏验收**，不建议简单替换。此处不一致是**有意**的。
+- **③ ~~`GenericAdminPage` 套用 `AdminDataState`~~（已失效 2026-06-23）**：`GenericAdminPage` 与 `adminPageConfigs` 整张配置已删除（永不渲染的死配置，全部页面已专用化），该谨慎区不再适用；未知路由由 `AdminApp` default 内联占位兜底。
 - **⑥ ~~`LegacyConsoleApp.tsx`/`shell.tsx` god-file 拆分~~（已完成 2026-06-23）**：legacy 控制台整体退役删除（路由、壳、页面、动作、自带单测一并移除），鉴权错误 UI 验收由 admin 壳 ADM-MVP-09/10 承接，无需再拆分。
 
 ## 3. 建议推进顺序（交付后）
