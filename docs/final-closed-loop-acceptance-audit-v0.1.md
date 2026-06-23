@@ -66,7 +66,7 @@
 ## 6. 当前代码质量与架构状态
 
 - `apps/web/src/main.tsx` 为 60 行入口（三壳路由分流：默认 admin、customer、legacy 前缀）。
-- `apps/web/src/legacy-console/LegacyConsoleApp.tsx` 已降为 313 行编排层，仅保留登录、加载、导航、表单实例和动作模块装配。
+- legacy 控制台已于 2026-06-23 整体退役删除（commit `9e20a44`）；其鉴权错误 UI 呈现验收由 admin 壳 `ADM-MVP-09/10` 承接。
 - 旧控制台业务动作已拆分到 `ticketingActions.ts`、`barActions.ts`、`amusementActions.ts`、`foundationActions.ts`、`floorPlanActions.ts`、`riskAndIntegrationActions.ts`。
 - `TicketingService` 当前 372 行，`BarService` 当前 565 行，仍为入口编排 + 子服务委托（行数随 R5/R6/goal 阶段新增业务回升）。
 - `BarOrderService` 已新增出品前订单项归属校验、已出品校验和完整数量校验，防止跨订单串单、重复出品、部分数量出品误完成、二次扣库存，并保证 `delivery_photo_attachment_ids` 合并进入出品事件和库存流水审计证据链。
@@ -76,8 +76,7 @@
 
 | 文件 | 当前行数 | 口径 |
 |---|---:|---|
-| `apps/web/src/main.tsx` | 60 行 | Web 入口薄层 |
-| `apps/web/src/legacy-console/LegacyConsoleApp.tsx` | 313 行 | Legacy 控制台编排层 |
+| `apps/web/src/main.tsx` | 49 行 | Web 入口薄层 |
 | `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 379 行 | 票务 facade |
 | `backend/src/main/java/com/complex/platform/bar/BarService.java` | 579 行 | 酒吧 facade |
 | `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 976 行 | 酒吧订单/出品子服务 |
