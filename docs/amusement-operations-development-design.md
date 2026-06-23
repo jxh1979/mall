@@ -9,7 +9,7 @@
 > - **✅ 检修整表 + 恢复营业联动已落地（V081）**：新建 `amusement_maintenance_record`（检修单位复用供应链供应商 supplier_category∈{maintenance,service}、工程师、检修结果、异常说明、来源终端/点位结构化、`supervisor_confirmed_by`/`resume_business_at`）；主管确认恢复时联动写 `amusement_projects.open_status`(maintenance→open)，`AmusementMaintenanceService` 提供提交检修 / `confirm-resume` 端点；CHECK 硬约束确认前不得由 maintenance 流转回 open。
 > - **✅ 现场核销校验票务权益已落地（V082）**：新建 `amusement_project_entitlements`（项目↔权益类型绑定）；`AmusementService.createVerification` 经 `AmusementEntitlementGateway` 在线校验存在/active/有效期/剩余次数/游乐类/绑定本项目，不可用即拒绝（`ENTITLEMENT_USED`/`ENTITLEMENT_EXPIRED`/无剩余次数等），不再原样入库；无绑定配置的项目回退为"仅校验游乐类放行"（向后兼容，待运营配置后自动收紧）。
 > - **✅ 三维度容量已落地（V083）**：新建 `amusement_capacity_config`（点位/设备维并发容量）+ `amusement_capacity_snapshot`（项目/场次/点位设备各维在场计数物化），核销按"项目安全上限 / 场次 / 点位设备"三维度取最小可放行余量原子 check+increment；仅校验已配置受控维度，未配置维度退化为场次单维。
-> - **仍开放——一体机端侧实际集成**：整条检修/核销链当前在 admin Web/legacy-console 已可用，`apps/android-terminal/` 仍无 amusement/safety 实际端侧集成、device_status 无端侧写入口（属客人端/Android 终端端侧实现遗留，待端侧排期）。
+> - **仍开放——一体机端侧实际集成**：整条检修/核销链当前在 admin Web 已可用，`apps/android-terminal/` 仍无 amusement/safety 实际端侧集成、device_status 无端侧写入口（属客人端/Android 终端端侧实现遗留，待端侧排期）。
 > - **验收口径（已正式）**：检修主管确认通过后项目 `open_status` 自动恢复为 `open`；无有效/未绑定本项目权益核销失败并返回明确原因；任一受控容量维度余量为 0 即拒绝（`session_full`）。
 
 本文档覆盖【游乐设施运营系统：项目、场次、核销、巡检】的开发级设计。目标是让后端、前端、安卓端、数据分析和第三方设备对接可以直接按本文档拆任务和编码。

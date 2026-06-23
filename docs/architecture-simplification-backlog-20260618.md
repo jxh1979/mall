@@ -66,7 +66,7 @@
 
 **谨慎区**：
 - **③ `GenericAdminPage` 套用 `AdminDataState`**：会丢 `admin-generic-error/empty/contract-gap` testid（`GenericAdminPage.tsx:104,106,110`），**几乎确定破坏验收**，不建议简单替换。此处不一致是**有意**的。
-- **⑥ `LegacyConsoleApp.tsx`(313)/`shell.tsx`(448) god-file 拆分**：结构性重构，legacy 表单联动复杂，需独立 PR + 全量 e2e。
+- **⑥ ~~`LegacyConsoleApp.tsx`/`shell.tsx` god-file 拆分~~（已完成 2026-06-23）**：legacy 控制台整体退役删除（路由、壳、页面、动作、自带单测一并移除），鉴权错误 UI 验收由 admin 壳 ADM-MVP-09/10 承接，无需再拆分。
 
 ## 3. 建议推进顺序（交付后）
 

@@ -164,4 +164,26 @@ test.describe("full admin MVP acceptance", () => {
     await expect(page.getByTestId("finance-ledger-table")).toHaveCount(0);
     await expectNoMaterialHorizontalOverflow(page);
   });
+
+  // 承接退役 legacy 控制台的两条鉴权错误呈现验收（P0-UI-09/04/08）：
+  // legacy 壳删除后，这两类后端错误的 UI 呈现改在 admin 壳验证。
+  test("ADM-MVP-09 failed login surfaces backend 401 and stays on auth screen", async ({ page }) => {
+    await installMockApi(page, { authFailure: true });
+    await page.goto("/admin/overview");
+    await page.getByTestId("login-username").fill("admin");
+    await page.getByTestId("login-password").fill("wrong-pass");
+    await page.getByTestId("login-submit").click();
+
+    await expect(page.getByTestId("login-view")).toBeVisible();
+    await expect(page.getByTestId("global-error")).toContainText("401");
+    await expect(page.getByTestId("admin-shell")).toHaveCount(0);
+  });
+
+  test("ADM-MVP-10 forbidden backend access surfaces 403 without hiding the audit trail", async ({ page }) => {
+    await installMockApi(page, { forbiddenPath: "/api/v1/analytics/dashboards/p0-overview" });
+    await adminLogin(page, "/admin/overview");
+
+    await expect(page.getByTestId("global-error")).toContainText("403");
+    await expect(page.getByTestId("global-error")).toContainText("FORBIDDEN");
+  });
 });

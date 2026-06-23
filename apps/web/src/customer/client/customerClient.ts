@@ -1,4 +1,4 @@
-// 客人端 API client：复用 admin/legacy-console 的请求封装口径
+// 客人端 API client：复用 admin 的请求封装口径
 // - Bearer 客人 Token（同时写 X-Customer-Token，对齐后端双读口径）
 // - 请求体 camelCase -> snake_case；响应 snake_case -> camelCase
 // - 统一信封 { code, message, data } 解包，data.items 列表拆箱

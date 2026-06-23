@@ -26,7 +26,6 @@ const requiredTempFiles = [
   "docs/full-admin-mvp-requirements-code-matrix-v0.1.csv",
   "docs/full-admin-remaining-requirements-code-matrix-v0.1.csv",
   "apps/web/src/main.tsx",
-  "apps/web/src/legacy-console/LegacyConsoleApp.tsx",
   "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java",
   "backend/src/main/java/com/complex/platform/bar/BarService.java",
   "backend/src/main/java/com/complex/platform/bar/BarOrderService.java",

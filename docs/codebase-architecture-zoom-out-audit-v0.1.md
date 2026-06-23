@@ -12,9 +12,7 @@
 
 | 区域 | 当前边界 | 状态 | 后续建议 |
 |---|---|---|---|
-| Web 入口 | `apps/web/src/main.tsx` 仅负责 legacy/admin 路由分流 | 良好 | 保持入口薄层，不再塞业务逻辑 |
-| Legacy 控制台 | `LegacyConsoleApp.tsx` 负责登录、加载、导航和动作装配 | 良好 | 后续如继续扩展，按动作模块或页面模块拆分 |
-| Legacy 业务动作 | ticketing/bar/amusement/foundation/floorPlan/riskAndIntegration actions | 良好 | 如动作模块超过 180 行，再按子域拆分 |
+| Web 入口 | `apps/web/src/main.tsx` 仅负责 admin/customer 路由分流（legacy 控制台 2026-06-23 退役删除） | 良好 | 保持入口薄层，不再塞业务逻辑 |
 | 完整后台 | `AdminApp` + `adminRoutes` + `adminPageConfigs` + `GenericAdminPage` + `DynamicPricingPage` + `TicketOrdersPage` + `BarOrdersPage` + `StoredWinePage` + `BarCommissionsPage` + `InventoryLedgerPage` + `ReconciliationPage` + `MerchantWorkOrdersPage` + `MerchantScopePage` + `AmusementSafetyPage` + `SupervisorReviewPage` + `SubjectBindingsPage` + `ContractApprovalPage` + `RiskAlertsPage` + `IntegrationEventsPage` + `AuditEventsPage` + `BusinessAnalyticsPage` + `AdmissionAuditsPage` + `GovernanceTopologyPage` + `OrganizationMerchantPage` + `AmusementSessionsPage` + `AmusementGroupBookingsPage` | 可接受 | 关键高频页面逐步从 Generic 页面升级为专用页面 |
 | 票务后端 | `TicketingService` facade + pricing/order/verification/refund/catalog 子服务 | 良好 | 保持 facade 只做事务入口和幂等装配 |
 | 酒吧后端 | `BarService` facade + billing/order/session/entry/age 子服务 + `BarValidation`/`BarBillRecords` 公共辅助 | 良好 | 公共校验、账单记录重建、审计快照和 ID slug 已集中；主要酒吧子服务均低于 400 行 |

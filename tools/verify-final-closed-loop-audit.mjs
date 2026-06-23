@@ -145,7 +145,6 @@ for (const [matrixPath, total, done, gap] of [
 
 const expectedLineCounts = {
   "apps/web/src/main.tsx": countLines("apps/web/src/main.tsx"),
-  "apps/web/src/legacy-console/LegacyConsoleApp.tsx": countLines("apps/web/src/legacy-console/LegacyConsoleApp.tsx"),
   "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": countLines("backend/src/main/java/com/complex/platform/ticketing/TicketingService.java"),
   "backend/src/main/java/com/complex/platform/bar/BarService.java": countLines("backend/src/main/java/com/complex/platform/bar/BarService.java"),
   "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": countLines("backend/src/main/java/com/complex/platform/bar/BarOrderService.java"),

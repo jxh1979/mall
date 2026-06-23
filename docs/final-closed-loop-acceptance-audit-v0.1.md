@@ -101,7 +101,7 @@
 | Semgrep | 通过：results=0，errors=0，paths_scanned=1543，scan_ref=security-scans/semgrep-20260617-064855-manual-request。 |
 | Git 交接洁净度 | 通过：本轮新增 Semgrep 证据和最终审计文档已纳入交接；`git diff --cached --check` 已复跑通过，当前无未跟踪文件残留 |
 | 完整后台视觉回归 | 通过：`npx playwright test tests/e2e/full-admin-visual.spec.ts --reporter=line`，2 条通过；覆盖总控驾驶舱桌面、生产 blocker 与证据桌面、酒吧订单/出品/账单移动端、动态定价移动端，4 张截图基线稳定且无材料级横向溢出 |
-| 真实后端 UI 验收 | 通过：`npm run verify:ui:real-backend:seeded`，2 条通过；REAL-UI-01 覆盖健康检查、真实登录、控制台和退出，REAL-UI-02 覆盖票务、酒吧、游乐、第三方接口页面真实快照读取；自动打包 Java 后端、启动 18080 临时 Spring Boot、使用 5174 独立 Vite 前端端口，2026-06-17 07:03 UTC 复跑通过 |
+| 真实后端 UI 验收 | `npm run verify:ui:real-backend:seeded`，2 条；REAL-UI-01 覆盖健康检查、真实登录、admin 壳总控台与退出，REAL-UI-02 覆盖 admin 票务/酒吧/财务/第三方接口页面真实后端数据加载；legacy 控制台退役后 REAL-UI-01/02 已改在 admin 壳，自动打包 Java 后端、启动 18080 临时 Spring Boot、使用 5174 独立 Vite 前端端口，待真实后端环境复跑 |
 | 闭环运行态总验收 | 通过：`npm run verify:closed-loop-runtime` 覆盖后端 579 个测试、Web typecheck/build、28 条 Playwright UI 和 2 条真实后端 UI 验收；当前运行态证据额外记录 16 条前端单元测试定义 |
 | 闭环当前态快照 | 通过：`docs/closed-loop-current-state-snapshot-v0.1.md` / `docs/closed-loop-current-state-snapshot-latest.json` 与 `npm run verify:closed-loop-current-state`；快照结论为可联调、可业务验收、不可宣称生产上线就绪 |
 | 生产证据缺口审计 | 通过：新增 `production-evidence-closure-gap-report-v0.1.md`、`production-existing-evidence-to-manifest-gap-audit-v0.1.md`、`nas-current-state-drift-report-v0.1.md` 和 `external-evidence-requirement-traceability-v0.1.md`，并接入 `verify:production-closure-gap-reports` 与 `verify:external-evidence-requirement-traceability`；明确 15 份 manifest / 13 份 P0 仍待真实外部证据，8 条 partial 需求均已追踪到责任组和目标 manifest，未伪关闭任何 blocker |

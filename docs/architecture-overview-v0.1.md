@@ -135,7 +135,6 @@ graph TB
   MAIN["main.tsx<br/>(路径前缀分流,默认 admin)"]
   MAIN --> ADM["AdminApp<br/>管理后台(33页,路由级 lazy 分包)"]
   MAIN --> CUST["CustomerApp<br/>客人端(购票/订台/积分/验票)"]
-  MAIN --> LEG["LegacyConsoleApp<br/>(已退役,跳转 admin)"]
   ADM --> APIc["后端 REST"]
   CUST --> APIc
   ANDR["Android 终端<br/>(工作手机/平板/kiosk)"] --> APIc

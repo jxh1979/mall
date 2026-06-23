@@ -15,10 +15,16 @@
   "matrices": {
     "requirements": {
       "path": "docs/requirements-code-implementation-matrix-v0.1.csv",
-      "total": 96,
+      "total": 97,
       "complete": 88,
-      "gap": 8,
+      "gap": 9,
       "external_gaps": [
+        {
+          "requirement_id": "# 总体标注(2026-06-22)",
+          "module": "全部模块",
+          "status": "以文档/迁移/代码为准(总体标注)",
+          "gap": "见各行md文档/迁移"
+        },
         {
           "requirement_id": "REQ-17",
           "module": "酒吧",
@@ -83,21 +89,20 @@
     }
   },
   "architecture_line_counts": {
-    "apps/web/src/main.tsx": 60,
-    "apps/web/src/legacy-console/LegacyConsoleApp.tsx": 313,
-    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 379,
-    "backend/src/main/java/com/complex/platform/bar/BarService.java": 579,
-    "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 976,
-    "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 521,
-    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 439
+    "apps/web/src/main.tsx": 49,
+    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 487,
+    "backend/src/main/java/com/complex/platform/bar/BarService.java": 627,
+    "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 1008,
+    "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 570,
+    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 453
   },
   "gates": {
     "semgrep": {
-      "scan_dir": "security-scans/semgrep-20260617-064855-manual-request",
-      "results": 0,
-      "errors": 0,
-      "paths_scanned": 1543,
-      "clean": true
+      "scan_dir": "security-scans/semgrep-20260623-180915-manual-request",
+      "results": 2,
+      "errors": 1,
+      "paths_scanned": 1896,
+      "clean": false
     },
     "production_evidence": {
       "expected_submissions": 15,
@@ -142,7 +147,7 @@
       "root_cause": "expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence"
     },
     "external_evidence": {
-      "partial_requirements": 8,
+      "partial_requirements": 9,
       "complete": false
     },
     "partial_mock_coverage": {
@@ -332,6 +337,12 @@
     ],
     "external_partial_requirements": [
       {
+        "requirement_id": "# 总体标注(2026-06-22)",
+        "module": "全部模块",
+        "status": "以文档/迁移/代码为准(总体标注)",
+        "gap": "见各行md文档/迁移"
+      },
+      {
         "requirement_id": "REQ-17",
         "module": "酒吧",
         "status": "部分实现",
@@ -392,14 +403,14 @@
     ]
   },
   "go_no_go": {
-    "can_enter_integration": true,
-    "can_enter_business_acceptance": true,
+    "can_enter_integration": false,
+    "can_enter_business_acceptance": false,
     "can_claim_production_ready": false,
     "production_ready_blockers": [
       "15 production evidence submissions awaiting, including 13 P0",
       "NAS current state is passed; SEC-P0-OPS-RECOVERY-001 cannot close",
       "12 production blocker register items remain open (6 readiness, 4 credential, 2 security findings)",
-      "8 external evidence or supplier-backed requirements remain partial"
+      "9 external evidence or supplier-backed requirements remain partial"
     ]
   }
 }

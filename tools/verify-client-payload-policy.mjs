@@ -73,7 +73,7 @@ function checkSchemaProperties(openapi, schema, label, visited = new Set()) {
 }
 
 const webEntryFile = 'apps/web/src/main.tsx';
-const webApiClientFile = 'apps/web/src/legacy-console/apiClient.ts';
+const webApiClientFile = 'apps/web/src/customer/client/customerClient.ts';
 const adminApiClientFile = 'apps/web/src/admin/client/adminClient.ts';
 const androidClientFile = 'apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt';
 const openapiFile = 'docs/openapi/openapi-p0.json';
@@ -81,10 +81,8 @@ const openapiFile = 'docs/openapi/openapi-p0.json';
 const webEntrySource = read(webEntryFile);
 const webApiClientSource = read(webApiClientFile);
 const adminApiClientSource = read(adminApiClientFile);
-expectContains(webApiClientFile, webApiClientSource, 'function normalizeOutgoingBody', 'outgoing snake_case request normalizer');
-expectContains(webApiClientFile, webApiClientSource, 'function normalizeIncomingBody', 'incoming camelCase response normalizer');
-expectContains(webApiClientFile, webApiClientSource, 'function normalizePostBody', 'POST body normalizer with idempotency key');
-expectContains(webApiClientFile, webApiClientSource, 'body: JSON.stringify(normalizePostBody(path, body))', 'normalized POST body');
+expectContains(webApiClientFile, webApiClientSource, 'function normalizeRequestBody', 'customer outgoing snake_case request normalizer');
+expectContains(webApiClientFile, webApiClientSource, 'init.body = JSON.stringify(normalizeRequestBody(body, idempotencyKey))', 'customer normalized request body');
 expectNotContains(webEntryFile, webEntrySource, 'body: JSON.stringify(body)', 'direct POST JSON body without OpenAPI field normalization');
 expectNotContains(webApiClientFile, webApiClientSource, 'body: JSON.stringify(body)', 'direct POST JSON body without OpenAPI field normalization');
 expectContains(adminApiClientFile, adminApiClientSource, 'function normalizeRequestBody', 'admin outgoing snake_case request normalizer');

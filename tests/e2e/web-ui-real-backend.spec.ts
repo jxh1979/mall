@@ -18,15 +18,16 @@ async function expectRealBackendReady(request: APIRequestContext) {
   expect(apiLogin.ok(), await apiLogin.text()).toBeTruthy();
 }
 
-async function loginAgainstRealBackend(page: Page, path = "/legacy") {
+// legacy 控制台退役后，真实后端 UI 验收改在 admin 完整后台壳上进行。
+async function loginAgainstRealBackend(page: Page, path = "/admin/overview") {
   await page.goto(path);
   await expect(page.getByTestId("login-view")).toBeVisible();
   await page.getByTestId("login-username").fill(username);
   await page.getByTestId("login-password").fill(password);
   await page.getByTestId("login-submit").click();
 
-  await expect(page.getByTestId("app-shell")).toBeVisible();
-  await expect(page.locator(".user-chip")).toHaveText(username);
+  await expect(page.getByTestId("admin-shell")).toBeVisible();
+  await expect(page.locator(".admin-user-chip")).toHaveText(username);
   await expect(page.locator(".loading-state")).toHaveCount(0);
   await expect(page.getByTestId("global-error")).toHaveCount(0);
 }
@@ -36,54 +37,33 @@ test.describe("real backend UI acceptance", () => {
     test.skip(process.env.REAL_BACKEND_E2E !== "1", "set REAL_BACKEND_E2E=1 to run real backend UI acceptance");
   });
 
-  test("REAL-UI-01 health, login, dashboard and logout use the real backend", async ({ page, request }) => {
+  test("REAL-UI-01 health, login, admin overview and logout use the real backend", async ({ page, request }) => {
     await expectRealBackendReady(request);
     await loginAgainstRealBackend(page);
 
-    await expect(page.getByText("运营总览").first()).toBeVisible();
-    await expect(page.getByText("API 正常").first()).toBeVisible();
+    await expect(page.getByTestId("admin-page-title")).toContainText("总控驾驶舱");
 
-    await page.getByTestId("logout-button").click();
+    await page.getByTestId("admin-logout").click();
     await expect(page.getByTestId("login-view")).toBeVisible();
   });
 
-  test("REAL-UI-02 core business pages load real backend snapshots without proxy fallback", async ({ page, request }) => {
+  test("REAL-UI-02 admin core business pages load real backend data without global errors", async ({ page, request }) => {
     await expectRealBackendReady(request);
 
-    for (const pageCase of [
-      {
-        path: "/legacy?page=ticketing",
-        title: "票务核销",
-        expectedTexts: ["创建票种并出票", "P2 Dynamic Pricing Rules", "票种", "核销记录"],
-      },
-      {
-        path: "/legacy?page=bar",
-        title: "酒吧经营",
-        expectedTexts: ["一键完成酒吧闭环", "桌台", "订单", "P1 存酒"],
-      },
-      {
-        path: "/legacy?page=amusement",
-        title: "游乐运营",
-        expectedTexts: ["创建项目和场次", "P2 团体/包场", "游乐项目", "P1 设备状态"],
-      },
-      {
-        path: "/legacy?page=interfaces",
-        title: "第三方接口",
-        expectedTexts: ["第三方预留接口与开放应用", "接口目录", "供应商适配器", "P1 重试任务"],
-      },
+    for (const path of [
+      "/admin/ticketing/policies",
+      "/admin/bar/table-sessions",
+      "/admin/finance/ar-ap-ledger",
+      "/admin/integrations/adapters",
     ]) {
-      await loginAgainstRealBackend(page, pageCase.path);
-      await expect(page.getByText(pageCase.title).first()).toBeVisible();
-      for (const text of pageCase.expectedTexts) {
-        await expect(page.getByText(text).first()).toBeVisible();
-      }
-      await expect(page.getByText("同源 API")).toBeVisible();
+      await loginAgainstRealBackend(page, path);
+      await expect(page.getByTestId("admin-page-title")).toBeVisible();
+      await expect(page.getByTestId("global-error")).toHaveCount(0);
     }
   });
 
   // P1-12（A8-03 红线补强）：UI 验收矩阵 §5 红线要求"权限拦截必须有服务端拒绝证据，不能只靠前端隐藏"。
-  // 此前真实后端 E2E 仅覆盖健康/登录/页面加载，缺红线断言。本用例以 API 级（不依赖 UI 选择器/账号 seed，最稳）
-  // 校验：无认证直接访问受保护业务端点，真实后端必须拒绝（非 2xx，期望 401/403），而非返回数据。
+  // 此用例以 API 级（不依赖 UI 选择器/账号 seed，最稳）校验：无认证直接访问受保护业务端点，真实后端必须拒绝（非 2xx，期望 401/403），而非返回数据。
   test("REAL-UI-03 protected business endpoints reject unauthenticated access (server-side denial, not just frontend hiding)", async ({ request }) => {
     await expectRealBackendReady(request);
     for (const path of [

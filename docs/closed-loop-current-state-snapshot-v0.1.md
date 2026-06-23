@@ -20,15 +20,15 @@
 
 | 判断项 | 当前值 |
 |---|---|
-| 可以进入联调 | 是 |
-| 可以进入业务验收 | 是 |
+| 可以进入联调 | 否 |
+| 可以进入业务验收 | 否 |
 | 可以宣称生产上线就绪 | 否 |
 
 ## 2. 需求矩阵当前态
 
 | 矩阵 | 总数 | 完整/已实现 | 缺口 |
 |---|---:|---:|---:|
-| `docs/requirements-code-implementation-matrix-v0.1.csv` | 96 | 88 | 8 |
+| `docs/requirements-code-implementation-matrix-v0.1.csv` | 97 | 88 | 9 |
 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` | 9 | 9 | 0 |
 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` | 22 | 22 | 0 |
 
@@ -36,19 +36,18 @@
 
 | 文件 | 当前行数 |
 |---|---:|
-| `apps/web/src/main.tsx` | 60 |
-| `apps/web/src/legacy-console/LegacyConsoleApp.tsx` | 313 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 379 |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 579 |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 976 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 521 |
-| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 439 |
+| `apps/web/src/main.tsx` | 49 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 487 |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 627 |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1008 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 570 |
+| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 453 |
 
 ## 4. 安全与生产证据闸口
 
 | 闸口 | 当前态 |
 |---|---|
-| Semgrep | results=0，errors=0，paths_scanned=1543，scan_dir=`security-scans/semgrep-20260617-064855-manual-request` |
+| Semgrep | results=2，errors=1，paths_scanned=1896，scan_dir=`security-scans/semgrep-20260623-180915-manual-request` |
 | 运行时验收证据 | backend=579 tests / failures=0 / errors=0，web_unit=16，ui=28，real_backend_ui=2，ready=true |
 | 生产证据提交 | expected=15，awaiting=15，valid=0，invalid=0 |
 | Production blocker register | readiness=6, credential=4, findings=2, blocking_total=12, complete=false |
@@ -56,7 +55,7 @@
 | NAS 当前状态 | live_status=passed，can_close_sec_p0_ops_recovery=false |
 | NAS 只读诊断 | ping=reachable，tcp445=reachable，cifs_mount=active，preflight=passed |
 | NAS 诊断根因 | expected CIFS mount is active and preflight passed; production manifest still needs owner/reviewer evidence |
-| 外部证据 | partial=8，complete=false |
+| 外部证据 | partial=9，complete=false |
 | Owner action manifest links | blockers=12, actions=15, related_submissions=15, items_without_manifest=0, complete=true |
 
 ## 5. 不可宣称生产上线就绪的原因
@@ -64,7 +63,7 @@
 - 15 production evidence submissions awaiting, including 13 P0
 - NAS current state is passed; SEC-P0-OPS-RECOVERY-001 cannot close
 - 12 production blocker register items remain open (6 readiness, 4 credential, 2 security findings)
-- 8 external evidence or supplier-backed requirements remain partial
+- 9 external evidence or supplier-backed requirements remain partial
 
 
 ## 6. 下一步可执行阻断明细
@@ -126,6 +125,7 @@
 
 | 需求编号 | 模块 | 状态 | 缺口 |
 |---|---|---|---|
+| # 总体标注(2026-06-22) | 全部模块 | 以文档/迁移/代码为准(总体标注) | 见各行md文档/迁移 |
 | REQ-17 | 酒吧 | 部分实现 | 真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。 |
 | REQ-21 | 酒吧 | 部分实现 | 真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。 |
 | REQ-23b | 酒吧 | 部分实现 | 真实外部资料/生产证据可能未全部到位；当前以 mock、adapter、Runbook、blocker register 或沙箱验收，不得伪装生产闭环。 |

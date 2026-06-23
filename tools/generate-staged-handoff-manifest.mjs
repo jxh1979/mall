@@ -22,7 +22,6 @@ const criticalFiles = [
   "apps/web/src/admin/security/PermissionGate.test.ts",
   "tests/e2e/full-admin-mvp.spec.ts",
   "tests/e2e/full-admin-remaining.spec.ts",
-  "tests/e2e/web-ui-acceptance.spec.ts",
   "tests/e2e/web-ui-real-backend.spec.ts",
   "playwright.real-backend.config.ts",
   "tools/run-real-backend-ui-e2e.mjs",

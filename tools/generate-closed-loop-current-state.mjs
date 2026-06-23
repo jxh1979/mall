@@ -205,7 +205,6 @@ function currentState() {
     matrices,
     architecture_line_counts: {
       "apps/web/src/main.tsx": lineCount("apps/web/src/main.tsx"),
-      "apps/web/src/legacy-console/LegacyConsoleApp.tsx": lineCount("apps/web/src/legacy-console/LegacyConsoleApp.tsx"),
       "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": lineCount("backend/src/main/java/com/complex/platform/ticketing/TicketingService.java"),
       "backend/src/main/java/com/complex/platform/bar/BarService.java": lineCount("backend/src/main/java/com/complex/platform/bar/BarService.java"),
       "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": lineCount("backend/src/main/java/com/complex/platform/bar/BarOrderService.java"),
