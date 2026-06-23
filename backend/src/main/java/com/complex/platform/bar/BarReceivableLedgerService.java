@@ -50,4 +50,16 @@ interface BarReceivableLedgerService {
             String reason,
             List<String> evidenceAttachmentIds
     );
+
+    /**
+     * F-TXN-03 piece③b 通票免费酒水平台↔酒吧结算：核销发放免费酒水后，平台按该酒水内部结算价向酒吧(merchant)挂应付
+     * （direction='payable'、source_type='pass_drink_settlement'、source_id/幂等键=verificationId）。返回 ar_ap 项 id。
+     */
+    String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent);
+
+    /**
+     * 赠饮核销冲正 → 冲销该结算应付：过一条 direction='receivable'、source_type='pass_drink_settlement'、
+     * 同 source_id=verificationId（direction 不同 → 与原应付净额归零）。返回 ar_ap 项 id。
+     */
+    String reverseGiftSettlementPayable(String verificationId, String merchantId, long internalPriceCent);
 }

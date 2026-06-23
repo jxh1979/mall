@@ -295,7 +295,28 @@ public class TicketVerificationService {
                 original.merchantId(),
                 original.verifiedPeople()
         ));
+        // F-TXN-03 按核销张数：冲正回滚积分份额——以冲正后该订单最新 Σused/Σtotal 发积分确认事件，
+        // customer 域据此把已确认份额对齐更低的 target（冲正一张即按份回滚 1/Σtotal），取代原"冲正全额 deduct"。
+        String reversedOrderId = reversedEntitlement == null ? null : reversedEntitlement.orderId();
+        if (reversedOrderId != null && !reversedOrderId.isBlank()) {
+            long[] units = sumOrderUnits(reversedOrderId);
+            eventPublisher.publishEvent(new PointsConfirmRequestedEvent(reversedOrderId, units[0], units[1]));
+        }
         return new VerificationResponse(reversal.id(), reversal.verificationNo(), reversal.status(), reversal.resultReason());
+    }
+
+    /**
+     * F-TXN-03 按核销张数：聚合该订单全部已发权益的 Σused_times / Σtotal_times（张=use），
+     * 作为积分确认事件的 verifiedUnits / totalUnits（核销/冲正后读到的最新值；customer 域据此对齐确认份额）。
+     */
+    private long[] sumOrderUnits(String orderId) {
+        long used = 0L;
+        long total = 0L;
+        for (IssuedEntitlementRecord e : repository.listIssuedEntitlementsByOrderId(orderId)) {
+            used += e.usedTimes();
+            total += e.totalTimes();
+        }
+        return new long[]{used, total};
     }
 
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
@@ -425,10 +446,11 @@ public class TicketVerificationService {
                 null,
                 null
         ));
-        // P0 清单#2：核销/履约成功 → 发积分确认事件，customer 域把该订单 pending earn 转 confirmed（幂等 noop 安全）。
-        // 同一订单多权益多次核销：confirmPoints 仅首次确认，其余为幂等 noop。
+        // P0 清单#2 / F-TXN-03 按核销张数：核销成功 → 发积分确认事件，带该订单最新 Σused/Σtotal；
+        // customer 域据此把已确认份额对齐 floor(总额 × Σused / Σtotal)（多次/多人票部分核销按张数比例确认）。
         if (updated.orderId() != null && !updated.orderId().isBlank()) {
-            eventPublisher.publishEvent(new PointsConfirmRequestedEvent(updated.orderId()));
+            long[] units = sumOrderUnits(updated.orderId());
+            eventPublisher.publishEvent(new PointsConfirmRequestedEvent(updated.orderId(), units[0], units[1]));
         }
         if (credential != null) {
             repository.saveTicketCredential(new TicketCredentialRecord(

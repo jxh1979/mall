@@ -71,7 +71,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `due_date` | date | 是 | 到期日 |
 | `aging_days` | int | 是 | 按未收/未付余额计算 |
 | `status` | enum | 是 | 见 §5 |
-| `source_type` | enum | 是 | `contract_fee`、`order`、`verification`、`refund`、`purchase`、`inventory_difference`、`employee_commission`、`manual_adjustment`、`third_party_reconciliation` |
+| `source_type` | enum | 是 | `contract_fee`、`order`、`verification`、`refund`、`purchase`、`inventory_difference`、`employee_commission`、`manual_adjustment`、`third_party_reconciliation`、`pass_drink_settlement`（通票免费酒水平台↔酒吧结算，F-TXN-03 piece③b；权威集合见 `FinanceService.SOURCE_TYPES`） |
 | `source_id` | uuid/varchar | 否 | 来源对象 |
 | `contract_id` | uuid | 否 | 关联合同 |
 | `space_id` | uuid | 否 | 关联铺位/点位/区域 |
@@ -311,6 +311,8 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 
 #### 14.1.3 `cam_allocations` CAM 公摊分摊
 
+> 修订说明（2026-06-22，F-OPS-08）：CAM 权重分摊已**整体废止**，改为物业费每平米固定计费（见 §14.4）。本表 `cam_allocations` 与 `cam_trueup_*`（V110/V121）仅作**历史只读**保留，应用层不再新写。现行物业费用新表 `property_fee_rates`/`property_fee_bills`（V150）。
+
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `id` | uuid | 是 | 主键 |
@@ -344,10 +346,14 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 - `offset`（抵扣租金欠费）：审批通过后，`deposit_ledger` 余额↓，同时联动被抵扣租金 `ar_ap_items` 的 `amount_paid`↑/`amount_unpaid`↓（经 `linked_ar_ap_item_id` 关联），二者金额一致可对账。
 - `forfeit`（没收）：审批通过后余额↓，没收额按 R6-D08 科目方向转平台收入/应收冲销，生成对应 `ar_ap_items` 或调整分录并留痕。
 
-### 14.4 CAM 分摊 → 应收，年度 true-up 差额冲销
+### 14.4 物业费固定计费 → 应收（V150 替代 CAM 分摊 / 年度 true-up，F-OPS-08）
 
-- 周期预收（P1）：按 `cam_allocations` 各商户 `allocated_amount_cent` 生成 `ar_ap_items`，`source_type=cam`，`source_id` 指向 `cam_allocations.id`；各商户分摊额之和=费用池总额（尾差挂最大分摊方）。
-- 年度 true-up（P2）：年末按实际发生公共费用与已预收差额计 `trueup_diff_cent`，少补生成应收（正差额）、多退生成应付/退款（负差额），通过 `ar_ap_adjustments` 冲销并留痕。
+> 修订说明（2026-06-22，F-OPS-08）：用户 2026-06 裁决——CAM「按权重分摊 + 年度 true-up 多退少补」**整体废止**，改为物业费「每平米固定单价 × 商户面积」按期计费、**不退不补**。下为现行口径；旧 CAM 口径（§14.1.3 表）仅作历史保留，`cam_allocations`/`cam_trueup_*` 只读不再新写，应用层 `allocateCam`/`runCamTrueUp` 改抛 `CAM_ALLOCATION_ABOLISHED`/`CAM_TRUEUP_ABOLISHED`。
+
+- **费率（`property_fee_rates`，项目级可按期）**：`rate_per_square_meter_cent`（分/㎡/期）；`effective_period` 精确期命中优先，NULL=该项目默认费率（未命中回退）。维护端点 `POST /finance/property-fee/rates`、列出 `GET /finance/property-fee/rates?project_id=`。
+- **计费（`property_fee_bills` + 应收）**：端点 `POST /finance/property-fee/bills`，对运营提供的 `merchant_ids` 逐户 `amount_cent = round(单价 × merchants.area_square_meter)` 生成 `ar_ap_items`，`source_type=property_fee`、`direction=receivable`、`counterparty_id=merchant_id`；`UNIQUE(project_id,period,merchant_id)` 幂等，**一经计费即固定、不退不补**（费率事后调整不影响已计费行）。面积缺失/非正的商户跳过。
+- **取数**：`merchants` 无 `project_id`，商户名单由运营显式提供（类比旧 CAM shares）；费率按请求 `project_id` 解析。无生效费率整批拒绝 `PROPERTY_FEE_RATE_NOT_FOUND`。
+- **不退不补的含义**：取消「实际 vs 预收」差额对账（true-up），三层口径矛盾随之消解；后续费率变化只影响**未来期**计费，不回溯已计费期。
 
 ### 14.5 存酒"已售未取"→ 预收负债登记口径收口（承接 §6D.7 / F5）
 
@@ -363,7 +369,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 
 - `finance.turnover_rent.posted`：营业额抽成应收生成后发出（仅开关 on）。
 - `finance.deposit.action_posted`：保证金收/退/抵扣/没收动作完成后发出（含 action_type）。
-- `finance.cam.allocation_posted` / `finance.cam.trueup_posted`（P2）：CAM 周期分摊 / 年度 true-up 完成后发出。
+- ~~`finance.cam.allocation_posted` / `finance.cam.trueup_posted`~~（**已废止**，V150 起不再发出）；改发 `finance_property_fee.billed`：物业费按期计费完成后发出。
 - `finance.saved_bottle_liability.posted` / `.released`：存酒负债登记 / 取酒核销冲减后发出。
 
 **状态流转**
@@ -371,7 +377,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 ```
 营业额回流(开关on) → 抽成试算(草稿) → 财务确认(应收, source_type=turnover_rent) → 周期锁定
 保证金: charge → (offset 联动租金应收 / forfeit 转收入, 均审批) → refund(余额→0)
-CAM: 费用池归集 → 分摊预收应收(source_type=cam) → (P2)年度true-up多退少补
+物业费(V150): 项目费率(property_fee_rates) → 按期计费 round(单价×面积) → 应收(source_type=property_fee, 不退不补)  [旧 CAM 分摊/true-up 已废止]
 存酒负债: 售出→预收负债登记 → 取酒/核销→负债冲减(R6-D08 方向)
 ```
 
@@ -380,7 +386,7 @@ CAM: 费用池归集 → 分摊预收应收(source_type=cam) → (P2)年度true-
 - 高价值报损审批后入应付可查（承接 §6D.7）：`source_type=inventory_difference` 应付/调整分录可在台账查到，金额=差异金额。
 - 营业额抽成可对账：开关 on 时按规则生成 `source_type=turnover_rent` 应收，可关联合同/商户/周期，与回流营业额×扣率封顶保底口径一致；开关 off 不入账。
 - 保证金四动作余额自洽：余额=Σcharge−Σrefund−Σoffset−Σforfeit，offset 与被抵扣租金应收金额一致可对账。
-- CAM 分摊额之和=费用池总额（仅取整尾差），`source_type=cam` 可对账；P2 true-up 差额可生成多退少补。
+- 物业费可对账（V150）：`source_type=property_fee` 应收金额 = round(项目费率 × 商户面积)，按 (项目,期,商户) 幂等不重复挂账；~~原 CAM 分摊额之和=费用池总额 / P2 true-up 多退少补~~ 已废止。
 - 存酒已售未取负债登记后可查，取酒/核销后冲减至 0，entry 方向符合 R6-D08。
 
 ### 14.7 待业务确认项（已写明 R6 建议默认值）
@@ -391,8 +397,8 @@ CAM: 费用池归集 → 分摊预收应收(source_type=cam) → (P2)年度true-
 | 抽成模式 `calc_mode` | 默认 `base_plus_turnover`（固定+抽成累加） |
 | 营业额口径 | 默认不含税净营业额、扣退款，对齐 `revenue.net` |
 | 保证金抵扣 / 没收触发 | 默认人工发起 + 财务/上级审批，不自动扣减 |
-| CAM 分摊权重 | 默认按租赁建筑面积占比，合同另约定比例时以合同为准 |
-| CAM true-up 周期 | 默认按年度（自然年）true-up，标 P2 |
+| ~~CAM 分摊权重~~ | **已废止（V150，F-OPS-08）**：CAM 权重分摊取消，改物业费每平米固定单价×面积、不退不补 |
+| ~~CAM true-up 周期~~ | **已废止（V150，F-OPS-08）**：年度 true-up 多退少补取消（物业费不退不补、无对账差额） |
 | 库存差异 / 存酒负债 entry 科目方向 | 引用 `business-decision-log` R6-D08（科目方向）；库存差异默认损益调整 vs 应付按 R6-D08 定，存酒按预收负债方向登记 |
 
 ---

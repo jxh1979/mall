@@ -167,33 +167,69 @@ public class LoyaltyService {
     }
 
     /**
-     * 履约（核销/完成）：把该业务单据的 pending earn 转 confirmed，并把积分计入可用余额 + 保级进度。
-     * 幂等：无 pending（未入账或已 confirmed）则 noop 返回 0；只确认一次。
+     * 履约（核销/完成）：把该订单 earn 的「已确认份额」对齐 target = floor(总额 × 已核销张数 / 订单总张数)，
+     * 按差额双向增减可用余额 + 保级进度（核销→升、冲正→降，统一对齐 target，自然幂等）。
+     * 多次/多人票部分核销按张数比例确认；单次票(1/1)即整单全额，与原口径一致。
      *
-     * @return 本次实际确认入账的积分（noop 时 0）。
+     * @param verifiedUnits 该订单已核销张数（Σ used_times）
+     * @param totalUnits    该订单总张数（Σ total_times）；&lt;=0 时退化为全额（兼容无张数信息）
+     * @return 本次确认份额变动（正=新增确认，负=冲正回滚，0=无变化幂等 noop）。
+     */
+    @Transactional
+    public long confirmPoints(String sourceDocType, String sourceDocId, long verifiedUnits, long totalUnits) {
+        requireSourceDoc(sourceDocType, sourceDocId);
+        CustomerPointsLedgerRecord earn = repository
+                .findPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
+                .orElse(null);
+        if (earn == null) {
+            return 0; // 无会员订单从未入账：幂等 noop。
+        }
+        long pendingTotal = Math.max(0, earn.pointsDelta());
+        if (pendingTotal == 0) {
+            return 0;
+        }
+        // 目标已确认份额 = floor(总额 × 已核销张数 / 订单总张数)，clamp [0, 总额]。
+        long target;
+        if (totalUnits <= 0) {
+            target = pendingTotal; // 退化：无张数信息按全额（单次票 / 兼容旧事件）。
+        } else {
+            long v = Math.max(0, Math.min(verifiedUnits, totalUnits));
+            target = Math.floorDiv(pendingTotal * v, totalUnits);
+        }
+        long delta = target - earn.confirmedAmount();
+        if (delta == 0) {
+            return 0; // 已对齐 target：幂等 noop（重复核销事件 / 无变化）。
+        }
+        Instant now = now();
+        CustomerPointsAccountRecord account = loadOrCreateForUpdate(earn.customerId(), now);
+        long balanceAfter = Math.max(0, account.balance() + delta);
+        long appliedDelta = balanceAfter - account.balance(); // 余额下限 0：实际变动（已花光时不为负）。
+        long keepProgress = Math.max(0, account.keepThresholdProgress() + appliedDelta);
+        repository.savePoints(withBalance(account, balanceAfter, keepProgress, now));
+        // 回写已确认份额=target；status：target>0→confirmed（计入余额）、target==0→pending（全部回滚未确认）；
+        // 有有效期批次令 remaining_points 同步为 target（过期口径与实际入余额一致）。
+        String status = target > 0
+                ? CustomerPointsLedgerRecord.STATUS_CONFIRMED
+                : CustomerPointsLedgerRecord.STATUS_PENDING;
+        Long remaining = earn.expireAt() == null ? null : target;
+        repository.updatePointsLedgerConfirmation(earn.id(), target, status, remaining);
+        auditEventService.recordSuccess("points.earned", "not_applicable", "customer_points",
+                earn.customerId(), null, sourceDocId,
+                Map.of("source_doc_type", sourceDocType, "source_doc_id", sourceDocId,
+                        "confirmed_amount", target, "verified_units", Math.max(0, verifiedUnits),
+                        "total_units", Math.max(0, totalUnits), "delta", delta, "status", status),
+                "loyalty", "customer_points");
+        return delta;
+    }
+
+    /**
+     * 兼容入口（无张数信息）：按全额确认（单次票 / 直接发放履约）。委托四参 set-to-target（target=全额）。
+     *
+     * @return 本次确认份额变动（首次=全额，已确认=0 幂等 noop）。
      */
     @Transactional
     public long confirmPoints(String sourceDocType, String sourceDocId) {
-        requireSourceDoc(sourceDocType, sourceDocId);
-        CustomerPointsLedgerRecord pending = repository
-                .findPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
-                .orElse(null);
-        if (pending == null || !CustomerPointsLedgerRecord.STATUS_PENDING.equals(pending.status())) {
-            return 0; // 未入账 / 已确认 / 已冲减：幂等 noop。
-        }
-        Instant now = now();
-        CustomerPointsAccountRecord account = loadOrCreateForUpdate(pending.customerId(), now);
-        long awarded = Math.max(0, pending.pointsDelta());
-        long balanceAfter = account.balance() + awarded;
-        long keepProgress = account.keepThresholdProgress() + awarded;
-        repository.savePoints(withBalance(account, balanceAfter, keepProgress, now));
-        repository.updatePointsLedgerStatus(pending.id(), CustomerPointsLedgerRecord.STATUS_CONFIRMED);
-        auditEventService.recordSuccess("points.earned", "not_applicable", "customer_points",
-                pending.customerId(), null, sourceDocId,
-                Map.of("source_doc_type", sourceDocType, "source_doc_id", sourceDocId,
-                        "points", awarded, "status", CustomerPointsLedgerRecord.STATUS_CONFIRMED),
-                "loyalty", "customer_points");
-        return awarded;
+        return confirmPoints(sourceDocType, sourceDocId, 1, 1);
     }
 
     /**
@@ -222,12 +258,12 @@ public class LoyaltyService {
         if (existing != null) {
             return Math.abs(existing.pointsDelta());
         }
-        // 仅取原单 confirmed 的 earn 入账（pending 未履约不冲减）。
+        // 仅取原单已确认份额（confirmed_amount）冲减；未履约/已冲正回零的份额不冲减。
+        // F-TXN-03：按核销张数确认后，已入余额的是 confirmed_amount（≤points_delta），故退款按已确认份额比例冲减。
         long confirmedAwarded = repository
                 .listPointsLedgerBySourceDoc(sourceDocType, sourceDocId, CustomerPointsLedgerRecord.CHANGE_EARN)
                 .stream()
-                .filter(l -> CustomerPointsLedgerRecord.STATUS_CONFIRMED.equals(l.status()))
-                .mapToLong(l -> Math.max(0, l.pointsDelta()))
+                .mapToLong(l -> Math.max(0, l.confirmedAmount()))
                 .sum();
         if (confirmedAwarded <= 0) {
             return 0; // 未履约/未入账：无可冲减。

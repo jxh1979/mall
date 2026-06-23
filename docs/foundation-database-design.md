@@ -1937,6 +1937,8 @@ V105 给 V008 建表的 `finance_reconciliation_differences` 增列并纯化 CHE
 
 ### 11.12 综合体计费引擎（V110 → `turnover_rent_rules` + `deposit_ledger` + `cam_allocations` 新表）
 
+> 注（2026-06-22，F-OPS-08）：本节 `cam_allocations`（CAM 权重分摊）**已废止**，改物业费每平米固定计费（见 §11.30，V150）；`cam_allocations` 表保留只读历史、应用层 `allocateCam` 改抛 `CAM_ALLOCATION_ABOLISHED`。`turnover_rent_rules`/`deposit_ledger` 不受影响。
+
 **新表 `turnover_rent_rules`（营业额抽成规则）**：`id` PK、`merchant_id` NOT NULL、`rule_name` NOT NULL、`rate_bps` INTEGER NOT NULL（基点，10000=100%）、`min_amount_cent`/`max_amount_cent` BIGINT（保底/封顶 clamp，可空）、`effective_from` DATE NOT NULL、`effective_to`、`status` DEFAULT `active`、时间戳。CHECK：`rate_bps` 0..10000、min/max ≥0 且 max≥min、status IN (active/inactive)。
 
 **新表 `deposit_ledger`（保证金台账四动作）**：`id` PK、`merchant_id` NOT NULL、`action` VARCHAR(32) NOT NULL、`amount_cent` BIGINT NOT NULL（恒正）、`balance_after_cent` BIGINT NOT NULL（≥0）、`ar_ap_item_id` FK → `ar_ap_items(id)`、`reason`、`created_at`。CHECK：`action` IN (collect/refund/deduct/forfeit)；`amount_cent>0`；`balance_after_cent>=0`。
@@ -1981,6 +1983,8 @@ V117 让 void 流水承载审批生命周期：增 `reviewed_by_user_id` VARCHAR
 V120 给 `merchant_service_work_orders`（V022）增 `sla_breached` BOOLEAN NOT NULL DEFAULT FALSE、`escalated_at` TIMESTAMPTZ（向后兼容默认未违约/未升级）；partial 索引 `idx_merchant_service_work_orders_sla_due`（扫描 due_at 已过、未关闭、未升级行）。`merchant_service_work_order_actions` 的 `chk_..._action_type` 增 `escalated` 动作类型（升级不改 status，仅打标+留痕）。真实事件名：`merchant_service.work_order.escalated`。
 
 ### 11.21 CAM 年度 true-up+退款方向（V121 → `cam_trueup_runs` + `cam_trueup_lines` 新表 + `cam_allocations`/`finance_refunds` 改列）
+
+> 注（2026-06-22，F-OPS-08）：本节 CAM 年度 true-up（`cam_trueup_runs`/`cam_trueup_lines`，多退少补）**已废止**，物业费改不退不补、无对账差额（见 §11.30，V150）；相关表保留只读历史、应用层 `runCamTrueUp` 改抛 `CAM_TRUEUP_ABOLISHED`。`finance_refunds.refund_direction` 列不受影响。
 
 **`cam_allocations` 改列**：增 `settlement_period` VARCHAR(32)（结算归属期，回填=period）、`trued_up` BOOLEAN NOT NULL DEFAULT FALSE（防重复 true-up）。
 
@@ -2111,6 +2115,45 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 - 残留说明：经 UPDATE 翻转锁状态（locked→其它）属应用层职责——finance 域无 reopen 路径（grep 确认），补录一律走 `ar_ap_adjustments` 审批链；DB 层防删确保锁记录不可被悄悄抹除，是纵深防御关键一环。
 - 无新表/新列（仅加触发器 + 角色 REVOKE）；`AppendOnlyEnforcementJdbcIntegrationTests` 的 delete_only 计数 5→6（含本表）。
 
+### 11.30 物业费固定计费替代 CAM（V150 → 新表 `property_fee_rates` / `property_fee_bills`，废止 CAM 权重分摊 + 年度 true-up，F-OPS-08）
+
+> 本小节标注 `文档goalP1(2026-06-22)`，落地 F-OPS-08（用户 2026-06 裁决）：公共区域维护费（CAM）由「按权重分摊 + 年度 true-up 多退少补」改为**物业费「每平米固定单价 × 商户面积」按期计费、不退不补**。三层口径矛盾（预收/实际/分摊）随 true-up 废止而消解。
+
+- **新表 `property_fee_rates`（项目级、可按期费率）**：`id`、`project_id`、`effective_period`（如 `2026-06`，**NULL=该项目默认费率**，精确期未命中时回退）、`rate_per_square_meter_cent BIGINT`（每平米单价，分/㎡/期，CHECK ≥0）、`status`（active/inactive）、created/updated。唯一索引 `(project_id, COALESCE(effective_period,'__default__'))` 保证每 (项目,期/默认) 仅一条费率。
+- **新表 `property_fee_bills`（逐户计费留痕，不退不补，幂等）**：`id`、`project_id`、`period`、`merchant_id`、`area_square_meter NUMERIC(18,2)`（计费时商户面积快照）、`rate_per_square_meter_cent`、`amount_cent`（=round(单价×面积)）、`ar_ap_item_id`（联动应收）、created。`UNIQUE(project_id,period,merchant_id)` 幂等：某 (项目,期,商户) 一经计费即固定，费率事后调整不影响已计费行。纳入 **append-only `delete_only`**（贴 `trg_append_only_d`，复用 V140 `complex_block_mutation()`；`complex_app` REVOKE DELETE）。
+- **应收联动**：逐户生成 `ar_ap_items`，`source_type='property_fee'`（服务层 SOURCE_TYPES 已扩；`ar_ap_items.source_type` DB 层无 CHECK），`direction=receivable`，`counterparty_id=merchant_id`；按 (项目,期,商户) 稳定派生 ar_ap id（确定性、跨请求幂等，重复计费不重复挂账）。
+- **取数（只读跨域）**：商户面积来自 `merchants.area_square_meter`（NUMERIC(18,2)，V005/V042）；**`merchants` 无 `project_id`**，故计费由运营提供 `merchant_ids` 列表（类比旧 CAM 提供 shares），费率按请求 `project_id` 解析。面积缺失/非正的商户跳过、不计费。
+- **seed 权限**：`finance.property_fee.manage`（high，requires_approval）入 `permissions`+`role_permissions(role_platform_admin)`。
+- **旧 CAM 处置**：`cam_allocations`（V110）/`cam_trueup_runs`/`cam_trueup_lines`（V121）表与历史数据**保留只读**，本迁移不删除；应用层 `FinanceService.allocateCam`/`runCamTrueUp` 改抛 `CAM_ALLOCATION_ABOLISHED`/`CAM_TRUEUP_ABOLISHED`（端点保留仅对旧客户端返回明确弃用码）。
+- **端点**：`POST /finance/property-fee/rates`（维护费率）、`GET /finance/property-fee/rates?project_id=`（列出）、`POST /finance/property-fee/bills`（按期计费）；`POST /finance/cam/allocations`、`POST /finance/cam/trueups` 标记 deprecated。
+
+### 11.31 积分按核销张数精确计分（V151 → `customer_points_ledger` 增 `confirmed_amount`，F-TXN-03）
+
+> 本小节标注 `文档goalP1(2026-06-22)`，收尾 F-TXN-03（积分按核销张数）：原入账引擎 `confirmPoints` 把订单 pending earn「首次核销即整单 100% confirmed」；多次/多人票部分核销应只按 Σused/Σtotal 比例确认、冲正一张只回滚 1/Σtotal。
+
+- **新列 `confirmed_amount BIGINT NOT NULL DEFAULT 0`**：记录该 earn 行「已确认份额」（⊆ `points_delta`）；仅对 `change_type='earn'` 行有意义。历史回填：旧 `status='confirmed'` 的正向 earn 行 `confirmed_amount = points_delta`（保持既有余额口径）。
+- **set-confirmed-to-target**：`LoyaltyService.confirmPoints(docType, docId, verifiedUnits, totalUnits)` 计 `target = floor(points_delta × verifiedUnits / totalUnits)`，按 `delta = target − confirmed_amount` 双向增减可用余额 + 保级进度，回写 `confirmed_amount=target`（核销→升、冲正→降，对齐 target 天然幂等）。`status`：target>0→confirmed、target==0→pending；有有效期批次令 `remaining_points` 同步为 target（过期口径与实际入余额一致）。
+- **冲正改走确认事件**：`TicketVerificationService` 核销**与冲正**两路均按订单最新 Σused/Σtotal 发 `PointsConfirmRequestedEvent(orderId, verifiedUnits, totalUnits)`；删除原 `LoyaltyPointsConsumer.onVerificationReversed` 的「冲正全额 deduct」（`VerificationReversedEvent` 仍供 finance 留痕）。
+- **退款按份额**：`deductPoints` 改按 `Σ confirmed_amount` 比例冲减（而非「`status=confirmed` 全额」）；与现行「核销后不可退」一致——退款只发生在全未核销（confirmed_amount=0）→ 自然 noop。
+- **单次票不变**：1/1 → target=全额，与原「首次核销整单确认」等价。无新表；`customer_points_ledger` 既有 delete_only（允许 UPDATE）口径下本列 UPDATE 合法。
+
+### 11.32 酒吧商品管理权限（V154 → `permissions` 新增 `bar.product.view`/`bar.product.manage`，收紧 /bar/products，F-TXN-05 配套）
+
+> 本小节标注 `文档goalP1(2026-06-23)`，配套 F-TXN-05：酒吧商品目录含 V152 `bar_products.internal_settlement_price_cent`（平台↔酒吧成本结算价基，敏感数据）。此前 `GET/POST /api/v1/bar/products` 均搭便车 `bar.order.create`，凡能下单的角色（收银/吧台）都能看改内部结算价，违反敏感成本数据应独立授权的治理原则（业主 2026-06-23 拍板专用权限）。
+
+- **新增权限（seed，platform/access 域）**：`bar.product.view`（domain=bar，risk_level=medium，requires_approval=FALSE，查看商品目录含内部结算价）、`bar.product.manage`（risk_level=high，requires_approval=FALSE，录入/修改商品含内部价）。`ON CONFLICT(permission_code) DO UPDATE` 幂等；并 `INSERT INTO role_permissions SELECT 'role_platform_admin'...ON CONFLICT DO NOTHING` 授予平台管理员（沿用 V091/V144 seed 范式）。
+- **接口收紧**：`BarController.listProducts` 改 `requirePermission("bar.product.view")`、`createProduct` 改 `requirePermission("bar.product.manage")`；OpenAPI `/api/v1/bar/products` 的 `x-permission` 同步（GET=bar.product.view、POST=bar.product.manage），`BarControllerTests.barRoutesUseExactOpenApiPermission` CsvSource 同步。
+- **前端**：后台「商品管理」页 ADM-BAR-005（`/admin/bar/products`，page-permission 矩阵 + UI-ADM-BAR-005），列商品 + 录入售价/内部结算价；列表读 `bar.product.view`、录入按钮门控 `bar.product.manage`。
+- **关联 bar 列迁移**：V152（`bar_products.internal_settlement_price_cent`）/V153（`bar_order_items.is_gift`）属 bar 域表列，其物理设计回写在 bar-operations §6.6/§6.8/§6.9A.2（沿用「bar 表权威定义归 bar 文档、foundation 仅留指针」惯例，故不在本 §11 重复建列）；本节仅登记 V154 平台权限 seed。
+
+### 11.33 订卡邀请函（V155 → `bar_reservations` 增邀请函列 + 新子表 `bar_reservation_invitation_members` + 权限 seed）
+
+> 本小节标注 `文档goalP1(2026-06-23)`，落地订卡邀请函（业主 2026-06-22 口述 + 2026-06-23 拍板两步确认 + 连客人端全链）：扩展卡座预订（不另起独立实体），权威建模在 bar-operations §6.3a（沿用「bar 表归 bar 文档」惯例）；本节仅登记迁移与平台权限 seed。
+
+- **`bar_reservations` 新列**：`invitation_token VARCHAR(64)`（不可猜随机串，部分唯一索引 WHERE NOT NULL）、`invitation_signature VARCHAR(256)`（HMAC-SHA256 防伪）、`invitation_capacity INTEGER`（卡座 capacity 快照，CHECK NULL OR ≥0）、`invitation_status VARCHAR(16) NOT NULL DEFAULT 'none'`（CHECK none/active/revoked）、`invitation_issued_at TIMESTAMPTZ`。
+- **新子表 `bar_reservation_invitation_members`**：`id` PK、`reservation_id`（FK→bar_reservations）、`bar_id`、`member_identifier`、`member_customer_id`、`is_holder`、`status`（CHECK confirmed/entered/revoked）、`confirmed_at`/`entered_at`/`device_id`/created/updated；`UNIQUE(reservation_id, member_identifier)` 幂等占位；索引 `(reservation_id)`。bar 域表（非 append-only，与既有 bar 表口径一致）。
+- **权限 seed**：`bar.reservation.invitation.manage`（domain=bar，high，签发/吊销）授予 role_platform_admin（沿用 V091/V144/V154 seed 范式）。朋友确认走客人端自助（X-Customer-Token，能力 `not_applicable`，不经 requirePermission），入场核验复用既有 `bar.table.guest_checkin`，故无新增 customer 权限码。
+
 ## 10. 下一步
 
 > 修订说明（2026-06-07）：依据基准 D10（A1 用户 2026-06-07 拍板迁移 Java），技术栈已确定，不再是「待选择」。原「下一步进入技术栈选择」按 D10 修正为「按既定技术栈搭建骨架」。
@@ -2168,3 +2211,7 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 | 2026-06-10 P0 执行矩阵补齐 | 增/改 | 1 / 3.13.1-3.13.5 / 7.2 / 建表顺序 | 补 CNY 币种口径、权限模板四表、最终权限计算纳入基础/临时模板和显式拒绝 | 用户确认权限模板机制和币类默认按建议执行 |
 | 2026-06-20 `文档goalP1` | 增 | 导言 / §11 V099–V124 新增表与列设计 | 覆盖范围导言由 V001–V065 改为 V001–V124；新增 §11 逐表回填 V099–V124 的新表/新列（含迁移号、关键列+类型、CHECK、外键、隔离键、用途、真实事件名）：V099 准入策略 seed、V100 customer_points_ledger 入账列、V101 audit_events 分类/主体列、V102 saved_bottle_transfers+saved_bottles 改列、V103 risk_alerts/risk_alert_actions、V104 amusement_over_capacity_policy+incident_type、V105 对账差异 expected/actual/source、V106 wecom_risk_hits、V107 设备生命周期+MDM 处置列、V108 stocktake/inventory_variance、V109 渠道语义列、V110 turnover_rent_rules/deposit_ledger/cam_allocations、V111 终端开关 CHECK、V112 supplier_qualifications/settlement_methods、V113 票种刷新窗口、V114 巡检结构化+入口点位、V115 集团总览权限、V116/V123 检修单位外键、V117 void 审批回写、V120 工单 SLA 列、V121 cam_trueup_runs/lines+退款方向、V124 bar void 反向冲销 | 逐脚本 Grep V099–V124 迁移核对回填，不臆造 |
 | 2026-06-22 `文档goalP1` | 增/改 | 导言 / §11 标题与导语 / §11.23–§11.25 / 变更日志 | 覆盖范围导言由 V001–V124 改为 V001–V145；§11 标题/导语扩为 V099–V145。新增三小节回填 V143–V145：**§11.23（V143）游乐设备安全检查周期子系统**——新表 `amusement_devices`（设备主数据，UNIQUE(project_id,device_code)、每设备 safety_check_interval_hours 空则回退项目级、last_pass_inspection_at 冗余）、`amusement_inspection_tasks`（到期检查工单，防重唯一索引 (project_id,COALESCE(device_id,''),due_at)）；`amusement_projects` 增 safety_check_interval_hours NOT NULL DEFAULT 24（CHECK>0）；`amusement_safety_inspections` 增 device_id + 索引 (project_id,device_id,inspected_at DESC)。**§11.24（V144）**游乐设备权限 seed `amusement.device.view`(normal)/`amusement.device.manage`(high,requires_approval) 入 permissions+role_permissions(role_platform_admin)。**§11.25（V145）**`ar_ap_items` 纳入 append-only delete_only（贴 trg_append_only_d / 复用 V140 complex_block_mutation()，仅禁 DELETE 保留 UPDATE，金额修正走冲正分录，complex_app REVOKE DELETE）——补齐 V140 仅护 ar_ap_payments(immutable)/ar_ap_item_sources(delete_only) 而遗漏运行期权威主表的缺口 | F-OPS-04 + amusement §6.6.1（V143）；F-OPS-01（V145）；逐脚本核对 V143–V145 迁移回填，不臆造 |
+| 2026-06-22 `文档goalP1` | 增/改 | §11.30 / 变更日志 | 新增 §11.30（V150）物业费固定计费替代 CAM：新表 `property_fee_rates`（项目级可按期费率，唯一索引含 COALESCE 默认键）+ `property_fee_bills`（逐户计费留痕，UNIQUE(project,period,merchant) 幂等、append-only delete_only），应收 `source_type='property_fee'`；旧 CAM 分摊/true-up 表保留只读、应用层改抛 `CAM_ALLOCATION_ABOLISHED`/`CAM_TRUEUP_ABOLISHED` | F-OPS-08（用户 2026-06 裁决 CAM 改物业费每平米固定、不退不补）；逐脚本核对 V150 迁移回填 |
+| 2026-06-22 `文档goalP1` | 增/改 | §11.31 / 变更日志 | 新增 §11.31（V151）积分按核销张数精确计分：`customer_points_ledger` 增 `confirmed_amount`（历史 confirmed earn 行回填=points_delta），`confirmPoints` 改 set-confirmed-to-target（target=floor(总额×Σused/Σtotal)）、冲正改走带计数确认事件、退款按已确认份额冲减；单次票口径不变 | F-TXN-03（积分按核销张数；用户 2026-06 拍板）；逐脚本核对 V151 迁移回填 |
+| 2026-06-23 `文档goalP1` | 增/改 | §11.32 / 变更日志 | 新增 §11.32（V154）酒吧商品管理权限：`permissions` seed `bar.product.view`(medium)/`bar.product.manage`(high) 并授予 role_platform_admin，`GET/POST /bar/products` 由 `bar.order.create` 收紧为 view/manage（OpenAPI x-permission 与 BarControllerTests 同步），后台新增 ADM-BAR-005 商品管理页录入售价/内部结算价；注明 V152/V153 bar 列物理设计在 bar 文档 §6.6/§6.8 不在本 §11 | F-TXN-05 配套 + 敏感内部结算价独立授权（业主 2026-06-23 拍板）；逐脚本核对 V154 迁移回填 |
+| 2026-06-23 `文档goalP1` | 增/改 | §11.33 / 变更日志 | 新增 §11.33（V155）订卡邀请函：`bar_reservations` 增 invitation_token（唯一）/signature(HMAC)/capacity（卡座快照）/status/issued_at + 新子表 `bar_reservation_invitation_members`（持函人+确认朋友，UNIQUE(reservation,identifier)，confirmed→entered）+ seed `bar.reservation.invitation.manage`(high)；权威建模在 bar-operations §6.3a；两步=客人端确认占名额→门口扫码入场，总人数≤卡座 capacity，持函免通票 | 订卡邀请函（业主 2026-06-22 口述 + 2026-06-23 拍板两步+全链）；逐脚本核对 V155 迁移回填 |

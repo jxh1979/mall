@@ -176,12 +176,12 @@ class JdbcCustomerRepository implements CustomerRepository {
                 INSERT INTO customer_points_ledger (
                     id, customer_id, points_delta, balance_after, source_type,
                     source_id, description, expire_at, remaining_points, expired, created_at,
-                    change_type, status, source_doc_type, source_doc_id
+                    change_type, status, source_doc_type, source_doc_id, confirmed_amount
                 )
                 VALUES (
                     :id, :customer_id, :points_delta, :balance_after, :source_type,
                     :source_id, :description, :expire_at, :remaining_points, :expired, :created_at,
-                    :change_type, :status, :source_doc_type, :source_doc_id
+                    :change_type, :status, :source_doc_type, :source_doc_id, :confirmed_amount
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     points_delta = EXCLUDED.points_delta,
@@ -195,7 +195,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                     change_type = EXCLUDED.change_type,
                     status = EXCLUDED.status,
                     source_doc_type = EXCLUDED.source_doc_type,
-                    source_doc_id = EXCLUDED.source_doc_id
+                    source_doc_id = EXCLUDED.source_doc_id,
+                    confirmed_amount = EXCLUDED.confirmed_amount
                 """, pointsLedgerParameters(ledger));
         return ledger;
     }
@@ -205,7 +206,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
                        source_id, description, expire_at, remaining_points, expired, created_at,
-                       change_type, status, source_doc_type, source_doc_id
+                       change_type, status, source_doc_type, source_doc_id, confirmed_amount
                   FROM customer_points_ledger
                  WHERE customer_id = :customer_id
                  ORDER BY created_at DESC, id DESC
@@ -217,7 +218,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
                        source_id, description, expire_at, remaining_points, expired, created_at,
-                       change_type, status, source_doc_type, source_doc_id
+                       change_type, status, source_doc_type, source_doc_id, confirmed_amount
                   FROM customer_points_ledger
                  WHERE customer_id = :customer_id
                    AND points_delta > 0
@@ -235,7 +236,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
                        source_id, description, expire_at, remaining_points, expired, created_at,
-                       change_type, status, source_doc_type, source_doc_id
+                       change_type, status, source_doc_type, source_doc_id, confirmed_amount
                   FROM customer_points_ledger
                  WHERE customer_id = :customer_id
                    AND points_delta > 0
@@ -271,7 +272,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
                        source_id, description, expire_at, remaining_points, expired, created_at,
-                       change_type, status, source_doc_type, source_doc_id
+                       change_type, status, source_doc_type, source_doc_id, confirmed_amount
                   FROM customer_points_ledger
                  WHERE source_doc_type = :source_doc_type
                    AND source_doc_id = :source_doc_id
@@ -290,7 +291,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return jdbcTemplate.query("""
                 SELECT id, customer_id, points_delta, balance_after, source_type,
                        source_id, description, expire_at, remaining_points, expired, created_at,
-                       change_type, status, source_doc_type, source_doc_id
+                       change_type, status, source_doc_type, source_doc_id, confirmed_amount
                   FROM customer_points_ledger
                  WHERE source_doc_type = :source_doc_type
                    AND source_doc_id = :source_doc_id
@@ -309,6 +310,23 @@ class JdbcCustomerRepository implements CustomerRepository {
                    SET status = :status
                  WHERE id = :id
                 """, Map.of("id", ledgerId, "status", status));
+    }
+
+    @Override
+    public void updatePointsLedgerConfirmation(String ledgerId, long confirmedAmount, String status, Long remainingPoints) {
+        // F-TXN-03 按核销张数：把该 earn 行已确认份额对齐 target（confirmed_amount），同步 status 与可过期余额。
+        // remainingPoints 为 null 时不动该列（无有效期批次）；非 null 时令其 = 已确认份额（过期口径与实际入余额一致）。
+        jdbcTemplate.update("""
+                UPDATE customer_points_ledger
+                   SET confirmed_amount = :confirmed_amount,
+                       status = :status,
+                       remaining_points = COALESCE(:remaining_points, remaining_points)
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", ledgerId)
+                .addValue("confirmed_amount", confirmedAmount)
+                .addValue("status", status)
+                .addValue("remaining_points", remainingPoints));
     }
 
     @Override
@@ -635,7 +653,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("change_type", ledger.changeType())
                 .addValue("status", ledger.status())
                 .addValue("source_doc_type", ledger.sourceDocType())
-                .addValue("source_doc_id", ledger.sourceDocId());
+                .addValue("source_doc_id", ledger.sourceDocId())
+                .addValue("confirmed_amount", ledger.confirmedAmount());
     }
 
     private MapSqlParameterSource redemptionCatalogParameters(CustomerRedemptionCatalogItemRecord item) {
@@ -754,7 +773,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 resultSet.getString("change_type"),
                 resultSet.getString("status"),
                 resultSet.getString("source_doc_type"),
-                resultSet.getString("source_doc_id")
+                resultSet.getString("source_doc_id"),
+                resultSet.getLong("confirmed_amount")
         );
     }
 

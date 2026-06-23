@@ -1,10 +1,13 @@
 package com.complex.platform.customer;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.bar.BarReservationInvitationMemberRecord;
+import com.complex.platform.bar.BarReservationInvitationRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.customer.dto.CustomerBarInvitationConfirmRequest;
 import com.complex.platform.customer.dto.CustomerBarReservationRequest;
 import com.complex.platform.customer.dto.CustomerCheckInRequest;
 import com.complex.platform.customer.dto.CustomerConsentRequest;
@@ -172,6 +175,34 @@ public class CustomerController {
                 requireCustomerToken(customerToken, authorization),
                 key,
                 request
+        ));
+    }
+
+    @PostMapping("/bar-invitations/confirm")
+    public ApiResponse<BarReservationInvitationMemberRecord> confirmBarInvitation(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody CustomerBarInvitationConfirmRequest request
+    ) {
+        String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
+        requireIdempotencyKey(key);
+        return ApiResponse.ok(service.confirmBarInvitation(
+                requireCustomerToken(customerToken, authorization),
+                key,
+                request
+        ));
+    }
+
+    @GetMapping("/bar-invitations/{reservation_id}")
+    public ApiResponse<BarReservationInvitationRecord> getMyBarInvitation(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("reservation_id") String reservationId
+    ) {
+        return ApiResponse.ok(service.getMyBarInvitation(
+                requireCustomerToken(customerToken, authorization),
+                reservationId
         ));
     }
 

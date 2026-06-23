@@ -101,6 +101,22 @@ public interface TicketingRepository {
     // 库存超时释放（2a-5）：列出超时未支付订单（created+unpaid 且 created_at < cutoff），供定时任务回补库存。
     List<TicketOrderRecord> listExpiredUnpaidOrders(java.time.Instant cutoff);
 
+    /**
+     * F-TXN-03 门票生命周期：列出已过期（valid_to &lt; now）、仍 active、且全未核销（used_times=0）的权益——
+     * 到期自动退款 / 一张用后其余作废的候选集。default 空兼容既有测试双子。
+     */
+    default List<IssuedEntitlementRecord> listExpiredUnusedActiveEntitlements(java.time.Instant now) {
+        return List.of();
+    }
+
+    /**
+     * F-TXN-03 一张用后其余作废：把到期未用权益置 forfeited（仅 active 且 used_times=0 才置，幂等）。返回受影响行数。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default int forfeitEntitlement(String id, java.time.Instant now) {
+        return 0;
+    }
+
     List<IssuedEntitlementRecord> listIssuedEntitlements();
 
     List<IssuedEntitlementRecord> listIssuedEntitlementsByOrderId(String orderId);

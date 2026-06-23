@@ -57,6 +57,7 @@ bar_orders,direct,merchant_id,merchant_id column on bar_orders,ready for project
 bar_production_ticket_events,inherited,order_id,order_id -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,covered
 bar_production_tickets,direct,merchant_id,merchant_id column on bar_production_tickets,ready for project/merchant scoped query enforcement,covered
 bar_products,direct,merchant_id,merchant_id column on bar_products,ready for project/merchant scoped query enforcement,covered
+bar_reservation_invitation_members,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 bar_reservations,direct,merchant_id,merchant_id column on bar_reservations,ready for project/merchant scoped query enforcement,covered
 bar_shifts,direct,project_id,project_id column on bar_shifts,ready for project/merchant scoped query enforcement,covered
 bar_table_guest_checkins,inherited,reservation/table linkage,reservation_id/table_id -> bar_reservations/bar_tables -> venue/project scope,must join through scope path before multi-complex rollout,covered
@@ -169,6 +170,8 @@ production_readiness_check_blockers,inherited,owner/blocker code,owner/blocker c
 production_readiness_checks,inherited,owner/blocker code,owner/blocker code -> production evidence scope,must join through scope path before multi-complex rollout,covered
 production_readiness_items,inherited,owner/blocker code,owner/blocker code -> production evidence scope,must join through scope path before multi-complex rollout,covered
 projects,direct,merchant_id,merchant_id column on projects,ready for project/merchant scoped query enforcement,covered
+property_fee_bills,direct,project_id,project_id column on property_fee_bills,ready for project/merchant scoped query enforcement,covered
+property_fee_rates,direct,project_id,project_id column on property_fee_rates,ready for project/merchant scoped query enforcement,covered
 risk_alert_actions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 risk_alerts,direct,project_id,project_id column on risk_alerts,ready for project/merchant scoped query enforcement,covered
 role_permissions,inherited,role_id/permission_id,role_id/permission_id -> roles/permissions,must join through scope path before multi-complex rollout,covered

@@ -1,5 +1,6 @@
 package com.complex.platform.finance;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -97,6 +98,41 @@ public interface FinanceRepository {
     /** 写一条 CAM true-up 逐户差额行。default 原样返回兼容既有测试双子。 */
     default CamTrueUpLineRecord saveCamTrueUpLine(CamTrueUpLineRecord line) {
         return line;
+    }
+
+    // ── F-OPS-08 物业费固定计费（V150，替代已废止 CAM）────────────────────────────
+
+    /** upsert 物业费费率（ON CONFLICT(id) 更新单价/状态）。default 原样返回兼容既有测试双子。 */
+    default PropertyFeeRateRecord savePropertyFeeRate(PropertyFeeRateRecord rate) {
+        return rate;
+    }
+
+    /**
+     * 解析某项目某期的生效费率：精确 effective_period 命中优先，否则回退到该项目默认费率（effective_period IS NULL），
+     * 仅取 status='active'。无任何生效费率返回 empty。default 返回 empty 兼容既有测试双子。
+     */
+    default Optional<PropertyFeeRateRecord> findEffectivePropertyFeeRate(String projectId, String period) {
+        return Optional.empty();
+    }
+
+    /** 列出某项目的所有物业费费率（按 effective_period，NULL 默认在前）。default 返回空兼容既有测试双子。 */
+    default List<PropertyFeeRateRecord> listPropertyFeeRates(String projectId) {
+        return List.of();
+    }
+
+    /** 只读跨域取商户面积（merchants.area_square_meter，NUMERIC(18,2)）；无此商户/面积为空返回 null。default null 兼容测试双子。 */
+    default BigDecimal findMerchantAreaSquareMeter(String merchantId) {
+        return null;
+    }
+
+    /** 某 (项目,期,商户) 是否已计过物业费（不退不补、幂等跳过依据）。default false 兼容既有测试双子。 */
+    default boolean propertyFeeBillExists(String projectId, String period, String merchantId) {
+        return false;
+    }
+
+    /** 写一条物业费计费留痕（ON CONFLICT(project_id,period,merchant_id) DO NOTHING 幂等）。default 原样返回兼容测试双子。 */
+    default PropertyFeeBillRecord savePropertyFeeBill(PropertyFeeBillRecord bill) {
+        return bill;
     }
 
     ArApItemRecord saveArApItem(ArApItemRecord item);

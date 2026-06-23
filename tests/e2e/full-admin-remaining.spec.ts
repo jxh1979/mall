@@ -20,6 +20,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", route: "/admin/bar/orders" },
   { pageId: "ADM-BAR-003", label: "存酒", route: "/admin/bar/stored-wine" },
   { pageId: "ADM-BAR-004", label: "销售提成", route: "/admin/bar/commissions" },
+  { pageId: "ADM-BAR-005", label: "商品管理", route: "/admin/bar/products" },
   { pageId: "ADM-AMU-001", label: "项目与场次", route: "/admin/amusement/sessions" },
   { pageId: "ADM-AMU-002", label: "团体/包场", route: "/admin/amusement/group-bookings" },
   { pageId: "ADM-AMU-003", label: "安全巡检/事故", route: "/admin/amusement/safety-incidents" },
@@ -65,6 +66,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("stored-wine-page")).toBeVisible();
   } else if (spec.pageId === "ADM-BAR-004") {
     await expect(page.getByTestId("bar-commissions-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-BAR-005") {
+    await expect(page.getByTestId("bar-products-page")).toBeVisible();
   } else if (spec.pageId === "ADM-INV-001") {
     await expect(page.getByTestId("inventory-ledger-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {

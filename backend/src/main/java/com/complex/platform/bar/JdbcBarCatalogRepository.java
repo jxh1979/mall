@@ -141,14 +141,18 @@ final class JdbcBarCatalogRepository {
                     allowed_pass_free_guest_count, deposit_amount_cent, deposit_status,
                     order_source, sales_staff_id, status, created_terminal, device_id,
                     evidence_attachment_ids, created_at, updated_at, deposit_rule,
-                    deposit_intent_id, deposit_paid_at, deposit_settlement
+                    deposit_intent_id, deposit_paid_at, deposit_settlement,
+                    invitation_token, invitation_signature, invitation_capacity,
+                    invitation_status, invitation_issued_at
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :customer_id, :reserved_at, :guest_count,
                     :allowed_pass_free_guest_count, :deposit_amount_cent, :deposit_status,
                     :order_source, :sales_staff_id, :status, :created_terminal, :device_id,
                     CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :deposit_rule,
-                    :deposit_intent_id, :deposit_paid_at, :deposit_settlement
+                    :deposit_intent_id, :deposit_paid_at, :deposit_settlement,
+                    :invitation_token, :invitation_signature, :invitation_capacity,
+                    :invitation_status, :invitation_issued_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -170,9 +174,50 @@ final class JdbcBarCatalogRepository {
                     deposit_rule = EXCLUDED.deposit_rule,
                     deposit_intent_id = EXCLUDED.deposit_intent_id,
                     deposit_paid_at = EXCLUDED.deposit_paid_at,
-                    deposit_settlement = EXCLUDED.deposit_settlement
+                    deposit_settlement = EXCLUDED.deposit_settlement,
+                    invitation_token = EXCLUDED.invitation_token,
+                    invitation_signature = EXCLUDED.invitation_signature,
+                    invitation_capacity = EXCLUDED.invitation_capacity,
+                    invitation_status = EXCLUDED.invitation_status,
+                    invitation_issued_at = EXCLUDED.invitation_issued_at
                 """, parameterSource.reservationParameters(reservation));
         return reservation;
+    }
+
+    public Optional<BarReservationRecord> findReservationByInvitationToken(String token) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM bar_reservations
+                 WHERE invitation_token = :token
+                """, Map.of("token", token), rowMapper::mapReservation).stream().findFirst();
+    }
+
+    public BarReservationInvitationMemberRecord saveInvitationMember(BarReservationInvitationMemberRecord member) {
+        jdbcTemplate.update("""
+                INSERT INTO bar_reservation_invitation_members (
+                    id, reservation_id, bar_id, member_identifier, member_customer_id,
+                    is_holder, status, confirmed_at, entered_at, device_id, created_at, updated_at
+                )
+                VALUES (
+                    :id, :reservation_id, :bar_id, :member_identifier, :member_customer_id,
+                    :is_holder, :status, :confirmed_at, :entered_at, :device_id, :created_at, :updated_at
+                )
+                ON CONFLICT (reservation_id, member_identifier) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    entered_at = EXCLUDED.entered_at,
+                    device_id = EXCLUDED.device_id,
+                    updated_at = EXCLUDED.updated_at
+                """, parameterSource.invitationMemberParameters(member));
+        return member;
+    }
+
+    public List<BarReservationInvitationMemberRecord> listInvitationMembers(String reservationId) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM bar_reservation_invitation_members
+                 WHERE reservation_id = :reservation_id
+                 ORDER BY is_holder DESC, confirmed_at, id
+                """, Map.of("reservation_id", reservationId), rowMapper::mapInvitationMember);
     }
 
     public BarDepositRuleRecord saveDepositRule(BarDepositRuleRecord rule) {
@@ -302,14 +347,14 @@ final class JdbcBarCatalogRepository {
                     inventory_item_id, stock_location_id, stock_deduction_required,
                     status, created_at, updated_at,
                     standard_pour_volume, pour_volume_unit, loss_threshold,
-                    sold_out, sold_out_at, sold_out_reason
+                    sold_out, sold_out_at, sold_out_reason, internal_settlement_price_cent
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :product_name, :product_type, :price_cent, :currency,
                     :inventory_item_id, :stock_location_id, :stock_deduction_required,
                     :status, :created_at, :updated_at,
                     :standard_pour_volume, :pour_volume_unit, :loss_threshold,
-                    :sold_out, :sold_out_at, :sold_out_reason
+                    :sold_out, :sold_out_at, :sold_out_reason, :internal_settlement_price_cent
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -328,7 +373,8 @@ final class JdbcBarCatalogRepository {
                     loss_threshold = EXCLUDED.loss_threshold,
                     sold_out = EXCLUDED.sold_out,
                     sold_out_at = EXCLUDED.sold_out_at,
-                    sold_out_reason = EXCLUDED.sold_out_reason
+                    sold_out_reason = EXCLUDED.sold_out_reason,
+                    internal_settlement_price_cent = EXCLUDED.internal_settlement_price_cent
                 """, parameterSource.productParameters(product));
         return product;
     }
@@ -355,5 +401,18 @@ final class JdbcBarCatalogRepository {
                   FROM bar_products
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapProduct).stream().findFirst();
+    }
+
+    public Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
+        // F-TXN-03 piece③b：按 (bar_id, inventory_item_id) 取吧台商品，active 优先、最近创建，取一条。
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM bar_products
+                 WHERE bar_id = :bar_id
+                   AND inventory_item_id = :inventory_item_id
+                 ORDER BY (status = 'active') DESC, created_at DESC, id
+                 LIMIT 1
+                """, Map.of("bar_id", barId, "inventory_item_id", inventoryItemId),
+                rowMapper::mapProduct).stream().findFirst();
     }
 }

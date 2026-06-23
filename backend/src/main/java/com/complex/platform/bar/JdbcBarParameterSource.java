@@ -55,7 +55,28 @@ final class JdbcBarParameterSource {
                 .addValue("deposit_rule", reservation.depositRule())
                 .addValue("deposit_intent_id", reservation.depositIntentId())
                 .addValue("deposit_paid_at", timestampWithTimeZone(reservation.depositPaidAt()))
-                .addValue("deposit_settlement", reservation.depositSettlement());
+                .addValue("deposit_settlement", reservation.depositSettlement())
+                .addValue("invitation_token", reservation.invitationToken())
+                .addValue("invitation_signature", reservation.invitationSignature())
+                .addValue("invitation_capacity", reservation.invitationCapacity())
+                .addValue("invitation_status", reservation.invitationStatus())
+                .addValue("invitation_issued_at", timestampWithTimeZone(reservation.invitationIssuedAt()));
+    }
+
+    MapSqlParameterSource invitationMemberParameters(BarReservationInvitationMemberRecord member) {
+        return new MapSqlParameterSource()
+                .addValue("id", member.id())
+                .addValue("reservation_id", member.reservationId())
+                .addValue("bar_id", member.barId())
+                .addValue("member_identifier", member.memberIdentifier())
+                .addValue("member_customer_id", member.memberCustomerId())
+                .addValue("is_holder", member.isHolder())
+                .addValue("status", member.status())
+                .addValue("confirmed_at", timestampWithTimeZone(member.confirmedAt()))
+                .addValue("entered_at", timestampWithTimeZone(member.enteredAt()))
+                .addValue("device_id", member.deviceId())
+                .addValue("created_at", timestampWithTimeZone(member.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(member.updatedAt()));
     }
 
     MapSqlParameterSource depositRuleParameters(BarDepositRuleRecord rule) {
@@ -123,7 +144,8 @@ final class JdbcBarParameterSource {
                 .addValue("loss_threshold", product.lossThreshold())
                 .addValue("sold_out", product.soldOut())
                 .addValue("sold_out_at", timestampWithTimeZone(product.soldOutAt()))
-                .addValue("sold_out_reason", product.soldOutReason());
+                .addValue("sold_out_reason", product.soldOutReason())
+                .addValue("internal_settlement_price_cent", product.internalSettlementPriceCent());
     }
 
     MapSqlParameterSource orderParameters(BarOrderRecord order) {
@@ -204,7 +226,8 @@ final class JdbcBarParameterSource {
                 .addValue("void_reason", item.voidReason())
                 .addValue("voided_at", timestampWithTimeZone(item.voidedAt()))
                 .addValue("voided_by_user_id", item.voidedByUserId())
-                .addValue("return_to_stock", item.returnToStock());
+                .addValue("return_to_stock", item.returnToStock())
+                .addValue("is_gift", item.isGift());
     }
 
     MapSqlParameterSource orderItemVoidParameters(BarOrderItemVoidRecord voidRecord) {

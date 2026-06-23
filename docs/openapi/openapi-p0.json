@@ -2925,7 +2925,7 @@
         "operationId": "listBarProducts",
         "summary": "查询酒吧商品",
         "description": "用于查询酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
-        "x-permission": "bar.order.create",
+        "x-permission": "bar.product.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
@@ -2955,7 +2955,7 @@
         "operationId": "createBarProduct",
         "summary": "创建酒吧商品",
         "description": "用于创建酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
-        "x-permission": "bar.order.create",
+        "x-permission": "bar.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web"
@@ -3073,6 +3073,192 @@
           {
             "$ref": "#/components/parameters/Id",
             "description": "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/Verification"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/reservations/{id}/invitation": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "issueBarReservationInvitation",
+        "summary": "签发订卡邀请函",
+        "x-permission": "bar.reservation.invitation.manage",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.reservation_invitation_issued",
+        "x-audit-event-failure": "bar.reservation_invitation_issue_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "operator_note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "getBarReservationInvitation",
+        "summary": "查询订卡邀请函",
+        "x-permission": "bar.reservation.view",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.reservation_invitation_viewed",
+        "x-audit-event-failure": "bar.reservation_invitation_view_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/reservations/{id}/invitation/revoke": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "revokeBarReservationInvitation",
+        "summary": "吊销订卡邀请函",
+        "x-permission": "bar.reservation.invitation.manage",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.reservation_invitation_revoked",
+        "x-audit-event-failure": "bar.reservation_invitation_revoke_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "operator_note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/reservations/{id}/invitation/entry-verify": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "verifyBarReservationInvitationEntry",
+        "summary": "订卡邀请函入场核验",
+        "x-permission": "bar.table.guest_checkin",
+        "x-data-scope": "project-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.reservation_invitation_entered",
+        "x-audit-event-failure": "bar.reservation_invitation_entry_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
           }
         ],
         "requestBody": {
@@ -3296,6 +3482,109 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/bar-invitations/confirm": {
+      "post": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "operationId": "confirmCustomerBarInvitation",
+        "summary": "客人确认接受订卡邀请函",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer-project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.bar_invitation.confirmed",
+        "x-audit-event-failure": "customer.bar_invitation.confirm_failed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "invitation_token"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string"
+                  },
+                  "invitation_token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/bar-invitations/{reservation_id}": {
+      "get": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "operationId": "getCustomerBarInvitation",
+        "summary": "客人查看自己的订卡邀请函",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer-project-bar",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.bar_invitation.viewed",
+        "x-audit-event-failure": "customer.bar_invitation.view_failed",
+        "parameters": [
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -13818,7 +14107,7 @@
           "finance"
         ],
         "operationId": "allocateCam",
-        "summary": "CAM 公共区域维护费按权重分摊",
+        "summary": "（已废止）CAM 权重分摊 → 改用物业费固定计费；调用返回 409 CAM_ALLOCATION_ABOLISHED",
         "x-auth-context": "staff-token",
         "x-permission": "finance.cam.allocate",
         "x-data-scope": "platform",
@@ -13922,7 +14211,8 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/v1/finance/cam/trueups": {
@@ -13931,7 +14221,7 @@
           "finance"
         ],
         "operationId": "trueUpCam",
-        "summary": "CAM 年度 true-up 多退少补对账",
+        "summary": "（已废止）CAM 年度 true-up → 物业费不退不补、无对账；调用返回 409 CAM_TRUEUP_ABOLISHED",
         "x-auth-context": "staff-token",
         "x-permission": "finance.cam.trueup",
         "x-data-scope": "platform",
@@ -14035,7 +14325,8 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/v1/finance/deposits/actions": {
@@ -20276,6 +20567,124 @@
           }
         }
       }
+    },
+    "/api/v1/finance/property-fee/rates": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "createPropertyFeeRate",
+        "summary": "维护物业费费率（项目级、可按期）",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.property_fee.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance_property_fee.rate_set",
+        "x-audit-event-failure": "finance_property_fee.rate_set_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PropertyFeeRateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listPropertyFeeRates",
+        "summary": "列出某项目的物业费费率",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.property_fee.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "finance_property_fee.rate_viewed",
+        "x-audit-event-failure": "finance_property_fee.rate_view_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "项目 ID；按其列出物业费费率。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/property-fee/bills": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "billPropertyFee",
+        "summary": "物业费按期计费（每平米固定单价 × 面积，不退不补）",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.property_fee.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance_property_fee.billed",
+        "x-audit-event-failure": "finance_property_fee.bill_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PropertyFeeBillRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -22225,6 +22634,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ConfirmTicketOrderPaymentRequest"
+            }
+          }
+        }
+      },
+      "PropertyFeeRateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PropertyFeeRateRequest"
+            }
+          }
+        }
+      },
+      "PropertyFeeBillRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PropertyFeeBillRequest"
             }
           }
         }
@@ -30513,6 +30942,94 @@
             "type": "string",
             "description": "真实第三方回调渠道流水号（可空）；内部 staff/对账确认可留空，仅作留痕。",
             "maxLength": 128
+          }
+        }
+      },
+      "PropertyFeeRateRequest": {
+        "type": "object",
+        "description": "请求载荷 `PropertyFeeRateRequest`（F-OPS-08 物业费费率维护，upsert）；effective_period 为空=设为该项目默认费率（精确期未命中时回退）。rate_per_square_meter_cent 为每平米单价（分/㎡/期，>=0）。替代已废止的 CAM 权重分摊。",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "rate_per_square_meter_cent"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复计费/重复入账。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "项目 ID。",
+            "maxLength": 64
+          },
+          "effective_period": {
+            "type": "string",
+            "description": "计费期（如 2026-06）；为空=该项目默认费率。",
+            "maxLength": 32
+          },
+          "rate_per_square_meter_cent": {
+            "type": "integer",
+            "description": "每平米单价。（单位：分，禁止浮点）",
+            "minimum": 0,
+            "maximum": 999999999999
+          },
+          "status": {
+            "type": "string",
+            "description": "费率状态。",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          }
+        }
+      },
+      "PropertyFeeBillRequest": {
+        "type": "object",
+        "description": "请求载荷 `PropertyFeeBillRequest`（F-OPS-08 物业费按期计费）；对 project_id 下运营提供的 merchant_ids 按「每平米固定单价 × 商户面积」逐户生成应收，不退不补、按 (项目,期,商户) 幂等。merchants 无 project_id，故商户名单由运营显式提供。",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "period",
+          "merchant_ids"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复计费/重复入账。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作留痕备注；进入审计。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表；进入审计留痕。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "project_id": {
+            "type": "string",
+            "description": "项目 ID（费率按此 + period 解析）。",
+            "maxLength": 64
+          },
+          "period": {
+            "type": "string",
+            "description": "计费期（如 2026-06）。",
+            "maxLength": 32
+          },
+          "merchant_ids": {
+            "type": "array",
+            "description": "本期计费的商户 ID 列表（运营提供）。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
           }
         }
       }

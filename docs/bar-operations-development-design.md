@@ -7,7 +7,7 @@
 > **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > R5 横幅原标注的订台定金/赠饮扣库存缺口已在本会话 P0 实现并落库（V072/V073/V079），以下逐条上修；存酒转赠/争议入口与按杯损耗强制采集保持开放。
 > - **订台定金闭环已落地（V073）**：新建 `bar_deposit_rules`（固定额 `fixed` / 按最低消费比例 `min_consumption_ratio`，scope=bar/table_type/time_slot，取消免没收时限 `cancel_free_before_minutes` 后台可配）+ `bar_reservations` 定金结算字段，定金按规则计算入库、到店抵扣、取消按时限退/没收，不再硬编码 `deposit=0/not_required`。下方 R5-D11 小节的"现状空转"描述已被本次实现取代，仅"目标/验收"口径仍有效。
-> - **赠饮核销→扣库存已落地（V072）**：链路 ticketing 核销 `entitlement_type='gift_drink'` 成功 → 发 Spring 事件 `ticket.gift_verified` → `BarGiftConsumer` 监听 → 生成 0 元 `bar_order(order_type='gift')` + 出品 ticket → `deliver` 调 `atomicDecreaseStock(redeem_consume)` 扣库存 → 回填 `inventory_movement_id` 到出品事件与桥表 `bar_gift_redemptions`（`verification_id` 唯一键保证幂等，冲正联动 `status=reversed` + 回补库存）。赠饮→吧台 SKU 映射来源 `entitlement_templates.bar_item_ref`(V076)；0 元赠饮单不计商户收入但进账单/留痕。
+> - **赠饮核销→扣库存已落地（V072）**：链路 ticketing 核销 `entitlement_type='gift_drink'` 成功 → 发 Spring 事件 `ticket.gift_verified` → `BarGiftConsumer` 监听 → 生成 0 元 `bar_order(order_type='gift')` + 出品 ticket → `deliver` 调 `atomicDecreaseStock(redeem_consume)` 扣库存 → 回填 `inventory_movement_id` 到出品事件与桥表 `bar_gift_redemptions`（`verification_id` 唯一键保证幂等，冲正联动 `status=reversed` + 回补库存）。赠饮→吧台 SKU 映射来源 `entitlement_templates.bar_item_ref`(V076)；0 元赠饮单不计商户收入但进账单/留痕。**通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b，2026-06-22）**：核销发放免费酒水后，平台按该酒水**内部结算价**（`bar_products.internal_settlement_price_cent`，V152；经 itemRef[库存物料]→bar_product 桥接 `findProductByInventoryItem`）向酒吧(merchant)挂应付（`ar_ap_items` direction=`payable`、source_type=`pass_drink_settlement`、source_id/幂等=verificationId）；赠饮冲正 → 对冲 `receivable`（同 source_id、净额归零）。仅商户吧(merchantId 非空) + 内部价>0 时结算；平台自营吧 / 无内部价跳过（向后兼容）。`BarGiftConsumer` 经 `BarReceivableLedgerService.createPayableForGiftSettlement`/`reverseGiftSettlementPayable` 实现，与核销主链同事务。
 > - **酒吧账单免单/退款已落地（V079）**：`chk_bar_bill_adjustment_type` 扩 `{waiver, refund}`，`refunded_at` 仅 refund 落值用于经营日聚合冲减当日 net（与 finance/analytics 退款口径联动）。
 > - **仍开放（P2 未做）**：退菜/退酒、反结、沽清 86、小费；存酒转赠(transfer) 无方法、争议仅枚举无入口；按杯损耗仍依赖请求传 `actual_pour_volume`（不传则 loss=0），无强制采集；存酒侧高价值作废主管复核见供应链域 `inventory_high_value_reviews`。
 > - **验收口径（已正式）**：订台付定金可回查、到店抵扣、取消按规则退/没收；赠饮权益核销后吧台库存相应减少且可对账。
@@ -551,6 +551,35 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 - 退/没收结果写入事件（见 §9.1 `reservation.deposit_settled`），便于对账与争议举证。
 - 卡座销售归属在创建订台或到店开台前确定；如后续变更 `sales_staff_id`，必须填写原因并写 `order.sales_attributed`，保留变更前后岗位和提成率快照。
 
+### 6.3a 订卡邀请函（V155，扩展卡座预订，不另起独立实体）
+
+> 新增（2026-06-23，业主 2026-06-22 口述 + 2026-06-23 拍板「两步确认」+「连客人端全链」）：**订卡客人无需买通票、只进定卡酒吧**；持函人可把邀请函（二维码，注明酒吧/卡座/卡座可进人数）转发给朋友，朋友在客人端**确认接受**先占一个名额，到店再扫码核验入场；**「已确认 + 已入场」总人数 ≤ 卡座可进人数（capacity）**。本特性以预订列 + 子表承载，复用 `bar_tables.capacity`（V013）与既有入场核验机理，不另起独立实体。
+
+`bar_reservations` 增邀请函列（V155）：`invitation_token`（不可猜随机串，唯一索引，供 confirm/entry 反查）、`invitation_signature`（HMAC-SHA256 防伪，范式同门票 `TicketCredentialSigner`，绑定预订/酒吧/卡座/容量/token）、`invitation_capacity`（签发时 `bar_tables.capacity` 快照，作总人数上限）、`invitation_status`（`none`/`active`/`revoked`）、`invitation_issued_at`。
+
+新子表 `bar_reservation_invitation_members`（预订子记录）：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | varchar | 主键 |
+| `reservation_id` | varchar | 所属预订（FK→bar_reservations） |
+| `bar_id` | varchar | 酒吧 |
+| `member_identifier` | varchar | 成员标识：朋友的 `customer_id`（持函人散客无则 `holder:<reservation_id>`） |
+| `member_customer_id` | varchar | 关联客人 ID，可空 |
+| `is_holder` | boolean | 是否持函人（签发时自动占一名额） |
+| `status` | varchar | `confirmed`（已确认占位）/`entered`（已入场）/`revoked` |
+| `confirmed_at` / `entered_at` | timestamptz | 确认 / 入场时点 |
+| `device_id` | varchar | 入场核验设备，可空 |
+
+`UNIQUE(reservation_id, member_identifier)` 保证同一朋友确认幂等、不重复占名额。
+
+**两步流程**：
+1. **签发（staff，`bar.reservation.invitation.manage`）** `POST /bar/reservations/{id}/invitation`：capacity≤0 拒 `BAR_INVITATION_CAPACITY_REQUIRED`；生成 token+签名、`status=active`、持函人自动入一条 `is_holder=true` 成员（占一名额）；已 active 幂等返回（不重置 token，避免已转发二维码失效）。`GET .../invitation` 查视图（含容量/已确认/已入场计数与成员明细）；`POST .../invitation/revoke` 吊销。
+2. **朋友确认（客人端自助，两步之第一步）** `POST /customer/bar-invitations/confirm`（X-Customer-Token 鉴权，能力 `not_applicable`，不经 requirePermission，对齐 `createBarReservation`）：按 token 反查预订→`active` 校验→`confirmed < capacity` 否则 `BAR_INVITATION_CAPACITY_EXHAUSTED`→落 `confirmed` 成员（`member_customer_id` = 确认人）；同一朋友重复确认幂等返回原成员。
+3. **入场核验（门口 staff/设备，复用 `bar.table.guest_checkin`）** `POST /bar/reservations/{id}/invitation/entry-verify`：`credential_payload` = 成员标识；成员须 `confirmed`（否则 `BAR_INVITATION_MEMBER_NOT_CONFIRMED`），标 `entered`，**已入场 ≤ capacity**（否则 `BAR_INVITATION_CAPACITY_EXHAUSTED`），跨吧 `BAR_SCOPE_MISMATCH`。**持函免通票**：此入场路径仅校验「是否已确认成员 + 容量 + 同吧」，不校验通票——确认成员即可进定卡吧。
+
+**提成**：订卡客人消费走正常账单（有 `sales_staff_id` 即计销售提成），与通票相反（通票免费酒水才排除提成，见 §6.9A.2）。
+
 ### 6.4 bar_table_sessions 开台会话表
 
 | 字段 | 类型 | 说明 |
@@ -611,6 +640,10 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 - 同一商户下 `product_code` 唯一。
 
 > 修订说明（2026-06-07）：依 finding bar-2，新增 `standard_pour_volume/pour_volume_unit/loss_threshold` 三字段承接 PRD §11 第 6 条"每杯标准出酒量/超标记损耗/损耗严重核查"已拍板规则。`loss_threshold` 区别于配方层 `bar_recipe_items.loss_rate`（后者为固定损耗率，无法表达"本次实际出量 vs 标准容量"的差异损耗）。单次实际出酒量与损耗量记录在出品扣减流水（见 §6.16）。
+
+> 物理列与内部结算价（2026-06-23，回写实现事实）：本节为逻辑设计，物理列以迁移为准——售价物理列为 `price_cent`（分），逻辑 `cost_price` 未单独落地。**V152 新增 `internal_settlement_price_cent BIGINT`（内部结算价，分；可空=未录入则不参与结算/提成扣减；非空 CHECK ≥0）**：作为 ① 通票免费酒水「平台↔酒吧结算」与 ② 吧台随单赠送项「按内部价 × 数量从销售提成基数扣除」（F-TXN-05，见 §6.9A.2）的统一成本价基。
+>
+> 权限与录入页（2026-06-23）：内部结算价属敏感成本数据（业主 2026-06-23 确认独立授权）。**V154 新增权限 `bar.product.view`（medium，查看商品目录含内部价）与 `bar.product.manage`（high，录入/修改商品含内部价）**；`GET /api/v1/bar/products` 改用 `bar.product.view`、`POST /api/v1/bar/products` 改用 `bar.product.manage`（不再搭便车 `bar.order.create`）。运营在后台「商品管理」页（**ADM-BAR-005**，`/admin/bar/products`，page-permission 矩阵 UI-ADM-BAR-005）录入售价与内部结算价。
 
 ### 6.7 bar_orders 点单表
 
@@ -728,10 +761,12 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 
 > 已实现修复（finding F-TXN-05，2026-06-22，已在 160 编译通过）：`calculateCommission` 的提成基数 `commission_base` 此前仅按 `subtotal − discount` 计算，未扣除免单（waiver）与退款（refund），导致已免/已退金额仍被计提。现已改为在 `subtotal − discount` 基础上**额外扣除免单与退款净额**——按 `bar_bill_adjustments` 中处于 applied 态的调整净额计算，并对 `waiver_reversal`/`refund_reversal` 反向回加，使提成基数与账单实际可计提消费额一致。这与本表"通票、票务权益、卡座预约入场名额、赠酒成本、退款、免单、抹零和不可计提调整不得进入提成基数"的口径对齐。
 >
-> 待实现（finding F-TXN-05，口径已与业主确认，2026-06-22，代码尚未实现，仅文档登记）：
-> - **赠品（gift）按内部价从提成扣除**：赠送酒水/礼品应以内部价（成本价口径）从提成基数中剔除，不得按售价计提；当前计算尚未纳入 gift 扣除。
+> 已实现（finding F-TXN-05，赠菜扣提成，2026-06-23，已在 160 编译通过）：**赠品（gift）按内部价从提成扣除**。新增 `bar_order_items.is_gift`（V153，§6.8 已登记的逻辑列之物理落地）承载随单赠送标记：下单/加菜时 `is_gift=true` 的明细对客 `amount_cent=0`（不计入账单 `subtotal`）、单价保留售价；出品/退菜撤单/撤单回滚等明细重建均透传该标记。`calculateCommission` 在 `subtotal − discount − 免退净额` 基础上**再按赠送项商品内部结算价（V152 `internal_settlement_price_cent`）× 数量扣除 `giftDeduction`**，即赠送项成本不计提成。商品未录内部价时该项不扣（`orElse 0`，向后兼容既有商品）。
+>
+> 口径澄清（经业主确认，无需代码处理）：
 > - **抹零**：经业主确认**无抹零业务**，提成基数无需处理抹零项。
 > - **低消补差**：低消是开台前提而非提成排除项，不从提成基数中扣除。
+> - **通票/票务权益赠饮**：在核销环节即为 0 元平台赠饮单、不进 `subtotal`（见 §7.2 赠饮核销闭环），无需在提成计算中额外扣除。
 
 ### 6.10 bar_bill_payments 账单支付表
 
@@ -1509,3 +1544,5 @@ P0 完成时必须能演示：
 | 2026-06-18 R5 回填 | 增 | R5 横幅后「R5-D11 订台定金现状与收口」 | 把订台定金按"现状（createReservation 硬编码 deposit=0/not_required，到店抵扣/退没收空转）→目标（P0 真实记录定金+到店抵扣+取消退没收，退没收时限后台可配）→候选验收"三段式收敛，并标注订台/定金 UI 验收用例需补 | R5-D11、2026-06-18 二轮业务裁决 |
 | 2026-06-19 `R6 全闭环` | 增 | §17 出品后异常/沽清/pour cost 强制采集/卡座责任链接线 | 承接 R6-D14/R6-D09：17.1 退菜退酒（served→returned、库存回库/损耗规则、bar.order.item_returned）、17.2 反结（settled→reopened、bar.bill_reopened、财务冲正联动）、17.3 沽清 86、17.4 pour cost 强制采集（缺 actual_pour_volume 拒绝或标准量兜底+异常标记，消除"不传则 loss=0"）、17.5 卡座责任链接线（service_responsibility_records V059 补 Controller/接入点，table.service_assigned/transferred，与 F2 异常链衔接）；据实标注 V091 退菜退酒/反结/沽清已先行落库，pour cost/责任链为真实开放缺口 | R6-D14、R6-D09（business-decision-log）、V059、V091 |
 | 2026-06-19 R5业务HTML缺口审计 F4 | 增/改 | §4.5 / §5.3.1 / §5.3.2 / §5.3.3 / §5.3.3a | §4.5 状态表补 `disputed` 争议态；§5.3.1 补散客 `customer_id` 可空+`customer_phone` 核身；§5.3.2 取酒核身强表述"瓶底标签数值+姓名/昵称必须比对通过，不止手机号+验证码"；§5.3.3 补 `transferSavedBottle` 方法名；新增 §5.3.3a 争议处置入口；口径以 ticketing §10.4.1 为权威 | F4 存酒核身契约对齐，与文件1口径一致 |
+| 2026-06-23 F-TXN-05 赠菜扣提成 | 增/改 | §6.8 bar_order_items / §6.9A.2 提成计算 | `bar_order_items` 增 `is_gift`（V153，§6.8 既有逻辑列之物理落地）承载随单赠送标记：下单/加菜 `is_gift=true` 明细对客 `amount_cent=0`（不计 `subtotal`）、单价保留售价，出品/撤单/回滚等明细重建均透传；`calculateCommission` 在 `subtotal − discount − 免退净额` 基础上再按赠送项商品内部结算价（V152 `internal_settlement_price_cent`）× 数量扣除 `giftDeduction`，赠送项成本不计提成；未录内部价不扣（向后兼容）。解除 §6.9A.2 旧 BLOCKED 标注 | F-TXN-05（赠品按内部价从提成扣除；业主 2026-06-22 确认口径）；V152 内部结算价基 + V153 赠送标记 |
+| 2026-06-23 订卡邀请函 | 增 | §6.3a 订卡邀请函 / §6.3 bar_reservations / 新子表 bar_reservation_invitation_members | 扩展卡座预订（不另起独立实体）：`bar_reservations` 增 invitation_token/signature/capacity/status/issued_at（V155），新子表承载持函人 + 确认朋友成员（confirmed→entered，UNIQUE(reservation,identifier)）；两步=朋友客人端确认占名额（`POST /customer/bar-invitations/confirm`，token 鉴权）→门口扫码入场（`POST /bar/reservations/{id}/invitation/entry-verify`，复用 bar.table.guest_checkin），已确认+已入场≤卡座 capacity；签发/吊销 staff `bar.reservation.invitation.manage`；持函免通票仅进定卡吧；订卡消费正常计提成 | 业主 2026-06-22 口述 + 2026-06-23 拍板（两步确认 + 连客人端全链）；V155 |

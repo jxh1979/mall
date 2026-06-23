@@ -26,7 +26,8 @@ public record CustomerPointsLedgerRecord(
         String changeType,
         String status,
         String sourceDocType,
-        String sourceDocId
+        String sourceDocId,
+        long confirmedAmount
 ) {
 
     /** 入账引擎状态常量。 */
@@ -57,6 +58,33 @@ public record CustomerPointsLedgerRecord(
     ) {
         this(id, customerId, pointsDelta, balanceAfter, sourceType, sourceId, description,
                 expireAt, remainingPoints, expired, createdAt,
-                sourceType, STATUS_CONFIRMED, null, null);
+                sourceType, STATUS_CONFIRMED, null, null, 0L);
+    }
+
+    /**
+     * 兼容构造器（V100 的 15 字段，confirmed_amount 缺省 0）。
+     * 新写入的 pending earn 行 confirmed_amount=0（尚未确认）；确认份额由 confirmPoints 经
+     * {@code updatePointsLedgerConfirmation} 回写，不走构造器。
+     */
+    public CustomerPointsLedgerRecord(
+            String id,
+            String customerId,
+            long pointsDelta,
+            long balanceAfter,
+            String sourceType,
+            String sourceId,
+            String description,
+            Instant expireAt,
+            Long remainingPoints,
+            boolean expired,
+            Instant createdAt,
+            String changeType,
+            String status,
+            String sourceDocType,
+            String sourceDocId
+    ) {
+        this(id, customerId, pointsDelta, balanceAfter, sourceType, sourceId, description,
+                expireAt, remainingPoints, expired, createdAt,
+                changeType, status, sourceDocType, sourceDocId, 0L);
     }
 }

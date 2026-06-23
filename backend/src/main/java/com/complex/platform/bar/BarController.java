@@ -267,13 +267,15 @@ public class BarController {
 
     @GetMapping("/products")
     public ApiResponse<PageResponse<BarProductRecord>> listProducts() {
-        authorizationService.requirePermission("bar.order.create");
+        // 商品目录含敏感内部结算价（V152），查看独立授权（不再搭便车 bar.order.create）。
+        authorizationService.requirePermission("bar.product.view");
         return ApiResponse.ok(service.listProducts());
     }
 
     @PostMapping("/products")
     public ApiResponse<BarProductRecord> createProduct(@RequestBody(required = false) BarProductRequest request) {
-        authorizationService.requirePermission("bar.order.create");
+        // 录入/修改商品（含内部结算价）为高危动作，需专用高危权限。
+        authorizationService.requirePermission("bar.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createProduct(request));
     }
@@ -348,6 +350,42 @@ public class BarController {
         authorizationService.requirePermission("bar.table.guest_checkin");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.verifyReservationEntryAllowance(id, request));
+    }
+
+    @PostMapping("/reservations/{id}/invitation")
+    public ApiResponse<BarReservationInvitationRecord> issueReservationInvitation(
+            @PathVariable String id,
+            @RequestBody(required = false) BarInvitationActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.reservation.invitation.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.issueReservationInvitation(id, request));
+    }
+
+    @GetMapping("/reservations/{id}/invitation")
+    public ApiResponse<BarReservationInvitationRecord> getReservationInvitation(@PathVariable String id) {
+        authorizationService.requirePermission("bar.reservation.view");
+        return ApiResponse.ok(service.getReservationInvitation(id));
+    }
+
+    @PostMapping("/reservations/{id}/invitation/revoke")
+    public ApiResponse<BarReservationInvitationRecord> revokeReservationInvitation(
+            @PathVariable String id,
+            @RequestBody(required = false) BarInvitationActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.reservation.invitation.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.revokeReservationInvitation(id, request));
+    }
+
+    @PostMapping("/reservations/{id}/invitation/entry-verify")
+    public ApiResponse<BarReservationInvitationMemberRecord> verifyReservationInvitationEntry(
+            @PathVariable String id,
+            @RequestBody(required = false) VerificationRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.guest_checkin");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.verifyReservationInvitationEntry(id, request));
     }
 
     @GetMapping("/tables")

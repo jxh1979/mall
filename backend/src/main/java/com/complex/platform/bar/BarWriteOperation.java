@@ -36,7 +36,10 @@ enum BarWriteOperation implements AuditedOperation {
     ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill"),
     OPEN_SHIFT("bar.shift_opened", "bar.shift_open_failed", "bar.shift.manage", "bar_shift"),
     CLOSE_SHIFT("bar.shift_closed", "bar.shift_close_failed", "bar.shift.close", "bar_shift"),
-    REDEEM_DRINK_ENTITLEMENT("bar.entitlement_redeemed", "bar.entitlement_redeem_failed", "bar.entitlement.redeem", "bar_gift_redemption");
+    REDEEM_DRINK_ENTITLEMENT("bar.entitlement_redeemed", "bar.entitlement_redeem_failed", "bar.entitlement.redeem", "bar_gift_redemption"),
+    ISSUE_INVITATION("bar.reservation_invitation_issued", "bar.reservation_invitation_issue_failed", "bar.reservation.invitation.manage", "bar_reservation"),
+    REVOKE_INVITATION("bar.reservation_invitation_revoked", "bar.reservation_invitation_revoke_failed", "bar.reservation.invitation.manage", "bar_reservation"),
+    ENTER_INVITATION("bar.reservation_invitation_entered", "bar.reservation_invitation_entry_failed", "bar.table.guest_checkin", "bar_reservation");
 
     private final String successEvent;
     private final String failureEvent;

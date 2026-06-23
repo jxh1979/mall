@@ -270,6 +270,56 @@ public class TicketingService {
         return orderService.cancelExpiredUnpaidOrders(cutoff);
     }
 
+    /**
+     * 系统定时任务入口（F-TXN-03 门票生命周期）：处理已过期、全未核销的权益——
+     * <ul>
+     *   <li>该单**全未核销** → 已付订单整单**原渠道自动退款**（系统直批，{@code autoRefundExpiredUnusedOrder}）；
+     *       0 元 / 非 paid / 已有退款在途 → 作废或交由退款链；</li>
+     *   <li>该单**已有核销** → 其余到期未用权益**作废**（forfeited、不退款，与"核销后不可退"一致）。</li>
+     * </ul>
+     * 无认证上下文，由 TicketOrderExpiryJob 触发；逐订单独立原子（autoRefund {@code @Transactional} / forfeit 单 UPDATE）。
+     * 返回处理的权益数。
+     */
+    public int processExpiredPaidEntitlements(java.time.Instant now) {
+        List<IssuedEntitlementRecord> expired = repository.listExpiredUnusedActiveEntitlements(now);
+        java.util.Map<String, java.util.List<IssuedEntitlementRecord>> byOrder = new java.util.LinkedHashMap<>();
+        int processed = 0;
+        for (IssuedEntitlementRecord e : expired) {
+            if (e.orderId() == null || e.orderId().isBlank()) {
+                processed += repository.forfeitEntitlement(e.id(), now); // 无订单（直接发放）到期未用 → 作废。
+                continue;
+            }
+            byOrder.computeIfAbsent(e.orderId(), k -> new java.util.ArrayList<>()).add(e);
+        }
+        for (var entry : byOrder.entrySet()) {
+            String orderId = entry.getKey();
+            List<IssuedEntitlementRecord> all = repository.listIssuedEntitlementsByOrderId(orderId);
+            if (all.stream().anyMatch(e -> e.usedTimes() > 0)) {
+                // 一张用后其余作废：该单到期未用权益置 forfeited、不退款。
+                for (IssuedEntitlementRecord e : entry.getValue()) {
+                    processed += repository.forfeitEntitlement(e.id(), now);
+                }
+                continue;
+            }
+            // 全未核销 → 已付订单整单原渠道自动退款；已有退款在途/完成则交由退款链、跳过。
+            TicketOrderRecord order = repository.findTicketOrderById(orderId).orElse(null);
+            if (order != null && (repository.sumApprovedRefundAmountByOrderId(orderId) > 0
+                    || repository.sumPendingRefundAmountByOrderId(orderId) > 0)) {
+                continue;
+            }
+            TicketRefundRecord refund = refundService.autoRefundExpiredUnusedOrder(order, all, now);
+            if (refund != null) {
+                processed += entry.getValue().size();
+            } else {
+                // 0 元 / 非 paid 无可退 → 作废到期未用权益，避免反复扫描。
+                for (IssuedEntitlementRecord e : entry.getValue()) {
+                    processed += repository.forfeitEntitlement(e.id(), now);
+                }
+            }
+        }
+        return processed;
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "ticket.ticket.issue")
     @Transactional
     public IssuedTicketResponse issueTicketOrder(String orderId, StatusChangeRequest request) {

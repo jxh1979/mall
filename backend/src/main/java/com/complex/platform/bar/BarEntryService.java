@@ -23,17 +23,20 @@ public class BarEntryService {
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
     private final FaceVerificationPort faceVerificationGate;
+    private final BarInvitationTokenSigner invitationSigner;
 
     public BarEntryService(
             BarRepository repository,
             AuthorizationService authorizationService,
             AuditEventService auditEventService,
-            FaceVerificationPort faceVerificationGate
+            FaceVerificationPort faceVerificationGate,
+            BarInvitationTokenSigner invitationSigner
     ) {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
         this.faceVerificationGate = faceVerificationGate;
+        this.invitationSigner = invitationSigner;
     }
 
     BarAgeVerificationRecord createAgeVerification(VerificationRequest request) {
@@ -461,6 +464,139 @@ public class BarEntryService {
             case "FREE_GUEST_QUOTA_EXHAUSTED" -> throw ApiException.conflict(reasonCode, "card-seat free guest quota is exhausted");
             default -> throw ApiException.conflict(reasonCode, "card-seat free entry is not allowed");
         }
+    }
+
+    // ── V155 订卡邀请函（扩展卡座预订）─────────────────────────────────────────
+    // 两步语义：confirm（朋友在客人端确认，占名额，见 CustomerService）→ entered（到店扫码核验入场，下方）。
+    // 「已确认 + 已入场」总人数 ≤ 邀请函 capacity（卡座可进人数）；持函（已确认成员）免通票即可进定卡吧。
+
+    /** 签发邀请函（staff）：capacity=卡座 capacity 快照，token 不可猜随机串 + HMAC 防伪签名；持函人自动占一个名额。 */
+    BarReservationInvitationRecord issueInvitation(String reservationId, BarInvitationActionRequest request) {
+        BarInvitationActionRequest actual = requireRequest(request);
+        BarReservationRecord reservation = requireReservation(reservationId);
+        if ("cancelled".equals(reservation.status())) {
+            throw ApiException.conflict("BAR_RESERVATION_NOT_CHECKINABLE", "reservation is cancelled");
+        }
+        // 已签发且未吊销 → 幂等返回现有邀请函（不重置 token，避免已转发二维码失效）。
+        if ("active".equals(reservation.invitationStatus()) && reservation.invitationToken() != null) {
+            return buildInvitationView(reservation);
+        }
+        BarTableRecord table = repository.findTableById(reservation.tableId())
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
+        int capacity = table.capacity();
+        if (capacity <= 0) {
+            throw ApiException.conflict("BAR_INVITATION_CAPACITY_REQUIRED",
+                    "card-seat capacity must be configured before issuing an invitation");
+        }
+        Instant now = Instant.now();
+        String token = "inv_" + java.util.UUID.randomUUID().toString().replace("-", "");
+        String signature = invitationSigner.sign(
+                invitationSigner.canonical(reservation.id(), reservation.barId(), reservation.tableId(), capacity, token));
+        BarReservationRecord issued = withInvitation(reservation, token, signature, capacity, "active", now);
+        repository.saveReservation(issued);
+        // 持函人自动占一个名额（is_holder）；散客无 customerId 时以预订占位标识。
+        String holderId = trimToNull(reservation.customerId()) != null
+                ? reservation.customerId() : "holder:" + reservation.id();
+        boolean holderExists = repository.listInvitationMembers(reservation.id()).stream()
+                .anyMatch(member -> holderId.equals(member.memberIdentifier()));
+        if (!holderExists) {
+            repository.saveInvitationMember(new BarReservationInvitationMemberRecord(
+                    "invm_" + slug(reservation.id() + ":holder"),
+                    reservation.id(), reservation.barId(), holderId, trimToNull(reservation.customerId()),
+                    true, "confirmed", now, null, null, now, now));
+        }
+        auditEventService.recordSuccess("bar.reservation_invitation_issued", "bar.reservation.invitation.manage",
+                "bar_reservation", reservation.id(), null, actual.idempotencyKey(),
+                Map.of("invitation_capacity", capacity));
+        return buildInvitationView(issued);
+    }
+
+    /** 吊销邀请函（staff）：status→revoked，已确认/已入场成员不回滚（留痕），但新确认/入场被拒。 */
+    BarReservationInvitationRecord revokeInvitation(String reservationId, BarInvitationActionRequest request) {
+        BarInvitationActionRequest actual = requireRequest(request);
+        BarReservationRecord reservation = requireReservation(reservationId);
+        if (!"active".equals(reservation.invitationStatus())) {
+            throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "no active invitation to revoke");
+        }
+        BarReservationRecord revoked = withInvitation(reservation, reservation.invitationToken(),
+                reservation.invitationSignature(), reservation.invitationCapacity(), "revoked",
+                reservation.invitationIssuedAt());
+        repository.saveReservation(revoked);
+        auditEventService.recordSuccess("bar.reservation_invitation_revoked", "bar.reservation.invitation.manage",
+                "bar_reservation", reservation.id(), null, actual.idempotencyKey(), Map.of());
+        return buildInvitationView(revoked);
+    }
+
+    /** 查询邀请函视图（staff）：含 token/签名/容量/占用计数/成员明细。 */
+    BarReservationInvitationRecord getInvitation(String reservationId) {
+        return buildInvitationView(requireReservation(reservationId));
+    }
+
+    /**
+     * 门口入场核验（staff/设备，复用 bar.table.guest_checkin）：核验成员已确认，标 entered，已入场 ≤ capacity。
+     * credential_payload = 成员标识（朋友的 customer_id/手机）。持函免通票：此路径不校验通票，确认成员即可入场。
+     */
+    BarReservationInvitationMemberRecord verifyInvitationEntry(String reservationId, VerificationRequest request) {
+        VerificationRequest actual = requireRequest(request);
+        BarReservationRecord reservation = requireReservation(reservationId);
+        if (!"active".equals(reservation.invitationStatus())) {
+            throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "invitation is not active");
+        }
+        Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
+        String verificationBarId = trimToDefault(textFromMap(context, "bar_id", "barId"), actual.pointId());
+        if (!reservation.barId().equals(verificationBarId)) {
+            throw ApiException.conflict("BAR_SCOPE_MISMATCH", "card-seat invitation entry is limited to the reserved bar");
+        }
+        String memberIdentifier = requireText(actual.credentialPayload(), "credential_payload");
+        List<BarReservationInvitationMemberRecord> members = repository.listInvitationMembers(reservation.id());
+        BarReservationInvitationMemberRecord member = members.stream()
+                .filter(item -> memberIdentifier.equals(item.memberIdentifier()) && !"revoked".equals(item.status()))
+                .findFirst()
+                .orElseThrow(() -> ApiException.conflict("BAR_INVITATION_MEMBER_NOT_CONFIRMED",
+                        "guest has not confirmed this invitation"));
+        if ("entered".equals(member.status())) {
+            return member; // 幂等：已入场重复扫码返回原记录
+        }
+        int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
+        long enteredCount = members.stream().filter(item -> "entered".equals(item.status())).count();
+        if (enteredCount >= capacity) {
+            throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "card-seat capacity is exhausted");
+        }
+        Instant now = Instant.now();
+        BarReservationInvitationMemberRecord entered = new BarReservationInvitationMemberRecord(
+                member.id(), member.reservationId(), member.barId(), member.memberIdentifier(), member.memberCustomerId(),
+                member.isHolder(), "entered", member.confirmedAt(), now, trimToNull(actual.deviceId()),
+                member.createdAt(), now);
+        repository.saveInvitationMember(entered);
+        auditEventService.recordSuccess("bar.reservation_invitation_entered", "bar.table.guest_checkin",
+                "bar_reservation", reservation.id(), null, actual.idempotencyKey(),
+                Map.of("member_identifier", memberIdentifier));
+        return entered;
+    }
+
+    private BarReservationInvitationRecord buildInvitationView(BarReservationRecord reservation) {
+        List<BarReservationInvitationMemberRecord> members = repository.listInvitationMembers(reservation.id());
+        int confirmed = (int) members.stream().filter(member -> !"revoked".equals(member.status())).count();
+        int entered = (int) members.stream().filter(member -> "entered".equals(member.status())).count();
+        int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
+        return new BarReservationInvitationRecord(
+                reservation.id(), reservation.barId(), reservation.tableId(),
+                reservation.invitationToken(), reservation.invitationSignature(), capacity,
+                reservation.invitationStatus(), reservation.invitationIssuedAt(),
+                confirmed, entered, Math.max(capacity - confirmed, 0), members);
+    }
+
+    private BarReservationRecord withInvitation(
+            BarReservationRecord reservation, String token, String signature, Integer capacity,
+            String status, Instant issuedAt) {
+        return new BarReservationRecord(
+                reservation.id(), reservation.barId(), reservation.merchantId(), reservation.tableId(),
+                reservation.customerId(), reservation.reservedAt(), reservation.guestCount(),
+                reservation.allowedPassFreeGuestCount(), reservation.depositAmountCent(), reservation.depositStatus(),
+                reservation.orderSource(), reservation.salesStaffId(), reservation.status(), reservation.createdTerminal(),
+                reservation.deviceId(), reservation.evidenceAttachmentIds(), reservation.createdAt(), Instant.now(),
+                reservation.depositRule(), reservation.depositIntentId(), reservation.depositPaidAt(),
+                reservation.depositSettlement(), token, signature, capacity, status, issuedAt);
     }
 
     private List<String> listFromMap(Map<String, Object> map, String... names) {

@@ -164,7 +164,10 @@ erDiagram
 - 支付成功后才能出票。
 - 出票后退款必须检查权益使用情况（F-TXN-03 已强制：`TicketRefundService.requestRefund` 发起退款前核查本订单权益核销状态）。
 - 已核销即整票不可退（F-TXN-03 用户口径「多次/多人票一经购买即限时用完；核销一张则整票不可退、核销后不可退」）：本订单**任一**权益 `usedTimes>0`（被冲正回滚归零则视为未核销）→ 拒退 `TICKET_ORDER_VERIFIED_NO_REFUND`；仅**全未核销**可原渠道退（其 pending 积分从未 confirmed，天然不计分）。
-  - 注：积分「按核销次数精确计分」（多次/多人票按核销张数比例 confirm）为 F-TXN-03 剩余子项；单次票现有「支付 pending → 核销 confirm」链已等价按核销计分。
+  - 注：积分「按核销次数精确计分」（多次/多人票按核销张数比例 confirm）**已完成（V151，F-TXN-03 收尾）**：`customer_points_ledger.confirmed_amount` 记已确认份额，`LoyaltyService.confirmPoints` 改 set-confirmed-to-target（`target=floor(总额×Σused/Σtotal)`），`TicketVerificationService` 核销与冲正两路均按订单 Σused/Σtotal 对齐确认份额（冲正一张按份回滚 1/Σtotal，取代原冲正全额 deduct）；单次票（1/1）口径与原「支付 pending → 核销 confirm」等价。
+- 门票到期生命周期（F-TXN-03，piece②）：系统定时任务 `TicketingService.processExpiredPaidEntitlements`（按权益 `valid_to < now` 实时判定，由 `TicketOrderExpiryJob` 触发、开关 `ticket.order.expiry.scheduled.enabled` 默认关）——
+  - **到期未用自动退款**：该单**全未核销**且已付（amount>0）→ 整单**原渠道自动退款**（系统直批 `autoRefundExpiredUnusedOrder`：建 approved 退款 + 冻结权益 active→refunded + 全额回补库存 + 发打款事件；跳过商户范围闸、系统动作；全未核销故无已确认积分可冲减、不发 points deduct）；已有退款在途/完成则交由退款链、跳过。
+  - **一张用后其余作废**：该单**已有核销**→ 其余到期未用权益置 `forfeited`（`forfeitEntitlement`，不退款，与「核销后不可退」一致）；0 元 / 非 paid 的到期未用权益亦作废以止反复扫描。`issued_entitlements.status` 无 DB CHECK，新增 `forfeited` 值无需迁移。
 
 ### 4.3 票实例状态
 

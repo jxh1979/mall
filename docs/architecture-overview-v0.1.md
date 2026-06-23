@@ -18,7 +18,7 @@ graph TB
     WEB["前端 Web<br/>(admin / customer / legacy)"]
     ANDROID["Android 终端<br/>(工作手机/平板/kiosk)"]
     API["后端 API<br/>Java 21 + Spring Boot 4"]
-    DB[("PostgreSQL<br/>Flyway V001..V148")]
+    DB[("PostgreSQL<br/>Flyway V001..V151")]
   end
 
   subgraph External["外部依赖 (能力开关默认 off + mock)"]
@@ -103,7 +103,7 @@ graph LR
   REPO --> PG[("PostgreSQL")]
   SVC -->|"事件"| AUD["audit_events / risk_alerts"]
   SVC -. "幂等键" .-> IDEM["IdempotencyService"]
-  CTRL -. "OpenAPI 契约" .-> OAS["openapi-p0 (410 op)"]
+  CTRL -. "OpenAPI 契约" .-> OAS["openapi-p0 (413 op)"]
 ```
 
 每个写动作经 `@GuardedAction`（权限点 + 终端开关 + 准入闸 AdmissionGuard）→ Service（业务+幂等+留痕）→ JDBC Repository（强制注入 merchant_id/project_id scope）→ PostgreSQL，并发布审计事件；异常进统一责任链 `risk_alerts`。

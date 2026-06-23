@@ -61,7 +61,29 @@ final class JdbcBarRowMapper {
                 resultSet.getString("deposit_rule"),
                 resultSet.getString("deposit_intent_id"),
                 nullableInstant(resultSet, "deposit_paid_at"),
-                resultSet.getString("deposit_settlement")
+                resultSet.getString("deposit_settlement"),
+                resultSet.getString("invitation_token"),
+                resultSet.getString("invitation_signature"),
+                resultSet.getObject("invitation_capacity", Integer.class),
+                resultSet.getString("invitation_status"),
+                nullableInstant(resultSet, "invitation_issued_at")
+        );
+    }
+
+    BarReservationInvitationMemberRecord mapInvitationMember(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new BarReservationInvitationMemberRecord(
+                resultSet.getString("id"),
+                resultSet.getString("reservation_id"),
+                resultSet.getString("bar_id"),
+                resultSet.getString("member_identifier"),
+                resultSet.getString("member_customer_id"),
+                resultSet.getBoolean("is_holder"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "confirmed_at"),
+                nullableInstant(resultSet, "entered_at"),
+                resultSet.getString("device_id"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
         );
     }
 
@@ -150,7 +172,8 @@ final class JdbcBarRowMapper {
                 resultSet.getObject("loss_threshold", Integer.class),
                 resultSet.getBoolean("sold_out"),
                 nullableInstant(resultSet, "sold_out_at"),
-                resultSet.getString("sold_out_reason")
+                resultSet.getString("sold_out_reason"),
+                resultSet.getObject("internal_settlement_price_cent", Long.class)
         );
     }
 
@@ -193,7 +216,8 @@ final class JdbcBarRowMapper {
                 resultSet.getString("void_reason"),
                 nullableInstant(resultSet, "voided_at"),
                 resultSet.getString("voided_by_user_id"),
-                resultSet.getBoolean("return_to_stock")
+                resultSet.getBoolean("return_to_stock"),
+                resultSet.getBoolean("is_gift")
         );
     }
 

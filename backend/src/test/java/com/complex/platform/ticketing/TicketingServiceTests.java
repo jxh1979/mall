@@ -982,6 +982,50 @@ class TicketingServiceTests {
     }
 
     @Test
+    void expiredFullyUnusedPaidOrderIsAutoRefunded() {
+        java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        // 已付订单（9900 分，1 张）+ 1 个到期、active、全未核销的权益。
+        ticketingRepository.ticketOrders.put("o_auto", new TicketOrderRecord(
+                "o_auto", "ON-AUTO", "c1", "tt_auto", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", past, past));
+        ticketingRepository.issuedEntitlements.put("e_auto",
+                seedEntitlement("e_auto", "o_auto", "tt_auto", 1, 0, "active", past));
+
+        int processed = service.processExpiredPaidEntitlements(now);
+
+        assertThat(processed).isEqualTo(1);
+        // 全未核销已付到期单 → 整单原渠道自动退款（approved/全额）、权益冻结 refunded、库存回补。
+        assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
+                "o_auto".equals(r.targetId()) && "approved".equals(r.status())
+                        && r.refundAmountCent() == 9900L && "original".equals(r.refundChannel()));
+        assertThat(ticketingRepository.issuedEntitlements.get("e_auto").status()).isEqualTo("refunded");
+        assertThat(ticketingRepository.releasedStock).contains("tt_auto:1");
+    }
+
+    @Test
+    void expiredRemainderForfeitedWhenOrderHasAnyVerification() {
+        java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        ticketingRepository.ticketOrders.put("o_fft", new TicketOrderRecord(
+                "o_fft", "ON-FFT", "c1", "tt_fft", null, 2, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", past, past));
+        // A：已核销(usedTimes=1)；B：到期、active、未核销。
+        ticketingRepository.issuedEntitlements.put("e_used",
+                seedEntitlement("e_used", "o_fft", "tt_fft", 1, 1, "active", past));
+        ticketingRepository.issuedEntitlements.put("e_unused",
+                seedEntitlement("e_unused", "o_fft", "tt_fft", 1, 0, "active", past));
+
+        int processed = service.processExpiredPaidEntitlements(now);
+
+        assertThat(processed).isEqualTo(1);
+        // 该单已有核销 → 其余到期未用权益作废(forfeited)、不退款；已核销的不动。
+        assertThat(ticketingRepository.issuedEntitlements.get("e_unused").status()).isEqualTo("forfeited");
+        assertThat(ticketingRepository.issuedEntitlements.get("e_used").status()).isEqualTo("active");
+        assertThat(ticketingRepository.refunds).isEmpty();
+    }
+
+    @Test
     void refundRequestAndApprovalDoNotDeleteIssuedHistory() {
         IssuedEntitlementRecord entitlement = issueOrderEntitlement("refund");
         TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();
@@ -2146,6 +2190,15 @@ class TicketingServiceTests {
         return ticketingRepository.findIssuedEntitlementByCode(entitlementCode).orElseThrow();
     }
 
+    /** F-TXN-03 piece② 测试构造：直接构造一条已发权益（用于到期/作废场景 seed）。 */
+    private static IssuedEntitlementRecord seedEntitlement(String id, String orderId, String ticketTypeId,
+            int totalTimes, int usedTimes, String status, java.time.Instant validTo) {
+        java.time.Instant t0 = validTo.minusSeconds(86400);
+        return new IssuedEntitlementRecord(
+                id, "CODE_" + id, ticketTypeId, orderId, "tmpl_" + id, "general", "mch", "venue", "point",
+                totalTimes, usedTimes, 9900L, status, t0, validTo, t0, t0, 1, 9900L);
+    }
+
     private IssuedEntitlementRecord issueOrderEntitlement(String key) {
         TicketTypeRecord ticketType = createTicketType(key + "-ticket");
         EntitlementTemplateRecord template = createTemplate(key + "-template", 2, 9900L);
@@ -2549,6 +2602,28 @@ class TicketingServiceTests {
                     "refunded", entitlement.validFrom(), entitlement.validTo(), entitlement.createdAt(), updatedAt,
                     entitlement.numPeople(), entitlement.allocatedRevenueCent()
             ));
+            return 1;
+        }
+
+        @Override
+        public List<IssuedEntitlementRecord> listExpiredUnusedActiveEntitlements(java.time.Instant now) {
+            return issuedEntitlements.values().stream()
+                    .filter(e -> "active".equals(e.status()) && e.usedTimes() == 0
+                            && e.validTo() != null && e.validTo().isBefore(now))
+                    .toList();
+        }
+
+        @Override
+        public int forfeitEntitlement(String id, java.time.Instant now) {
+            IssuedEntitlementRecord e = issuedEntitlements.get(id);
+            if (e == null || !"active".equals(e.status()) || e.usedTimes() != 0) {
+                return 0;
+            }
+            issuedEntitlements.put(id, new IssuedEntitlementRecord(
+                    e.id(), e.entitlementCode(), e.ticketTypeId(), e.orderId(), e.entitlementTemplateId(),
+                    e.entitlementType(), e.merchantId(), e.venueId(), e.pointId(), e.totalTimes(),
+                    e.usedTimes(), e.valueAmountCent(), "forfeited", e.validFrom(), e.validTo(),
+                    e.createdAt(), now, e.numPeople(), e.allocatedRevenueCent()));
             return 1;
         }
 

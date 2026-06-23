@@ -4,12 +4,14 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
+import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, BarReservationRow, BarTableRow, BarTableSessionRow } from "../types";
 
 const BAR_CHECKIN_PERMISSION = "bar.table.guest_checkin";
 const BAR_TRANSFER_PERMISSION = "bar.table_session.transfer";
 const BAR_MERGE_PERMISSION = "bar.table_session.merge";
 const BAR_RENEW_PERMISSION = "bar.table_session.renew";
+const BAR_INVITATION_PERMISSION = "bar.reservation.invitation.manage";
 
 function nextRenewedUntil(minutes: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -26,6 +28,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [mergedSessionId, setMergedSessionId] = React.useState("session-2");
   const [renewMinutes, setRenewMinutes] = React.useState("60");
   const [actionReason, setActionReason] = React.useState("主管审批通过");
+  const [invitationMemberId, setInvitationMemberId] = React.useState("");
   const [barError, setBarError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -129,6 +132,43 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
+  // V155 订卡邀请函：签发 / 吊销（staff）+ 门口入场核验（复用 guest_checkin 权限）。
+  async function runInvitationAction(kind: "issue" | "revoke" | "entry") {
+    if (!selectedReservation?.id) {
+      setBarError("请先在预定列表中选择订台。");
+      return;
+    }
+    if (kind === "entry" && !invitationMemberId.trim()) {
+      setBarError("入场核验请先输入成员标识（朋友的客人 ID 或持函人标识）。");
+      return;
+    }
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const reservationId = selectedReservation.id;
+      const barId = selectedReservation.barId ?? selectedTable?.barId ?? "bar-main";
+      const path = kind === "issue"
+        ? `/api/v1/bar/reservations/${encodeURIComponent(reservationId)}/invitation`
+        : kind === "revoke"
+          ? `/api/v1/bar/reservations/${encodeURIComponent(reservationId)}/invitation/revoke`
+          : `/api/v1/bar/reservations/${encodeURIComponent(reservationId)}/invitation/entry-verify`;
+      const body = kind === "entry"
+        ? { credentialPayload: invitationMemberId.trim(), pointId: barId, businessContext: { barId } }
+        : {};
+      const result = await api.post(path, body);
+      setActionResult({ action: `bar_invitation_${kind}`, reservationId, result });
+      setBarError("");
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "邀请函操作失败";
+      setBarError(message);
+      setGlobalError(message);
+      setActionResult({ action: `bar_invitation_${kind}`, status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <section data-testid="bar-table-sessions-page">
       <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并、续卡必须受结账与审批约束。" />
@@ -155,6 +195,15 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           <HighRiskConfirm label="续卡" impact="将延长选中会话并记录追加低消/服务费快照。" disabled={submitting} precheck={() => validateSessionAction("renew")} onConfirm={() => void runSessionAction("renew")} permissionsState={effectivePermissions} permissions={[BAR_RENEW_PERMISSION]} data-testid="bar-renew-submit" />
         </div>
         {barError ? <div data-testid="bar-checkin-error" className="admin-inline-error">{barError}</div> : null}
+
+        <h3>订卡邀请函</h3>
+        <p className="admin-muted-action">对选中订台签发邀请函（持函人转发给朋友，朋友客人端确认占名额）；门口扫码核验成员入场，总人数受卡座可进人数约束。</p>
+        <div className="admin-form-row">
+          <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("issue")} data-testid="bar-invitation-issue">签发邀请函</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("revoke")} data-testid="bar-invitation-revoke">吊销邀请函</PermissionButton>
+          <input data-testid="bar-invitation-member" value={invitationMemberId} onChange={(event) => setInvitationMemberId(event.target.value)} placeholder="入场成员标识（朋友客人ID/持函人标识）" />
+          <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_CHECKIN_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("entry")} data-testid="bar-invitation-entry">门口入场核验</PermissionButton>
+        </div>
 
         <h3>开台会话</h3>
         <div className="admin-table-scroll">

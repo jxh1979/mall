@@ -20,6 +20,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", module: "酒吧", group: "bar", route: "/admin/bar/orders", requiredPermissions: ["bar.order.view"] },
   { pageId: "ADM-BAR-003", label: "存酒", module: "酒吧", group: "bar", route: "/admin/bar/stored-wine", requiredPermissions: ["bar.saved_bottle.manage"] },
   { pageId: "ADM-BAR-004", label: "销售提成", module: "酒吧", group: "bar", route: "/admin/bar/commissions", requiredPermissions: ["bar.table_commission.calculate"] },
+  { pageId: "ADM-BAR-005", label: "商品管理", module: "酒吧", group: "bar", route: "/admin/bar/products", requiredPermissions: ["bar.product.view"] },
   { pageId: "ADM-AMU-001", label: "项目与场次", module: "游乐", group: "amusement", route: "/admin/amusement/sessions", requiredPermissions: ["amusement.session.view"] },
   { pageId: "ADM-AMU-002", label: "团体/包场", module: "游乐", group: "amusement", route: "/admin/amusement/group-bookings", requiredPermissions: ["amusement.group_booking.view"] },
   { pageId: "ADM-AMU-003", label: "安全巡检/事故", module: "游乐", group: "amusement", route: "/admin/amusement/safety-incidents", requiredPermissions: ["amusement.safety_inspection.view"] },

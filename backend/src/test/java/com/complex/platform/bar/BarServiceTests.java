@@ -61,7 +61,8 @@ class BarServiceTests {
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
         BarEntryService entryService = new BarEntryService(
-                barRepository, authorizationService, auditEventService, FaceVerificationRouter.alwaysDisabled());
+                barRepository, authorizationService, auditEventService, FaceVerificationRouter.alwaysDisabled(),
+                new BarInvitationTokenSigner("test-bar-invitation-secret"));
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
@@ -133,6 +134,21 @@ class BarServiceTests {
                 "settle-mincon", "settle", List.of(), "pay_m", bill.payableAmountCent(), "aggregate_pay")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("BAR_MIN_CONSUMPTION_NOT_MET");
+    }
+
+    @Test
+    void createProductPersistsInternalSettlementPrice() {
+        // V152（F-TXN-05 + 通票赠饮结算价基）：商品录入内部结算价并落库；负值被拒。
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "product-internal", "create", List.of(), "bar_1", "House Beer", "beer",
+                3800L, null, null, "active", null, null, false, null, null, null, 1500L));
+        assertThat(product.internalSettlementPriceCent()).isEqualTo(1500L);
+
+        assertThatThrownBy(() -> service.createProduct(new BarProductRequest(
+                "product-internal-neg", "create", List.of(), "bar_1", "Bad", "beer",
+                3800L, null, null, "active", null, null, false, null, null, null, -1L)))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("VALIDATION_FAILED");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -608,6 +624,94 @@ class BarServiceTests {
                         BarCommissionCalculationRecord::commissionAmountCent
                 )
                 .containsExactly("non_sales", 1000, 12880L);
+    }
+
+    @Test
+    void commissionDeductsGiftCostAtInternalPriceFromBase() {
+        // F-TXN-05 赠菜扣提成：随单赠送项对客 amount_cent=0 不计 subtotal，其成本再按商品内部结算价 × 数量
+        // 从提成基数扣除（赠送项成本不计提成）。
+        BarReservationRecord reservation = createReservation("gift-commission", "bar_1", 2);
+        BarProductRecord sold = service.createProduct(new BarProductRequest(
+                "product-gift-sold", "create product", List.of(), "bar_1", "Whisky", "spirit",
+                100000L, null, null, "active", null, null, false));
+        // 赠送商品：售价 20000/份、内部结算价 8000/份。
+        BarProductRecord gift = service.createProduct(new BarProductRequest(
+                "product-gift-comp", "create product", List.of(), "bar_1", "Fruit Plate", "beer",
+                20000L, null, null, "active", null, null, false, null, null, null, 8000L));
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-gift-commission", "create order", List.of(), "bar_1",
+                reservation.tableId(), reservation.id(),
+                List.of(
+                        Map.of("product_id", sold.id(), "quantity", 1),
+                        Map.of("product_id", gift.id(), "quantity", 2, "is_gift", true)
+                ),
+                "staff_sales", List.of(), "offline"));
+
+        // 赠送项落库：金额 0、单价保留售价、isGift=true、数量保留。
+        BarOrderItemRecord giftItem = barRepository.listOrderItems(order.id()).stream()
+                .filter(BarOrderItemRecord::isGift).findFirst().orElseThrow();
+        assertThat(giftItem.amountCent()).isZero();
+        assertThat(giftItem.unitPriceCent()).isEqualTo(20000L);
+        assertThat(giftItem.quantity()).isEqualTo(2);
+        // 赠送项 0 元 → 不进订单总额/账单 subtotal（仅售卖项 100000）。
+        assertThat(order.totalAmountCent()).isEqualTo(100000L);
+
+        BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
+                "bill-gift-commission", "create bill", List.of(), "offline", false, 0));
+        assertThat(bill.subtotalAmountCent()).isEqualTo(100000L);
+
+        BarCommissionCalculationRecord commission = service.calculateCommission(bill.id(),
+                new CommissionCalculateRequest("commission-gift", bill.id(), true, false));
+        // base = 100000 − 赠菜成本(8000 × 2 = 16000) = 84000；销售 15% → 12600。
+        assertThat(commission.commissionBaseCent()).isEqualTo(84000L);
+        assertThat(commission.commissionAmountCent()).isEqualTo(12600L);
+    }
+
+    @Test
+    void cardSeatInvitationIssueEntryEnforcesCapacityAndScope() {
+        // V155 订卡邀请函：签发→持函人占一名额→门口入场核验（已入场≤capacity）；未确认/超容量/跨吧均拒。
+        BarReservationRecord reservation = createReservation("inv-cap", "bar_1", 2); // 卡座 capacity=2
+        BarReservationInvitationRecord invitation = service.issueReservationInvitation(
+                reservation.id(), new BarInvitationActionRequest("inv-issue", null));
+        assertThat(invitation.status()).isEqualTo("active");
+        assertThat(invitation.capacity()).isEqualTo(2);
+        assertThat(invitation.invitationToken()).isNotBlank();
+        assertThat(invitation.invitationSignature()).isNotBlank();
+        assertThat(invitation.confirmedCount()).isEqualTo(1); // 持函人自动占一个名额
+        String holderId = "holder:" + reservation.id();
+
+        // 模拟朋友确认（客人端 confirm 落成员，此处直接落库以测门口入场闸）。
+        Instant now = Instant.parse("2026-06-20T21:30:00Z");
+        barRepository.saveInvitationMember(new BarReservationInvitationMemberRecord(
+                "invm-friend-1", reservation.id(), "bar_1", "friend-1", "cust-friend-1",
+                false, "confirmed", now, null, null, now, now));
+        barRepository.saveInvitationMember(new BarReservationInvitationMemberRecord(
+                "invm-friend-2", reservation.id(), "bar_1", "friend-2", "cust-friend-2",
+                false, "confirmed", now, null, null, now, now));
+
+        // 入场：持函人 + friend-1（2 = capacity）。
+        assertThat(service.verifyReservationInvitationEntry(reservation.id(),
+                verification("entry-holder", holderId, "bar_1")).status()).isEqualTo("entered");
+        assertThat(service.verifyReservationInvitationEntry(reservation.id(),
+                verification("entry-friend-1", "friend-1", "bar_1")).status()).isEqualTo("entered");
+
+        // 第三人入场超 capacity → 拒。
+        assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
+                verification("entry-friend-2", "friend-2", "bar_1")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("BAR_INVITATION_CAPACITY_EXHAUSTED");
+
+        // 未确认者入场 → 拒。
+        assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
+                verification("entry-stranger", "stranger", "bar_1")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("BAR_INVITATION_MEMBER_NOT_CONFIRMED");
+
+        // 跨吧入场 → 拒（持函免通票仅限定卡吧）。
+        assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
+                verification("entry-crossbar", holderId, "bar_other")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("BAR_SCOPE_MISMATCH");
     }
 
     @Test
@@ -1890,7 +1994,8 @@ class BarServiceTests {
         FaceVerificationPort failingGate =
                 request -> FaceVerificationResult.failed("provider_x", "underage", "identity under 18");
         BarEntryService failClosedEntry = new BarEntryService(
-                barRepository, authorizationService, new AuditEventService(auditEventRepository), failingGate);
+                barRepository, authorizationService, new AuditEventService(auditEventRepository), failingGate,
+                new BarInvitationTokenSigner("test-bar-invitation-secret"));
 
         BarAgeVerificationRecord record = failClosedEntry.createAgeVerification(new VerificationRequest(
                 "age-check-fail",
@@ -2930,6 +3035,29 @@ class BarServiceTests {
             return checkin;
         }
 
+        private final Map<String, BarReservationInvitationMemberRecord> invitationMembers = new LinkedHashMap<>();
+
+        @Override
+        public Optional<BarReservationRecord> findReservationByInvitationToken(String token) {
+            return reservations.values().stream()
+                    .filter(reservation -> token != null && token.equals(reservation.invitationToken()))
+                    .findFirst();
+        }
+
+        @Override
+        public BarReservationInvitationMemberRecord saveInvitationMember(BarReservationInvitationMemberRecord member) {
+            invitationMembers.put(member.reservationId() + "|" + member.memberIdentifier(), member);
+            return member;
+        }
+
+        @Override
+        public List<BarReservationInvitationMemberRecord> listInvitationMembers(String reservationId) {
+            return invitationMembers.values().stream()
+                    .filter(member -> reservationId.equals(member.reservationId()))
+                    .sorted((a, b) -> Boolean.compare(b.isHolder(), a.isHolder()))
+                    .toList();
+        }
+
         @Override
         public BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification) {
             return verification;
@@ -3510,6 +3638,16 @@ class BarServiceTests {
                     List.copyOf(evidenceAttachmentIds)
             ));
             return "arap_refund_reversal_" + reversalAdjustmentId;
+        }
+
+        @Override
+        public String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent) {
+            return "arap_gift_settle_" + verificationId;
+        }
+
+        @Override
+        public String reverseGiftSettlementPayable(String verificationId, String merchantId, long internalPriceCent) {
+            return "arap_gift_settle_reverse_" + verificationId;
         }
     }
 

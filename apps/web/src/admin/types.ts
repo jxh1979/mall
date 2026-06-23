@@ -260,6 +260,19 @@ export type BarOrderRow = {
   bills?: BarBillRow[];
 };
 
+export type BarProductRow = {
+  id: string;
+  barId?: string;
+  productName?: string;
+  productType?: string;
+  priceCent?: number;
+  currency?: string;
+  status?: string;
+  soldOut?: boolean;
+  /** V152 内部结算价（分）：平台↔酒吧成本结算价基；null/未录入=不参与结算/提成扣减。 */
+  internalSettlementPriceCent?: number | null;
+};
+
 export type StoredWineRow = {
   id: string;
   savedNo?: string;

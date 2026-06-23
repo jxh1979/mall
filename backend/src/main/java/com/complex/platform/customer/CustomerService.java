@@ -1,8 +1,12 @@
 package com.complex.platform.customer;
 
 import com.complex.platform.bar.BarDepositRuleRecord;
+import com.complex.platform.bar.BarRepository;
+import com.complex.platform.bar.BarReservationInvitationMemberRecord;
+import com.complex.platform.bar.BarReservationInvitationRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
+import com.complex.platform.customer.dto.CustomerBarInvitationConfirmRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperation;
@@ -46,6 +50,7 @@ public class CustomerService {
     private final AuditEventService auditEventService;
     private final InventoryService inventoryService;
     private final LoyaltyService loyaltyService;
+    private final BarRepository barRepository;
 
     public CustomerService(
             CustomerRepository repository,
@@ -54,7 +59,8 @@ public class CustomerService {
             AuditedOperationExecutor operations,
             AuditEventService auditEventService,
             InventoryService inventoryService,
-            LoyaltyService loyaltyService
+            LoyaltyService loyaltyService,
+            BarRepository barRepository
     ) {
         this.repository = repository;
         this.otpVerifier = otpVerifier;
@@ -63,6 +69,7 @@ public class CustomerService {
         this.auditEventService = auditEventService;
         this.inventoryService = inventoryService;
         this.loyaltyService = loyaltyService;
+        this.barRepository = barRepository;
     }
 
     @Transactional
@@ -570,6 +577,81 @@ public class CustomerService {
                     ));
                 }
         );
+    }
+
+    /**
+     * V155 订卡邀请函——朋友确认（客人端两步之第一步，占一个名额）。
+     * 鉴权=客人 token（requireCustomer，能力 not_applicable，不经 requirePermission，对齐 createBarReservation）。
+     * 幂等：同一朋友重复确认返回原成员；确认上限 confirmed<capacity（卡座可进人数）。
+     */
+    @Transactional
+    public BarReservationInvitationMemberRecord confirmBarInvitation(
+            String customerToken,
+            String idempotencyKey,
+            CustomerBarInvitationConfirmRequest request
+    ) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        CustomerBarInvitationConfirmRequest actual = requireRequest(request);
+        String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
+        return executeWrite(
+                "confirmCustomerBarInvitation:" + customer.id(),
+                key,
+                actual,
+                BarReservationInvitationMemberRecord.class,
+                "customer.bar_invitation.confirmed",
+                "customer.bar_invitation.confirm_failed",
+                "not_applicable",
+                "bar_reservation",
+                () -> {
+                    String token = requireText(actual.invitationToken(), "invitation_token");
+                    BarReservationRecord reservation = barRepository.findReservationByInvitationToken(token)
+                            .orElseThrow(() -> ApiException.notFound("BAR_INVITATION_NOT_FOUND", "card-seat invitation not found"));
+                    if (!"active".equals(reservation.invitationStatus())) {
+                        throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "card-seat invitation is not active");
+                    }
+                    String memberIdentifier = customer.id();
+                    List<BarReservationInvitationMemberRecord> members = barRepository.listInvitationMembers(reservation.id());
+                    BarReservationInvitationMemberRecord existing = members.stream()
+                            .filter(member -> memberIdentifier.equals(member.memberIdentifier()))
+                            .findFirst().orElse(null);
+                    if (existing != null) {
+                        return existing; // 幂等：同一朋友重复确认返回原记录，不重复占名额
+                    }
+                    int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
+                    long confirmed = members.stream().filter(member -> !"revoked".equals(member.status())).count();
+                    if (confirmed >= capacity) {
+                        throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "card-seat capacity is exhausted");
+                    }
+                    Instant now = Instant.now();
+                    return barRepository.saveInvitationMember(new BarReservationInvitationMemberRecord(
+                            "invm_" + slug(reservation.id() + ":" + memberIdentifier),
+                            reservation.id(), reservation.barId(), memberIdentifier, customer.id(),
+                            false, "confirmed", now, null, null, now, now));
+                }
+        );
+    }
+
+    /**
+     * V155 订卡邀请函——持函人（客人端）查看自己预订的邀请函（展示二维码 token / 容量 / 已确认成员，供转发）。
+     * 只读，鉴权=客人 token + 校验该预订归属本人（CROSS_CUSTOMER_FORBIDDEN）；不签发（签发为 staff 动作）。
+     */
+    public BarReservationInvitationRecord getMyBarInvitation(String customerToken, String reservationId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        String id = requireText(reservationId, "reservation_id");
+        BarReservationRecord reservation = barRepository.findReservationById(id)
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
+        if (!customer.id().equals(reservation.customerId())) {
+            throw ApiException.forbidden("CROSS_CUSTOMER_FORBIDDEN", "access to another customer's reservation is not allowed");
+        }
+        List<BarReservationInvitationMemberRecord> members = barRepository.listInvitationMembers(id);
+        int confirmed = (int) members.stream().filter(member -> !"revoked".equals(member.status())).count();
+        int entered = (int) members.stream().filter(member -> "entered".equals(member.status())).count();
+        int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
+        return new BarReservationInvitationRecord(
+                reservation.id(), reservation.barId(), reservation.tableId(),
+                reservation.invitationToken(), reservation.invitationSignature(), capacity,
+                reservation.invitationStatus(), reservation.invitationIssuedAt(),
+                confirmed, entered, Math.max(capacity - confirmed, 0), members);
     }
 
     /** P0#3：scope 优先级 table_type > bar；listDepositRules 已按 scope_type DESC 返回（对齐 BarEntryService）。 */

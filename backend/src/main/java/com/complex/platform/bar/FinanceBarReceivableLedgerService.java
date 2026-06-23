@@ -123,6 +123,44 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
         return item.id();
     }
 
+    @Override
+    public String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent) {
+        LocalDate today = LocalDate.now();
+        // 通票免费酒水：核销发放 → 平台按内部结算价向酒吧(merchant)挂应付。源/幂等键 = verificationId（一次核销至多一笔）。
+        ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
+                "bar-gift-settle-" + verificationId,
+                "platform-to-bar pass drink settlement: verification " + verificationId,
+                List.of(),
+                "payable",
+                merchantId,
+                "pass_drink_settlement",
+                verificationId,
+                internalPriceCent,
+                today.plusDays(30),
+                YearMonth.from(today).toString()
+        ));
+        return item.id();
+    }
+
+    @Override
+    public String reverseGiftSettlementPayable(String verificationId, String merchantId, long internalPriceCent) {
+        LocalDate today = LocalDate.now();
+        // 赠饮冲正 → 对冲应收（同 source_id=verificationId、direction 不同 → 与原应付 V008 唯一索引不冲突且净额归零）。
+        ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
+                "bar-gift-settle-reverse-" + verificationId,
+                "reverse platform-to-bar pass drink settlement: verification " + verificationId,
+                List.of(),
+                "receivable",
+                merchantId,
+                "pass_drink_settlement",
+                verificationId,
+                internalPriceCent,
+                today.plusDays(30),
+                YearMonth.from(today).toString()
+        ));
+        return item.id();
+    }
+
     private String counterpartyId(BarBillRecord bill, BarOrderRecord order) {
         if (order.customerId() != null && !order.customerId().isBlank()) {
             return order.customerId();

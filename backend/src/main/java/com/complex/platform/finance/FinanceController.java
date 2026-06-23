@@ -18,6 +18,8 @@ import com.complex.platform.finance.dto.TurnoverRentBillRequest;
 import java.util.List;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.PropertyFeeBillRequest;
+import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -168,6 +171,9 @@ public class FinanceController {
         return ApiResponse.ok(service.recordDepositAction(request));
     }
 
+    // F-OPS-08 已废止：CAM 权重分摊 + 年度 true-up 由物业费每平米固定计费（不退不补）取代。
+    // 两端点保留仅为对旧客户端返回明确弃用错误码（CAM_ALLOCATION_ABOLISHED / CAM_TRUEUP_ABOLISHED）；
+    // 改用下方 /property-fee/* 端点。
     @PostMapping("/cam/allocations")
     public ApiResponse<List<CamAllocationRecord>> allocateCam(@RequestBody CamAllocationRequest request) {
         authorizationService.requirePermission("finance.cam.allocate");
@@ -180,5 +186,27 @@ public class FinanceController {
         authorizationService.requirePermission("finance.cam.trueup");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.runCamTrueUp(request));
+    }
+
+    // ── F-OPS-08 物业费固定计费（每平米固定单价 × 商户面积，按期不退不补）─────────────
+
+    @PostMapping("/property-fee/rates")
+    public ApiResponse<PropertyFeeRateRecord> createPropertyFeeRate(@RequestBody PropertyFeeRateRequest request) {
+        authorizationService.requirePermission("finance.property_fee.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createPropertyFeeRate(request));
+    }
+
+    @GetMapping("/property-fee/rates")
+    public ApiResponse<List<PropertyFeeRateRecord>> listPropertyFeeRates(@RequestParam("project_id") String projectId) {
+        authorizationService.requirePermission("finance.property_fee.manage");
+        return ApiResponse.ok(service.listPropertyFeeRates(projectId));
+    }
+
+    @PostMapping("/property-fee/bills")
+    public ApiResponse<List<PropertyFeeBillRecord>> billPropertyFee(@RequestBody PropertyFeeBillRequest request) {
+        authorizationService.requirePermission("finance.property_fee.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.billPropertyFee(request));
     }
 }

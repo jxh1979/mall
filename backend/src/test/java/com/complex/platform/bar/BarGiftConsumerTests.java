@@ -70,6 +70,48 @@ class BarGiftConsumerTests {
     }
 
     @Test
+    void giftVerifiedAndReversedSettlesAndReversesPlatformBarPayable() {
+        CapturingLedger ledger = new CapturingLedger();
+        BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
+        // 该免费酒水对应吧台商品（内部结算价 4200），经 itemRef（库存物料）桥接。
+        repository.giftDrinkProduct = new BarProductRecord(
+                "prod_beer", BAR_ID, "merchant_1", "House Beer", "beer", 3800L, "CNY",
+                ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
+                null, null, null, false, null, null, 4200L);
+
+        settlingConsumer.onGiftVerified(new GiftVerifiedEvent("ent_s", "ver_s", ITEM_REF, BAR_ID, null, "merchant_1"));
+        // 平台→酒吧结算应付按内部价 4200 生成。
+        assertThat(ledger.settledVerificationId).isEqualTo("ver_s");
+        assertThat(ledger.settledMerchantId).isEqualTo("merchant_1");
+        assertThat(ledger.settledAmount).isEqualTo(4200L);
+
+        settlingConsumer.onGiftReversed(new GiftReversedEvent("ver_s"));
+        // 赠饮冲正 → 冲销结算应付。
+        assertThat(ledger.reversedVerificationId).isEqualTo("ver_s");
+    }
+
+    @Test
+    void giftSettlementSkippedWhenNoInternalPriceOrPlatformBar() {
+        CapturingLedger ledger = new CapturingLedger();
+        BarGiftConsumer settlingConsumer = new BarGiftConsumer(repository, ledger);
+        // 无内部价（商品内部价 null）→ 不结算。
+        repository.giftDrinkProduct = new BarProductRecord(
+                "prod_beer", BAR_ID, "merchant_1", "House Beer", "beer", 3800L, "CNY",
+                ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
+                null, null, null, false, null, null, null);
+        settlingConsumer.onGiftVerified(new GiftVerifiedEvent("ent_n", "ver_n", ITEM_REF, BAR_ID, null, "merchant_1"));
+        assertThat(ledger.settledVerificationId).isNull();
+
+        // 平台自营吧（merchantId null）→ 即便有内部价也不结算。
+        repository.giftDrinkProduct = new BarProductRecord(
+                "prod_beer2", BAR_ID, null, "House Beer", "beer", 3800L, "CNY",
+                ITEM_REF, LOCATION, false, "active", Instant.now(), Instant.now(),
+                null, null, null, false, null, null, 4200L);
+        settlingConsumer.onGiftVerified(new GiftVerifiedEvent("ent_p", "ver_p", ITEM_REF, BAR_ID, null, null));
+        assertThat(ledger.settledVerificationId).isNull();
+    }
+
+    @Test
     void giftVerifiedIsIdempotentAcrossRepeatedEvents() {
         GiftVerifiedEvent event = new GiftVerifiedEvent("ent_1", "ver_1", ITEM_REF, BAR_ID, null, "merchant_1");
         consumer.onGiftVerified(event);
@@ -126,6 +168,56 @@ class BarGiftConsumerTests {
                 0, 0L, "CNY", "active", now, now);
     }
 
+    /** F-TXN-03 piece③b：捕获平台↔酒吧结算调用的内存 BarReceivableLedgerService（其余方法 stub）。 */
+    private static final class CapturingLedger implements BarReceivableLedgerService {
+        String settledVerificationId;
+        String settledMerchantId;
+        long settledAmount;
+        String reversedVerificationId;
+
+        @Override
+        public boolean isBusinessDayLocked(java.time.LocalDate businessDate) {
+            return false;
+        }
+
+        @Override
+        public String createReceivableForOnAccountBill(BarBillRecord bill, BarOrderRecord order,
+                String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds) {
+            return null;
+        }
+
+        @Override
+        public String createPayableForCommission(BarCommissionCalculationRecord commission) {
+            return null;
+        }
+
+        @Override
+        public String createRefundPayable(BarBillRecord bill, BarOrderRecord order, String adjustmentId,
+                long refundAmountCent, String idempotencyKey, String reason, List<String> evidenceAttachmentIds) {
+            return null;
+        }
+
+        @Override
+        public String reverseRefundPayable(BarBillRecord bill, BarOrderRecord order, String reversalAdjustmentId,
+                long refundAmountCent, String idempotencyKey, String reason, List<String> evidenceAttachmentIds) {
+            return null;
+        }
+
+        @Override
+        public String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent) {
+            settledVerificationId = verificationId;
+            settledMerchantId = merchantId;
+            settledAmount = internalPriceCent;
+            return "arap_" + verificationId;
+        }
+
+        @Override
+        public String reverseGiftSettlementPayable(String verificationId, String merchantId, long internalPriceCent) {
+            reversedVerificationId = verificationId;
+            return "arap_rev_" + verificationId;
+        }
+    }
+
     /** 仅实现消费者所需 + 断言所需方法的内存 BarRepository。 */
     private static final class CapturingBarRepository implements BarRepository {
         private final Map<String, BarTableRecord> tables = new LinkedHashMap<>();
@@ -135,11 +227,22 @@ class BarGiftConsumerTests {
         private final Map<String, StockBalanceSnapshot> stockBalances = new LinkedHashMap<>();
         final List<StockMovementSnapshot> stockMovements = new ArrayList<>();
         private final Map<String, BarGiftRedemptionRecord> giftRedemptions = new LinkedHashMap<>();
+        // F-TXN-03 piece③b：通票赠饮 itemRef→bar_product 桥接的商品（含内部结算价）。
+        BarProductRecord giftDrinkProduct;
 
         @Override
         public BarTableRecord saveTable(BarTableRecord table) {
             tables.put(table.id(), table);
             return table;
+        }
+
+        @Override
+        public Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
+            if (giftDrinkProduct != null && barId.equals(giftDrinkProduct.barId())
+                    && inventoryItemId.equals(giftDrinkProduct.inventoryItemId())) {
+                return Optional.of(giftDrinkProduct);
+            }
+            return Optional.empty();
         }
 
         @Override

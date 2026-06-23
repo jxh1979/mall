@@ -102,6 +102,21 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public Optional<BarReservationRecord> findReservationByInvitationToken(String token) {
+        return catalog.findReservationByInvitationToken(token);
+    }
+
+    @Override
+    public BarReservationInvitationMemberRecord saveInvitationMember(BarReservationInvitationMemberRecord member) {
+        return catalog.saveInvitationMember(member);
+    }
+
+    @Override
+    public List<BarReservationInvitationMemberRecord> listInvitationMembers(String reservationId) {
+        return catalog.listInvitationMembers(reservationId);
+    }
+
+    @Override
     public BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification) {
         return catalog.saveAgeVerification(verification);
     }
@@ -119,6 +134,11 @@ class JdbcBarRepository implements BarRepository {
     @Override
     public Optional<BarProductRecord> findProductById(String id) {
         return catalog.findProductById(id);
+    }
+
+    @Override
+    public Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
+        return catalog.findProductByInventoryItem(barId, inventoryItemId);
     }
 
     @Override

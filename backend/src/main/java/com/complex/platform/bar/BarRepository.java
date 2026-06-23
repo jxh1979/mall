@@ -51,6 +51,22 @@ public interface BarRepository {
 
     BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin);
 
+    // ── V155 订卡邀请函（默认空实现，JDBC + 邀请函测试桩覆盖；其它内存桩无需改动）─────────────
+    /** 按邀请函 token 反查预订（confirm/entry 校验入口）；未签发/不存在返回空。 */
+    default Optional<BarReservationRecord> findReservationByInvitationToken(String token) {
+        return Optional.empty();
+    }
+
+    /** upsert 邀请函成员（confirm 新增 / entry 标 entered）；幂等键 (reservation_id, member_identifier)。 */
+    default BarReservationInvitationMemberRecord saveInvitationMember(BarReservationInvitationMemberRecord member) {
+        return member;
+    }
+
+    /** 列邀请函成员（含持函人），供容量计数与门口核验。 */
+    default List<BarReservationInvitationMemberRecord> listInvitationMembers(String reservationId) {
+        return List.of();
+    }
+
     BarAgeVerificationRecord saveAgeVerification(BarAgeVerificationRecord verification);
 
     BarProductRecord saveProduct(BarProductRecord product);
@@ -58,6 +74,15 @@ public interface BarRepository {
     List<BarProductRecord> listProducts(Optional<String> merchantScope);
 
     Optional<BarProductRecord> findProductById(String id);
+
+    /**
+     * F-TXN-03 piece③b：按 (bar_id, inventory_item_id) 定位吧台商品（通票赠饮经 itemRef[库存物料] 桥接到 bar_product
+     * 取 internal_settlement_price_cent 作平台↔酒吧结算价）。多命中取 active 优先；无则空。
+     * default 返回 empty 兼容既有测试双子。
+     */
+    default Optional<BarProductRecord> findProductByInventoryItem(String barId, String inventoryItemId) {
+        return Optional.empty();
+    }
 
     BarOrderRecord saveOrder(BarOrderRecord order);
 

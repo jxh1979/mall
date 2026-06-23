@@ -427,8 +427,8 @@ public class BarBillingService {
         // 排除项中"免单(waiver)/退款(refund)"已落 bar_bill_adjustments（V079），按净额扣除：
         // waiver+refund 为减项，其 V124 反向冲销 waiver_reversal/refund_reversal（退菜退酒被拒时撤销原减免）回加，
         // 避免免单/退款被撤销后仍少发提成。仅统计 applied 态记录（applyBillAdjustment/void 流程均落 applied）。
-        // 注意：文档另列的赠酒成本(gift)/抹零(round_off)/通票/票务权益/卡座入场名额抵扣，
-        // 当前 bar_bill_adjustments 无对应 adjustment_type、账单与提成表亦无对应列，无法在不新增字段下扣除（见交付报告 BLOCKED）。
+        // 注意：抹零(round_off)经业主确认无此业务；通票免费酒水/票务权益赠饮在核销环节即为 0 元平台赠饮单、
+        // 不进 subtotal，故无需在此扣除（见 §7.2 赠饮核销闭环）。赠菜成本(gift)见下方 giftDeduction（F-TXN-05）。
         long commissionExcluded = repository.listBillAdjustments(bill.id()).stream()
                 .filter(a -> "applied".equals(a.status()))
                 .mapToLong(a -> switch (a.adjustmentType()) {
@@ -437,7 +437,17 @@ public class BarBillingService {
                     default -> 0L;
                 })
                 .sum();
-        long base = Math.max(0L, bill.subtotalAmountCent() - bill.discountAmountCent() - commissionExcluded);
+        // F-TXN-05 赠菜扣提成：吧台随单赠送项(is_gift)对客 amount_cent=0 已不计入 subtotal，其成本再按
+        // 商品内部结算价(V152 internal_settlement_price_cent)× 数量从提成基数扣除——即赠送项成本不计提成。
+        // 商品未录内部价时该项不扣（orElse 0，向后兼容既有商品）。
+        long giftDeduction = repository.listOrderItems(bill.orderId()).stream()
+                .filter(BarOrderItemRecord::isGift)
+                .mapToLong(it -> repository.findProductById(it.productId())
+                        .map(BarProductRecord::internalSettlementPriceCent)
+                        .map(price -> price * it.quantity())
+                        .orElse(0L))
+                .sum();
+        long base = Math.max(0L, bill.subtotalAmountCent() - bill.discountAmountCent() - commissionExcluded - giftDeduction);
         long amount = base * rateBp / 10_000L;
         BarCommissionCalculationRecord saved = repository.saveCommissionCalculation(new BarCommissionCalculationRecord(
                 "commission_" + billSlug(actual.idempotencyKey()),

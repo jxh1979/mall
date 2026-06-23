@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TicketRefundService {
@@ -150,6 +151,56 @@ public class TicketRefundService {
                     order.id(), approved.id(), approved.refundAmountCent(), approved.refundChannel()));
         }
         return approved;
+    }
+
+    /**
+     * F-TXN-03 门票到期自动退款（系统发起，无 auth 上下文）：全未核销的已付到期订单整单原渠道直批退款。
+     * 与手动退款生效效果一致（退款记录 + 行直批 approved、冻结权益 active→refunded、全额回补库存、发打款事件），
+     * 但**跳过商户范围闸**（系统动作）；全未核销 → 无已确认积分可冲减，不发 points deduct。
+     * 幂等：非 paid / 0 元 / 有核销 / 已有退款（pending/approved）→ 跳过返回 null（由调用方对到期未用权益另作作废）。
+     * {@code @Transactional} 保多写原子（失败回滚，权益保持 active、下轮重试）。
+     */
+    @Transactional
+    public TicketRefundRecord autoRefundExpiredUnusedOrder(
+            TicketOrderRecord order, List<IssuedEntitlementRecord> entitlements, Instant now) {
+        if (order == null || !"paid".equals(order.payStatus()) || order.amountCent() <= 0) {
+            return null;
+        }
+        if (entitlements.stream().anyMatch(e -> e.usedTimes() > 0)) {
+            return null; // 有核销 → 不自动退（走作废分支）。
+        }
+        if (repository.sumApprovedRefundAmountByOrderId(order.id()) > 0
+                || repository.sumPendingRefundAmountByOrderId(order.id()) > 0) {
+            return null; // 已有退款（手动/自动）→ 幂等跳过。
+        }
+        TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
+                "ticket_refund_auto_expiry_" + slug(order.id()),
+                order.id(),
+                order.amountCent(),
+                "ticket order expired unused — system auto refund",
+                "original",
+                "approved",
+                "system",
+                now,
+                now,
+                now));
+        createRefundLines(refund, order, now);
+        // 直批生效（镜像 approveRefund）：退款行置 approved、冻结对应权益(active→refunded)、全额回补库存、发打款事件。
+        repository.listTicketRefundLines(refund.id()).forEach(line -> {
+            repository.saveTicketRefundLine(new TicketRefundLineRecord(
+                    line.id(), line.refundId(), line.orderId(), line.entitlementId(), line.entitlementType(),
+                    line.lineType(), line.refundAmountCent(), line.remainingTimesBefore(), line.usedTimesBefore(),
+                    "approved", line.createdAt(), now));
+            if (line.entitlementId() != null && !line.entitlementId().isBlank()) {
+                repository.freezeEntitlementForRefund(line.entitlementId(), now);
+            }
+        });
+        if (order.quantity() > 0) {
+            repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
+        }
+        eventPublisher.publishEvent(new TicketRefundApprovedEvent(
+                order.id(), refund.id(), refund.refundAmountCent(), refund.refundChannel()));
+        return refund;
     }
 
     private void publishPointsDeductRequested(TicketRefundRecord refund) {

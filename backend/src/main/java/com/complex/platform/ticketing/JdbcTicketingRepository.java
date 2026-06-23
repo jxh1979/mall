@@ -806,6 +806,32 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
+    public List<IssuedEntitlementRecord> listExpiredUnusedActiveEntitlements(java.time.Instant now) {
+        // F-TXN-03 到期未用：valid_to 已过、仍 active、且 used_times=0 的权益（到期自动退款 / 作废候选）。
+        return jdbcTemplate.query(JdbcTicketingSql.issuedEntitlementSelect() + """
+                 WHERE valid_to < :now
+                   AND status = 'active'
+                   AND used_times = 0
+                 ORDER BY order_id, created_at ASC, id
+                """, Map.of("now", now.atOffset(java.time.ZoneOffset.UTC)), rowMapper::mapIssuedEntitlement);
+    }
+
+    @Override
+    public int forfeitEntitlement(String id, java.time.Instant now) {
+        // F-TXN-03 一张用后其余作废：到期未用权益置 forfeited（仅 active 且 used_times=0，幂等：已非此态返回 0）。
+        return jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET status = 'forfeited',
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND status = 'active'
+                   AND used_times = 0
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("updated_at", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
     public boolean tryLockOrderForIssuance(String orderId) {
         return jdbcTemplate.update("""
                 UPDATE ticket_orders

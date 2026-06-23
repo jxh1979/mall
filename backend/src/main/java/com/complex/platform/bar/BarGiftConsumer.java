@@ -33,9 +33,18 @@ public class BarGiftConsumer {
     private static final String STOCK_LOCATION_DEFAULT = "default";
 
     private final BarRepository repository;
+    // F-TXN-03 piece③b 通票免费酒水平台↔酒吧结算：可为 null=兼容既有测试构造（不结算）。生产由 Spring 注入。
+    private final BarReceivableLedgerService receivableLedgerService;
 
-    public BarGiftConsumer(BarRepository repository) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public BarGiftConsumer(BarRepository repository, BarReceivableLedgerService receivableLedgerService) {
         this.repository = repository;
+        this.receivableLedgerService = receivableLedgerService;
+    }
+
+    /** 向后兼容构造（不注入结算）：既有单测零改动，通票赠饮平台↔酒吧结算关闭。 */
+    public BarGiftConsumer(BarRepository repository) {
+        this(repository, null);
     }
 
     @EventListener
@@ -170,6 +179,16 @@ public class BarGiftConsumer {
             if (inventoryMovementId != null) {
                 repository.atomicDecreaseStock(itemRef, STOCK_LOCATION_DEFAULT, -1);
             }
+            return;
+        }
+        // 通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b）：本次实际落单后，平台按该酒水内部结算价向酒吧挂应付。
+        // 仅商户吧(merchantId 非空)、能由 itemRef 桥接到 bar_product 且其内部价>0 时结算；平台自营吧/无内部价不结算。
+        if (receivableLedgerService != null && merchantId != null && itemRef != null) {
+            Long internalPrice = repository.findProductByInventoryItem(barId, itemRef)
+                    .map(BarProductRecord::internalSettlementPriceCent).orElse(null);
+            if (internalPrice != null && internalPrice > 0) {
+                receivableLedgerService.createPayableForGiftSettlement(verificationId, merchantId, internalPrice);
+            }
         }
     }
 
@@ -224,6 +243,15 @@ public class BarGiftConsumer {
                 redemption.createdAt(),
                 now
         ));
+        // 赠饮冲正 → 冲销平台↔酒吧结算应付（对冲应收，净额归零）；条件与正向一致（商户吧 + 可解析内部价>0）。
+        if (receivableLedgerService != null && redemption.merchantId() != null && redemption.itemRef() != null) {
+            Long internalPrice = repository.findProductByInventoryItem(redemption.barId(), redemption.itemRef())
+                    .map(BarProductRecord::internalSettlementPriceCent).orElse(null);
+            if (internalPrice != null && internalPrice > 0) {
+                receivableLedgerService.reverseGiftSettlementPayable(
+                        verificationId, redemption.merchantId(), internalPrice);
+            }
+        }
     }
 
     private String trimToNull(String value) {

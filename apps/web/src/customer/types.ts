@@ -67,6 +67,34 @@ export type BarReservation = {
   createdAt: string;
 };
 
+// V155 订卡邀请函（客人端展示/转发/确认）
+export type BarInvitationMember = {
+  id: string;
+  reservationId?: string;
+  barId?: string;
+  memberIdentifier?: string;
+  memberCustomerId?: string | null;
+  isHolder?: boolean;
+  status?: string;
+  confirmedAt?: string | null;
+  enteredAt?: string | null;
+};
+
+export type BarInvitation = {
+  reservationId: string;
+  barId?: string;
+  tableId?: string;
+  invitationToken?: string | null;
+  invitationSignature?: string | null;
+  capacity?: number;
+  status?: string;
+  issuedAt?: string | null;
+  confirmedCount?: number;
+  enteredCount?: number;
+  remaining?: number;
+  members?: BarInvitationMember[];
+};
+
 export type PointsSummary = {
   customerId: string;
   balance: number;

@@ -263,6 +263,54 @@ public class BarService {
         );
     }
 
+    // ── V155 订卡邀请函 ───────────────────────────────────────────────────────
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.invitation.manage")
+    @Transactional
+    public BarReservationInvitationRecord issueReservationInvitation(String reservationId, BarInvitationActionRequest request) {
+        String id = operations.requireText(reservationId, "reservation_id");
+        return operations.executeWrite(
+                "issueBarReservationInvitation:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarReservationInvitationRecord.class,
+                BarWriteOperation.ISSUE_INVITATION,
+                () -> entryService.issueInvitation(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.invitation.manage")
+    @Transactional
+    public BarReservationInvitationRecord revokeReservationInvitation(String reservationId, BarInvitationActionRequest request) {
+        String id = operations.requireText(reservationId, "reservation_id");
+        return operations.executeWrite(
+                "revokeBarReservationInvitation:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarReservationInvitationRecord.class,
+                BarWriteOperation.REVOKE_INVITATION,
+                () -> entryService.revokeInvitation(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.guest_checkin")
+    @Transactional
+    public BarReservationInvitationMemberRecord verifyReservationInvitationEntry(String reservationId, VerificationRequest request) {
+        String id = operations.requireText(reservationId, "reservation_id");
+        return operations.executeWrite(
+                "verifyBarReservationInvitationEntry:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarReservationInvitationMemberRecord.class,
+                BarWriteOperation.ENTER_INVITATION,
+                () -> entryService.verifyInvitationEntry(id, request)
+        );
+    }
+
+    /** 读：邀请函视图（含成员明细）；权限由控制器 requirePermission(bar.reservation.view) 把关。 */
+    public BarReservationInvitationRecord getReservationInvitation(String reservationId) {
+        return entryService.getInvitation(operations.requireText(reservationId, "reservation_id"));
+    }
+
     public PageResponse<BarTableRecord> listTables() {
         return operations.readPage(
                 BarReadOperation.LIST_TABLES,

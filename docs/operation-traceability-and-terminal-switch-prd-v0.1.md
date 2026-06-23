@@ -351,7 +351,7 @@ flowchart TD
 | `mdm.violation.handled` | facility | MDM 受管设备违规处置闭环（V107 disposition：acknowledged/device_blocked/dismissed）。`MdmService` |
 | `merchant_service.work_order.escalated` | service | 物业工单 SLA 自动超时升级（V120 sla_breached/escalated_at）。`MerchantServiceService` |
 | `bar.order_item_void_decided` | bar | 退菜退酒审批决策（approved/rejected，V117 回写 + V124 驳回反向冲销 waiver_reversal/refund_reversal）。`BarWriteOperation.DECIDE_ORDER_ITEM_VOID` |
-| `finance_cam.trued_up` | finance | CAM 年度 true-up 多退少补（V121 cam_trueup_runs/lines）。**注意为 `finance_cam.` 下划线连写**，字典/口语 `finance.cam.trued_up` 为漂移；映射：`finance.cam.trued_up`→`finance_cam.trued_up`。`FinanceService` |
+| `finance_cam.trued_up` | finance | ~~CAM 年度 true-up 多退少补（V121 cam_trueup_runs/lines）~~ **已废止（2026-06-22，V150 F-OPS-08）**：CAM 改物业费每平米固定计费、不退不补、无 true-up，本事件不再发出（旧映射 `finance.cam.trued_up`→`finance_cam.trued_up` 仅作历史）。物业费计费事件为 `finance_property_fee.billed`。`FinanceService` |
 | `integration.channel_reconciliation.completed` | third_party | 第三方回流渠道自动对账完成（V109 channel/external_channel_order_id + source_domain）。`IntegrationOrderSyncService` |
 | `integration.channel_reconciliation.failed` | third_party | 第三方回流渠道自动对账失败。`IntegrationOrderSyncService` |
 

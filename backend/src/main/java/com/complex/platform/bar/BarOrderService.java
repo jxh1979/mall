@@ -62,6 +62,11 @@ public class BarOrderService {
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         boolean stockManaged = Boolean.TRUE.equals(actual.stockDeductionRequired());
+        // V152 内部结算价（可空；非空须 >=0，DB CHECK 兜底，应用层先验给明确错误码）。
+        Long internalPrice = actual.internalSettlementPriceCent();
+        if (internalPrice != null && internalPrice < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "internal_settlement_price_cent must be >= 0");
+        }
         return repository.saveProduct(new BarProductRecord(
                 "product_" + slug(actual.idempotencyKey()),
                 requireText(actual.barId(), "bar_id"),
@@ -78,7 +83,11 @@ public class BarOrderService {
                 now,
                 actual.standardPourVolume(),
                 trimToNull(actual.pourVolumeUnit()),
-                actual.lossThreshold()
+                actual.lossThreshold(),
+                false,
+                null,
+                null,
+                internalPrice
         ));
     }
 
@@ -109,7 +118,10 @@ public class BarOrderService {
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
             requireProductSellable(product);
             int quantity = requirePositiveItemQuantity(item, "quantity");
-            long amount = product.priceCent() * quantity;
+            // F-TXN-05 赠菜：赠送项对客金额计 0（不计消费额/账单 subtotal），单价保留售价；
+            // 成本按商品内部结算价于结账计提时从提成基数扣除（见 BarBillingService.calculateCommission）。
+            boolean gift = Boolean.TRUE.equals(item.get("is_gift"));
+            long amount = gift ? 0L : product.priceCent() * quantity;
             total += amount;
             orderItems.add(new BarOrderItemRecord(
                     "item_" + slug(orderId + ":" + product.id()),
@@ -123,7 +135,8 @@ public class BarOrderService {
                     now,
                     now,
                     null,
-                    0L
+                    0L,
+                    gift
             ));
         }
         BarOrderRecord order = repository.saveOrder(new BarOrderRecord(
@@ -170,7 +183,10 @@ public class BarOrderService {
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
             requireProductSellable(product);
             int quantity = requirePositiveItemQuantity(item, "quantity");
-            long amount = product.priceCent() * quantity;
+            // F-TXN-05 赠菜：赠送项对客金额计 0（不计消费额/账单 subtotal），单价保留售价；
+            // 成本按商品内部结算价于结账计提时从提成基数扣除（见 BarBillingService.calculateCommission）。
+            boolean gift = Boolean.TRUE.equals(item.get("is_gift"));
+            long amount = gift ? 0L : product.priceCent() * quantity;
             total += amount;
             last = repository.saveOrderItem(new BarOrderItemRecord(
                     "item_" + slug(orderId + ":" + product.id() + ":" + actual.idempotencyKey()),
@@ -184,7 +200,8 @@ public class BarOrderService {
                     now,
                     now,
                     null,
-                    0L
+                    0L,
+                    gift
             ));
         }
         repository.saveOrder(new BarOrderRecord(
@@ -252,7 +269,8 @@ public class BarOrderService {
                     item.createdAt(),
                     now,
                     actualPourVolume,
-                    lossVolume
+                    lossVolume,
+                    item.isGift()
             ));
         }
         BarOrderRecord deliveredOrder = repository.saveOrder(new BarOrderRecord(
@@ -529,7 +547,8 @@ public class BarOrderService {
                 product.lossThreshold(),
                 targetSoldOut,
                 targetSoldOut ? now : null,
-                targetSoldOut ? trimToDefault(actual.reason(), "marked sold out") : null
+                targetSoldOut ? trimToDefault(actual.reason(), "marked sold out") : null,
+                product.internalSettlementPriceCent()
         );
         BarProductRecord saved = repository.saveProduct(updated);
         auditEventService.recordSuccess(
@@ -622,7 +641,8 @@ public class BarOrderService {
                 reason,
                 now,
                 actorId,
-                returnToStock));
+                returnToStock,
+                item.isGift()));
 
         // 退菜退酒为高危需审批动作：流水 status 承载审批生命周期。
         // approvalRequired=TRUE → 落 'pending'（待审批，由审批决策回写 approved/rejected）；FALSE → 'applied'（直接生效）。
@@ -878,7 +898,8 @@ public class BarOrderService {
                 null,
                 null,
                 null,
-                false));
+                false,
+                item.isGift()));
     }
 
     /** 退菜退酒资金回退：在关联账单上做减项（未结=waiver 减应付；已结=refund 冲正）；无账单则仅明细取消不动资金。 */

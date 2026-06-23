@@ -3,6 +3,8 @@
 
 import { CustomerApi } from "./customerClient";
 import type {
+  BarInvitation,
+  BarInvitationMember,
   BarReservation,
   BarReservationOption,
   CheckInRecord,
@@ -66,6 +68,16 @@ export class CustomerService {
     contactPhone?: string;
   }): Promise<BarReservation> {
     return this.api.post<BarReservation>("/api/v1/customer/bar-reservations", payload);
+  }
+
+  // ③a 订卡邀请函：持函人查看自己的邀请函（展示二维码 token / 容量 / 已确认成员，供转发）
+  getMyBarInvitation(reservationId: string): Promise<BarInvitation> {
+    return this.api.get<BarInvitation>(`/api/v1/customer/bar-invitations/${encodeURIComponent(reservationId)}`);
+  }
+
+  // ③a 订卡邀请函：朋友确认接受（两步之第一步，占一个名额）
+  confirmBarInvitation(invitationToken: string): Promise<BarInvitationMember> {
+    return this.api.post<BarInvitationMember>("/api/v1/customer/bar-invitations/confirm", { invitationToken });
   }
 
   // ④ 我的订单 / 我的票 / 我的权益

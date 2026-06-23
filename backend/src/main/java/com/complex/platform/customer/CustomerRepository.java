@@ -145,6 +145,14 @@ public interface CustomerRepository {
         throw new UnsupportedOperationException("updatePointsLedgerStatus not supported by this repository");
     }
 
+    /**
+     * F-TXN-03 按核销张数：把某条 earn 行的已确认份额对齐 confirmedAmount（target），同步 status；
+     * remainingPoints 非空时同步可过期余额（=已确认份额，使过期口径与实际入余额一致），为空则不动该列。
+     */
+    default void updatePointsLedgerConfirmation(String ledgerId, long confirmedAmount, String status, Long remainingPoints) {
+        throw new UnsupportedOperationException("updatePointsLedgerConfirmation not supported by this repository");
+    }
+
     // ---- 会员忠诚度 第2部分（V090）：储值 / 付费会员 / 积分转赠 ----
 
     /** 储值账户（每客每项目唯一），带行锁用于充值/消费一致。 */

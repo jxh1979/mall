@@ -12,6 +12,8 @@ import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.CamAllocationRequest;
 import com.complex.platform.finance.dto.CamTrueUpRequest;
+import com.complex.platform.finance.dto.PropertyFeeBillRequest;
+import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.DepositActionRequest;
 import com.complex.platform.finance.dto.InventoryVariancePostRequest;
@@ -42,7 +44,8 @@ public class FinanceService {
     // P1#13/#14 + R1-LOOP-01：库存差异、综合体计费三源、卡座销售提成入账来源。
     private static final Set<String> SOURCE_TYPES = Set.of(
             "contract", "order", "refund", "manual", "settlement", "bar_bill",
-            "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit");
+            "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
+            "property_fee", "pass_drink_settlement");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -624,6 +627,51 @@ public class FinanceService {
                 "finance.cam.trueup",
                 "cam_trueup_run",
                 () -> runCamTrueUpInternal(request));
+    }
+
+    // ── F-OPS-08 物业费固定计费（替代已废止 CAM）─────────────────────────────────
+
+    /** 维护物业费费率（项目级、可按期 upsert）。effectivePeriod 为空=设为该项目默认费率（精确期未命中时回退）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.property_fee.manage")
+    @Transactional
+    public PropertyFeeRateRecord createPropertyFeeRate(PropertyFeeRateRequest request) {
+        return executeWrite(
+                "createPropertyFeeRate",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                PropertyFeeRateRecord.class,
+                "finance_property_fee.rate_set",
+                "finance_property_fee.rate_set_failed",
+                "finance.property_fee.manage",
+                "property_fee_rate",
+                () -> createPropertyFeeRateInternal(request));
+    }
+
+    /** 列出某项目的物业费费率（含默认与各期）。 */
+    public List<PropertyFeeRateRecord> listPropertyFeeRates(String projectId) {
+        authorizationService.requirePermission("finance.property_fee.manage");
+        return repository.listPropertyFeeRates(requireText(projectId, "project_id"));
+    }
+
+    /**
+     * 物业费按期计费：对 projectId 下运营提供的 merchantIds，按「每平米固定单价 × 商户面积」逐户生成应收，
+     * 不退不补、按 (项目,期,商户) 幂等。面积缺失/已计费的商户跳过。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.property_fee.manage", admissionAction = "finance.property_fee_bill", objectType = "property_fee_bill")
+    @Transactional
+    public List<PropertyFeeBillRecord> billPropertyFee(PropertyFeeBillRequest request) {
+        @SuppressWarnings("unchecked")
+        List<PropertyFeeBillRecord> result = executeWrite(
+                "billPropertyFee",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                (Class<List<PropertyFeeBillRecord>>) (Class<?>) List.class,
+                "finance_property_fee.billed",
+                "finance_property_fee.bill_failed",
+                "finance.property_fee.manage",
+                "property_fee_bill",
+                () -> billPropertyFeeInternal(request));
+        return result;
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.refund.create", admissionAction = "finance.refund", objectType = "finance_refund")
@@ -1318,165 +1366,19 @@ public class FinanceService {
     }
 
     private List<CamAllocationRecord> allocateCamInternal(CamAllocationRequest request) {
-        CamAllocationRequest actual = requireRequest(request);
-        String period = requireText(actual.period(), "period");
-        long totalAmountCent = requirePositive(actual.totalAmountCent(), "total_amount_cent");
-        LocalDate dueDate = requireDate(actual.dueDate(), "due_date");
-        List<CamAllocationRequest.CamShare> shares = actual.shares();
-        if (shares == null || shares.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "shares is required");
-        }
-        // 权重合计须为 10000（逐分守恒，避免分摊不足/超额）。
-        long totalWeight = 0;
-        for (CamAllocationRequest.CamShare share : shares) {
-            if (share.weightBps() == null || share.weightBps() < 0 || share.weightBps() > BPS_DENOMINATOR) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "weight_bps must be within [0, 10000]");
-            }
-            requireText(share.merchantId(), "merchant_id");
-            totalWeight += share.weightBps();
-        }
-        if (totalWeight != BPS_DENOMINATOR) {
-            throw ApiException.badRequest("CAM_WEIGHTS_NOT_FULL",
-                    "share weights must sum to 10000 bps; got " + totalWeight);
-        }
-
-        Instant now = Instant.now();
-        String batchId = "cam_batch_" + slug(actual.idempotencyKey());
-        List<CamAllocationRecord> result = new java.util.ArrayList<>();
-        long allocatedSoFar = 0;
-        for (int i = 0; i < shares.size(); i++) {
-            CamAllocationRequest.CamShare share = shares.get(i);
-            // P1 越权修复：CAM 分摊此前不校验各 share 归属（trueUp 有、allocate 漏），可凭空给他商户挂应收。
-            // 与 trueUp 一致：平台管理员放行（可跨商户分摊）；商户用户仅能含自身。
-            checkMerchantOwnership(share.merchantId());
-            long allocated;
-            if (i == shares.size() - 1) {
-                // 末位归入剩余差额，保证逐分守恒。
-                allocated = totalAmountCent - allocatedSoFar;
-            } else {
-                allocated = Math.floorDiv(totalAmountCent * (long) share.weightBps(), BPS_DENOMINATOR);
-            }
-            allocatedSoFar += allocated;
-
-            String arApItemId = null;
-            if (allocated > 0) {
-                ArApItemRecord item = persistDerivedArApItem(
-                        "receivable",
-                        share.merchantId(),
-                        "cam",
-                        batchId + "_" + share.merchantId(),
-                        allocated,
-                        actual.idempotencyKey() + "_" + i,
-                        share.merchantId());
-                arApItemId = item.id();
-            }
-            result.add(repository.saveCamAllocation(new CamAllocationRecord(
-                    "cam_alloc_" + slug(batchId + "_" + share.merchantId()),
-                    batchId,
-                    share.merchantId(),
-                    period,
-                    totalAmountCent,
-                    share.weightBps(),
-                    allocated,
-                    arApItemId,
-                    now)));
-        }
-        return result;
+        // F-OPS-08（用户 2026-06 裁决）：CAM 权重分摊已废止，物业费改为每平米固定计费、不退不补。
+        // 旧 cam_allocations 表与历史数据保留只读；此处对旧客户端返回明确弃用错误码，引导改用 billPropertyFee。
+        throw ApiException.conflict("CAM_ALLOCATION_ABOLISHED",
+                "CAM weight allocation is abolished; use fixed per-square-meter property fee billing "
+                        + "(POST /finance/property-fee/bills)");
     }
 
     private CamTrueUpRunRecord runCamTrueUpInternal(CamTrueUpRequest request) {
-        CamTrueUpRequest actual = requireRequest(request);
-        String settlementPeriod = requireText(actual.settlementPeriod(), "settlement_period");
-        long actualTotalAmountCent = requirePositive(actual.actualTotalAmountCent(), "actual_total_amount_cent");
-        requireDate(actual.dueDate(), "due_date");
-        List<CamTrueUpRequest.TrueUpShare> shares = actual.shares();
-        if (shares == null || shares.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "shares is required");
-        }
-        // 权重合计须为 10000（与 CAM 预收权重口径一致，逐分守恒）。
-        long totalWeight = 0;
-        for (CamTrueUpRequest.TrueUpShare share : shares) {
-            if (share.weightBps() == null || share.weightBps() < 0 || share.weightBps() > BPS_DENOMINATOR) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "weight_bps must be within [0, 10000]");
-            }
-            requireText(share.merchantId(), "merchant_id");
-            totalWeight += share.weightBps();
-        }
-        if (totalWeight != BPS_DENOMINATOR) {
-            throw ApiException.badRequest("CAM_WEIGHTS_NOT_FULL",
-                    "share weights must sum to 10000 bps; got " + totalWeight);
-        }
-
-        // P0 资金修复：同一 settlement_period 此前可用不同幂等键重复 true-up，导致已预收被重复计入、多退少补翻倍
-        // （trued_up 标记写而不读、run_id 含幂等键）。合法重试用同一幂等键，会被外层幂等短路、不会进入此处；
-        // 因此此处再次进入必为不同键，按"同期已 true-up"硬拒绝。
-        if (repository.countCamTrueUpRunsForPeriod(settlementPeriod) > 0) {
-            throw ApiException.conflict("CAM_TRUEUP_ALREADY_DONE",
-                    "CAM true-up for settlement_period " + settlementPeriod + " has already been completed");
-        }
-
-        Instant now = Instant.now();
-        String runId = "cam_trueup_" + slug(settlementPeriod + "_" + actual.idempotencyKey());
-        List<CamTrueUpLineRecord> lines = new java.util.ArrayList<>();
-        long actualAllocatedSoFar = 0;
-        long prepaidTotal = 0;
-        for (int i = 0; i < shares.size(); i++) {
-            CamTrueUpRequest.TrueUpShare share = shares.get(i);
-            checkMerchantOwnership(share.merchantId());
-
-            long actualAllocated;
-            if (i == shares.size() - 1) {
-                // 末位归差额，保证实际应摊逐分守恒至 actualTotalAmountCent。
-                actualAllocated = actualTotalAmountCent - actualAllocatedSoFar;
-            } else {
-                actualAllocated = Math.floorDiv(actualTotalAmountCent * (long) share.weightBps(), BPS_DENOMINATOR);
-            }
-            actualAllocatedSoFar += actualAllocated;
-
-            // 该户该归属期已预收合计（来自 cam_allocations，按 settlement_period 归集）。
-            long prepaid = repository.sumCamPrepaidByMerchantAndPeriod(share.merchantId(), settlementPeriod);
-            prepaidTotal += prepaid;
-            long diff = actualAllocated - prepaid;
-
-            String arApItemId = null;
-            if (diff != 0) {
-                // diff>0 少收 → 补收应收；diff<0 多收 → 退还应付。金额取绝对值，方向区分多退少补。
-                String direction = diff > 0 ? "receivable" : "payable";
-                ArApItemRecord item = persistDerivedArApItem(
-                        direction,
-                        share.merchantId(),
-                        "cam",
-                        "cam_trueup_" + settlementPeriod + "_" + share.merchantId(),
-                        Math.abs(diff),
-                        actual.idempotencyKey() + "_trueup_" + i,
-                        share.merchantId());
-                arApItemId = item.id();
-            }
-
-            CamTrueUpLineRecord line = repository.saveCamTrueUpLine(new CamTrueUpLineRecord(
-                    "cam_trueup_line_" + slug(runId + "_" + share.merchantId()),
-                    runId,
-                    share.merchantId(),
-                    share.weightBps(),
-                    actualAllocated,
-                    prepaid,
-                    diff,
-                    arApItemId,
-                    now));
-            lines.add(line);
-        }
-
-        // 标记该归属期既有预收行已被本次 true-up 纳入对账（防重复 true-up）。
-        repository.markCamAllocationsTruedUp(settlementPeriod);
-
-        return repository.saveCamTrueUpRun(new CamTrueUpRunRecord(
-                runId,
-                settlementPeriod,
-                actualTotalAmountCent,
-                prepaidTotal,
-                "completed",
-                now,
-                lines));
+        // F-OPS-08（用户 2026-06 裁决）：CAM 年度 true-up（多退少补）随固定计费废止——物业费按每平米固定收、不退不补，
+        // 无"实际 vs 预收"差额对账。旧 cam_trueup_runs/lines 表与历史数据保留只读；此处返回明确弃用错误码。
+        throw ApiException.conflict("CAM_TRUEUP_ABOLISHED",
+                "CAM annual true-up is abolished; property fee is a fixed per-square-meter charge with no "
+                        + "over/under settlement");
     }
 
     /**
@@ -1534,6 +1436,89 @@ public class FinanceService {
                 amountCent,
                 now));
         return saved;
+    }
+
+    private PropertyFeeRateRecord createPropertyFeeRateInternal(PropertyFeeRateRequest request) {
+        PropertyFeeRateRequest actual = requireRequest(request);
+        String projectId = requireText(actual.projectId(), "project_id");
+        Long rateBoxed = actual.ratePerSquareMeterCent();
+        if (rateBoxed == null || rateBoxed < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "rate_per_square_meter_cent must be >= 0");
+        }
+        String effectivePeriod = trimToNull(actual.effectivePeriod());   // null=该项目默认费率
+        String status = requireEnum(trimToDefault(actual.status(), "active"),
+                Set.of("active", "inactive"), "status");
+        Instant now = Instant.now();
+        String id = "pfr_" + stableToken("property_fee_rate",
+                projectId + "|" + (effectivePeriod == null ? "__default__" : effectivePeriod));
+        return repository.savePropertyFeeRate(new PropertyFeeRateRecord(
+                id, projectId, effectivePeriod, rateBoxed, status, now, now));
+    }
+
+    private List<PropertyFeeBillRecord> billPropertyFeeInternal(PropertyFeeBillRequest request) {
+        PropertyFeeBillRequest actual = requireRequest(request);
+        String projectId = requireText(actual.projectId(), "project_id");
+        String period = requireText(actual.period(), "period");
+        List<String> merchantIds = actual.merchantIds();
+        if (merchantIds == null || merchantIds.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_ids is required");
+        }
+        // 费率按 项目+期 解析一次（精确期优先、回退默认）；无生效费率直接拒绝整批。
+        PropertyFeeRateRecord rate = repository.findEffectivePropertyFeeRate(projectId, period)
+                .orElseThrow(() -> ApiException.badRequest("PROPERTY_FEE_RATE_NOT_FOUND",
+                        "no active property fee rate configured for project " + projectId + " period " + period));
+        long rateCent = rate.ratePerSquareMeterCent();
+        Instant now = Instant.now();
+        List<PropertyFeeBillRecord> result = new java.util.ArrayList<>();
+        for (String rawMerchantId : merchantIds) {
+            String merchantId = requireText(rawMerchantId, "merchant_id");
+            checkMerchantOwnership(merchantId);
+            // 不退不补 + 幂等：该 (项目,期,商户) 已计过费则跳过（含跨请求重复计费，不二次挂账）。
+            if (repository.propertyFeeBillExists(projectId, period, merchantId)) {
+                continue;
+            }
+            java.math.BigDecimal area = repository.findMerchantAreaSquareMeter(merchantId);
+            if (area == null || area.signum() <= 0) {
+                // 面积缺失/非正，无法按面积计费——跳过（运营补面积后重跑，已计费的不重复）。
+                continue;
+            }
+            long amountCent = java.math.BigDecimal.valueOf(rateCent)
+                    .multiply(area)
+                    .setScale(0, java.math.RoundingMode.HALF_UP)
+                    .longValueExact();
+            if (amountCent <= 0) {
+                continue;   // rate=0 等导致 0 额，不挂 0 元应收。
+            }
+            // ar_ap 幂等键按 (项目,期,商户) 稳定派生（与 bills 行同源），跨请求重复计费 upsert 同一台账行、不重复挂账。
+            String naturalKey = projectId + "|" + period + "|" + merchantId;
+            ArApItemRecord item = persistDerivedArApItem(
+                    "receivable",
+                    merchantId,
+                    "property_fee",
+                    "property_fee_" + naturalKey,
+                    amountCent,
+                    stableToken("property_fee", naturalKey),
+                    merchantId);
+            PropertyFeeBillRecord bill = repository.savePropertyFeeBill(new PropertyFeeBillRecord(
+                    "pfb_" + stableToken("property_fee_bill", naturalKey),
+                    projectId,
+                    period,
+                    merchantId,
+                    area,
+                    rateCent,
+                    amountCent,
+                    item.id(),
+                    now));
+            result.add(bill);
+        }
+        return result;
+    }
+
+    /** 由稳定自然键派生确定性、抗截断的幂等令牌（名字 UUID v3，跨请求一致；用于物业费 ar_ap/留痕行 id）。 */
+    private String stableToken(String namespace, String naturalKey) {
+        return java.util.UUID.nameUUIDFromBytes(
+                (namespace + ":" + naturalKey).getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .toString().replace("-", "");
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {

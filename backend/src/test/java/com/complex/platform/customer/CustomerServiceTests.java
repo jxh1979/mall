@@ -72,7 +72,8 @@ class CustomerServiceTests {
                 operations,
                 auditEventService,
                 inventoryService,
-                loyaltyService
+                loyaltyService,
+                Mockito.mock(com.complex.platform.bar.BarRepository.class)
         );
     }
 

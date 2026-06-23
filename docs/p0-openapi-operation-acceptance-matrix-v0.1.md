@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 410 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 419 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -96,17 +96,23 @@
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | `deliverBarOrder` | 出酒或送达确认 | `BarOrderDeliveryRequest` | `bar.order.create` | `staff-token` | `project-bar-table` | tablet, staff_work_phone | 是 | `bar.order_delivered` | `bar.order_deliver_failed` |
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/items` | `addBarOrderItem` | 新增酒吧订单物品 | `BarOrderRequest` | `bar.order.create` | `staff-token` | `project` | web | 是 | `bar.order_item.created` | `bar.order_item.created_failed` |
 | bar | `GET` | `/api/v1/bar/production-tickets` | `listBarProductionTickets` | 查询酒吧出品票据 | `-` | `bar.order.create` | `staff-token` | `project` | web | 否 | `bar.production_ticket.viewed` | `bar.production_ticket.viewed_failed` |
-| bar | `GET` | `/api/v1/bar/products` | `listBarProducts` | 查询酒吧商品 | `-` | `bar.order.create` | `staff-token` | `project` | web, tablet, kiosk | 否 | `bar.product.viewed` | `bar.product.viewed_failed` |
-| bar | `POST` | `/api/v1/bar/products` | `createBarProduct` | 创建酒吧商品 | `BarProductRequest` | `bar.order.create` | `staff-token` | `project` | web | 是 | `bar.product.created` | `bar.product.created_failed` |
+| bar | `GET` | `/api/v1/bar/products` | `listBarProducts` | 查询酒吧商品 | `-` | `bar.product.view` | `staff-token` | `project` | web, tablet, kiosk | 否 | `bar.product.viewed` | `bar.product.viewed_failed` |
+| bar | `POST` | `/api/v1/bar/products` | `createBarProduct` | 创建酒吧商品 | `BarProductRequest` | `bar.product.manage` | `staff-token` | `project` | web | 是 | `bar.product.created` | `bar.product.created_failed` |
 | bar | `GET` | `/api/v1/bar/reservations` | `listBarReservations` | 查询酒吧预约 | `-` | `bar.reservation.view` | `staff-token` | `project-bar-table` | web, tablet | 否 | `bar.reservation.viewed` | `bar.reservation.view_failed` |
 | bar | `POST` | `/api/v1/bar/reservations` | `createBarReservation` | 订台或卡座预订 | `BarReservationRequest` | `bar.reservation.create` | `staff-token` | `project-bar` | web, tablet, miniapp, app, kiosk | 是 | `bar.reservation.created` | `bar.reservation.create_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | `checkInBarReservationGuest` | 卡座免通票入场名额核销 | `VerificationRequest` | `bar.table.guest_checkin` | `staff-token` | `project-bar` | staff_work_phone | 是 | `bar.table_guest.checked_in` | `bar.table_guest.rejected` |
+| bar | `GET` | `/api/v1/bar/reservations/{id}/invitation` | `getBarReservationInvitation` | 查询订卡邀请函 | `-` | `bar.reservation.view` | `staff-token` | `project-bar` | web, tablet | 否 | `bar.reservation_invitation_viewed` | `bar.reservation_invitation_view_failed` |
+| bar | `POST` | `/api/v1/bar/reservations/{id}/invitation` | `issueBarReservationInvitation` | 签发订卡邀请函 | `object` | `bar.reservation.invitation.manage` | `staff-token` | `project-bar` | web, tablet | 是 | `bar.reservation_invitation_issued` | `bar.reservation_invitation_issue_failed` |
+| bar | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | `revokeBarReservationInvitation` | 吊销订卡邀请函 | `object` | `bar.reservation.invitation.manage` | `staff-token` | `project-bar` | web, tablet | 是 | `bar.reservation_invitation_revoked` | `bar.reservation_invitation_revoke_failed` |
+| bar | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | `verifyBarReservationInvitationEntry` | 订卡邀请函入场核验 | `VerificationRequest` | `bar.table.guest_checkin` | `staff-token` | `project-bar` | staff_work_phone | 是 | `bar.reservation_invitation_entered` | `bar.reservation_invitation_entry_failed` |
 | bar | `GET` | `/api/v1/bar/tables` | `listBarTables` | 查询桌台或卡座 | `-` | `bar.table.view` | `staff-token` | `project-bar` | web, tablet | 否 | `bar.table.viewed` | `bar.table.view_failed` |
 | bar | `POST` | `/api/v1/bar/tables` | `createBarTable` | 创建桌台或卡座 | `BarTableRequest` | `bar.table.manage` | `staff-token` | `project-bar` | web | 是 | `bar.table.changed` | `bar.table.change_failed` |
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/open` | `openBarTable` | 开台 | `OpenBarTableRequest` | `bar.table.open_close` | `staff-token` | `project-bar` | tablet, web | 是 | `bar.table.opened` | `bar.table.open_failed` |
 | customer | `POST` | `/api/v1/customer/auth/phone-login` | `customerPhoneLogin` | 客人手机号登录 | `CustomerPhoneLoginRequest` | `public` | `public` | `customer` | web, miniapp, app, kiosk | 否 | `customer.auth.login` | `customer.auth.login_failed` |
 | customer | `GET` | `/api/v1/customer/bar-reservation-options` | `listCustomerBarReservationOptions` | 客人可订台资源 | `-` | `not_applicable` | `customer-token` | `public-project-bar` | web, miniapp, app, kiosk | 否 | `customer.bar_reservation_options_viewed` | `customer.bar_reservation_options_view_failed` |
 | customer | `POST` | `/api/v1/customer/bar-reservations` | `createCustomerBarReservation` | 客人卡座预订 | `CustomerBarReservationRequest` | `not_applicable` | `customer-token` | `customer-project-bar` | web, miniapp, app, kiosk | 是 | `customer.bar_reservation.created` | `customer.bar_reservation.create_failed` |
+| customer | `POST` | `/api/v1/customer/bar-invitations/confirm` | `confirmCustomerBarInvitation` | 客人确认接受订卡邀请函 | `object` | `not_applicable` | `customer-token` | `customer-project-bar` | web, miniapp, app | 是 | `customer.bar_invitation.confirmed` | `customer.bar_invitation.confirm_failed` |
+| customer | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}` | `getCustomerBarInvitation` | 客人查看自己的订卡邀请函 | `-` | `not_applicable` | `customer-token` | `customer-project-bar` | web, miniapp, app | 否 | `customer.bar_invitation.viewed` | `customer.bar_invitation.view_failed` |
 | customer | `POST` | `/api/v1/customer/consents` | `createCustomerConsent` | 隐私同意记录 | `CustomerConsentRequest` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app, kiosk | 是 | `customer.consent.created` | `customer.consent.create_failed` |
 | customer | `GET` | `/api/v1/customer/orders` | `listCustomerOrders` | 我的订单 | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app, kiosk | 否 | `customer.orders_viewed` | `customer.orders_view_failed` |
 | customer | `GET` | `/api/v1/customer/points` | `getCustomerPoints` | 积分余额 | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.points_viewed` | `customer.points_view_failed` |
@@ -339,8 +345,8 @@
 | evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | `escalateRiskAlert` | 升级风险预警 | `object` | `risk_alert.escalate` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.escalated` | `exception.escalate_failed` |
 | evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | `resolveRiskAlert` | 关闭风险预警（需结论） | `object` | `risk_alert.resolve` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.resolved` | `exception.resolve_failed` |
 | evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | `dismissRiskAlert` | 忽略关闭风险预警 | `object` | `risk_alert.dismiss` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.dismissed` | `exception.dismiss_failed` |
-| finance | `POST` | `/api/v1/finance/cam/allocations` | `allocateCam` | CAM 公共区域维护费按权重分摊 | `object` | `finance.cam.allocate` | `staff-token` | `platform` | web | 是 | `finance.cam.allocated` | `finance.cam.allocate_failed` |
-| finance | `POST` | `/api/v1/finance/cam/trueups` | `trueUpCam` | CAM 年度 true-up 多退少补对账 | `object` | `finance.cam.trueup` | `staff-token` | `platform` | web | 是 | `finance.cam.trued_up` | `finance.cam.trueup_failed` |
+| finance | `POST` | `/api/v1/finance/cam/allocations` | `allocateCam` | （已废止）CAM 权重分摊 → 改用物业费固定计费；调用返回 409 CAM_ALLOCATION_ABOLISHED | `object` | `finance.cam.allocate` | `staff-token` | `platform` | web | 是 | `finance.cam.allocated` | `finance.cam.allocate_failed` |
+| finance | `POST` | `/api/v1/finance/cam/trueups` | `trueUpCam` | （已废止）CAM 年度 true-up → 物业费不退不补、无对账；调用返回 409 CAM_TRUEUP_ABOLISHED | `object` | `finance.cam.trueup` | `staff-token` | `platform` | web | 是 | `finance.cam.trued_up` | `finance.cam.trueup_failed` |
 | finance | `POST` | `/api/v1/finance/deposits/actions` | `recordDepositAction` | 保证金台账动作（收取/退还/抵扣/没收） | `object` | `finance.deposit.manage` | `staff-token` | `platform` | web | 是 | `finance.deposit.action_recorded` | `finance.deposit.action_failed` |
 | finance | `POST` | `/api/v1/finance/inventory-variances/post` | `postInventoryVariance` | 库存差异复核入账为 AR/AP | `object` | `finance.inventory_variance.post` | `staff-token` | `platform` | web | 是 | `finance.inventory_variance.posted` | `finance.inventory_variance.post_failed` |
 | finance | `POST` | `/api/v1/finance/turnover-rent/bills` | `billTurnoverRent` | 营业额抽成计费生成应收 | `object` | `finance.turnover_rent.bill` | `staff-token` | `platform` | web | 是 | `finance.turnover_rent.billed` | `finance.turnover_rent.bill_failed` |
@@ -431,6 +437,9 @@
 | integration | `POST` | `/api/v1/integration/polling-checks` | `recordIntegrationPollingCheck` | 登记第三方定时轮询校验快照 | `object` | `integration.retry.manage` | `staff-token` | `platform` | web | 是 | `integration.polling_check.recorded` | `integration.polling_check.record_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/confirm-payment` | `confirmTicketOrderPayment` | 确认票务订单支付成功（回写 paid） | `ConfirmTicketOrderPaymentRequest` | `finance.payment.register` | `staff-token` | `platform` | web, kiosk | 是 | `ticket_order.payment_confirmed` | `ticket_order.payment_confirm_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/cancel` | `cancelTicketOrder` | 取消未支付票务订单（回补库存） | `StatusChangeRequest` | `ticket.order.create` | `staff-token` | `platform` | web, kiosk | 是 | `ticket_order.cancelled` | `ticket_order.cancel_failed` |
+| finance | `GET` | `/api/v1/finance/property-fee/rates` | `listPropertyFeeRates` | 列出某项目的物业费费率 | `-` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 否 | `finance_property_fee.rate_viewed` | `finance_property_fee.rate_view_failed` |
+| finance | `POST` | `/api/v1/finance/property-fee/rates` | `createPropertyFeeRate` | 维护物业费费率（项目级、可按期） | `PropertyFeeRateRequest` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 是 | `finance_property_fee.rate_set` | `finance_property_fee.rate_set_failed` |
+| finance | `POST` | `/api/v1/finance/property-fee/bills` | `billPropertyFee` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `PropertyFeeBillRequest` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 是 | `finance_property_fee.billed` | `finance_property_fee.bill_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -498,5 +507,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 410 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 419 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

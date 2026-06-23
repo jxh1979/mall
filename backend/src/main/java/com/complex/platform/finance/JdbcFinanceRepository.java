@@ -5,6 +5,7 @@ import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZ
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -877,6 +878,117 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("ar_ap_item_id", line.arApItemId())
                 .addValue("created_at", timestampWithTimeZone(line.createdAt())));
         return line;
+    }
+
+    // ── F-OPS-08 物业费固定计费（V150，替代已废止 CAM）────────────────────────────
+
+    @Override
+    public PropertyFeeRateRecord savePropertyFeeRate(PropertyFeeRateRecord rate) {
+        jdbcTemplate.update("""
+                INSERT INTO property_fee_rates (
+                    id, project_id, effective_period, rate_per_square_meter_cent, status, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :effective_period, :rate, :status, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    rate_per_square_meter_cent = EXCLUDED.rate_per_square_meter_cent,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", rate.id())
+                .addValue("project_id", rate.projectId())
+                .addValue("effective_period", rate.effectivePeriod())
+                .addValue("rate", rate.ratePerSquareMeterCent())
+                .addValue("status", rate.status())
+                .addValue("created_at", timestampWithTimeZone(rate.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(rate.updatedAt())));
+        return rate;
+    }
+
+    @Override
+    public Optional<PropertyFeeRateRecord> findEffectivePropertyFeeRate(String projectId, String period) {
+        // 精确 period 命中优先（CASE 排序 0），否则回退默认费率（effective_period IS NULL，排序 1）。
+        return jdbcTemplate.query("""
+                SELECT id, project_id, effective_period, rate_per_square_meter_cent, status, created_at, updated_at
+                  FROM property_fee_rates
+                 WHERE project_id = :project_id
+                   AND status = 'active'
+                   AND (effective_period = :period OR effective_period IS NULL)
+                 ORDER BY CASE WHEN effective_period = :period THEN 0 ELSE 1 END
+                 LIMIT 1
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("period", period),
+                this::mapPropertyFeeRate).stream().findFirst();
+    }
+
+    @Override
+    public List<PropertyFeeRateRecord> listPropertyFeeRates(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, effective_period, rate_per_square_meter_cent, status, created_at, updated_at
+                  FROM property_fee_rates
+                 WHERE project_id = :project_id
+                 ORDER BY effective_period NULLS FIRST
+                """, new MapSqlParameterSource().addValue("project_id", projectId),
+                this::mapPropertyFeeRate);
+    }
+
+    @Override
+    public BigDecimal findMerchantAreaSquareMeter(String merchantId) {
+        // 只读跨域：finance 不写 merchants，仅取面积用于物业费计费（与 V110 只读 integration_order_syncs 同范式）。
+        return jdbcTemplate.query("""
+                SELECT area_square_meter FROM merchants WHERE id = :id
+                """, new MapSqlParameterSource().addValue("id", merchantId),
+                (rs, rowNum) -> rs.getBigDecimal("area_square_meter")).stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public boolean propertyFeeBillExists(String projectId, String period, String merchantId) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM property_fee_bills
+                 WHERE project_id = :project_id AND period = :period AND merchant_id = :merchant_id
+                """, new MapSqlParameterSource()
+                .addValue("project_id", projectId)
+                .addValue("period", period)
+                .addValue("merchant_id", merchantId), Long.class);
+        return count != null && count > 0;
+    }
+
+    @Override
+    public PropertyFeeBillRecord savePropertyFeeBill(PropertyFeeBillRecord bill) {
+        jdbcTemplate.update("""
+                INSERT INTO property_fee_bills (
+                    id, project_id, period, merchant_id, area_square_meter,
+                    rate_per_square_meter_cent, amount_cent, ar_ap_item_id, created_at
+                )
+                VALUES (
+                    :id, :project_id, :period, :merchant_id, :area,
+                    :rate, :amount, :ar_ap_item_id, :created_at
+                )
+                ON CONFLICT (project_id, period, merchant_id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", bill.id())
+                .addValue("project_id", bill.projectId())
+                .addValue("period", bill.period())
+                .addValue("merchant_id", bill.merchantId())
+                .addValue("area", bill.areaSquareMeter())
+                .addValue("rate", bill.ratePerSquareMeterCent())
+                .addValue("amount", bill.amountCent())
+                .addValue("ar_ap_item_id", bill.arApItemId())
+                .addValue("created_at", timestampWithTimeZone(bill.createdAt())));
+        return bill;
+    }
+
+    private PropertyFeeRateRecord mapPropertyFeeRate(ResultSet rs, int rowNum) throws SQLException {
+        return new PropertyFeeRateRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("effective_period"),
+                rs.getLong("rate_per_square_meter_cent"),
+                rs.getString("status"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
     }
 
     private DailyCloseSourceTotals aggregateTotals(

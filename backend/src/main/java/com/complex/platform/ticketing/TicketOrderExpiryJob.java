@@ -37,10 +37,15 @@ public class TicketOrderExpiryJob {
         this.timeoutMinutes = timeoutMinutes;
     }
 
-    /** @Scheduled 薄包装：默认关闭，仅在 ticket.order.expiry.scheduled.enabled=true 时注册。 */
+    /**
+     * @Scheduled 薄包装：默认关闭，仅在 ticket.order.expiry.scheduled.enabled=true 时注册。
+     * 两件事：① 取消超时未支付订单回补库存（按 unpaid-timeout 宽限）；② F-TXN-03 门票生命周期——
+     * 处理已过期、全未核销的权益（全未核销自动退款 / 一张用后其余作废，按权益 valid_to 实时判定）。
+     */
     @ConditionalOnProperty(name = "ticket.order.expiry.scheduled.enabled", havingValue = "true")
     @Scheduled(fixedDelayString = "${ticket.order.expiry.scheduled.fixed-delay-ms:300000}")
     public void scheduledReleaseExpired() {
         service.cancelExpiredUnpaidTicketOrders(Instant.now(clock).minus(Duration.ofMinutes(timeoutMinutes)));
+        service.processExpiredPaidEntitlements(Instant.now(clock));
     }
 }

@@ -21,6 +21,8 @@ import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.PropertyFeeBillRequest;
+import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -1302,117 +1304,113 @@ class FinanceServiceTests {
                 .isEqualTo("DEPOSIT_INSUFFICIENT");
     }
 
-    // ─── P1#14 CAM 权重分摊 ───────────────────────────────────────────────────
+    // ─── F-OPS-08 物业费固定计费（替代已废止 CAM 权重分摊 + 年度 true-up）──────────────
 
     @Test
-    void camAllocationSplitsByWeightAndIsCentExact() {
-        // 总额 100001 分摊给两户：6000 bps / 4000 bps。末位归差额，逐分守恒。
-        List<CamAllocationRecord> rows = service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
-                "cam-1", "note", List.of(), "2026-06", 100001L, LocalDate.parse("2026-07-10"),
-                List.of(
-                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 6000),
-                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_2", 4000))));
-
-        assertThat(rows).hasSize(2);
-        long sum = rows.stream().mapToLong(CamAllocationRecord::allocatedAmountCent).sum();
-        assertThat(sum).isEqualTo(100001L);                        // 逐分守恒
-        assertThat(rows.get(0).allocatedAmountCent()).isEqualTo(60000L);
-        assertThat(rows.get(1).allocatedAmountCent()).isEqualTo(40001L); // 末位含差额
-        assertThat(rows).allMatch(r -> r.arApItemId() != null);
-    }
-
-    @Test
-    void camAllocationRejectsWeightsNotSummingToFull() {
+    void camAllocateAndTrueUpAreAbolished() {
+        // CAM 权重分摊 + 年度 true-up 已废止，调用即返明确弃用错误码（引导改用物业费计费）。
         assertThatThrownBy(() -> service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
-                "cam-bad", "note", List.of(), "2026-06", 100000L, LocalDate.parse("2026-07-10"),
-                List.of(
-                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 6000),
-                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_2", 3000)))))
+                "cam-x", "note", List.of(), "2026-06", 100000L, LocalDate.parse("2026-07-10"),
+                List.of(new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 10000)))))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
-                .isEqualTo("CAM_WEIGHTS_NOT_FULL");
-    }
+                .isEqualTo("CAM_ALLOCATION_ABOLISHED");
 
-    // ─── P2#④ CAM 年度 true-up（多退少补）─────────────────────────────────────
-
-    @Test
-    void camTrueUpUnderCollectedGeneratesReceivableTopUp() {
-        // 先按周期预收：merchant_1 预收 6000 / merchant_2 预收 4000（period=2026）。
-        service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
-                "cam-prepay", "note", List.of(), "2026", 10000L, LocalDate.parse("2026-02-10"),
-                List.of(
-                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 6000),
-                        new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_2", 4000))));
-
-        // 年度 true-up：实际发生 20000（远高于预收 10000）→ 两户均少收，补收应收。
-        CamTrueUpRunRecord run = service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
-                "cam-trueup-1", "note", List.of(), "2026", 20000L, LocalDate.parse("2027-01-31"),
-                List.of(
-                        new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 6000),
-                        new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_2", 4000))));
-
-        assertThat(run.actualTotalAmountCent()).isEqualTo(20000L);
-        assertThat(run.prepaidTotalAmountCent()).isEqualTo(10000L);
-        assertThat(run.lines()).hasSize(2);
-        // merchant_1 实际应摊 12000 − 已预收 6000 = +6000（少收补收）。
-        CamTrueUpLineRecord m1 = run.lines().get(0);
-        assertThat(m1.actualAllocatedAmountCent()).isEqualTo(12000L);
-        assertThat(m1.prepaidAmountCent()).isEqualTo(6000L);
-        assertThat(m1.diffAmountCent()).isEqualTo(6000L);
-        assertThat(m1.arApItemId()).isNotNull();
-        // 差额台账方向：少收 → receivable。
-        assertThat(financeRepository.findArApItemById(m1.arApItemId()).orElseThrow().direction())
-                .isEqualTo("receivable");
-        // 末位户含差额：merchant_2 实际应摊 8000 − 4000 = +4000。
-        assertThat(run.lines().get(1).diffAmountCent()).isEqualTo(4000L);
-    }
-
-    @Test
-    void camTrueUpOverCollectedGeneratesPayableRefund() {
-        // 预收 30000（merchant_1 全额，权重 10000）。
-        service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
-                "cam-prepay-over", "note", List.of(), "2026", 30000L, LocalDate.parse("2026-02-10"),
-                List.of(new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 10000))));
-
-        // 实际仅 18000 → 多收 12000，向商户退应付。
-        CamTrueUpRunRecord run = service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
-                "cam-trueup-over", "note", List.of(), "2026", 18000L, LocalDate.parse("2027-01-31"),
-                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 10000))));
-
-        CamTrueUpLineRecord line = run.lines().get(0);
-        assertThat(line.diffAmountCent()).isEqualTo(-12000L);
-        assertThat(line.arApItemId()).isNotNull();
-        // 差额台账：多收 → payable（向商户退还），金额取绝对值。
-        ArApItemRecord adj = financeRepository.findArApItemById(line.arApItemId()).orElseThrow();
-        assertThat(adj.direction()).isEqualTo("payable");
-        assertThat(adj.amountCent()).isEqualTo(12000L);
-        assertThat(adj.sourceType()).isEqualTo("cam");
-    }
-
-    @Test
-    void camTrueUpWithNoDiffSkipsLedgerItem() {
-        // 预收 10000，实际也 10000 → 差额 0，不生成台账项。
-        service.allocateCam(new com.complex.platform.finance.dto.CamAllocationRequest(
-                "cam-prepay-exact", "note", List.of(), "2026", 10000L, LocalDate.parse("2026-02-10"),
-                List.of(new com.complex.platform.finance.dto.CamAllocationRequest.CamShare("merchant_1", 10000))));
-
-        CamTrueUpRunRecord run = service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
-                "cam-trueup-exact", "note", List.of(), "2026", 10000L, LocalDate.parse("2027-01-31"),
-                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 10000))));
-
-        CamTrueUpLineRecord line = run.lines().get(0);
-        assertThat(line.diffAmountCent()).isEqualTo(0L);
-        assertThat(line.arApItemId()).isNull();
-    }
-
-    @Test
-    void camTrueUpRejectsWeightsNotSummingToFull() {
         assertThatThrownBy(() -> service.runCamTrueUp(new com.complex.platform.finance.dto.CamTrueUpRequest(
-                "cam-trueup-bad", "note", List.of(), "2026", 10000L, LocalDate.parse("2027-01-31"),
-                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 6000)))))
+                "cam-trueup-x", "note", List.of(), "2026", 18000L, LocalDate.parse("2027-01-31"),
+                List.of(new com.complex.platform.finance.dto.CamTrueUpRequest.TrueUpShare("merchant_1", 10000)))))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
-                .isEqualTo("CAM_WEIGHTS_NOT_FULL");
+                .isEqualTo("CAM_TRUEUP_ABOLISHED");
+    }
+
+    @Test
+    void propertyFeeBilledAtFixedRatePerSquareMeter() {
+        // 费率 1000 分/㎡（10 元）；商户面积 120.50 ㎡ → 应收 = 1000 × 120.50 = 120500 分。
+        service.createPropertyFeeRate(new PropertyFeeRateRequest(
+                "pfr-1", "project_1", "2026-06", 1000L, "active"));
+        financeRepository.seedMerchantArea("merchant_1", new java.math.BigDecimal("120.50"));
+
+        List<PropertyFeeBillRecord> bills = service.billPropertyFee(new PropertyFeeBillRequest(
+                "pf-bill-1", "note", List.of(), "project_1", "2026-06", List.of("merchant_1")));
+
+        assertThat(bills).hasSize(1);
+        PropertyFeeBillRecord bill = bills.get(0);
+        assertThat(bill.amountCent()).isEqualTo(120500L);
+        assertThat(bill.ratePerSquareMeterCent()).isEqualTo(1000L);
+        assertThat(bill.arApItemId()).isNotNull();
+        ArApItemRecord ar = financeRepository.findArApItemById(bill.arApItemId()).orElseThrow();
+        assertThat(ar.direction()).isEqualTo("receivable");
+        assertThat(ar.sourceType()).isEqualTo("property_fee");
+        assertThat(ar.amountCent()).isEqualTo(120500L);
+        assertThat(ar.counterpartyId()).isEqualTo("merchant_1");
+    }
+
+    @Test
+    void propertyFeeBillingIsIdempotentAndNoRefundNoTopUp() {
+        service.createPropertyFeeRate(new PropertyFeeRateRequest(
+                "pfr-2", "project_1", "2026-06", 1000L, "active"));
+        financeRepository.seedMerchantArea("merchant_1", new java.math.BigDecimal("100.00"));
+
+        List<PropertyFeeBillRecord> first = service.billPropertyFee(new PropertyFeeBillRequest(
+                "pf-bill-2a", "note", List.of(), "project_1", "2026-06", List.of("merchant_1")));
+        assertThat(first).hasSize(1);
+        assertThat(first.get(0).amountCent()).isEqualTo(100000L);
+
+        // 费率事后上调，再以不同幂等键对同 (项目,期,商户) 计费 → 已计费跳过，不补不退、不二次挂账。
+        service.createPropertyFeeRate(new PropertyFeeRateRequest(
+                "pfr-2b", "project_1", "2026-06", 5000L, "active"));
+        List<PropertyFeeBillRecord> second = service.billPropertyFee(new PropertyFeeBillRequest(
+                "pf-bill-2b", "note", List.of(), "project_1", "2026-06", List.of("merchant_1")));
+        assertThat(second).isEmpty();                                       // 已计费跳过
+        assertThat(financeRepository.propertyFeeBillCount()).isEqualTo(1);  // 仍只有一笔
+    }
+
+    @Test
+    void propertyFeeSkipsMerchantWithMissingArea() {
+        service.createPropertyFeeRate(new PropertyFeeRateRequest(
+                "pfr-3", "project_1", "2026-06", 1000L, "active"));
+        // merchant_no_area 未登记面积 → 跳过；merchant_1 有面积 → 计费。
+        financeRepository.seedMerchantArea("merchant_1", new java.math.BigDecimal("80.00"));
+
+        List<PropertyFeeBillRecord> bills = service.billPropertyFee(new PropertyFeeBillRequest(
+                "pf-bill-3", "note", List.of(), "project_1", "2026-06",
+                List.of("merchant_no_area", "merchant_1")));
+
+        assertThat(bills).hasSize(1);
+        assertThat(bills.get(0).merchantId()).isEqualTo("merchant_1");
+        assertThat(bills.get(0).amountCent()).isEqualTo(80000L);
+    }
+
+    @Test
+    void propertyFeeRejectsWhenNoActiveRateConfigured() {
+        financeRepository.seedMerchantArea("merchant_1", new java.math.BigDecimal("80.00"));
+        assertThatThrownBy(() -> service.billPropertyFee(new PropertyFeeBillRequest(
+                "pf-bill-4", "note", List.of(), "project_1", "2026-06", List.of("merchant_1"))))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("PROPERTY_FEE_RATE_NOT_FOUND");
+    }
+
+    @Test
+    void propertyFeeExactPeriodRateOverridesProjectDefault() {
+        // 默认费率 800 分/㎡（effectivePeriod=null）+ 2026-06 精确费率 1000 分/㎡。
+        service.createPropertyFeeRate(new PropertyFeeRateRequest(
+                "pfr-def", "project_1", null, 800L, "active"));
+        service.createPropertyFeeRate(new PropertyFeeRateRequest(
+                "pfr-jun", "project_1", "2026-06", 1000L, "active"));
+        financeRepository.seedMerchantArea("merchant_1", new java.math.BigDecimal("10.00"));
+        financeRepository.seedMerchantArea("merchant_2", new java.math.BigDecimal("10.00"));
+
+        // 2026-06 命中精确费率 → 1000 × 10 = 10000。
+        List<PropertyFeeBillRecord> jun = service.billPropertyFee(new PropertyFeeBillRequest(
+                "pf-bill-jun", "note", List.of(), "project_1", "2026-06", List.of("merchant_1")));
+        assertThat(jun.get(0).amountCent()).isEqualTo(10000L);
+
+        // 2026-07 无精确费率 → 回退默认 800 × 10 = 8000。
+        List<PropertyFeeBillRecord> jul = service.billPropertyFee(new PropertyFeeBillRequest(
+                "pf-bill-jul", "note", List.of(), "project_1", "2026-07", List.of("merchant_2")));
+        assertThat(jul.get(0).amountCent()).isEqualTo(8000L);
     }
 
     // ─── P1#15 日结两源非空 ───────────────────────────────────────────────────
@@ -1900,6 +1898,72 @@ class FinanceServiceTests {
         public CamTrueUpLineRecord saveCamTrueUpLine(CamTrueUpLineRecord line) {
             camTrueUpLines.add(line);
             return line;
+        }
+
+        // ── F-OPS-08 物业费固定计费 ─────────────────────────────────────────────
+        private final Map<String, PropertyFeeRateRecord> propertyFeeRates = new LinkedHashMap<>();
+        private final Map<String, java.math.BigDecimal> merchantAreas = new LinkedHashMap<>();
+        private final List<PropertyFeeBillRecord> propertyFeeBills = new ArrayList<>();
+
+        @Override
+        public PropertyFeeRateRecord savePropertyFeeRate(PropertyFeeRateRecord rate) {
+            // 以 (项目, 期或默认) 为键 upsert，模拟唯一索引 / ON CONFLICT。
+            propertyFeeRates.put(rate.projectId() + "|"
+                    + (rate.effectivePeriod() == null ? "__default__" : rate.effectivePeriod()), rate);
+            return rate;
+        }
+
+        @Override
+        public Optional<PropertyFeeRateRecord> findEffectivePropertyFeeRate(String projectId, String period) {
+            // 精确期命中优先，否则回退该项目默认费率；仅取 active。
+            PropertyFeeRateRecord exact = propertyFeeRates.get(projectId + "|" + period);
+            if (exact != null && "active".equals(exact.status())) {
+                return Optional.of(exact);
+            }
+            PropertyFeeRateRecord dft = propertyFeeRates.get(projectId + "|__default__");
+            if (dft != null && "active".equals(dft.status())) {
+                return Optional.of(dft);
+            }
+            return Optional.empty();
+        }
+
+        @Override
+        public List<PropertyFeeRateRecord> listPropertyFeeRates(String projectId) {
+            List<PropertyFeeRateRecord> out = new ArrayList<>();
+            for (PropertyFeeRateRecord r : propertyFeeRates.values()) {
+                if (projectId.equals(r.projectId())) {
+                    out.add(r);
+                }
+            }
+            return out;
+        }
+
+        @Override
+        public java.math.BigDecimal findMerchantAreaSquareMeter(String merchantId) {
+            return merchantAreas.get(merchantId);
+        }
+
+        @Override
+        public boolean propertyFeeBillExists(String projectId, String period, String merchantId) {
+            return propertyFeeBills.stream().anyMatch(b ->
+                    b.projectId().equals(projectId) && b.period().equals(period) && b.merchantId().equals(merchantId));
+        }
+
+        @Override
+        public PropertyFeeBillRecord savePropertyFeeBill(PropertyFeeBillRecord bill) {
+            // 模拟 ON CONFLICT(project_id,period,merchant_id) DO NOTHING。
+            if (!propertyFeeBillExists(bill.projectId(), bill.period(), bill.merchantId())) {
+                propertyFeeBills.add(bill);
+            }
+            return bill;
+        }
+
+        void seedMerchantArea(String merchantId, java.math.BigDecimal area) {
+            merchantAreas.put(merchantId, area);
+        }
+
+        int propertyFeeBillCount() {
+            return propertyFeeBills.size();
         }
 
         // 测试种子辅助。
