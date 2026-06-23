@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 
 const matrixPath = "docs/full-admin-page-permission-field-matrix-v0.1.csv";
 const routesPath = "apps/web/src/admin/adminRoutes.ts";
-const configsPath = "apps/web/src/admin/adminPageConfigs.ts";
 const mvpTestPath = "tests/e2e/full-admin-mvp.spec.ts";
 const remainingTestPath = "tests/e2e/full-admin-remaining.spec.ts";
 
@@ -102,10 +101,6 @@ function parseRoutes(source) {
   return routes;
 }
 
-function parseGenericConfigPageIds(source) {
-  return new Set([...source.matchAll(/"(ADM-[A-Z]+-\d{3})"\s*:\s*\{/g)].map((match) => match[1]));
-}
-
 function expectedRoutePermission(row) {
   const permissions = row.permissions.split(";").map((item) => item.trim()).filter(Boolean);
   return permissions.find((permission) => permission.endsWith(".read")) ?? permissions[0] ?? "";
@@ -117,7 +112,6 @@ function reportMismatch(errors, pageId, field, expected, actual) {
 
 const matrixRows = parseCsv(read(matrixPath));
 const routes = parseRoutes(read(routesPath));
-const genericPageIds = parseGenericConfigPageIds(read(configsPath));
 const testsSource = `${read(mvpTestPath)}\n${read(remainingTestPath)}`;
 const errors = [];
 
@@ -139,8 +133,8 @@ for (const row of matrixRows) {
     reportMismatch(errors, pageId, "首个读权限", expectedPermission, actualPermission);
   }
 
-  if (!bespokePages.has(pageId) && !genericPageIds.has(pageId)) {
-    errors.push(`${pageId} ?? GenericAdminPage ??`);
+  if (!bespokePages.has(pageId)) {
+    errors.push(`${pageId} ?? 专属页面缺失（不在 bespokePages 内）??`);
   }
 
   if (!testsSource.includes(pageId)) {

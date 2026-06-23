@@ -43,7 +43,6 @@ const BarProductsPage = React.lazy(() => import("./pages/BarProductsPage").then(
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
-const GenericAdminPage = React.lazy(() => import("./pages/GenericAdminPage").then((m) => ({ default: m.GenericAdminPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
 const ICON_PATHS: Record<string, string> = {
@@ -167,7 +166,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
     case "ADM-GOV-002":
       return <OrganizationMerchantPage {...props} />;
     default:
-      return <GenericAdminPage route={route} {...props} />;
+      // findAdminRoute 兜底到 adminRoutes[0]，正常导航不会落到这里；保留未知页面占位仅为类型完备与极端防御。
+      return <div className="admin-state admin-error">未知页面：{route.pageId}</div>;
   }
 }
 

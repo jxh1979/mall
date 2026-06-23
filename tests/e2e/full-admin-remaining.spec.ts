@@ -5,7 +5,6 @@ type RouteSpec = {
   pageId: string;
   label: string;
   route: string;
-  contractGap?: boolean;
 };
 
 const remainingRoutes: RouteSpec[] = [
@@ -100,8 +99,6 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-002") {
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
-  } else {
-    await expect(page.getByTestId("admin-generic-page")).toBeVisible();
   }
 }
 
@@ -348,14 +345,6 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(switchesTable).toBeVisible();
         await expect(switchesTable).toContainText("face.verification.enabled");
         continue;
-      }
-      await expect(page.getByTestId("admin-generic-evidence")).toBeVisible();
-      if (spec.contractGap) {
-        await expect(page.getByTestId("admin-contract-gap")).toContainText("正式接口");
-      } else {
-        const table = page.getByTestId("admin-generic-table");
-        await expect(table).toBeVisible();
-        await expect(table.locator("tbody tr").first()).toBeVisible();
       }
     }
   });
