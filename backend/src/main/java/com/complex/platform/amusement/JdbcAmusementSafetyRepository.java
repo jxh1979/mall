@@ -323,26 +323,6 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
         );
     }
 
-    private AmusementWaiverAcknowledgementRecord mapAcknowledgement(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new AmusementWaiverAcknowledgementRecord(
-                resultSet.getString("id"),
-                resultSet.getString("notice_id"),
-                resultSet.getString("project_id"),
-                resultSet.getString("amusement_project_id"),
-                resultSet.getString("session_id"),
-                resultSet.getString("customer_id"),
-                resultSet.getString("visitor_name"),
-                resultSet.getString("signer_name"),
-                resultSet.getString("acknowledgement_method"),
-                resultSet.getString("content_version"),
-                resultSet.getString("content_hash"),
-                resultSet.getTimestamp("acknowledged_at").toInstant(),
-                resultSet.getString("operator_user_id"),
-                readStringList(resultSet.getString("evidence_attachment_ids")),
-                resultSet.getTimestamp("created_at").toInstant()
-        );
-    }
-
     private AmusementIncidentRecord mapIncident(ResultSet resultSet, int rowNumber) throws SQLException {
         return new AmusementIncidentRecord(
                 resultSet.getString("id"),

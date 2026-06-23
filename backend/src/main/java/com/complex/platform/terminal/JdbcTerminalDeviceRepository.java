@@ -19,8 +19,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
 
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE = new TypeReference<>() {
     };
-    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
-    };
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -497,15 +495,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
             return value == null ? Map.of() : objectMapper.readValue(value, OBJECT_MAP_TYPE);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("terminal config JSON value is not readable", exception);
-        }
-    }
-
-    @SuppressWarnings("unused")
-    private List<String> readStringList(String value) {
-        try {
-            return value == null ? List.of() : objectMapper.readValue(value, STRING_LIST_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("terminal string list JSON value is not readable", exception);
         }
     }
 }

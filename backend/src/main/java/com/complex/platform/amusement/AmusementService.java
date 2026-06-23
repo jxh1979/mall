@@ -1540,11 +1540,6 @@ public class AmusementService {
                 .toList();
     }
 
-    private List<String> evidenceOrExisting(List<String> values, List<String> existing) {
-        List<String> evidence = evidence(values);
-        return evidence.isEmpty() ? List.copyOf(existing == null ? List.of() : existing) : evidence;
-    }
-
     private String textFromMap(Map<String, Object> map, String... keys) {
         if (map == null) {
             return null;

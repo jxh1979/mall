@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -546,11 +547,7 @@ public class AccessService {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(trimmed.getBytes(StandardCharsets.UTF_8));
-            StringBuilder builder = new StringBuilder(hash.length * 2);
-            for (byte b : hash) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
+            return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 algorithm is required", exception);
         }

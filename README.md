@@ -35,8 +35,6 @@ complex-management/
 ├── apps/
 │   ├── web/                # React + Vite + antd 管理端（含 ticketing/bar/amusement 模块）
 │   └── android-terminal/   # Android 终端（android-app/，Gradle）
-├── packages/
-│   └── shared/             # 前端/工具共享包（npm workspace）
 ├── database/
 │   └── migrations/         # 历史/参考迁移脚本（正式迁移以 backend/.../db/migration 为权威）
 ├── docs/                   # 全部产品/开发/契约/验收/运营文档（第一入口见 docs/00-...）

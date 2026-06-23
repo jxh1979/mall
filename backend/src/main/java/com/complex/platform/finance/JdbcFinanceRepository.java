@@ -3,7 +3,6 @@ import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
@@ -19,9 +18,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class JdbcFinanceRepository implements FinanceRepository {
-
-    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
-    };
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -1288,15 +1284,6 @@ class JdbcFinanceRepository implements FinanceRepository {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("finance JSON value is not serializable", exception);
-        }
-    }
-
-    @SuppressWarnings("unused")
-    private List<String> readStringList(String value) {
-        try {
-            return value == null ? List.of() : objectMapper.readValue(value, STRING_LIST_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("finance JSON value is not readable", exception);
         }
     }
 }

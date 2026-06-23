@@ -542,14 +542,6 @@ public class PlatformService {
         return value;
     }
 
-    private String slug(String value) {
-        String slug = trimToDefault(value, UUID.randomUUID().toString())
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "_")
-                .replaceAll("^_+|_+$", "");
-        return slug.isEmpty() ? UUID.randomUUID().toString().replace("-", "") : slug;
-    }
-
     private String idempotencyKey(BusinessEntityRequest request) {
         return request == null ? null : request.idempotencyKey();
     }

@@ -30,7 +30,6 @@ complex-management/
 ├── apps/
 │   ├── web/                # React + Vite + antd admin/customer web
 │   └── android-terminal/   # Android terminals (Gradle)
-├── packages/shared/        # shared frontend/tooling package (npm workspace)
 ├── database/migrations/    # historical/reference migrations (authoritative ones live under backend/.../db/migration)
 ├── docs/                   # all product/dev/contract/acceptance/ops docs (entry: docs/00-...)
 │   └── openapi/            # machine-readable P0 contract: openapi-p0.yaml / openapi-p0.json
