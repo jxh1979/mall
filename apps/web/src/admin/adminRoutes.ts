@@ -28,6 +28,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-MER-001", label: "商户服务工单", module: "商户服务", group: "governance", route: "/admin/merchant-service/tickets", requiredPermissions: ["merchant.service_work_order.view"] },
   { pageId: "ADM-MER-002", label: "商户授权工作台", module: "商户门户", group: "governance", route: "/admin/merchant-portal/scope", requiredPermissions: ["merchant.service_work_order.view", "merchant.billing.view"] },
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", module: "第三方", group: "integration", route: "/admin/integrations/events", requiredPermissions: ["integration.retry.view", "integration.compensation.view", "integration.order_sync.view", "integration.reconciliation.view"] },
+  { pageId: "ADM-INT-003", label: "第三方开关", module: "第三方", group: "integration", route: "/admin/integrations/switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-RISK-001", label: "风控预警", module: "风控", group: "risk", route: "/admin/risk/alerts", requiredPermissions: ["analytics.risk_alert.view"] },
   { pageId: "ADM-EVD-001", label: "审计事件", module: "审计", group: "audit", route: "/admin/audit/events", requiredPermissions: ["evidence.event.view"] },
   { pageId: "ADM-ANA-001", label: "经营分析", module: "分析", group: "overview", route: "/admin/analytics/business", requiredPermissions: ["analytics.dashboard.view"] },

@@ -48,6 +48,7 @@
 | UI-ADM-MER-002 | 商户授权工作台 | merchant_operator 账号 | 查看授权工单/账单、确认授权范围、尝试进入平台财务页 | 授权范围内数据可见；商户角色只显示自身 merchant_id；平台财务页显示权限不足；确认动作产生留痕结果 | merchant-service/work-orders + merchant-billing/bills | 覆盖授权工单/账单分表、空状态、越权拦截、确认留痕；后端数据范围策略是安全边界 |
 | UI-ADM-INT-001 | 供应商适配器 | IT/集成管理员登录 | 配置 endpoint、字段映射、签名、凭证引用 | 密钥不明文展示；字段缺失不可启用 | integration adapters | 覆盖鉴权失败、密钥引用脱敏 |
 | UI-ADM-INT-002 | 回调/轮询/补偿 | 存在第三方事件 | 查看四类回流、登记轮询校验、立即重试、处理补偿 | 重复请求幂等；签名失败拒绝；轮询补偿来源明确；不得伪造第三方生产补偿执行 | integration events | 覆盖成功、失败、超时、限流、重复回调、内部补偿处理 |
+| UI-ADM-INT-003 | 第三方开关 | 平台管理员登录；存在能力开关 | 查看全部第三方/集成开关及接入状态、切换某开关 | 默认全部关闭；每开关标注关闭口径/开启要求/当前 API 或 SDK 接入状态；仅平台管理员可切换，非平台账号 fail-closed 拒绝；切换写 terminal_switch.changed 留痕 | terminals/capability-switches（GET 列表 / PUT 切换） | 覆盖列表渲染、接入状态标注、平台切换、非平台越权拒绝、空/错状态 |
 | UI-ADM-EVD-001 | 审计事件 | 审计账号登录 | 搜索、筛选、查看详情、导出并留痕 | 审计事件不可编辑；导出通过 evidence event 自身留痕；无匹配和读取失败可见 | audit events | 覆盖 trace_id 查询、前后值详情、导出 EventBatchRequest 和错误状态 |
 | UI-ADM-ANA-001 | 经营分析 | 总控/运营/财务账号登录；存在指标快照、定义和异常数据 | 查看指标快照、指标定义和异常，按业务域筛选，锁定复盘快照 | 三类数据均可见；筛选后只显示对应业务域；空数据显示“暂无经营指标”；锁定复盘只产生本地审计结果，不伪造 AI/BI 生产结论 | analytics/business-metric-snapshots + metric-definitions + metric-anomalies | 覆盖三接口聚合、业务域筛选、空状态、错误状态、窄屏和复盘锁定留痕 |
 | UI-ADM-ANA-002 | 集团总览 | 平台总控账号登录（无 merchant scope） | 查看多综合体集团级经营汇总 | 平台级跨综合体汇总可见；merchant-scoped 账号被 fail-closed 拒绝（PLATFORM_SCOPE_REQUIRED） | analytics/group-overview（`analytics.group.view`） | 覆盖平台汇总、商户账号越权拒绝、空状态 |

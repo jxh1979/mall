@@ -216,6 +216,10 @@ function fixedRows(pathname: string, state: MockState): ApiData {
     "/api/v1/integration/devices": empty,
     "/api/v1/integration/devices/events": empty,
     "/api/v1/integration/devices/offline-sync-batches": empty,
+    "/api/v1/terminals/capability-switches": [
+      { id: "tcs_face_verification_off", terminalType: "*", capabilityCode: "face.verification.enabled", scopeType: "global", scopeId: "global", enabled: false, reason: "默认关，待供应商接入" },
+      { id: "tcs_int_payment_off", terminalType: "*", capabilityCode: "integration.payment.sync", scopeType: "global", scopeId: "global", enabled: false, reason: "默认关" },
+    ],
     "/api/v1/ops/production-readiness/items": state.readinessItems,
     "/api/v1/ops/production-readiness/checks": [{ id: "check-1", status: "open", message: "NAS 恢复演练待回填" }],
     "/api/v1/analytics/robot": empty,

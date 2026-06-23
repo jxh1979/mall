@@ -40,6 +40,7 @@ const BarOrdersPage = React.lazy(() => import("./pages/BarOrdersPage").then((m) 
 const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m) => ({ default: m.StoredWinePage })));
 const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
+const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
 const GenericAdminPage = React.lazy(() => import("./pages/GenericAdminPage").then((m) => ({ default: m.GenericAdminPage })));
 
@@ -154,6 +155,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <FinanceArApLedgerPage {...props} />;
     case "ADM-INT-001":
       return <IntegrationAdaptersPage {...props} />;
+    case "ADM-INT-003":
+      return <IntegrationSwitchesPage {...props} />;
     case "ADM-OPS-001":
       return <OpsReadinessPage {...props} />;
     case "ADM-GOV-001":

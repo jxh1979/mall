@@ -456,6 +456,16 @@ export type ProviderAdapterRow = {
   productionReady?: boolean;
 };
 
+export type CapabilitySwitchRow = {
+  id: string;
+  terminalType: string;
+  capabilityCode: string;
+  scopeType: string;
+  scopeId: string;
+  enabled: boolean;
+  reason?: string | null;
+};
+
 export type IntegrationEventRow = {
   id?: string;
   taskNo?: string;
