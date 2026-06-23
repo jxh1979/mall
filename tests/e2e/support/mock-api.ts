@@ -259,8 +259,9 @@ function effectivePermissionsFor(options: MockOptions) {
     return { grants: [], denies: [], wildcard: true, computedAt: now };
   }
   if (accountType === "merchant_operator") {
+    // 对齐页面-权限矩阵 ADM-MER-002（MERCHANT_OPERATOR 可用商户授权工作台，需工单+账单两项读权限）。
     return {
-      grants: ["merchant.portal.read", "merchant.service_work_order.view"],
+      grants: ["merchant.service_work_order.view", "merchant.billing.view"],
       denies: [],
       wildcard: false,
       computedAt: now,

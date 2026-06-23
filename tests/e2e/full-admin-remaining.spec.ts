@@ -337,6 +337,18 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("group-overview-row-project_1")).toBeVisible();
         continue;
       }
+      if (spec.pageId === "ADM-BAR-005") {
+        const barProductsTable = page.getByTestId("bar-products-table");
+        await expect(barProductsTable).toBeVisible();
+        await expect(barProductsTable).toContainText("Mock Drink");
+        continue;
+      }
+      if (spec.pageId === "ADM-INT-003") {
+        const switchesTable = page.getByTestId("integration-switches-table");
+        await expect(switchesTable).toBeVisible();
+        await expect(switchesTable).toContainText("face.verification.enabled");
+        continue;
+      }
       await expect(page.getByTestId("admin-generic-evidence")).toBeVisible();
       if (spec.contractGap) {
         await expect(page.getByTestId("admin-contract-gap")).toContainText("正式接口");
@@ -507,7 +519,9 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("integration-events-polling-note").fill("已完成 Webhook 与定时轮询一致性校验");
     await page.getByTestId("integration-events-log-polling").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("integration_polling_checked");
-    await expect(page.getByTestId("admin-action-result")).toContainText("webhook_plus_polling_verified");
+    // 该页已从通用页升级为专属 IntegrationEventsPage：登记轮询校验 POST /integration/polling-checks，
+    // 回显真实结果（status=recorded + 反伪造边界），不再是旧通用配置的 webhook_plus_polling_verified 占位。
+    await expect(page.getByTestId("admin-action-result")).toContainText("platform_task_status_only_not_supplier_execution");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-polling");
     await page.getByTestId("integration-events-retry-reason").fill("供应商超时后人工触发重试");
     await page.getByTestId("integration-events-run-retry").click();

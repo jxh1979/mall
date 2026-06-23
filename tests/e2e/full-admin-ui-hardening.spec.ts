@@ -50,15 +50,17 @@ test.describe("full admin UI hardening acceptance", () => {
   });
 
   test("ADM-UI-HARDEN-02 shared empty and error states expose stable testids", async ({ page }) => {
+    // 共享整页空态 admin-empty 仅在只读列表页出现：可录入页（员工账号等）按 27ab627 既定设计走
+    // empty={false}+表格内联空提示以保留录入表单，不再用会遮挡表单的整页空态。故改用只读审计事件页验收共享空/错态。
     await installMockApi(page, { empty: true });
-    await adminLogin(page, "/admin/access/users");
-    await openNav(page, "ADM-ACC-001");
+    await adminLogin(page, "/admin/audit/events");
+    await openNav(page, "ADM-EVD-001");
     await expect(page.getByTestId("admin-empty")).toBeVisible();
 
-    await installMockApi(page, { errorPath: "/api/v1/access/users" });
+    await installMockApi(page, { errorPath: "/api/v1/evidence/events" });
     await page.reload();
-    await adminLogin(page, "/admin/access/users");
-    await openNav(page, "ADM-ACC-001");
+    await adminLogin(page, "/admin/audit/events");
+    await openNav(page, "ADM-EVD-001");
     await expect(page.getByTestId("admin-error")).toContainText("读取失败");
     await expect(page.getByTestId("admin-retry")).toBeVisible();
   });
