@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 419 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 253 | 人工权限矩阵正文未覆盖 148 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 838 | 人工事件矩阵正文未覆盖 794 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 419 | 人工任务映射正文未逐项覆盖 413 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 260 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 423 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 255 | 人工权限矩阵正文未覆盖 150 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 846 | 人工事件矩阵正文未覆盖 802 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 423 | 人工任务映射正文未逐项覆盖 417 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 262 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -234,6 +234,8 @@
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
 | `public` | public | customer, none, project, public-project | 5 | login, customerPhoneLogin, listCustomerTicketProducts, getSystemHealth, listCustomerMembershipPlans | 已在权限矩阵正文出现 |
+| `refund.authority.manage` | staff-token | project | 2 | upsertRefundAuthorityLimit, upsertRefundAutoRule | OpenAPI 补充，以本附录为准 |
+| `refund.authority.view` | staff-token | project | 2 | listRefundAuthorityLimits, listRefundAutoRules | OpenAPI 补充，以本附录为准 |
 | `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.dismiss` | staff-token | platform | 1 | dismissRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.escalate` | staff-token | platform | 1 | escalateRiskAlert | OpenAPI 补充，以本附录为准 |
@@ -986,6 +988,14 @@
 | `provider_adapter.update_failed` | failure | `updateProviderAdapter` | `PUT` | `/api/v1/integration/provider-adapters/{id}` | INT-第三方集成 | `integration.provider_adapter.update` | 接口级事件，以本附录为准 |
 | `provider_adapter.view_failed` | failure | `listProviderAdapters` | `GET` | `/api/v1/integration/provider-adapters` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
 | `provider_adapter.viewed` | success | `listProviderAdapters` | `GET` | `/api/v1/integration/provider-adapters` | INT-第三方集成 | `integration.provider_adapter.view` | 接口级事件，以本附录为准 |
+| `refund_authority_limit.view_failed` | failure | `listRefundAuthorityLimits` | `GET` | `/api/v1/finance/refund-authority/limits` | FIN-财务台账 | `refund.authority.view` | 接口级事件，以本附录为准 |
+| `refund_authority_limit.viewed` | success | `listRefundAuthorityLimits` | `GET` | `/api/v1/finance/refund-authority/limits` | FIN-财务台账 | `refund.authority.view` | 接口级事件，以本附录为准 |
+| `refund_authority.change_failed` | failure | `upsertRefundAuthorityLimit` | `POST` | `/api/v1/finance/refund-authority/limits` | FIN-财务台账 | `refund.authority.manage` | 接口级事件，以本附录为准 |
+| `refund_authority.change_failed` | failure | `upsertRefundAutoRule` | `POST` | `/api/v1/finance/refund-authority/rules` | FIN-财务台账 | `refund.authority.manage` | 接口级事件，以本附录为准 |
+| `refund_authority.changed` | success | `upsertRefundAuthorityLimit` | `POST` | `/api/v1/finance/refund-authority/limits` | FIN-财务台账 | `refund.authority.manage` | 接口级事件，以本附录为准 |
+| `refund_authority.changed` | success | `upsertRefundAutoRule` | `POST` | `/api/v1/finance/refund-authority/rules` | FIN-财务台账 | `refund.authority.manage` | 接口级事件，以本附录为准 |
+| `refund_auto_rule.view_failed` | failure | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | FIN-财务台账 | `refund.authority.view` | 接口级事件，以本附录为准 |
+| `refund_auto_rule.viewed` | success | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | FIN-财务台账 | `refund.authority.view` | 接口级事件，以本附录为准 |
 | `risk_alert.create_failed` | failure | `createRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `risk_alert.created` | success | `createRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `risk_alert.view_failed` | failure | `listRiskAlerts` | `GET` | `/api/v1/analytics/risk-alerts` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
@@ -1353,10 +1363,14 @@
 | FIN-财务台账 | `listPropertyFeeRates` | `GET` | `/api/v1/finance/property-fee/rates` | 列出某项目的物业费费率 | `finance.property_fee.manage` | `finance_property_fee.rate_viewed` / `finance_property_fee.rate_view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | 查询对账批次 | `finance.reconciliation.view` | `finance.reconciliation_batch.viewed` / `finance.reconciliation_batch.viewed_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `openplatform.reconcile.execute` | `finance_reconciliation.difference_found` / `finance_reconciliation.view_failed` | web | operation 级补充 |
+| FIN-财务台账 | `listRefundAuthorityLimits` | `GET` | `/api/v1/finance/refund-authority/limits` | 查询退款自助额度配置 | `refund.authority.view` | `refund_authority_limit.viewed` / `refund_authority_limit.view_failed` | web | operation 级补充 |
+| FIN-财务台账 | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | 查询退款自动放行规则配置 | `refund.authority.view` | `refund_auto_rule.viewed` / `refund_auto_rule.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | 保证金台账动作（收取/退还/抵扣/没收） | `finance.deposit.manage` | `finance.deposit.action_recorded` / `finance.deposit.action_failed` | web | operation 级补充 |
 | FIN-财务台账 | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | 锁定后补录审批申请 | `finance.locked_backfill.request` | `finance.locked_backfill_requested` / `finance.locked_backfill_request_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | （已废止）CAM 年度 true-up → 物业费不退不补、无对账；调用返回 409 CAM_TRUEUP_ABOLISHED | `finance.cam.trueup` | `finance.cam.trued_up` / `finance.cam.trueup_failed` | web | operation 级补充 |
+| FIN-财务台账 | `upsertRefundAuthorityLimit` | `POST` | `/api/v1/finance/refund-authority/limits` | 新增或更新退款自助额度 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
+| FIN-财务台账 | `upsertRefundAutoRule` | `POST` | `/api/v1/finance/refund-authority/rules` | 新增或更新退款自动放行规则 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | 合同审批流 | `contract.lifecycle.approve` | `contract.lifecycle_changed` / `contract.lifecycle_change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | 主管审批或驳回复核记录 | `governance.supervisor_review.approve` | `governance.supervisor_review.decided` / `governance.supervisor_review.decide_failed` | web | operation 级补充 |
 | GOV-平台治理 | `changeBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings/{id}/change` | 变更四类主体绑定 | `entity.binding.manage` | `entity_binding.changed` / `entity_binding.change_failed` | web | operation 级补充 |

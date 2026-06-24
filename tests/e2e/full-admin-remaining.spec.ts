@@ -25,6 +25,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-AMU-003", label: "安全巡检/事故", route: "/admin/amusement/safety-incidents" },
   { pageId: "ADM-INV-001", label: "库存台账", route: "/admin/inventory/ledger" },
   { pageId: "ADM-FIN-002", label: "对账差异", route: "/admin/finance/reconciliation" },
+  { pageId: "ADM-FIN-003", label: "退款分级授权", route: "/admin/finance/refund-authority" },
   { pageId: "ADM-MER-001", label: "商户服务工单", route: "/admin/merchant-service/tickets" },
   { pageId: "ADM-MER-002", label: "商户授权工作台", route: "/admin/merchant-portal/scope" },
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", route: "/admin/integrations/events" },
@@ -71,6 +72,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("inventory-ledger-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-002") {
     await expect(page.getByTestId("reconciliation-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-FIN-003") {
+    await expect(page.getByTestId("refund-authority-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-001") {
     await expect(page.getByTestId("merchant-work-orders-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-002") {

@@ -42,6 +42,7 @@ const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage")
 const BarProductsPage = React.lazy(() => import("./pages/BarProductsPage").then((m) => ({ default: m.BarProductsPage })));
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
+const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
@@ -125,6 +126,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <InventoryLedgerPage {...props} />;
     case "ADM-FIN-002":
       return <ReconciliationPage {...props} />;
+    case "ADM-FIN-003":
+      return <RefundAuthorityPage {...props} />;
     case "ADM-MER-001":
       return <MerchantWorkOrdersPage {...props} />;
     case "ADM-MER-002":

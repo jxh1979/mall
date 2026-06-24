@@ -26,6 +26,7 @@ const bespokePages = new Set([
   "ADM-GOV-006",
   "ADM-FIN-001",
   "ADM-FIN-002",
+  "ADM-FIN-003",
   "ADM-MER-001",
   "ADM-MER-002",
   "ADM-AMU-001",

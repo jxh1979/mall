@@ -20685,6 +20685,130 @@
           }
         }
       }
+    },
+    "/api/v1/finance/refund-authority/limits": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listRefundAuthorityLimits",
+        "summary": "查询退款自助额度配置",
+        "x-permission": "refund.authority.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "refund_authority_limit.viewed",
+        "x-audit-event-failure": "refund_authority_limit.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "upsertRefundAuthorityLimit",
+        "summary": "新增或更新退款自助额度",
+        "x-permission": "refund.authority.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "refund_authority.changed",
+        "x-audit-event-failure": "refund_authority.change_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RefundAuthorityLimitRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/finance/refund-authority/rules": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listRefundAutoRules",
+        "summary": "查询退款自动放行规则配置",
+        "x-permission": "refund.authority.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "refund_auto_rule.viewed",
+        "x-audit-event-failure": "refund_auto_rule.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "upsertRefundAutoRule",
+        "summary": "新增或更新退款自动放行规则",
+        "x-permission": "refund.authority.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "refund_authority.changed",
+        "x-audit-event-failure": "refund_authority.change_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RefundAutoRuleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -22654,6 +22778,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/PropertyFeeBillRequest"
+            }
+          }
+        }
+      },
+      "RefundAuthorityLimitRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RefundAuthorityLimitRequest"
+            }
+          }
+        }
+      },
+      "RefundAutoRuleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RefundAutoRuleRequest"
             }
           }
         }
@@ -31030,6 +31174,114 @@
               "type": "string",
               "maxLength": 64
             }
+          }
+        }
+      },
+      "RefundAuthorityLimitRequest": {
+        "type": "object",
+        "description": "请求载荷 RefundAuthorityLimitRequest；员工退款自助额度配置（upsert，自然键 subject_type+subject_id+refund_domain 幂等）。",
+        "additionalProperties": false,
+        "required": [
+          "subject_type",
+          "subject_id",
+          "refund_domain",
+          "limit_amount_cent"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "subject_type": {
+            "type": "string",
+            "description": "授权主体类型。",
+            "enum": [
+              "staff",
+              "staff_level"
+            ]
+          },
+          "subject_id": {
+            "type": "string",
+            "description": "员工 id 或职级 code。",
+            "maxLength": 64
+          },
+          "refund_domain": {
+            "type": "string",
+            "description": "退款域。",
+            "enum": [
+              "ticket",
+              "bar",
+              "finance",
+              "all"
+            ]
+          },
+          "limit_amount_cent": {
+            "type": "integer",
+            "description": "单笔自助退款额度（分），必须 >= 0。",
+            "minimum": 0,
+            "maximum": 999999999999
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体级；留空为全局。",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "description": "配置状态，缺省 active。",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          }
+        }
+      },
+      "RefundAutoRuleRequest": {
+        "type": "object",
+        "description": "请求载荷 RefundAutoRuleRequest；退款自动放行规则配置（upsert，自然键 refund_domain+rule_type 幂等）。",
+        "additionalProperties": false,
+        "required": [
+          "refund_domain",
+          "rule_type"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "refund_domain": {
+            "type": "string",
+            "description": "退款域。",
+            "enum": [
+              "ticket",
+              "bar",
+              "finance",
+              "all"
+            ]
+          },
+          "rule_type": {
+            "type": "string",
+            "description": "规则类型，如 expired_unused（到期未用）。",
+            "maxLength": 40
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用，缺省 false（最安全）。"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体级；留空为全局。",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "description": "配置状态，缺省 active。",
+            "enum": [
+              "active",
+              "inactive"
+            ]
           }
         }
       }
