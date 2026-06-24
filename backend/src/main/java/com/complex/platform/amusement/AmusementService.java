@@ -1281,6 +1281,36 @@ public class AmusementService {
         });
     }
 
+    /**
+     * T3.1 巡检到期调度（激活 V143 已建表 amusement_inspection_tasks）：遍历每个项目的在役(active)设备，按
+     * 「设备级安全检查周期（缺省回退项目级，默认 24h）」从最近 PASS 巡检时间推算到期点（从未巡检则立即到期），
+     * 幂等 upsert 一张 pending 待办（同到期点不重复）；再把已到期未完成的待办批量翻 overdue。
+     * 由 {@link AmusementInspectionTaskJob} 薄 @Scheduled 包装调用（默认关），亦供单测直调对拍。返回本次遍历产生的 upsert 次数。
+     */
+    public int generateDueInspectionTasks(Instant now) {
+        int upserted = 0;
+        for (AmusementProjectRecord project : repository.listProjects()) {
+            int projectInterval = repository.findProjectSafetyCheckIntervalHours(project.id());
+            for (AmusementDeviceRecord device : repository.listDevicesByProject(project.id())) {
+                if (!"active".equals(device.status())) {
+                    continue; // 退役/停用/检修设备不排巡检
+                }
+                int intervalHours = device.safetyCheckIntervalHours() != null
+                        ? device.safetyCheckIntervalHours() : projectInterval;
+                Instant dueAt = device.lastPassInspectionAt() != null
+                        ? device.lastPassInspectionAt().plus(java.time.Duration.ofHours(intervalHours))
+                        : now; // 从未巡检 → 立即到期，必须尽快巡检
+                repository.upsertInspectionTask(new AmusementInspectionTaskRecord(
+                        "itask_" + UUID.randomUUID().toString().replace("-", ""),
+                        project.id(), device.id(), dueAt, "pending", now,
+                        null, null, device.merchantId(), now, now));
+                upserted++;
+            }
+        }
+        repository.markOverdueInspectionTasks(now);
+        return upserted;
+    }
+
     private AmusementOpenEligibilityResponse evaluateOpenEligibility(String projectId, String sessionId, String deviceId) {
         AmusementProjectRecord project = repository.findProjectById(projectId)
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "project not found"));

@@ -242,4 +242,15 @@ public interface AmusementRepository {
      * 仅当当前 open_status 等于 expectedCurrentStatus 时更新，避免并发误流转；返回是否更新成功。
      */
     boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus);
+
+    /**
+     * T3.1 巡检到期调度（amusement_inspection_tasks，V143）：按 (project_id, COALESCE(device_id,''), due_at)
+     * 唯一索引幂等 upsert 一张 pending 待办（ON CONFLICT DO NOTHING——同一到期点只生成一次，重复调度不产生重复待办）。
+     */
+    void upsertInspectionTask(AmusementInspectionTaskRecord task);
+
+    /**
+     * T3.1：把已到期未完成的巡检待办（status='pending' AND due_at &lt; now）批量翻 overdue；返回受影响行数。
+     */
+    int markOverdueInspectionTasks(java.time.Instant now);
 }

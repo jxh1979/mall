@@ -535,6 +535,29 @@ class AmusementServiceTests {
     }
 
     @Test
+    void generateDueInspectionTasksUpsertsPendingDeduplicatesAndMarksOverdue() {
+        // T3.1：激活 V143 巡检到期工单表。项目有一台在役设备、最近 PASS 在 48h 前、周期 24h
+        // → 到期点 = now-24h（已过）。生成应产 1 张待办并翻 overdue；重复调度去重仍 1 张。
+        AmusementProjectRecord project = projectWithTemplate("t31-inspection-task");
+        Instant now = Instant.parse("2026-06-23T12:00:00Z");
+        Instant lastPass = now.minus(java.time.Duration.ofHours(48));
+        amusementRepository.saveDevice(new AmusementDeviceRecord(
+                "dev_t31", project.id(), "DEV-T31", "巡检Job测试设备", "active",
+                24, null, lastPass, null, lastPass, lastPass));
+
+        service.generateDueInspectionTasks(now);
+        service.generateDueInspectionTasks(now); // 重复调度
+
+        List<AmusementInspectionTaskRecord> tasks = amusementRepository.allInspectionTasks();
+        assertThat(tasks).hasSize(1); // 去重：同到期点只 1 张
+        AmusementInspectionTaskRecord task = tasks.get(0);
+        assertThat(task.projectId()).isEqualTo(project.id());
+        assertThat(task.deviceId()).isEqualTo("dev_t31");
+        assertThat(task.dueAt()).isEqualTo(now.minus(java.time.Duration.ofHours(24)));
+        assertThat(task.status()).isEqualTo("overdue");
+    }
+
+    @Test
     void deviceInspectionExpiryBlocksVerificationEvenWhenRequestOmitsDeviceId() {
         // P0-3 回归：项目级巡检 PASS（旧路径会放行），但项目下有一台在役(active)设备从未通过巡检
         // （lastPass=null=超期）。核销请求不传 deviceId（最常见形态）仍必须被巡检超期项目级兜底阻断，杜绝绕过。
@@ -2192,6 +2215,36 @@ class AmusementServiceTests {
                             d.id(), d.projectId(), d.deviceCode(), d.name(), d.status(),
                             d.safetyCheckIntervalHours(), d.locationPointId(), inspectedAt,
                             d.merchantId(), d.createdAt(), inspectedAt)));
+        }
+
+        // T3.1：巡检到期工单（amusement_inspection_tasks）内存桩。
+        private final Map<String, AmusementInspectionTaskRecord> inspectionTasks = new LinkedHashMap<>();
+
+        @Override
+        public void upsertInspectionTask(AmusementInspectionTaskRecord task) {
+            // 自然键 (project, device|'', due_at) 去重，命中不覆盖（对齐 DB ON CONFLICT DO NOTHING）。
+            String key = task.projectId() + "|" + (task.deviceId() == null ? "" : task.deviceId())
+                    + "|" + task.dueAt().toEpochMilli();
+            inspectionTasks.putIfAbsent(key, task);
+        }
+
+        @Override
+        public int markOverdueInspectionTasks(java.time.Instant now) {
+            int n = 0;
+            for (Map.Entry<String, AmusementInspectionTaskRecord> e : inspectionTasks.entrySet()) {
+                AmusementInspectionTaskRecord t = e.getValue();
+                if ("pending".equals(t.status()) && t.dueAt().isBefore(now)) {
+                    e.setValue(new AmusementInspectionTaskRecord(t.id(), t.projectId(), t.deviceId(), t.dueAt(),
+                            "overdue", t.generatedAt(), t.completedInspectionId(), t.completedAt(),
+                            t.merchantId(), t.createdAt(), now));
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        List<AmusementInspectionTaskRecord> allInspectionTasks() {
+            return new ArrayList<>(inspectionTasks.values());
         }
 
         // 清单#6：超容处置策略夹具（运营容量软上限 + 处置模式）。

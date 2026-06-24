@@ -387,6 +387,43 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public void upsertInspectionTask(AmusementInspectionTaskRecord task) {
+        // T3.1：自然键 (project_id, COALESCE(device_id,''), due_at) 唯一索引（V143）幂等——同到期点只生成一次。
+        jdbcTemplate.update("""
+                INSERT INTO amusement_inspection_tasks (
+                    id, project_id, device_id, due_at, status, generated_at,
+                    completed_inspection_id, completed_at, merchant_id, created_at, updated_at
+                )
+                VALUES (
+                    :id, :project_id, :device_id, :due_at, :status, :generated_at,
+                    :completed_inspection_id, :completed_at, :merchant_id, :created_at, :updated_at
+                )
+                ON CONFLICT (project_id, COALESCE(device_id, ''), due_at) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", task.id())
+                .addValue("project_id", task.projectId())
+                .addValue("device_id", task.deviceId())
+                .addValue("due_at", timestampWithTimeZone(task.dueAt()))
+                .addValue("status", task.status())
+                .addValue("generated_at", timestampWithTimeZone(task.generatedAt()))
+                .addValue("completed_inspection_id", task.completedInspectionId())
+                .addValue("completed_at", timestampWithTimeZone(task.completedAt()))
+                .addValue("merchant_id", task.merchantId())
+                .addValue("created_at", timestampWithTimeZone(task.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(task.updatedAt())));
+    }
+
+    @Override
+    public int markOverdueInspectionTasks(java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE amusement_inspection_tasks
+                   SET status = 'overdue', updated_at = :now
+                 WHERE status = 'pending' AND due_at < :now
+                """, new MapSqlParameterSource()
+                .addValue("now", timestampWithTimeZone(now)));
+    }
+
+    @Override
     public AmusementOverCapacityPolicy findOverCapacityPolicy(String projectId) {
         return jdbcTemplate.query("""
                 SELECT project_id, operating_capacity, disposal_mode, enabled
