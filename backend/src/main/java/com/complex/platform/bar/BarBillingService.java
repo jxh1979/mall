@@ -8,6 +8,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.PaymentChannelPolicy;
 import com.complex.platform.finance.PaymentIntentRecord;
+import com.complex.platform.finance.RefundAuthorizationService;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -25,6 +26,12 @@ public class BarBillingService {
     private final BarReceivableLedgerService receivableLedgerService;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
+    // Stage B（审计 A2，适用所有退款）：退款分级授权引擎 + 功能标志（默认关）。字段注入以免改构造点；
+    // 可为 null（旧构造/单测未注入）；包私有便于单测置位。开标志后超额酒吧退款须复核（见 requireRefundTierAuthorized）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    RefundAuthorizationService refundAuthorizationService;
+    @org.springframework.beans.factory.annotation.Value("${refund.tiered_authorization.enabled:false}")
+    boolean tieredRefundEnabled;
 
     public BarBillingService(
             BarRepository repository,
@@ -36,6 +43,27 @@ public class BarBillingService {
         this.receivableLedgerService = receivableLedgerService;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
+    }
+
+    /**
+     * Stage B 分级授权闸（适用所有退款，功能标志 refund.tiered_authorization.enabled 默认关）：
+     * 退款额按 {@link RefundAuthorizationService#classify} 判档——额度内/规则既定放行，超额（REVIEW_REQUIRED）
+     * 因单步退款无独立审批环节而直接拒（REFUND_REVIEW_REQUIRED），须由额度内的授权人办理。
+     * 平台管理员旁路（与 {@code requirePermission} 一致）。关闭标志或引擎未注入 → 不拦（维持现状）。
+     */
+    private void requireRefundTierAuthorized(String domain, long amountCent) {
+        if (!tieredRefundEnabled || refundAuthorizationService == null) {
+            return; // 关闭标志/引擎未注入 → 不拦（维持现状）。
+        }
+        var actor = authorizationService.currentActor();
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return;
+        }
+        if (refundAuthorizationService.classify(domain, amountCent, actor.id(), null)
+                == RefundAuthorizationService.RefundTier.REVIEW_REQUIRED) {
+            throw ApiException.forbidden("REFUND_REVIEW_REQUIRED",
+                    "refund amount exceeds the self-service authorization limit; an authorized approver must process it");
+        }
     }
 
     BarBillRecord createBill(String orderId, BarOrderBillCreateRequest request) {
@@ -216,6 +244,8 @@ public class BarBillingService {
             if (amount > beforePayable) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "refund amount cannot exceed payable amount");
             }
+            // Stage B 分级授权（功能标志默认关）：超额度退款须复核——单步退款无独立审批环节，超额直接拒，由额度内授权人办理。
+            requireRefundTierAuthorized("bar", amount);
             afterPayable = beforePayable - amount;
             refundedAt = Instant.now();
             // RC1①：退款过账到 finance ar_ap 台账（direction=payable, source_type=refund），表示"应退/已退"。

@@ -601,6 +601,45 @@ class FinanceServiceTests {
     }
 
     @Test
+    void tieredAuthorizationBlocksOverLimitFinanceRefundButAllowsWithinLimit() {
+        // Stage B（审计 A2，适用所有退款）：开启分级授权后，超额度财务退款被拒（REFUND_REVIEW_REQUIRED）、额度内放行。
+        Instant ts = Instant.parse("2026-06-23T00:00:00Z");
+        RefundAuthorizationRepository refundRepo = new RefundAuthorizationRepository() {
+            @Override
+            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom) {
+                if ("staff".equals(st) && "finance".equals(dom) && "op1".equals(sid)) {
+                    return Optional.of(new RefundAuthorityLimitRecord(
+                            "l_op1", "staff", "op1", "finance", 20000L, null, "active", ts, ts));
+                }
+                return Optional.empty();
+            }
+            @Override public boolean isAutoRuleEnabled(String dom, String type) { return false; }
+            @Override public RefundAuthorityLimitRecord saveLimit(RefundAuthorityLimitRecord l) { return l; }
+            @Override public List<RefundAuthorityLimitRecord> listLimits() { return List.of(); }
+            @Override public RefundAutoRuleRecord saveRule(RefundAutoRuleRecord r) { return r; }
+            @Override public List<RefundAutoRuleRecord> listRules() { return List.of(); }
+        };
+        service.refundAuthorizationService = new RefundAuthorizationService(refundRepo);
+        service.tieredRefundEnabled = true;
+        // 操作者 op1（非平台管理员→闸生效）；isPlatformAdmin 走 mock 默认 false。
+        when(authorizationService.currentActor()).thenReturn(
+                new AccessActor("op1", "op1", "staff", "org_1", null, "active"));
+
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-tier-refund", "receivable", 100000L));
+        ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-tier", 100000L));
+
+        // 超额度（30000 > 20000）→ 复核拒，不落退款记录。
+        assertThatThrownBy(() -> service.createRefund(new RefundRequest(
+                "refund-tier-over", "refund", List.of(), payment.payment().id(), 30000L, "over limit", null, "cash")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_REVIEW_REQUIRED");
+
+        // 额度内（15000 ≤ 20000）→ 放行。
+        FinanceRefundRecord ok = service.createRefund(new RefundRequest(
+                "refund-tier-within", "refund", List.of(), payment.payment().id(), 15000L, "within limit", null, "cash"));
+        assertThat(ok.refundAmountCent()).isEqualTo(15000L);
+    }
+
+    @Test
     void refundWithoutDirectionDefaultsToOriginal() {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-default-dir", "receivable", 30000L));
         ArApPaymentResponse payment = service.registerArApPayment(item.id(), paymentRequest("pay-default-dir", 30000L));
