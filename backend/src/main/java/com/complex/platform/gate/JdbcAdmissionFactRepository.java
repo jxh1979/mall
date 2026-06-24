@@ -35,7 +35,7 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
                 SELECT COUNT(1)
                   FROM contracts
                  WHERE merchant_id = :merchant_id
-                   AND lifecycle_status = 'approved'
+                   AND lifecycle_status IN ('approved', 'effective')
                    AND effective_date <= :today
                    AND expiry_date >= :today
                 """, Map.of("merchant_id", merchantId, "today", today), Integer.class);
@@ -71,7 +71,7 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
                 SELECT COUNT(1)
                   FROM contracts
                  WHERE merchant_id = :merchant_id
-                   AND lifecycle_status = 'approved'
+                   AND lifecycle_status IN ('approved', 'effective')
                    AND effective_date <= :today
                    AND expiry_date >= :today
                 """, Map.of("merchant_id", merchantId, "today", today), Integer.class);
@@ -83,7 +83,7 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
                 SELECT COUNT(1)
                   FROM contracts
                  WHERE merchant_id = :merchant_id
-                   AND lifecycle_status = 'approved'
+                   AND lifecycle_status IN ('approved', 'effective')
                    AND effective_date <= :today
                    AND expiry_date >= :today
                    AND (
@@ -109,7 +109,7 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
                   JOIN contracts c ON c.id = cs.contract_id
                  WHERE cs.space_id = :space_id
                    AND c.merchant_id = :merchant_id
-                   AND c.lifecycle_status = 'approved'
+                   AND c.lifecycle_status IN ('approved', 'effective')
                    AND c.effective_date <= :today
                    AND c.expiry_date >= :today
                 """,

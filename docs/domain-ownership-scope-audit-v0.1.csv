@@ -75,7 +75,7 @@ complex_operating_params,direct,project_id,project_id column on complex_operatin
 compliance_expiry_items,direct,merchant_id,merchant_id column on compliance_expiry_items,ready for project/merchant scoped query enforcement,covered
 compliance_reminders,direct,merchant_id,merchant_id column on compliance_reminders,ready for project/merchant scoped query enforcement,covered
 contract_key_dates,direct,merchant_id,merchant_id column on contract_key_dates,ready for project/merchant scoped query enforcement,covered
-contract_spaces,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+contract_spaces,direct,project_id,project_id column on contract_spaces,ready for project/merchant scoped query enforcement,covered
 contracts,direct,merchant_id,merchant_id column on contracts,ready for project/merchant scoped query enforcement,covered
 customer_birthday_rules,direct,project_id,project_id column on customer_birthday_rules,ready for project/merchant scoped query enforcement,covered
 customer_check_in_tiers,direct,project_id,project_id column on customer_check_in_tiers,ready for project/merchant scoped query enforcement,covered

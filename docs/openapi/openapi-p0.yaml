@@ -15029,6 +15029,63 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/platform/contracts/{contract_id}/activate:
+    post:
+      tags:
+        - platform
+      operationId: activateContract
+      summary: 合同生效并绑定租赁空间
+      description: approved→effective 并绑定该合同所租空间（写 contract_spaces，准入闸 over_space 据此判定）。功能标志
+        contract.lifecycle_effective.enabled 默认关。
+      x-permission: contract.lifecycle.activate
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.activated
+      x-audit-event-failure: contract.activate_failed
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/ContractActivateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/platform/contracts/{contract_id}/spaces:
+    get:
+      tags:
+        - platform
+      operationId: listContractSpaces
+      summary: 查询合同已绑定的租赁空间
+      description: 列出该合同经 contract_spaces 绑定的租赁空间。
+      x-permission: contract.view
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract_space.viewed
+      x-audit-event-failure: contract_space.view_failed
+      parameters:
+        - $ref: "#/components/parameters/ContractId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
 components:
   securitySchemes:
     BearerAuth:
@@ -16341,6 +16398,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/OperatingParamsRequest"
+    ContractActivateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractActivateRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -23126,6 +23189,24 @@ components:
           enum:
             - active
             - inactive
+    ContractActivateRequest:
+      type: object
+      description: 请求载荷 ContractActivateRequest；合同生效并绑定所租空间（space_ids 非空）。
+      additionalProperties: false
+      required:
+        - space_ids
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        space_ids:
+          type: array
+          description: 该合同租赁的空间 id 列表（非空）。
+          items:
+            type: string
+            maxLength: 64
+          minItems: 1
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

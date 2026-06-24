@@ -29,6 +29,33 @@ class PlatformJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.gate.AdmissionFactRepository admissionFactRepository;
+
+    @Test
+    void activatedContractSpaceBindingMakesOverSpaceGateRecognizeLease() {
+        // ② 履约闭环 S1：合同生效绑定空间（contract_spaces 首次写入）后，准入闸 over_space 据真实数据判定
+        //   ——空间在生效合同租赁内→不越界；未绑定空间→越界；并验冲突查询（同空间重叠生效合同）。@Transactional 回滚不污染 dev 库。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveSpace(new SpaceRecord(
+                "sp_s1_it", "prj_1", "mch_s1_it", null, "S1 Shop", "shop", "1F", null, List.of(), "active", now, now));
+        repository.saveContract(new ContractRecord(
+                "ctr_s1_it", "mch_s1_it", "be_c", "be_o", "be_s",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2027-12-31"),
+                Map.of(), null, List.of(), "effective", now, now));
+        repository.bindContractSpace("ctr_s1_it", "sp_s1_it", "prj_1", now);
+
+        // over_space：绑定空间在租赁内（不越界）；未绑定空间越界命中。
+        assertThat(admissionFactRepository.isOverSpaceForMerchant("mch_s1_it", "sp_s1_it")).isFalse();
+        assertThat(admissionFactRepository.isOverSpaceForMerchant("mch_s1_it", "sp_unbound_it")).isTrue();
+
+        // 冲突查询：同空间被另一份「重叠生效合同」占用→true；排除自身→false。
+        assertThat(repository.hasOverlappingEffectiveContractForSpace(
+                "sp_s1_it", LocalDate.parse("2026-06-01"), LocalDate.parse("2026-12-31"), "ctr_other")).isTrue();
+        assertThat(repository.hasOverlappingEffectiveContractForSpace(
+                "sp_s1_it", LocalDate.parse("2026-06-01"), LocalDate.parse("2026-12-31"), "ctr_s1_it")).isFalse();
+    }
+
     @Test
     void migrationCreatesPlatformMasterDataTablesAndSeedsPermissions() {
         assertThat(regclass("business_entities")).isEqualTo("business_entities");

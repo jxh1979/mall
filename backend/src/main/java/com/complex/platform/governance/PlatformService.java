@@ -7,6 +7,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.ApprovalRequest;
+import com.complex.platform.governance.dto.ContractActivateRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
@@ -23,13 +24,19 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PlatformService {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
+
+    // ② 履约闭环 S1（PRD phase6）：合同生效终态开关，默认关→activate 拒（关时合同止于 approved，现状语义不变）。
+    @Value("${contract.lifecycle_effective.enabled:false}")
+    boolean contractLifecycleEffectiveEnabled;
 
     private final PlatformRepository repository;
     private final AuditedOperationExecutor operations;
@@ -438,6 +445,84 @@ public class PlatformService {
                     ));
                 }
         );
+    }
+
+    /**
+     * ② 履约闭环 S1：合同生效（approved→effective）并绑定所租空间（首次写 contract_spaces）。
+     * 校验空间存在 + 无重叠生效合同占用（防重复出租）；@Transactional 保证「置生效 + 多空间绑定」原子。
+     * 准入闸 over_space 据 contract_spaces 真实判定，本切片落地后该维度生效。
+     */
+    @Transactional
+    public ContractRecord activateContract(String contractId, ContractActivateRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(contractId, "contract_id");
+        return executeWrite(
+                "activateContract:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ContractRecord.class,
+                "contract.activated",
+                "contract.activate_failed",
+                "contract.lifecycle.activate",
+                "contract",
+                () -> {
+                    if (!contractLifecycleEffectiveEnabled) {
+                        throw ApiException.conflict("CONTRACT_LIFECYCLE_EFFECTIVE_DISABLED",
+                                "contract effective lifecycle is disabled");
+                    }
+                    ContractActivateRequest actual = requireRequest(request);
+                    List<String> spaceIds = (actual.spaceIds() == null ? List.<String>of() : actual.spaceIds())
+                            .stream().map(s -> requireText(s, "space_id")).distinct().toList();
+                    if (spaceIds.isEmpty()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "space_ids is required");
+                    }
+                    ContractRecord existing = repository.findContractById(id)
+                            .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                    if (!"approved".equals(existing.lifecycleStatus())) {
+                        throw ApiException.conflict("CONTRACT_NOT_APPROVED",
+                                "contract must be approved before activation");
+                    }
+                    // 校验每个空间存在 + 无重叠生效合同占用。
+                    // ponytail: 冲突检查 + @Transactional(READ COMMITTED) 足够 admin 低频生效场景；
+                    //   若并发生效同空间成真，再对 space 行加咨询锁/FOR UPDATE 收紧。
+                    java.util.Map<String, String> spaceProjects = new java.util.LinkedHashMap<>();
+                    for (String spaceId : spaceIds) {
+                        SpaceRecord space = repository.findSpaceById(spaceId)
+                                .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "space not found: " + spaceId));
+                        if (repository.hasOverlappingEffectiveContractForSpace(
+                                spaceId, existing.effectiveDate(), existing.expiryDate(), id)) {
+                            throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
+                                    "space already leased by an overlapping effective contract: " + spaceId);
+                        }
+                        spaceProjects.put(spaceId, space.projectId());
+                    }
+                    Instant now = Instant.now();
+                    ContractRecord effective = repository.saveContract(new ContractRecord(
+                            existing.id(), existing.merchantId(), existing.contractSubjectId(),
+                            existing.operationSubjectId(), existing.settlementSubjectId(),
+                            existing.effectiveDate(), existing.expiryDate(), existing.rentTerms(),
+                            existing.shareholderRatioForReport(), existing.attachmentIds(),
+                            "effective", existing.createdAt(), now));
+                    spaceProjects.forEach((spaceId, projectId) -> repository.bindContractSpace(id, spaceId, projectId, now));
+                    return effective;
+                }
+        );
+    }
+
+    /** ② 履约闭环 S1：查某合同已绑定的租赁空间。 */
+    public PageResponse<ContractSpaceRecord> listContractSpaces(String contractId) {
+        String id = requireText(contractId, "contract_id");
+        try {
+            List<ContractSpaceRecord> spaces = repository.listContractSpaces(id);
+            auditEventService.recordSuccess(
+                    "contract_space.viewed", "contract.view", "contract", id, null, null,
+                    Map.of("count", spaces.size()));
+            return page(spaces);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "contract_space.view_failed", "contract.view", "contract", id, null, null, codeOf(exception));
+            throw exception;
+        }
     }
 
     private MerchantRecord saveMerchant(

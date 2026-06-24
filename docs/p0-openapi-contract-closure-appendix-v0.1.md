@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 427 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 253 | 人工权限矩阵正文未覆盖 149 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 854 | 人工事件矩阵正文未覆盖 812 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 427 | 人工任务映射正文未逐项覆盖 421 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 261 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 429 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 254 | 人工权限矩阵正文未覆盖 150 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 858 | 人工事件矩阵正文未覆盖 816 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 429 | 人工任务映射正文未逐项覆盖 423 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 262 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -124,8 +124,9 @@
 | `compliance.reminder.scan` | staff-token | - | 1 | scanComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `compliance.reminder.view` | staff-token | - | 1 | listComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `contract.draft.manage` | staff-token | project-merchant | 1 | createContractDraft | 已在权限矩阵正文出现 |
+| `contract.lifecycle.activate` | staff-token | project-merchant | 1 | activateContract | OpenAPI 补充，以本附录为准 |
 | `contract.lifecycle.approve` | staff-token | project-merchant | 1 | approveContract | 已在权限矩阵正文出现 |
-| `contract.view` | staff-token | project-merchant | 1 | listContracts | 已在权限矩阵正文出现 |
+| `contract.view` | staff-token | project-merchant | 2 | listContracts, listContractSpaces | 已在权限矩阵正文出现 |
 | `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.view` | staff-token | project | 1 | listMemberLevels | OpenAPI 补充，以本附录为准 |
 | `customer.membership.manage` | staff-token | project | 1 | saveMembershipPlan | OpenAPI 补充，以本附录为准 |
@@ -584,6 +585,10 @@
 | `compliance.reminder.list_failed` | failure | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | P0-待归类 | `compliance.reminder.view` | 接口级事件，以本附录为准 |
 | `compliance.reminder.scan` | success | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | P0-待归类 | `compliance.reminder.scan` | 接口级事件，以本附录为准 |
 | `compliance.reminder.scan_failed` | failure | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | P0-待归类 | `compliance.reminder.scan` | 接口级事件，以本附录为准 |
+| `contract_space.view_failed` | failure | `listContractSpaces` | `GET` | `/api/v1/platform/contracts/{contract_id}/spaces` | GOV-平台治理 | `contract.view` | 接口级事件，以本附录为准 |
+| `contract_space.viewed` | success | `listContractSpaces` | `GET` | `/api/v1/platform/contracts/{contract_id}/spaces` | GOV-平台治理 | `contract.view` | 接口级事件，以本附录为准 |
+| `contract.activate_failed` | failure | `activateContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/activate` | GOV-平台治理 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
+| `contract.activated` | success | `activateContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/activate` | GOV-平台治理 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
 | `contract.draft_save_failed` | failure | `createContractDraft` | `POST` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.draft.manage` | 接口级事件，以本附录为准 |
 | `contract.draft_saved` | success | `createContractDraft` | `POST` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.draft.manage` | 接口级事件，以本附录为准 |
 | `contract.lifecycle_change_failed` | failure | `approveContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | GOV-平台治理 | `contract.lifecycle.approve` | 接口级事件，以本附录为准 |
@@ -1382,6 +1387,7 @@
 | FIN-财务台账 | `trueUpCam` | `POST` | `/api/v1/finance/cam/trueups` | （已废止）CAM 年度 true-up → 物业费不退不补、无对账；调用返回 409 CAM_TRUEUP_ABOLISHED | `finance.cam.trueup` | `finance.cam.trued_up` / `finance.cam.trueup_failed` | web | operation 级补充 |
 | FIN-财务台账 | `upsertRefundAuthorityLimit` | `POST` | `/api/v1/finance/refund-authority/limits` | 新增或更新退款自助额度 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
 | FIN-财务台账 | `upsertRefundAutoRule` | `POST` | `/api/v1/finance/refund-authority/rules` | 新增或更新退款自动放行规则 | `refund.authority.manage` | `refund_authority.changed` / `refund_authority.change_failed` | web | operation 级补充 |
+| GOV-平台治理 | `activateContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/activate` | 合同生效并绑定租赁空间 | `contract.lifecycle.activate` | `contract.activated` / `contract.activate_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | 合同审批流 | `contract.lifecycle.approve` | `contract.lifecycle_changed` / `contract.lifecycle_change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | 主管审批或驳回复核记录 | `governance.supervisor_review.approve` | `governance.supervisor_review.decided` / `governance.supervisor_review.decide_failed` | web | operation 级补充 |
 | GOV-平台治理 | `changeBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings/{id}/change` | 变更四类主体绑定 | `entity.binding.manage` | `entity_binding.changed` / `entity_binding.change_failed` | web | operation 级补充 |
@@ -1395,6 +1401,7 @@
 | GOV-平台治理 | `listBusinessEntities` | `GET` | `/api/v1/platform/business-entities` | 查询经营、运营、合同、结算主体档案 | `entity.binding.view` | `business_entity.viewed` / `business_entity.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listBusinessEntityBindings` | `GET` | `/api/v1/platform/business-entity-bindings` | 查询四类主体绑定 | `entity.binding.view` | `entity_binding.viewed` / `entity_binding.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listContracts` | `GET` | `/api/v1/platform/contracts` | 查询合同摘要和附件归档 | `contract.view` | `contract.viewed` / `contract.view_failed` | web | operation 级补充 |
+| GOV-平台治理 | `listContractSpaces` | `GET` | `/api/v1/platform/contracts/{contract_id}/spaces` | 查询合同已绑定的租赁空间 | `contract.view` | `contract_space.viewed` / `contract_space.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listMerchants` | `GET` | `/api/v1/platform/merchants` | 查询商户 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web, merchant_portal | operation 级补充 |
 | GOV-平台治理 | `listProjects` | `GET` | `/api/v1/platform/projects` | 查询综合体项目 | `governance.project.view` | `project.viewed` / `project.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listSpaces` | `GET` | `/api/v1/platform/spaces` | 查询场馆、区域、点位 | `governance.space.view` | `space.viewed` / `space.view_failed` | web, merchant_portal | operation 级补充 |

@@ -13,6 +13,7 @@ import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.ApprovalRequest;
+import com.complex.platform.governance.dto.ContractActivateRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
@@ -303,6 +304,58 @@ class PlatformServiceTests {
                         assertThat(exception.code()).isEqualTo("INVALID_STATUS_TRANSITION"));
     }
 
+    // ② 履约闭环 S1：合同生效 + 空间绑定（功能标志门控 + 状态守卫 + 空间冲突）
+    @Test
+    void activateContractSetsEffectiveAndBindsSpacesGatedByFlag() {
+        service.contractLifecycleEffectiveEnabled = true;
+        platformRepository.spaces.put("sp_act", new SpaceRecord(
+                "sp_act", "prj_1", "mch_act", null, "Shop A", "shop", "1F", null, List.of(), "active",
+                java.time.Instant.parse("2026-06-14T00:00:00Z"), java.time.Instant.parse("2026-06-14T00:00:00Z")));
+        ContractRecord draft = service.createContractDraft(new ContractDraftRequest(
+                "ctr-act-draft", "draft", List.of(), "mch_act", "be_contract", "be_operation", "be_settlement",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(), null, List.of()));
+        service.approveContract(draft.id(), new ApprovalRequest("ctr-act-approve", "approve", List.of(), "approve", "ok", "ops"));
+
+        // 关标志：activate 被拒（合同止于 approved，现状语义不变）。
+        service.contractLifecycleEffectiveEnabled = false;
+        assertThatThrownBy(() -> service.activateContract(draft.id(),
+                new ContractActivateRequest(List.of("sp_act"), "ctr-act-1")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CONTRACT_LIFECYCLE_EFFECTIVE_DISABLED"));
+
+        // 开标志：approved→effective + 写 contract_spaces。
+        service.contractLifecycleEffectiveEnabled = true;
+        ContractRecord effective = service.activateContract(draft.id(),
+                new ContractActivateRequest(List.of("sp_act"), "ctr-act-2"));
+        assertThat(effective.lifecycleStatus()).isEqualTo("effective");
+        assertThat(service.listContractSpaces(draft.id()).items())
+                .extracting(ContractSpaceRecord::spaceId).contains("sp_act");
+    }
+
+    @Test
+    void activateContractRejectsNonApprovedAndSpaceConflict() {
+        service.contractLifecycleEffectiveEnabled = true;
+        platformRepository.spaces.put("sp_x", new SpaceRecord(
+                "sp_x", "prj_1", "m", null, "X", "shop", "1F", null, List.of(), "active",
+                java.time.Instant.parse("2026-06-14T00:00:00Z"), java.time.Instant.parse("2026-06-14T00:00:00Z")));
+
+        // 未 approve（draft）→ activate 拒 CONTRACT_NOT_APPROVED。
+        ContractRecord draftA = service.createContractDraft(new ContractDraftRequest(
+                "ctr-x-draft", "draft", List.of(), "m", "bc", "bo", "bs",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(), null, List.of()));
+        assertThatThrownBy(() -> service.activateContract(draftA.id(), new ContractActivateRequest(List.of("sp_x"), "k1")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CONTRACT_NOT_APPROVED"));
+
+        // A 生效占用 sp_x；B（租期重叠）activate 同空间 → CONTRACT_SPACE_CONFLICT。
+        service.approveContract(draftA.id(), new ApprovalRequest("ctr-x-approve", "approve", List.of(), "approve", "ok", "ops"));
+        service.activateContract(draftA.id(), new ContractActivateRequest(List.of("sp_x"), "k2"));
+        ContractRecord draftB = service.createContractDraft(new ContractDraftRequest(
+                "ctr-y-draft", "draft", List.of(), "m", "bc", "bo", "bs",
+                LocalDate.parse("2026-08-01"), LocalDate.parse("2027-01-31"), Map.of(), null, List.of()));
+        service.approveContract(draftB.id(), new ApprovalRequest("ctr-y-approve", "approve", List.of(), "approve", "ok", "ops"));
+        assertThatThrownBy(() -> service.activateContract(draftB.id(), new ContractActivateRequest(List.of("sp_x"), "k3")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CONTRACT_SPACE_CONFLICT"));
+    }
+
     // P1-4 red→green: action 字段拒绝非法枚举值
     @Test
     void changeBusinessEntityBindingRejectsInvalidAction() {
@@ -480,6 +533,38 @@ class PlatformServiceTests {
         @Override
         public Optional<ContractRecord> findContractById(String id) {
             return Optional.ofNullable(contracts.get(id));
+        }
+
+        private final List<ContractSpaceRecord> contractSpaces = new ArrayList<>();
+
+        @Override
+        public Optional<SpaceRecord> findSpaceById(String id) {
+            return Optional.ofNullable(spaces.get(id));
+        }
+
+        @Override
+        public List<ContractSpaceRecord> listContractSpaces(String contractId) {
+            return contractSpaces.stream().filter(cs -> contractId.equals(cs.contractId())).toList();
+        }
+
+        @Override
+        public void bindContractSpace(String contractId, String spaceId, String projectId, java.time.Instant createdAt) {
+            boolean exists = contractSpaces.stream()
+                    .anyMatch(cs -> contractId.equals(cs.contractId()) && spaceId.equals(cs.spaceId()));
+            if (!exists) {
+                contractSpaces.add(new ContractSpaceRecord(contractId, spaceId, projectId, createdAt));
+            }
+        }
+
+        @Override
+        public boolean hasOverlappingEffectiveContractForSpace(
+                String spaceId, java.time.LocalDate effectiveDate, java.time.LocalDate expiryDate, String excludeContractId) {
+            return contractSpaces.stream()
+                    .filter(cs -> spaceId.equals(cs.spaceId()) && !excludeContractId.equals(cs.contractId()))
+                    .map(cs -> contracts.get(cs.contractId()))
+                    .filter(java.util.Objects::nonNull)
+                    .filter(c -> "effective".equals(c.lifecycleStatus()))
+                    .anyMatch(c -> !c.effectiveDate().isAfter(expiryDate) && !c.expiryDate().isBefore(effectiveDate));
         }
     }
 

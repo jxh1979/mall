@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -321,6 +322,63 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                   FROM contracts
                  WHERE id = :id
                 """, Map.of("id", id), this::mapContract).stream().findFirst();
+    }
+
+    @Override
+    public Optional<SpaceRecord> findSpaceById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                  FROM spaces
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapSpace).stream().findFirst();
+    }
+
+    @Override
+    public List<ContractSpaceRecord> listContractSpaces(String contractId) {
+        return jdbcTemplate.query("""
+                SELECT contract_id, space_id, project_id, created_at
+                  FROM contract_spaces
+                 WHERE contract_id = :contract_id
+                 ORDER BY space_id
+                """, Map.of("contract_id", contractId), (rs, n) -> new ContractSpaceRecord(
+                        rs.getString("contract_id"),
+                        rs.getString("space_id"),
+                        rs.getString("project_id"),
+                        nullableInstant(rs, "created_at")));
+    }
+
+    @Override
+    public void bindContractSpace(String contractId, String spaceId, String projectId, Instant createdAt) {
+        jdbcTemplate.update("""
+                INSERT INTO contract_spaces (contract_id, space_id, project_id, created_at)
+                VALUES (:contract_id, :space_id, :project_id, :created_at)
+                ON CONFLICT (contract_id, space_id) DO NOTHING
+                """, new MapSqlParameterSource()
+                        .addValue("contract_id", contractId)
+                        .addValue("space_id", spaceId)
+                        .addValue("project_id", projectId)
+                        .addValue("created_at", timestampWithTimeZone(createdAt)));
+    }
+
+    @Override
+    public boolean hasOverlappingEffectiveContractForSpace(
+            String spaceId, LocalDate effectiveDate, LocalDate expiryDate, String excludeContractId) {
+        Boolean exists = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM contract_spaces cs
+                      JOIN contracts c ON c.id = cs.contract_id
+                     WHERE cs.space_id = :space_id
+                       AND c.id <> :exclude_id
+                       AND c.lifecycle_status = 'effective'
+                       AND c.effective_date <= :expiry_date
+                       AND c.expiry_date >= :effective_date)
+                """, new MapSqlParameterSource()
+                        .addValue("space_id", spaceId)
+                        .addValue("exclude_id", excludeContractId)
+                        .addValue("effective_date", effectiveDate)
+                        .addValue("expiry_date", expiryDate), Boolean.class);
+        return Boolean.TRUE.equals(exists);
     }
 
     private MapSqlParameterSource businessEntityParameters(BusinessEntityRecord businessEntity) {

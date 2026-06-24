@@ -19,6 +19,7 @@ import com.complex.platform.common.api.GlobalExceptionHandler;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.config.SecurityConfig;
 import com.complex.platform.governance.dto.ApprovalRequest;
+import com.complex.platform.governance.dto.ContractActivateRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
@@ -357,6 +358,30 @@ class PlatformControllerTests {
 
         verify(authorizationService).requirePermission("contract.draft.manage");
         verify(authorizationService).requirePermission("contract.lifecycle.approve");
+    }
+
+    @Test
+    void activateContractBindsSpacesAndUsesActivatePermission() throws Exception {
+        when(service.activateContract(eq("ctr_1"), any(ContractActivateRequest.class)))
+                .thenReturn(new ContractRecord(
+                        "ctr_1", "mch_1", "be_contract", "be_operation", "be_settlement",
+                        LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                        Map.of(), java.math.BigDecimal.valueOf(12.50), List.of("att_contract"),
+                        "effective", Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T02:00:00Z")));
+
+        mockMvc.perform(post("/api/v1/platform/contracts/ctr_1/activate")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "contract-activate",
+                                  "space_ids": ["sp_1"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lifecycle_status").value("effective"));
+
+        verify(authorizationService).requirePermission("contract.lifecycle.activate");
     }
 
     @TestConfiguration

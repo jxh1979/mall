@@ -37,6 +37,13 @@ const TEXT = {
   shareholderRatio: "股东比例(报表)",
   attachments: "附件",
   status: "审批状态",
+  // ② 履约闭环 S1：合同生效 + 空间绑定
+  spaceIds: "租赁空间 id（逗号分隔）",
+  activate: "生效并绑定空间",
+  activateImpact: "合同将由 approved 进入 effective（履约中），并绑定所列租赁空间——准入闸 over_space 据此判定。需开启功能标志 contract.lifecycle_effective.enabled。",
+  spaceIdsRequired: "请填写至少一个租赁空间 id（逗号分隔）。",
+  viewSpaces: "查看已绑空间",
+  boundSpaces: "已绑租赁空间",
 };
 
 function nextKey(prefix: string) {
@@ -61,12 +68,16 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
 
 // 后端写权限码（PlatformController：/contracts/{id}/approve）
 const CONTRACT_APPROVE_PERMISSION = "contract.lifecycle.approve";
+// ② 履约闭环 S1：合同生效写权限（/contracts/{id}/activate）
+const CONTRACT_ACTIVATE_PERMISSION = "contract.lifecycle.activate";
 
 export function ContractApprovalPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<ContractRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [draftTitle, setDraftTitle] = React.useState("主力店补充协议");
   const [approvalComment, setApprovalComment] = React.useState("主体、附件和日期均已核验");
+  const [spaceIdsInput, setSpaceIdsInput] = React.useState("");
+  const [boundSpaces, setBoundSpaces] = React.useState<string[]>([]);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -136,6 +147,39 @@ export function ContractApprovalPage({ api, setActionResult, setGlobalError, eff
     await runAction("contract_approved", request, () => api.post(`/api/v1/platform/contracts/${selected.id}/approve`, request));
   }
 
+  // ② 履约闭环 S1：合同生效（approved→effective）+ 绑定租赁空间。
+  function validateActivate() {
+    if (!selected) {
+      setFormError(TEXT.noContract);
+      return false;
+    }
+    if (spaceIdsInput.split(",").map((s) => s.trim()).filter(Boolean).length === 0) {
+      setFormError(TEXT.spaceIdsRequired);
+      return false;
+    }
+    return true;
+  }
+
+  async function activateContract() {
+    if (!selected) {
+      setFormError(TEXT.noContract);
+      return;
+    }
+    const spaceIds = spaceIdsInput.split(",").map((s) => s.trim()).filter(Boolean);
+    const request = { idempotencyKey: nextKey("contract-activate"), spaceIds };
+    await runAction("contract_activated", request, () => api.post(`/api/v1/platform/contracts/${selected.id}/activate`, request));
+  }
+
+  async function loadBoundSpaces() {
+    if (!selected) {
+      setFormError(TEXT.noContract);
+      return;
+    }
+    setGlobalError(null);
+    const spaces = await api.get<Array<{ spaceId: string }>>(`/api/v1/platform/contracts/${selected.id}/spaces`);
+    setBoundSpaces((spaces ?? []).map((s) => s.spaceId));
+  }
+
   return (
     <section data-testid="contract-approval-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -152,6 +196,7 @@ export function ContractApprovalPage({ api, setActionResult, setGlobalError, eff
         <div className="admin-form-grid" data-testid="contract-approval-form">
           <label>{TEXT.draftTitle}<input data-testid="contract-approval-draft-title" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} /></label>
           <label>{TEXT.approvalComment}<input data-testid="contract-approval-comment" value={approvalComment} onChange={(event) => setApprovalComment(event.target.value)} /></label>
+          <label>{TEXT.spaceIds}<input data-testid="contract-activate-space-ids" placeholder="sp_1, sp_2" value={spaceIdsInput} onChange={(event) => setSpaceIdsInput(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="contract-approval-actions">
           <button type="button" data-testid="contract-approval-create-draft" disabled={busyAction !== ""} onClick={() => void createDraft()}>{TEXT.createDraft}</button>
@@ -165,8 +210,20 @@ export function ContractApprovalPage({ api, setActionResult, setGlobalError, eff
             permissions={[CONTRACT_APPROVE_PERMISSION]}
             data-testid="contract-approval-approve"
           />
+          <HighRiskConfirm
+            label={TEXT.activate}
+            impact={TEXT.activateImpact}
+            disabled={busyAction !== ""}
+            precheck={validateActivate}
+            onConfirm={() => void activateContract()}
+            permissionsState={effectivePermissions}
+            permissions={[CONTRACT_ACTIVATE_PERMISSION]}
+            data-testid="contract-activate"
+          />
+          <button type="button" data-testid="contract-view-spaces" disabled={busyAction !== ""} onClick={() => void loadBoundSpaces()}>{TEXT.viewSpaces}</button>
         </div>
         <div className="admin-muted-action" data-testid="contract-approval-boundary">{TEXT.boundary}</div>
+        {boundSpaces.length > 0 ? <div className="admin-muted-action" data-testid="contract-bound-spaces">{TEXT.boundSpaces}：{boundSpaces.join(", ")}</div> : null}
         {formError ? <div data-testid="contract-approval-error" className="admin-inline-error">{formError}</div> : null}
 
         <div className="admin-table-scroll">

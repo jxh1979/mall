@@ -6,6 +6,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.governance.dto.ApprovalRequest;
+import com.complex.platform.governance.dto.ContractActivateRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
@@ -141,5 +142,23 @@ public class PlatformController {
         authorizationService.requirePermission("contract.lifecycle.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approveContract(contractId, request));
+    }
+
+    @PostMapping("/contracts/{contract_id}/activate")
+    public ApiResponse<ContractRecord> activateContract(
+            @PathVariable("contract_id") String contractId,
+            @RequestBody ContractActivateRequest request
+    ) {
+        authorizationService.requirePermission("contract.lifecycle.activate");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.activateContract(contractId, request));
+    }
+
+    @GetMapping("/contracts/{contract_id}/spaces")
+    public ApiResponse<PageResponse<ContractSpaceRecord>> listContractSpaces(
+            @PathVariable("contract_id") String contractId
+    ) {
+        authorizationService.requirePermission("contract.view");
+        return ApiResponse.ok(service.listContractSpaces(contractId));
     }
 }
