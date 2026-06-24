@@ -145,6 +145,8 @@ inventory_trace_handover_steps,single_complex_default,P0_SINGLE_COMPLEX,single-c
 inventory_trace_handovers,direct,merchant_id,merchant_id column on inventory_trace_handovers,ready for project/merchant scoped query enforcement,covered
 inventory_variance,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 issued_entitlements,direct,venue_id,venue_id column on issued_entitlements,ready for project/merchant scoped query enforcement,covered
+leasing_leads,direct,project_id,project_id column on leasing_leads,ready for project/merchant scoped query enforcement,covered
+leasing_offers,direct,project_id,project_id column on leasing_offers,ready for project/merchant scoped query enforcement,covered
 mall_floor_plans,direct,project_id,project_id column on mall_floor_plans,ready for project/merchant scoped query enforcement,covered
 mdm_app_whitelist,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 mdm_policy_violations,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered

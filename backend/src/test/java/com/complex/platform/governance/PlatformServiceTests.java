@@ -14,6 +14,8 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.ContractActivateRequest;
+import com.complex.platform.governance.dto.ContractRenewRequest;
+import com.complex.platform.governance.dto.ContractTerminateRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
@@ -356,6 +358,64 @@ class PlatformServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CONTRACT_SPACE_CONFLICT"));
     }
 
+    // ② 履约闭环 S3：到期/退租/续约 + 空间释放
+    private ContractRecord effectiveContractBoundToSpace(String key, String spaceId, String merchantId, LocalDate eff, LocalDate exp) {
+        service.contractLifecycleEffectiveEnabled = true;
+        platformRepository.spaces.put(spaceId, new SpaceRecord(spaceId, "prj_1", merchantId, null, "S", "shop", "1F", null,
+                List.of(), "active", java.time.Instant.parse("2026-06-14T00:00:00Z"), java.time.Instant.parse("2026-06-14T00:00:00Z")));
+        ContractRecord draft = service.createContractDraft(new ContractDraftRequest(
+                key + "-draft", "draft", List.of(), merchantId, "bc", "bo", "bs", eff, exp, Map.of(), null, List.of()));
+        service.approveContract(draft.id(), new ApprovalRequest(key + "-appr", "approve", List.of(), "approve", "ok", "ops"));
+        service.activateContract(draft.id(), new ContractActivateRequest(List.of(spaceId), key + "-act"));
+        return draft;
+    }
+
+    @Test
+    void terminateContractReleasesSpacesAndSetsTerminatedGatedByFlag() {
+        ContractRecord c = effectiveContractBoundToSpace("ctr-t", "sp_t", "m",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"));
+        assertThat(service.listContractSpaces(c.id()).items()).hasSize(1);
+
+        // 关标志 → 拒。
+        service.contractRenewalTerminationEnabled = false;
+        assertThatThrownBy(() -> service.terminateContract(c.id(), new ContractTerminateRequest("退租", "ctr-t-1")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CONTRACT_RENEWAL_TERMINATION_DISABLED"));
+
+        // 开标志 → terminated + 释放空间。
+        service.contractRenewalTerminationEnabled = true;
+        ContractRecord terminated = service.terminateContract(c.id(), new ContractTerminateRequest("退租", "ctr-t-2"));
+        assertThat(terminated.lifecycleStatus()).isEqualTo("terminated");
+        assertThat(service.listContractSpaces(c.id()).items()).isEmpty();
+    }
+
+    @Test
+    void renewContractCreatesNewDraftFromPrior() {
+        service.contractRenewalTerminationEnabled = true;
+        ContractRecord prior = effectiveContractBoundToSpace("ctr-r", "sp_r", "mch_r",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"));
+
+        ContractRecord renewed = service.renewContract(prior.id(), new ContractRenewRequest(
+                LocalDate.parse("2027-07-01"), LocalDate.parse("2028-06-30"), "ctr-r-1"));
+        assertThat(renewed.id()).isNotEqualTo(prior.id());
+        assertThat(renewed.lifecycleStatus()).isEqualTo("draft");
+        assertThat(renewed.merchantId()).isEqualTo("mch_r");                          // 复用原商户/条款
+        assertThat(renewed.effectiveDate()).isEqualTo(LocalDate.parse("2027-07-01")); // 新租期
+    }
+
+    @Test
+    void expiryTransitionMarksExpiredAndReleasesSpaces() {
+        service.contractRenewalTerminationEnabled = true;
+        ContractRecord c = effectiveContractBoundToSpace("ctr-e", "sp_e", "m",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-03-31")); // 已过期租期
+        assertThat(service.listContractSpaces(c.id()).items()).hasSize(1);
+
+        int n = service.generateExpiredContractTransitions(LocalDate.parse("2026-06-24"));
+        assertThat(n).isEqualTo(1);
+        assertThat(service.listContracts().items().stream()
+                .filter(r -> r.id().equals(c.id())).findFirst().orElseThrow().lifecycleStatus()).isEqualTo("expired");
+        assertThat(service.listContractSpaces(c.id()).items()).isEmpty(); // 到期释放空间
+    }
+
     // P1-4 red→green: action 字段拒绝非法枚举值
     @Test
     void changeBusinessEntityBindingRejectsInvalidAction() {
@@ -565,6 +625,37 @@ class PlatformServiceTests {
                     .filter(java.util.Objects::nonNull)
                     .filter(c -> "effective".equals(c.lifecycleStatus()))
                     .anyMatch(c -> !c.effectiveDate().isAfter(expiryDate) && !c.expiryDate().isBefore(effectiveDate));
+        }
+
+        @Override
+        public void updateContractLifecycle(String contractId, String status, java.time.Instant terminatedAt, String terminationReason) {
+            ContractRecord c = contracts.get(contractId);
+            if (c != null) {
+                contracts.put(contractId, new ContractRecord(c.id(), c.merchantId(), c.contractSubjectId(),
+                        c.operationSubjectId(), c.settlementSubjectId(), c.effectiveDate(), c.expiryDate(),
+                        c.rentTerms(), c.shareholderRatioForReport(), c.attachmentIds(), status, c.createdAt(),
+                        java.time.Instant.now()));
+            }
+        }
+
+        @Override
+        public int releaseContractSpaces(String contractId) {
+            int before = contractSpaces.size();
+            contractSpaces.removeIf(cs -> contractId.equals(cs.contractId()));
+            return before - contractSpaces.size();
+        }
+
+        @Override
+        public List<String> listEffectiveContractIdsExpiredBy(java.time.LocalDate asOf) {
+            return contracts.values().stream()
+                    .filter(c -> "effective".equals(c.lifecycleStatus())
+                            && c.expiryDate() != null && c.expiryDate().isBefore(asOf))
+                    .map(ContractRecord::id).toList();
+        }
+
+        @Override
+        public void setContractRenewedFrom(String newContractId, String fromContractId) {
+            // renewed_from 不在 ContractRecord 字段；内存桩 no-op（续约测试断言新 draft 存在即可）。
         }
     }
 

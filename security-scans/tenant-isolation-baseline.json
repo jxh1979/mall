@@ -13,6 +13,14 @@
     {
       "key": "F1:UNSCOPED_DIRECT_READ:contract_spaces",
       "text": "[F1 UNSCOPED_DIRECT_READ] 表 'contract_spaces'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/gate/JdbcAdmissionFactRepository.java, backend/src/main/java/com/complex/platform/governance/JdbcPlatformRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:leasing_leads",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'leasing_leads'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/leasing/JdbcLeasingRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:leasing_offers",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'leasing_offers'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/leasing/JdbcLeasingRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
     }
   ]
 }

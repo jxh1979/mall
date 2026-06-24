@@ -7,6 +7,8 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.ContractActivateRequest;
+import com.complex.platform.governance.dto.ContractRenewRequest;
+import com.complex.platform.governance.dto.ContractTerminateRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
@@ -160,5 +162,25 @@ public class PlatformController {
     ) {
         authorizationService.requirePermission("contract.view");
         return ApiResponse.ok(service.listContractSpaces(contractId));
+    }
+
+    @PostMapping("/contracts/{contract_id}/terminate")
+    public ApiResponse<ContractRecord> terminateContract(
+            @PathVariable("contract_id") String contractId,
+            @RequestBody ContractTerminateRequest request
+    ) {
+        authorizationService.requirePermission("contract.lifecycle.activate");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.terminateContract(contractId, request));
+    }
+
+    @PostMapping("/contracts/{contract_id}/renew")
+    public ApiResponse<ContractRecord> renewContract(
+            @PathVariable("contract_id") String contractId,
+            @RequestBody ContractRenewRequest request
+    ) {
+        authorizationService.requirePermission("contract.lifecycle.activate");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.renewContract(contractId, request));
     }
 }

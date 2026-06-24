@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 430 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 254 | 人工权限矩阵正文未覆盖 150 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 860 | 人工事件矩阵正文未覆盖 818 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 430 | 人工任务映射正文未逐项覆盖 424 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 263 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 439 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 256 | 人工权限矩阵正文未覆盖 152 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 878 | 人工事件矩阵正文未覆盖 836 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 439 | 人工任务映射正文未逐项覆盖 433 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 270 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -124,7 +124,7 @@
 | `compliance.reminder.scan` | staff-token | - | 1 | scanComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `compliance.reminder.view` | staff-token | - | 1 | listComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `contract.draft.manage` | staff-token | project-merchant | 1 | createContractDraft | 已在权限矩阵正文出现 |
-| `contract.lifecycle.activate` | staff-token | project-merchant | 1 | activateContract | OpenAPI 补充，以本附录为准 |
+| `contract.lifecycle.activate` | staff-token | project-merchant | 3 | activateContract, terminateContract, renewContract | OpenAPI 补充，以本附录为准 |
 | `contract.lifecycle.approve` | staff-token | project-merchant | 1 | approveContract | 已在权限矩阵正文出现 |
 | `contract.view` | staff-token | project-merchant | 2 | listContracts, listContractSpaces | 已在权限矩阵正文出现 |
 | `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
@@ -211,6 +211,8 @@
 | `inventory.trace_code.register` | staff-token | project | 1 | registerInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.trace_code.view` | staff-token | project | 2 | listInventoryTraceCodes, getInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.warehouse.manage` | staff-token | project-warehouse-bar, warehouse | 2 | listWarehouses, createWarehouse | OpenAPI 补充，以本附录为准 |
+| `leasing.lead.manage` | staff-token | platform | 3 | listLeasingLeads, createLeasingLead, updateLeasingLeadStatus | OpenAPI 补充，以本附录为准 |
+| `leasing.offer.manage` | staff-token | platform | 4 | listLeasingOffers, createLeasingOffer, updateLeasingOfferStatus, convertLeasingOfferToContract | OpenAPI 补充，以本附录为准 |
 | `mdm.device.manage` | staff-token | -, project-device | 3 | enrollMdmDevice, reportMdmPolicyViolation, detectMdmViolations | OpenAPI 补充，以本附录为准 |
 | `mdm.policy.manage` | staff-token | project-device | 4 | listMdmAppWhitelist, upsertMdmAppWhitelist, listMdmSiteWhitelist, upsertMdmSiteWhitelist | OpenAPI 补充，以本附录为准 |
 | `mdm.violation.handle` | staff-token | - | 1 | handleMdmViolation | OpenAPI 补充，以本附录为准 |
@@ -593,6 +595,10 @@
 | `contract.draft_saved` | success | `createContractDraft` | `POST` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.draft.manage` | 接口级事件，以本附录为准 |
 | `contract.lifecycle_change_failed` | failure | `approveContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | GOV-平台治理 | `contract.lifecycle.approve` | 接口级事件，以本附录为准 |
 | `contract.lifecycle_changed` | success | `approveContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | GOV-平台治理 | `contract.lifecycle.approve` | 已在事件矩阵正文出现 |
+| `contract.renew_failed` | failure | `renewContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/renew` | GOV-平台治理 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
+| `contract.renewed` | success | `renewContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/renew` | GOV-平台治理 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
+| `contract.terminate_failed` | failure | `terminateContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/terminate` | GOV-平台治理 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
+| `contract.terminated` | success | `terminateContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/terminate` | GOV-平台治理 | `contract.lifecycle.activate` | 接口级事件，以本附录为准 |
 | `contract.view_failed` | failure | `listContracts` | `GET` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.view` | 接口级事件，以本附录为准 |
 | `contract.viewed` | success | `listContracts` | `GET` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.view` | 接口级事件，以本附录为准 |
 | `customer.auth.login` | success | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
@@ -912,6 +918,20 @@
 | `inventory.warehouse.created` | success | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.list` | success | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.list_failed` | failure | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.create_failed` | failure | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.created` | success | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.status_change_failed` | failure | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.status_changed` | success | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.view_failed` | failure | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.viewed` | success | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.convert_failed` | failure | `convertLeasingOfferToContract` | `POST` | `/api/v1/leasing/offers/{offer_id}/convert-to-contract` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.converted` | success | `convertLeasingOfferToContract` | `POST` | `/api/v1/leasing/offers/{offer_id}/convert-to-contract` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.create_failed` | failure | `createLeasingOffer` | `POST` | `/api/v1/leasing/offers` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.created` | success | `createLeasingOffer` | `POST` | `/api/v1/leasing/offers` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.status_change_failed` | failure | `updateLeasingOfferStatus` | `POST` | `/api/v1/leasing/offers/{offer_id}/status` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.status_changed` | success | `updateLeasingOfferStatus` | `POST` | `/api/v1/leasing/offers/{offer_id}/status` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.view_failed` | failure | `listLeasingOffers` | `GET` | `/api/v1/leasing/offers` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
+| `leasing.offer.viewed` | success | `listLeasingOffers` | `GET` | `/api/v1/leasing/offers` | P0-待归类 | `leasing.offer.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.change_failed` | failure | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.changed` | success | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.view_failed` | failure | `listMdmAppWhitelist` | `GET` | `/api/v1/terminals/mdm/app-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
@@ -1409,6 +1429,8 @@
 | GOV-平台治理 | `listProjects` | `GET` | `/api/v1/platform/projects` | 查询综合体项目 | `governance.project.view` | `project.viewed` / `project.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listSpaces` | `GET` | `/api/v1/platform/spaces` | 查询场馆、区域、点位 | `governance.space.view` | `space.viewed` / `space.view_failed` | web, merchant_portal | operation 级补充 |
 | GOV-平台治理 | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | 查询主管复核与违规阻断策略 | `governance.supervisor_review.view` | `governance.supervisor_review.policies_viewed` / `governance.supervisor_review.policies_view_failed` | web | operation 级补充 |
+| GOV-平台治理 | `renewContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/renew` | 合同续约（基于 effective/expired 合同生成新 draft） | `contract.lifecycle.activate` | `contract.renewed` / `contract.renew_failed` | web | operation 级补充 |
+| GOV-平台治理 | `terminateContract` | `POST` | `/api/v1/platform/contracts/{contract_id}/terminate` | 合同退租（effective→terminated + 释放空间） | `contract.lifecycle.activate` | `contract.terminated` / `contract.terminate_failed` | web | operation 级补充 |
 | GOV-平台治理 | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | 修改商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | 创建补偿任务 | `integration.compensation.manage` | `integration.compensation_task.created` / `integration.compensation_task.create_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createIntegrationReconciliationBatch` | `POST` | `/api/v1/integration/reconciliation/batches` | 创建对账批次 | `integration.reconciliation.manage` | `integration.reconciliation_batch.created` / `integration.reconciliation_batch.create_failed` | web | operation 级补充 |
@@ -1507,10 +1529,13 @@
 | P0-待归类 | `assignMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | Assign merchant service work order | `merchant.service_work_order.assign` | `merchant_service.assignMerchantServiceWorkOrder.succeeded` / `merchant_service.assignMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `closeMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | Close merchant service work order | `merchant.service_work_order.close` | `merchant_service.closeMerchantServiceWorkOrder.succeeded` / `merchant_service.closeMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
+| P0-待归类 | `convertLeasingOfferToContract` | `POST` | `/api/v1/leasing/offers/{offer_id}/convert-to-contract` | 报价转合同（accepted→合同 draft） | `leasing.offer.manage` | `leasing.offer.converted` / `leasing.offer.convert_failed` | web | operation 级补充 |
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | 创建合同关键日期 | `compliance.contract_key_date.manage` | `compliance.contract_key_date.create` / `compliance.contract_key_date.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | 创建 P1/P2 商场平面图 | `floor_plan.manage` | `floor_plan.created` / `floor_plan.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports` | 创建 SVG 或标准 JSON 导入任务 | `floor_plan.import.manage` | `floor_plan.import_created` / `floor_plan.import_create_failed` | web | operation 级补充 |
+| P0-待归类 | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | 新建招商线索 | `leasing.lead.manage` | `leasing.lead.created` / `leasing.lead.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createLeasingOffer` | `POST` | `/api/v1/leasing/offers` | 新建租赁报价 | `leasing.offer.manage` | `leasing.offer.created` / `leasing.offer.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | 创建商户账单 | `merchant.billing.manage` | `merchant.billing.create` / `merchant.billing.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | Create merchant service work order | `merchant.service_work_order.create` | `merchant_service.createMerchantServiceWorkOrder.succeeded` / `merchant_service.createMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
@@ -1520,6 +1545,8 @@
 | P0-待归类 | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | 查询平面图导入任务 | `floor_plan.import.view` | `floor_plan.import_viewed` / `floor_plan.import_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | 查询 P1/P2 商场平面图 | `floor_plan.view` | `floor_plan.viewed` / `floor_plan.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | 查询平面图正式区域 | `floor_plan.view` | `floor_plan.shape_viewed` / `floor_plan.shape_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | 招商线索清单 | `leasing.lead.manage` | `leasing.lead.viewed` / `leasing.lead.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listLeasingOffers` | `GET` | `/api/v1/leasing/offers` | 租赁报价清单 | `leasing.offer.manage` | `leasing.offer.viewed` / `leasing.offer.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | List merchant bills | `merchant.billing.view` | `merchant_billing.bill.viewed` / `merchant_billing.bill.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | 企微留存策略列表 | `wecom.retention.manage` | `wecom.retention_policy_viewed` / `wecom.retention_policy_view_failed` | web | operation 级补充 |
@@ -1531,6 +1558,8 @@
 | P0-待归类 | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | 触发合规提醒扫描 | `compliance.reminder.scan` | `compliance.reminder.scan` / `compliance.reminder.scan_failed` | web | operation 级补充 |
 | P0-待归类 | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | 提交账单争议 | `merchant.billing.dispute.submit` | `merchant.billing.dispute.submit` / `merchant.billing.dispute.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `syncWecomConversation` | `POST` | `/api/v1/compliance/wecom/conversations/sync` | 企微会话同步入站（PIPL 合规，开关门控） | `wecom.sync` | `wecom.conversation_synced` / `wecom.conversation_sync_failed` | <br>channel: provider-webhook | operation 级补充 |
+| P0-待归类 | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | 招商线索状态流转 | `leasing.lead.manage` | `leasing.lead.status_changed` / `leasing.lead.status_change_failed` | web | operation 级补充 |
+| P0-待归类 | `updateLeasingOfferStatus` | `POST` | `/api/v1/leasing/offers/{offer_id}/status` | 租赁报价状态流转（sent/accepted/rejected） | `leasing.offer.manage` | `leasing.offer.status_changed` / `leasing.offer.status_change_failed` | web | operation 级补充 |
 | P0-待归类 | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | 配置企微留存策略（默认180天） | `wecom.retention.manage` | `wecom.retention_policy_set` / `wecom.retention_policy_failed` | web | operation 级补充 |
 | P0-待归类 | `viewWecomConversationMessages` | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | 分级查看企微会话消息（脱敏/原文，原文需审批+审计） | `wecom.view_raw` | `wecom.raw_viewed` / `wecom.raw_view_failed` | web, mobile_admin | operation 级补充 |
 | SYS-系统健康 | `getSystemHealth` | `GET` | `/api/v1/system/health` | 健康检查 | `public` | `system.health_checked` / `system.health_check_failed` | web, mobile_admin<br>channel: monitoring | operation 级补充 |

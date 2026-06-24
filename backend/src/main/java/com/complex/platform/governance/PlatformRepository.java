@@ -59,4 +59,18 @@ public interface PlatformRepository {
     /** 该空间是否已被另一份「生效中且租期与 [effectiveDate, expiryDate] 重叠」的合同占用（防重复出租）。 */
     boolean hasOverlappingEffectiveContractForSpace(
             String spaceId, LocalDate effectiveDate, LocalDate expiryDate, String excludeContractId);
+
+    // ② 履约闭环 S3：合同到期/退租/续约 + 空间释放。
+
+    /** 改合同生命周期；terminatedAt/terminationReason 仅退租时写（到期/其它传 null）。 */
+    void updateContractLifecycle(String contractId, String status, Instant terminatedAt, String terminationReason);
+
+    /** 释放（删除）该合同的全部空间绑定；返回释放数。退租/到期后 over_space 即不再认其租赁。 */
+    int releaseContractSpaces(String contractId);
+
+    /** 列出已过 expiry_date 仍为 effective 的合同 id（到期 Job 据此转 expired + 释放空间）。 */
+    List<String> listEffectiveContractIdsExpiredBy(LocalDate asOf);
+
+    /** 续约链：记新合同由哪份旧合同续来。 */
+    void setContractRenewedFrom(String newContractId, String fromContractId);
 }

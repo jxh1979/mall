@@ -381,6 +381,47 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         return Boolean.TRUE.equals(exists);
     }
 
+    @Override
+    public void updateContractLifecycle(String contractId, String status, Instant terminatedAt, String terminationReason) {
+        jdbcTemplate.update("""
+                UPDATE contracts
+                   SET lifecycle_status = :status,
+                       terminated_at = :terminated_at,
+                       termination_reason = :reason,
+                       updated_at = :now
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                        .addValue("id", contractId)
+                        .addValue("status", status)
+                        .addValue("terminated_at", timestampWithTimeZone(terminatedAt))
+                        .addValue("reason", terminationReason)
+                        .addValue("now", timestampWithTimeZone(Instant.now())));
+    }
+
+    @Override
+    public int releaseContractSpaces(String contractId) {
+        return jdbcTemplate.update("DELETE FROM contract_spaces WHERE contract_id = :id",
+                Map.of("id", contractId));
+    }
+
+    @Override
+    public List<String> listEffectiveContractIdsExpiredBy(LocalDate asOf) {
+        return jdbcTemplate.query("""
+                SELECT id FROM contracts
+                 WHERE lifecycle_status = 'effective' AND expiry_date < :as_of
+                """, Map.of("as_of", asOf), (rs, n) -> rs.getString("id"));
+    }
+
+    @Override
+    public void setContractRenewedFrom(String newContractId, String fromContractId) {
+        jdbcTemplate.update("""
+                UPDATE contracts SET renewed_from_contract_id = :from_id, updated_at = :now WHERE id = :id
+                """, new MapSqlParameterSource()
+                        .addValue("id", newContractId)
+                        .addValue("from_id", fromContractId)
+                        .addValue("now", timestampWithTimeZone(Instant.now())));
+    }
+
     private MapSqlParameterSource businessEntityParameters(BusinessEntityRecord businessEntity) {
         return new MapSqlParameterSource()
                 .addValue("id", businessEntity.id())

@@ -8,6 +8,8 @@ import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.ContractActivateRequest;
+import com.complex.platform.governance.dto.ContractRenewRequest;
+import com.complex.platform.governance.dto.ContractTerminateRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.ContractDraftRequest;
@@ -37,6 +39,9 @@ public class PlatformService {
     // ② 履约闭环 S1（PRD phase6）：合同生效终态开关，默认关→activate 拒（关时合同止于 approved，现状语义不变）。
     @Value("${contract.lifecycle_effective.enabled:false}")
     boolean contractLifecycleEffectiveEnabled;
+    // ② 履约闭环 S3：合同到期/退租/续约开关，默认关→terminate/renew/到期转换 拒（关时无终态变更）。
+    @Value("${contract.renewal_termination.enabled:false}")
+    boolean contractRenewalTerminationEnabled;
 
     private final PlatformRepository repository;
     private final AuditedOperationExecutor operations;
@@ -523,6 +528,94 @@ public class PlatformService {
                     "contract_space.view_failed", "contract.view", "contract", id, null, null, codeOf(exception));
             throw exception;
         }
+    }
+
+    /**
+     * ② 履约闭环 S3：合同退租（effective→terminated）+ 释放所租空间（删 contract_spaces）。
+     * 退租后 over_space 即不再认其租赁。@Transactional 保证「置终态 + 释放空间」原子。
+     */
+    @Transactional
+    public ContractRecord terminateContract(String contractId, ContractTerminateRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(contractId, "contract_id");
+        return executeWrite(
+                "terminateContract:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request, ContractRecord.class,
+                "contract.terminated", "contract.terminate_failed",
+                "contract.lifecycle.activate", "contract",
+                () -> {
+                    if (!contractRenewalTerminationEnabled) {
+                        throw ApiException.conflict("CONTRACT_RENEWAL_TERMINATION_DISABLED",
+                                "contract renewal/termination is disabled");
+                    }
+                    ContractTerminateRequest actual = requireRequest(request);
+                    String reason = requireText(actual.reason(), "reason");
+                    ContractRecord existing = repository.findContractById(id)
+                            .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                    if (!"effective".equals(existing.lifecycleStatus())) {
+                        throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract can be terminated");
+                    }
+                    repository.updateContractLifecycle(id, "terminated", Instant.now(), reason);
+                    repository.releaseContractSpaces(id);
+                    return repository.findContractById(id).orElseThrow();
+                });
+    }
+
+    /**
+     * ② 履约闭环 S3：合同续约——基于 effective/expired 合同生成新 draft（复用原条款 + 新租期），链 renewed_from。
+     * 新约走 draft→approve→activate 既有流程。
+     */
+    @Transactional
+    public ContractRecord renewContract(String contractId, ContractRenewRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(contractId, "contract_id");
+        return executeWrite(
+                "renewContract:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request, ContractRecord.class,
+                "contract.renewed", "contract.renew_failed",
+                "contract.lifecycle.activate", "contract",
+                () -> {
+                    if (!contractRenewalTerminationEnabled) {
+                        throw ApiException.conflict("CONTRACT_RENEWAL_TERMINATION_DISABLED",
+                                "contract renewal/termination is disabled");
+                    }
+                    ContractRenewRequest actual = requireRequest(request);
+                    LocalDate newEffective = requireDate(actual.effectiveDate(), "effective_date");
+                    LocalDate newExpiry = requireDate(actual.expiryDate(), "expiry_date");
+                    ContractRecord prior = repository.findContractById(id)
+                            .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
+                    if (!Set.of("effective", "expired").contains(prior.lifecycleStatus())) {
+                        throw ApiException.conflict("CONTRACT_NOT_RENEWABLE",
+                                "only effective or expired contract can be renewed");
+                    }
+                    Instant now = Instant.now();
+                    String newId = "ctr_" + UUID.randomUUID();
+                    ContractRecord renewed = repository.saveContract(new ContractRecord(
+                            newId, prior.merchantId(), prior.contractSubjectId(), prior.operationSubjectId(),
+                            prior.settlementSubjectId(), newEffective, newExpiry, prior.rentTerms(),
+                            prior.shareholderRatioForReport(), prior.attachmentIds(), "draft", now, now));
+                    repository.setContractRenewedFrom(newId, id);
+                    return renewed;
+                });
+    }
+
+    /**
+     * ② 履约闭环 S3：到期转换——过 expiry_date 仍 effective 的合同转 expired + 释放空间。供 ContractExpiryJob 调。
+     * 功能标志默认关；返回处理数。@Transactional 整批原子。
+     */
+    @Transactional
+    public int generateExpiredContractTransitions(LocalDate asOf) {
+        if (!contractRenewalTerminationEnabled) {
+            return 0;
+        }
+        List<String> expired = repository.listEffectiveContractIdsExpiredBy(asOf);
+        for (String id : expired) {
+            repository.updateContractLifecycle(id, "expired", null, null);
+            repository.releaseContractSpaces(id);
+        }
+        return expired.size();
     }
 
     private MerchantRecord saveMerchant(

@@ -21021,6 +21021,389 @@
           }
         }
       }
+    },
+    "/api/v1/platform/contracts/{contract_id}/terminate": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "terminateContract",
+        "summary": "合同退租（effective→terminated + 释放空间）",
+        "description": "S3：退租录原因 + 释放所租空间；over_space 即不再认其租赁。功能标志 contract.renewal_termination.enabled 默认关。",
+        "x-permission": "contract.lifecycle.activate",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.terminated",
+        "x-audit-event-failure": "contract.terminate_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "合同 id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractTerminateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/contracts/{contract_id}/renew": {
+      "post": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "renewContract",
+        "summary": "合同续约（基于 effective/expired 合同生成新 draft）",
+        "description": "S3：复用原条款 + 新租期生成新 draft，链 renewed_from。功能标志 contract.renewal_termination.enabled 默认关。",
+        "x-permission": "contract.lifecycle.activate",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.renewed",
+        "x-audit-event-failure": "contract.renew_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "合同 id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractRenewRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/leads": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingLeads",
+        "summary": "招商线索清单",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.lead.viewed",
+        "x-audit-event-failure": "leasing.lead.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "createLeasingLead",
+        "summary": "新建招商线索",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.lead.created",
+        "x-audit-event-failure": "leasing.lead.create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingLeadRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/leads/{lead_id}/status": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "updateLeasingLeadStatus",
+        "summary": "招商线索状态流转",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.lead.status_changed",
+        "x-audit-event-failure": "leasing.lead.status_change_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "线索 id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingStatusRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/offers": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingOffers",
+        "summary": "租赁报价清单",
+        "x-permission": "leasing.offer.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.offer.viewed",
+        "x-audit-event-failure": "leasing.offer.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "createLeasingOffer",
+        "summary": "新建租赁报价",
+        "x-permission": "leasing.offer.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.offer.created",
+        "x-audit-event-failure": "leasing.offer.create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingOfferRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/offers/{offer_id}/status": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "updateLeasingOfferStatus",
+        "summary": "租赁报价状态流转（sent/accepted/rejected）",
+        "x-permission": "leasing.offer.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.offer.status_changed",
+        "x-audit-event-failure": "leasing.offer.status_change_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "报价 id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingStatusRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/offers/{offer_id}/convert-to-contract": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "convertLeasingOfferToContract",
+        "summary": "报价转合同（accepted→合同 draft）",
+        "description": "S4：accepted 报价生成合同 draft（喂入既有合同环）+ 标 offer/lead converted；幂等（已转拒重复建）。",
+        "x-permission": "leasing.offer.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.offer.converted",
+        "x-audit-event-failure": "leasing.offer.convert_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "报价 id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingConvertRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -23060,6 +23443,66 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ContractRentBillRequest"
+            }
+          }
+        }
+      },
+      "ContractTerminateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractTerminateRequest"
+            }
+          }
+        }
+      },
+      "ContractRenewRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractRenewRequest"
+            }
+          }
+        }
+      },
+      "LeasingLeadRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingLeadRequest"
+            }
+          }
+        }
+      },
+      "LeasingOfferRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingOfferRequest"
+            }
+          }
+        }
+      },
+      "LeasingStatusRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingStatusRequest"
+            }
+          }
+        }
+      },
+      "LeasingConvertRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingConvertRequest"
             }
           }
         }
@@ -31730,6 +32173,188 @@
               "maxLength": 64
             },
             "minItems": 1
+          }
+        }
+      },
+      "ContractTerminateRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractTerminateRequest（S3 合同退租）。",
+        "additionalProperties": false,
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "description": "退租原因。",
+            "maxLength": 500
+          }
+        }
+      },
+      "ContractRenewRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractRenewRequest（S3 合同续约）。",
+        "additionalProperties": false,
+        "required": [
+          "effective_date",
+          "expiry_date"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "description": "新合同生效日。"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date",
+            "description": "新合同到期日。"
+          }
+        }
+      },
+      "LeasingLeadRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingLeadRequest（S4 招商线索）。",
+        "additionalProperties": false,
+        "required": [
+          "contact_name"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "contact_name": {
+            "type": "string",
+            "description": "联系人。",
+            "maxLength": 120
+          },
+          "intended_business_type": {
+            "type": "string",
+            "description": "意向业态。",
+            "maxLength": 64
+          },
+          "intended_space_id": {
+            "type": "string",
+            "description": "意向空间 id。",
+            "maxLength": 64
+          },
+          "source": {
+            "type": "string",
+            "description": "来源。",
+            "maxLength": 64
+          }
+        }
+      },
+      "LeasingOfferRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingOfferRequest（S4 租赁报价）。",
+        "additionalProperties": false,
+        "required": [
+          "lead_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "lead_id": {
+            "type": "string",
+            "description": "线索 id。",
+            "maxLength": 64
+          },
+          "space_id": {
+            "type": "string",
+            "description": "空间 id。",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "拟商户 id。",
+            "maxLength": 64
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "description": "拟生效日。"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date",
+            "description": "拟到期日。"
+          },
+          "rent_terms": {
+            "type": "object",
+            "description": "租金条款（如 baseRentCent）。",
+            "additionalProperties": true
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date",
+            "description": "报价有效期。"
+          }
+        }
+      },
+      "LeasingStatusRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingStatusRequest（S4 线索/报价状态流转）。",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "description": "目标状态。",
+            "maxLength": 32
+          }
+        }
+      },
+      "LeasingConvertRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingConvertRequest（S4 报价转合同）。",
+        "additionalProperties": false,
+        "required": [
+          "contract_subject_id",
+          "settlement_subject_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "contract_subject_id": {
+            "type": "string",
+            "description": "合同主体 id。",
+            "maxLength": 64
+          },
+          "operation_subject_id": {
+            "type": "string",
+            "description": "运营主体 id。",
+            "maxLength": 64
+          },
+          "settlement_subject_id": {
+            "type": "string",
+            "description": "结算主体 id。",
+            "maxLength": 64
           }
         }
       }
