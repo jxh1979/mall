@@ -102,7 +102,7 @@ public class FinanceController {
     }
 
     @PostMapping("/payment-intents")
-    public ApiResponse<PaymentIntentRecord> createPaymentIntent(@RequestBody PaymentIntentRequest request) {
+    public ApiResponse<PaymentIntentRecord> createPaymentIntent(@RequestBody @jakarta.validation.Valid PaymentIntentRequest request) {
         authorizationService.requirePermission("finance.payment_intent.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createPaymentIntent(request));
@@ -140,7 +140,7 @@ public class FinanceController {
     }
 
     @PostMapping("/refunds")
-    public ApiResponse<FinanceRefundRecord> createRefund(@RequestBody RefundRequest request) {
+    public ApiResponse<FinanceRefundRecord> createRefund(@RequestBody @jakarta.validation.Valid RefundRequest request) {
         authorizationService.requirePermission("finance.refund.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createRefund(request));

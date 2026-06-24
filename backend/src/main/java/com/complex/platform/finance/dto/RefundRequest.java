@@ -1,5 +1,7 @@
 package com.complex.platform.finance.dto;
 
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.util.List;
 
 public record RefundRequest(
@@ -7,7 +9,8 @@ public record RefundRequest(
         String operatorNote,
         List<String> evidenceAttachmentIds,
         String targetId,
-        Long refundAmountCent,
+        // 审计 A3/T1.3 边界防御纵深：金额声明式校验（服务层 requirePositive 仍是主闸，此为更早失败的双保险）。
+        @NotNull @Positive Long refundAmountCent,
         String reason,
         String refundChannel,
         // P2#④ 统一退款方向维度：original 原路 / cash 现金 / third_party 第三方代退 / mixed 混合。

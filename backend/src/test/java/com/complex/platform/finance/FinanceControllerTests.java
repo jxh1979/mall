@@ -88,6 +88,45 @@ class FinanceControllerTests {
     }
 
     @Test
+    void createRefundRejectsNonPositiveAmount() throws Exception {
+        // T1.3 边界防御纵深：@Valid + @Positive 在控制器层拦下负数退款金额（不进 service；服务层 requirePositive 仍是主闸）。
+        mockMvc.perform(post("/api/v1/finance/refunds")
+                        .with(user("finance").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "refund-neg",
+                                  "target_id": "payment_1",
+                                  "refund_amount_cent": -100,
+                                  "reason": "x",
+                                  "refund_channel": "original_channel"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void createPaymentIntentRejectsNonPositiveAmount() throws Exception {
+        // T1.3 边界防御纵深：@Valid + @Positive 在控制器层拦下零/负支付意图金额（不进 service）。
+        mockMvc.perform(post("/api/v1/finance/payment-intents")
+                        .with(user("finance").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "pi-zero",
+                                  "business_order_type": "ticket_order",
+                                  "business_order_id": "order_1",
+                                  "amount_cent": 0,
+                                  "currency": "CNY",
+                                  "channel": "aggregate_pay"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
     void listArApItemsUsesOpenApiViewPermissionAndPageShape() throws Exception {
         when(service.listArApItems()).thenReturn(new PageResponse<>(List.of(arApItem()), 1, 50, 1));
 

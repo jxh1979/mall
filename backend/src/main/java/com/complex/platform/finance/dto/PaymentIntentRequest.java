@@ -1,5 +1,7 @@
 package com.complex.platform.finance.dto;
 
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.util.List;
 
 public record PaymentIntentRequest(
@@ -8,7 +10,8 @@ public record PaymentIntentRequest(
         List<String> evidenceAttachmentIds,
         String businessOrderType,
         String businessOrderId,
-        Long amountCent,
+        // 审计 A3/T1.3 边界防御纵深：金额声明式校验（服务层 requirePositive 仍是主闸，此为更早失败的双保险）。
+        @NotNull @Positive Long amountCent,
         String currency,
         String channel,
         // 跨模块闭环②a：现场/工作机发起支付意图时携带的操作设备标识（MDM 门控真实启用）。
