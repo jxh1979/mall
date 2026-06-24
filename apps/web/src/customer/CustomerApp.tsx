@@ -14,6 +14,7 @@ import { CustomerService } from "./client/customerService";
 import { customerPhoneLogin } from "./client/customerClient";
 import { BarInvitationPage } from "./pages/BarInvitationPage";
 import { BarReservationPage } from "./pages/BarReservationPage";
+import { BarScanOrderPage } from "./pages/BarScanOrderPage";
 import { BuyTicketPage } from "./pages/BuyTicketPage";
 import { HomePage } from "./pages/HomePage";
 import { MyOrdersPage } from "./pages/MyOrdersPage";
@@ -25,7 +26,7 @@ const { Header, Content, Sider } = Layout;
 
 const STORAGE_KEY = "customer-session";
 
-type PageKey = "home" | "buy" | "reserve" | "invitation" | "orders" | "points" | "wallet";
+type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet";
 
 function loadSession(): CustomerSession | null {
   try {
@@ -85,6 +86,7 @@ export default function CustomerApp(): React.ReactElement {
     { key: "buy", icon: <ShoppingOutlined />, label: "购票" },
     { key: "reserve", icon: <CalendarOutlined />, label: "订台" },
     { key: "invitation", icon: <CalendarOutlined />, label: "订卡邀请函" },
+    { key: "scan", icon: <ShoppingOutlined />, label: "扫码点单" },
     { key: "orders", icon: <UnorderedListOutlined />, label: "我的订单 / 票 / 二维码" },
     { key: "points", icon: <StarOutlined />, label: "积分 / 签到" },
     { key: "wallet", icon: <WalletOutlined />, label: "储值 / 会员" },
@@ -116,6 +118,7 @@ export default function CustomerApp(): React.ReactElement {
           {page === "buy" ? <BuyTicketPage service={service} /> : null}
           {page === "reserve" ? <BarReservationPage service={service} /> : null}
           {page === "invitation" ? <BarInvitationPage service={service} /> : null}
+          {page === "scan" ? <BarScanOrderPage service={service} /> : null}
           {page === "orders" ? <MyOrdersPage service={service} /> : null}
           {page === "points" ? <PointsPage service={service} /> : null}
           {page === "wallet" ? <WalletPage service={service} /> : null}

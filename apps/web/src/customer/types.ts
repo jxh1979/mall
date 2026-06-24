@@ -147,3 +147,20 @@ export type CustomerSession = {
   customerToken: string;
   expiresAt: string;
 };
+
+// 扫码点单（绑桌台会话）：菜单项为安全投影，不含内部结算价。
+export type BarScanMenuItem = {
+  productId: string;
+  productName: string;
+  productType: string;
+  priceCent: number;
+  currency: string;
+  soldOut: boolean;
+};
+
+export type BarScanOrder = {
+  id: string;
+  status: string;
+  totalAmountCent: number;
+  orderSource: string;
+};

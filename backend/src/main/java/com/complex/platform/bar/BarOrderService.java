@@ -98,13 +98,20 @@ public class BarOrderService {
     }
 
     BarOrderRecord createOrder(BarOrderRequest request) {
-        return createOrderInternal(request, "staff", "web");
+        return createOrderInternal(request, "staff", "web", null, null);
     }
 
-    private BarOrderRecord createOrderInternal(BarOrderRequest request, String orderSource, String createdTerminal) {
+    /**
+     * @param merchantIdOverride 非空时强制为订单商户（扫码点单取自会话，权威；员工常规下单传 null=按调用者 scope）。
+     * @param customerIdOverride 非空时强制为下单客人（客人扫码自助下单=本人；传 null=取自预订客人）。
+     */
+    private BarOrderRecord createOrderInternal(BarOrderRequest request, String orderSource, String createdTerminal,
+            String merchantIdOverride, String customerIdOverride) {
         BarOrderRequest actual = requireRequest(request);
         String barId = requireText(actual.barId(), "bar_id");
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        String merchantId = merchantIdOverride != null
+                ? merchantIdOverride
+                : authorizationService.currentMerchantScope().orElse(null);
         BarTableRecord table = repository.findTableById(requireText(actual.tableId(), "table_id"))
                 .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "bar table not found"));
         if (!barId.equals(table.barId())) {
@@ -149,13 +156,16 @@ public class BarOrderService {
                     gift
             ));
         }
+        String customerId = customerIdOverride != null
+                ? customerIdOverride
+                : (reservation == null ? null : reservation.customerId());
         BarOrderRecord order = repository.saveOrder(new BarOrderRecord(
                 orderId,
                 barId,
                 merchantId,
                 table.id(),
                 reservation == null ? null : reservation.id(),
-                reservation == null ? null : reservation.customerId(),
+                customerId,
                 orderSource,
                 "created",
                 total,
@@ -186,7 +196,27 @@ public class BarOrderService {
      * 故点单环节不重复核龄——与 createOrder 一致（本就不逐单核龄），此处显式只校验会话有效（已入场就座）、不加核龄。
      * 功能标志 bar.scan_order.enabled 默认关 → 关时拒（上线前灰度/急停开关）。
      */
+    /** 员工/工作机扫码下单：经 BarService（staff-token + bar.order.create）；强制本商户会话（跨商户防护）。 */
     BarOrderRecord placeScanOrder(String sessionId, BarOrderRequest request) {
+        return createScanOrder(sessionId, request, true, null);
+    }
+
+    /**
+     * 客人自助扫码下单（customer-token，经 CustomerService 跨域调入）：merchant 取自会话（客人无 scope）、
+     * customerId=下单客人本人；不做员工 scope 校验（客人非商户用户，会话商户即权威）。
+     */
+    public BarOrderRecord placeCustomerScanOrder(String sessionId, BarOrderRequest request, String customerId) {
+        return createScanOrder(sessionId, request, false, customerId);
+    }
+
+    /**
+     * 扫码下单共用核心（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId → 在开台会话上下单，
+     * bar/桌台/预订/商户 一律取自会话（扫码定位），来源标 app/miniapp。继承入场闸：客人已在场馆统一入场闸
+     * 完成年龄核验（全场 18+，bar 售酒继承入场结论，见 BarEntryService），点单环节不重复核龄（createOrder 本就不逐单核龄）。
+     * 功能标志 bar.scan_order.enabled 默认关 → 关时拒（上线前灰度/急停开关）。
+     */
+    private BarOrderRecord createScanOrder(
+            String sessionId, BarOrderRequest request, boolean enforceStaffMerchantScope, String customerIdOverride) {
         if (!scanOrderEnabled) {
             throw ApiException.conflict("BAR_SCAN_ORDER_DISABLED",
                     "scan-to-order is not enabled (feature flag bar.scan_order.enabled is off)");
@@ -198,14 +228,15 @@ public class BarOrderService {
         if (!"open".equals(session.status())) {
             throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "scan order requires an open table session");
         }
-        // 跨商户越权防护：商户用户只能在本商户会话下单（平台管理员 scope 空放行）。
-        authorizationService.currentMerchantScope().ifPresent(scope -> {
-            if (!scope.equals(session.merchantId())) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                        "access to another merchant's table session is not allowed");
-            }
-        });
-        // bar/桌台/预订 取自会话（扫码定位），items 来自客户端；来源 app、终端 miniapp。
+        // 员工路径：商户用户只能在本商户会话下单（平台管理员 scope 空放行）。客人路径不校验（会话商户即权威）。
+        if (enforceStaffMerchantScope) {
+            authorizationService.currentMerchantScope().ifPresent(scope -> {
+                if (!scope.equals(session.merchantId())) {
+                    throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                            "access to another merchant's table session is not allowed");
+                }
+            });
+        }
         BarOrderRequest derived = new BarOrderRequest(
                 actual.idempotencyKey(),
                 actual.operatorNote(),
@@ -217,7 +248,8 @@ public class BarOrderService {
                 actual.salespersonUserId(),
                 actual.serviceUserIds(),
                 actual.paymentMode());
-        return createOrderInternal(derived, "app", "miniapp");
+        // merchant 取自会话（权威，修员工 scope 兜底 + 支持客人无 scope）；customerId 客人路径=本人。
+        return createOrderInternal(derived, "app", "miniapp", session.merchantId(), customerIdOverride);
     }
 
     BarOrderItemRecord addOrderItem(String orderId, BarOrderRequest request) {

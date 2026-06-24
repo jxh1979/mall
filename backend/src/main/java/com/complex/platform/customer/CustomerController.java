@@ -1,6 +1,7 @@
 package com.complex.platform.customer;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.bar.BarOrderRecord;
 import com.complex.platform.bar.BarReservationInvitationMemberRecord;
 import com.complex.platform.bar.BarReservationInvitationRecord;
 import com.complex.platform.bar.BarReservationRecord;
@@ -8,7 +9,9 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.CustomerBarInvitationConfirmRequest;
+import com.complex.platform.customer.dto.CustomerBarMenuItemResponse;
 import com.complex.platform.customer.dto.CustomerBarReservationRequest;
+import com.complex.platform.customer.dto.CustomerBarScanOrderRequest;
 import com.complex.platform.customer.dto.CustomerCheckInRequest;
 import com.complex.platform.customer.dto.CustomerConsentRequest;
 import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
@@ -176,6 +179,30 @@ public class CustomerController {
                 key,
                 request
         ));
+    }
+
+    @GetMapping("/bar-sessions/{session_id}/menu")
+    public ApiResponse<PageResponse<CustomerBarMenuItemResponse>> listBarScanMenu(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("session_id") String sessionId
+    ) {
+        return ApiResponse.ok(service.listBarScanMenu(
+                requireCustomerToken(customerToken, authorization), sessionId));
+    }
+
+    @PostMapping("/bar-sessions/{session_id}/scan-orders")
+    public ApiResponse<BarOrderRecord> placeBarScanOrder(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @PathVariable("session_id") String sessionId,
+            @RequestBody CustomerBarScanOrderRequest request
+    ) {
+        String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
+        requireIdempotencyKey(key);
+        return ApiResponse.ok(service.placeBarScanOrder(
+                requireCustomerToken(customerToken, authorization), key, sessionId, request));
     }
 
     @PostMapping("/bar-invitations/confirm")

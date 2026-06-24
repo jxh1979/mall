@@ -7,6 +7,8 @@ import type {
   BarInvitationMember,
   BarReservation,
   BarReservationOption,
+  BarScanMenuItem,
+  BarScanOrder,
   CheckInRecord,
   Membership,
   PaymentIntent,
@@ -111,5 +113,22 @@ export class CustomerService {
 
   listMemberships(): Promise<Membership[]> {
     return this.api.get<Membership[]>("/api/v1/customer/memberships");
+  }
+
+  // ⑧ 扫码点单（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId -> 看菜单 / 自助下单（不重复核龄）
+  listBarScanMenu(sessionId: string): Promise<BarScanMenuItem[]> {
+    return this.api.get<BarScanMenuItem[]>(
+      `/api/v1/customer/bar-sessions/${encodeURIComponent(sessionId)}/menu`,
+    );
+  }
+
+  placeBarScanOrder(
+    sessionId: string,
+    items: Array<{ productId: string; quantity: number }>,
+  ): Promise<BarScanOrder> {
+    return this.api.post<BarScanOrder>(
+      `/api/v1/customer/bar-sessions/${encodeURIComponent(sessionId)}/scan-orders`,
+      { items },
+    );
   }
 }

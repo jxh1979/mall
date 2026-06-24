@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 420 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 422 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 252 | 人工权限矩阵正文未覆盖 148 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 840 | 人工事件矩阵正文未覆盖 798 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 420 | 人工任务映射正文未逐项覆盖 414 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 259 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 844 | 人工事件矩阵正文未覆盖 802 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 422 | 人工任务映射正文未逐项覆盖 416 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 260 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -225,7 +225,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 21 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 23 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -591,6 +591,10 @@
 | `customer.bar_reservation_options_viewed` | success | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation.create_failed` | failure | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation.created` | success | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_menu.view_failed` | failure | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-sessions/{session_id}/menu` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_menu.viewed` | success | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-sessions/{session_id}/menu` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_order.create_failed` | failure | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_order.created` | success | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.check_in_failed` | failure | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.check_ins_view_failed` | failure | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.check_ins_viewed` | success | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -1315,6 +1319,8 @@
 | CUS/BAR-客人订台 | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | 客人卡座预订 | `not_applicable` | `customer.bar_reservation.created` / `customer.bar_reservation.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS/BAR-客人订台 | `getCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}` | 客人查看自己的订卡邀请函 | `not_applicable` | `customer.bar_invitation.viewed` / `customer.bar_invitation.view_failed` | web, miniapp, app | operation 级补充 |
 | CUS/BAR-客人订台 | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | 客人可订台资源 | `not_applicable` | `customer.bar_reservation_options_viewed` / `customer.bar_reservation_options_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS/BAR-客人订台 | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-sessions/{session_id}/menu` | 客人扫码点单查看菜单 | `not_applicable` | `customer.bar_scan_menu.viewed` / `customer.bar_scan_menu.view_failed` | web, miniapp, app | operation 级补充 |
+| CUS/BAR-客人订台 | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | 客人自助扫码点单 | `not_applicable` | `customer.bar_scan_order.created` / `customer.bar_scan_order.create_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | 客人购票下单 | `not_applicable` | `customer.ticket_order.created` / `customer.ticket_order.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS/TIC-客人购票 | `getCustomerTicketQr` | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 我的动态二维码 | `not_applicable` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | 客人可购票种和票价 | `public` | `customer.ticket_products_viewed` / `customer.ticket_products_view_failed` | web, miniapp, app, kiosk | operation 级补充 |

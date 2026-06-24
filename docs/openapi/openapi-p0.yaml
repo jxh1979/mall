@@ -14838,6 +14838,76 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/customer/bar-sessions/{session_id}/menu:
+    get:
+      tags:
+        - customer
+        - bar
+      operationId: listCustomerBarScanMenu
+      summary: 客人扫码点单查看菜单
+      x-permission: not_applicable
+      x-data-scope: customer-project-bar
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
+      x-idempotency-required: false
+      x-audit-event-success: customer.bar_scan_menu.viewed
+      x-audit-event-failure: customer.bar_scan_menu.view_failed
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 被扫的台位会话 ID。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
+  /api/v1/customer/bar-sessions/{session_id}/scan-orders:
+    post:
+      tags:
+        - customer
+        - bar
+      operationId: placeCustomerBarScanOrder
+      summary: 客人自助扫码点单
+      x-permission: not_applicable
+      x-data-scope: customer-project-bar
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
+      x-idempotency-required: true
+      x-audit-event-success: customer.bar_scan_order.created
+      x-audit-event-failure: customer.bar_scan_order.create_failed
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 被扫的台位会话 ID。
+      requestBody:
+        $ref: "#/components/requestBodies/CustomerBarScanOrderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
 components:
   securitySchemes:
     BearerAuth:
@@ -16138,6 +16208,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/BarScanOrderRequest"
+    CustomerBarScanOrderRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CustomerBarScanOrderRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -22880,6 +22956,23 @@ components:
             - offline
             - on_account
           maxLength: 64
+    CustomerBarScanOrderRequest:
+      type: object
+      description: 请求载荷 CustomerBarScanOrderRequest；客人自助扫码点单——bar/桌台/预订/商户由后端取自会话，客人只传所点 items。
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        items:
+          type: array
+          description: BarOrderRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。
+          items:
+            type: object
+          maxItems: 200
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

@@ -51,6 +51,8 @@ class CustomerServiceTests {
     private InMemoryAuditEventRepository auditEventRepository;
     private TicketingService ticketingService;
     private InventoryService inventoryService;
+    private com.complex.platform.bar.BarRepository barRepository;
+    private com.complex.platform.bar.BarOrderService barOrderService;
     private CustomerService service;
 
     @BeforeEach
@@ -65,6 +67,8 @@ class CustomerServiceTests {
                 auditEventService
         );
         LoyaltyService loyaltyService = new LoyaltyService(customerRepository, auditEventService);
+        barRepository = Mockito.mock(com.complex.platform.bar.BarRepository.class);
+        barOrderService = Mockito.mock(com.complex.platform.bar.BarOrderService.class);
         service = new CustomerService(
                 customerRepository,
                 new FixedCustomerOtpVerifier("000000"),
@@ -73,8 +77,55 @@ class CustomerServiceTests {
                 auditEventService,
                 inventoryService,
                 loyaltyService,
-                Mockito.mock(com.complex.platform.bar.BarRepository.class)
+                barRepository,
+                barOrderService
         );
+    }
+
+    @Test
+    void barScanMenuReturnsSafeProjectionWithoutInternalPrice() {
+        // 客人扫码看菜单：安全投影只给对客售卖信息；DTO 类型本身不含 internal_settlement_price（编译期即隐去敏感成本）。
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        java.time.Instant now = java.time.Instant.now();
+        Mockito.when(barRepository.findTableSessionById("session_s1")).thenReturn(Optional.of(
+                new com.complex.platform.bar.BarTableSessionRecord("session_s1", "bar_1", "merchant_1",
+                        java.time.LocalDate.parse("2026-06-24"), "table_1", null, null, 2, 0L, 0, null, null,
+                        "open", now, null, null, 1L, now, now)));
+        Mockito.when(barRepository.listProducts(Optional.of("merchant_1"))).thenReturn(List.of(
+                new com.complex.platform.bar.BarProductRecord("product_1", "bar_1", "merchant_1", "精酿", "beer",
+                        3800L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, 1500L)));
+
+        PageResponse<com.complex.platform.customer.dto.CustomerBarMenuItemResponse> menu =
+                service.listBarScanMenu(login.customerToken(), "session_s1");
+
+        assertThat(menu.items()).hasSize(1);
+        com.complex.platform.customer.dto.CustomerBarMenuItemResponse item = menu.items().get(0);
+        assertThat(item.productId()).isEqualTo("product_1");
+        assertThat(item.priceCent()).isEqualTo(3800L);
+        assertThat(item.productType()).isEqualTo("beer");
+    }
+
+    @Test
+    void customerScanOrderDelegatesToBarOrderServiceWithCustomerId() {
+        // 客人自助扫码下单：委托 BarOrderService.placeCustomerScanOrder，传本人 customerId + 会话 id。
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
+        java.time.Instant now = java.time.Instant.now();
+        com.complex.platform.bar.BarOrderRecord created = new com.complex.platform.bar.BarOrderRecord(
+                "order_1", "bar_1", "merchant_1", "table_1", null, customerId, "app", "created",
+                7600L, "CNY", "miniapp", null, null, now, now);
+        Mockito.when(barOrderService.placeCustomerScanOrder(Mockito.eq("session_s1"), Mockito.any(), Mockito.eq(customerId)))
+                .thenReturn(created);
+
+        com.complex.platform.bar.BarOrderRecord order = service.placeBarScanOrder(
+                login.customerToken(), "scan-key-1", "session_s1",
+                new com.complex.platform.customer.dto.CustomerBarScanOrderRequest(
+                        "scan-key-1", List.of(Map.of("product_id", "product_1", "quantity", 2))));
+
+        assertThat(order.orderSource()).isEqualTo("app");
+        assertThat(order.customerId()).isEqualTo(customerId);
+        Mockito.verify(barOrderService)
+                .placeCustomerScanOrder(Mockito.eq("session_s1"), Mockito.any(), Mockito.eq(customerId));
     }
 
     @Test

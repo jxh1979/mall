@@ -1,12 +1,19 @@
 package com.complex.platform.customer;
 
 import com.complex.platform.bar.BarDepositRuleRecord;
+import com.complex.platform.bar.BarOrderRecord;
+import com.complex.platform.bar.BarOrderRequest;
+import com.complex.platform.bar.BarOrderService;
+import com.complex.platform.bar.BarProductRecord;
 import com.complex.platform.bar.BarRepository;
 import com.complex.platform.bar.BarReservationInvitationMemberRecord;
 import com.complex.platform.bar.BarReservationInvitationRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
+import com.complex.platform.bar.BarTableSessionRecord;
 import com.complex.platform.customer.dto.CustomerBarInvitationConfirmRequest;
+import com.complex.platform.customer.dto.CustomerBarMenuItemResponse;
+import com.complex.platform.customer.dto.CustomerBarScanOrderRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperation;
@@ -32,6 +39,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
@@ -51,6 +59,8 @@ public class CustomerService {
     private final InventoryService inventoryService;
     private final LoyaltyService loyaltyService;
     private final BarRepository barRepository;
+    // 扫码点单跨域调入：客人自助下单复用 bar 下单逻辑（merchant/customer 取自会话），见 placeBarScanOrder。
+    private final BarOrderService barOrderService;
 
     public CustomerService(
             CustomerRepository repository,
@@ -60,7 +70,8 @@ public class CustomerService {
             AuditEventService auditEventService,
             InventoryService inventoryService,
             LoyaltyService loyaltyService,
-            BarRepository barRepository
+            BarRepository barRepository,
+            BarOrderService barOrderService
     ) {
         this.repository = repository;
         this.otpVerifier = otpVerifier;
@@ -70,6 +81,7 @@ public class CustomerService {
         this.inventoryService = inventoryService;
         this.loyaltyService = loyaltyService;
         this.barRepository = barRepository;
+        this.barOrderService = barOrderService;
     }
 
     @Transactional
@@ -701,6 +713,52 @@ public class CustomerService {
         } catch (RuntimeException exception) {
             return java.util.Optional.empty();
         }
+    }
+
+    /**
+     * 客人扫码点单——查菜单（安全投影，刻意隐去内部结算价）：扫桌台二维码得 session_id → 列该开台会话所在 bar 的在售商品。
+     */
+    public PageResponse<CustomerBarMenuItemResponse> listBarScanMenu(String customerToken, String sessionId) {
+        requireCustomer(customerToken);
+        String id = requireText(sessionId, "session_id");
+        BarTableSessionRecord session = barRepository.findTableSessionById(id)
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "bar table session not found"));
+        if (!"open".equals(session.status())) {
+            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "scan order requires an open table session");
+        }
+        List<CustomerBarMenuItemResponse> items = barRepository.listProducts(Optional.ofNullable(session.merchantId())).stream()
+                .filter(p -> session.barId().equals(p.barId()) && "active".equals(p.status()))
+                .map(p -> new CustomerBarMenuItemResponse(
+                        p.id(), p.productName(), p.productType(), p.priceCent(), p.currency(), p.soldOut()))
+                .toList();
+        return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
+    }
+
+    /**
+     * 客人自助扫码下单：在开台会话上下单（bar/桌台/预订/商户取自会话，customerId=本人，来源 app/miniapp），
+     * 继承入场闸不重复核龄；幂等经 executeWrite。复用 BarOrderService.placeCustomerScanOrder
+     *（功能标志 bar.scan_order.enabled 默认关→关时拒）。
+     */
+    @Transactional
+    public BarOrderRecord placeBarScanOrder(
+            String customerToken, String idempotencyKey, String sessionId, CustomerBarScanOrderRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        CustomerBarScanOrderRequest actual = requireRequest(request);
+        String id = requireText(sessionId, "session_id");
+        String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
+        return executeWrite(
+                "customerBarScanOrder:" + customer.id(),
+                key,
+                actual,
+                BarOrderRecord.class,
+                "customer.bar_scan_order.created",
+                "customer.bar_scan_order.create_failed",
+                "not_applicable",
+                "bar_order",
+                () -> barOrderService.placeCustomerScanOrder(
+                        id,
+                        new BarOrderRequest(key, null, List.of(), null, null, null, actual.items(), null, List.of(), null),
+                        customer.id()));
     }
 
     private CustomerRecord requireCustomer(String customerToken) {
