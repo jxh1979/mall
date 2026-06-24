@@ -30,7 +30,6 @@ import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
-import com.complex.platform.inventory.dto.SavedBottleTransferRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
@@ -629,47 +628,6 @@ class InventoryServiceTests {
                 .isEqualTo(2);
     }
 
-    // P0#4: 转赠——原瓶 transferred、流水留痕、新瓶 stored 归受让人。
-    @Test
-    void transferSavedBottleReassignsToNewOwner() {
-        InventoryItemRecord item = createItem("transfer-item");
-        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
-                "saved-transfer", null, List.of(), "customer_1", "bar_1",
-                List.of(Map.of("item_id", item.id(), "quantity", 3, "bottle_name", "Tequila", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
-                "LBL-TR", "原主", "13800138000", null, null, List.of("reg_photo"), null));
-
-        SavedBottleRecord newBottle = service.transferSavedBottle(bottle.id(), new SavedBottleTransferRequest(
-                "transfer-1", null, List.of("transfer_evidence"), "受赠人赵", "13900139000", "生日礼"));
-
-        assertThat(inventoryRepository.findSavedBottleById(bottle.id()).orElseThrow().status())
-                .isEqualTo("transferred");
-        assertThat(newBottle.status()).isEqualTo("stored");
-        assertThat(newBottle.customerId()).isNull();
-        assertThat(newBottle.customerNameOrNickname()).isEqualTo("受赠人赵");
-        assertThat(newBottle.remainingQuantity()).isEqualTo(3);
-        assertThat(inventoryRepository.savedBottleTransfers).hasSize(1);
-        assertThat(inventoryRepository.savedBottleTransfers.getFirst().toNameOrNickname()).isEqualTo("受赠人赵");
-    }
-
-    // P0#4: 已转赠/非 stored 不可再转赠。
-    @Test
-    void transferRejectsWhenNotStored() {
-        InventoryItemRecord item = createItem("transfer-bad");
-        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
-                "saved-transfer-bad", null, List.of(), "customer_1", "bar_1",
-                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Tequila", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
-                "LBL-TRB", "原主", null, null, null, List.of("reg_photo"), null));
-        service.transferSavedBottle(bottle.id(), new SavedBottleTransferRequest(
-                "transfer-bad-1", null, List.of(), "受赠人", null, null));
-
-        assertThatThrownBy(() -> service.transferSavedBottle(bottle.id(), new SavedBottleTransferRequest(
-                "transfer-bad-2", null, List.of(), "再受赠人", null, null)))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_TRANSFERABLE");
-    }
-
-    // P0#4: 争议受理——stored 置 disputed。
     @Test
     void disputeSavedBottleMovesToDisputedState() {
         InventoryItemRecord item = createItem("dispute-item");

@@ -171,17 +171,6 @@ public class InventoryController {
         return ApiResponse.ok(service.cancelSavedBottle(id, request));
     }
 
-    // P0#4：存酒转赠（R6-D05）。
-    @PostMapping("/saved-bottles/{id}/transfer")
-    public ApiResponse<SavedBottleRecord> transferSavedBottle(
-            @PathVariable String id,
-            @RequestBody com.complex.platform.inventory.dto.SavedBottleTransferRequest request
-    ) {
-        authorizationService.requirePermission("bar.saved_bottle.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.transferSavedBottle(id, request));
-    }
-
     // P0#4：存酒争议受理（disputed 入状态机）。
     @PostMapping("/saved-bottles/{id}/dispute")
     public ApiResponse<SavedBottleRecord> disputeSavedBottle(

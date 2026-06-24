@@ -464,99 +464,6 @@ public class InventoryService {
     }
 
     /**
-     * P0#4 存酒转赠（R6-D05）：将 stored 状态存酒整瓶转赠给受让人。
-     *
-     * <p>原瓶置 {@code transferred} 终态；新建一瓶 {@code stored} 归属受让人（姓名昵称 +（可选）手机号），
-     * 沿用剩余量/到期/标签/登记证据，受让人凭新瓶取酒核身。写 saved_bottle_transfers 流水留痕，
-     * 发 {@code saved_bottle.transferred} 事件（由 executeWrite 成功事件承载）。
-     */
-    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_transfer", objectType = "saved_bottle")
-    @Transactional
-    public SavedBottleRecord transferSavedBottle(
-            String savedBottleId, com.complex.platform.inventory.dto.SavedBottleTransferRequest request) {
-        String id = requireText(savedBottleId, "saved_bottle_id");
-        return executeWrite(
-                "transferSavedBottle:" + id,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                SavedBottleRecord.class,
-                "bar.saved_bottle.transferred",
-                "bar.saved_bottle.transfer_failed",
-                "bar.saved_bottle.manage",
-                "saved_bottle",
-                () -> {
-                    com.complex.platform.inventory.dto.SavedBottleTransferRequest actual = requireRequest(request);
-                    String toName = requireText(actual.toNameOrNickname(), "to_name_or_nickname");
-                    SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
-                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "saved bottle not found"));
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    if (scope.isPresent() && !scope.get().equals(savedBottle.merchantId())) {
-                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "saved bottle does not belong to your merchant");
-                    }
-                    if (!"stored".equals(savedBottle.status())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_NOT_TRANSFERABLE", "saved bottle is not transferable");
-                    }
-                    if (savedBottle.expireAt() != null && savedBottle.expireAt().isBefore(Instant.now())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "saved bottle is expired");
-                    }
-                    Instant now = Instant.now();
-                    String toPhone = trimToNull(actual.toPhone());
-                    // 原瓶置 transferred 终态，并落受让信息（便于追溯）。
-                    repository.saveSavedBottle(new SavedBottleRecord(
-                            savedBottle.id(), savedBottle.customerId(), savedBottle.barProjectId(),
-                            savedBottle.itemId(), savedBottle.bottleName(), savedBottle.initialQuantity(),
-                            savedBottle.remainingQuantity(), savedBottle.unit(), savedBottle.expireAt(),
-                            "transferred", savedBottle.evidenceAttachmentIds(), savedBottle.createdAt(), now,
-                            savedBottle.merchantId(), savedBottle.isHighValue(), savedBottle.highValueThresholdCents(),
-                            savedBottle.bottleLabelValue(), savedBottle.customerNameOrNickname(),
-                            savedBottle.customerPhone(), savedBottle.customerPhoneHash(),
-                            savedBottle.registrationPhotoRefs(), savedBottle.manualNote(),
-                            now, toName, toPhone, phoneHash(toPhone)));
-                    // 流水留痕。
-                    repository.saveSavedBottleTransfer(new SavedBottleTransferRecord(
-                            "transfer_" + slug(actual.idempotencyKey()),
-                            savedBottle.id(),
-                            savedBottle.customerId(),
-                            savedBottle.customerNameOrNickname(),
-                            toName,
-                            toPhone,
-                            phoneHash(toPhone),
-                            savedBottle.remainingQuantity(),
-                            authorizationService.currentActor().id(),
-                            "transferred",
-                            safeList(actual.evidenceAttachmentIds()),
-                            now));
-                    // 新建归属受让人的存酒（stored），沿用登记信息，受让人后续取酒核身。
-                    return repository.saveSavedBottle(new SavedBottleRecord(
-                            "saved_" + slug(actual.idempotencyKey() + ":to"),
-                            null,
-                            savedBottle.barProjectId(),
-                            savedBottle.itemId(),
-                            savedBottle.bottleName(),
-                            savedBottle.remainingQuantity(),
-                            savedBottle.remainingQuantity(),
-                            savedBottle.unit(),
-                            savedBottle.expireAt(),
-                            "stored",
-                            safeList(actual.evidenceAttachmentIds()),
-                            now,
-                            now,
-                            savedBottle.merchantId(),
-                            savedBottle.isHighValue(),
-                            savedBottle.highValueThresholdCents(),
-                            savedBottle.bottleLabelValue(),
-                            toName,
-                            toPhone,
-                            phoneHash(toPhone),
-                            savedBottle.registrationPhotoRefs(),
-                            savedBottle.manualNote(),
-                            null, null, null, null));
-                }
-        );
-    }
-
-    /**
      * P0#4 争议受理（R6-D05）：将 stored/pending_identity_review 存酒置 {@code disputed} 态，进争议处理流程
      * （区别于高价值作废的 disputed_frozen）。受理后停止取酒/转赠，待线下核实后由作废/复核流程收口。
      */
@@ -1902,9 +1809,6 @@ public class InventoryService {
             return record.id();
         }
         if (response instanceof SavedBottleClaimRecord record) {
-            return record.id();
-        }
-        if (response instanceof SavedBottleTransferRecord record) {
             return record.id();
         }
         if (response instanceof StockMovementRecord record) {

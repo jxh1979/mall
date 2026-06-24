@@ -58,7 +58,7 @@ R5 横幅已点出"订台定金闭环断裂"，此处把订台定金一条按"�
 
 | 范围 | 说明 |
 |---|---|
-| 酒吧入场 | 酒吧通票、活动票、酒吧入场权益核销结果承接；门口年龄核验（人工+人脸识别）、未成年/醉酒拒售拒入场与原因码留痕（finding bar-1 / 合规 C1） |
+| 酒吧入场 | 酒吧通票、活动票、酒吧入场权益核销结果承接（年龄由综合体统一入场刷脸闸核验，售酒豁免逐单验龄/拒售，2026-06-24 改写，详见合规 §2） |
 | 桌台卡座 | 桌台档案、预订、开台、转台、并台、低消、清台 |
 | 点单 | 服务员点单、吧台点单、扫码点单入口预留、退单、赠送、折扣 |
 | 账单 | 桌台挂账、吧台即时结账、低消校验、服务费、支付记录 |
@@ -289,7 +289,7 @@ sequenceDiagram
 | 取消点单必须填写原因 | 高价值商品取消需主管权限 |
 | 赠送必须有权限 | 赠饮、免单、折扣都要留痕 |
 | 酒水兑换权益不直接等于点单 | 先核销票务权益，再生成兑换类订单或账单抵扣 |
-| 售酒年龄继承入场闸（豁免逐单复核） | 全部售酒点在入场闸内 → 门口统一人脸闸核验年龄，酒水环节豁免逐单复核、**继承入场闸结论**（X-03 修复：不再信客户端自报 `result`）：入场闸开关 `face.verification.enabled` 关时 `provider_code=entry_gate_exempt` 非阻塞放行（场内豁免 + 制度兜底，残留风险已知会），开关开真实接入后 fail-closed 判龄、bar 继承 `face_inherited` 的 PASSED/FAILED；未成年（`refuse_reason=underage`）禁止售酒，醉酒仍可人工拒售（`intoxicated`），拒售须记原因码并留痕（finding bar-1 / 合规 C1 / X-03） |
+| 售酒年龄继承入场闸（售酒豁免） | 全部售酒点在综合体统一入场刷脸闸内 → 入场闸核验年龄（满 18 岁），售酒环节继承入场结论、**不逐单验龄、不醉酒拒售**（2026-06-24 售酒豁免收口）。入场闸开关 `face.verification.enabled` 关时靠制度管控兜底（人工证件/巡查），开真实接入后 fail-closed 判龄。原 bar 侧 `BarAgeVerificationService`/`createAgeVerification`/`bar_age_verifications`/`refuse_*` 已移除，bar 不再独立验龄/拒售/记录（详见合规 §2） |
 
 #### 5.2.2 低消计算
 
@@ -359,16 +359,9 @@ P0 规则：
 6. 如果剩余量为 0，状态变为 `finished`；否则为 `partially_used`。
 7. 写入 `bar.saved_bottle_picked_up` 事件。
 
-#### 5.3.3 转赠（`transferSavedBottle`）<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：补 transferSavedBottle 方法名，对齐 §7.5 POST /saved-bottles/{id}/transfer -->
+#### 5.3.3 转赠（`transferSavedBottle`）——已下线（2026-06-24）
 
-领域方法 `transferSavedBottle`（对齐 §7.5 `POST /api/v1/bar/saved-bottles/{id}/transfer`，权限 `bar.saved_bottle.transfer`）：
-
-1. 原客户发起或现场确认转赠。
-2. 员工录入新客户手机号/会员。
-3. 主管确认。
-4. 生成转赠流水。
-5. 原存酒记录可直接更换客户归属，或关闭旧记录并创建新记录。
-6. 写入 `bar.saved_bottle.transferred` 事件。
+> 2026-06-24：存酒对他人转赠已下线（同积分转赠，HTML 未授权存酒对外转赠）。`transferSavedBottle` 领域方法、`POST /api/v1/inventory/saved-bottles/{id}/transfer` 端点及测试已移除；`saved_bottle_transfers` 表、`SavedBottleTransferRecord`/`SavedBottleTransferRequest`、repo `saveSavedBottleTransfer` 保留为孤儿待清理迁移统一删。**散客存酒登记（`createSavedBottle`，customer_id 可空）、取酒核身、争议处置（§5.3.3a）、作废均保留不变。**
 
 #### 5.3.3a 争议处置（`disputed`）<!-- 修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：补 disputed 争议态入口 -->
 
@@ -662,20 +655,11 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `total_amount` | bigint | 原价合计 |
 | `discount_amount` | bigint | 优惠 |
 | `payable_amount` | bigint | 应付 |
-| `age_verified` | boolean | 点酒环节年龄二次复核是否通过 |
-| `age_verify_method` | varchar | 核验方式：`face/manual/face_and_manual` |
-| `age_verify_by` | uuid | 核验操作人（员工），承载"谁核验"留痕，可为空 |
-| `age_verified_at` | timestamptz | 核验时间，承载"何时核验"留痕，可为空 |
-| `age_verify_point` | varchar | 核验点位：`gate`（门口）/`order`（点酒） |
-| `refuse_reason` | varchar | 拒售原因码：`underage/intoxicated/no_qualification/other`，可为空 |
-| `refuse_by` | uuid | 拒售操作人（员工），承载"谁拒"留痕，可为空 |
-| `refuse_at` | timestamptz | 拒售时间，承载"何时拒"留痕，可为空 |
+| ~~`age_verified`/`age_verify_method`/`age_verify_by`/`age_verified_at`/`age_verify_point`/`refuse_reason`/`refuse_by`/`refuse_at`~~ | — | **已下线（2026-06-24 售酒豁免）**：点酒环节年龄二次复核/拒售整体移除，售酒继承统一入场闸结论、不逐单验龄/拒售。这些 V013 列保留为孤儿、待清理迁移统一删，新流程不再写入 |
 | `status` | varchar | 点单状态 |
 | `cancel_reason` | text | 取消原因 |
 
-> 修订说明（2026-06-07）：依 finding bar-1 与合规决策 C1（见 `compliance-and-personal-information-protection-requirements-v0.1.md §2`，用户 2026-06-07 拍板"门口人工核验 + 人脸识别"），点酒表补年龄核验/拒售字段，支撑点酒环节售酒前二次复核与拒售留痕。门口入场关卡的核验在入场记录承接（见 §10.1）。
->
-> 修订说明（2026-06-07 收口）：依 finding compliance-land-12 与合规 C1 §2.2，补 `age_verify_by`/`age_verified_at`/`refuse_by`/`refuse_at` 四个留痕字段，承载合规 §2.1 第 4 条"谁核验、何时、谁拒、何时拒"全要素留痕（原表仅有 age_verified/method/point/refuse_reason，缺责任人与时间承载）。入场记录侧字段对齐见 §10.1。
+> 修订说明（2026-06-07 补字段；**2026-06-24 售酒豁免下线**）：原依合规 C1 补的点酒表年龄核验/拒售字段（`age_verified`/`age_verify_*`/`refuse_*`）已整体下线——售酒年龄核验由综合体统一入场刷脸闸 18+ 承接、售酒继承入场结论不逐单验龄/拒售（合规 §2 2026-06-24 改写）；`BarAgeVerificationService`、`bar_age_verifications` 表、`/api/v1/bar/age-verifications` 端点已移除，上述 V013 列保留为孤儿待清理迁移。
 
 索引：
 
@@ -1212,7 +1196,7 @@ source_system, result, risk_level, evidence_ref, trace_id, idempotency_key
 - 酒吧系统调用票务核销服务或订阅票务核销成功事件。
 - 酒水兑换导致的库存消耗由酒吧系统记录。
 
-> 入场年龄核验留痕（finding bar-1 / 合规 C1，2026-06-07）：酒吧承接票务入场核销结果时，**门口年龄核验关卡（人工核验 + 人脸识别）**的判定一并落入入场记录，字段对齐合规文档 C1：`age_verified`(bool)、`age_verify_method`(`face/manual/face_and_manual`)、`age_verify_by`(操作人)、`age_verified_at`、`age_verify_point`(`gate`/`order`)、`refuse_reason`(`underage/intoxicated/no_qualification/other`)、`refuse_by`、`refuse_at`。未成年判定即拒绝进入售酒区/拒售并记原因码；醉酒可人工拒售。全部动作写入事件中心（谁核验、方式、结果、点位、时间），并触发合规告警 `BAR_UNDERAGE_BLOCKED`/`BAR_INTOXICATED_REFUSED`。酒类经营资质有效期在售酒前由平台级校验。
+> 入场年龄核验（2026-06-24 售酒豁免收口）：售酒年龄核验由综合体**统一入场刷脸闸**承接（满 18 岁），酒吧承接票务入场核销时**不再独立做门口年龄核验/点酒二次复核/醉酒拒售**；原 `age_verified`/`age_verify_*`/`refuse_*` 字段与 `BAR_UNDERAGE_BLOCKED`/`BAR_INTOXICATED_REFUSED` 规则码已下线（V013 列留孤儿待清理）。刷脸开关关闭期间靠制度管控兜底（人工证件/巡查）。酒类经营资质有效期在售酒前由平台级校验（保留）。
 >
 > 生产阻断口径（2026-06-10 收口）：酒吧正式生产入场/售酒年龄核验必须接入第三方人脸/年龄核验接口或等效设备，供应商未确定前只实现适配器接口和 mock；测试环境可模拟通过，生产环境在未配置供应商/设备时不得把 `age_verified` 标记为正式通过。
 
@@ -1399,7 +1383,7 @@ P0 完成时必须能演示：
 10. 桌台进入待清台，清台后恢复空闲。
 11. 酒吧入场权益和酒水兑换权益可从票务核销结果承接；**赠饮/兑换核销后生成 0 元兑换点单并相应扣减吧台库存（可演示库存减少）**。<!-- 改（2026-06-07）：finding bar-7 -->
 12. 酒水或可追责物品从后厨接收、服务员取走到送达客人能扫码留痕。
-13. **门口年龄核验（人工核验 + 人脸识别）可判定成年与否，未成年拒绝进入并记原因码 `underage`，醉酒可人工拒售 `intoxicated`，核验方式/责任人/点位/时间进入事件留痕。**<!-- 增（2026-06-07）：finding bar-1 + 合规 C1 -->
+13. **售酒年龄核验由综合体统一入场刷脸闸 18+ 承接，售酒环节继承入场结论、不逐单验龄、不醉酒拒售（2026-06-24 售酒豁免，详见合规 §2）；刷脸关时制度兜底。**<!-- 2026-06-24 售酒豁免：原 finding bar-1 + 合规 C1 门口验龄/拒售口径已下线 -->
 14. **一体机订台 + 订金可演示：创建预订、支付订金、到店抵扣、取消/爽约退或没收，并记录来源/终端/责任人/设备/点位。**<!-- 增（2026-06-07）：finding kiosk-1/2/3 -->
 15. **存酒登记强制采集姓名/昵称、瓶底标签数值、登记照片；取酒核身比对该三项。**<!-- 增（2026-06-07）：finding bar-4/supply-2 -->
 16. **高价值报损、盘点差异、存酒作废可演示同时上传照片和视频双证据并主管复核。**<!-- 增（2026-06-07）：finding supply-3 -->

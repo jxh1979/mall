@@ -1106,7 +1106,7 @@ sequenceDiagram
   - `customer_phone`：客户手机号（散客核身主键之一）。
 - **`customer_id` 改为可空**：散客（无会员）允许存酒，核身改用 `customer_phone` + `customer_name_or_nickname` + `bottle_label_value`，外键指向 foundation `customers.id`，可空。
 - **取酒核身规则**：不再仅凭"手机号 + 验证码"。取酒必须比对 `bottle_label_value`（瓶底标签数值）**且** 比对 `customer_name_or_nickname`（姓名/昵称）通过，方可放行；原 `claim_by_phone` / `verification_code` 作为附加校验项保留。
-- **新增操作 `transferSavedBottle`（转赠）**：将存酒资产转赠给其他客户，原记录可直接更换客户归属或关闭旧记录并创建新记录，写转赠事件。
+- ~~**操作 `transferSavedBottle`（转赠）**~~：**已下线（2026-06-24，同积分转赠，HTML 未授权存酒对外转赠）**；端点/方法/测试已移除，`saved_bottle_transfers` 表留孤儿待清理。散客存酒登记/取酒核身/争议处置保留。
 - **新增状态 `disputed`（争议）及入口**：存酒归属/数量争议进入 `disputed`，提供争议登记入口，待人工/主管处置后流转。
 - **事件**：`saved_bottle.registered` / `saved_bottle.claimed` / `saved_bottle.transferred` / `saved_bottle.voided` / `saved_bottle.disputed`。
 
@@ -1123,7 +1123,7 @@ sequenceDiagram
 | `SavedBottleRequest` | 新增属性 | `customer_name_or_nickname`、`bottle_label_value`、`registration_photo_refs`（array）、`manual_note`、`customer_phone` |
 | `SavedBottleRequest` | required 调整 | 移除 `customer_id`（改可空）；required 含 `bottle_label_value`、`registration_photo_refs`、`customer_name_or_nickname` |
 | `SavedBottleClaimRequest` | 新增比对属性 | `bottle_label_value`、`customer_name_or_nickname`（保留原 `claim_by_phone` / `verification_code`） |
-| paths | 待评估 | `transferSavedBottle`（转赠）端点；对齐 `POST /api/v1/bar/saved-bottles/{id}/transfer` |
+| paths | ~~已删~~ | `transferSavedBottle`（转赠）端点 2026-06-24 已下线（HTML 未授权存酒对外转赠，同积分转赠） |
 
 ### 10.5 与游乐系统
 
