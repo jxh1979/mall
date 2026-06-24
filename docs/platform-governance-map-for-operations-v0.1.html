@@ -121,7 +121,7 @@
     .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .summary-box, .system-card, .info-block, .relation-row, .question {
+    .summary-box, .system-card, .info-block, .question {
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fff;
@@ -201,16 +201,6 @@
     }
     .step strong { display: block; margin-bottom: 5px; }
     .step span { color: var(--muted); font-size: 14px; }
-    .relation-list { display: grid; gap: 10px; }
-    .relation-row {
-      display: grid;
-      grid-template-columns: 220px minmax(0, 1fr);
-      gap: 12px;
-      padding: 14px;
-      align-items: start;
-    }
-    .relation-from { font-weight: 800; color: var(--blue); }
-    .relation-text { color: var(--muted); }
     .question-list { display: grid; gap: 10px; }
     .question { padding: 13px 15px; background: var(--amber-soft); border-color: #ffd591; color: #5c3b00; }
     .question.confirmed { background: var(--green-soft); border-color: #b7e2cc; color: #0b4f3a; }
@@ -219,7 +209,6 @@
       .layout { grid-template-columns: 1fr; }
       .side { position: static; }
       .summary-grid, .card-grid, .detail-grid, .flow { grid-template-columns: 1fr; }
-      .relation-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -667,32 +656,17 @@
 
         <section id="relations">
           <h2>连接关系：平台治理层怎么连接所有业务</h2>
-          <div class="relation-list">
-            <div class="relation-row">
-              <div class="relation-from">治理连接票务</div>
-              <div class="relation-text">票种发布、权益核销、退款和人工放行，都要看项目、合同、员工权限、设备状态和准入规则。</div>
-            </div>
-            <div class="relation-row">
-              <div class="relation-from">治理连接酒吧</div>
-              <div class="relation-text">卡座、订台、低消、点酒、免单和账单调整，都要知道空间、商户、合同、员工和审批层级。</div>
-            </div>
-            <div class="relation-row">
-              <div class="relation-from">治理连接游乐</div>
-              <div class="relation-text">项目开放、场次容量、设备检修和恢复营业，都要绑定点位、设备、员工、检修供应商和主管确认。</div>
-            </div>
-            <div class="relation-row">
-              <div class="relation-from">治理连接供应链</div>
-              <div class="relation-text">供应商、供应合同、采购、库房、库存报损和盘点差异，都要看商户归属、合同范围和复核权限。</div>
-            </div>
-            <div class="relation-row">
-              <div class="relation-from">治理连接财务</div>
-              <div class="relation-text">日结锁定、结算依据、补录影响金额和对账差异，都要有审批权限和操作留痕。</div>
-            </div>
-            <div class="relation-row">
-              <div class="relation-from">治理连接第三方</div>
-              <div class="relation-text">第三方只能在身份核验和授权范围内调用接口；后续供应商对接也要遵守同一套规则。</div>
-            </div>
-          </div>
+          <table class="plain-table">
+            <thead><tr><th style="width:130px">连接</th><th>为什么必须连</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">治理连接票务</th><td>票种发布、权益核销、退款和人工放行，都要看项目、合同、员工权限、设备状态和准入规则。</td></tr>
+              <tr><th scope="row">治理连接酒吧</th><td>卡座、订台、低消、点酒、免单和账单调整，都要知道空间、商户、合同、员工和审批层级。</td></tr>
+              <tr><th scope="row">治理连接游乐</th><td>项目开放、场次容量、设备检修和恢复营业，都要绑定点位、设备、员工、检修供应商和主管确认。</td></tr>
+              <tr><th scope="row">治理连接供应链</th><td>供应商、供应合同、采购、库房、库存报损和盘点差异，都要看商户归属、合同范围和复核权限。</td></tr>
+              <tr><th scope="row">治理连接财务</th><td>日结锁定、结算依据、补录影响金额和对账差异，都要有审批权限和操作留痕。</td></tr>
+              <tr><th scope="row">治理连接第三方</th><td>第三方只能在身份核验和授权范围内调用接口；后续供应商对接也要遵守同一套规则。</td></tr>
+            </tbody>
+          </table>
         </section>
 
         <section id="decisions">
