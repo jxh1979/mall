@@ -57,6 +57,21 @@
 | UI-ADM-OPS-001 | 生产证据 | IT 管理员登录 | 登记 NAS/密钥/备份/恢复证据，更新状态 | 只保存 credential_ref/evidence_ref，不保存真实密钥；到期提醒可见 | ops readiness | 覆盖证据缺失、过期、已验证状态 |
 | UI-ADM-VIS-001 | 完整后台视觉回归 | 平台管理员登录；Mock API 有基础数据 | 桌面打开总控驾驶舱和生产 blocker 与证据页；移动端打开酒吧订单和动态定价页 | 截图基线稳定；无材料级横向溢出；导航、表格和主按钮不遮挡 | full-admin-visual | `tests/e2e/full-admin-visual.spec.ts` 覆盖 4 张截图基线 |
 
+## 2A. 客人端与一体机验收范围（权威指向）
+
+> 本矩阵 §2 为后台管理端（`UI-ADM-*`）路径。客人端与一体机的端到端验收口径在**专属文档**，本节统一指向，避免误判"客人端/一体机无验收"：
+
+| 范围 | 验收权威文档 | 覆盖 |
+|---|---|---|
+| 客人端（App/小程序） | `customer-app-miniapp-development-design-v0.1.md` §8 验收标准、**§9A 两端一致性/订台定金异常/第三方渠道查询 E2E（G/W/T）**；`v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` | 购票/订台定金/我的订单票权益/积分摘要/验票二维码；储值/付费订阅/签到生日/订卡邀请函见 `member-loyalty-and-stored-value-development-design-v0.1.md` + v099-v124 |
+| 触摸屏一体机（kiosk） | `terminal-page-product-prd-v0.1.md` §4 终端能力矩阵 + 本节一体机专项 G/W/T | 售票型自助购票/取票；非售票型权益领取/订台/吧台买酒/游乐状态/检修记录 |
+
+**一体机（kiosk）专项 Given/When/Then（补统一口径）：**
+- Given 非售票型一体机扫客人码，When 展示可领权益，Then 只展示该客人当前可领的赠饮/礼物/积分兑换并回写领取状态，不暴露他人数据。
+- Given 一体机订台/吧台买酒，When 现金或 POS 支付，Then 必须由授权员工记录到订单/账单/日结/对账（一体机不脱离财务闭环）。
+- Given 售票型一体机，When 工作人员尝试代客购票，Then 拒绝（门票仅客人本人自助，见 terminal-prd §98）。
+- Given 一体机断网/开关拉取失败，When 资金/核销/库存类写操作，Then 后端 fail-closed 拒绝并留痕（见 operation-traceability §5.6 一体机协调）。
+
 ## 3. 通用 Given/When/Then 验收
 
 ### 3.1 表单校验
