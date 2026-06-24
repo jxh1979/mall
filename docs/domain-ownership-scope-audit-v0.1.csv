@@ -71,6 +71,7 @@ business_process_step_records,single_complex_default,P0_SINGLE_COMPLEX,single-co
 cam_allocations,direct,merchant_id,merchant_id column on cam_allocations,ready for project/merchant scoped query enforcement,covered
 cam_trueup_lines,direct,merchant_id,merchant_id column on cam_trueup_lines,ready for project/merchant scoped query enforcement,covered
 cam_trueup_runs,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+complex_operating_params,direct,project_id,project_id column on complex_operating_params,ready for project/merchant scoped query enforcement,covered
 compliance_expiry_items,direct,merchant_id,merchant_id column on compliance_expiry_items,ready for project/merchant scoped query enforcement,covered
 compliance_reminders,direct,merchant_id,merchant_id column on compliance_reminders,ready for project/merchant scoped query enforcement,covered
 contract_key_dates,direct,merchant_id,merchant_id column on contract_key_dates,ready for project/merchant scoped query enforcement,covered

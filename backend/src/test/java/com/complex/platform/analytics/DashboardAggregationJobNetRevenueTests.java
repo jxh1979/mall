@@ -64,6 +64,26 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void perSqmDerivesNetDividedByOperatingAreaAndSkipsWhenAreaUnset() {
+        // T4.2 坪效：revenue.per_sqm = 平台净收入 / 可经营面积；面积未配置则不产出（诚实空缺）。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.ticketRevenue = new BigDecimal("100000");
+        repository.ticketAllocated = orderedMap("merchant_a", "100000"); // 平台 net = Σ商户 net = 100000。
+
+        // 面积未配置 → 不产出 per_sqm。
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+        assertThat(repository.upserts).doesNotContainKey(DashboardAggregationJob.REVENUE_PER_SQM + "|platform");
+
+        // 配置面积 1000㎡ → per_sqm = 100000 / 1000 = 100.00（平台 + project 两口径）。
+        repository.operatingParams = new OperatingParamsRecord("project_1", new BigDecimal("1000"), "active",
+                Instant.parse("2026-06-18T00:00:00Z"), Instant.parse("2026-06-18T00:00:00Z"));
+        repository.upserts.clear();
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+        assertThat(repository.upserts.get(DashboardAggregationJob.REVENUE_PER_SQM + "|platform")).isEqualByComparingTo("100.00");
+        assertThat(repository.upserts.get(DashboardAggregationJob.REVENUE_PER_SQM + "|project:project_1")).isEqualByComparingTo("100.00");
+    }
+
+    @Test
     void merchantNetIncludesTicketAllocatedShareAndRefundShare() {
         // 清单#4：商户行级 net = 本商户售票分量(allocated) + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
@@ -309,6 +329,29 @@ class DashboardAggregationJobNetRevenueTests {
         @Override
         public Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate) {
             return verifyDone;
+        }
+
+        @Override
+        public Map<Integer, Long> hourlyTrafficCounts(LocalDate businessDate, Optional<String> merchantScope) {
+            return Map.of();
+        }
+
+        private OperatingParamsRecord operatingParams; // null = 未配置面积
+
+        @Override
+        public Optional<OperatingParamsRecord> findOperatingParams(String projectId) {
+            return Optional.ofNullable(operatingParams);
+        }
+
+        @Override
+        public List<OperatingParamsRecord> listOperatingParams() {
+            return operatingParams == null ? List.of() : List.of(operatingParams);
+        }
+
+        @Override
+        public OperatingParamsRecord upsertOperatingParams(OperatingParamsRecord record) {
+            this.operatingParams = record;
+            return record;
         }
 
         @Override

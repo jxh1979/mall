@@ -35,6 +35,7 @@ public class DashboardAggregationJob {
     static final String REVENUE_BAR_REFUND = "revenue.bar_refund"; // 收入·酒吧退款（冲减 net，待确认#2）
     static final String REVENUE_TICKET_REFUND = "revenue.ticket_refund"; // 收入·自营售票退款（冲减 net）
     static final String REVENUE_NET = "revenue.net";            // 收入·平台净收入（派生：售票+酒吧−退款，第三方不计）
+    static final String REVENUE_PER_SQM = "revenue.per_sqm";    // 收入·坪效（派生：净收入/可经营面积；面积未配置则不产出）
     // 待确认项#1：通票售票收入的业态拆分展示口径（不并入 net，仅展示）。
     static final String REVENUE_TICKET_BAR_SHARE = "revenue.ticket_bar_share";             // 收入·通票酒吧分摊
     static final String REVENUE_TICKET_AMUSEMENT_SHARE = "revenue.ticket_amusement_share"; // 收入·通票游乐分摊
@@ -165,6 +166,16 @@ public class DashboardAggregationJob {
 
         // 风险·待复核：supervisor_review_decisions / analytics_risk_alerts 无 merchant_id → 仅平台口径。
         upsertPlatform(RISK_PENDING_REVIEW, "governance", businessDate, repository.countPendingReview(), now, platformTotals);
+
+        // T4.2 坪效（派生）：净收入 / 可经营面积（综合体主数据，complex_operating_params）。
+        // 面积未配置/≤0 → 不产出（诚实空缺，AnalyticsService 目录注 unavailable，不伪造、不除零）。
+        // 单综合体：净收入取平台口径合计，面积取 DEFAULT_PROJECT_ID；多综合体启用后按真实 project 各自面积派生。
+        BigDecimal netForPerSqm = platformTotals.getOrDefault(REVENUE_NET + "|finance", BigDecimal.ZERO);
+        repository.findOperatingParams(DEFAULT_PROJECT_ID)
+                .map(OperatingParamsRecord::operatingAreaSqm)
+                .filter(area -> area != null && area.signum() > 0)
+                .ifPresent(area -> upsertPlatform(REVENUE_PER_SQM, "finance", businessDate,
+                        netForPerSqm.divide(area, 2, java.math.RoundingMode.HALF_UP), now, platformTotals));
 
         // ⑤ 集团多项目 ETL：按 project_id 维度 upsert segment_type='project' 行。
         upsertByProject(businessDate, platformTotals, now);

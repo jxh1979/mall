@@ -139,6 +139,46 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void trafficHourlyReturns24ZeroFilledBucketsForRequestedDate() {
+        // T4.3：分时段客流恒返回 0~23 共 24 桶，命中小时填真值、其余补 0；落审计事件。
+        analyticsRepository.hourlyTraffic.put(9, 3L);
+        analyticsRepository.hourlyTraffic.put(14, 5L);
+
+        var resp = service.trafficHourly(Optional.empty(), java.time.LocalDate.parse("2026-06-14"));
+
+        assertThat(resp.businessDate()).isEqualTo(java.time.LocalDate.parse("2026-06-14"));
+        assertThat(resp.buckets()).hasSize(24);
+        assertThat(resp.buckets()).extracting(AnalyticsRecords.HourlyTrafficBucket::hour)
+                .containsExactly(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
+        assertThat(resp.buckets().get(9).count()).isEqualTo(3L);
+        assertThat(resp.buckets().get(14).count()).isEqualTo(5L);
+        assertThat(resp.buckets().get(0).count()).isZero();
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("analytics.traffic_hourly.viewed");
+    }
+
+    @Test
+    void operatingParamsUpsertPersistsAreaRejectsNonPositiveAndRecordsAudit() {
+        // T4.2 坪效面积配置：upsert 落库 + 审计；面积必须为正。
+        OperatingParamsService paramsService = new OperatingParamsService(
+                analyticsRepository, new AuditEventService(auditEventRepository), FIXED_CLOCK);
+
+        var saved = paramsService.upsertOperatingParams(
+                new OperatingParamsRequest("project_1", new BigDecimal("1200.00"), null, "op-key-1"));
+        assertThat(saved.operatingAreaSqm()).isEqualByComparingTo("1200.00");
+        assertThat(saved.status()).isEqualTo("active");
+        assertThat(paramsService.listOperatingParams().items())
+                .extracting(OperatingParamsRecord::projectId).contains("project_1");
+        assertThat(analyticsRepository.findOperatingParams("project_1")).isPresent();
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("operating_params.changed");
+
+        // 非正数面积被拒（不落库分母为 0/负）。
+        assertThatThrownBy(() -> paramsService.upsertOperatingParams(
+                new OperatingParamsRequest("project_1", BigDecimal.ZERO, null, "op-key-2")))
+                .isInstanceOf(ApiException.class);
+    }
+
+    @Test
     void overviewEnforcesMerchantScopeIsolation() {
         // 商户 A 与 B 的酒吧收入分别落快照（行级隔离按 segment_id）。
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
@@ -1024,6 +1064,31 @@ class AnalyticsServiceTests {
         @Override
         public Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate) {
             return Map.of();
+        }
+
+        final Map<Integer, Long> hourlyTraffic = new LinkedHashMap<>();
+
+        @Override
+        public Map<Integer, Long> hourlyTrafficCounts(LocalDate businessDate, Optional<String> merchantScope) {
+            return hourlyTraffic;
+        }
+
+        final Map<String, OperatingParamsRecord> operatingParams = new LinkedHashMap<>();
+
+        @Override
+        public Optional<OperatingParamsRecord> findOperatingParams(String projectId) {
+            return Optional.ofNullable(operatingParams.get(projectId));
+        }
+
+        @Override
+        public List<OperatingParamsRecord> listOperatingParams() {
+            return new ArrayList<>(operatingParams.values());
+        }
+
+        @Override
+        public OperatingParamsRecord upsertOperatingParams(OperatingParamsRecord record) {
+            operatingParams.put(record.projectId(), record);
+            return record;
         }
 
         @Override

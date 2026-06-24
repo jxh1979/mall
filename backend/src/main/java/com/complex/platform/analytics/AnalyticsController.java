@@ -7,6 +7,7 @@ import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
 import com.complex.platform.analytics.AnalyticsRecords.BusinessMetricSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.GroupOverviewResponse;
+import com.complex.platform.analytics.AnalyticsRecords.HourlyTrafficResponse;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantSummaryRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricAnomalyRecord;
@@ -32,10 +33,13 @@ public class AnalyticsController {
 
     private final AnalyticsService service;
     private final AuthorizationService authorizationService;
+    private final OperatingParamsService operatingParamsService;
 
-    public AnalyticsController(AnalyticsService service, AuthorizationService authorizationService) {
+    public AnalyticsController(AnalyticsService service, AuthorizationService authorizationService,
+            OperatingParamsService operatingParamsService) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.operatingParamsService = operatingParamsService;
     }
 
     @GetMapping("/ai-quality/results")
@@ -101,12 +105,38 @@ public class AnalyticsController {
     }
 
 
+    @GetMapping("/traffic-hourly")
+    public ApiResponse<HourlyTrafficResponse> getTrafficHourly(
+            @org.springframework.web.bind.annotation.RequestParam(value = "date", required = false) String date) {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        // T4.3 分时段客流：date 为空 → 退回最新经营日（与总览日期口径一致）；scope 隔离（商户仅自身票务核销）。
+        return ApiResponse.ok(service.trafficHourly(
+                authorizationService.currentMerchantScope(), parseOverviewDate(date)));
+    }
+
     @GetMapping("/group-overview")
     public ApiResponse<GroupOverviewResponse> getGroupOverview() {
         authorizationService.requirePermission("analytics.group.view");
         // 集团总览为平台级跨商户汇总：fail-closed 拒绝 merchant-scoped 调用方（与其它平台级分析端点纵深防御一致）。
         authorizationService.requirePlatformScope();
         return ApiResponse.ok(service.groupOverview());
+    }
+
+    @GetMapping("/operating-params")
+    public ApiResponse<PageResponse<OperatingParamsRecord>> listOperatingParams() {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        // 综合体经营参数=平台级主数据：fail-closed 拒绝 merchant-scoped 调用方（与其它平台级分析端点一致）。
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(operatingParamsService.listOperatingParams());
+    }
+
+    @PostMapping("/operating-params")
+    public ApiResponse<OperatingParamsRecord> upsertOperatingParams(
+            @RequestBody(required = false) OperatingParamsRequest request) {
+        authorizationService.requirePermission("analytics.operating_params.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(operatingParamsService.upsertOperatingParams(request));
     }
 
     @GetMapping("/business-metric-snapshots")

@@ -7,6 +7,8 @@ import com.complex.platform.analytics.AnalyticsRecords.CustomerIntentRecord;
 import com.complex.platform.analytics.AnalyticsRecords.DashboardSnapshotRecord;
 import com.complex.platform.analytics.AnalyticsRecords.GroupOverviewResponse;
 import com.complex.platform.analytics.AnalyticsRecords.GroupProjectRollup;
+import com.complex.platform.analytics.AnalyticsRecords.HourlyTrafficBucket;
+import com.complex.platform.analytics.AnalyticsRecords.HourlyTrafficResponse;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantHealthScoreRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MerchantSummaryRecord;
 import com.complex.platform.analytics.AnalyticsRecords.MetricAnomalyRecord;
@@ -80,6 +82,9 @@ public class AnalyticsService {
             // 商户行级 = 售票分量(allocated)+酒吧实收−售票退款分摊−酒吧退款；第三方回流不计）。
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_NET, "finance", "cent", true,
                     "no revenue.net snapshot for merchant on business date"),
+            // T4.2 坪效（派生：净收入/可经营面积）。面积未配置或商户口径无快照 → 诚实空缺 null + note。
+            new MetricCatalogEntry(DashboardAggregationJob.REVENUE_PER_SQM, "finance", "cent_per_sqm", true,
+                    "operating area not configured (set via /analytics/operating-params) or no snapshot for business date"),
             new MetricCatalogEntry(DashboardAggregationJob.TRAFFIC_AMUSEMENT, "amusement", "count", true,
                     "amusement_verifications has no merchant_id; merchant-scoped value not available"),
             new MetricCatalogEntry(DashboardAggregationJob.VERIFY_DONE, "ticketing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
@@ -259,6 +264,35 @@ public class AnalyticsService {
                 "analytics_dashboard_snapshot",
                 () -> buildOverview(scope, normalizedDomain, null)
         );
+    }
+
+    /**
+     * T4.3 分时段客流：按经营日窗口对成功核销小时分桶，恒返回 0~23 共 24 桶（无数据补 0）。
+     * 日期解析与 {@link #overview(Optional, LocalDate)} 一致：指定日优先，否则退回最新 ETL 经营日。
+     */
+    public HourlyTrafficResponse trafficHourly(Optional<String> scope, LocalDate requestedDate) {
+        return readSingle(
+                "analytics.traffic_hourly.viewed",
+                "analytics.traffic_hourly.view_failed",
+                "analytics.dashboard.view",
+                "analytics_dashboard_snapshot",
+                () -> buildTrafficHourly(scope, requestedDate)
+        );
+    }
+
+    private HourlyTrafficResponse buildTrafficHourly(Optional<String> scope, LocalDate requestedDate) {
+        String scopeValue = scope.orElse(null);
+        Instant now = Instant.now(clock);
+        LocalDate businessDate = requestedDate != null ? requestedDate
+                : repository.latestEtlBusinessDate(scopeValue)
+                .or(() -> repository.latestEtlBusinessDate(null))
+                .orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
+        Map<Integer, Long> counts = repository.hourlyTrafficCounts(businessDate, scope);
+        List<HourlyTrafficBucket> buckets = new java.util.ArrayList<>(24);
+        for (int hour = 0; hour < 24; hour++) {
+            buckets.add(new HourlyTrafficBucket(hour, counts.getOrDefault(hour, 0L)));
+        }
+        return new HourlyTrafficResponse(businessDate, List.copyOf(buckets));
     }
 
     private OverviewResponse buildOverview(Optional<String> scope, String domainFilter, LocalDate requestedDate) {

@@ -581,6 +581,33 @@ class AmusementServiceTests {
     }
 
     @Test
+    void listsProjectsMissingDeviceRegistryUntilActiveDeviceArchived() {
+        // T3.3：无在役设备档案的项目出现在「待建档」清单；退役设备不算建档；补一台 active 设备后移出。
+        AmusementProjectRecord missing = projectWithTemplate("t33-missing");
+        AmusementProjectRecord archived = projectWithTemplate("t33-archived");
+        service.createDevice(archived.id(), new AmusementDeviceRequest(
+                "t33-archived-dev", null, List.of(), archived.id(),
+                "DEV-T33-A", "过山车", "active", 24, null));
+        // 退役设备不在役，missing 仅有 retired 设备仍属待建档。
+        service.createDevice(missing.id(), new AmusementDeviceRequest(
+                "t33-missing-retired", null, List.of(), missing.id(),
+                "DEV-T33-R", "退役设备", "retired", 24, null));
+
+        assertThat(service.listProjectsMissingDeviceRegistry().items())
+                .extracting(AmusementProjectDeviceRegistryBacklogRecord::id)
+                .contains(missing.id())
+                .doesNotContain(archived.id());
+
+        // 补一台在役设备 → 移出待建档清单。
+        service.createDevice(missing.id(), new AmusementDeviceRequest(
+                "t33-missing-active", null, List.of(), missing.id(),
+                "DEV-T33-M", "旋转木马", "active", 24, null));
+        assertThat(service.listProjectsMissingDeviceRegistry().items())
+                .extracting(AmusementProjectDeviceRegistryBacklogRecord::id)
+                .doesNotContain(missing.id());
+    }
+
+    @Test
     void deviceInspectionExpiryBlocksVerificationEvenWhenRequestOmitsDeviceId() {
         // P0-3 回归：项目级巡检 PASS（旧路径会放行），但项目下有一台在役(active)设备从未通过巡检
         // （lastPass=null=超期）。核销请求不传 deviceId（最常见形态）仍必须被巡检超期项目级兜底阻断，杜绝绕过。
@@ -2335,6 +2362,17 @@ class AmusementServiceTests {
                     .filter(p -> projectSpaceIds.get(p.id()) == null)
                     .filter(p -> merchantScope.isEmpty() || merchantScope.get().equals(p.merchantId()))
                     .map(p -> new AmusementProjectSpaceBacklogRecord(
+                            p.id(), p.projectName(), p.openStatus(), p.merchantId()))
+                    .toList();
+        }
+
+        @Override
+        public List<AmusementProjectDeviceRegistryBacklogRecord> listProjectsMissingDeviceRegistry(Optional<String> merchantScope) {
+            return projects.values().stream()
+                    .filter(p -> devices.values().stream()
+                            .noneMatch(d -> p.id().equals(d.projectId()) && "active".equals(d.status())))
+                    .filter(p -> merchantScope.isEmpty() || merchantScope.get().equals(p.merchantId()))
+                    .map(p -> new AmusementProjectDeviceRegistryBacklogRecord(
                             p.id(), p.projectName(), p.openStatus(), p.merchantId()))
                     .toList();
         }

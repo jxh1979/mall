@@ -182,6 +182,22 @@ public class AmusementService {
         );
     }
 
+    /**
+     * T3.3 存量零档建档：列出无任何在役设备档案、待建档的项目。
+     * 运营据此在开启强制建档总开关（{@link #enforceDeviceRegistry}，T3.2）前补齐设备档案；
+     * 开关一旦开启，清单内项目即被拒核销（AMUSEMENT_DEVICE_REGISTRY_MISSING）。
+     */
+    public PageResponse<AmusementProjectDeviceRegistryBacklogRecord> listProjectsMissingDeviceRegistry() {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        return readPage(
+                "amusement.device_registry_backlog.viewed",
+                "amusement.device_registry_backlog.view_failed",
+                "amusement.session.manage",
+                "amusement_project",
+                () -> repository.listProjectsMissingDeviceRegistry(scope)
+        );
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "amusement.session.manage")
     @Transactional
     public AmusementProjectSpaceAssignmentRecord assignProjectSpace(String projectId, AmusementProjectSpaceAssignmentRequest request) {

@@ -30,6 +30,9 @@ public interface AmusementRepository {
     /** 处理清单 #8：列出 space_id 为空、待运营回填的项目（按商户范围过滤）。 */
     List<AmusementProjectSpaceBacklogRecord> listProjectsWithoutSpace(Optional<String> merchantScope);
 
+    /** T3.3：列出无任何在役（active）设备档案、待建档的项目（按商户范围过滤）。 */
+    List<AmusementProjectDeviceRegistryBacklogRecord> listProjectsMissingDeviceRegistry(Optional<String> merchantScope);
+
     /**
      * 返回该项目已配置的可用权益类型绑定（amusement_project_entitlements）。
      * 为空表示该项目无绑定配置——核销时回退按「entitlement_type 为游乐类」放行（V082 注释、向后兼容）。

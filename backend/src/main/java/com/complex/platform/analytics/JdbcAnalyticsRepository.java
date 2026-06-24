@@ -383,6 +383,52 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Optional<OperatingParamsRecord> findOperatingParams(String projectId) {
+        List<OperatingParamsRecord> rows = jdbcTemplate.query("""
+                SELECT project_id, operating_area_sqm, status, created_at, updated_at
+                  FROM complex_operating_params
+                 WHERE project_id = :project_id
+                """, Map.of("project_id", projectId), (rs, n) -> mapOperatingParams(rs));
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
+    public List<OperatingParamsRecord> listOperatingParams() {
+        return jdbcTemplate.query("""
+                SELECT project_id, operating_area_sqm, status, created_at, updated_at
+                  FROM complex_operating_params
+                 ORDER BY project_id
+                """, (rs, n) -> mapOperatingParams(rs));
+    }
+
+    @Override
+    public OperatingParamsRecord upsertOperatingParams(OperatingParamsRecord record) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("project_id", record.projectId())
+                .addValue("operating_area_sqm", record.operatingAreaSqm())
+                .addValue("status", record.status())
+                .addValue("now", timestampWithTimeZone(record.updatedAt()));
+        jdbcTemplate.update("""
+                INSERT INTO complex_operating_params (project_id, operating_area_sqm, status, created_at, updated_at)
+                VALUES (:project_id, :operating_area_sqm, :status, :now, :now)
+                ON CONFLICT (project_id) DO UPDATE SET
+                    operating_area_sqm = EXCLUDED.operating_area_sqm,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, params);
+        return findOperatingParams(record.projectId()).orElse(record);
+    }
+
+    private OperatingParamsRecord mapOperatingParams(ResultSet rs) throws SQLException {
+        return new OperatingParamsRecord(
+                rs.getString("project_id"),
+                rs.getBigDecimal("operating_area_sqm"),
+                rs.getString("status"),
+                instant(rs, "created_at"),
+                instant(rs, "updated_at"));
+    }
+
+    @Override
     public void upsertMetricSnapshot(
             MetricSnapshotKey key,
             BigDecimal actualValue,
@@ -643,6 +689,40 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
         );
+        return result;
+    }
+
+    @Override
+    public Map<Integer, Long> hourlyTrafficCounts(LocalDate businessDate, Optional<String> merchantScope) {
+        // T4.3：按经营日窗口对成功核销 created_at 分小时桶。
+        // ponytail: 按 UTC 小时分桶（确定、与窗口同源）；若要本地时段口径，改 AT TIME ZONE '业务时区'。
+        Map<Integer, Long> result = new LinkedHashMap<>();
+        MapSqlParameterSource params = dayRange(businessDate);
+        String sql;
+        if (merchantScope.isEmpty()) {
+            sql = """
+                    SELECT h, COUNT(*) AS total FROM (
+                        SELECT date_part('hour', created_at AT TIME ZONE 'UTC')::int AS h
+                          FROM ticket_verifications
+                         WHERE status = 'success' AND created_at >= :start AND created_at < :end
+                        UNION ALL
+                        SELECT date_part('hour', created_at AT TIME ZONE 'UTC')::int AS h
+                          FROM amusement_verifications
+                         WHERE verification_result = 'success' AND created_at >= :start AND created_at < :end
+                    ) t GROUP BY h
+                    """;
+        } else {
+            params.addValue("merchant_id", merchantScope.get());
+            sql = """
+                    SELECT date_part('hour', created_at AT TIME ZONE 'UTC')::int AS h, COUNT(*) AS total
+                      FROM ticket_verifications
+                     WHERE status = 'success' AND merchant_id = :merchant_id
+                       AND created_at >= :start AND created_at < :end
+                     GROUP BY h
+                    """;
+        }
+        jdbcTemplate.query(sql, params, (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                result.put(rs.getInt("h"), rs.getLong("total")));
         return result;
     }
 

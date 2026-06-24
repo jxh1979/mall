@@ -90,6 +90,20 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /**
+     * T4.3 分时段客流：按经营日窗口（BusinessDayResolver）对成功核销 created_at 小时分桶。
+     * buckets 恒为 0~23 共 24 桶（无数据补 0）。平台口径合并票务+游乐核销；商户口径仅本商户票务核销。
+     */
+    public record HourlyTrafficResponse(
+            LocalDate businessDate,
+            List<HourlyTrafficBucket> buckets
+    ) {
+    }
+
+    /** 单个小时桶：hour 为 0~23，count 为该小时成功核销数。 */
+    public record HourlyTrafficBucket(int hour, long count) {
+    }
+
     /** ETL upsert 的快照唯一键（与 V070 唯一索引对齐）。 */
     public record MetricSnapshotKey(
             String metricKey,

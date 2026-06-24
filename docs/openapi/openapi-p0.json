@@ -20765,6 +20765,142 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/amusement/projects/without-device-registry": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementProjectsWithoutDeviceRegistry",
+        "summary": "待建档（无在役设备档案）的游乐项目清单",
+        "description": "T3.3 存量零档建档：列出无任何 active 设备档案、待建档的项目，供运营在开启强制建档总开关（amusement.device-registry.enforce.enabled）前照单补齐设备档案。",
+        "x-permission": "amusement.session.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.device_registry_backlog.viewed",
+        "x-audit-event-failure": "amusement.device_registry_backlog.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/traffic-hourly": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "getAnalyticsTrafficHourly",
+        "summary": "分时段客流分布",
+        "description": "T4.3：按经营日窗口对成功核销 created_at 小时分桶（0~23 共 24 桶）；date 为空退回最新经营日，按 scope 隔离。",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "as-of 经营日（YYYY-MM-DD），空=最新经营日。"
+          }
+        ],
+        "x-permission": "analytics.dashboard.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.traffic_hourly.viewed",
+        "x-audit-event-failure": "analytics.traffic_hourly.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/operating-params": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "listOperatingParams",
+        "summary": "查询综合体经营参数（坪效面积）",
+        "description": "T4.2：列出 complex_operating_params（可经营面积等综合体级主数据），坪效 revenue.per_sqm 据此派生。",
+        "x-permission": "analytics.dashboard.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.operating_params.viewed",
+        "x-audit-event-failure": "analytics.operating_params.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "upsertOperatingParams",
+        "summary": "新增或更新综合体经营参数（坪效面积）",
+        "description": "T4.2：按 project_id upsert 可经营面积（高敏：决定坪效口径分母），落审计 operating_params.changed。",
+        "x-permission": "analytics.operating_params.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "operating_params.changed",
+        "x-audit-event-failure": "operating_params.change_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/OperatingParamsRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -22774,6 +22910,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/CustomerBarScanOrderRequest"
+            }
+          }
+        }
+      },
+      "OperatingParamsRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OperatingParamsRequest"
             }
           }
         }
@@ -31343,6 +31489,40 @@
               "type": "object"
             },
             "maxItems": 200
+          }
+        }
+      },
+      "OperatingParamsRequest": {
+        "type": "object",
+        "description": "请求载荷 OperatingParamsRequest；综合体经营参数 upsert（按 project_id 设可经营面积，幂等）。",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "operating_area_sqm"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体（项目）id。",
+            "maxLength": 64
+          },
+          "operating_area_sqm": {
+            "type": "number",
+            "description": "可经营面积(㎡)，必须 > 0。",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "description": "配置状态，缺省 active。",
+            "enum": [
+              "active",
+              "inactive"
+            ]
           }
         }
       }

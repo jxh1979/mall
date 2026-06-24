@@ -177,6 +177,33 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public List<AmusementProjectDeviceRegistryBacklogRecord> listProjectsMissingDeviceRegistry(Optional<String> merchantScope) {
+        // T3.3：无任何在役设备档案的项目（与 evaluateOpenEligibility 强制建档判定的 noneMatch(active) 同口径）。
+        String base = """
+                SELECT id, project_name, open_status, merchant_id
+                  FROM amusement_projects p
+                 WHERE NOT EXISTS (SELECT 1 FROM amusement_devices d
+                                    WHERE d.project_id = p.id AND d.status = 'active')
+                """;
+        if (merchantScope.isEmpty()) {
+            return jdbcTemplate.query(base + " ORDER BY created_at DESC, id", (rs, n) ->
+                    new AmusementProjectDeviceRegistryBacklogRecord(
+                            rs.getString("id"),
+                            rs.getString("project_name"),
+                            rs.getString("open_status"),
+                            rs.getString("merchant_id")));
+        }
+        return jdbcTemplate.query(
+                base + " AND merchant_id = :merchant_id ORDER BY created_at DESC, id",
+                Map.of("merchant_id", merchantScope.get()),
+                (rs, n) -> new AmusementProjectDeviceRegistryBacklogRecord(
+                        rs.getString("id"),
+                        rs.getString("project_name"),
+                        rs.getString("open_status"),
+                        rs.getString("merchant_id")));
+    }
+
+    @Override
     public List<String> listProjectEntitlementTypes(String projectId) {
         return jdbcTemplate.queryForList("""
                 SELECT entitlement_type

@@ -67,6 +67,12 @@ public class AmusementController {
         return ApiResponse.ok(service.listProjectsWithoutSpace());
     }
 
+    @GetMapping("/projects/without-device-registry")
+    public ApiResponse<PageResponse<AmusementProjectDeviceRegistryBacklogRecord>> listProjectsMissingDeviceRegistry() {
+        authorizationService.requirePermission("amusement.session.manage");
+        return ApiResponse.ok(service.listProjectsMissingDeviceRegistry());
+    }
+
     @PutMapping("/projects/{id}/space")
     public ApiResponse<AmusementProjectSpaceAssignmentRecord> assignProjectSpace(
             @PathVariable String id,

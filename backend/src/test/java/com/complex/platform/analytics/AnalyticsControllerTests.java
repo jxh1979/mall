@@ -67,9 +67,16 @@ class AnalyticsControllerTests {
     @Autowired
     private AuthorizationService authorizationService;
 
+    @Autowired
+    private OperatingParamsService operatingParamsService;
+
     @BeforeEach
     void resetMocks() {
-        Mockito.reset(service, authorizationService);
+        Mockito.reset(service, authorizationService, operatingParamsService);
+        when(service.trafficHourly(any(), any())).thenReturn(
+                new AnalyticsRecords.HourlyTrafficResponse(LocalDate.parse("2026-06-14"), List.of()));
+        when(operatingParamsService.listOperatingParams()).thenReturn(new PageResponse<>(List.of(operatingParams()), 1, 50, 1));
+        when(operatingParamsService.upsertOperatingParams(any(OperatingParamsRequest.class))).thenReturn(operatingParams());
         when(service.listAiQualityResults()).thenReturn(new PageResponse<>(List.of(aiQualityResult()), 1, 50, 1));
         when(service.listAiQualityTasks()).thenReturn(new PageResponse<>(List.of(aiQualityTask()), 1, 50, 1));
         when(service.generateLocalLlmAiQualitySuggestion(any(AiQualitySuggestionRequest.class))).thenReturn(aiQualitySuggestion());
@@ -100,6 +107,9 @@ class AnalyticsControllerTests {
             "GET,/api/v1/analytics/customer-intents,analytics.risk_alert.view",
             "GET,/api/v1/analytics/dashboards/p0-overview,analytics.dashboard.view",
             "GET,/api/v1/analytics/dashboards/bar,analytics.dashboard.view",
+            "GET,/api/v1/analytics/traffic-hourly,analytics.dashboard.view",
+            "GET,/api/v1/analytics/operating-params,analytics.dashboard.view",
+            "POST,/api/v1/analytics/operating-params,analytics.operating_params.manage",
             "GET,/api/v1/analytics/group-overview,analytics.group.view",
             "GET,/api/v1/analytics/business-metric-snapshots,analytics.dashboard.view",
             "GET,/api/v1/analytics/merchant-health,analytics.dashboard.view",
@@ -134,7 +144,8 @@ class AnalyticsControllerTests {
     @CsvSource({
             "/api/v1/analytics/risk-alerts",
             "/api/v1/analytics/risk-alerts/alert_1/resolve",
-            "/api/v1/analytics/ai-quality/local-llm-suggestions"
+            "/api/v1/analytics/ai-quality/local-llm-suggestions",
+            "/api/v1/analytics/operating-params"
     })
     void writeRoutesRejectMissingIdempotencyKey(String path) throws Exception {
         mockMvc.perform(post(path)
@@ -150,6 +161,9 @@ class AnalyticsControllerTests {
         String idempotency = withIdempotencyKey ? "\"idempotency_key\":\"analytics-once\"," : "";
         if (path.contains("/local-llm-suggestions")) {
             return "{" + idempotency + "\"source_type\":\"ticket_call\",\"source_id\":\"call_160\",\"source_text\":\"guest asks for refund after failed service\",\"requested_by\":\"staff_1\"}";
+        }
+        if (path.endsWith("/operating-params")) {
+            return "{" + idempotency + "\"project_id\":\"project_1\",\"operating_area_sqm\":1000}";
         }
         if (path.endsWith("/resolve")) {
             return "{" + idempotency + "\"action\":\"resolved\",\"reason\":\"handled by operator\",\"evidence_attachment_ids\":[\"att_1\"]}";
@@ -283,6 +297,11 @@ class AnalyticsControllerTests {
         return new StaffServiceScoreRecord("score_1", "staff_1", "Alex", "frontdesk", 95, 0, 12, "normal", LocalDate.parse("2026-06-14"), now());
     }
 
+    private OperatingParamsRecord operatingParams() {
+        Instant now = now();
+        return new OperatingParamsRecord("project_1", new BigDecimal("1000.00"), "active", now, now);
+    }
+
     private Instant now() {
         return Instant.parse("2026-06-14T00:00:00Z");
     }
@@ -292,6 +311,11 @@ class AnalyticsControllerTests {
         @Bean
         AnalyticsService analyticsService() {
             return Mockito.mock(AnalyticsService.class);
+        }
+
+        @Bean
+        OperatingParamsService operatingParamsService() {
+            return Mockito.mock(OperatingParamsService.class);
         }
 
         @Bean

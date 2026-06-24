@@ -98,6 +98,17 @@ public interface AnalyticsRepository {
     /** ETL upsert 一个指标快照（按 V070 唯一键幂等）。 */
     void upsertMetricSnapshot(MetricSnapshotKey key, BigDecimal actualValue, String projectionMethod, Instant createdAt);
 
+    // T4.2 坪效：综合体经营参数（complex_operating_params，V160）——可经营面积主数据，坪效 revenue.per_sqm 据此派生。
+
+    /** 读某综合体经营参数（含可经营面积）；无配置返回 empty（坪效该日诚实空缺）。 */
+    Optional<OperatingParamsRecord> findOperatingParams(String projectId);
+
+    /** 列出全部综合体经营参数（后台配置页）。 */
+    List<OperatingParamsRecord> listOperatingParams();
+
+    /** 按 project_id upsert 经营参数（ON CONFLICT DO UPDATE 幂等）。 */
+    OperatingParamsRecord upsertOperatingParams(OperatingParamsRecord record);
+
     // ETL 聚合源（从真实业务表读取，按 segment 维度返回 segmentId -> 聚合值；segmentId=null 行表示平台口径）。
 
     /** Σ ticket_orders.amount_cent（pay_status='paid'）——售票收入；ticket_orders 无 merchant_id，仅平台口径。 */
@@ -155,6 +166,14 @@ public interface AnalyticsRepository {
 
     /** count ticket_verifications(status='success')——核销数；返回 merchantId(可 null) -> 计数。 */
     Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate);
+
+    /**
+     * T4.3 分时段客流：成功核销按经营日窗口内 created_at 的小时（0~23）分桶计数。
+     * 平台口径（scope 空）合并 ticket_verifications + amusement_verifications；
+     * 商户口径仅本商户 ticket_verifications（amusement_verifications 无 merchant_id，不并入）。
+     * 返回 hour(0~23) -> 计数（稀疏，缺的小时由上层补 0）。
+     */
+    Map<Integer, Long> hourlyTrafficCounts(LocalDate businessDate, Optional<String> merchantScope);
 
     /**
      * 清单#18：券发放数——count issued_entitlements(created_at 落经营日窗口)，作为券核销率分母。

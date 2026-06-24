@@ -67,17 +67,21 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
   const [domainFilter, setDomainFilter] = React.useState("all");
   const [lockNote, setLockNote] = React.useState("总控周会复盘锁定");
   const [formError, setFormError] = React.useState("");
+  // T4.3 分时段客流：traffic-hourly 端点的 24 桶（hour/count）。
+  const [hourly, setHourly] = React.useState<Array<{ hour: number; count: number }>>([]);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [snapshotRows, definitionRows, anomalyRows] = await Promise.all([
+      const [snapshotRows, definitionRows, anomalyRows, hourlyResp] = await Promise.all([
         api.get<BusinessMetricSnapshotRow[]>("/api/v1/analytics/business-metric-snapshots"),
         api.get<MetricDefinitionRow[]>("/api/v1/analytics/metric-definitions"),
         api.get<MetricAnomalyRow[]>("/api/v1/analytics/metric-anomalies"),
+        api.get<{ businessDate?: string; buckets?: Array<{ hour: number; count: number }> }>("/api/v1/analytics/traffic-hourly"),
       ]);
       setSnapshots(snapshotRows);
       setDefinitions(definitionRows);
       setAnomalies(anomalyRows);
+      setHourly(hourlyResp?.buckets ?? []);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -109,6 +113,24 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
       };
     });
   }, [filteredSnapshots]);
+
+  // T4.2/T4.3 三图派生：取最新经营日的平台口径指标值（不受业务域筛选影响，恒为管理层视图）。
+  function latestPlatformMetric(metricKey: string): number | null {
+    const rows = snapshots.filter((row) => row.metricKey === metricKey && (!row.segmentType || row.segmentType === "platform"));
+    if (rows.length === 0) return null;
+    const latest = [...rows].sort((a, b) => String(b.businessDate ?? "").localeCompare(String(a.businessDate ?? "")))[0];
+    return latest?.actualValue == null ? null : numberValue(latest.actualValue);
+  }
+  const perSqmCent = latestPlatformMetric("revenue.per_sqm"); // 坪效（分/㎡）
+  const barRevenue = latestPlatformMetric("revenue.bar") ?? 0;
+  const ticketRevenue = latestPlatformMetric("revenue.ticket") ?? 0;
+  const categoryTotal = barRevenue + ticketRevenue;
+  const barShare = categoryTotal > 0 ? (barRevenue / categoryTotal) * 100 : 0;
+  const ticketShare = categoryTotal > 0 ? (ticketRevenue / categoryTotal) * 100 : 0;
+  const peakBucket = hourly.reduce<{ hour: number; count: number } | null>(
+    (best, b) => (best == null || numberValue(b.count) > numberValue(best.count) ? b : best),
+    null,
+  );
 
   function lockSnapshot() {
     if (!lockNote.trim()) {
@@ -165,6 +187,32 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
                 ))}
               </div>
             ) : null}
+
+            <div className="admin-chart-panel" data-testid="business-analytics-pingxiao">
+              <div className="admin-chart-block" data-testid="business-analytics-per-sqm">
+                <span>坪效（净收入 / 可经营面积）</span>
+                <strong data-testid="business-analytics-per-sqm-value">
+                  {perSqmCent == null ? "未配置面积" : `${formatNumber(perSqmCent / 100)} 元/㎡`}
+                </strong>
+                <small className="admin-muted-action">面积在「经营参数」页维护；未配置时此处显示未配置、不伪造。</small>
+              </div>
+              <div className="admin-chart-block" data-testid="business-analytics-category-share">
+                <span>品类占比（酒吧 vs 票务实收）</span>
+                <MiniBars values={[barRevenue, ticketRevenue]} width={90} height={36} testid="business-analytics-category-bars" ariaLabel="酒吧与票务收入占比" />
+                <small className="admin-muted-action">
+                  {categoryTotal > 0 ? `酒吧 ${barShare.toFixed(1)}% · 票务 ${ticketShare.toFixed(1)}%` : "暂无收入数据"}
+                </small>
+              </div>
+              <div className="admin-chart-block" data-testid="business-analytics-hourly">
+                <span>分时段客流（24 小时核销分布）</span>
+                <MiniBars values={hourly.map((bucket) => numberValue(bucket.count))} width={240} height={36} testid="business-analytics-hourly-bars" ariaLabel="分时段客流分布" />
+                <small className="admin-muted-action">
+                  {peakBucket && numberValue(peakBucket.count) > 0
+                    ? `高峰时段 ${String(peakBucket.hour).padStart(2, "0")}:00（${formatNumber(peakBucket.count)} 人次）`
+                    : "暂无客流数据"}
+                </small>
+              </div>
+            </div>
 
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="business-analytics-table">
