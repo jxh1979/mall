@@ -30,6 +30,7 @@
 | `evidence-risk-control-product-prd-v0.1.md` | 证据留痕与风控 PRD | 现行 |
 | `terminal-page-product-prd-v0.1.md` / `web-mobile-app-terminal-extension-product-prd-v0.1.md` | 终端页面 / Web-App-终端扩展 PRD | 现行 |
 | `operation-traceability-and-terminal-switch-prd-v0.1.md` | 操作留痕与终端开关 PRD | 现行 |
+| `real-estate-full-chain-domain-prd-v0.1.md` | 地产全链域 PRD（招商/租赁全周期/物业工单/楼宇设备/能耗/楼宇巡检）授权基线（2026-06-24 业务 HTML 扩授权后补） | 现行 |
 | `original-requirements-capture-v0.1.md` | 原始需求采集 | 部分过期（早期采集，以各域 PRD 为准） |
 
 ## 2. 需求矩阵 / 追溯
@@ -52,6 +53,7 @@
 | `frontend-admin-development-design.md` | 前端管理端开发设计 | 现行 |
 | `android-device-terminal-development-design.md` | Android 终端开发设计 | 现行 |
 | `customer-app-miniapp-development-design-v0.1.md` | 客户 App/小程序开发设计 | 现行 |
+| `member-loyalty-and-stored-value-development-design-v0.1.md` | 会员忠诚度/积分两本账/储值/付费会员订阅/签到/生日 开发设计（2026-06-24 据现有实现 V025/V060/V089/V090/V100 回填） | 现行 |
 | `ticketing-pass-entitlement-development-design.md` | 票务-通票-权益开发设计 | 现行 |
 | `bar-operations-development-design.md` | 酒吧运营开发设计 | 现行 |
 | `amusement-operations-development-design.md` | 游乐运营开发设计 | 现行 |
