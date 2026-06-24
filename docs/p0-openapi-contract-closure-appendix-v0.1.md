@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 429 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 430 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 254 | 人工权限矩阵正文未覆盖 150 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 858 | 人工事件矩阵正文未覆盖 816 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 429 | 人工任务映射正文未逐项覆盖 423 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 262 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 860 | 人工事件矩阵正文未覆盖 818 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 430 | 人工任务映射正文未逐项覆盖 424 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 263 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -145,7 +145,7 @@
 | `evidence.event.view` | staff-token | project-object | 1 | listEvidenceEvents | 已在权限矩阵正文出现 |
 | `evidence.review.create` | staff-token | project-object | 1 | createEvidenceReview | 已在权限矩阵正文出现 |
 | `evidence.timeline.view` | staff-token | project-object | 2 | getEvidenceTimeline, getTraceabilityAutoCaptureRate | 已在权限矩阵正文出现 |
-| `finance.ar_ap.manage` | staff-token | project-entity | 1 | createArApItem | 已在权限矩阵正文出现 |
+| `finance.ar_ap.manage` | staff-token | platform, project-entity | 2 | createArApItem, billContractRent | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | project-entity | 2 | listArApItems, exportArApItems | 已在权限矩阵正文出现 |
 | `finance.cam.allocate` | staff-token | platform | 1 | allocateCam | OpenAPI 补充，以本附录为准 |
 | `finance.cam.trueup` | staff-token | platform | 1 | trueUpCam | OpenAPI 补充，以本附录为准 |
@@ -702,6 +702,8 @@
 | `finance_ar_ap.exported` | success | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.view_failed` | failure | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.viewed` | success | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `finance_contract_rent.bill_failed` | failure | `billContractRent` | `POST` | `/api/v1/finance/contract-rent/bills` | FIN-财务台账 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `finance_contract_rent.billed` | success | `billContractRent` | `POST` | `/api/v1/finance/contract-rent/bills` | FIN-财务台账 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
 | `finance_daily_close.lock_failed` | failure | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
 | `finance_daily_close.locked` | success | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.lock` | 已在事件矩阵正文出现 |
 | `finance_payment.register_failed` | failure | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
@@ -1363,6 +1365,7 @@
 | EVD-事件证据 | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | 转交风险预警 | `risk_alert.transfer` | `exception.transferred` / `exception.transfer_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `allocateCam` | `POST` | `/api/v1/finance/cam/allocations` | （已废止）CAM 权重分摊 → 改用物业费固定计费；调用返回 409 CAM_ALLOCATION_ABOLISHED | `finance.cam.allocate` | `finance.cam.allocated` / `finance.cam.allocate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | 锁定后补录审批决定 | `finance.locked_backfill.approve` | `finance.locked_backfill_approved` / `finance.locked_backfill_decision_failed` | web, mobile_admin | operation 级补充 |
+| FIN-财务台账 | `billContractRent` | `POST` | `/api/v1/finance/contract-rent/bills` | 合同租金按期计费（rent_terms.baseRentCent → 合同应收） | `finance.ar_ap.manage` | `finance_contract_rent.billed` / `finance_contract_rent.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `finance.property_fee.manage` | `finance_property_fee.billed` / `finance_property_fee.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | 现金或 POS 线下收款确认 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |

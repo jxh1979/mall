@@ -11,6 +11,7 @@ import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.CamAllocationRequest;
+import com.complex.platform.finance.dto.ContractRentBillRequest;
 import com.complex.platform.finance.dto.CamTrueUpRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
@@ -82,6 +83,9 @@ public class FinanceService {
     RefundAuthorizationService refundAuthorizationService;
     @org.springframework.beans.factory.annotation.Value("${refund.tiered_authorization.enabled:false}")
     boolean tieredRefundEnabled;
+    // ② 履约闭环 S2：合同租金计费开关，默认关→billContractRent 拒（关时不自动起租金应收，现状不变）。
+    @org.springframework.beans.factory.annotation.Value("${contract.rent_billing.enabled:false}")
+    boolean contractRentBillingEnabled;
 
     @org.springframework.beans.factory.annotation.Autowired
     public FinanceService(
@@ -1538,6 +1542,75 @@ public class FinanceService {
                     merchantId,
                     area,
                     rateCent,
+                    amountCent,
+                    item.id(),
+                    now));
+            result.add(bill);
+        }
+        return result;
+    }
+
+    /**
+     * ② 履约闭环 S2：合同租金按期计费——对指定 contractIds 按 rent_terms.baseRentCent 起当期租金应收
+     *（source_type='contract'，source_id=合同 id）。仅 effective 合同 + 有 baseRentCent 入账；(合同,期) 已计过则跳过（幂等）。
+     * 功能标志 contract.rent_billing.enabled 默认关。镜像 {@link #billPropertyFee}，金额安全交 persistDerivedArApItem（含日结锁）。
+     */
+    public List<ContractRentBillRecord> billContractRent(ContractRentBillRequest request) {
+        @SuppressWarnings("unchecked")
+        List<ContractRentBillRecord> result = executeWrite(
+                "billContractRent",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                (Class<List<ContractRentBillRecord>>) (Class<?>) List.class,
+                "finance_contract_rent.billed",
+                "finance_contract_rent.bill_failed",
+                "finance.ar_ap.manage",
+                "contract_rent_bill",
+                () -> billContractRentInternal(request));
+        return result;
+    }
+
+    private List<ContractRentBillRecord> billContractRentInternal(ContractRentBillRequest request) {
+        if (!contractRentBillingEnabled) {
+            throw ApiException.conflict("CONTRACT_RENT_BILLING_DISABLED", "contract rent billing is disabled");
+        }
+        ContractRentBillRequest actual = requireRequest(request);
+        String period = requireText(actual.period(), "period");
+        List<String> contractIds = actual.contractIds();
+        if (contractIds == null || contractIds.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "contract_ids is required");
+        }
+        Instant now = Instant.now();
+        List<ContractRentBillRecord> result = new java.util.ArrayList<>();
+        for (String rawContractId : contractIds) {
+            String contractId = requireText(rawContractId, "contract_id");
+            ContractRentContext ctx = repository.findContractRentContext(contractId).orElse(null);
+            if (ctx == null || !"effective".equals(ctx.lifecycleStatus())) {
+                continue;   // 合同不存在或未生效 → 不起租金。
+            }
+            if (ctx.baseRentCent() == null || ctx.baseRentCent() <= 0) {
+                continue;   // 无 rent_terms.baseRentCent（不猜单位）或非正 → 跳过。
+            }
+            checkMerchantOwnership(ctx.merchantId());
+            if (repository.contractRentBillExists(contractId, period)) {
+                continue;   // 该 (合同,期) 已计过 → 幂等跳过、不重复挂账。
+            }
+            long amountCent = ctx.baseRentCent();
+            String naturalKey = contractId + "|" + period;
+            ArApItemRecord item = persistDerivedArApItem(
+                    "receivable",
+                    ctx.merchantId(),
+                    "contract",
+                    contractId,
+                    amountCent,
+                    stableToken("contract_rent", naturalKey),
+                    ctx.merchantId());
+            ContractRentBillRecord bill = repository.saveContractRentBill(new ContractRentBillRecord(
+                    "crb_" + stableToken("contract_rent_bill", naturalKey),
+                    contractId,
+                    ctx.merchantId(),
+                    null,                 // project_id 预留（contracts 无 project_id 列；Phase④ 收口）
+                    period,
                     amountCent,
                     item.id(),
                     now));

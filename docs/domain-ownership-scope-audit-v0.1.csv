@@ -75,6 +75,7 @@ complex_operating_params,direct,project_id,project_id column on complex_operatin
 compliance_expiry_items,direct,merchant_id,merchant_id column on compliance_expiry_items,ready for project/merchant scoped query enforcement,covered
 compliance_reminders,direct,merchant_id,merchant_id column on compliance_reminders,ready for project/merchant scoped query enforcement,covered
 contract_key_dates,direct,merchant_id,merchant_id column on contract_key_dates,ready for project/merchant scoped query enforcement,covered
+contract_rent_bills,direct,project_id,project_id column on contract_rent_bills,ready for project/merchant scoped query enforcement,covered
 contract_spaces,direct,project_id,project_id column on contract_spaces,ready for project/merchant scoped query enforcement,covered
 contracts,direct,merchant_id,merchant_id column on contracts,ready for project/merchant scoped query enforcement,covered
 customer_birthday_rules,direct,project_id,project_id column on customer_birthday_rules,ready for project/merchant scoped query enforcement,covered

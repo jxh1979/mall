@@ -18,6 +18,7 @@ import com.complex.platform.finance.dto.TurnoverRentBillRequest;
 import java.util.List;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.ContractRentBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
@@ -208,5 +209,12 @@ public class FinanceController {
         authorizationService.requirePermission("finance.property_fee.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.billPropertyFee(request));
+    }
+
+    @PostMapping("/contract-rent/bills")
+    public ApiResponse<List<ContractRentBillRecord>> billContractRent(@RequestBody ContractRentBillRequest request) {
+        authorizationService.requirePermission("finance.ar_ap.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.billContractRent(request));
     }
 }

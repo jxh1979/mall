@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V161**，发现 **105** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V162**，发现 **106** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_users` | `merchant_id` + `organization_id` | direct | V003 | `V003__p0_access_permission_authz_slice.sql` |
@@ -107,6 +107,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `compliance_expiry_items` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
 | `compliance_reminders` | `merchant_id` | direct | V051 | `V051__compliance_security_fixes.sql` |
 | `contract_key_dates` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
+| `contract_rent_bills` | `merchant_id` + `project_id` | direct | V162 | `V162__contract_rent_bills.sql` |
 | `contract_spaces` | `project_id` + `space_id` | direct | V080, V161 | `V080__contract_scope_and_spaces.sql`<br>`V161__contract_effective_and_space_binding.sql` |
 | `contracts` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
 | `customer_birthday_rules` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |

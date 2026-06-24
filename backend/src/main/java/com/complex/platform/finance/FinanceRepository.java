@@ -135,6 +135,23 @@ public interface FinanceRepository {
         return bill;
     }
 
+    // ② 履约闭环 S2：合同租金计费（contract_rent_bills，V162）。default 兼容既有测试双子；JdbcFinanceRepository 覆盖真实读写。
+
+    /** 只读跨域取合同租金计费上下文（merchantId/lifecycle/baseRentCent）；无合同/无 baseRentCent 返回 empty/null。 */
+    default Optional<ContractRentContext> findContractRentContext(String contractId) {
+        return Optional.empty();
+    }
+
+    /** 某 (合同,期) 是否已计过租金（幂等跳过依据）。 */
+    default boolean contractRentBillExists(String contractId, String period) {
+        return false;
+    }
+
+    /** 写一条合同租金计费留痕（ON CONFLICT(contract_id,period) DO NOTHING 幂等）。 */
+    default ContractRentBillRecord saveContractRentBill(ContractRentBillRecord bill) {
+        return bill;
+    }
+
     ArApItemRecord saveArApItem(ArApItemRecord item);
 
     ArApItemSourceRecord saveArApItemSource(ArApItemSourceRecord source);

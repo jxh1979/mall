@@ -20982,6 +20982,45 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/finance/contract-rent/bills": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "billContractRent",
+        "summary": "合同租金按期计费（rent_terms.baseRentCent → 合同应收）",
+        "description": "② 履约闭环 S2：对指定 contract_ids 按 rent_terms.baseRentCent 起当期租金应收（source_type=contract），仅 effective 合同入账、(合同,期) 幂等。功能标志 contract.rent_billing.enabled 默认关。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.ar_ap.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance_contract_rent.billed",
+        "x-audit-event-failure": "finance_contract_rent.bill_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractRentBillRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -23011,6 +23050,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ContractActivateRequest"
+            }
+          }
+        }
+      },
+      "ContractRentBillRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractRentBillRequest"
             }
           }
         }
@@ -31633,6 +31682,49 @@
           "space_ids": {
             "type": "array",
             "description": "该合同租赁的空间 id 列表（非空）。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "ContractRentBillRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractRentBillRequest（② 履约闭环 S2 合同租金按期计费）；对 contract_ids 按 rent_terms.baseRentCent 起当期租金应收，仅 effective 合同入账、(合同,期) 幂等。",
+        "additionalProperties": false,
+        "required": [
+          "period",
+          "contract_ids"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；避免重复计费/重复入账。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作留痕备注；进入审计。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表；进入审计留痕。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "period": {
+            "type": "string",
+            "description": "计费期（如 2026-06）。",
+            "maxLength": 32
+          },
+          "contract_ids": {
+            "type": "array",
+            "description": "待计费的合同 ID 列表（运营显式提供；仅 effective 合同入账）。",
             "items": {
               "type": "string",
               "maxLength": 64

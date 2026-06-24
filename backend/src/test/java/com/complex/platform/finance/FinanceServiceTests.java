@@ -21,6 +21,7 @@ import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.ContractRentBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
@@ -1422,6 +1423,50 @@ class FinanceServiceTests {
     }
 
     @Test
+    void contractRentBilledFromBaseRentCentGatedByFlag() {
+        // ② 履约闭环 S2：生效合同按 rent_terms.baseRentCent 起租金应收（source_type='contract'）；功能标志门控。
+        service.contractRentBillingEnabled = true;
+        financeRepository.seedContractRent("ctr_rent_1", "merchant_1", "effective", 1_500_000L); // 15000 元/月
+
+        List<ContractRentBillRecord> bills = service.billContractRent(new ContractRentBillRequest(
+                "cr-bill-1", "note", List.of(), "2026-06", List.of("ctr_rent_1")));
+
+        assertThat(bills).hasSize(1);
+        ContractRentBillRecord bill = bills.get(0);
+        assertThat(bill.amountCent()).isEqualTo(1_500_000L);
+        assertThat(bill.arApItemId()).isNotNull();
+        ArApItemRecord ar = financeRepository.findArApItemById(bill.arApItemId()).orElseThrow();
+        assertThat(ar.direction()).isEqualTo("receivable");
+        assertThat(ar.sourceType()).isEqualTo("contract");
+        assertThat(ar.sourceId()).isEqualTo("ctr_rent_1");
+        assertThat(ar.counterpartyId()).isEqualTo("merchant_1");
+
+        // 关标志 → 拒。
+        service.contractRentBillingEnabled = false;
+        assertThatThrownBy(() -> service.billContractRent(new ContractRentBillRequest(
+                "cr-bill-x", "note", List.of(), "2026-06", List.of("ctr_rent_1"))))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CONTRACT_RENT_BILLING_DISABLED");
+    }
+
+    @Test
+    void contractRentSkipsNonEffectiveNoRentAndIsIdempotent() {
+        service.contractRentBillingEnabled = true;
+        financeRepository.seedContractRent("ctr_eff", "merchant_1", "effective", 1_000_000L);
+        financeRepository.seedContractRent("ctr_appr", "merchant_1", "approved", 1_000_000L);  // 未生效
+        financeRepository.seedContractRent("ctr_norent", "merchant_1", "effective", null);     // 无 baseRentCent
+
+        List<ContractRentBillRecord> bills = service.billContractRent(new ContractRentBillRequest(
+                "cr-bill-2", "note", List.of(), "2026-06", List.of("ctr_eff", "ctr_appr", "ctr_norent")));
+        assertThat(bills).extracting(ContractRentBillRecord::contractId).containsExactly("ctr_eff");
+
+        // 同 (合同,期) 再计 → 幂等跳过、不二次挂账。
+        List<ContractRentBillRecord> again = service.billContractRent(new ContractRentBillRequest(
+                "cr-bill-2b", "note", List.of(), "2026-06", List.of("ctr_eff")));
+        assertThat(again).isEmpty();
+        assertThat(financeRepository.contractRentBillCount()).isEqualTo(1);
+    }
+
+    @Test
     void propertyFeeRejectsWhenNoActiveRateConfigured() {
         financeRepository.seedMerchantArea("merchant_1", new java.math.BigDecimal("80.00"));
         assertThatThrownBy(() -> service.billPropertyFee(new PropertyFeeBillRequest(
@@ -2003,6 +2048,37 @@ class FinanceServiceTests {
 
         int propertyFeeBillCount() {
             return propertyFeeBills.size();
+        }
+
+        // ② 履约闭环 S2：合同租金计费内存桩。
+        private final List<ContractRentBillRecord> contractRentBills = new java.util.ArrayList<>();
+        private final Map<String, ContractRentContext> contractRentContexts = new LinkedHashMap<>();
+
+        @Override
+        public Optional<ContractRentContext> findContractRentContext(String contractId) {
+            return Optional.ofNullable(contractRentContexts.get(contractId));
+        }
+
+        @Override
+        public boolean contractRentBillExists(String contractId, String period) {
+            return contractRentBills.stream().anyMatch(b ->
+                    b.contractId().equals(contractId) && b.period().equals(period));
+        }
+
+        @Override
+        public ContractRentBillRecord saveContractRentBill(ContractRentBillRecord bill) {
+            if (!contractRentBillExists(bill.contractId(), bill.period())) {
+                contractRentBills.add(bill);
+            }
+            return bill;
+        }
+
+        void seedContractRent(String contractId, String merchantId, String lifecycleStatus, Long baseRentCent) {
+            contractRentContexts.put(contractId, new ContractRentContext(merchantId, lifecycleStatus, baseRentCent));
+        }
+
+        int contractRentBillCount() {
+            return contractRentBills.size();
         }
 
         // 测试种子辅助。

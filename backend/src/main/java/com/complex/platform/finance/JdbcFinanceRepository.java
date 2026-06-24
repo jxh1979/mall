@@ -976,6 +976,49 @@ class JdbcFinanceRepository implements FinanceRepository {
         return bill;
     }
 
+    @Override
+    public java.util.Optional<ContractRentContext> findContractRentContext(String contractId) {
+        // ② 履约闭环 S2：只读跨域取合同租金计费上下文（merchant/lifecycle/baseRentCent）。
+        return jdbcTemplate.query("""
+                SELECT merchant_id, lifecycle_status,
+                       NULLIF(rent_terms->>'baseRentCent', '')::bigint AS base_rent_cent
+                  FROM contracts WHERE id = :id
+                """, new MapSqlParameterSource().addValue("id", contractId),
+                (rs, n) -> new ContractRentContext(
+                        rs.getString("merchant_id"),
+                        rs.getString("lifecycle_status"),
+                        (Long) rs.getObject("base_rent_cent"))).stream().findFirst();
+    }
+
+    @Override
+    public boolean contractRentBillExists(String contractId, String period) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM contract_rent_bills WHERE contract_id = :contract_id AND period = :period
+                """, new MapSqlParameterSource()
+                .addValue("contract_id", contractId).addValue("period", period), Long.class);
+        return count != null && count > 0;
+    }
+
+    @Override
+    public ContractRentBillRecord saveContractRentBill(ContractRentBillRecord bill) {
+        jdbcTemplate.update("""
+                INSERT INTO contract_rent_bills (
+                    id, contract_id, merchant_id, project_id, period, amount_cent, ar_ap_item_id, created_at
+                )
+                VALUES (:id, :contract_id, :merchant_id, :project_id, :period, :amount, :ar_ap_item_id, :created_at)
+                ON CONFLICT (contract_id, period) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", bill.id())
+                .addValue("contract_id", bill.contractId())
+                .addValue("merchant_id", bill.merchantId())
+                .addValue("project_id", bill.projectId())
+                .addValue("period", bill.period())
+                .addValue("amount", bill.amountCent())
+                .addValue("ar_ap_item_id", bill.arApItemId())
+                .addValue("created_at", timestampWithTimeZone(bill.createdAt())));
+        return bill;
+    }
+
     private PropertyFeeRateRecord mapPropertyFeeRate(ResultSet rs, int rowNum) throws SQLException {
         return new PropertyFeeRateRecord(
                 rs.getString("id"),
