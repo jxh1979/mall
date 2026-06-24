@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 424 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 420 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -86,7 +86,6 @@
 | auth | `POST` | `/api/v1/auth/login` | `login` | 员工或商户员工登录 | `LoginRequest` | `public` | `public` | `none` | web, merchant_portal, staff_work_phone, tablet, kiosk | 否 | `auth.login.succeeded` | `auth.login.failed` |
 | auth | `POST` | `/api/v1/auth/logout` | `logout` | 退出登录 | `LogoutRequest` | `authenticated` | `staff-token` | `current-session` | web, merchant_portal, staff_work_phone, tablet, kiosk | 否 | `auth.logout` | `auth.logout_failed` |
 | auth | `POST` | `/api/v1/auth/refresh` | `refreshToken` | 刷新会话 | `RefreshTokenRequest` | `authenticated` | `staff-token` | `current-session` | web, merchant_portal, staff_work_phone, tablet, kiosk | 否 | `auth.token.refreshed` | `auth.token_refresh_failed` |
-| bar | `POST` | `/api/v1/bar/age-verifications` | `createBarAgeVerification` | 酒吧年龄和人脸核验 | `VerificationRequest` | `bar.entry.age_verify` | `staff-token` | `project-bar` | staff_work_phone<br>capability: age-verification-device | 是 | `bar.age_verification.passed` | `bar.age_verification.rejected` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | `calculateBarTableCommission` | 卡座销售提成计算 | `CommissionCalculateRequest` | `bar.table_commission.calculate` | `staff-token` | `project-bar` | web | 是 | `bar.table_commission.calculated` | `bar.table_commission.calculate_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | `createBarBillPayIntent` | 酒吧账单支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-bar-table` | tablet, web | 是 | `payment.intent_created` | `payment.intent_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | `settleBarBill` | 账单结清 | `BarBillSettleRequest` | `finance.payment.register` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill.settled` | `bar.bill.settle_failed` |
@@ -311,13 +310,11 @@
 | customer | `GET` | `/api/v1/customer/memberships` | `listCustomerMemberships` | 客人付费会员列表 | `-` | `customer.membership.view` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.memberships_viewed` | `customer.memberships_viewed_failed` |
 | customer | `GET` | `/api/v1/customer/membership-plans` | `listCustomerMembershipPlans` | 付费会员档位列表（客人端公开展示） | `-` | `public` | `public` | `project` | web, miniapp, app | 否 | `customer.membership_plans_viewed` | `customer.membership_plans_viewed_failed` |
 | customer | `GET` | `/api/v1/customer/membership-benefits` | `customerMembershipBenefits` | 客人当前生效会员权益 | `-` | `customer.membership.view` | `customer-token` | `customer` | web, miniapp, app | 否 | `customer.membership_benefits_viewed` | `customer.membership_benefits_viewed_failed` |
-| customer | `POST` | `/api/v1/customer/points/transfers` | `customerPointsTransfer` | 客人积分转赠（风控防套现） | `PointsTransferRequest` | `customer.points.transfer` | `customer-token` | `customer` | web, miniapp, app | 否 | `points.transferred` | `points.transferred_failed` |
 | customer | `GET` | `/api/v1/loyalty/membership-plans` | `listMembershipPlans` | 付费会员档位列表（后台） | `-` | `customer.membership.view` | `staff-token` | `project` | web | 否 | `customer.membership_plans_admin_viewed` | `customer.membership_plans_admin_viewed_failed` |
 | customer | `POST` | `/api/v1/loyalty/membership-plans` | `saveMembershipPlan` | 保存付费会员档位（后台） | `MembershipPlanRequest` | `customer.membership.manage` | `staff-token` | `project` | web | 否 | `membership.plan_saved` | `membership.plan_saved_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | `freezeStoredValueAccount` | 冻结会员储值账户（后台） | `StoredValueFreezeRequest` | `customer.stored_value.freeze` | `staff-token` | `project` | web | 否 | `stored_value.frozen` | `stored_value.frozen_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/unfreeze` | `unfreezeStoredValueAccount` | 解冻会员储值账户（后台） | `StoredValueFreezeRequest` | `customer.stored_value.freeze` | `staff-token` | `project` | web | 否 | `stored_value.unfrozen` | `stored_value.unfrozen_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | `refundStoredValueAccount` | 会员储值退卡/退余额（后台） | `StoredValueRefundRequest` | `customer.stored_value.refund` | `staff-token` | `project` | web | 否 | `stored_value.refund` | `stored_value.refund_failed` |
-| customer | `POST` | `/api/v1/loyalty/points-transfer-limits` | `savePointsTransferLimit` | 保存积分转赠风控配置（后台） | `PointsTransferLimitRequest` | `customer.points.transfer_limit` | `staff-token` | `project` | web | 否 | `points.transfer_limit_saved` | `points.transfer_limit_saved_failed` |
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | `voidBarOrderItem` | 退菜退酒 | `BarOrderItemVoidRequest` | `bar.order_item.void` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.order_item_voided` | `bar.order_item_void_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | `reopenBarBill` | 账单反结 | `BarBillReopenRequest` | `bar.bill.reopen` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill_reopened` | `bar.bill_reopen_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | `addBarBillTip` | 账单加小费 | `BarBillTipRequest` | `bar.bill.tip` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill_tip_added` | `bar.bill_tip_failed` |
@@ -390,7 +387,6 @@
 | inventory | `GET` | `/api/v1/inventory/supplier-settlement-methods` | `listSupplierSettlementMethods` | 查询供应商结算档列表 | `-` | `inventory.supplier.settlement.manage` | `staff-token` | `supplier` | web | 否 | `inventory.supplier_settlement_method.list` | `inventory.supplier_settlement_method.list_failed` |
 | inventory | `POST` | `/api/v1/inventory/supplier-settlement-methods` | `createSupplierSettlementMethod` | 创建/更新供应商结算档 | `object` | `inventory.supplier.settlement.manage` | `staff-token` | `supplier` | web | 是 | `inventory.supplier_settlement_method.create` | `inventory.supplier_settlement_method.create_failed` |
 | inventory | `POST` | `/api/v1/inventory/saved-bottles/{id}/dispute` | `disputeSavedBottle` | 受理存酒争议 | `object` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.saved_bottle.dispute` | `bar.saved_bottle.dispute_failed` |
-| inventory | `POST` | `/api/v1/inventory/saved-bottles/{id}/transfer` | `transferSavedBottle` | 存酒整瓶转赠 | `object` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.saved_bottle.transfer` | `bar.saved_bottle.transfer_failed` |
 | compliance | `GET` | `/api/v1/compliance/contract-key-dates` | `listContractKeyDates` | 查询合同关键日期列表 | `-` | `compliance.contract_key_date.view` | `staff-token` | `-` | web | 否 | `compliance.contract_key_date.list` | `compliance.contract_key_date.list_failed` |
 | compliance | `POST` | `/api/v1/compliance/contract-key-dates` | `createContractKeyDate` | 创建合同关键日期 | `object` | `compliance.contract_key_date.manage` | `staff-token` | `-` | web | 是 | `compliance.contract_key_date.create` | `compliance.contract_key_date.create_failed` |
 | compliance | `GET` | `/api/v1/compliance/expiry-items` | `listComplianceExpiryItems` | 查询合规到期项列表 | `-` | `compliance.expiry_item.view` | `staff-token` | `-` | web | 否 | `compliance.expiry_item.list` | `compliance.expiry_item.list_failed` |
@@ -512,5 +508,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 424 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 420 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

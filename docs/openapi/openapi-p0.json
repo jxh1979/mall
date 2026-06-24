@@ -2524,44 +2524,6 @@
         "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/bar/age-verifications": {
-      "post": {
-        "tags": [
-          "bar"
-        ],
-        "operationId": "createBarAgeVerification",
-        "summary": "酒吧年龄和人脸核验",
-        "x-permission": "bar.entry.age_verify",
-        "x-data-scope": "project-bar",
-        "x-terminal-allowed": [
-          "staff_work_phone"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "bar.age_verification.passed",
-        "x-audit-event-failure": "bar.age_verification.rejected",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/Verification"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "424": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-device-capability": [
-          "age-verification-device"
-        ],
-        "x-auth-context": "staff-token"
-      }
-    },
     "/api/v1/bar/bills/{bill_id}/commissions/calculate": {
       "post": {
         "tags": [
@@ -12332,52 +12294,6 @@
         "x-auth-context": "customer-token"
       }
     },
-    "/api/v1/customer/points/transfers": {
-      "post": {
-        "tags": [
-          "customer"
-        ],
-        "operationId": "customerPointsTransfer",
-        "summary": "客人积分转赠（风控防套现）",
-        "x-permission": "customer.points.transfer",
-        "x-data-scope": "customer",
-        "x-terminal-allowed": [
-          "web",
-          "miniapp",
-          "app"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "points.transferred",
-        "x-audit-event-failure": "points.transferred_failed",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/PointsTransferRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "customer-token"
-      }
-    },
     "/api/v1/loyalty/membership-plans": {
       "post": {
         "tags": [
@@ -12607,44 +12523,6 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/loyalty/points-transfer-limits": {
-      "post": {
-        "tags": [
-          "customer"
-        ],
-        "operationId": "savePointsTransferLimit",
-        "summary": "保存积分转赠风控配置（后台）",
-        "x-permission": "customer.points.transfer_limit",
-        "x-data-scope": "project",
-        "x-terminal-allowed": [
-          "web"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "points.transfer_limit_saved",
-        "x-audit-event-failure": "points.transfer_limit_saved_failed",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/PointsTransferLimitRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -17841,103 +17719,6 @@
                       "type": "string",
                       "maxLength": 64
                     }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/api/v1/inventory/saved-bottles/{id}/transfer": {
-      "post": {
-        "tags": [
-          "inventory"
-        ],
-        "operationId": "transferSavedBottle",
-        "summary": "存酒整瓶转赠",
-        "x-auth-context": "staff-token",
-        "x-permission": "bar.saved_bottle.manage",
-        "x-data-scope": "project-bar-table",
-        "x-terminal-allowed": [
-          "tablet",
-          "web"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "bar.saved_bottle.transfer",
-        "x-audit-event-failure": "bar.saved_bottle.transfer_failed",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "description": "存酒记录 ID。"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "required": [
-                  "idempotency_key"
-                ],
-                "properties": {
-                  "idempotency_key": {
-                    "type": "string",
-                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
-                    "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "to_name_or_nickname": {
-                    "type": "string",
-                    "description": "受赠人姓名/昵称。",
-                    "maxLength": 255
-                  },
-                  "to_phone": {
-                    "type": "string",
-                    "description": "受赠人电话。",
-                    "maxLength": 255
-                  },
-                  "reason": {
-                    "type": "string",
-                    "description": "转赠原因。",
-                    "maxLength": 4000
                   }
                 }
               }
