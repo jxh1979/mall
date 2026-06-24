@@ -8,7 +8,7 @@
 > R5 横幅原标注的"日结锁定补录审批零落地"已在本会话 P0 实现并落库（V069），以下上修；盘点/报损对账、聚合口径财务复核保持开放。
 > - **日结锁定 + 补录审批 + 六源汇总已落地（V069）**：`ar_ap_items` 补 `locked_day_close_id`（指向 `finance_daily_closes`），新建 `ar_ap_adjustments`（`locked_day_close_id` + `approval_status` 三态 `pending/approved/rejected`）——锁定后直接改影响金额被硬拦截，须走补录审批通过后方可补录并留痕；新建日结六源汇总表 `finance_daily_close_sources`（`source_stream` 六源 CHECK + `uq_fdcs_close_source` 唯一键），日结金额来自真实多源流水汇总，不再是空壳。退款联动 `ar_ap` + `revenue.net`（V079/V078 口径）。
 > - **聚合口径**：T7 六源与 `revenue.net`（= 自营售票实付 + 酒吧实收 − 退款，bar 仅取 `bar_bill_settlements` 现场消费实收）口径已定稿、日切可配；通票收入业态拆分另设展示口径 `revenue.ticket_bar_share/ticket_amusement_share`(V078)，不并入 net。
-> - **仍开放**：盘点/报损对账（无 stocktake/variance 表或代码，§"库存差异→独立批次→应收应付"链条未落地）；聚合口径最终值仍待财务复核确认（草案见 `r5-aggregation-metrics-draft-20260618.md`）。
+> - **盘点/报损对账已收口（V108，2026-06-24 复核）**：stocktake/inventory_variance 表 + 服务（createStocktake/recordVariance/reviewVariance）+ 端点 + FinanceService 入账已落地（见 §6D），库存差异→AR/AP 链条贯通。聚合口径最终值仍待财务复核确认（草案见 `r5-aggregation-metrics-draft-20260618.md`）。
 > - **验收口径（已正式）**：锁定日结后直接改影响金额被拒，走上级审批通过后方可补录并留痕；日结金额来自真实多源流水汇总。
 
 文档类型：Implementation  
@@ -165,14 +165,18 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 
 ## 6D. 库存差异→应收应付资金回写（stocktake/variance→AP）
 
-> 修正(2026-06-19 R5业务HTML缺口审计 F5)：本文 R7 横幅已自认"盘点/报损对账无 stocktake/variance 表或代码，库存差异→独立批次→应收应付链条未落地"。代码核验：migration 中 `stocktake` **零命中**；`variance` 仅作为子类型枚举 `stock_variance`（V085 `inventory_high_value_reviews.subject_type` CHECK、V094 注释）和指标字段 `variance_rate`（V037），**无 `CREATE TABLE inventory_variance/stocktake`**；`source_type=inventory_difference` 虽列于 §4.1 枚举，但无生成代码。本节补"库存差异→AR/AP 资金回写"完整链条。
+> ✅ 收口（2026-06-24 复核）：本节链条**已由 V108 完整落地**——`stocktake`（盘点单）/`inventory_variance`（差异明细）两表建表（`V108__inventory_variance_to_ap.sql`），供应链域 `InventoryService.createStocktake`/`recordVariance`/`reviewVariance`（+`listStocktakes`/`getStocktake`）写盘点与差异、域内主管复核，复核通过（`review_status=approved`）后由 `FinanceService` 经 `POST /api/v1/finance/inventory-variances/post`（权限 `finance.inventory_variance.post`）生成 `ar_ap_items`（`source_type=inventory_difference`，`posted_ar_ap_item_id` 幂等防重；盘盈纠账守恒账本同事务补流水）。端点：`GET/POST /api/v1/inventory/stocktakes`、`POST /stocktakes/{id}/variances`、`POST /stocktakes/{id}/variances/{vid}/review`。下方"待落地"措辞均已失效，仅留作历史。
+>
+> 历史（2026-06-19 R5 F5，已失效）：曾自认"盘点/报损对账无 stocktake/variance 表或代码、链条未落地"，当时 `stocktake` 在 migration 零命中。V108 已据本节表设计建议落地。
 
 ### 6D.1 业务问题
 
-- 报损、盘点差异、高价值酒水异常当前**不进财务台账**：缺 stocktake（盘点单）/inventory_variance（差异明细）承载表，`source_type=inventory_difference` 无生成代码，库存差异影响金额无法回写应收应付。
-- 结果：业务HTML #finance 要求的"核对采购入库、库存消耗、报损、盘点差异"在财务侧只能停留在差异提示，无法形成可追款/可付款/可入账的台账项。
+- （✅ V108 已收口）报损、盘点差异、高价值酒水异常经"盘点单→差异明细→主管复核→入账"链进入财务台账：`stocktake`/`inventory_variance` 表已建、`source_type=inventory_difference` 已有生成代码（FinanceService post），库存差异影响金额可回写应收应付。
+- 业务HTML #finance 要求的"核对采购入库、库存消耗、报损、盘点差异"在财务侧已形成可追款/可付款/可入账的台账项（盘亏→AP 应付损失、盘盈→纠账，守恒账本同事务补流水）。
 
-### 6D.2 表设计建议（待落地）
+### 6D.2 表设计（✅ V108 已落地）
+
+> V108 实际落地列（权威）：`stocktake`(stocktake_no/warehouse_id/merchant_id/business_date/status[counting/reviewing/closed])；`inventory_variance`(stocktake_id/item_id/batch_no/book_qty/counted_qty/variance_qty/variance_amount_cent/reason[damage/shortage/overage/supplier_fault]/supplier_id/review_status[pending/approved/rejected]/posted_ar_ap_item_id)。下表为原"建议"草案，留作设计背景。
 
 | 表 | 用途 | 关键字段（建议） |
 |---|---|---|

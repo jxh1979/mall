@@ -21,7 +21,7 @@
 > 上方"零落地/保持开放"横幅为 R7（2026-06-19 早段）只读核验时的快照，部分结论已被随后落地的迁移覆盖，**不再作为验收依据**。本文档口径以 `backend/src/main/resources/db/migration` 实际迁移 + `docs/matrix-migration-claims.json`（2026-06-19）为**单一权威源**：
 > - **V085 已落地（`V085__supply_chain_t6.sql`）**：`supply_contracts` 三模式（platform_self_use/merchant_self_purchase/platform_purchase_distribution）+ approval_status/status + 可采购范围 JSONB 卡控；采购周期完整状态机（created/submitted→approved/rejected→ordered→expected→arrived→received，每步写事件 + 合同范围卡控 + received 生成入库流水）；`warehouses` 六类库房（main/bar/bar_counter/consumable/gift/saved_bottle）+ 余额挂 warehouse_id；库存域内高价值复核表（双证据照片+视频）。
 > - **V094 已落地（`V094__inventory_item_high_value_threshold.sql`）**：物料 `high_value_threshold_cents`（整数分，可空，null=不视高价值），报损/盘点差异判定=数量×单价≥阈值，命中进复核。
-> - **结论**：上方横幅中"供应合同三模式/采购周期/六类库房/高价值复核/高价值阈值仍零命中"的措辞为更早快照，**已被 V085/V094 覆盖；验收以最新 claims 为准**。唯一码主数据 `inventory_trace_codes` 经核验在迁移中**仍零命中**，确属未落地缺口，详见下方新增章节。
+> - **结论**：上方横幅中"供应合同三模式/采购周期/六类库房/高价值复核/高价值阈值仍零命中"的措辞为更早快照，**已被 V085/V094 覆盖；验收以最新 claims 为准**。唯一码主数据 `inventory_trace_codes` **已由 V128 落地**（2026-06-24 复核：`V128__inventory_trace_codes.sql` 建码主数据表，trace_code 唯一 + 状态机 registered→printed→bound→consumed + merchant_id 直接归属 + 码 CRUD 权限点，REQ-39 收口；下方 §13B 表设计建议已实现）。原"零命中/待建"结论失效。
 
 > **本文档为什么新增（定位）：** 依据 finding **supply-1**（HIGH/omission）——供应链是用户原始需求点名的 P0 域、三种供应合同模式被反复列为"已拍板"，但全部文档此前只在产品口径层面用散文描述，没有任何一份开发设计给出供应商表、供应合同表、采购周期表、库房/批次/流水表的字段与状态定义，P0 编码任务清单也无对应任务，处于"有 PRD 无开发设计"状态，开发无法据此编码。本文对标 `bar-operations-development-design.md` 结构，把供应链域落到可编码的数据结构、状态机、流程、API、事件与 P0 编码任务。
 >
@@ -888,9 +888,11 @@ P0 完成时必须能演示：
 > 说明：13A.1 的 FIFO/效期/单位换算与已落地的 `stock_batches`（`expire_at`/`cost_price`）、`items`（`unit`）字段衔接成本最低，建议 P1 优先；对账/应付需与 finance 域桥接，安全库存需补物品级阈值字段。13A.2 的 BOM/退货/评分/预测依赖前序台账与履约数据沉淀，列 P2。**以上均为规划级，本期不实现、不进 P0 验收。**
 
 <!-- 修正(2026-06-19 R5业务HTML缺口审计 F1/F3)：依据 business-system-map-for-operations-v0.1.html #supply 与 matrix-migration-claims.json -->
-## 13B. 平台唯一追溯码主数据（inventory_trace_codes）（F3，待建表，本期缺口）
+## 13B. 平台唯一追溯码主数据（inventory_trace_codes）（F3，✅ 已由 V128 落地）
 
-> 现状核验（2026-06-19）：`inventory_trace_codes` 在 `backend/src/main/resources/db/migration` 全量迁移中**零命中**，`matrix-migration-claims.json` 标记 R4-G1 DRIFT（"矩阵声称 inventory_trace_codes 表，迁移从未建；trace_code 仅为共用列"）。`items.is_traceable` 仅为布尔标记位，平台唯一二维码主数据无独立表、无生成/绑定流程，码—批次—物品三元溯源链未建模。本章给出表设计建议以收口 F3 缺口，待业务确认后进入排期。
+> ✅ 收口（2026-06-24 复核）：`inventory_trace_codes` 已由 `V128__inventory_trace_codes.sql` 建表落地（trace_code 唯一 + 状态机 registered→printed→bound→consumed + merchant_id 直接归属 + 码 CRUD 权限点，REQ-39 收口），下方表设计建议已实现。原 F3 缺口关闭。
+>
+> 历史现状（2026-06-19，已失效，留痕）：`inventory_trace_codes` 当时在全量迁移中**零命中**，`matrix-migration-claims.json` 标记 R4-G1 DRIFT；`items.is_traceable` 仅为布尔标记位，码—批次—物品三元溯源链未建模。本章原为收口 F3 给出表设计建议，V128 已据此落地。
 
 ### 13B.1 业务依据（HTML #supply）
 

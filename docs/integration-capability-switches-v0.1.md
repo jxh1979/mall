@@ -20,7 +20,7 @@
 | aggregate_payment | 聚合支付 | off | no | PRD-PAY-001, PRD-PAY-002, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不读取聚合支付接口，不要求商户号、回调、退款或对账文件；支付仅允许现金、线下 POS 刷卡或人工收款确认，并写入审计留痕。 | 开启后必须补齐商户号、回调验签、退款权限、对账文件、credential_ref、失败补偿和生产证据。 |
 | groupbuy_ticket_channel | 团购/渠道售票 | off | no | PRD-3P-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不接美团/大众点评/抖音等渠道订单、票码、退款和对账接口；仅支持平台自出票和后台手动补录渠道信息。 | 开启后必须补齐渠道 API/SDK、券码核销、订单回流、退款同步、对账口径和生产证据。 |
 | wecom | 企业微信 | off | no | PRD-WECOM-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不读取企业微信通讯录、会话存档、客户联系或回调；员工账号由后台手动录入，质检仅使用平台内数据。 | 开启后必须补齐企业微信应用、通讯录、会话存档、回调、同步任务、告警和 credential_ref。 |
-| bar_face_age | 酒吧人脸/年龄核验 | off | no | PRD-FACE-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不调用第三方人脸/年龄接口；酒吧入场必须走人工证件核验、人工复核和审计留痕，不能宣称已完成自动人脸核验。 | 开启后必须补齐供应商 SDK/API、成功/失败样例、错误码、合规材料、测试账号和 credential_ref。 |
+| face.verification.enabled | 全场入场刷脸闸（满 18 岁核验） | off | no | PRD-FACE-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不调用第三方人脸/年龄接口；全场入场按制度兜底（人工证件核验/人工复核/审计留痕），售酒环节继承入场核验、不逐单验年龄，不能宣称已完成自动人脸核验。 | 开启后必须补齐供应商 SDK/API、成功/失败样例、错误码、合规材料、测试账号和 credential_ref。 |
 | managed_work_devices | 工作手机/平板/一体机 MDM 纳管 | off | no | PRD-MDM-001 | SEC-P0-MDM-DEVICE-001 | 关闭后不允许工作手机、平板、一体机执行高风险核销、出酒、支付相关动作；相关操作只能在受控后台或人工流程内完成。 | 开启后必须补齐 Android Enterprise/商业 MDM 选型、enroll、策略下发、远程锁定/擦除测试和设备绑定证据。 |
 | object_storage | 对象存储/附件证据桶 | off | no | PRD-CRED-OBJ-001 |  | 关闭后不要求 MinIO/S3 等对象存储接口；附件和证据只允许记录外部受控证据编号或手工 evidence_link，不提供平台内文件上传/签名 URL 能力。 | 开启后必须补齐桶、权限、Access Key 引用、上传下载、签名 URL、备份和轮换证据。 |
 | open_platform | 开放平台/第三方应用接入 | off | no | PRD-CRED-OPEN-001, PRD-3P-001, PRD-CRED-3P-001 | SEC-P1-WEBHOOK-REPLAY-001 | 关闭后不开放第三方应用 app_key/app_secret、动态 endpoint、Webhook 入站或供应商主动调用平台；仅保留内部 Adapter/mock。 | 开启后必须补齐开放应用、allowed scopes、签名密钥、nonce、防重放、Webhook 验签和轮换证据。 |
@@ -44,7 +44,9 @@
 3. Given 某能力开关为开启，When 进入生产准入检查，Then 必须要求真实 SDK/API、credential_ref、Webhook/轮询、对账/补偿、失败样例和生产证据。
 4. Given 企业微信关闭，When 创建工作人员，Then 后台手动录入、角色或权限模板分配、审计留痕必须可完成。
 5. Given 工作手机/平板/一体机 MDM 关闭，When 执行高风险核销、出酒或支付动作，Then 移动终端不得放行，必须转后台或人工流程。
-6. Given 酒吧人脸/年龄核验关闭，When 酒吧入场，Then 系统只能记录人工证件核验结果，不能展示自动人脸核验已通过。
+6. Given 全场入场刷脸闸关闭，When 客人入场，Then 系统只能记录人工证件核验结果，不能展示自动人脸核验已通过；售酒环节继承入场核验，不逐单验年龄。
+
+<!-- 2026-06-24 对齐：原 capability_id `bar_face_age`、口径"酒吧人脸/酒吧入场"与业务系统地图 #bar/#thirdparty「门口统一刷脸、全场 18+、售酒继承入场核验」及代码真实键 `face.verification.enabled`（V146，global scope，默认关）冲突，按业务 HTML 最终解释权回归"全场入场刷脸闸"口径并改用真实能力键。注意：`integration-capability-switches-latest.json` 内同名 `bar_face_age` 项需一并对齐（若为生成产物则重生成）。 -->
 
 ## 6. 餐饮 POS 和零售 POS 解释
 
