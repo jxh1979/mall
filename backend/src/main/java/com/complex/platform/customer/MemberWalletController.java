@@ -3,7 +3,6 @@ package com.complex.platform.customer;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.MembershipSubscribeRequest;
-import com.complex.platform.customer.dto.PointsTransferRequest;
 import com.complex.platform.customer.dto.StoredValueConsumeRequest;
 import com.complex.platform.customer.dto.StoredValueSettleRequest;
 import com.complex.platform.customer.dto.StoredValueTopupRequest;
@@ -19,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 会员钱包（客人端 customer-token）：储值充值/入账/消费/查询、付费会员开通/查询、积分转赠（第2部分 V090）。
+ * 会员钱包（客人端 customer-token）：储值充值/入账/消费/查询、付费会员开通/查询。
  * 充值/开通绑 finance 支付意图：先返回支付意图，支付成功后再调入账/生效接口；保证不凭空加余额/开通。
  */
 @RestController
@@ -126,19 +125,8 @@ public class MemberWalletController {
         return ApiResponse.ok(membershipService.activeBenefits(customerId));
     }
 
-    // ---- 积分转赠 ----
-
-    @PostMapping("/points/transfers")
-    public ApiResponse<CustomerPointsTransferRecord> transfer(
-            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
-            @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestBody PointsTransferRequest request
-    ) {
-        String fromCustomerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        return ApiResponse.ok(loyaltyService.transferPoints(fromCustomerId, request.toCustomerId(),
-                request.points() == null ? 0L : request.points(), request.reason(),
-                request.projectId(), request.idempotencyKey()));
-    }
+    // 积分转赠（会员间转移）已下线：HTML 业务口径明确「积分不支持会员间转赠」，端点移除；
+    // V090 customer_points_transfers/limits 表与 repo/record/dto 暂留孤儿，待后续清理迁移统一删。
 
     private String token(String customerToken, String authorization) {
         if (customerToken != null && !customerToken.isBlank()) {

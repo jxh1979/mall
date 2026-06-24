@@ -52,8 +52,8 @@ class CustomerGuardedActionAndRejectionAuditTests {
                 // 积分/权益
                 Arguments.of(LoyaltyService.class, "evaluateLevel", "customer.loyalty.evaluate"),
                 Arguments.of(LoyaltyService.class, "freeze", "customer.points.freeze"),
-                Arguments.of(LoyaltyService.class, "unfreeze", "customer.points.freeze"),
-                Arguments.of(LoyaltyService.class, "savePointsTransferLimit", "customer.points.transfer_limit")
+                Arguments.of(LoyaltyService.class, "unfreeze", "customer.points.freeze")
+                // savePointsTransferLimit 已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
         );
     }
 

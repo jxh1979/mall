@@ -445,36 +445,7 @@ class LoyaltyServiceTests {
                         && ((Number) e.metadata().get("points")).longValue() == 100L);
     }
 
-    /**
-     * P2-2（固化客人端自助口径）：积分转赠为客人端 customer-token 自助（无员工权限闸）。
-     * Service 层 transferPoints 只靠 token 解析出的 fromCustomerId + 业务风控（冻结/余额/日限额/日次数）保护，
-     * 不要求员工权限点 customer.points.transfer（该权限点仅供后台代客转赠）。
-     * 同时断言转赠成功后发 points.transferred 审计留痕（既有口径）。
-     * 此测试锁定：给客人端端点误加 requirePermission 会破坏自助转赠 —— 故 Controller 端不加权限闸。
-     */
-    @Test
-    void transferPointsIsCustomerSelfServiceAndRecordsAudit() {
-        InMemoryLoyaltyRepository repo = seededRepo();
-        repo.saveCustomer(new CustomerRecord("c2", "13900000000", "139****0000", "active", null, T0, T0, T0));
-        // c1 先有余额：earn 100。
-        RecordingAudit recording = new RecordingAudit();
-        AuditEventService audit = new AuditEventService(recording);
-        LoyaltyService service = serviceAt(repo, audit, T0);
-        service.earnPoints("c1", 100, "consume_amount", "o1", "buy", null);
-
-        // 客人自助转赠 60：仅凭 fromCustomerId（token 解析所得），无员工权限闸即可完成。
-        CustomerPointsTransferRecord transfer =
-                service.transferPoints("c1", "c2", 60, "gift", null, "idem-1");
-        assertThat(transfer.status()).isEqualTo("completed");
-        assertThat(repo.points.get("c1").balance()).isEqualTo(40);
-        assertThat(repo.points.get("c2").balance()).isEqualTo(60);
-
-        // 转赠留痕 points.transferred（既有口径）。
-        assertThat(recording.events)
-                .anyMatch(e -> "points.transferred".equals(e.eventName())
-                        && "success".equals(e.eventResult())
-                        && transfer.id().equals(e.businessId()));
-    }
+    // P2-2 积分转赠客人端自助用例已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
 
     // ===================== In-memory repo =====================
 

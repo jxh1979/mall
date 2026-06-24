@@ -30,11 +30,6 @@ public class LoyaltyService {
 
     private static final long BASIS_POINTS_DENOMINATOR = 10_000L;
 
-    // P1 安全兜底默认（仅当项目未配置 points_transfer_limit 时套用，防止无限额批量转赠套现）。
-    // 这是安全封顶默认，非业务最终口径；运营须按积分经济在 points_transfer_limit 表显式配置覆盖。
-    private static final long DEFAULT_DAILY_POINTS_LIMIT = 100_000L;
-    private static final int DEFAULT_DAILY_COUNT_LIMIT = 50;
-
     private final CustomerRepository repository;
     private final AuditEventService auditEventService;
     private final Clock clock;
@@ -542,133 +537,10 @@ public class LoyaltyService {
         return checkIn;
     }
 
-    // ============================================================
-    // 积分转赠（会员间转移，gap-analysis §7A P2）—— from 扣 / to 加 原子 + 风控防套现
-    // ============================================================
-
-    /**
-     * 积分转赠：from 扣 / to 加，单事务原子。风控（防套现）：
-     * <ul>
-     *   <li>双方账户均不可处于 frozen；</li>
-     *   <li>from 余额不足拒；</li>
-     *   <li>日限额：from 今日已转出 + 本次 &gt; daily_points_limit 拒（limit&gt;0 才校验）；</li>
-     *   <li>日次数：from 今日已转出次数 ≥ daily_count_limit 拒（limit&gt;0 才校验）。</li>
-     * </ul>
-     * 事件 points.transferred。idempotencyKey 命中已存在转赠则原样返回。
-     */
-    @Transactional
-    public CustomerPointsTransferRecord transferPoints(String fromCustomerId, String toCustomerId,
-            long points, String reason, String projectId, String idempotencyKey) {
-        if (points <= 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "points must be positive");
-        }
-        if (fromCustomerId == null || fromCustomerId.equals(toCustomerId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "from and to customers must differ");
-        }
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            CustomerPointsTransferRecord existing =
-                    repository.findPointsTransferByIdempotencyKey(idempotencyKey).orElse(null);
-            if (existing != null) {
-                return existing;
-            }
-        }
-        Instant now = now();
-        requireCustomer(fromCustomerId);
-        requireCustomer(toCustomerId);
-
-        // 风控：日限额 / 日次数（按 UTC 自然日窗口）。
-        // P1 安全修复（fail-closed）：此前未配置 limit 即整段跳过风控 → 可批量转赠聚合/套现。
-        // 改为未配置时套用保守安全默认（封顶而非放行）。注意：DEFAULT_* 为安全兜底默认，数值需运营按积分经济核定。
-        CustomerPointsTransferLimitRecord limit = repository.findPointsTransferLimit(projectId)
-                .orElseGet(() -> new CustomerPointsTransferLimitRecord(
-                        "default", projectId,
-                        DEFAULT_DAILY_POINTS_LIMIT, DEFAULT_DAILY_COUNT_LIMIT,
-                        "active", now, now));
-        if (limit != null) {
-            LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
-            Instant dayStart = today.atStartOfDay(ZoneOffset.UTC).toInstant();
-            Instant dayEnd = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-            if (limit.dailyPointsLimit() > 0) {
-                long already = repository.sumPointsTransferredOut(fromCustomerId, dayStart, dayEnd);
-                if (already + points > limit.dailyPointsLimit()) {
-                    throw ApiException.conflict("TRANSFER_DAILY_POINTS_EXCEEDED",
-                            "daily points transfer limit exceeded");
-                }
-            }
-            if (limit.dailyCountLimit() > 0) {
-                int count = repository.countPointsTransfersOut(fromCustomerId, dayStart, dayEnd);
-                if (count >= limit.dailyCountLimit()) {
-                    throw ApiException.conflict("TRANSFER_DAILY_COUNT_EXCEEDED",
-                            "daily points transfer count exceeded");
-                }
-            }
-        }
-
-        // 锁定双方账户（始终按 customerId 升序加锁，避免死锁）。
-        CustomerPointsAccountRecord first;
-        CustomerPointsAccountRecord second;
-        boolean fromIsFirst = fromCustomerId.compareTo(toCustomerId) < 0;
-        if (fromIsFirst) {
-            first = loadOrCreateForUpdate(fromCustomerId, now);
-            second = loadOrCreateForUpdate(toCustomerId, now);
-        } else {
-            first = loadOrCreateForUpdate(toCustomerId, now);
-            second = loadOrCreateForUpdate(fromCustomerId, now);
-        }
-        CustomerPointsAccountRecord from = fromIsFirst ? first : second;
-        CustomerPointsAccountRecord to = fromIsFirst ? second : first;
-
-        if ("frozen".equals(from.accountStatus())) {
-            throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "sender points account is frozen");
-        }
-        if ("frozen".equals(to.accountStatus())) {
-            throw ApiException.conflict("POINTS_ACCOUNT_FROZEN", "receiver points account is frozen");
-        }
-        if (from.balance() < points) {
-            throw ApiException.conflict("POINTS_INSUFFICIENT", "sender points balance is insufficient");
-        }
-
-        long fromAfter = from.balance() - points;
-        long toAfter = to.balance() + points;
-        repository.savePoints(withBalance(from, fromAfter, from.keepThresholdProgress(), now));
-        repository.savePoints(withBalance(to, toAfter, to.keepThresholdProgress(), now));
-
-        String transferId = "transfer_" + UUID.randomUUID().toString().replace("-", "");
-        repository.savePointsLedger(new CustomerPointsLedgerRecord(
-                "ledger_xferout_" + transferId, fromCustomerId, -points, fromAfter,
-                "transfer_out", transferId, "points transferred to " + toCustomerId,
-                null, null, false, now));
-        repository.savePointsLedger(new CustomerPointsLedgerRecord(
-                "ledger_xferin_" + transferId, toCustomerId, points, toAfter,
-                "transfer_in", transferId, "points received from " + fromCustomerId,
-                null, null, false, now));
-        CustomerPointsTransferRecord transfer = repository.savePointsTransfer(new CustomerPointsTransferRecord(
-                transferId, fromCustomerId, toCustomerId, points, "completed", reason, idempotencyKey, now));
-        auditEventService.recordSuccess("points.transferred", "customer.points.transfer",
-                "customer_points_transfer", transferId, null, null,
-                Map.of("from", fromCustomerId, "to", toCustomerId, "points", points));
-        return transfer;
-    }
-
-    /** 配置积分转赠风控（后台，防套现：日限额 / 日次数）。 */
-    @Transactional
-    @GuardedAction(capability = "customer.points.transfer_limit", permission = "customer.points.transfer_limit")
-    public CustomerPointsTransferLimitRecord savePointsTransferLimit(String id, String projectId,
-            long dailyPointsLimit, int dailyCountLimit, String status) {
-        if (dailyPointsLimit < 0 || dailyCountLimit < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "limits must be non-negative");
-        }
-        Instant now = now();
-        String limitId = id == null || id.isBlank()
-                ? "cptl_" + UUID.randomUUID().toString().replace("-", "") : id;
-        CustomerPointsTransferLimitRecord limit = repository.savePointsTransferLimit(
-                new CustomerPointsTransferLimitRecord(limitId, projectId, dailyPointsLimit, dailyCountLimit,
-                        status == null || status.isBlank() ? "active" : status, now, now));
-        auditEventService.recordSuccess("points.transfer_limit_saved", "customer.points.transfer_limit",
-                "customer_points_transfer_limit", limitId, null, null,
-                Map.of("daily_points_limit", dailyPointsLimit, "daily_count_limit", dailyCountLimit));
-        return limit;
-    }
+    // 积分转赠（会员间转移）已下线：HTML 业务口径明确「积分不支持会员间转赠」。
+    // transferPoints / savePointsTransferLimit 服务方法移除；repo 接口的 savePointsTransfer/
+    // findPointsTransferByIdempotencyKey/sumPointsTransferredOut/countPointsTransfersOut/
+    // findPointsTransferLimit/savePointsTransferLimit 与 V090 转赠表暂留孤儿，待后续清理迁移统一删。
 
     // ============================================================
     // 辅助

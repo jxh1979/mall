@@ -248,53 +248,8 @@ class MemberWalletServiceTests {
         assertThat(repo.storedValue.get("c1").status()).isEqualTo("closed");
     }
 
-    // ============================================================
-    // 积分转赠：原子 + 日限额拒 + 不足拒
-    // ============================================================
-
-    @Test
-    void transferMovesPointsAtomically() {
-        InMemoryRepo repo = seeded();
-        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
-        repo.points.put("c1", account("c1", 500));
-        repo.points.put("c2", account("c2", 0));
-        LoyaltyService service = new LoyaltyService(repo, audit(), Clock.fixed(T0, ZoneOffset.UTC));
-
-        CustomerPointsTransferRecord t = service.transferPoints("c1", "c2", 200, "gift", null, "xfer-1");
-        assertThat(t.status()).isEqualTo("completed");
-        assertThat(repo.points.get("c1").balance()).isEqualTo(300);
-        assertThat(repo.points.get("c2").balance()).isEqualTo(200);
-    }
-
-    @Test
-    void transferRejectedWhenInsufficient() {
-        InMemoryRepo repo = seeded();
-        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
-        repo.points.put("c1", account("c1", 100));
-        repo.points.put("c2", account("c2", 0));
-        LoyaltyService service = new LoyaltyService(repo, audit(), Clock.fixed(T0, ZoneOffset.UTC));
-        assertThatThrownBy(() -> service.transferPoints("c1", "c2", 200, "gift", null, "xfer-2"))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("POINTS_INSUFFICIENT"));
-        assertThat(repo.points.get("c1").balance()).isEqualTo(100);
-        assertThat(repo.points.get("c2").balance()).isZero();
-    }
-
-    @Test
-    void transferRejectedWhenDailyPointsLimitExceeded() {
-        InMemoryRepo repo = seeded();
-        repo.saveCustomer(new CustomerRecord("c2", "139", "139", "active", null, T0, T0, T0));
-        repo.points.put("c1", account("c1", 1000));
-        repo.points.put("c2", account("c2", 0));
-        repo.transferLimit = new CustomerPointsTransferLimitRecord(
-                "lim", null, 150, 0, "active", T0, T0);
-        LoyaltyService service = new LoyaltyService(repo, audit(), Clock.fixed(T0, ZoneOffset.UTC));
-        service.transferPoints("c1", "c2", 100, "gift", null, "xfer-3");
-        // 当日累计 100 + 100 = 200 > 150 限额 → 拒
-        assertThatThrownBy(() -> service.transferPoints("c1", "c2", 100, "gift", null, "xfer-4"))
-                .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.code()).isEqualTo("TRANSFER_DAILY_POINTS_EXCEEDED"));
-        assertThat(repo.points.get("c1").balance()).isEqualTo(900);
-    }
+    // 积分转赠用例已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
+    // InMemoryRepo 仍保留转赠 repo 桩方法以实现 CustomerRepository 接口（转赠 repo 方法留孤儿）。
 
     // ============================================================
     // helpers

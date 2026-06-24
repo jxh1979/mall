@@ -4,7 +4,6 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.LoyaltyFreezeRequest;
 import com.complex.platform.customer.dto.MembershipPlanRequest;
-import com.complex.platform.customer.dto.PointsTransferLimitRequest;
 import com.complex.platform.customer.dto.StoredValueFreezeRequest;
 import com.complex.platform.customer.dto.StoredValueRefundRequest;
 import java.time.Instant;
@@ -19,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 会员忠诚度后台管理（staff-token + 权限闸）：等级配置查询、积分账户冻结/解冻、手动等级评估；
- * 第2部分（V090）：付费会员档位管理、储值账户冻结/解冻/退卡、积分转赠风控配置。
+ * 第2部分（V090）：付费会员档位管理、储值账户冻结/解冻/退卡。
  */
 @RestController
 @RequestMapping("/api/v1/loyalty")
@@ -122,16 +121,5 @@ public class LoyaltyController {
                 Boolean.TRUE.equals(request.closeAccount()), request.idempotencyKey()));
     }
 
-    // ---- 第2部分（V090）：积分转赠风控配置 ----
-
-    @PostMapping("/points-transfer-limits")
-    public ApiResponse<CustomerPointsTransferLimitRecord> savePointsTransferLimit(
-            @RequestBody PointsTransferLimitRequest request
-    ) {
-        return ApiResponse.ok(service.savePointsTransferLimit(
-                null, request.projectId(),
-                request.dailyPointsLimit() == null ? 0L : request.dailyPointsLimit(),
-                request.dailyCountLimit() == null ? 0 : request.dailyCountLimit(),
-                request.status()));
-    }
+    // 积分转赠风控配置已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
 }
