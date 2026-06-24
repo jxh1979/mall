@@ -14,8 +14,6 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
-import com.complex.platform.entry.FaceVerificationPort;
-import com.complex.platform.entry.FaceVerificationResult;
 import com.complex.platform.entry.FaceVerificationRouter;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
@@ -75,7 +73,6 @@ class BarServiceTests {
                 new BarTableSessionService(barRepository, authorizationService),
                 barOrderService,
                 entryService,
-                new BarAgeVerificationService(idempotencyService, auditEventService, entryService),
                 authorizationService
         );
     }
@@ -2003,58 +2000,6 @@ class BarServiceTests {
                 .isEqualTo("BAR_BILL_MERGE_BAR_MISMATCH");
     }
 
-    @Test
-    void ageVerificationInheritsEntryGateExemptionAndIgnoresClientSelfReport() {
-        // P0-5 / X-03：客户端自报 result=failed / review_status=manual_review 不再被采信；
-        // 本期人脸闸默认关 → 继承入场闸豁免、非阻塞放行，标注 provider_code=entry_gate_exempt（证据仍留存）。
-        BarAgeVerificationRecord record = service.createAgeVerification(new VerificationRequest(
-                "age-check",
-                "provider_result",
-                "face-session-1",
-                "device_age_1",
-                "bar_1",
-                Map.of("result", "failed", "review_status", "manual_review", "evidence_attachment_ids", List.of("att_1"))
-        ));
-
-        assertThat(record)
-                .extracting(
-                        BarAgeVerificationRecord::result,
-                        BarAgeVerificationRecord::providerCode,
-                        BarAgeVerificationRecord::reviewStatus,
-                        BarAgeVerificationRecord::evidenceAttachmentIds
-                )
-                .containsExactly("passed", "entry_gate_exempt", "accepted", List.of("att_1"));
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("bar.age_verification.passed");
-    }
-
-    @Test
-    void ageVerificationRejectsWhenEntryFaceGateFailsClosed() {
-        // 真实接入后人脸闸 fail-closed（未通过 / 未成年）→ bar 售酒继承拒绝结论（即便客户端自报 passed）。
-        FaceVerificationPort failingGate =
-                request -> FaceVerificationResult.failed("provider_x", "underage", "identity under 18");
-        BarEntryService failClosedEntry = new BarEntryService(
-                barRepository, authorizationService, new AuditEventService(auditEventRepository), failingGate,
-                new BarInvitationTokenSigner("test-bar-invitation-secret"));
-
-        BarAgeVerificationRecord record = failClosedEntry.createAgeVerification(new VerificationRequest(
-                "age-check-fail",
-                "provider_result",
-                "face-session-2",
-                "device_age_2",
-                "bar_1",
-                Map.of("result", "passed", "evidence_attachment_ids", List.of("att_2"))
-        ));
-
-        assertThat(record)
-                .extracting(
-                        BarAgeVerificationRecord::result,
-                        BarAgeVerificationRecord::providerCode,
-                        BarAgeVerificationRecord::reviewStatus
-                )
-                .containsExactly("rejected", "face_inherited", "rejected");
-    }
 
     @Test
     void transferTableSessionKeepsSameBarMerchantAndBusinessDateTrace() {

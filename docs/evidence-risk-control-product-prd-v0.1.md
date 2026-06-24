@@ -84,12 +84,10 @@ P0 目标：
 | 酒水扫码不匹配 | 物品码与订单、库位或责任人不匹配 | 立即异常 |
 | 游乐超容 | 核销数量超过容量 | 立即异常 |
 | 场所超容（酒吧/全场入场超消防容量） | 按 venue/area 聚合的实时在场人数 ≥ 核定/消防容量（max_occupancy/fire_capacity） | 立即异常 + 超员预警 |
-| 未成年售酒拦截 | 酒吧门口/点酒年龄核验判定未成年并拦截/拒售 | 进入异常队列 + 统计告警 |
-| 醉酒拒售 | 工作人员对明显醉酒客人执行醉酒拒售人工标记 | 进入责任链留痕 + 统计 |
 | 第三方差异 | 回流结果与平台结果不一致 | 进入差异处理 |
 | 设备异常 | 未归还、挂失、跨班次使用 | 进入责任链异常 |
 
-> 修订说明（2026-06-07，依据 compliance-land-5/critic-8/C8 + compliance-land-6/C1 收口）：合规 §9（C8）要求风控补"场所超容"规则、合规 §2.3（C1）要求补"未成年售酒拦截/醉酒拒售"规则，此前本表只有"游乐超容"，无酒吧/全场入场超消防容量与未成年/醉酒两类规则，合规要求落不到风控。现补三条并与 data-risk-ai §10.9 规则码一字一致（`VENUE_OVER_CAPACITY`/`BAR_UNDERAGE_BLOCKED`/`BAR_INTOXICATED_REFUSED`），见 §6.2 规则码与等级映射。
+> 修订说明（2026-06-07 补"场所超容"；2026-06-24 售酒豁免收口）：合规 §9（C8）的"场所超容"规则 `VENUE_OVER_CAPACITY` 保留。原依 C1 补的"未成年售酒拦截/醉酒拒售"两条（`BAR_UNDERAGE_BLOCKED`/`BAR_INTOXICATED_REFUSED`）已于 2026-06-24 下线——售酒豁免：未成年人售酒法定义务由统一入场刷脸闸 18+ 核验承接，售酒环节不独立验龄/拒售（详见合规 §2、data-risk-ai §10.9）。
 
 ### 6.2 合规与场所安全规则码及等级（依据 C1/C8）
 
@@ -97,11 +95,9 @@ P0 目标：
 
 | 规则码（与 data-risk-ai §10.9 一致） | 中文 | 风险等级 | 超员预警/处置 |
 |---|---|---|---|
-| `BAR_UNDERAGE_BLOCKED` | 未成年售酒拦截 | high | 命中统计与告警；硬卡控在 bar PRD 门口/点酒年龄核验关卡 |
-| `BAR_INTOXICATED_REFUSED` | 醉酒拒售 | suspicious | 人工标记留痕（refuse_reason=intoxicated）并统计 |
 | `VENUE_OVER_CAPACITY` | 场所超容（酒吧/全场实时在场超消防容量） | critical | 实时在场（入场+1/离场-1，按 venue/area 聚合）≥ max_occupancy/fire_capacity 即触发**超员预警**；与入场卡控互补（卡控在入场口阻断、本规则做超员监测） |
 
-> 说明：C1 两条规则字段依据在 bar 入场/点酒表（age_verified/age_verify_by/refuse_reason/refuse_by 等，见合规 §2.2）；C8 容量字段 fire_capacity/max_occupancy 已落 foundation venues/areas。本层只做命中、留痕、超员预警，不替代入场口硬卡控。
+> 说明：C1 未成年人售酒法定义务由统一入场闸 18+ 核验承接（2026-06-24 售酒豁免，bar 不独立验龄/拒售；原 `BAR_UNDERAGE_BLOCKED`/`BAR_INTOXICATED_REFUSED` 已下线）；C8 容量字段 fire_capacity/max_occupancy 已落 foundation venues/areas。本层只做命中、留痕、超员预警，不替代入场口硬卡控。
 
 ### 6.1 风险等级映射（依据 D6/analytics-8）
 

@@ -5,8 +5,6 @@ import static com.complex.platform.bar.BarValidation.*;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.entry.FaceVerificationPort;
-import com.complex.platform.entry.FaceVerificationRequest;
-import com.complex.platform.entry.FaceVerificationResult;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.time.Instant;
@@ -39,49 +37,6 @@ public class BarEntryService {
         this.invitationSigner = invitationSigner;
     }
 
-    BarAgeVerificationRecord createAgeVerification(VerificationRequest request) {
-        VerificationRequest actual = requireRequest(request);
-        Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
-        String credentialPayload = requireText(actual.credentialPayload(), "credential_payload");
-        // P0-5 / X-03 安全修复：不再信客户端自报 result（原缺省 "passed" 可被客户端伪造年龄核验）。
-        // 业务口径（年龄合规裁决）：全部售酒点都在入场闸内 → 酒水环节豁免逐单年龄核验，由统一入场人脸闸
-        // 裁决年龄，bar 环节“继承”入场闸结论。本期人脸闸开关默认关 → 闸返回 RESERVED → 非阻塞放行并标注豁免
-        // （制度兜底，残留风险已知会）；接入真实厂商后闸 fail-closed 判龄，此处自动继承 PASSED/FAILED。
-        FaceVerificationResult gate = faceVerificationGate.verifyEntry(FaceVerificationRequest.of(
-                credentialPayload, trimToNull(actual.deviceId()), actual.pointId(), "bar_age_inherit"));
-        String result;
-        String providerCode;
-        String reviewStatus;
-        if (gate.isRejected()) {
-            // 人脸闸明确拒绝（真实接入后 fail-closed：未通过 / 无通过记录 / 未成年）→ 售酒拒绝。
-            result = "rejected";
-            providerCode = "face_inherited";
-            reviewStatus = "rejected";
-        } else if (gate.requiresExemptionFallback()) {
-            // 闸关闭 / 未接厂商（本期）→ 场内豁免、非阻塞放行，来源标注为入场闸豁免（而非客户端自报）。
-            result = "passed";
-            providerCode = "entry_gate_exempt";
-            reviewStatus = "accepted";
-        } else {
-            // 闸通过（真实接入后 ≥18 周岁实名人脸核验通过）→ 继承放行。
-            result = "passed";
-            providerCode = "face_inherited";
-            reviewStatus = "accepted";
-        }
-        Instant now = Instant.now();
-        return repository.saveAgeVerification(new BarAgeVerificationRecord(
-                "age_" + slug(actual.idempotencyKey()),
-                trimToDefault(textFromMap(context, "business_id", "bar_id", "barId"), actual.pointId()),
-                credentialPayload,
-                trimToNull(actual.deviceId()),
-                trimToNull(textFromMap(context, "staff_id", "staffId")),
-                result,
-                providerCode,
-                reviewStatus,
-                safeList(listFromMap(context, "evidence_attachment_ids", "evidenceAttachmentIds")),
-                now
-        ));
-    }
 
     BarReservationRecord createReservation(BarReservationRequest request, String customerId, String orderSource, String terminal) {
         BarReservationRequest actual = requireRequest(request);

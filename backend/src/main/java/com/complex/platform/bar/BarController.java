@@ -49,15 +49,6 @@ public class BarController {
         return ApiResponse.ok(entitlementRedemptionService.redeemDrink(request));
     }
 
-    @PostMapping("/age-verifications")
-    public ApiResponse<BarAgeVerificationRecord> createAgeVerification(
-            @RequestBody(required = false) VerificationRequest request
-    ) {
-        authorizationService.requirePermission("bar.entry.age_verify");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createAgeVerification(request));
-    }
-
     @PostMapping("/bills/{bill_id}/commissions/calculate")
     public ApiResponse<BarCommissionCalculationRecord> calculateCommission(
             @PathVariable("bill_id") String billId,

@@ -62,7 +62,6 @@ class BarControllerTests {
     @BeforeEach
     void resetMocks() {
         Mockito.reset(service, redemptionService, authorizationService);
-        when(service.createAgeVerification(any(VerificationRequest.class))).thenReturn(ageVerification());
         when(service.calculateCommission(eq("bill_1"), any(CommissionCalculateRequest.class))).thenReturn(commission(1500, 19320L));
         when(service.createBillPayIntent(eq("bill_1"), any(PaymentIntentRequest.class))).thenReturn(paymentIntent());
         when(service.settleBill(eq("bill_1"), any(BarBillSettleRequest.class))).thenReturn(settledBill());
@@ -98,7 +97,6 @@ class BarControllerTests {
 
     @ParameterizedTest
     @CsvSource({
-            "POST,/api/v1/bar/age-verifications,bar.entry.age_verify",
             "POST,/api/v1/bar/bills/bill_1/commissions/calculate,bar.table_commission.calculate",
             "POST,/api/v1/bar/bills/bill_1/pay-intents,finance.payment_intent.create",
             "POST,/api/v1/bar/bills/bill_1/settle,finance.payment.register",
@@ -152,7 +150,6 @@ class BarControllerTests {
 
     @ParameterizedTest
     @CsvSource({
-            "/api/v1/bar/age-verifications",
             "/api/v1/bar/bills/bill_1/commissions/calculate",
             "/api/v1/bar/bills/bill_1/pay-intents",
             "/api/v1/bar/bills/bill_1/settle",
@@ -348,9 +345,6 @@ class BarControllerTests {
         return new BarReservationEntryAllowanceVerificationRecord("verify_1", "reservation_1", "bar_1", "table_1", "guest_1", true, "allowed", 0, 2, 2, "dev_1", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"));
     }
 
-    private BarAgeVerificationRecord ageVerification() {
-        return new BarAgeVerificationRecord("age_1", "bar_1", "guest_1", "dev_1", null, "passed", "placeholder", "accepted", List.of(), Instant.parse("2026-06-14T00:00:00Z"));
-    }
 
     private BarProductRecord product(boolean stockManaged) {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");

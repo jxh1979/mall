@@ -532,12 +532,10 @@ P0 只提供风险预警列表、摘要证据和复核入口；分派、确认�
 
 ### 10.9 合规与场所安全风控规则
 
-> 修订说明（2026-06-07，依据 compliance-land-6/C1 + compliance-land-5/critic-8/C8 收口）：合规 §2.3（C1）要求回填 evidence-risk-control / data-risk-ai 第 10 章未成年售酒拦截与醉酒拒售两条风控规则；合规 §9（C8）要求风控补"场所超容"规则。此前 §10 风控全表无这三条，规则码只在合规文档本身出现，data-risk-ai/evidence-risk-control 都解析不到，属"合规要求未真正落到风控规则"。现新增本组三条规则并给等级。三条规则的 `domain` 归 `safety`（已在 §13.4 risk_rules.domain 枚举内），命中后生成风险预警入 risk_alerts，并写入 `audit_events` 留痕。
+> 修订说明（2026-06-24 售酒豁免收口）：原 `BAR_UNDERAGE_BLOCKED`（未成年售酒拦截）/ `BAR_INTOXICATED_REFUSED`（醉酒拒售）两条 bar 售酒环节风控规则已下线——业务口径改为「全场统一入场刷脸闸（满 18 岁核验），全部售酒点都在入场核验范围内，售酒环节继承入场结论、不逐单验龄、不醉酒拒售；刷脸开关关闭期间靠制度管控兜底」（合规 §2 同步改写；未成年人售酒法定义务由统一入场闸承接，bar 不再独立验龄）。仅保留场所超容规则。`domain` 归 `safety`，命中后生成风险预警入 risk_alerts，并写入 `audit_events` 留痕。
 
 | 规则编码 | 场景 | 条件 | 等级 |
 |---|---|---|---|
-| BAR_UNDERAGE_BLOCKED | 未成年售酒拦截 | 酒吧门口/点酒年龄核验判定未成年（`age_verified=false` 或 `refuse_reason=underage`），拦截进入售酒区/拒售；命中做统计与告警 | high |
-| BAR_INTOXICATED_REFUSED | 醉酒拒售 | 工作人员对明显醉酒客人执行醉酒拒售人工标记（`refuse_reason=intoxicated`），记录留痕并统计 | suspicious |
 | VENUE_OVER_CAPACITY | 场所超容（酒吧/全场实时在场超消防容量） | 按 venue/area 聚合的实时在场人数 `current_guest_count`（酒吧场地级，bar-operations `bar_venues.current_guest_count`）≥ 核定/消防容量（`max_occupancy`/`fire_capacity`）时触发超员预警；入场/开台校验若强行放行也命中 | critical |
 
 > 口径说明：

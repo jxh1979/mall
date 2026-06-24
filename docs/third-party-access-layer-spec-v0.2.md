@@ -829,8 +829,6 @@ flowchart TD
 | `face_provider_result_id` | 供应商侧核验流水号 | 是 | 对账/追溯 |
 | `face_verify_result` | 平台标准结果（成年/未成年/不确定） | 是 | 入场/售酒判定 |
 | `liveness_result` | 活体结果（通过/失败/低分） | 条件必填 | 防伪 |
-| `age_verify_method` | face / manual / face_and_manual | 是 | 核验方式留痕（合规 §2.2） |
-| `age_verify_point` | 门口 / 点酒 | 是 | 二次复核区分 |
 | `face_verify_error_code` | 供应商失败码映射（占位，`FACE_*` 命名空间） | 条件必填 | 失败归因 |
 | `verified_by` / `verified_at` | 操作人 / 核验时间 | 是 | 审计留痕 |
 
@@ -843,7 +841,7 @@ flowchart TD
 | 供应商超时/不可用 | **阻断入场**，进入人工复核（不自动放行）；落事件 + 异常记录（合规 §2 + supplier kit §7） |
 | 活体分过低 / 疑似照片翻拍 | 判活体失败，转人工证件核验 + 人工复核 |
 | 低质量图像 / 无法识别 | 不判通过，重试或转人工核验 |
-| 判定为未成年人 | 禁止进入售酒区/禁止售酒，记 `refuse_reason=underage` + 原因码（合规 §2.1） |
+| 判定为未成年人 | 统一入场刷脸闸拒绝进入；落事件 + 异常记录留痕（合规 §2；售酒豁免后由入场闸承接，bar 不再独立验龄/拒售） |
 | 供应商未配置/开关 off | 只记人工证件核验结果，不得标记"自动核验已通过" |
 
 > 失败码统一走 `FACE_*` 命名空间（`FACE_TIMEOUT`/`FACE_LOW_LIVENESS`/`FACE_MANUAL_REVIEW`，见 sms-notification-and-supplier-field-mapping 占位文档 §3），真实供应商码到位后在适配器映射。

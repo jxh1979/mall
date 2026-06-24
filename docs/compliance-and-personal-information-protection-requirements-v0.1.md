@@ -34,27 +34,21 @@
 **建议 P 级：P0（合规阻断）。关联 bar PRD / bar 开发设计 / evidence-risk-control。**
 
 ### 2.1 产品规则
-> 决策口径（2026-06-07 用户拍板）：在酒吧**门口**设置年龄核验关卡，采用**人工核验 + 人脸识别**双重方式防止未成年人进入酒吧。
->
-> 执行口径（2026-06-10 收口）：酒吧正式生产必须接入第三方人脸/年龄核验接口或等效设备，供应商未确定前只保留接口占位和测试 mock，不能把人工口头确认标记为正式通过。该核验仅用于售酒/入场合规，不等同于扩大游客实名范围；游客实名仍按第 8 节“仅国家法令强制场景启用”。
+> 决策口径（2026-06-24 售酒豁免收口，取代 2026-06-07/06-10 旧口径）：未成年人售酒法定义务（《未成年人保护法》《预防未成年人犯罪法》）由**全场统一入场刷脸闸**承接——综合体大门设满 18 岁入场年龄核验关卡，全部售酒点都在入场核验范围内；**售酒环节继承入场结论，不再在酒吧门口独立验龄、不做点酒二次复核、不做醉酒拒售**。原"酒吧门口独立年龄核验 + 点酒二次复核 + 醉酒拒售"口径已下线。
 
-1. 酒吧**入口（门口）**必须经过"入场年龄核验"关卡：**人工核验 + 第三方人脸/年龄核验接口或等效设备**双重判定，防止未成年人进入；点酒环节做二次复核。
-2. 判定为未成年人时**禁止进入售酒区/禁止售酒**，记录拒绝并给出原因码。
-3. 支持工作人员对明显醉酒客人执行**醉酒拒售**人工标记并留痕。
-4. 上述动作全部进入事件中心留痕（谁核验、方式=人工/人脸识别、结果、点位、时间）。
+1. 综合体**统一入场闸**必须经过"入场年龄核验"：接入第三方人脸/年龄核验接口或等效设备，满 18 岁方可进入；全部售酒点都在该核验范围内。
+2. 判定为未成年人时**禁止进入**，记录拒绝并留痕。
+3. **售酒环节继承入场闸结论、不逐单验龄、不醉酒拒售**（场内皆已验成年）。
+4. **刷脸开关关闭期间**（本期默认关、供应商未接入）：靠**制度管控兜底**（人工证件查验、现场巡查），系统不强制逐单验龄；接入真实供应商前不得把人工口头确认标记为"自动核验已通过"。该核验不扩大第 8 节游客实名范围。
+5. 上述入场核验动作进入事件中心留痕（方式、结果、点位、时间）。
 
-### 2.2 需新增字段（回填 bar-operations-development-design 的入场记录/点酒订单表）
-- `age_verified`(bool)、`age_verify_method`(face/manual/face_and_manual)、`age_verify_by`(操作人)、`age_verified_at`、`age_verify_point`(门口/点酒)
-- `refuse_reason`(枚举：underage/intoxicated/no_qualification/other)、`refuse_by`、`refuse_at`
-- `face_provider_code`、`face_provider_result_id`、`face_verify_result`、`face_verify_error_code` 作为供应商结果引用占位；P0 默认只保存最小必要结果和供应商流水引用，不默认保存原始人脸图像。
+### 2.2 需新增字段（统一入场闸侧）
+- 入场核验结果落**统一入场闸**记录：`face_provider_code`、`face_provider_result_id`、`face_verify_result`（成年/未成年/不确定）、`face_verify_error_code` 作为供应商结果引用占位；P0 默认只保存最小必要结果和供应商流水引用，不默认保存原始人脸图像。
 
-> 修订说明（2026-06-07）：依用户拍板，核验方式以"人工+人脸识别"为准（门口关卡），故 `age_verify_method` 取值改为 face/manual/face_and_manual 并新增 `age_verify_point`。
->
-> 修订说明（2026-06-10）：补第三方人脸/年龄核验接口或等效设备的生产阻断口径，以及供应商结果字段占位；明确该核验不扩大第 8 节游客实名范围。
+> 修订说明（2026-06-24 售酒豁免收口）：原回填 bar-operations 入场记录/点酒订单表的 `age_verified`/`age_verify_method`/`age_verify_point`/`refuse_reason`/`refuse_by`/`refuse_at` 等 bar 售酒环节字段已下线（售酒不再独立验龄/拒售）；入场年龄核验结果统一落入场闸侧。bar 侧 `BarAgeVerificationService`、`bar_age_verifications` 表与 refuse 字段已随之移除（详见 bar 开发设计 2026-06-24 修订）。
 
-### 2.3 风控规则（回填 evidence-risk-control / data-risk-ai 第 10 章）
-- `BAR_UNDERAGE_BLOCKED`：未成年售酒拦截命中统计与告警。
-- `BAR_INTOXICATED_REFUSED`：醉酒拒售记录。
+### 2.3 风控规则
+> 2026-06-24 售酒豁免收口：原 `BAR_UNDERAGE_BLOCKED`（未成年售酒拦截）/ `BAR_INTOXICATED_REFUSED`（醉酒拒售）两条风控规则已下线（详见 data-risk-ai §10.9、evidence-risk-control）。未成年人售酒法定义务由统一入场闸 18+ 核验承接；入场闸判未成年即拒入，落 `risk_alerts` 留痕。
 
 ---
 
@@ -280,7 +274,7 @@
 
 | 合规项 | 回填目标文档 | 新增字段/规则 | 建议 P 级 |
 |---|---|---|---|
-| C1 未成年/醉酒 | bar PRD、bar 开发设计、evidence-risk-control | age_verified 等、拒售原因码、BAR_UNDERAGE_BLOCKED | P0 |
+| C1 未成年人售酒 | 合规 §2（2026-06-24 售酒豁免改写）、统一入场闸、evidence-risk-control | 入场闸 18+ 核验、`face_verify_result`、未成年拒入；bar 不独立验龄/拒售 | P0 |
 | C2 PIPL 同意 | product-requirements、票务/客人端 PRD、存酒流程 | consent_records 表 | P0 |
 | C3 企微会话 | data-risk-ai §11、evidence-risk-control §8 | 留存策略字段、合法性基础 | P0 |
 | C4 私人手机检测 | android §9、platform-governance §6.9 | 同意凭据、仅存哈希 | P0 |

@@ -18,7 +18,6 @@ public class BarService {
     private final BarTableSessionService tableSessionService;
     private final BarOrderService orderService;
     private final BarEntryService entryService;
-    private final BarAgeVerificationService ageVerificationService;
     private final AuthorizationService authorizationService;
 
     public BarService(
@@ -29,7 +28,6 @@ public class BarService {
             BarTableSessionService tableSessionService,
             BarOrderService orderService,
             BarEntryService entryService,
-            BarAgeVerificationService ageVerificationService,
             AuthorizationService authorizationService
     ) {
         this.repository = repository;
@@ -39,15 +37,9 @@ public class BarService {
         this.tableSessionService = tableSessionService;
         this.orderService = orderService;
         this.entryService = entryService;
-        this.ageVerificationService = ageVerificationService;
         this.authorizationService = authorizationService;
     }
 
-    @com.complex.platform.gate.GuardedAction(capability = "bar.entry.age_verify")
-    @Transactional
-    public BarAgeVerificationRecord createAgeVerification(VerificationRequest request) {
-        return ageVerificationService.createAgeVerification(request);
-    }
 
     public PageResponse<BarOrderRecord> listOrders() {
         return operations.readPage(
