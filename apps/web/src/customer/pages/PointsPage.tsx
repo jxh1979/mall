@@ -2,26 +2,49 @@ import { Alert, Button, Card, Empty, List, Space, Spin, Statistic, Tag, Typograp
 import { useEffect, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
-import type { CheckInRecord, PointsSummary } from "../types";
+import type { CheckInRecord, PointsRedemption, PointsSummary, RedemptionItem } from "../types";
 
-const { Title, Paragraph, Text } = Typography;
+const { Paragraph, Text } = Typography;
 
 // ⑤ 积分摘要 + 等级（GET /customer/points）+ 连续签到（POST /customer/check-ins, V089）
 export function PointsPage({ service }: { service: CustomerService }): React.ReactElement {
   const [summary, setSummary] = useState<PointsSummary | null>(null);
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
+  const [items, setItems] = useState<RedemptionItem[]>([]);
+  const [redemptions, setRedemptions] = useState<PointsRedemption[]>([]);
+  const [redeemingId, setRedeemingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
 
   const reload = () => {
-    Promise.all([service.getPoints(), service.listCheckIns()])
-      .then(([points, records]) => {
+    Promise.all([
+      service.getPoints(),
+      service.listCheckIns(),
+      service.listRedemptionItems(),
+      service.listRedemptions(),
+    ])
+      .then(([points, records, catalog, history]) => {
         setSummary(points);
         setCheckIns(records ?? []);
+        setItems(catalog ?? []);
+        setRedemptions(history ?? []);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "积分加载失败"))
       .finally(() => setLoading(false));
+  };
+
+  const onRedeem = async (item: RedemptionItem) => {
+    setRedeemingId(item.id);
+    try {
+      const record = await service.redeemPoints(item.id, 1);
+      void message.success(`兑换成功：${record.itemName} ×${record.quantity}，扣 ${record.totalPoints} 积分`);
+      reload();
+    } catch (err) {
+      void message.error(err instanceof Error ? err.message : "兑换失败");
+    } finally {
+      setRedeemingId(null);
+    }
   };
 
   useEffect(() => {
@@ -77,13 +100,57 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
         />
       </Card>
 
-      <Card title="积分明细 / 礼物兑换" style={{ marginTop: 16 }} data-testid="points-p1-placeholder">
-        <Title level={5} type="secondary">
-          P1 能力（占位）
-        </Title>
-        <Paragraph type="secondary">
-          积分明细、礼物列表、兑换发起与兑换记录为 P1 客人端能力（底层扣库存规则保留），未进入 P0 OpenAPI，本页仅占位标注。
-        </Paragraph>
+      <Card title="积分商城" style={{ marginTop: 16 }} data-testid="points-redemption-catalog">
+        <Paragraph type="secondary">用积分兑换礼品；兑换即按目录扣减积分并扣库存。</Paragraph>
+        <List
+          dataSource={items}
+          locale={{ emptyText: "暂无可兑换礼品" }}
+          renderItem={(item) => {
+            const soldOut = item.stockQuantity <= 0 || item.status !== "active";
+            const affordable = (summary?.balance ?? 0) >= item.pointsCost;
+            return (
+              <List.Item
+                data-testid={`redemption-item-${item.id}`}
+                actions={[
+                  <Button
+                    key="redeem"
+                    type="primary"
+                    size="small"
+                    disabled={soldOut || !affordable}
+                    loading={redeemingId === item.id}
+                    onClick={() => void onRedeem(item)}
+                    data-testid={`redeem-${item.id}`}
+                  >
+                    {soldOut ? "已兑罄" : affordable ? "兑换" : "积分不足"}
+                  </Button>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={
+                    <Text>
+                      {item.itemName} <Tag>{item.itemType}</Tag>
+                    </Text>
+                  }
+                  description={`${item.pointsCost} 积分 · 库存 ${item.stockQuantity}`}
+                />
+              </List.Item>
+            );
+          }}
+        />
+      </Card>
+
+      <Card title="兑换记录" style={{ marginTop: 16 }} data-testid="points-redemption-history">
+        <List
+          dataSource={redemptions}
+          locale={{ emptyText: "暂无兑换记录" }}
+          renderItem={(record) => (
+            <List.Item data-testid={`redemption-record-${record.id}`}>
+              <Text>
+                {record.itemName} ×{record.quantity} · 扣 {record.totalPoints} 积分 · {record.status}
+              </Text>
+            </List.Item>
+          )}
+        />
       </Card>
     </div>
   );

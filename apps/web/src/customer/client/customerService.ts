@@ -12,7 +12,9 @@ import type {
   CheckInRecord,
   Membership,
   PaymentIntent,
+  PointsRedemption,
   PointsSummary,
+  RedemptionItem,
   StoredValueAccount,
   TicketCredential,
   TicketOrder,
@@ -130,5 +132,22 @@ export class CustomerService {
       `/api/v1/customer/bar-sessions/${encodeURIComponent(sessionId)}/scan-orders`,
       { items },
     );
+  }
+
+  // ⑨ 积分商城：兑换目录 / 发起兑换 / 兑换记录（GET/POST /customer/points/redemption*）
+  listRedemptionItems(): Promise<RedemptionItem[]> {
+    return this.api.get<RedemptionItem[]>("/api/v1/customer/points/redemption-items");
+  }
+
+  redeemPoints(catalogItemId: string, quantity: number): Promise<PointsRedemption> {
+    return this.api.post<PointsRedemption>("/api/v1/customer/points/redemptions", {
+      catalogItemId,
+      quantity,
+      sourceTerminal: "customer-web",
+    });
+  }
+
+  listRedemptions(): Promise<PointsRedemption[]> {
+    return this.api.get<PointsRedemption[]>("/api/v1/customer/points/redemptions");
   }
 }

@@ -164,3 +164,22 @@ export type BarScanOrder = {
   totalAmountCent: number;
   orderSource: string;
 };
+
+// 积分商城：兑换目录项（安全投影，不含库存定位等内部字段）+ 兑换记录。
+export type RedemptionItem = {
+  id: string;
+  itemName: string;
+  itemType: string;
+  pointsCost: number;
+  stockQuantity: number;
+  status: string;
+};
+
+export type PointsRedemption = {
+  id: string;
+  itemName: string;
+  quantity: number;
+  totalPoints: number;
+  status: string;
+  createdAt: string;
+};
