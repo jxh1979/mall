@@ -1,0 +1,14 @@
+{
+  "note": "verify:tenant-isolation 已知缺口 baseline（棘轮底座）。闸口对此清单之外的新增 finding 硬失败；每条须在 security-scans/findings-register-v1.md tenant-isolation 小节有对应 SEC-*-TENANT-ISOLATION-* 证据；修复后从本清单与台账移除以收紧闸口。重建：node tools/verify-tenant-isolation.mjs --write-baseline。",
+  "generated_at_source": "static scan of Jdbc*Repository.java vs domain-ownership-scope-audit-v0.1.csv",
+  "known_findings": [
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:refund_authority_limits",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'refund_authority_limits'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/finance/JdbcRefundAuthorizationRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:refund_auto_rules",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'refund_auto_rules'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/finance/JdbcRefundAuthorizationRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    }
+  ]
+}
