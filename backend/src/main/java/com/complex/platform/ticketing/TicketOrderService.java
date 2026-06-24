@@ -110,6 +110,8 @@ public class TicketOrderService {
         PaymentIntentRequest actual = requireRequest(request);
         TicketOrderRecord order = repository.findTicketOrderById(orderId)
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+        // P0 越权修复（审计 A3）：商户用户只能对自身受理订单创建支付意图（跨商户 IDOR）。
+        enforceMerchantScope(order.merchantId());
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
         if (!orderId.equals(businessOrderId)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "business_order_id must match path order_id");
@@ -149,6 +151,8 @@ public class TicketOrderService {
         ConfirmTicketOrderPaymentRequest actual = requireRequest(request);
         TicketOrderRecord order = repository.findTicketOrderById(requireText(orderId, "order_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+        // P0 越权修复（审计 A3）：商户用户只能确认自身受理订单的支付（跨商户 IDOR）。
+        enforceMerchantScope(order.merchantId());
         // 2a-5：已取消（超时释放/手动取消）的订单不可再确认支付，防止"取消已释放库存 → 又确认 paid"导致超卖。
         if ("cancelled".equals(order.status())) {
             throw ApiException.conflict("ORDER_CANCELLED", "ticket order has been cancelled");
@@ -193,6 +197,8 @@ public class TicketOrderService {
         // 由 TicketingService（跨 bean）调用，Spring 事务代理生效。
         TicketOrderRecord order = repository.findTicketOrderById(requireText(orderId, "order_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+        // P0 越权修复（审计 A3）：商户用户只能取消自身受理订单（跨商户 IDOR）；系统超时任务走 cancelExpiredUnpaidOrders（无 scope 放行）。
+        enforceMerchantScope(order.merchantId());
         int cancelled = repository.atomicCancelUnpaidOrder(order.id(), Instant.now());
         if (cancelled == 0) {
             if ("cancelled".equals(order.status())) {
@@ -224,6 +230,8 @@ public class TicketOrderService {
         requireText(request.reason(), "reason");
         TicketOrderRecord order = repository.findTicketOrderById(orderId)
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+        // P0 越权修复（审计 A3）：商户用户只能为自身受理订单出票（跨商户 IDOR）。
+        enforceMerchantScope(order.merchantId());
         List<IssuedEntitlementRecord> existing = repository.listIssuedEntitlementsByOrderId(orderId);
         if (!existing.isEmpty()) {
             return toIssuedTicketResponse(existing);
@@ -453,6 +461,20 @@ public class TicketOrderService {
             return authorizationService.currentMerchantScope().orElse(null);
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    /**
+     * P0 越权修复（审计 A3）：写端取出原单后按调用者商户范围校验归属，语义对齐
+     * TicketRefundService/TicketVerificationService.enforceMerchantScope。
+     * 平台管理员/无上下文（scope 为空）→ 放行；商户用户 → 必须等于原单 merchant_id，否则 CROSS_MERCHANT_FORBIDDEN。
+     * 复用本类既有防御式 resolveMerchantId()（无上下文返回 null、不抛），兼容内部确认/支付回调路径。
+     */
+    private void enforceMerchantScope(String merchantId) {
+        String scope = resolveMerchantId();
+        if (scope != null && !scope.equals(merchantId)) {
+            throw ApiException.forbidden(
+                    "CROSS_MERCHANT_FORBIDDEN", "access to another merchant's ticket order is not allowed");
         }
     }
 

@@ -687,6 +687,53 @@ class TicketingServiceTests {
     }
 
     @Test
+    void ticketOrderWriteEndpointsRejectCrossMerchantAccess() {
+        // 审计 A3：订单写端（创建支付意图/确认支付/出票/取消）补跨商户归属校验。
+        // 商户A 受理下单 → 商户B 持自身令牌操作该单四个写端点，均应 CROSS_MERCHANT_FORBIDDEN；商户A 自身不受影响。
+        TestSecurityActors.clear();
+        try {
+            TestSecurityActors.asMerchantUser("mch_a");
+            TicketTypeRecord ticketType = createTicketType("xm-ticket");
+            EntitlementTemplateRecord template = createTemplate("xm-template", 1, 5000L);
+            service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                    "xm-bind", "bind", List.of(), template.id(), 1, 1, 5000L, "default", 1, null));
+            TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                    "xm-order", "create", List.of(), ticketType.id(), null, 1,
+                    LocalDate.parse("2026-06-20"), "web", "13800138000", "customer_xm"));
+            TicketPaymentIntentRecord intentA = service.createTicketOrderPayIntent(order.id(), new PaymentIntentRequest(
+                    "xm-intent-a", "pay", List.of(), "ticket_order", order.id(), order.amountCent(), "CNY", "aggregate_pay"));
+
+            // 切到商户B —— 四个写端点都应拒绝。
+            TestSecurityActors.asMerchantUser("mch_b");
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createTicketOrderPayIntent(order.id(),
+                            new PaymentIntentRequest("xm-intent-b", "pay", List.of(), "ticket_order", order.id(),
+                                    order.amountCent(), "CNY", "aggregate_pay")))
+                    .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                            ex -> assertThat(ex.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.confirmTicketOrderPayment(order.id(),
+                            new ConfirmTicketOrderPaymentRequest("xm-confirm-b", intentA.id(), null)))
+                    .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                            ex -> assertThat(ex.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.issueTicketOrder(order.id(),
+                            new StatusChangeRequest("xm-issue-b", "issue", "x", List.of())))
+                    .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                            ex -> assertThat(ex.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.cancelTicketOrder(order.id(),
+                            new StatusChangeRequest("xm-cancel-b", "cancel", "x", List.of())))
+                    .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                            ex -> assertThat(ex.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+
+            // 商户A 自身确认支付不受影响。
+            TestSecurityActors.asMerchantUser("mch_a");
+            TicketOrderRecord paid = service.confirmTicketOrderPayment(order.id(),
+                    new ConfirmTicketOrderPaymentRequest("xm-confirm-a", intentA.id(), null));
+            assertThat(paid.payStatus()).isEqualTo("paid");
+        } finally {
+            TestSecurityActors.clear();
+        }
+    }
+
+    @Test
     void cancelUnpaidOrderAndExpiryJobReclaimWhilePaidOrderCannotBeCancelled() {
         TicketTypeRecord ticketType = createTicketType("cancel-ticket");
         EntitlementTemplateRecord template = createTemplate("cancel-template", 1, 5000L);
