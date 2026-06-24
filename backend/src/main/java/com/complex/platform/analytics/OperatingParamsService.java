@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -25,6 +26,8 @@ public class OperatingParamsService {
     private final AuditEventService auditEventService;
     private final Clock clock;
 
+    // 多构造器须显式 @Autowired 指定注入构造（否则全 Spring 上下文实例化报 "No default constructor found"）。
+    @Autowired
     public OperatingParamsService(AnalyticsRepository repository, AuditEventService auditEventService) {
         this(repository, auditEventService, Clock.systemUTC());
     }
