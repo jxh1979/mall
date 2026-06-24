@@ -424,6 +424,35 @@ class JdbcAmusementRepository implements AmusementRepository {
     }
 
     @Override
+    public java.util.List<AmusementInspectionTaskRecord> listInspectionTasks(java.util.Optional<String> merchantScope) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT id, project_id, device_id, due_at, status, generated_at, completed_inspection_id, "
+                        + "completed_at, merchant_id, created_at, updated_at FROM amusement_inspection_tasks");
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        if (merchantScope.isPresent()) {
+            sql.append(" WHERE merchant_id = :merchant_id");
+            params.addValue("merchant_id", merchantScope.get());
+        }
+        sql.append(" ORDER BY due_at ASC");
+        return jdbcTemplate.query(sql.toString(), params, (rs, n) -> new AmusementInspectionTaskRecord(
+                rs.getString("id"),
+                rs.getString("project_id"),
+                rs.getString("device_id"),
+                tsToInstant(rs.getTimestamp("due_at")),
+                rs.getString("status"),
+                tsToInstant(rs.getTimestamp("generated_at")),
+                rs.getString("completed_inspection_id"),
+                tsToInstant(rs.getTimestamp("completed_at")),
+                rs.getString("merchant_id"),
+                tsToInstant(rs.getTimestamp("created_at")),
+                tsToInstant(rs.getTimestamp("updated_at"))));
+    }
+
+    private static java.time.Instant tsToInstant(java.sql.Timestamp ts) {
+        return ts == null ? null : ts.toInstant();
+    }
+
+    @Override
     public AmusementOverCapacityPolicy findOverCapacityPolicy(String projectId) {
         return jdbcTemplate.query("""
                 SELECT project_id, operating_capacity, disposal_mode, enabled

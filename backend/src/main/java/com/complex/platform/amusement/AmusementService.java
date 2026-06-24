@@ -105,6 +105,18 @@ public class AmusementService {
         );
     }
 
+    /** T3.4 巡检前端：列出巡检到期待办（V143 amusement_inspection_tasks，由 AmusementInspectionTaskJob 预生成）。 */
+    public PageResponse<AmusementInspectionTaskRecord> listInspectionTasks() {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        return readPage(
+                "amusement.inspection_task.viewed",
+                "amusement.inspection_task.viewed_failed",
+                "amusement.safety_inspection.view",
+                "amusement_inspection_task",
+                () -> repository.listInspectionTasks(scope)
+        );
+    }
+
     public PageResponse<AmusementManualOverrideRecord> listManualOverrides() {
         Optional<String> scope = authorizationService.currentMerchantScope();
         return readPage(

@@ -2266,6 +2266,14 @@ class AmusementServiceTests {
             return n;
         }
 
+        @Override
+        public List<AmusementInspectionTaskRecord> listInspectionTasks(java.util.Optional<String> merchantScope) {
+            return inspectionTasks.values().stream()
+                    .filter(t -> merchantScope.isEmpty() || merchantScope.get().equals(t.merchantId()))
+                    .sorted(java.util.Comparator.comparing(AmusementInspectionTaskRecord::dueAt))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
         List<AmusementInspectionTaskRecord> allInspectionTasks() {
             return new ArrayList<>(inspectionTasks.values());
         }

@@ -303,6 +303,12 @@ public class AmusementController {
         return ApiResponse.ok(service.listSafetyInspections());
     }
 
+    @GetMapping("/inspection-tasks")
+    public ApiResponse<PageResponse<AmusementInspectionTaskRecord>> listInspectionTasks() {
+        authorizationService.requirePermission("amusement.safety_inspection.view");
+        return ApiResponse.ok(service.listInspectionTasks());
+    }
+
     @PostMapping("/safety-inspections")
     public ApiResponse<AmusementSafetyInspectionRecord> createSafetyInspection(
             @RequestBody(required = false) AmusementSafetyInspectionRequest request

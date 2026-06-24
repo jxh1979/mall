@@ -23,6 +23,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-AMU-001", label: "项目与场次", route: "/admin/amusement/sessions" },
   { pageId: "ADM-AMU-002", label: "团体/包场", route: "/admin/amusement/group-bookings" },
   { pageId: "ADM-AMU-003", label: "安全巡检/事故", route: "/admin/amusement/safety-incidents" },
+  { pageId: "ADM-AMU-004", label: "巡检到期任务", route: "/admin/amusement/inspection-tasks" },
   { pageId: "ADM-INV-001", label: "库存台账", route: "/admin/inventory/ledger" },
   { pageId: "ADM-FIN-002", label: "对账差异", route: "/admin/finance/reconciliation" },
   { pageId: "ADM-FIN-003", label: "退款分级授权", route: "/admin/finance/refund-authority" },
@@ -84,6 +85,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("amusement-group-bookings-page")).toBeVisible();
   } else if (spec.pageId === "ADM-AMU-003") {
     await expect(page.getByTestId("amusement-safety-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-AMU-004") {
+    await expect(page.getByTestId("amusement-inspection-tasks-page")).toBeVisible();
   } else if (spec.pageId === "ADM-GOV-006") {
     await expect(page.getByTestId("supervisor-review-page")).toBeVisible();
   } else if (spec.pageId === "ADM-GOV-004") {

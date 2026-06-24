@@ -253,4 +253,10 @@ public interface AmusementRepository {
      * T3.1：把已到期未完成的巡检待办（status='pending' AND due_at &lt; now）批量翻 overdue；返回受影响行数。
      */
     int markOverdueInspectionTasks(java.time.Instant now);
+
+    /**
+     * T3.4 巡检前端：列出巡检到期待办（amusement_inspection_tasks），按到期时间升序（最紧急在前）。
+     * merchantScope 非空 → 仅本商户；空（平台管理员）→ 全部。
+     */
+    java.util.List<AmusementInspectionTaskRecord> listInspectionTasks(java.util.Optional<String> merchantScope);
 }

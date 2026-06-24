@@ -20735,6 +20735,36 @@
         },
         "x-auth-context": "customer-token"
       }
+    },
+    "/api/v1/amusement/inspection-tasks": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementInspectionTasks",
+        "summary": "查询游乐巡检到期待办",
+        "x-permission": "amusement.safety_inspection.view",
+        "x-data-scope": "project-amusement",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.inspection_task.viewed",
+        "x-audit-event-failure": "amusement.inspection_task.viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
