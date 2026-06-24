@@ -558,6 +558,29 @@ class AmusementServiceTests {
     }
 
     @Test
+    void enforceDeviceRegistryBlocksVerificationForProjectWithNoActiveDevice() {
+        // T3.2（A4 根因修）：开启强制建档后，零设备档案项目（即便项目级巡检 PASS）核销被拒；默认关不影响既有行为。
+        AmusementProjectRecord project = projectWithTemplate("t32-registry");
+        submitPassingInspection(project, "t32-registry");
+        AmusementSessionRecord session = createSession("t32-registry-session", project.id(), 5, "open");
+
+        // 默认关（enforceDeviceRegistry=false）：零设备不阻断，核销成功。
+        registerAmusementEntitlement("credential-t32-off", 1);
+        AmusementVerificationRecord ok = service.createVerification(verification(
+                "verify-t32-off", project.id(), session.id(), "credential-t32-off"));
+        assertThat(ok).isNotNull();
+
+        // 开启强制建档：零在役设备档案项目核销被拒（SAFETY_BLOCKED）。
+        service.enforceDeviceRegistry = true;
+        registerAmusementEntitlement("credential-t32-on", 1);
+        assertThatThrownBy(() -> service.createVerification(verification(
+                        "verify-t32-on", project.id(), session.id(), "credential-t32-on")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("SAFETY_BLOCKED");
+    }
+
+    @Test
     void deviceInspectionExpiryBlocksVerificationEvenWhenRequestOmitsDeviceId() {
         // P0-3 回归：项目级巡检 PASS（旧路径会放行），但项目下有一台在役(active)设备从未通过巡检
         // （lastPass=null=超期）。核销请求不传 deviceId（最常见形态）仍必须被巡检超期项目级兜底阻断，杜绝绕过。

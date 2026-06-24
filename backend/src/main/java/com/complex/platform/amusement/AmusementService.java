@@ -53,6 +53,12 @@ public class AmusementService {
     // 可为 null（向后兼容/单测无 SecurityContext 环境）；接入为 fail-safe，不阻塞核销主链。
     private final RiskAlertService riskAlertService;
 
+    // T3.2（A4 根因修，功能标志 amusement.device-registry.enforce.enabled，默认关）：是否强制游乐项目建设备档案。
+    // 开启后「零在役设备档案」项目拒核销，从根上消除 fail-open；默认关给存量项目建档过渡期，ops 建档后开启即生效。
+    // 用字段注入（非构造）以免改动既有多处构造点；包私有便于单测直接置位。
+    @org.springframework.beans.factory.annotation.Value("${amusement.device-registry.enforce.enabled:false}")
+    boolean enforceDeviceRegistry;
+
     // 向后兼容构造器：未注入统一责任链服务（既有单测/无 SecurityContext 环境）。
     public AmusementService(
             AmusementRepository repository,
@@ -1362,6 +1368,13 @@ public class AmusementService {
             if (anyActiveDeviceExpired) {
                 reasons.add("SAFETY_INSPECTION_EXPIRED");
             }
+        }
+        // T3.2（A4 根因修，默认关）：强制建档——项目无任何在役注册设备（设备档案为空）时拒核销，
+        // 从根上消除「零设备档案项目」的 fail-open（用户决策：建项目即建档、零档拒核销）。存量过渡靠开关默认关。
+        if (enforceDeviceRegistry
+                && repository.listDevicesByProject(projectId).stream()
+                        .noneMatch(device -> "active".equals(device.status()))) {
+            reasons.add("AMUSEMENT_DEVICE_REGISTRY_MISSING");
         }
         if (!repository.listActiveBlockingProjectRules(projectId).isEmpty()) {
             reasons.add("PROJECT_RULE_BLOCKED");
