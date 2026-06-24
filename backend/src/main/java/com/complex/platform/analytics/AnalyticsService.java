@@ -232,12 +232,20 @@ public class AnalyticsService {
      * 数据源未就绪的指标返回 value=null + note（不伪造）。
      */
     public OverviewResponse overview(Optional<String> scope) {
+        return overview(scope, null);
+    }
+
+    /**
+     * T4.1 修日期「假筛选」：按指定经营日 as-of 读快照（此前永远取最新 ETL 日、忽略前端日期）。
+     * businessDate 为空 → 退回最新 ETL 经营日（默认行为不变）。区间跨日聚合待口径确定后再做。
+     */
+    public OverviewResponse overview(Optional<String> scope, java.time.LocalDate businessDate) {
         return readSingle(
                 "analytics.dashboard_viewed",
                 "analytics.dashboard_view_failed",
                 "analytics.dashboard.view",
                 "analytics_dashboard_snapshot",
-                () -> buildOverview(scope, null)
+                () -> buildOverview(scope, null, businessDate)
         );
     }
 
@@ -249,14 +257,16 @@ public class AnalyticsService {
                 "analytics.dashboard_domain.view_failed",
                 "analytics.dashboard.view",
                 "analytics_dashboard_snapshot",
-                () -> buildOverview(scope, normalizedDomain)
+                () -> buildOverview(scope, normalizedDomain, null)
         );
     }
 
-    private OverviewResponse buildOverview(Optional<String> scope, String domainFilter) {
+    private OverviewResponse buildOverview(Optional<String> scope, String domainFilter, LocalDate requestedDate) {
         String scopeValue = scope.orElse(null);
         Instant now = Instant.now(clock);
-        LocalDate businessDate = repository.latestEtlBusinessDate(scopeValue)
+        // T4.1：指定经营日优先（前端日期筛选生效）；未指定退回最新 ETL 日。
+        LocalDate businessDate = requestedDate != null ? requestedDate
+                : repository.latestEtlBusinessDate(scopeValue)
                 .or(() -> repository.latestEtlBusinessDate(null))
                 .orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
         Map<String, BigDecimal> snapshots = repository.readMetricSnapshots(businessDate, scopeValue);

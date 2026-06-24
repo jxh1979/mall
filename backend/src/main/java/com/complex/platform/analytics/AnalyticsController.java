@@ -70,9 +70,28 @@ public class AnalyticsController {
     }
 
     @GetMapping("/dashboards/p0-overview")
-    public ApiResponse<OverviewResponse> getP0OverviewDashboard() {
+    public ApiResponse<OverviewResponse> getP0OverviewDashboard(
+            @org.springframework.web.bind.annotation.RequestParam(value = "from", required = false) String from,
+            @org.springframework.web.bind.annotation.RequestParam(value = "to", required = false) String to) {
         authorizationService.requirePermission("analytics.dashboard.view");
-        return ApiResponse.ok(service.overview(authorizationService.currentMerchantScope()));
+        // T4.1 修日期「假筛选」：前端发 from/to，以 to（退化用 from）为「看哪个经营日」的 as-of 日；
+        // 空/非法 → 退回最新 ETL 日。区间跨日求和对余额/比率类指标会算错，待口径确定后再做，当前为单日 as-of。
+        java.time.LocalDate asOf = parseOverviewDate(to);
+        if (asOf == null) {
+            asOf = parseOverviewDate(from);
+        }
+        return ApiResponse.ok(service.overview(authorizationService.currentMerchantScope(), asOf));
+    }
+
+    private static java.time.LocalDate parseOverviewDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return java.time.LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            return null; // 非法日期忽略，退回最新经营日。
+        }
     }
 
     @GetMapping("/dashboards/{domain}")

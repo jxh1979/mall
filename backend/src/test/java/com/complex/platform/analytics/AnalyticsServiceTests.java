@@ -125,6 +125,20 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void overviewHonorsRequestedBusinessDateInsteadOfLatestEtlDay() {
+        // T4.1：修总览日期「假筛选」——overview 接受指定经营日 as-of 返回该日；此前永远取最新 ETL 日、忽略前端日期。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.ticket", "platform", null),
+                new BigDecimal("128800"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        java.time.LocalDate requested = java.time.LocalDate.parse("2026-05-01");
+
+        var overview = service.overview(Optional.empty(), requested);
+        assertThat(overview.businessDate()).isEqualTo(requested);
+
+        // 不传日期 → 退回最新 ETL 日（默认行为不变）。
+        assertThat(service.overview(Optional.empty(), null).businessDate()).isNotNull();
+    }
+
+    @Test
     void overviewEnforcesMerchantScopeIsolation() {
         // 商户 A 与 B 的酒吧收入分别落快照（行级隔离按 segment_id）。
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
