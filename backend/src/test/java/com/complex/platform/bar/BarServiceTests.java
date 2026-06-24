@@ -47,6 +47,7 @@ class BarServiceTests {
     private CapturingBarReceivableLedgerService receivableLedgerService;
     private AuthorizationService authorizationService;
     private BarService service;
+    private BarOrderService barOrderService;
 
     @BeforeEach
     void setUp() {
@@ -63,15 +64,16 @@ class BarServiceTests {
         BarEntryService entryService = new BarEntryService(
                 barRepository, authorizationService, auditEventService, FaceVerificationRouter.alwaysDisabled(),
                 new BarInvitationTokenSigner("test-bar-invitation-secret"));
+        barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
+                new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
+                receivableLedgerService);
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
                 new BarBillingService(barRepository, receivableLedgerService, authorizationService, auditEventService),
                 new BarShiftService(barRepository, authorizationService, auditEventService),
                 new BarTableSessionService(barRepository, authorizationService),
-                new BarOrderService(barRepository, authorizationService, auditEventService,
-                        new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
-                        receivableLedgerService),
+                barOrderService,
                 entryService,
                 new BarAgeVerificationService(idempotencyService, auditEventService, entryService),
                 authorizationService
@@ -81,6 +83,45 @@ class BarServiceTests {
     @AfterEach
     void tearDown() {
         TestSecurityActors.clear();
+    }
+
+    @Test
+    void scanOrderBindsOpenSessionInheritsEntryGateAndSourcesApp() {
+        // 扫码点单（绑桌台会话 + 继承入场闸）：开启功能标志后，扫开台会话二维码下单 → 单据绑会话桌台、来源 app/miniapp、
+        // 不重复核龄（继承场馆入场闸结论）；bar/桌台取自会话（扫码定位），客户端只传 items。
+        BarTableRecord table = service.createTable(new BarTableRequest(
+                "scan-table", "create", List.of(), "bar_1", "VIP 扫码", "card_seat", 50000L, 4, "active"));
+        BarProductRecord product = service.createProduct(new BarProductRequest(
+                "scan-product", "create product", List.of(), "bar_1", "精酿", "beer",
+                3800L, null, null, "active", null, null, false));
+        Instant now = Instant.now();
+        barRepository.saveTableSession(new BarTableSessionRecord(
+                "session_scan", "bar_1", null, LocalDate.parse("2026-06-24"), table.id(), null, null,
+                4, 0L, 0, null, null, "open", now, null, null, 1L, now, now));
+        barOrderService.scanOrderEnabled = true;
+
+        BarOrderRecord order = service.placeScanOrder("session_scan", new BarOrderRequest(
+                "scan-order-1", "scan order", List.of(), null, null, null,
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "app"));
+
+        assertThat(order.orderSource()).isEqualTo("app");
+        assertThat(order.createdTerminal()).isEqualTo("miniapp");
+        assertThat(order.tableId()).isEqualTo(table.id());
+        assertThat(order.totalAmountCent()).isEqualTo(7600L);
+    }
+
+    @Test
+    void scanOrderRejectedWhenFeatureFlagDisabled() {
+        // 功能标志默认关 → 扫码点单被拒（上线前灰度/急停开关），不创建订单。
+        Instant now = Instant.now();
+        barRepository.saveTableSession(new BarTableSessionRecord(
+                "session_scan_off", "bar_1", null, LocalDate.parse("2026-06-24"), "table_x", null, null,
+                2, 0L, 0, null, null, "open", now, null, null, 1L, now, now));
+        assertThatThrownBy(() -> service.placeScanOrder("session_scan_off", new BarOrderRequest(
+                "scan-off", "x", List.of(), null, null, null,
+                List.of(Map.of("product_id", "p", "quantity", 1)), null, List.of(), "app")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code").isEqualTo("BAR_SCAN_ORDER_DISABLED");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

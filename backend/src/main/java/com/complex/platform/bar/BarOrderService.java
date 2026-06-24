@@ -36,6 +36,12 @@ public class BarOrderService {
      */
     private final boolean pourCostStrictMode;
 
+    // 扫码点单功能标志（bar.scan_order.enabled，默认关）：开启后允许 placeScanOrder——
+    // 扫桌台二维码下单，绑开台会话 + 继承入场闸（点单环节不重复年龄核验），来源标 app/miniapp。
+    // 字段注入以免改既有多处构造点；包私有便于单测置位（仿 AmusementService.enforceDeviceRegistry）。
+    @org.springframework.beans.factory.annotation.Value("${bar.scan_order.enabled:false}")
+    boolean scanOrderEnabled;
+
     @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService, TraceabilityService traceabilityService,
@@ -92,6 +98,10 @@ public class BarOrderService {
     }
 
     BarOrderRecord createOrder(BarOrderRequest request) {
+        return createOrderInternal(request, "staff", "web");
+    }
+
+    private BarOrderRecord createOrderInternal(BarOrderRequest request, String orderSource, String createdTerminal) {
         BarOrderRequest actual = requireRequest(request);
         String barId = requireText(actual.barId(), "bar_id");
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
@@ -146,11 +156,11 @@ public class BarOrderService {
                 table.id(),
                 reservation == null ? null : reservation.id(),
                 reservation == null ? null : reservation.customerId(),
-                "staff",
+                orderSource,
                 "created",
                 total,
                 CURRENCY_CNY,
-                "web",
+                createdTerminal,
                 null,
                 trimToNull(actual.salespersonUserId()),
                 now,
@@ -167,6 +177,47 @@ public class BarOrderService {
                 now
         ));
         return order;
+    }
+
+    /**
+     * 扫码点单（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId → 在该开台会话上下单。
+     * bar/桌台/预订/客户 一律取自会话（扫码即定位），来源标 app/miniapp 与员工点单区分。
+     * 继承入场闸：客人已在场馆统一入场闸完成年龄核验（全场 18+，bar 售酒继承入场结论，见 BarEntryService），
+     * 故点单环节不重复核龄——与 createOrder 一致（本就不逐单核龄），此处显式只校验会话有效（已入场就座）、不加核龄。
+     * 功能标志 bar.scan_order.enabled 默认关 → 关时拒（上线前灰度/急停开关）。
+     */
+    BarOrderRecord placeScanOrder(String sessionId, BarOrderRequest request) {
+        if (!scanOrderEnabled) {
+            throw ApiException.conflict("BAR_SCAN_ORDER_DISABLED",
+                    "scan-to-order is not enabled (feature flag bar.scan_order.enabled is off)");
+        }
+        BarOrderRequest actual = requireRequest(request);
+        BarTableSessionRecord session = repository.findTableSessionById(requireText(sessionId, "session_id"))
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "bar table session not found"));
+        // 仅「开台中」会话可扫码下单（已关/已并台不可）。
+        if (!"open".equals(session.status())) {
+            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "scan order requires an open table session");
+        }
+        // 跨商户越权防护：商户用户只能在本商户会话下单（平台管理员 scope 空放行）。
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(session.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "access to another merchant's table session is not allowed");
+            }
+        });
+        // bar/桌台/预订 取自会话（扫码定位），items 来自客户端；来源 app、终端 miniapp。
+        BarOrderRequest derived = new BarOrderRequest(
+                actual.idempotencyKey(),
+                actual.operatorNote(),
+                actual.evidenceAttachmentIds(),
+                session.barId(),
+                session.tableId(),
+                session.reservationId(),
+                actual.items(),
+                actual.salespersonUserId(),
+                actual.serviceUserIds(),
+                actual.paymentMode());
+        return createOrderInternal(derived, "app", "miniapp");
     }
 
     BarOrderItemRecord addOrderItem(String orderId, BarOrderRequest request) {

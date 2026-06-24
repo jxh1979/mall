@@ -137,6 +137,16 @@ public class BarController {
         return ApiResponse.ok(service.createOrder(request));
     }
 
+    @PostMapping("/table-sessions/{session_id}/scan-orders")
+    public ApiResponse<BarOrderRecord> placeScanOrder(
+            @PathVariable("session_id") String sessionId,
+            @RequestBody(required = false) BarOrderRequest request
+    ) {
+        authorizationService.requirePermission("bar.order.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.placeScanOrder(sessionId, request));
+    }
+
     @PostMapping("/orders/{order_id}/bill")
     public ApiResponse<BarBillRecord> createOrderBill(
             @PathVariable("order_id") String orderId,

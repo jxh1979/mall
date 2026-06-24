@@ -4,6 +4,7 @@ import com.complex.platform.evidence.AuditedOperation;
 
 enum BarWriteOperation implements AuditedOperation {
     CREATE_ORDER("bar.order_created", "bar.order_create_failed", "bar.order.create", "bar_order"),
+    SCAN_ORDER("bar.scan_order_created", "bar.scan_order_create_failed", "bar.order.create", "bar_order"),
     CREATE_ORDER_BILL("bar.bill.created", "bar.bill.created_failed", "bar.order.create", "bar_bill"),
     DELIVER_ORDER("bar.order_delivered", "bar.order_deliver_failed", "bar.order.create", "bar_order"),
     ADD_ORDER_ITEM("bar.order_item.created", "bar.order_item.created_failed", "bar.order.create", "bar_order_item"),

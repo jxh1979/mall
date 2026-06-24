@@ -14961,6 +14961,40 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/bar/table-sessions/{session_id}/scan-orders:
+    post:
+      tags:
+        - bar
+      operationId: placeBarScanOrder
+      summary: 扫码点单（绑桌台会话）
+      x-permission: bar.order.create
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - miniapp
+        - tablet
+      x-idempotency-required: true
+      x-audit-event-success: bar.scan_order_created
+      x-audit-event-failure: bar.scan_order_create_failed
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 被扫的台位会话 ID。
+      requestBody:
+        $ref: "#/components/requestBodies/BarScanOrderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
 components:
   securitySchemes:
     BearerAuth:
@@ -16255,6 +16289,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/RefundAutoRuleRequest"
+    BarScanOrderRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarScanOrderRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -22949,6 +22989,54 @@ components:
           enum:
             - active
             - inactive
+    BarScanOrderRequest:
+      type: object
+      description: 请求载荷 BarScanOrderRequest；扫码点单——bar/桌台/预订取自被扫的开台会话（session_id 路径参定位），客户端只传 items 等下单内容，不传 bar_id/table_id。
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        items:
+          type: array
+          description: BarOrderRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。
+          items:
+            type: object
+          maxItems: 200
+        salesperson_user_id:
+          type: string
+          description: 销售归属员工 ID；卡座销售提成按岗位快照计算。
+          maxLength: 64
+        service_user_ids:
+          type: array
+          description: "`service_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 200
+        payment_mode:
+          type: string
+          description: 金额字段，单位为分；必须为非负整数，所有展示层再转换为元。
+          enum:
+            - scan_qr
+            - pay_code
+            - offline
+            - on_account
+          maxLength: 64
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

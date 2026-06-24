@@ -71,6 +71,20 @@ public class BarService {
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.order.create")
     @Transactional
+    public BarOrderRecord placeScanOrder(String sessionId, BarOrderRequest request) {
+        String id = operations.requireText(sessionId, "session_id");
+        return operations.executeWrite(
+                "placeBarScanOrder",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderRecord.class,
+                BarWriteOperation.SCAN_ORDER,
+                () -> orderService.placeScanOrder(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.order.create")
+    @Transactional
     public BarBillRecord createOrderBill(String orderId, BarOrderBillCreateRequest request) {
         String id = operations.requireText(orderId, "order_id");
         return operations.executeWrite(
