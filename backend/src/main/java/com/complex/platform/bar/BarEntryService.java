@@ -539,6 +539,10 @@ public class BarEntryService {
     BarReservationInvitationMemberRecord verifyInvitationEntry(String reservationId, VerificationRequest request) {
         VerificationRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
+        // T1.1 并发超员修复：按预订行 FOR UPDATE 加锁（仿 evaluateGuestEntryAllowance 既有范式，入场流程在上层事务内），
+        // 序列化并发入场核验，防超员入场（与确认路径一致的防御纵深；逻辑上 entered⊆confirmed≤capacity）。
+        reservation = repository.findReservationByIdForUpdate(reservation.id())
+                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "bar reservation not found"));
         if (!"active".equals(reservation.invitationStatus())) {
             throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "invitation is not active");
         }

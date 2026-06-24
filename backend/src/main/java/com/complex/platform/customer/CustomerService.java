@@ -606,6 +606,10 @@ public class CustomerService {
                     String token = requireText(actual.invitationToken(), "invitation_token");
                     BarReservationRecord reservation = barRepository.findReservationByInvitationToken(token)
                             .orElseThrow(() -> ApiException.notFound("BAR_INVITATION_NOT_FOUND", "card-seat invitation not found"));
+                    // T1.1 并发超员修复：按预订行 FOR UPDATE 加锁（本方法 @Transactional），序列化并发确认，
+                    // 防"读已确认人数 → 判容量 → 插入"竞态击穿卡座可进人数上限。
+                    reservation = barRepository.findReservationByIdForUpdate(reservation.id())
+                            .orElseThrow(() -> ApiException.notFound("BAR_INVITATION_NOT_FOUND", "card-seat invitation not found"));
                     if (!"active".equals(reservation.invitationStatus())) {
                         throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "card-seat invitation is not active");
                     }
