@@ -2,6 +2,7 @@ package com.complex.platform.ticketing;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.finance.RefundAuthorizationService;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import java.time.Instant;
@@ -23,15 +24,35 @@ public class TicketRefundService {
     // F-TXN-01 退款跨商户越权修复：退款须按调用者商户范围校验原票/订单归属。可为 null=旧构造/兼容测试路径
     // （不强制）；生产由 Spring 走主构造注入。平台管理员 scope 为空=放行，商户用户必须匹配原单 merchant_id。
     private final AuthorizationService authorizationService;
+    // Stage B（审计 A2）：退款分级授权引擎（finance 域 public 服务）。可为 null=旧构造/兼容测试；生产由 Spring 注入。
+    private final RefundAuthorizationService refundAuthorizationService;
+
+    // 功能标志 refund.tiered_authorization.enabled，默认关。开启后退款走分级授权（额度内自助自动退 / 超额留二人复核 + SoD、
+    // 真实发起人/审批人留痕）；关闭则维持现状退款行为（审批人记字面量 "staff"、无 SoD、无自助自动）。
+    // 用字段注入（非构造）以免改动既有多处构造点；包私有便于单测直接置位（仿 AmusementService.enforceDeviceRegistry）。
+    @org.springframework.beans.factory.annotation.Value("${refund.tiered_authorization.enabled:false}")
+    boolean tieredRefundEnabled;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketRefundService(
             TicketingRepository repository,
             ApplicationEventPublisher eventPublisher,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            RefundAuthorizationService refundAuthorizationService) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.authorizationService = authorizationService;
+        this.refundAuthorizationService = refundAuthorizationService;
+    }
+
+    /**
+     * 向后兼容构造：未注入分级授权引擎（功能标志关时不需要）。供既有单测构造。
+     */
+    public TicketRefundService(
+            TicketingRepository repository,
+            ApplicationEventPublisher eventPublisher,
+            AuthorizationService authorizationService) {
+        this(repository, eventPublisher, authorizationService, null);
     }
 
     /**
@@ -39,7 +60,12 @@ public class TicketRefundService {
      * 供既有单测构造（不改既有用例）。生产环境由 Spring 走上方主构造注入。
      */
     public TicketRefundService(TicketingRepository repository, ApplicationEventPublisher eventPublisher) {
-        this(repository, eventPublisher, null);
+        this(repository, eventPublisher, null, null);
+    }
+
+    /** 当前操作者 id；无 AuthorizationService（旧构造/兼容测试）时返回 null（→ classify 不享额度自助、落复核最安全）。 */
+    private String currentActorId() {
+        return authorizationService == null ? null : authorizationService.currentActor().id();
     }
 
     /**
@@ -84,19 +110,31 @@ public class TicketRefundService {
             throw ApiException.badRequest("VALIDATION_FAILED", "refund amount exceeds order amount");
         }
         Instant now = Instant.now();
+        String requestedBy = currentActorId();
+        // Stage B 分级授权（功能标志 refund.tiered_authorization.enabled，默认关）：判定本笔退款能否当场自助完成。
+        //   额度内(WITHIN_LIMIT)/规则既定(RULE_AUTO) → 发起人当场自助自动退；超额/无额度(REVIEW_REQUIRED) → 留待二人复核。
+        //   手动发起无规则上下文(autoRuleType=null)，故此路径只会落「额度自助」或「复核」；到期未用规则自动退另走
+        //   autoRefundExpiredUnusedOrder。关闭功能标志或引擎未注入 → 维持现状：一律建 requested、等人工 approveRefund。
+        boolean selfComplete = tieredRefundEnabled && refundAuthorizationService != null
+                && refundAuthorizationService.classify("ticket", amountCent, requestedBy, null)
+                        != RefundAuthorizationService.RefundTier.REVIEW_REQUIRED;
         TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
                 "ticket_refund_" + slug(actual.idempotencyKey()),
                 targetId,
                 amountCent,
                 requireText(actual.reason(), "reason"),
                 trimToDefault(actual.refundChannel(), "original"),
-                "requested",
-                null,
-                null,
+                selfComplete ? "approved" : "requested",
+                requestedBy,
+                selfComplete ? requestedBy : null,   // 额度内自助：审批人=发起人本人（非 SoD 场景，SoD 仅约束复核档）
+                selfComplete ? now : null,
                 now,
                 now
         ));
         createRefundLines(refund, order, now);
+        if (selfComplete) {
+            finalizeApprovedRefund(refund, now);
+        }
         return refund;
     }
 
@@ -109,19 +147,37 @@ public class TicketRefundService {
         // 防商户A审批通过商户B的退款。原单缺失时不做归属判定（交由下方既有 null 容错路径）。
         repository.findTicketOrderById(current.targetId())
                 .ifPresent(order -> enforceMerchantScope(order.merchantId()));
+        // Stage B 职责分离（SoD，功能标志开时）：复核档退款的审批人不得为发起人——仿 FinanceService.decideAdjustment
+        //   （approver≠requestedBy，SELF_APPROVAL_FORBIDDEN）。关闭功能标志 → 维持现状：审批人记字面量 "staff"、不做 SoD。
+        String approver = tieredRefundEnabled ? currentActorId() : null;
+        if (tieredRefundEnabled && approver != null && approver.equals(current.requestedBy())) {
+            throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
+                    "the requester of a refund cannot approve it; a different approver is required");
+        }
+        String approvedBy = approver != null ? approver : "staff";
         Instant now = Instant.now();
         // F-TXN-04 并发双拨付防护：退款状态翻转改用 CAS（WHERE status='requested'），并发只一路过闸，
         // 杜绝并发审批同一退款单各发一次 TicketRefundApprovedEvent（双拨付）。原读检+saveTicketRefund 的 TOCTOU 消除。
-        int approvedRows = repository.markTicketRefundApproved(current.id(), "staff", now);
+        int approvedRows = repository.markTicketRefundApproved(current.id(), approvedBy, now);
         if (approvedRows == 0) {
             throw ApiException.conflict(
                     "TICKET_REFUND_NOT_APPROVABLE", "ticket refund cannot be approved in current status");
         }
         TicketRefundRecord approved = new TicketRefundRecord(
                 current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
-                "approved", "staff", now, current.createdAt(), now
+                "approved", current.requestedBy(), approvedBy, now, current.createdAt(), now
         );
-        repository.listTicketRefundLines(current.id()).forEach(line -> {
+        finalizeApprovedRefund(approved, now);
+        return approved;
+    }
+
+    /**
+     * 退款审批生效后的统一兑付副作用（approveRefund 人工审批通过 与 requestRefund 额度内自助完成 共用）：
+     * 退款行置 approved + 冻结对应权益（active→refunded，防退款后照常入场）+ 按比例发积分冲减 + 累计全额时回补库存 + 发打款拨付事件。
+     * 不含 SoD/CAS（由各入口先行把关）。
+     */
+    private void finalizeApprovedRefund(TicketRefundRecord approved, Instant now) {
+        repository.listTicketRefundLines(approved.id()).forEach(line -> {
             repository.saveTicketRefundLine(new TicketRefundLineRecord(
                     line.id(), line.refundId(), line.orderId(), line.entitlementId(), line.entitlementType(), line.lineType(),
                     line.refundAmountCent(), line.remainingTimesBefore(), line.usedTimesBefore(), "approved", line.createdAt(), now
@@ -134,7 +190,7 @@ public class TicketRefundService {
         // P0 清单#2：退款审批通过（生效）→ 发积分冲减事件，customer 域按退款比例冲减原单已 confirmed 积分。
         // 幂等键 source_doc=ticket_refund/refundId；无会员/未入账由 LoyaltyService 侧 noop。
         publishPointsDeductRequested(approved);
-        // 票务退款打款闭环：①全额退款回补库存（限量票名额返还，与下单即扣对称）②发打款拨付事件（解耦）。
+        // 票务退款打款闭环：①累计全额退款回补库存（限量票名额返还，与下单即扣对称）②发打款拨付事件（解耦）。
         TicketOrderRecord order = repository.findTicketOrderById(approved.targetId()).orElse(null);
         if (order != null) {
             // 累计全额退款（含本笔的已审批退款合计 ≥ 原单额）视为整单取消 → 回补该票种库存 order.quantity。
@@ -150,7 +206,6 @@ public class TicketRefundService {
             eventPublisher.publishEvent(new TicketRefundApprovedEvent(
                     order.id(), approved.id(), approved.refundAmountCent(), approved.refundChannel()));
         }
-        return approved;
     }
 
     /**
@@ -180,6 +235,7 @@ public class TicketRefundService {
                 "ticket order expired unused — system auto refund",
                 "original",
                 "approved",
+                "system",
                 "system",
                 now,
                 now,

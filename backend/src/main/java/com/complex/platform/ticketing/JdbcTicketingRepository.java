@@ -668,11 +668,11 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (
                     id, target_id, refund_amount_cent, reason, refund_channel, status,
-                    approved_by, approved_at, created_at, updated_at
+                    requested_by, approved_by, approved_at, created_at, updated_at
                 )
                 VALUES (
                     :id, :target_id, :refund_amount_cent, :reason, :refund_channel, :status,
-                    :approved_by, :approved_at, :created_at, :updated_at
+                    :requested_by, :approved_by, :approved_at, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
@@ -687,7 +687,7 @@ class JdbcTicketingRepository implements TicketingRepository {
     public Optional<TicketRefundRecord> findTicketRefundById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
-                       approved_by, approved_at, created_at, updated_at
+                       requested_by, approved_by, approved_at, created_at, updated_at
                   FROM ticket_refunds
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketRefund).stream().findFirst();

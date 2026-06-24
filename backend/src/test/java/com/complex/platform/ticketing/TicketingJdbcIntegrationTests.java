@@ -423,6 +423,7 @@ class TicketingJdbcIntegrationTests {
                 "requested",
                 null,
                 null,
+                null,
                 now,
                 now
         ));

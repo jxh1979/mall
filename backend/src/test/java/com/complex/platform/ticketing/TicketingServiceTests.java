@@ -2,6 +2,7 @@ package com.complex.platform.ticketing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -13,6 +14,10 @@ import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.RefundAuthorityLimitRecord;
+import com.complex.platform.finance.RefundAuthorizationRepository;
+import com.complex.platform.finance.RefundAuthorizationService;
+import com.complex.platform.finance.RefundAutoRuleRecord;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
@@ -37,6 +42,8 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 class TicketingServiceTests {
 
@@ -1225,6 +1232,118 @@ class TicketingServiceTests {
                 "refund-partial-approve", "approve", "approved", List.of()));
 
         assertThat(ticketingRepository.releasedStock).isEmpty();
+    }
+
+    @Test
+    void tieredAuthorizationSelfCompletesWithinLimitAndEnforcesSoDOverLimit() {
+        // Stage B（审计 A2）：开启分级授权后——额度内退款发起人当场自助自动退（审批人=发起人本人、权益冻结）；
+        //   超额退款留待复核且 SoD：发起人不得自审自批，须由不同审批人放行，全程真实发起人/审批人留痕。
+        Instant ts = Instant.parse("2026-06-23T00:00:00Z");
+        // 分级授权引擎：op_big 额度极大（一律额度内自助）、op_tiny 额度仅 1.00（任何票单都超额→复核）。
+        RefundAuthorizationRepository refundRepo = new RefundAuthorizationRepository() {
+            @Override
+            public Optional<RefundAuthorityLimitRecord> findActiveLimit(String st, String sid, String dom) {
+                if ("staff".equals(st) && "ticket".equals(dom) && "op_big".equals(sid)) {
+                    return Optional.of(new RefundAuthorityLimitRecord(
+                            "l_big", "staff", "op_big", "ticket", 100_000_000L, null, "active", ts, ts));
+                }
+                if ("staff".equals(st) && "ticket".equals(dom) && "op_tiny".equals(sid)) {
+                    return Optional.of(new RefundAuthorityLimitRecord(
+                            "l_tiny", "staff", "op_tiny", "ticket", 100L, null, "active", ts, ts));
+                }
+                return Optional.empty();
+            }
+            @Override
+            public boolean isAutoRuleEnabled(String dom, String type) {
+                return false;
+            }
+            @Override
+            public RefundAuthorityLimitRecord saveLimit(RefundAuthorityLimitRecord l) {
+                return l;
+            }
+            @Override
+            public List<RefundAuthorityLimitRecord> listLimits() {
+                return List.of();
+            }
+            @Override
+            public RefundAutoRuleRecord saveRule(RefundAutoRuleRecord r) {
+                return r;
+            }
+            @Override
+            public List<RefundAutoRuleRecord> listRules() {
+                return List.of();
+            }
+        };
+        AuthorizationService authz = new AuthorizationService(null);
+        TicketRefundService tiered = new TicketRefundService(
+                ticketingRepository, publishedEvents::add, authz, new RefundAuthorizationService(refundRepo));
+        tiered.tieredRefundEnabled = true;
+
+        // ── 额度内：op_big 发起 → 当场自助自动退（status approved、审批人=发起人 op_big、权益冻结）。 ──
+        TicketTypeRecord tt1 = createTicketType("tier-within-ticket");
+        EntitlementTemplateRecord tpl1 = createTemplate("tier-within-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(tt1.id(), new TicketTypeEntitlementRequest(
+                "tier-within-bind", "bind", List.of(), tpl1.id(), 1, 1, 9900L, "default", 1, null));
+        TestSecurityActors.asMerchantUser("mch_tier");
+        TicketOrderRecord order1 = service.createTicketOrder(new TicketOrderRequest(
+                "tier-within-order", "create", List.of(), tt1.id(), null, 1,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "cust_tier_within"));
+        service.issueTicketOrder(order1.id(), new StatusChangeRequest("tier-within-issue", "issue", "issue", List.of()));
+        IssuedEntitlementRecord ent1 = ticketingRepository.listIssuedEntitlementsByOrderId(order1.id()).get(0);
+
+        actAsAdmin("op_big");
+        TicketRefundRecord within = tiered.requestRefund(new TicketRefundRequest(
+                "tier-within-refund", "refund", List.of(), order1.id(), order1.amountCent(), "within limit", "original"));
+        assertThat(within.status()).isEqualTo("approved");
+        assertThat(within.requestedBy()).isEqualTo("op_big");
+        assertThat(within.approvedBy()).isEqualTo("op_big");
+        assertThat(ticketingRepository.findIssuedEntitlementById(ent1.id()))
+                .get().extracting(IssuedEntitlementRecord::status).isEqualTo("refunded");
+
+        // ── 超额度：op_tiny 发起 → 留待复核（status requested、未冻结）；SoD：本人不可批、他人可批。 ──
+        TicketTypeRecord tt2 = createTicketType("tier-review-ticket");
+        EntitlementTemplateRecord tpl2 = createTemplate("tier-review-template", 1, 9900L);
+        service.bindTicketTypeEntitlement(tt2.id(), new TicketTypeEntitlementRequest(
+                "tier-review-bind", "bind", List.of(), tpl2.id(), 1, 1, 9900L, "default", 1, null));
+        TestSecurityActors.asMerchantUser("mch_tier");
+        TicketOrderRecord order2 = service.createTicketOrder(new TicketOrderRequest(
+                "tier-review-order", "create", List.of(), tt2.id(), null, 1,
+                LocalDate.parse("2026-06-15"), "admin", "13800138000", "cust_tier_review"));
+        service.issueTicketOrder(order2.id(), new StatusChangeRequest("tier-review-issue", "issue", "issue", List.of()));
+        IssuedEntitlementRecord ent2 = ticketingRepository.listIssuedEntitlementsByOrderId(order2.id()).get(0);
+
+        actAsAdmin("op_tiny");
+        TicketRefundRecord review = tiered.requestRefund(new TicketRefundRequest(
+                "tier-review-refund", "refund", List.of(), order2.id(), order2.amountCent(), "over limit", "original"));
+        assertThat(review.status()).isEqualTo("requested");
+        assertThat(review.requestedBy()).isEqualTo("op_tiny");
+        assertThat(review.approvedBy()).isNull();
+        assertThat(ticketingRepository.findIssuedEntitlementById(ent2.id()))
+                .get().extracting(IssuedEntitlementRecord::status).isEqualTo("active");
+
+        // SoD：发起人 op_tiny 自审自批 → 拒。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> tiered.approveRefund(review.id(), new StatusChangeRequest(
+                        "tier-review-selfapprove", "approve", "approved", List.of())))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("requester of a refund cannot approve");
+
+        // 不同审批人 op_other 放行 → 生效（审批人留痕 op_other、发起人仍 op_tiny、权益冻结）。
+        actAsAdmin("op_other");
+        TicketRefundRecord approved = tiered.approveRefund(review.id(), new StatusChangeRequest(
+                "tier-review-approve", "approve", "approved", List.of()));
+        assertThat(approved.approvedBy()).isEqualTo("op_other");
+        assertThat(approved.requestedBy()).isEqualTo("op_tiny");
+        assertThat(ticketingRepository.findIssuedEntitlementById(ent2.id()))
+                .get().extracting(IssuedEntitlementRecord::status).isEqualTo("refunded");
+
+        TestSecurityActors.clear();
+    }
+
+    /** 设平台管理员上下文但 id 可指定——分级授权需「不同发起人/审批人」验 SoD，而平台管理员 scope 为空不触发商户闸。 */
+    private static void actAsAdmin(String userId) {
+        AccessActor actor = new AccessActor(userId, userId, "platform_admin", "org_1", null, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
     }
 
     @Test
@@ -2566,7 +2685,7 @@ class TicketingServiceTests {
             }
             refunds.put(refundId, new TicketRefundRecord(
                     r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(),
-                    "approved", approvedBy, approvedAt, r.createdAt(), approvedAt));
+                    "approved", r.requestedBy(), approvedBy, approvedAt, r.createdAt(), approvedAt));
             return 1;
         }
 

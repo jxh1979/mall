@@ -257,6 +257,7 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("reason"),
                 resultSet.getString("refund_channel"),
                 resultSet.getString("status"),
+                resultSet.getString("requested_by"),
                 resultSet.getString("approved_by"),
                 nullableInstant(resultSet, "approved_at"),
                 nullableInstant(resultSet, "created_at"),

@@ -239,6 +239,7 @@ final class JdbcTicketingParameterSource {
                 .addValue("reason", refund.reason())
                 .addValue("refund_channel", refund.refundChannel())
                 .addValue("status", refund.status())
+                .addValue("requested_by", refund.requestedBy())
                 .addValue("approved_by", refund.approvedBy())
                 .addValue("approved_at", timestampWithTimeZone(refund.approvedAt()))
                 .addValue("created_at", timestampWithTimeZone(refund.createdAt()))

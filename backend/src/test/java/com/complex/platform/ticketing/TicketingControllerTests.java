@@ -345,6 +345,7 @@ class TicketingControllerTests {
                 "requested",
                 null,
                 null,
+                null,
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
@@ -355,6 +356,7 @@ class TicketingControllerTests {
                 "customer request",
                 "original",
                 "approved",
+                "op_req",
                 "ops",
                 Instant.parse("2026-06-14T00:01:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z"),
