@@ -37,6 +37,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-ANA-001", label: "经营分析", module: "分析", group: "overview", route: "/admin/analytics/business", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-002", label: "集团总览", module: "分析", group: "overview", route: "/admin/analytics/group-overview", requiredPermissions: ["analytics.group.view"] },
   { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },
+  { pageId: "ADM-LEASE-001", label: "招商租赁工作台", module: "招商租赁", group: "governance", route: "/admin/leasing/workbench", requiredPermissions: ["leasing.lead.manage"] },
 ];
 
 // 业务域分组顺序与展示文案（frontend-admin §4.3：8 业务域 + 平台域聚合）。
