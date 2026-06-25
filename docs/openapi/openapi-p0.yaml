@@ -13895,6 +13895,16 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+      parameters:
+        - name: groupBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - project
+              - entity
+          description: 汇总维度：project(默认)按项目 / entity 按法律主体下钻；响应含集团均值与低于均值红点标记（④ S3 对标）。
   /api/v1/ticketing/refunds/{refund_id}/lines:
     get:
       tags:

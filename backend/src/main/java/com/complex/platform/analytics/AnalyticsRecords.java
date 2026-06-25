@@ -74,6 +74,8 @@ public final class AnalyticsRecords {
     public record GroupOverviewResponse(
             Instant asOf,
             LocalDate businessDate,
+            String groupBy,
+            Map<String, MetricValue> groupAverages,
             List<GroupProjectRollup> projects
     ) {
     }
@@ -86,7 +88,8 @@ public final class AnalyticsRecords {
             String projectId,
             String projectName,
             long merchantCount,
-            Map<String, MetricValue> metrics
+            Map<String, MetricValue> metrics,
+            List<String> belowAverageMetrics
     ) {
     }
 

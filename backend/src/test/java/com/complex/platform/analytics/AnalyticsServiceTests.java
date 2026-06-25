@@ -219,7 +219,7 @@ class AnalyticsServiceTests {
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_b"), new BigDecimal("9000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
 
-        var group = service.groupOverview();
+        var group = service.groupOverview(null);
 
         // 单综合体 → 单 project rollup（不伪造多 project）。
         assertThat(group.projects()).hasSize(1);
@@ -237,7 +237,7 @@ class AnalyticsServiceTests {
     @Test
     void groupOverviewReturnsHonestEmptyStateWhenNoEtlSnapshotExists() {
         // 无任何 ETL 快照 → metrics 全 null + note，商户数 0，不伪造。
-        var group = service.groupOverview();
+        var group = service.groupOverview(null);
 
         assertThat(group.projects()).hasSize(1);
         var project = group.projects().get(0);
@@ -255,7 +255,7 @@ class AnalyticsServiceTests {
         // 商户口径快照用于真实商户数计数（不进 project 桶）。
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
 
-        var group = service.groupOverview();
+        var group = service.groupOverview(null);
 
         assertThat(group.projects()).hasSize(1);
         var project = group.projects().get(0);
@@ -270,7 +270,7 @@ class AnalyticsServiceTests {
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_2"), new BigDecimal("88000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
 
-        var group = service.groupOverview();
+        var group = service.groupOverview(null);
 
         assertThat(group.projects()).hasSize(2);
         assertThat(group.projects().stream().map(p -> p.projectId()))
@@ -279,6 +279,39 @@ class AnalyticsServiceTests {
         var p2 = group.projects().stream().filter(p -> p.projectId().equals("project_2")).findFirst().orElseThrow();
         assertThat(p1.metrics().get("revenue.net").value()).isEqualByComparingTo("120000");
         assertThat(p2.metrics().get("revenue.net").value()).isEqualByComparingTo("88000");
+    }
+
+    @Test
+    void groupOverviewFlagsProjectsBelowGroupAverage() {
+        // ④ S3 对标：project_1=120000、project_2=30000 → 均值 75000；project_2 < 75000*0.8=60000 → 标红点。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_2"), new BigDecimal("30000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var group = service.groupOverview("project");
+
+        assertThat(group.groupBy()).isEqualTo("project");
+        assertThat(group.groupAverages().get("revenue.net").value()).isEqualByComparingTo("75000");
+        var p1 = group.projects().stream().filter(p -> p.projectId().equals("project_1")).findFirst().orElseThrow();
+        var p2 = group.projects().stream().filter(p -> p.projectId().equals("project_2")).findFirst().orElseThrow();
+        assertThat(p2.belowAverageMetrics()).contains("revenue.net");
+        assertThat(p1.belowAverageMetrics()).doesNotContain("revenue.net");
+    }
+
+    @Test
+    void groupOverviewByEntityAggregatesProjectsUnderSameEntity() {
+        // ④ S3 多级下钻：project_1+project_2 同属 ent_a → entity 维聚合为一行，指标求和。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_2"), new BigDecimal("80000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.projectEntityMap.put("project_1", "ent_a");
+        analyticsRepository.projectEntityMap.put("project_2", "ent_a");
+
+        var group = service.groupOverview("entity");
+
+        assertThat(group.groupBy()).isEqualTo("entity");
+        assertThat(group.projects()).hasSize(1);
+        var ent = group.projects().get(0);
+        assertThat(ent.projectId()).isEqualTo("ent_a");
+        assertThat(ent.metrics().get("revenue.net").value()).isEqualByComparingTo("200000"); // 120000+80000
     }
 
     @Test
@@ -840,7 +873,14 @@ class AnalyticsServiceTests {
     }
 
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
+        final Map<String, String> projectEntityMap = new LinkedHashMap<>();
         private final List<MetricDefinitionRecord> metricDefinitions = new ArrayList<>();
+
+        @Override
+        public Map<String, String> projectBusinessEntityMap() {
+            return projectEntityMap;
+        }
+
         private DashboardSnapshotRecord dashboardSnapshot;
         private final List<BusinessMetricSnapshotRecord> businessMetricSnapshots = new ArrayList<>();
         private final List<MerchantSummaryRecord> merchantSummaries = new ArrayList<>();

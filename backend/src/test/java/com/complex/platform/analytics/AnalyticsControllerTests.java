@@ -85,7 +85,7 @@ class AnalyticsControllerTests {
         when(authorizationService.currentMerchantScope()).thenReturn(java.util.Optional.empty());
         when(service.overview(any())).thenReturn(overviewResponse());
         when(service.dashboardDomain(anyString(), any())).thenReturn(overviewResponse());
-        when(service.groupOverview()).thenReturn(groupOverviewResponse());
+        when(service.groupOverview(org.mockito.ArgumentMatchers.any())).thenReturn(groupOverviewResponse());
         when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
         when(service.listMerchantHealthScores(any())).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
         when(service.listAnalyticsMerchants(any())).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
@@ -206,11 +206,14 @@ class AnalyticsControllerTests {
         return new AnalyticsRecords.GroupOverviewResponse(
                 now(),
                 LocalDate.parse("2026-06-14"),
+                "project",
+                Map.of(),
                 List.of(new AnalyticsRecords.GroupProjectRollup(
                         "project_1",
                         "综合体（默认）",
                         1L,
-                        Map.of("revenue.net", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent"))
+                        Map.of("revenue.net", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent")),
+                        List.of()
                 ))
         );
     }

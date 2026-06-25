@@ -115,11 +115,13 @@ public class AnalyticsController {
     }
 
     @GetMapping("/group-overview")
-    public ApiResponse<GroupOverviewResponse> getGroupOverview() {
+    public ApiResponse<GroupOverviewResponse> getGroupOverview(
+            @org.springframework.web.bind.annotation.RequestParam(value = "groupBy", required = false) String groupBy) {
         authorizationService.requirePermission("analytics.group.view");
         // 集团总览为平台级跨商户汇总：fail-closed 拒绝 merchant-scoped 调用方（与其它平台级分析端点纵深防御一致）。
         authorizationService.requirePlatformScope();
-        return ApiResponse.ok(service.groupOverview());
+        // ④ S3：groupBy=project（默认）/entity（按主体下钻）；对标红点在响应内。
+        return ApiResponse.ok(service.groupOverview(groupBy));
     }
 
     @GetMapping("/operating-params")

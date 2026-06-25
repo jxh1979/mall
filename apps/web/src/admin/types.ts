@@ -84,11 +84,14 @@ export type GroupProjectRollup = {
   projectName: string;
   merchantCount: number;
   metrics: Record<string, MetricValue>;
+  belowAverageMetrics?: string[];
 };
 
 export type GroupOverviewPayload = {
   asOf: string;
   businessDate: string;
+  groupBy?: string;
+  groupAverages?: Record<string, MetricValue>;
   projects: GroupProjectRollup[];
 };
 

@@ -23,6 +23,11 @@ import java.util.Optional;
 
 public interface AnalyticsRepository {
 
+    /** ④ S3：project_id → business_entity_id 映射（projects⋈merchants），供集团总览按主体维下钻聚合。默认空，Jdbc 覆盖。 */
+    default java.util.Map<String, String> projectBusinessEntityMap() {
+        return java.util.Map.of();
+    }
+
     List<AiQualityResultRecord> listAiQualityResults();
 
     List<AiQualityTaskRecord> listAiQualityTasks();

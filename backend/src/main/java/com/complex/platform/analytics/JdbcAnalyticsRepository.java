@@ -54,6 +54,20 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, String> projectBusinessEntityMap() {
+        // ④ S3：project → business_entity 映射，供集团总览按主体维聚合下钻。
+        Map<String, String> map = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT p.id AS project_id, m.business_entity_id AS business_entity_id
+                  FROM projects p JOIN merchants m ON p.merchant_id = m.id
+                 WHERE m.business_entity_id IS NOT NULL
+                """, new MapSqlParameterSource(), (rs) -> {
+            map.put(rs.getString("project_id"), rs.getString("business_entity_id"));
+        });
+        return map;
+    }
+
+    @Override
     public List<AiQualityResultRecord> listAiQualityResults() {
         return jdbcTemplate.query("""
                 SELECT result_id, task_id, source_type, source_id, quality_score, risk_level,
