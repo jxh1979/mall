@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 446 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 451 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -467,6 +467,11 @@
 | facility | `POST` | `/api/v1/facility/work-orders` | `createFacilityWorkOrder` | 新建楼宇维保/报修工单 | `FacilityWorkOrderRequest` | `facility.work_order.manage` | `staff-token` | `platform` | web | 是 | `facility.work_order.created` | `facility.work_order.create_failed` |
 | facility | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | `assignFacilityWorkOrder` | 楼宇维保工单派单 | `FacilityWorkOrderAssignRequest` | `facility.work_order.manage` | `staff-token` | `platform` | web | 是 | `facility.work_order.assigned` | `facility.work_order.assign_failed` |
 | facility | `POST` | `/api/v1/facility/work-orders/{work_order_id}/status` | `updateFacilityWorkOrderStatus` | 楼宇维保工单状态流转（in_progress/resolved/closed） | `FacilityWorkOrderStatusRequest` | `facility.work_order.manage` | `staff-token` | `platform` | web | 是 | `facility.work_order.status_changed` | `facility.work_order.status_change_failed` |
+| facility | `GET` | `/api/v1/facility/inspection-templates` | `listFacilityInspectionTemplates` | 楼宇巡检模板清单 | `-` | `facility.inspection.manage` | `staff-token` | `platform` | web | 否 | `facility.inspection.template_viewed` | `facility.inspection.template_view_failed` |
+| facility | `POST` | `/api/v1/facility/inspection-templates` | `createFacilityInspectionTemplate` | 新建楼宇巡检模板 | `FacilityInspectionTemplateRequest` | `facility.inspection.manage` | `staff-token` | `platform` | web | 是 | `facility.inspection.template_created` | `facility.inspection.template_create_failed` |
+| facility | `GET` | `/api/v1/facility/inspection-tasks` | `listFacilityInspectionTasks` | 楼宇巡检任务清单（含超期） | `-` | `facility.inspection.manage` | `staff-token` | `platform` | web | 否 | `facility.inspection.task_viewed` | `facility.inspection.task_view_failed` |
+| facility | `POST` | `/api/v1/facility/inspection-tasks/generate` | `generateFacilityInspectionTasks` | 按设备维保周期生成到期巡检任务 | `-` | `facility.inspection.manage` | `staff-token` | `platform` | web | 否 | `facility.inspection.tasks_generated` | `facility.inspection.tasks_generate_failed` |
+| facility | `POST` | `/api/v1/facility/inspection-tasks/{task_id}/complete` | `completeFacilityInspectionTask` | 完成巡检任务并写巡检记录 | `FacilityInspectionCompleteRequest` | `facility.inspection.manage` | `staff-token` | `platform` | web | 是 | `facility.inspection.task_completed` | `facility.inspection.task_complete_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -534,5 +539,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 446 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 451 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

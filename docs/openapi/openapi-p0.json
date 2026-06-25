@@ -21695,6 +21695,190 @@
           }
         }
       }
+    },
+    "/api/v1/facility/inspection-templates": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityInspectionTemplates",
+        "summary": "楼宇巡检模板清单",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.inspection.template_viewed",
+        "x-audit-event-failure": "facility.inspection.template_view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "createFacilityInspectionTemplate",
+        "summary": "新建楼宇巡检模板",
+        "description": "③ S3：定义巡检项清单（JSONB）。功能标志 facility.inspection.enabled 默认关。",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection.template_created",
+        "x-audit-event-failure": "facility.inspection.template_create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionTemplateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspection-tasks": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityInspectionTasks",
+        "summary": "楼宇巡检任务清单（含超期）",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.inspection.task_viewed",
+        "x-audit-event-failure": "facility.inspection.task_view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspection-tasks/generate": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "generateFacilityInspectionTasks",
+        "summary": "按设备维保周期生成到期巡检任务",
+        "description": "③ S3：对每台 active 且设维保周期的设备按 last_maintenance_at+周期 推 due_at 生成待办（自然键防重），并翻超期。亦由 @Scheduled 作业触发。",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.inspection.tasks_generated",
+        "x-audit-event-failure": "facility.inspection.tasks_generate_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspection-tasks/{task_id}/complete": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "completeFacilityInspectionTask",
+        "summary": "完成巡检任务并写巡检记录",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection.task_completed",
+        "x-audit-event-failure": "facility.inspection.task_complete_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "巡检任务 id。"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionCompleteRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -23844,6 +24028,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/FacilityWorkOrderStatusRequest"
+            }
+          }
+        }
+      },
+      "FacilityInspectionTemplateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityInspectionTemplateRequest"
+            }
+          }
+        }
+      },
+      "FacilityInspectionCompleteRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityInspectionCompleteRequest"
             }
           }
         }
@@ -32889,6 +33093,85 @@
               "resolved",
               "closed"
             ]
+          }
+        }
+      },
+      "FacilityInspectionTemplateRequest": {
+        "type": "object",
+        "description": "请求载荷 FacilityInspectionTemplateRequest（③ S3 巡检模板）。",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "description": "模板名称。",
+            "maxLength": 255
+          },
+          "equipment_type": {
+            "type": "string",
+            "description": "适用设备类型（空=通用）。",
+            "enum": [
+              "hvac",
+              "elevator",
+              "fire",
+              "power",
+              "water",
+              "weak_current",
+              "other"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "description": "巡检项清单。",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        }
+      },
+      "FacilityInspectionCompleteRequest": {
+        "type": "object",
+        "description": "请求载荷 FacilityInspectionCompleteRequest（③ S3 完成巡检）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "inspector": {
+            "type": "string",
+            "description": "巡检人 id。",
+            "maxLength": 64
+          },
+          "result": {
+            "type": "string",
+            "description": "巡检结论（空=pass）。",
+            "enum": [
+              "pass",
+              "fail"
+            ]
+          },
+          "findings": {
+            "type": "string",
+            "description": "问题描述。",
+            "maxLength": 2000
+          },
+          "checked_items": {
+            "type": "array",
+            "description": "已检项。",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            }
           }
         }
       }

@@ -40,6 +40,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-LEASE-001", label: "招商租赁工作台", module: "招商租赁", group: "governance", route: "/admin/leasing/workbench", requiredPermissions: ["leasing.lead.manage"] },
   { pageId: "ADM-FAC-001", label: "设施设备台账", module: "楼宇运营", group: "governance", route: "/admin/facility/equipment", requiredPermissions: ["facility.equipment.manage"] },
   { pageId: "ADM-FAC-002", label: "楼宇维保工单", module: "楼宇运营", group: "governance", route: "/admin/facility/work-orders", requiredPermissions: ["facility.work_order.manage"] },
+  { pageId: "ADM-FAC-003", label: "设施巡检", module: "楼宇运营", group: "governance", route: "/admin/facility/inspection", requiredPermissions: ["facility.inspection.manage"] },
 ];
 
 // 业务域分组顺序与展示文案（frontend-admin §4.3：8 业务域 + 平台域聚合）。

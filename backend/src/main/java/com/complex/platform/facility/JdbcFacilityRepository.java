@@ -3,8 +3,11 @@ package com.complex.platform.facility;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -16,10 +19,15 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcFacilityRepository implements FacilityRepository {
 
-    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
+    };
 
-    JdbcFacilityRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
+
+    JdbcFacilityRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper.copy().findAndRegisterModules();
     }
 
     @Override
@@ -114,5 +122,134 @@ class JdbcFacilityRepository implements FacilityRepository {
                 nullableInstant(rs, "sla_due_at"), nullableInstant(rs, "resolved_at"),
                 rs.getString("project_id"), rs.getString("merchant_id"),
                 nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+    }
+
+    @Override
+    public FacilityInspectionTemplateRecord saveInspectionTemplate(FacilityInspectionTemplateRecord t) {
+        jdbcTemplate.update("""
+                INSERT INTO facility_inspection_templates (id, name, equipment_type, items, status, project_id, merchant_id, created_at, updated_at)
+                VALUES (:id, :name, :equipment_type, CAST(:items AS jsonb), :status, :project_id, :merchant_id, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name, equipment_type = EXCLUDED.equipment_type, items = EXCLUDED.items,
+                    status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", t.id()).addValue("name", t.name()).addValue("equipment_type", t.equipmentType())
+                .addValue("items", writeJson(t.items())).addValue("status", t.status())
+                .addValue("project_id", t.projectId()).addValue("merchant_id", t.merchantId())
+                .addValue("created_at", timestampWithTimeZone(t.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(t.updatedAt())));
+        return t;
+    }
+
+    @Override
+    public List<FacilityInspectionTemplateRecord> listInspectionTemplates() {
+        return jdbcTemplate.query("SELECT * FROM facility_inspection_templates ORDER BY created_at DESC, id LIMIT 500", this::mapTemplate);
+    }
+
+    @Override
+    public boolean upsertInspectionTask(FacilityInspectionTaskRecord t) {
+        int affected = jdbcTemplate.update("""
+                INSERT INTO facility_inspection_tasks (id, equipment_id, space_id, due_at, status, generated_at,
+                        completed_record_id, completed_at, project_id, merchant_id, created_at, updated_at)
+                VALUES (:id, :equipment_id, :space_id, :due_at, :status, :generated_at,
+                        :completed_record_id, :completed_at, :project_id, :merchant_id, :created_at, :updated_at)
+                ON CONFLICT (equipment_id, due_at) DO NOTHING
+                """, taskParams(t));
+        return affected > 0;
+    }
+
+    @Override
+    public FacilityInspectionTaskRecord saveInspectionTask(FacilityInspectionTaskRecord t) {
+        jdbcTemplate.update("""
+                INSERT INTO facility_inspection_tasks (id, equipment_id, space_id, due_at, status, generated_at,
+                        completed_record_id, completed_at, project_id, merchant_id, created_at, updated_at)
+                VALUES (:id, :equipment_id, :space_id, :due_at, :status, :generated_at,
+                        :completed_record_id, :completed_at, :project_id, :merchant_id, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status, completed_record_id = EXCLUDED.completed_record_id,
+                    completed_at = EXCLUDED.completed_at, updated_at = EXCLUDED.updated_at
+                """, taskParams(t));
+        return t;
+    }
+
+    @Override
+    public List<FacilityInspectionTaskRecord> listInspectionTasks() {
+        return jdbcTemplate.query("SELECT * FROM facility_inspection_tasks ORDER BY due_at ASC, id LIMIT 500", this::mapTask);
+    }
+
+    @Override
+    public Optional<FacilityInspectionTaskRecord> findInspectionTaskById(String id) {
+        return jdbcTemplate.query("SELECT * FROM facility_inspection_tasks WHERE id = :id", Map.of("id", id), this::mapTask)
+                .stream().findFirst();
+    }
+
+    @Override
+    public int markOverdueInspectionTasks(Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE facility_inspection_tasks SET status = 'overdue', updated_at = :now
+                 WHERE status = 'pending' AND due_at < :now
+                """, new MapSqlParameterSource().addValue("now", timestampWithTimeZone(now)));
+    }
+
+    @Override
+    public FacilityInspectionRecordRecord saveInspectionRecord(FacilityInspectionRecordRecord r) {
+        jdbcTemplate.update("""
+                INSERT INTO facility_inspection_records (id, task_id, equipment_id, inspector, result, findings,
+                        checked_items, project_id, merchant_id, created_at)
+                VALUES (:id, :task_id, :equipment_id, :inspector, :result, :findings,
+                        CAST(:checked_items AS jsonb), :project_id, :merchant_id, :created_at)
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", r.id()).addValue("task_id", r.taskId()).addValue("equipment_id", r.equipmentId())
+                .addValue("inspector", r.inspector()).addValue("result", r.result()).addValue("findings", r.findings())
+                .addValue("checked_items", writeJson(r.checkedItems()))
+                .addValue("project_id", r.projectId()).addValue("merchant_id", r.merchantId())
+                .addValue("created_at", timestampWithTimeZone(r.createdAt())));
+        return r;
+    }
+
+    private MapSqlParameterSource taskParams(FacilityInspectionTaskRecord t) {
+        return new MapSqlParameterSource()
+                .addValue("id", t.id()).addValue("equipment_id", t.equipmentId()).addValue("space_id", t.spaceId())
+                .addValue("due_at", timestampWithTimeZone(t.dueAt())).addValue("status", t.status())
+                .addValue("generated_at", timestampWithTimeZone(t.generatedAt()))
+                .addValue("completed_record_id", t.completedRecordId())
+                .addValue("completed_at", timestampWithTimeZone(t.completedAt()))
+                .addValue("project_id", t.projectId()).addValue("merchant_id", t.merchantId())
+                .addValue("created_at", timestampWithTimeZone(t.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(t.updatedAt()));
+    }
+
+    private FacilityInspectionTemplateRecord mapTemplate(ResultSet rs, int n) throws SQLException {
+        return new FacilityInspectionTemplateRecord(
+                rs.getString("id"), rs.getString("name"), rs.getString("equipment_type"),
+                readJson(rs.getString("items")), rs.getString("status"),
+                rs.getString("project_id"), rs.getString("merchant_id"),
+                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+    }
+
+    private FacilityInspectionTaskRecord mapTask(ResultSet rs, int n) throws SQLException {
+        return new FacilityInspectionTaskRecord(
+                rs.getString("id"), rs.getString("equipment_id"), rs.getString("space_id"),
+                nullableInstant(rs, "due_at"), rs.getString("status"), nullableInstant(rs, "generated_at"),
+                rs.getString("completed_record_id"), nullableInstant(rs, "completed_at"),
+                rs.getString("project_id"), rs.getString("merchant_id"),
+                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+    }
+
+    private String writeJson(List<String> value) {
+        try {
+            return objectMapper.writeValueAsString(value == null ? List.of() : value);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("cannot serialize json", e);
+        }
+    }
+
+    private List<String> readJson(String value) {
+        try {
+            return value == null ? List.of() : objectMapper.readValue(value, STRING_LIST_TYPE);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("cannot parse json", e);
+        }
     }
 }

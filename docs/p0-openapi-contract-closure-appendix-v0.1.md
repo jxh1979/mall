@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 446 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 258 | 人工权限矩阵正文未覆盖 154 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 892 | 人工事件矩阵正文未覆盖 850 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 446 | 人工任务映射正文未逐项覆盖 440 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 275 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 451 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 259 | 人工权限矩阵正文未覆盖 155 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 902 | 人工事件矩阵正文未覆盖 860 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 451 | 人工任务映射正文未逐项覆盖 445 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 278 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -146,6 +146,7 @@
 | `evidence.review.create` | staff-token | project-object | 1 | createEvidenceReview | 已在权限矩阵正文出现 |
 | `evidence.timeline.view` | staff-token | project-object | 2 | getEvidenceTimeline, getTraceabilityAutoCaptureRate | 已在权限矩阵正文出现 |
 | `facility.equipment.manage` | staff-token | platform | 3 | listFacilityEquipment, createFacilityEquipment, updateFacilityEquipmentStatus | OpenAPI 补充，以本附录为准 |
+| `facility.inspection.manage` | staff-token | platform | 5 | listFacilityInspectionTemplates, createFacilityInspectionTemplate, listFacilityInspectionTasks, generateFacilityInspectionTasks, completeFacilityInspectionTask | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.manage` | staff-token | platform | 4 | listFacilityWorkOrders, createFacilityWorkOrder, assignFacilityWorkOrder, updateFacilityWorkOrderStatus | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project-entity | 2 | createArApItem, billContractRent | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | project-entity | 2 | listArApItems, exportArApItems | 已在权限矩阵正文出现 |
@@ -710,6 +711,16 @@
 | `facility.equipment.status_changed` | success | `updateFacilityEquipmentStatus` | `POST` | `/api/v1/facility/equipment/{equipment_id}/status` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment.view_failed` | failure | `listFacilityEquipment` | `GET` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment.viewed` | success | `listFacilityEquipment` | `GET` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.task_complete_failed` | failure | `completeFacilityInspectionTask` | `POST` | `/api/v1/facility/inspection-tasks/{task_id}/complete` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.task_completed` | success | `completeFacilityInspectionTask` | `POST` | `/api/v1/facility/inspection-tasks/{task_id}/complete` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.task_view_failed` | failure | `listFacilityInspectionTasks` | `GET` | `/api/v1/facility/inspection-tasks` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.task_viewed` | success | `listFacilityInspectionTasks` | `GET` | `/api/v1/facility/inspection-tasks` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.tasks_generate_failed` | failure | `generateFacilityInspectionTasks` | `POST` | `/api/v1/facility/inspection-tasks/generate` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.tasks_generated` | success | `generateFacilityInspectionTasks` | `POST` | `/api/v1/facility/inspection-tasks/generate` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.template_create_failed` | failure | `createFacilityInspectionTemplate` | `POST` | `/api/v1/facility/inspection-templates` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.template_created` | success | `createFacilityInspectionTemplate` | `POST` | `/api/v1/facility/inspection-templates` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.template_view_failed` | failure | `listFacilityInspectionTemplates` | `GET` | `/api/v1/facility/inspection-templates` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
+| `facility.inspection.template_viewed` | success | `listFacilityInspectionTemplates` | `GET` | `/api/v1/facility/inspection-templates` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order.assign_failed` | failure | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order.assigned` | success | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order.create_failed` | failure | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
@@ -1545,11 +1556,13 @@
 | P0-待归类 | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | 楼宇维保工单派单 | `facility.work_order.manage` | `facility.work_order.assigned` / `facility.work_order.assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | Assign merchant service work order | `merchant.service_work_order.assign` | `merchant_service.assignMerchantServiceWorkOrder.succeeded` / `merchant_service.assignMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `closeMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | Close merchant service work order | `merchant.service_work_order.close` | `merchant_service.closeMerchantServiceWorkOrder.succeeded` / `merchant_service.closeMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `completeFacilityInspectionTask` | `POST` | `/api/v1/facility/inspection-tasks/{task_id}/complete` | 完成巡检任务并写巡检记录 | `facility.inspection.manage` | `facility.inspection.task_completed` / `facility.inspection.task_complete_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
 | P0-待归类 | `convertLeasingOfferToContract` | `POST` | `/api/v1/leasing/offers/{offer_id}/convert-to-contract` | 报价转合同（accepted→合同 draft） | `leasing.offer.manage` | `leasing.offer.converted` / `leasing.offer.convert_failed` | web | operation 级补充 |
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | 创建合同关键日期 | `compliance.contract_key_date.manage` | `compliance.contract_key_date.create` / `compliance.contract_key_date.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | 新建楼宇设施设备档案 | `facility.equipment.manage` | `facility.equipment.created` / `facility.equipment.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createFacilityInspectionTemplate` | `POST` | `/api/v1/facility/inspection-templates` | 新建楼宇巡检模板 | `facility.inspection.manage` | `facility.inspection.template_created` / `facility.inspection.template_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | 新建楼宇维保/报修工单 | `facility.work_order.manage` | `facility.work_order.created` / `facility.work_order.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | 创建 P1/P2 商场平面图 | `floor_plan.manage` | `floor_plan.created` / `floor_plan.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports` | 创建 SVG 或标准 JSON 导入任务 | `floor_plan.import.manage` | `floor_plan.import_created` / `floor_plan.import_create_failed` | web | operation 级补充 |
@@ -1557,11 +1570,14 @@
 | P0-待归类 | `createLeasingOffer` | `POST` | `/api/v1/leasing/offers` | 新建租赁报价 | `leasing.offer.manage` | `leasing.offer.created` / `leasing.offer.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | 创建商户账单 | `merchant.billing.manage` | `merchant.billing.create` / `merchant.billing.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | Create merchant service work order | `merchant.service_work_order.create` | `merchant_service.createMerchantServiceWorkOrder.succeeded` / `merchant_service.createMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `generateFacilityInspectionTasks` | `POST` | `/api/v1/facility/inspection-tasks/generate` | 按设备维保周期生成到期巡检任务 | `facility.inspection.manage` | `facility.inspection.tasks_generated` / `facility.inspection.tasks_generate_failed` | web | operation 级补充 |
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | 查询合规到期项列表 | `compliance.expiry_item.view` | `compliance.expiry_item.list` / `compliance.expiry_item.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | 查询合规提醒列表 | `compliance.reminder.view` | `compliance.reminder.list` / `compliance.reminder.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractKeyDates` | `GET` | `/api/v1/compliance/contract-key-dates` | 查询合同关键日期列表 | `compliance.contract_key_date.view` | `compliance.contract_key_date.list` / `compliance.contract_key_date.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityEquipment` | `GET` | `/api/v1/facility/equipment` | 楼宇设施设备台账清单 | `facility.equipment.manage` | `facility.equipment.viewed` / `facility.equipment.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listFacilityInspectionTasks` | `GET` | `/api/v1/facility/inspection-tasks` | 楼宇巡检任务清单（含超期） | `facility.inspection.manage` | `facility.inspection.task_viewed` / `facility.inspection.task_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listFacilityInspectionTemplates` | `GET` | `/api/v1/facility/inspection-templates` | 楼宇巡检模板清单 | `facility.inspection.manage` | `facility.inspection.template_viewed` / `facility.inspection.template_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityWorkOrders` | `GET` | `/api/v1/facility/work-orders` | 楼宇维保工单清单 | `facility.work_order.manage` | `facility.work_order.viewed` / `facility.work_order.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | 查询平面图导入任务 | `floor_plan.import.view` | `floor_plan.import_viewed` / `floor_plan.import_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | 查询 P1/P2 商场平面图 | `floor_plan.view` | `floor_plan.viewed` / `floor_plan.view_failed` | web | operation 级补充 |

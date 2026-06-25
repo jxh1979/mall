@@ -31,9 +31,38 @@ class FacilityJdbcIntegrationTests {
     void migrationCreatesFacilityTablesAndSeedsPermissions() {
         assertThat(regclass("facility_equipment")).isEqualTo("facility_equipment");
         assertThat(regclass("facility_work_orders")).isEqualTo("facility_work_orders");
+        assertThat(regclass("facility_inspection_templates")).isEqualTo("facility_inspection_templates");
+        assertThat(regclass("facility_inspection_tasks")).isEqualTo("facility_inspection_tasks");
+        assertThat(regclass("facility_inspection_records")).isEqualTo("facility_inspection_records");
         assertThat(currentFlywayVersion()).isEqualTo(MigrationVersions.latest());
-        assertThat(permissionCodes()).contains("facility.equipment.manage", "facility.work_order.manage");
-        assertThat(platformAdminPermissionCodes()).contains("facility.equipment.manage", "facility.work_order.manage");
+        assertThat(permissionCodes()).contains("facility.equipment.manage", "facility.work_order.manage", "facility.inspection.manage");
+        assertThat(platformAdminPermissionCodes()).contains("facility.equipment.manage", "facility.work_order.manage", "facility.inspection.manage");
+    }
+
+    @Test
+    void repositoryPersistsInspectionRoundTripWithJsonb() {
+        Instant now = Instant.parse("2026-06-24T00:00:00Z");
+        repository.saveInspectionTemplate(new FacilityInspectionTemplateRecord(
+                "fitpl_jdbc", "月检", "hvac", List.of("查滤网", "测温度"), "active", null, null, now, now));
+        // JSONB items 读回对拍（writeJson/readJson 双向）。
+        assertThat(repository.listInspectionTemplates())
+                .filteredOn(t -> t.id().equals("fitpl_jdbc"))
+                .singleElement()
+                .extracting(FacilityInspectionTemplateRecord::items)
+                .isEqualTo(List.of("查滤网", "测温度"));
+
+        // 巡检任务挂设备（FK），自然键防重。
+        repository.saveEquipment(new FacilityEquipmentRecord(
+                "feq_insp", "E", "hvac", null, null, null, null, null, "active", 30, null, null, null, now, now));
+        assertThat(repository.upsertInspectionTask(new FacilityInspectionTaskRecord(
+                "fitask_jdbc", "feq_insp", null, now, "pending", now, null, null, null, null, now, now))).isTrue();
+        assertThat(repository.upsertInspectionTask(new FacilityInspectionTaskRecord(
+                "fitask_jdbc2", "feq_insp", null, now, "pending", now, null, null, null, null, now, now))).isFalse();
+
+        // 巡检记录 checked_items JSONB 写入（cast 不报错即通过）。
+        repository.saveInspectionRecord(new FacilityInspectionRecordRecord(
+                "firec_jdbc", "fitask_jdbc", "feq_insp", "insp", "pass", "正常", List.of("外观"), null, null, now));
+        assertThat(repository.findInspectionTaskById("fitask_jdbc")).isPresent();
     }
 
     @Test

@@ -48,6 +48,7 @@ const OperatingParamsPage = React.lazy(() => import("./pages/OperatingParamsPage
 const LeasingWorkbenchPage = React.lazy(() => import("./pages/LeasingWorkbenchPage").then((m) => ({ default: m.LeasingWorkbenchPage })));
 const FacilityEquipmentPage = React.lazy(() => import("./pages/FacilityEquipmentPage").then((m) => ({ default: m.FacilityEquipmentPage })));
 const FacilityWorkOrderPage = React.lazy(() => import("./pages/FacilityWorkOrderPage").then((m) => ({ default: m.FacilityWorkOrderPage })));
+const FacilityInspectionPage = React.lazy(() => import("./pages/FacilityInspectionPage").then((m) => ({ default: m.FacilityInspectionPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
@@ -171,6 +172,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <FacilityEquipmentPage {...props} />;
     case "ADM-FAC-002":
       return <FacilityWorkOrderPage {...props} />;
+    case "ADM-FAC-003":
+      return <FacilityInspectionPage {...props} />;
     case "ADM-FIN-001":
       return <FinanceArApLedgerPage {...props} />;
     case "ADM-INT-001":

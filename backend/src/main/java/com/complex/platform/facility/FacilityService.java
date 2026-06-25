@@ -5,10 +5,13 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.facility.dto.FacilityEquipmentRequest;
+import com.complex.platform.facility.dto.FacilityInspectionCompleteRequest;
+import com.complex.platform.facility.dto.FacilityInspectionTemplateRequest;
 import com.complex.platform.facility.dto.FacilityStatusRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderStatusRequest;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -40,11 +43,16 @@ public class FacilityService {
             "resolved", Set.of("closed", "in_progress"),
             "closed", Set.of());
 
+    private static final Set<String> INSPECTION_RESULTS = Set.of("pass", "fail");
+
     @Value("${facility.equipment.enabled:false}")
     boolean facilityEquipmentEnabled;
 
     @Value("${facility.work_order.enabled:false}")
     boolean facilityWorkOrderEnabled;
+
+    @Value("${facility.inspection.enabled:false}")
+    boolean facilityInspectionEnabled;
 
     private final FacilityRepository repository;
     private final AuditEventService auditEventService;
@@ -179,6 +187,105 @@ public class FacilityService {
     private void requireWorkOrderEnabled() {
         if (!facilityWorkOrderEnabled) {
             throw ApiException.conflict("FACILITY_WORK_ORDER_DISABLED", "facility work order module is disabled");
+        }
+    }
+
+    public PageResponse<FacilityInspectionTemplateRecord> listInspectionTemplates() {
+        List<FacilityInspectionTemplateRecord> items = repository.listInspectionTemplates();
+        auditEventService.recordSuccess("facility.inspection.template_viewed", "facility.inspection.manage",
+                "facility_inspection_templates", "all", null, null, Map.of("count", items.size()));
+        return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    public FacilityInspectionTemplateRecord createInspectionTemplate(FacilityInspectionTemplateRequest request) {
+        authorizationService.requirePlatformScope();
+        requireInspectionEnabled();
+        FacilityInspectionTemplateRequest actual = requireRequest(request);
+        String name = requireText(actual.name(), "name");
+        String type = actual.equipmentType() == null || actual.equipmentType().isBlank()
+                ? null : requireEnum(actual.equipmentType(), EQUIPMENT_TYPES, "equipment_type");
+        Instant now = Instant.now();
+        FacilityInspectionTemplateRecord saved = repository.saveInspectionTemplate(new FacilityInspectionTemplateRecord(
+                "fitpl_" + UUID.randomUUID(), name, type, actual.items() == null ? List.of() : actual.items(),
+                "active", null, null, now, now));
+        auditEventService.recordSuccess("facility.inspection.template_created", "facility.inspection.manage",
+                "facility_inspection_templates", saved.id(), null, actual.idempotencyKey(), Map.of("name", name));
+        return saved;
+    }
+
+    public PageResponse<FacilityInspectionTaskRecord> listInspectionTasks() {
+        List<FacilityInspectionTaskRecord> items = repository.listInspectionTasks();
+        auditEventService.recordSuccess("facility.inspection.task_viewed", "facility.inspection.manage",
+                "facility_inspection_tasks", "all", null, null, Map.of("count", items.size()));
+        return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    /**
+     * 巡检到期生成（Job + 手动端点共用）：对每台 active 且设维保周期的设备，按 last_maintenance_at + 周期推 due_at，
+     * 自然键防重 upsert；末尾把 pending 且超期的翻 overdue。返回新增任务数。
+     */
+    public int generateDueInspectionTasks(Instant now) {
+        int upserted = 0;
+        for (FacilityEquipmentRecord eq : repository.listEquipment()) {
+            if (!"active".equals(eq.status()) || eq.maintenanceCycleDays() == null) {
+                continue;
+            }
+            Instant dueAt = eq.lastMaintenanceAt() != null
+                    ? eq.lastMaintenanceAt().plus(Duration.ofDays(eq.maintenanceCycleDays()))
+                    : now; // 从未维保 → 立即到期
+            boolean inserted = repository.upsertInspectionTask(new FacilityInspectionTaskRecord(
+                    "fitask_" + UUID.randomUUID(), eq.id(), eq.spaceId(), dueAt, "pending", now,
+                    null, null, eq.projectId(), eq.merchantId(), now, now));
+            if (inserted) {
+                upserted++;
+            }
+        }
+        repository.markOverdueInspectionTasks(now);
+        return upserted;
+    }
+
+    public int generateDueInspectionTasksManually() {
+        authorizationService.requirePlatformScope();
+        requireInspectionEnabled();
+        int n = generateDueInspectionTasks(Instant.now());
+        auditEventService.recordSuccess("facility.inspection.tasks_generated", "facility.inspection.manage",
+                "facility_inspection_tasks", "all", null, null, Map.of("upserted", n));
+        return n;
+    }
+
+    public FacilityInspectionRecordRecord completeInspectionTask(String taskId, FacilityInspectionCompleteRequest request) {
+        authorizationService.requirePlatformScope();
+        requireInspectionEnabled();
+        String id = requireText(taskId, "task_id");
+        FacilityInspectionCompleteRequest actual = requireRequest(request);
+        String result = actual.result() == null || actual.result().isBlank()
+                ? "pass" : requireEnum(actual.result(), INSPECTION_RESULTS, "result");
+        FacilityInspectionTaskRecord task = repository.findInspectionTaskById(id)
+                .orElseThrow(() -> ApiException.notFound("FACILITY_INSPECTION_TASK_NOT_FOUND", "inspection task not found"));
+        if ("completed".equals(task.status())) {
+            throw ApiException.conflict("FACILITY_INSPECTION_TASK_ALREADY_COMPLETED", "inspection task already completed");
+        }
+        Instant now = Instant.now();
+        FacilityInspectionRecordRecord record = repository.saveInspectionRecord(new FacilityInspectionRecordRecord(
+                "firec_" + UUID.randomUUID(), task.id(), task.equipmentId(), trimToNull(actual.inspector()), result,
+                trimToNull(actual.findings()), actual.checkedItems() == null ? List.of() : actual.checkedItems(),
+                task.projectId(), task.merchantId(), now));
+        repository.saveInspectionTask(new FacilityInspectionTaskRecord(
+                task.id(), task.equipmentId(), task.spaceId(), task.dueAt(), "completed", task.generatedAt(),
+                record.id(), now, task.projectId(), task.merchantId(), task.createdAt(), now));
+        // 巡检完成即推进设备维保时点，下一周期 due_at 顺延（闭环）。
+        repository.findEquipmentById(task.equipmentId()).ifPresent(eq -> repository.saveEquipment(new FacilityEquipmentRecord(
+                eq.id(), eq.name(), eq.equipmentType(), eq.spaceId(), eq.vendor(), eq.model(), eq.installDate(),
+                eq.warrantyUntil(), eq.status(), eq.maintenanceCycleDays(), now, eq.projectId(), eq.merchantId(),
+                eq.createdAt(), now)));
+        auditEventService.recordSuccess("facility.inspection.task_completed", "facility.inspection.manage",
+                "facility_inspection_tasks", id, null, actual.idempotencyKey(), Map.of("result", result));
+        return record;
+    }
+
+    private void requireInspectionEnabled() {
+        if (!facilityInspectionEnabled) {
+            throw ApiException.conflict("FACILITY_INSPECTION_DISABLED", "facility inspection module is disabled");
         }
     }
 

@@ -6,10 +6,13 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.facility.dto.FacilityEquipmentRequest;
+import com.complex.platform.facility.dto.FacilityInspectionCompleteRequest;
+import com.complex.platform.facility.dto.FacilityInspectionTemplateRequest;
 import com.complex.platform.facility.dto.FacilityStatusRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderStatusRequest;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -78,5 +81,39 @@ public class FacilityController {
         authorizationService.requirePermission("facility.work_order.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updateWorkOrderStatus(workOrderId, request));
+    }
+
+    @GetMapping("/inspection-templates")
+    public ApiResponse<PageResponse<FacilityInspectionTemplateRecord>> listInspectionTemplates() {
+        authorizationService.requirePermission("facility.inspection.manage");
+        return ApiResponse.ok(service.listInspectionTemplates());
+    }
+
+    @PostMapping("/inspection-templates")
+    public ApiResponse<FacilityInspectionTemplateRecord> createInspectionTemplate(
+            @RequestBody FacilityInspectionTemplateRequest request) {
+        authorizationService.requirePermission("facility.inspection.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createInspectionTemplate(request));
+    }
+
+    @GetMapping("/inspection-tasks")
+    public ApiResponse<PageResponse<FacilityInspectionTaskRecord>> listInspectionTasks() {
+        authorizationService.requirePermission("facility.inspection.manage");
+        return ApiResponse.ok(service.listInspectionTasks());
+    }
+
+    @PostMapping("/inspection-tasks/generate")
+    public ApiResponse<Map<String, Integer>> generateInspectionTasks() {
+        authorizationService.requirePermission("facility.inspection.manage");
+        return ApiResponse.ok(Map.of("upserted", service.generateDueInspectionTasksManually()));
+    }
+
+    @PostMapping("/inspection-tasks/{task_id}/complete")
+    public ApiResponse<FacilityInspectionRecordRecord> completeInspectionTask(
+            @PathVariable("task_id") String taskId, @RequestBody FacilityInspectionCompleteRequest request) {
+        authorizationService.requirePermission("facility.inspection.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.completeInspectionTask(taskId, request));
     }
 }
