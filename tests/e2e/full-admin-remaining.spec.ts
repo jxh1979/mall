@@ -37,6 +37,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-002", label: "集团总览", route: "/admin/analytics/group-overview" },
   { pageId: "ADM-ANA-003", label: "经营参数", route: "/admin/analytics/operating-params" },
   { pageId: "ADM-LEASE-001", label: "招商租赁工作台", route: "/admin/leasing/workbench" },
+  { pageId: "ADM-FAC-001", label: "设施设备台账", route: "/admin/facility/equipment" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -111,6 +112,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("operating-params-page")).toBeVisible();
   } else if (spec.pageId === "ADM-LEASE-001") {
     await expect(page.getByTestId("leasing-workbench-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-FAC-001") {
+    await expect(page.getByTestId("facility-equipment-page")).toBeVisible();
   }
 }
 

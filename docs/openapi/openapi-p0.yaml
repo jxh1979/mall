@@ -15387,6 +15387,89 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/facility/equipment:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityEquipment
+      summary: 楼宇设施设备台账清单
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.equipment.viewed
+      x-audit-event-failure: facility.equipment.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - facility
+      operationId: createFacilityEquipment
+      summary: 新建楼宇设施设备档案
+      description: ③ S1：楼宇机电设备建档（HVAC/电梯/消防/给排水/配电/弱电）。功能标志 facility.equipment.enabled 默认关。
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.equipment.created
+      x-audit-event-failure: facility.equipment.create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityEquipmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/equipment/{equipment_id}/status:
+    post:
+      tags:
+        - facility
+      operationId: updateFacilityEquipmentStatus
+      summary: 楼宇设备状态流转（active/maintenance/retired）
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.equipment.status_changed
+      x-audit-event-failure: facility.equipment.status_change_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 设备 id。
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityStatusRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     BearerAuth:
@@ -16747,6 +16830,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/LeasingConvertRequest"
+    FacilityEquipmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityEquipmentRequest"
+    FacilityStatusRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityStatusRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -23724,6 +23819,76 @@ components:
           type: string
           description: 结算主体 id。
           maxLength: 64
+    FacilityEquipmentRequest:
+      type: object
+      description: 请求载荷 FacilityEquipmentRequest（③ S1 楼宇设备建档）。
+      additionalProperties: false
+      required:
+        - name
+        - equipment_type
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        name:
+          type: string
+          description: 设备名称。
+          maxLength: 255
+        equipment_type:
+          type: string
+          description: 设备类型。
+          enum:
+            - hvac
+            - elevator
+            - fire
+            - power
+            - water
+            - weak_current
+            - other
+        space_id:
+          type: string
+          description: 安装位置空间 id。
+          maxLength: 64
+        vendor:
+          type: string
+          description: 厂商。
+          maxLength: 255
+        model:
+          type: string
+          description: 型号。
+          maxLength: 255
+        install_date:
+          type: string
+          format: date
+          description: 安装日期。
+        warranty_until:
+          type: string
+          format: date
+          description: 保修截止。
+        maintenance_cycle_days:
+          type: integer
+          description: 维保周期（天，>0）。
+          minimum: 1
+          maximum: 100000
+    FacilityStatusRequest:
+      type: object
+      description: 请求载荷 FacilityStatusRequest（③ S1 楼宇设备状态流转）。
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        status:
+          type: string
+          description: 目标状态。
+          enum:
+            - active
+            - maintenance
+            - retired
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
