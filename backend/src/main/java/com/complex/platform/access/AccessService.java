@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+import com.complex.platform.access.dto.AccessGrantRequestCreateRequest;
+import com.complex.platform.access.dto.AccessGrantRequestDecisionRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
@@ -11,6 +13,10 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -24,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -38,6 +45,11 @@ public class AccessService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final AccessCredentialProvisioner credentialProvisioner;
+    private final SupervisorReviewService supervisorReviewService;
+
+    // ④ S2：开后高危授权（目标权限 requires_approval=true）不得直接装配，须走授权申请→主管复核流；默认关＝维持现状。
+    @Value("${access.grant_approval.enabled:false}")
+    boolean grantApprovalEnabled;
 
     @Autowired
     public AccessService(
@@ -45,10 +57,12 @@ public class AccessService {
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
-            ObjectProvider<AccessCredentialProvisioner> credentialProvisioner
+            ObjectProvider<AccessCredentialProvisioner> credentialProvisioner,
+            ObjectProvider<SupervisorReviewService> supervisorReviewService
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                credentialProvisioner.getIfAvailable(AccessCredentialProvisioner::noop));
+                credentialProvisioner.getIfAvailable(AccessCredentialProvisioner::noop),
+                supervisorReviewService.getIfAvailable(() -> null));
     }
 
     AccessService(
@@ -57,7 +71,7 @@ public class AccessService {
             AuditEventService auditEventService,
             AuthorizationService authorizationService
     ) {
-        this(repository, idempotencyService, auditEventService, authorizationService, AccessCredentialProvisioner.noop());
+        this(repository, idempotencyService, auditEventService, authorizationService, AccessCredentialProvisioner.noop(), null);
     }
 
     AccessService(
@@ -67,11 +81,23 @@ public class AccessService {
             AuthorizationService authorizationService,
             AccessCredentialProvisioner credentialProvisioner
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService, credentialProvisioner, null);
+    }
+
+    AccessService(
+            AccessRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            AccessCredentialProvisioner credentialProvisioner,
+            SupervisorReviewService supervisorReviewService
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.credentialProvisioner = credentialProvisioner == null ? AccessCredentialProvisioner.noop() : credentialProvisioner;
+        this.supervisorReviewService = supervisorReviewService;
     }
 
     public PageResponse<PermissionTemplate> listPermissionTemplates() {
@@ -302,6 +328,8 @@ public class AccessService {
                         requireSameOrgForRoleAssignment(actor, target, role);
                         // 提权防护：派角色＝授该角色全部权限，授权人须自身已持有（复用 createRole 同款闸）。
                         requireActorCanGrant(role.permissionCodes());
+                        // ④ S2：含高危权限的角色不得直接派，须走授权申请→复核流（开关开时）。
+                        requireDirectGrantAllowed(role.permissionCodes());
                         repository.assignUserRole(target.id(), role.id());
                         auditEventService.recordSuccess("access.user_role.assigned", "access.role.assign",
                                 "access_user", target.id(), null, idempotencyKey, Map.of("role_id", role.id()));
@@ -344,6 +372,8 @@ public class AccessService {
                         requireKnownPermissions(List.of(requireText(permissionCode, "permissionCode")));
                         // 提权防护：不得给角色加授权人自身没有的权限。
                         requireActorCanGrant(List.of(permissionCode));
+                        // ④ S2：高危权限不得直接加进角色，须走授权申请→复核流（开关开时）。
+                        requireDirectGrantAllowed(List.of(permissionCode));
                         repository.addRolePermission(role.id(), permissionCode.trim());
                         auditEventService.recordSuccess("access.role_permission.added", "access.role.manage",
                                 "role", role.id(), null, idempotencyKey, Map.of("permission_code", permissionCode.trim()));
@@ -406,6 +436,136 @@ public class AccessService {
         if (role.organizationId() == null || !actor.organizationId().equals(role.organizationId())) {
             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
                     "cannot modify a role owned by another scope: " + role.id());
+        }
+    }
+
+    /** ④ S2：开关开 且 任一目标权限 requires_approval → 拒直接装配，导向授权申请流。关时维持现状（直接装配）。 */
+    private void requireDirectGrantAllowed(List<String> permissionCodes) {
+        if (!grantApprovalEnabled) {
+            return;
+        }
+        for (String code : safeList(permissionCodes)) {
+            if (code != null && repository.permissionRequiresApproval(code)) {
+                throw ApiException.conflict("GRANT_REQUIRES_APPROVAL",
+                        "permission '" + code + "' requires approval; submit an access grant request");
+            }
+        }
+    }
+
+    public PageResponse<AccessGrantRequestRecord> listGrantRequests() {
+        List<AccessGrantRequestRecord> items = repository.listGrantRequests();
+        auditEventService.recordSuccess("access.grant_request.viewed", "access.role.assign",
+                "access_grant_request", "all", null, null, Map.of("count", items.size()));
+        return page(items);
+    }
+
+    /**
+     * ④ S2：创建高危授权申请（pending）。校验同直接装配（跨组织 + 提权闸 + 确属高危），再经既有主管复核 evaluate 生成待批 review。
+     * 不立即落 user_roles/role_permissions——审批通过后由 approveGrantRequest 落地。
+     */
+    public AccessGrantRequestRecord createGrantRequest(AccessGrantRequestCreateRequest request) {
+        AccessActor actor = authorizationService.currentActor();
+        try {
+            return idempotencyService.execute("createGrantRequest", request == null ? null : request.idempotencyKey(),
+                    request,
+                    () -> {
+                        requireSupervisorReviewAvailable();
+                        String type = requireText(request.requestType(), "requestType");
+                        RoleRecord role = requireRole(request.roleId());
+                        List<String> grantedCodes;
+                        String targetUserId = null;
+                        String permissionCode = null;
+                        if ("user_role".equals(type)) {
+                            AccessUser target = requireUser(request.userId());
+                            requireSameOrgForRoleAssignment(actor, target, role);
+                            grantedCodes = role.permissionCodes();
+                            targetUserId = target.id();
+                        } else if ("role_permission".equals(type)) {
+                            requireOwnedRole(actor, role);
+                            permissionCode = requireText(request.permissionCode(), "permissionCode");
+                            requireKnownPermissions(List.of(permissionCode));
+                            grantedCodes = List.of(permissionCode);
+                        } else {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "requestType must be user_role or role_permission");
+                        }
+                        // 申请人自身也须能授（提权闸）；并确认确属高危（否则无需走审批流，直接装配即可）。
+                        requireActorCanGrant(grantedCodes);
+                        if (grantedCodes.stream().noneMatch(repository::permissionRequiresApproval)) {
+                            throw ApiException.badRequest("GRANT_NOT_HIGH_RISK",
+                                    "target grants no approval-required permission; assign directly instead");
+                        }
+                        Instant now = Instant.now();
+                        String id = "agr_" + UUID.randomUUID();
+                        SupervisorReviewDecisionRecord review = supervisorReviewService.evaluate(new SupervisorReviewEvaluateRequest(
+                                request.idempotencyKey() + ":review", request.reason(), List.of(),
+                                "permission_grant", "access_grant_request", id, 0L, request.reason()));
+                        AccessGrantRequestRecord saved = repository.saveGrantRequest(new AccessGrantRequestRecord(
+                                id, type, targetUserId, role.id(), permissionCode, "pending", review.reviewId(),
+                                trimToNull(request.reason()), actor.id(), null, null, null, null, now, now));
+                        auditEventService.recordSuccess("access.grant_request.created", "access.role.assign",
+                                "access_grant_request", id, null, request.idempotencyKey(),
+                                Map.of("request_type", type, "review_id", review.reviewId()));
+                        return saved;
+                    },
+                    AccessGrantRequestRecord.class);
+        } catch (RuntimeException e) {
+            auditEventService.recordFailure("access.grant_request.create_failed", "access.role.assign",
+                    "access_grant_request", null, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            throw e;
+        }
+    }
+
+    /**
+     * ④ S2：审批授权申请。经既有主管复核 approve（发起人≠审批人 SoD、职级 rank、角色闸）；
+     * 通过则落 user_roles/role_permissions 并标 applied，驳回则标 rejected。申请须 pending。
+     */
+    public AccessGrantRequestRecord approveGrantRequest(String grantRequestId, AccessGrantRequestDecisionRequest request) {
+        AccessActor actor = authorizationService.currentActor();
+        String id = requireText(grantRequestId, "grantRequestId");
+        try {
+            return idempotencyService.execute("approveGrantRequest:" + id, request == null ? null : request.idempotencyKey(),
+                    request,
+                    () -> {
+                        requireSupervisorReviewAvailable();
+                        AccessGrantRequestRecord gr = repository.findGrantRequestById(id)
+                                .orElseThrow(() -> ApiException.notFound("GRANT_REQUEST_NOT_FOUND", "grant request not found: " + id));
+                        if (!"pending".equals(gr.status())) {
+                            throw ApiException.conflict("GRANT_REQUEST_NOT_PENDING", "grant request is not pending: " + id);
+                        }
+                        String decision = requireText(request.decision(), "decision");
+                        SupervisorReviewDecisionRecord reviewed = supervisorReviewService.approve(gr.reviewId(),
+                                new SupervisorReviewApprovalRequest(request.idempotencyKey() + ":approve", request.comment(),
+                                        List.of(), null, decision, request.comment()));
+                        Instant now = Instant.now();
+                        String finalStatus = "approved".equals(reviewed.decision()) ? "applied" : "rejected";
+                        if ("applied".equals(finalStatus)) {
+                            if ("user_role".equals(gr.requestType())) {
+                                repository.assignUserRole(gr.targetUserId(), gr.targetRoleId());
+                            } else {
+                                repository.addRolePermission(gr.targetRoleId(), gr.permissionCode());
+                            }
+                        }
+                        AccessGrantRequestRecord updated = new AccessGrantRequestRecord(
+                                gr.id(), gr.requestType(), gr.targetUserId(), gr.targetRoleId(), gr.permissionCode(),
+                                finalStatus, gr.reviewId(), gr.reason(), gr.requestedBy(), actor.id(), now,
+                                gr.projectId(), gr.merchantId(), gr.createdAt(), now);
+                        repository.saveGrantRequest(updated);
+                        auditEventService.recordSuccess("access.grant_request.decided", "governance.supervisor_review.approve",
+                                "access_grant_request", id, null, request.idempotencyKey(),
+                                Map.of("decision", decision, "final_status", finalStatus));
+                        return updated;
+                    },
+                    AccessGrantRequestRecord.class);
+        } catch (RuntimeException e) {
+            auditEventService.recordFailure("access.grant_request.decide_failed", "governance.supervisor_review.approve",
+                    "access_grant_request", id, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            throw e;
+        }
+    }
+
+    private void requireSupervisorReviewAvailable() {
+        if (supervisorReviewService == null) {
+            throw ApiException.conflict("GRANT_APPROVAL_UNAVAILABLE", "supervisor review service is not available");
         }
     }
 

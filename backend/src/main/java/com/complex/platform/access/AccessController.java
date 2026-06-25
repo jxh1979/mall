@@ -1,6 +1,8 @@
 package com.complex.platform.access;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.access.dto.AccessGrantRequestCreateRequest;
+import com.complex.platform.access.dto.AccessGrantRequestDecisionRequest;
 import com.complex.platform.access.dto.AccessRoleAssignmentRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
@@ -125,6 +127,28 @@ public class AccessController {
             @PathVariable("role_id") String roleId, @PathVariable("permission_code") String permissionCode) {
         authorizationService.requirePermission("access.role.manage");
         return ApiResponse.ok(service.removeRolePermission(roleId, permissionCode));
+    }
+
+    @GetMapping("/grant-requests")
+    public ApiResponse<PageResponse<AccessGrantRequestRecord>> listGrantRequests() {
+        authorizationService.requirePermission("access.role.assign");
+        return ApiResponse.ok(service.listGrantRequests());
+    }
+
+    @PostMapping("/grant-requests")
+    public ApiResponse<AccessGrantRequestRecord> createGrantRequest(@RequestBody AccessGrantRequestCreateRequest request) {
+        authorizationService.requirePermission("access.role.assign");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createGrantRequest(request));
+    }
+
+    @PostMapping("/grant-requests/{grant_request_id}/decision")
+    public ApiResponse<AccessGrantRequestRecord> decideGrantRequest(
+            @PathVariable("grant_request_id") String grantRequestId,
+            @RequestBody AccessGrantRequestDecisionRequest request) {
+        authorizationService.requirePermission("governance.supervisor_review.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveGrantRequest(grantRequestId, request));
     }
 
     @PostMapping("/temporary-grants")

@@ -30,6 +30,7 @@ class AccessJdbcIntegrationTests {
         assertThat(regclass("permission_template_items")).isEqualTo("permission_template_items");
         assertThat(regclass("permission_template_applications")).isEqualTo("permission_template_applications");
         assertThat(regclass("access_users")).isEqualTo("access_users");
+        assertThat(regclass("access_grant_requests")).isEqualTo("access_grant_requests");
 
         List<String> permissionCodes = repository.listPermissions().stream()
                 .map(PermissionDefinition::permissionCode)
@@ -71,6 +72,24 @@ class AccessJdbcIntegrationTests {
         repository.removeRolePermission("role_jdbc_assign", "access.role.manage");
         repository.unassignUserRole("usr_jdbc_assign", "role_jdbc_assign");
         assertThat(grantedCodes("usr_jdbc_assign", now)).doesNotContain("access.role.assign", "access.role.manage");
+    }
+
+    @Test
+    void grantRequestRepositoryRoundTripAndRequiresApprovalFlag() {
+        Instant now = Instant.parse("2026-06-24T00:00:00Z");
+        repository.saveGrantRequest(new AccessGrantRequestRecord(
+                "agr_jdbc", "user_role", "usr_x", "role_y", null, "pending", "review_z", "理由", "requester",
+                null, null, null, null, now, now));
+        assertThat(repository.findGrantRequestById("agr_jdbc")).get()
+                .extracting(AccessGrantRequestRecord::status, AccessGrantRequestRecord::reviewId,
+                        AccessGrantRequestRecord::requestType)
+                .containsExactly("pending", "review_z", "user_role");
+        assertThat(repository.listGrantRequests()).extracting(AccessGrantRequestRecord::id).contains("agr_jdbc");
+
+        // requires_approval 标记读取双向对拍（事务内改、回滚）。access.role.assign V169 默认 false。
+        assertThat(repository.permissionRequiresApproval("access.role.assign")).isFalse();
+        jdbcTemplate.update("UPDATE permissions SET requires_approval = true WHERE permission_code = 'access.role.assign'");
+        assertThat(repository.permissionRequiresApproval("access.role.assign")).isTrue();
     }
 
     private List<String> grantedCodes(String userId, Instant at) {

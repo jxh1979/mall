@@ -15988,6 +15988,95 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/access/grant-requests:
+    get:
+      tags:
+        - access
+      operationId: listAccessGrantRequests
+      summary: 高危授权申请清单
+      x-permission: access.role.assign
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: access.grant_request.viewed
+      x-audit-event-failure: access.grant_request.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - access
+      operationId: createAccessGrantRequest
+      summary: 提交高危授权申请（转主管复核待批）
+      description: ④ S2：当 access.grant_approval.enabled 开，含 requires_approval 权限的装配不得直接落地，须经此申请→主管复核(permission_grant_l3)审批后由
+        decision 落地。
+      x-permission: access.role.assign
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.grant_request.created
+      x-audit-event-failure: access.grant_request.create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/AccessGrantRequestCreateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/grant-requests/{grant_request_id}/decision:
+    post:
+      tags:
+        - access
+      operationId: decideAccessGrantRequest
+      summary: 审批高危授权申请（approved 落地 / rejected 驳回）
+      description: ④ S2：经既有主管复核 approve（发起人≠审批人 SoD、职级 rank、角色闸）；通过才落 user_roles/role_permissions。
+      x-permission: governance.supervisor_review.approve
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.grant_request.decided
+      x-audit-event-failure: access.grant_request.decide_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: grant_request_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 授权申请 id。
+      requestBody:
+        $ref: "#/components/requestBodies/AccessGrantRequestDecisionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     BearerAuth:
@@ -17414,6 +17503,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/RolePermissionRequest"
+    AccessGrantRequestCreateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessGrantRequestCreateRequest"
+    AccessGrantRequestDecisionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessGrantRequestDecisionRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -24691,6 +24792,61 @@ components:
           type: string
           description: 权限码。
           maxLength: 128
+    AccessGrantRequestCreateRequest:
+      type: object
+      description: 请求载荷 AccessGrantRequestCreateRequest（④ S2 高危授权申请）。
+      additionalProperties: false
+      required:
+        - request_type
+        - role_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        request_type:
+          type: string
+          description: 申请类型。
+          enum:
+            - user_role
+            - role_permission
+        user_id:
+          type: string
+          description: 目标用户 id（request_type=user_role 必填）。
+          maxLength: 64
+        role_id:
+          type: string
+          description: 目标角色 id。
+          maxLength: 64
+        permission_code:
+          type: string
+          description: 目标权限码（request_type=role_permission 必填）。
+          maxLength: 128
+        reason:
+          type: string
+          description: 申请理由。
+          maxLength: 1000
+    AccessGrantRequestDecisionRequest:
+      type: object
+      description: 请求载荷 AccessGrantRequestDecisionRequest（④ S2 授权审批）。
+      additionalProperties: false
+      required:
+        - decision
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        decision:
+          type: string
+          description: 审批结论。
+          enum:
+            - approved
+            - rejected
+        comment:
+          type: string
+          description: 审批意见。
+          maxLength: 1000
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

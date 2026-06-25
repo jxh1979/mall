@@ -8,9 +8,11 @@ import { PermissionButton } from "../security/Can";
 type UserRow = { id: string; username: string; organizationId?: string };
 type RoleRow = { id: string; roleName: string; permissionCodes: string[]; organizationId?: string };
 type PermRow = { permissionCode: string; permissionName: string };
+type GrantRequestRow = { id: string; requestType: string; targetUserId?: string; targetRoleId: string; permissionCode?: string; status: string };
 
 const ASSIGN = ["access.role.assign"];
 const MANAGE = ["access.role.manage"];
+const APPROVE = ["governance.supervisor_review.approve"];
 
 /**
  * 角色装配（ADM-ACC-003，④ 集团治理 S1）：用户↔角色直接装配/解绑 + 角色权限运行时增删。
@@ -21,6 +23,7 @@ export function AccessRoleAssignmentPage({ api, setActionResult, setGlobalError,
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleRow[]>([]);
   const [perms, setPerms] = React.useState<PermRow[]>([]);
+  const [grantRequests, setGrantRequests] = React.useState<GrantRequestRow[]>([]);
   const [userId, setUserId] = React.useState("");
   const [assignRoleId, setAssignRoleId] = React.useState("");
   const [permRoleId, setPermRoleId] = React.useState("");
@@ -31,6 +34,7 @@ export function AccessRoleAssignmentPage({ api, setActionResult, setGlobalError,
       setUsers((await api.get<UserRow[]>("/api/v1/access/users")) ?? []);
       setRoles((await api.get<RoleRow[]>("/api/v1/access/roles")) ?? []);
       setPerms((await api.get<PermRow[]>("/api/v1/access/permissions")) ?? []);
+      setGrantRequests((await api.get<GrantRequestRow[]>("/api/v1/access/grant-requests")) ?? []);
     },
     { onError: setGlobalError, fallbackMessage: "角色装配数据读取失败", onStart: () => setGlobalError(null) },
   );
@@ -73,6 +77,22 @@ export function AccessRoleAssignmentPage({ api, setActionResult, setGlobalError,
     reload();
   }
 
+  async function submitGrantRequest() {
+    if (!userId || !assignRoleId) {
+      setGlobalError("请选择用户与角色");
+      return;
+    }
+    await api.post("/api/v1/access/grant-requests", { requestType: "user_role", userId, roleId: assignRoleId, reason: "高危角色装配申请" });
+    setActionResult({ action: "grant_request_created", userId, roleId: assignRoleId });
+    reload();
+  }
+
+  async function decide(id: string, decision: string) {
+    await api.post(`/api/v1/access/grant-requests/${id}/decision`, { decision });
+    setActionResult({ action: "grant_request_decided", grantRequestId: id, decision });
+    reload();
+  }
+
   return (
     <section data-testid="access-role-assignment-page">
       <AdminPageHeader
@@ -94,6 +114,8 @@ export function AccessRoleAssignmentPage({ api, setActionResult, setGlobalError,
             data-testid="user-role-assign" onClick={() => void assign()}>装配</PermissionButton>
           <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN}
             data-testid="user-role-unassign" onClick={() => void unassign()}>解绑</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={ASSIGN}
+            data-testid="user-role-request" onClick={() => void submitGrantRequest()}>提交授权申请</PermissionButton>
         </div>
 
         <AdminPageHeader title="角色权限" description="选角色查看其权限，运行时加/减。" />
@@ -129,6 +151,29 @@ export function AccessRoleAssignmentPage({ api, setActionResult, setGlobalError,
             </div>
           </>
         )}
+
+        <AdminPageHeader title="高危授权申请" description="开启授权审批后，含高危权限的装配在此走申请→主管复核（通过才落地）。" />
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="grant-request-table">
+            <thead><tr><th>id</th><th>类型</th><th>用户</th><th>角色</th><th>权限</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              {grantRequests.map((g) => (
+                <tr key={g.id} data-testid={`grant-request-${g.id}`}>
+                  <td>{g.id}</td><td>{g.requestType}</td><td>{g.targetUserId ?? "-"}</td>
+                  <td>{g.targetRoleId}</td><td>{g.permissionCode ?? "-"}</td><td>{g.status}</td>
+                  <td>{g.status === "pending"
+                    ? <>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={APPROVE}
+                        data-testid={`grant-request-approve-${g.id}`} onClick={() => void decide(g.id, "approved")}>通过</PermissionButton>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={APPROVE}
+                        data-testid={`grant-request-reject-${g.id}`} onClick={() => void decide(g.id, "rejected")}>驳回</PermissionButton>
+                    </>
+                    : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </AdminDataState>
     </section>
   );

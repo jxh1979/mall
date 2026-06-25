@@ -98,6 +98,24 @@ public interface AccessRepository {
         throw new UnsupportedOperationException("removeRolePermission not supported by this repository");
     }
 
+    /** 权限是否需审批（permissions.requires_approval，④ S2）。默认 false，JdbcAccessRepository 覆盖。 */
+    default boolean permissionRequiresApproval(String permissionCode) {
+        return false;
+    }
+
+    /** 高危授权申请（access_grant_requests，④ S2）upsert by id。 */
+    default AccessGrantRequestRecord saveGrantRequest(AccessGrantRequestRecord request) {
+        throw new UnsupportedOperationException("saveGrantRequest not supported by this repository");
+    }
+
+    default Optional<AccessGrantRequestRecord> findGrantRequestById(String id) {
+        return Optional.empty();
+    }
+
+    default List<AccessGrantRequestRecord> listGrantRequests() {
+        return List.of();
+    }
+
     List<PermissionTemplateApplication> applyTemplate(
             String templateId,
             List<String> targetUserIds,

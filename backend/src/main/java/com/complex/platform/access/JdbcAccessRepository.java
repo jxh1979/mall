@@ -404,6 +404,57 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public boolean permissionRequiresApproval(String permissionCode) {
+        List<Boolean> rows = jdbcTemplate.query(
+                "SELECT requires_approval FROM permissions WHERE permission_code = :c",
+                Map.of("c", permissionCode), (rs, n) -> rs.getBoolean("requires_approval"));
+        return !rows.isEmpty() && Boolean.TRUE.equals(rows.get(0));
+    }
+
+    @Override
+    public AccessGrantRequestRecord saveGrantRequest(AccessGrantRequestRecord r) {
+        jdbcTemplate.update("""
+                INSERT INTO access_grant_requests (id, request_type, target_user_id, target_role_id, permission_code,
+                        status, review_id, reason, requested_by, decided_by, decided_at, project_id, merchant_id, created_at, updated_at)
+                VALUES (:id, :request_type, :target_user_id, :target_role_id, :permission_code,
+                        :status, :review_id, :reason, :requested_by, :decided_by, :decided_at, :project_id, :merchant_id, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status, review_id = EXCLUDED.review_id, decided_by = EXCLUDED.decided_by,
+                    decided_at = EXCLUDED.decided_at, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", r.id()).addValue("request_type", r.requestType())
+                .addValue("target_user_id", r.targetUserId()).addValue("target_role_id", r.targetRoleId())
+                .addValue("permission_code", r.permissionCode()).addValue("status", r.status())
+                .addValue("review_id", r.reviewId()).addValue("reason", r.reason())
+                .addValue("requested_by", r.requestedBy()).addValue("decided_by", r.decidedBy())
+                .addValue("decided_at", timestampWithTimeZone(r.decidedAt()))
+                .addValue("project_id", r.projectId()).addValue("merchant_id", r.merchantId())
+                .addValue("created_at", timestampWithTimeZone(r.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(r.updatedAt())));
+        return r;
+    }
+
+    @Override
+    public Optional<AccessGrantRequestRecord> findGrantRequestById(String id) {
+        return jdbcTemplate.query("SELECT * FROM access_grant_requests WHERE id = :id", Map.of("id", id), this::mapGrantRequest)
+                .stream().findFirst();
+    }
+
+    @Override
+    public List<AccessGrantRequestRecord> listGrantRequests() {
+        return jdbcTemplate.query("SELECT * FROM access_grant_requests ORDER BY created_at DESC, id LIMIT 500", this::mapGrantRequest);
+    }
+
+    private AccessGrantRequestRecord mapGrantRequest(ResultSet rs, int n) throws SQLException {
+        return new AccessGrantRequestRecord(
+                rs.getString("id"), rs.getString("request_type"), rs.getString("target_user_id"),
+                rs.getString("target_role_id"), rs.getString("permission_code"), rs.getString("status"),
+                rs.getString("review_id"), rs.getString("reason"), rs.getString("requested_by"),
+                rs.getString("decided_by"), nullableInstant(rs, "decided_at"), rs.getString("project_id"),
+                rs.getString("merchant_id"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+    }
+
+    @Override
     public List<PermissionTemplateApplication> applyTemplate(
             String templateId,
             List<String> targetUserIds,

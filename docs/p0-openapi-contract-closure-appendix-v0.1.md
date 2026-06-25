@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 459 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 462 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 261 | 人工权限矩阵正文未覆盖 157 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 918 | 人工事件矩阵正文未覆盖 876 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 459 | 人工任务映射正文未逐项覆盖 453 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 284 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 924 | 人工事件矩阵正文未覆盖 882 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 462 | 人工任务映射正文未逐项覆盖 456 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 286 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -30,7 +30,7 @@
 | `access.permission_template.manage` | staff-token | project | 3 | createPermissionTemplate, updatePermissionTemplate, copyPermissionTemplate | 已在权限矩阵正文出现 |
 | `access.permission_template.view` | staff-token | project | 1 | listPermissionTemplates | 已在权限矩阵正文出现 |
 | `access.permission.view` | staff-token | project | 1 | listPermissions | 已在权限矩阵正文出现 |
-| `access.role.assign` | staff-token | platform | 2 | assignUserRole, unassignUserRole | OpenAPI 补充，以本附录为准 |
+| `access.role.assign` | staff-token | platform | 4 | assignUserRole, unassignUserRole, listAccessGrantRequests, createAccessGrantRequest | OpenAPI 补充，以本附录为准 |
 | `access.role.manage` | staff-token | platform, project | 3 | createRole, addRolePermission, removeRolePermission | 已在权限矩阵正文出现 |
 | `access.role.view` | staff-token | project | 1 | listRoles | 已在权限矩阵正文出现 |
 | `access.staff_level.manage` | staff-token | project | 1 | assignStaffLevel | OpenAPI 补充，以本附录为准 |
@@ -175,7 +175,7 @@
 | `governance.project.view` | staff-token | project | 1 | listProjects | 已在权限矩阵正文出现 |
 | `governance.space.manage` | staff-token | project | 1 | createSpace | 已在权限矩阵正文出现 |
 | `governance.space.view` | staff-token | project-merchant-space | 1 | listSpaces | 已在权限矩阵正文出现 |
-| `governance.supervisor_review.approve` | staff-token | project-entity | 1 | approveSupervisorReview | OpenAPI 补充，以本附录为准 |
+| `governance.supervisor_review.approve` | staff-token | platform, project-entity | 2 | approveSupervisorReview, decideAccessGrantRequest | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.manage` | staff-token | project-entity | 1 | evaluateSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.view` | staff-token | project-entity | 1 | listSupervisorReviewPolicies | OpenAPI 补充，以本附录为准 |
 | `integration.compensation.manage` | staff-token | platform | 2 | createCompensationTask, resolveCompensationTask | OpenAPI 补充，以本附录为准 |
@@ -298,6 +298,12 @@
 | `access.effective_permission.viewed` | success | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
 | `access.effective_permission.viewed_failed` | failure | `getEffectivePermissions` | `GET` | `/api/v1/access/effective-permissions` | AUTH-账号权限 | `authenticated` | 接口级事件，以本附录为准 |
 | `access.effective_permission.viewed_failed` | failure | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
+| `access.grant_request.create_failed` | failure | `createAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.grant_request.created` | success | `createAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.grant_request.decide_failed` | failure | `decideAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests/{grant_request_id}/decision` | AUTH-账号权限 | `governance.supervisor_review.approve` | 接口级事件，以本附录为准 |
+| `access.grant_request.decided` | success | `decideAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests/{grant_request_id}/decision` | AUTH-账号权限 | `governance.supervisor_review.approve` | 接口级事件，以本附录为准 |
+| `access.grant_request.view_failed` | failure | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.grant_request.viewed` | success | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.role_permission.add_failed` | failure | `addRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `access.role_permission.added` | success | `addRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `access.role_permission.remove_failed` | failure | `removeRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions/{permission_code}/remove` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
@@ -1309,12 +1315,15 @@
 | AUTH-账号权限 | `assignUserRole` | `POST` | `/api/v1/access/users/{user_id}/roles` | 给用户装配角色 | `access.role.assign` | `access.user_role.assigned` / `access.user_role.assign_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | 绑定/换机申请员工设备凭证 | `staff.device.bind` | `staff_device.bound` / `staff_device.bind_failed` | staff_private_phone, web | operation 级补充 |
 | AUTH-账号权限 | `copyPermissionTemplate` | `POST` | `/api/v1/access/permission-templates/{id}/copy` | 复制权限模板 | `access.permission_template.manage` | `permission_template.copied` / `permission_template.copy_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `createAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests` | 提交高危授权申请（转主管复核待批） | `access.role.assign` | `access.grant_request.created` / `access.grant_request.create_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `createAccessUser` | `POST` | `/api/v1/access/users` | 创建权限用户 | `access.user.manage` | `access.user.changed` / `access.user.changed_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `createPermissionTemplate` | `POST` | `/api/v1/access/permission-templates` | 创建权限模板 | `access.permission_template.manage` | `permission_template.changed` / `permission_template.change_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `createRole` | `POST` | `/api/v1/access/roles` | 创建角色 | `access.role.manage` | `role.changed` / `role.change_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `createTemporaryGrant` | `POST` | `/api/v1/access/temporary-grants` | 临时授权 | `access.temporary_grant.create` | `permission_template.applied` / `temporary_grant.create_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `decideAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests/{grant_request_id}/decision` | 审批高危授权申请（approved 落地 / rejected 驳回） | `governance.supervisor_review.approve` | `access.grant_request.decided` / `access.grant_request.decide_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `getEffectivePermissions` | `GET` | `/api/v1/access/effective-permissions` | 查询当前账号有效权限集 | `authenticated` | `access.effective_permission.viewed` / `access.effective_permission.viewed_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | 查询指定账号有效权限集 | `access.user.view` | `access.effective_permission.viewed` / `access.effective_permission.viewed_failed` | web, mobile_admin | operation 级补充 |
+| AUTH-账号权限 | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | 高危授权申请清单 | `access.role.assign` | `access.grant_request.viewed` / `access.grant_request.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listAccessUsers` | `GET` | `/api/v1/access/users` | 查询权限用户 | `access.user.view` | `access.user.viewed` / `access.user.viewed_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listEmployeeNotices` | `GET` | `/api/v1/staff/notices` | 查询员工通知 | `staff.notice.view` | `staff.notice.viewed` / `staff.notice.view_failed` | staff_private_phone, web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `listPermissions` | `GET` | `/api/v1/access/permissions` | 权限点列表 | `access.permission.view` | `permission.viewed` / `permission.view_failed` | web | operation 级补充 |

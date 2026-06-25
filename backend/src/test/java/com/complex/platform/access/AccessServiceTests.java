@@ -2,8 +2,16 @@ package com.complex.platform.access;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.complex.platform.access.dto.AccessGrantRequestCreateRequest;
+import com.complex.platform.access.dto.AccessGrantRequestDecisionRequest;
 import com.complex.platform.auth.AuthService;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -103,6 +111,58 @@ class AccessServiceTests {
         authenticateAsOrgUser("usr_admin", "admin", "my-org");
         assertThatThrownBy(() -> service.assignUserRole("usr_other", "role_ops", "k1"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+    }
+
+    @Test
+    void directGrantOfHighRiskRoleBlockedWhenApprovalFlagOn() {
+        accessRepository.knownPermissions.add("finance.refund.approve");
+        accessRepository.highRiskPermissions.add("finance.refund.approve");
+        seedUser("usr_a", "seed-org");
+        seedRole("role_fin", "seed-org", List.of("finance.refund.approve"));
+        // 开关关：直接派可行（S1 行为不变）。
+        service.assignUserRole("usr_a", "role_fin", "k0");
+        assertThat(accessRepository.userRoles).contains("usr_a|role_fin");
+        accessRepository.userRoles.clear();
+        // 开关开：含高危权限的角色直接派被拒，导向授权申请流。
+        service.grantApprovalEnabled = true;
+        assertThatThrownBy(() -> service.assignUserRole("usr_a", "role_fin", "k1"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL"));
+    }
+
+    @Test
+    void grantRequestPendingThenApprovedApplies() {
+        SupervisorReviewService review = mock(SupervisorReviewService.class);
+        when(review.evaluate(any())).thenReturn(decisionStub("review_x", "blocked"));
+        when(review.approve(eq("review_x"), any())).thenReturn(decisionStub("review_x", "approved"));
+        AccessService svc = new AccessService(
+                accessRepository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                new AuthorizationService(accessRepository),
+                credentialProvisioner,
+                review);
+        svc.grantApprovalEnabled = true;
+        accessRepository.knownPermissions.add("finance.refund.approve");
+        accessRepository.highRiskPermissions.add("finance.refund.approve");
+        seedUser("usr_a", "seed-org");
+        seedRole("role_fin", "seed-org", List.of("finance.refund.approve"));
+
+        AccessGrantRequestRecord req = svc.createGrantRequest(
+                new AccessGrantRequestCreateRequest("user_role", "usr_a", "role_fin", null, "需退款权", "k2"));
+        assertThat(req.status()).isEqualTo("pending");
+        assertThat(req.reviewId()).isEqualTo("review_x");
+        assertThat(accessRepository.userRoles).doesNotContain("usr_a|role_fin"); // 尚未落
+
+        AccessGrantRequestRecord decided = svc.approveGrantRequest(req.id(),
+                new AccessGrantRequestDecisionRequest("approved", "ok", "k3"));
+        assertThat(decided.status()).isEqualTo("applied");
+        assertThat(accessRepository.userRoles).contains("usr_a|role_fin"); // 审批后落地
+    }
+
+    private SupervisorReviewDecisionRecord decisionStub(String id, String decision) {
+        return new SupervisorReviewDecisionRecord(id, "permission_grant_l3", "permission_grant", "access_grant_request",
+                id, true, decision, 3, null, decision, null, List.of(), Instant.parse("2026-06-14T00:00:00Z"),
+                "initiator", "specific_role", null);
     }
 
     private void seedUser(String id, String org) {
@@ -647,6 +707,29 @@ class AccessServiceTests {
         final Map<String, RoleRecord> roles = new LinkedHashMap<>();
         final Set<String> userRoles = new java.util.LinkedHashSet<>();
         final Map<String, Set<String>> rolePermissions = new LinkedHashMap<>();
+        final Set<String> highRiskPermissions = new java.util.LinkedHashSet<>();
+        final Map<String, AccessGrantRequestRecord> grantRequests = new LinkedHashMap<>();
+
+        @Override
+        public boolean permissionRequiresApproval(String permissionCode) {
+            return highRiskPermissions.contains(permissionCode);
+        }
+
+        @Override
+        public AccessGrantRequestRecord saveGrantRequest(AccessGrantRequestRecord r) {
+            grantRequests.put(r.id(), r);
+            return r;
+        }
+
+        @Override
+        public Optional<AccessGrantRequestRecord> findGrantRequestById(String id) {
+            return Optional.ofNullable(grantRequests.get(id));
+        }
+
+        @Override
+        public List<AccessGrantRequestRecord> listGrantRequests() {
+            return List.copyOf(grantRequests.values());
+        }
 
         @Override
         public List<StaffLevelRecord> listStaffLevels() {
