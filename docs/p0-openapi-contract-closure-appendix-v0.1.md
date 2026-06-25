@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 451 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 259 | 人工权限矩阵正文未覆盖 155 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 902 | 人工事件矩阵正文未覆盖 860 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 451 | 人工任务映射正文未逐项覆盖 445 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 278 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 455 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 260 | 人工权限矩阵正文未覆盖 156 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 910 | 人工事件矩阵正文未覆盖 868 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 455 | 人工任务映射正文未逐项覆盖 449 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 280 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -145,6 +145,7 @@
 | `evidence.event.view` | staff-token | project-object | 1 | listEvidenceEvents | 已在权限矩阵正文出现 |
 | `evidence.review.create` | staff-token | project-object | 1 | createEvidenceReview | 已在权限矩阵正文出现 |
 | `evidence.timeline.view` | staff-token | project-object | 2 | getEvidenceTimeline, getTraceabilityAutoCaptureRate | 已在权限矩阵正文出现 |
+| `facility.energy.manage` | staff-token | platform | 4 | listEnergyMeters, createEnergyMeter, recordEnergyMeterReading, listEnergyMeterReadings | OpenAPI 补充，以本附录为准 |
 | `facility.equipment.manage` | staff-token | platform | 3 | listFacilityEquipment, createFacilityEquipment, updateFacilityEquipmentStatus | OpenAPI 补充，以本附录为准 |
 | `facility.inspection.manage` | staff-token | platform | 5 | listFacilityInspectionTemplates, createFacilityInspectionTemplate, listFacilityInspectionTasks, generateFacilityInspectionTasks, completeFacilityInspectionTask | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.manage` | staff-token | platform | 4 | listFacilityWorkOrders, createFacilityWorkOrder, assignFacilityWorkOrder, updateFacilityWorkOrderStatus | OpenAPI 补充，以本附录为准 |
@@ -705,6 +706,14 @@
 | `exception.resolved` | success | `resolveRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | EVD-事件证据 | `risk_alert.resolve` | 接口级事件，以本附录为准 |
 | `exception.transfer_failed` | failure | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | EVD-事件证据 | `risk_alert.transfer` | 接口级事件，以本附录为准 |
 | `exception.transferred` | success | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | EVD-事件证据 | `risk_alert.transfer` | 接口级事件，以本附录为准 |
+| `facility.energy.meter_create_failed` | failure | `createEnergyMeter` | `POST` | `/api/v1/facility/energy/meters` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
+| `facility.energy.meter_created` | success | `createEnergyMeter` | `POST` | `/api/v1/facility/energy/meters` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
+| `facility.energy.meter_view_failed` | failure | `listEnergyMeters` | `GET` | `/api/v1/facility/energy/meters` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
+| `facility.energy.meter_viewed` | success | `listEnergyMeters` | `GET` | `/api/v1/facility/energy/meters` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
+| `facility.energy.reading_record_failed` | failure | `recordEnergyMeterReading` | `POST` | `/api/v1/facility/energy/meters/{meter_id}/readings` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
+| `facility.energy.reading_recorded` | success | `recordEnergyMeterReading` | `POST` | `/api/v1/facility/energy/meters/{meter_id}/readings` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
+| `facility.energy.reading_view_failed` | failure | `listEnergyMeterReadings` | `GET` | `/api/v1/facility/energy/readings` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
+| `facility.energy.reading_viewed` | success | `listEnergyMeterReadings` | `GET` | `/api/v1/facility/energy/readings` | P0-待归类 | `facility.energy.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment.create_failed` | failure | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment.created` | success | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment.status_change_failed` | failure | `updateFacilityEquipmentStatus` | `POST` | `/api/v1/facility/equipment/{equipment_id}/status` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
@@ -1561,6 +1570,7 @@
 | P0-待归类 | `convertLeasingOfferToContract` | `POST` | `/api/v1/leasing/offers/{offer_id}/convert-to-contract` | 报价转合同（accepted→合同 draft） | `leasing.offer.manage` | `leasing.offer.converted` / `leasing.offer.convert_failed` | web | operation 级补充 |
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | 创建合同关键日期 | `compliance.contract_key_date.manage` | `compliance.contract_key_date.create` / `compliance.contract_key_date.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createEnergyMeter` | `POST` | `/api/v1/facility/energy/meters` | 新建能耗表 | `facility.energy.manage` | `facility.energy.meter_created` / `facility.energy.meter_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | 新建楼宇设施设备档案 | `facility.equipment.manage` | `facility.equipment.created` / `facility.equipment.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityInspectionTemplate` | `POST` | `/api/v1/facility/inspection-templates` | 新建楼宇巡检模板 | `facility.inspection.manage` | `facility.inspection.template_created` / `facility.inspection.template_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | 新建楼宇维保/报修工单 | `facility.work_order.manage` | `facility.work_order.created` / `facility.work_order.create_failed` | web | operation 级补充 |
@@ -1575,6 +1585,8 @@
 | P0-待归类 | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | 查询合规到期项列表 | `compliance.expiry_item.view` | `compliance.expiry_item.list` / `compliance.expiry_item.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | 查询合规提醒列表 | `compliance.reminder.view` | `compliance.reminder.list` / `compliance.reminder.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractKeyDates` | `GET` | `/api/v1/compliance/contract-key-dates` | 查询合同关键日期列表 | `compliance.contract_key_date.view` | `compliance.contract_key_date.list` / `compliance.contract_key_date.list_failed` | web | operation 级补充 |
+| P0-待归类 | `listEnergyMeterReadings` | `GET` | `/api/v1/facility/energy/readings` | 能耗抄表读数清单 | `facility.energy.manage` | `facility.energy.reading_viewed` / `facility.energy.reading_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listEnergyMeters` | `GET` | `/api/v1/facility/energy/meters` | 能耗表台账清单 | `facility.energy.manage` | `facility.energy.meter_viewed` / `facility.energy.meter_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityEquipment` | `GET` | `/api/v1/facility/equipment` | 楼宇设施设备台账清单 | `facility.equipment.manage` | `facility.equipment.viewed` / `facility.equipment.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityInspectionTasks` | `GET` | `/api/v1/facility/inspection-tasks` | 楼宇巡检任务清单（含超期） | `facility.inspection.manage` | `facility.inspection.task_viewed` / `facility.inspection.task_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityInspectionTemplates` | `GET` | `/api/v1/facility/inspection-templates` | 楼宇巡检模板清单 | `facility.inspection.manage` | `facility.inspection.template_viewed` / `facility.inspection.template_view_failed` | web | operation 级补充 |
@@ -1589,6 +1601,7 @@
 | P0-待归类 | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | 企微留存策略列表 | `wecom.retention.manage` | `wecom.retention_policy_viewed` / `wecom.retention_policy_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | 查询企微会话违规命中列表 | `wecom.risk_hit.view` | `wecom.risk_hit.list` / `wecom.risk_hit.list_failed` | web | operation 级补充 |
 | P0-待归类 | `publishFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | 发布平面图导入候选 | `floor_plan.import.manage` | `floor_plan.import_published` / `floor_plan.import_publish_failed` | web | operation 级补充 |
+| P0-待归类 | `recordEnergyMeterReading` | `POST` | `/api/v1/facility/energy/meters/{meter_id}/readings` | 能耗抄表录入（系统算本期用量） | `facility.energy.manage` | `facility.energy.reading_recorded` / `facility.energy.reading_record_failed` | web | operation 级补充 |
 | P0-待归类 | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | 记录账单催收 | `merchant.billing.dunning.record` | `merchant.billing.dunning.record` / `merchant.billing.dunning.record_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewWecomRiskHit` | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | 复核处置企微违规命中 | `wecom.risk_hit.review` | `wecom.risk_hit.review` / `wecom.risk_hit.review_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | 保存平面图图形 | `floor_plan.manage` | `floor_plan.shape.save` / `floor_plan.shape.save_failed` | web | operation 级补充 |

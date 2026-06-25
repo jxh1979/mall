@@ -98,6 +98,8 @@ customer_stored_value_transactions,single_complex_default,P0_SINGLE_COMPLEX,sing
 customers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 deposit_ledger,direct,merchant_id,merchant_id column on deposit_ledger,ready for project/merchant scoped query enforcement,covered
 employee_notices,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+energy_meter_readings,direct,project_id,project_id column on energy_meter_readings,ready for project/merchant scoped query enforcement,covered
+energy_meters,direct,project_id,project_id column on energy_meters,ready for project/merchant scoped query enforcement,covered
 entitlement_sessions,direct,project_id,project_id column on entitlement_sessions,ready for project/merchant scoped query enforcement,covered
 entitlement_templates,direct,venue_id,venue_id column on entitlement_templates,ready for project/merchant scoped query enforcement,covered
 evidence_attachments,direct,merchant_id,merchant_id column on evidence_attachments,ready for project/merchant scoped query enforcement,covered
