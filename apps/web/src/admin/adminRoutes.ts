@@ -4,6 +4,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-OV-001", label: "总控驾驶舱", module: "总控", group: "overview", route: "/admin/overview", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ACC-001", label: "员工账号", module: "账号权限", group: "access", route: "/admin/access/users", requiredPermissions: ["access.user.view"] },
   { pageId: "ADM-ACC-002", label: "权限模板", module: "账号权限", group: "access", route: "/admin/access/permission-templates", requiredPermissions: ["access.permission_template.view"] },
+  { pageId: "ADM-ACC-003", label: "角色装配", module: "账号权限", group: "access", route: "/admin/access/role-assignment", requiredPermissions: ["access.role.assign"] },
   { pageId: "ADM-TKT-001", label: "票务策略", module: "票务", group: "ticketing", route: "/admin/ticketing/policies", requiredPermissions: ["ticket.product.view"] },
   { pageId: "ADM-BAR-001", label: "卡座与订台", module: "酒吧", group: "bar", route: "/admin/bar/table-sessions", requiredPermissions: ["bar.table_session.view", "bar.table.view", "bar.reservation.view", "bar.order.view"] },
   { pageId: "ADM-FIN-001", label: "应收应付台账", module: "财务", group: "finance", route: "/admin/finance/ar-ap-ledger", requiredPermissions: ["finance.ar_ap.view"] },

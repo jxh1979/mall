@@ -76,6 +76,28 @@ public interface AccessRepository {
 
     RoleRecord createRole(RoleRecord role);
 
+    default Optional<RoleRecord> findRoleById(String roleId) {
+        return listRoles().stream().filter(r -> r.id().equals(roleId)).findFirst();
+    }
+
+    /** 用户↔角色装配（④ S1）。幂等：重复装配 no-op。默认抛 UnsupportedOperation，JdbcAccessRepository 覆盖。 */
+    default void assignUserRole(String userId, String roleId) {
+        throw new UnsupportedOperationException("assignUserRole not supported by this repository");
+    }
+
+    default void unassignUserRole(String userId, String roleId) {
+        throw new UnsupportedOperationException("unassignUserRole not supported by this repository");
+    }
+
+    /** 角色权限运行时增删（④ S1）。幂等：重复加 no-op。 */
+    default void addRolePermission(String roleId, String permissionCode) {
+        throw new UnsupportedOperationException("addRolePermission not supported by this repository");
+    }
+
+    default void removeRolePermission(String roleId, String permissionCode) {
+        throw new UnsupportedOperationException("removeRolePermission not supported by this repository");
+    }
+
     List<PermissionTemplateApplication> applyTemplate(
             String templateId,
             List<String> targetUserIds,

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 455 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 260 | 人工权限矩阵正文未覆盖 156 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 910 | 人工事件矩阵正文未覆盖 868 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 455 | 人工任务映射正文未逐项覆盖 449 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 280 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 459 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 261 | 人工权限矩阵正文未覆盖 157 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 918 | 人工事件矩阵正文未覆盖 876 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 459 | 人工任务映射正文未逐项覆盖 453 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 284 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -30,7 +30,8 @@
 | `access.permission_template.manage` | staff-token | project | 3 | createPermissionTemplate, updatePermissionTemplate, copyPermissionTemplate | 已在权限矩阵正文出现 |
 | `access.permission_template.view` | staff-token | project | 1 | listPermissionTemplates | 已在权限矩阵正文出现 |
 | `access.permission.view` | staff-token | project | 1 | listPermissions | 已在权限矩阵正文出现 |
-| `access.role.manage` | staff-token | project | 1 | createRole | 已在权限矩阵正文出现 |
+| `access.role.assign` | staff-token | platform | 2 | assignUserRole, unassignUserRole | OpenAPI 补充，以本附录为准 |
+| `access.role.manage` | staff-token | platform, project | 3 | createRole, addRolePermission, removeRolePermission | 已在权限矩阵正文出现 |
 | `access.role.view` | staff-token | project | 1 | listRoles | 已在权限矩阵正文出现 |
 | `access.staff_level.manage` | staff-token | project | 1 | assignStaffLevel | OpenAPI 补充，以本附录为准 |
 | `access.staff_level.view` | staff-token | project | 1 | listStaffLevels | OpenAPI 补充，以本附录为准 |
@@ -297,10 +298,18 @@
 | `access.effective_permission.viewed` | success | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
 | `access.effective_permission.viewed_failed` | failure | `getEffectivePermissions` | `GET` | `/api/v1/access/effective-permissions` | AUTH-账号权限 | `authenticated` | 接口级事件，以本附录为准 |
 | `access.effective_permission.viewed_failed` | failure | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
+| `access.role_permission.add_failed` | failure | `addRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
+| `access.role_permission.added` | success | `addRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
+| `access.role_permission.remove_failed` | failure | `removeRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions/{permission_code}/remove` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
+| `access.role_permission.removed` | success | `removeRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions/{permission_code}/remove` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `access.staff_level.assign_failed` | failure | `assignStaffLevel` | `PUT` | `/api/v1/access/users/{id}/staff-level` | AUTH-账号权限 | `access.staff_level.manage` | 接口级事件，以本附录为准 |
 | `access.staff_level.assigned` | success | `assignStaffLevel` | `PUT` | `/api/v1/access/users/{id}/staff-level` | AUTH-账号权限 | `access.staff_level.manage` | 接口级事件，以本附录为准 |
 | `access.staff_level.viewed` | success | `listStaffLevels` | `GET` | `/api/v1/access/staff-levels` | AUTH-账号权限 | `access.staff_level.view` | 接口级事件，以本附录为准 |
 | `access.staff_level.viewed_failed` | failure | `listStaffLevels` | `GET` | `/api/v1/access/staff-levels` | AUTH-账号权限 | `access.staff_level.view` | 接口级事件，以本附录为准 |
+| `access.user_role.assign_failed` | failure | `assignUserRole` | `POST` | `/api/v1/access/users/{user_id}/roles` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.user_role.assigned` | success | `assignUserRole` | `POST` | `/api/v1/access/users/{user_id}/roles` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.user_role.unassign_failed` | failure | `unassignUserRole` | `POST` | `/api/v1/access/users/{user_id}/roles/{role_id}/unassign` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.user_role.unassigned` | success | `unassignUserRole` | `POST` | `/api/v1/access/users/{user_id}/roles/{role_id}/unassign` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.user.changed` | success | `createAccessUser` | `POST` | `/api/v1/access/users` | AUTH-账号权限 | `access.user.manage` | 接口级事件，以本附录为准 |
 | `access.user.changed_failed` | failure | `createAccessUser` | `POST` | `/api/v1/access/users` | AUTH-账号权限 | `access.user.manage` | 接口级事件，以本附录为准 |
 | `access.user.viewed` | success | `listAccessUsers` | `GET` | `/api/v1/access/users` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
@@ -1293,9 +1302,11 @@
 | AUTH-登录会话 | `logout` | `POST` | `/api/v1/auth/logout` | 退出登录 | `authenticated` | `auth.logout` / `auth.logout_failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | 已在任务映射正文出现 |
 | AUTH-登录会话 | `refreshToken` | `POST` | `/api/v1/auth/refresh` | 刷新会话 | `authenticated` | `auth.token.refreshed` / `auth.token_refresh_failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | operation 级补充 |
 | AUTH-账号权限 | `acknowledgeEmployeeNotice` | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | 确认/同意员工通知 | `staff.notice.view` | `staff.notice_acknowledged` / `staff.notice_acknowledge_failed` | staff_private_phone, web | operation 级补充 |
+| AUTH-账号权限 | `addRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions` | 给角色加一条权限（运行时） | `access.role.manage` | `access.role_permission.added` / `access.role_permission.add_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `applyPermissionTemplate` | `POST` | `/api/v1/access/permission-templates/{id}/apply` | 应用权限模板 | `access.permission_template.apply` | `permission_template.applied` / `permission_template.apply_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `approveStaffDeviceRebind` | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | 审批换机生效 | `staff.device.review` | `staff_device.rebound` / `staff_device.rebind_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `assignStaffLevel` | `PUT` | `/api/v1/access/users/{id}/staff-level` | 分配员工职级与薪资 | `access.staff_level.manage` | `access.staff_level.assigned` / `access.staff_level.assign_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `assignUserRole` | `POST` | `/api/v1/access/users/{user_id}/roles` | 给用户装配角色 | `access.role.assign` | `access.user_role.assigned` / `access.user_role.assign_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | 绑定/换机申请员工设备凭证 | `staff.device.bind` | `staff_device.bound` / `staff_device.bind_failed` | staff_private_phone, web | operation 级补充 |
 | AUTH-账号权限 | `copyPermissionTemplate` | `POST` | `/api/v1/access/permission-templates/{id}/copy` | 复制权限模板 | `access.permission_template.manage` | `permission_template.copied` / `permission_template.copy_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `createAccessUser` | `POST` | `/api/v1/access/users` | 创建权限用户 | `access.user.manage` | `access.user.changed` / `access.user.changed_failed` | web | operation 级补充 |
@@ -1311,11 +1322,13 @@
 | AUTH-账号权限 | `listRoles` | `GET` | `/api/v1/access/roles` | 角色列表 | `access.role.view` | `role.viewed` / `role.view_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listStaffLevels` | `GET` | `/api/v1/access/staff-levels` | 查询职级目录 | `access.staff_level.view` | `access.staff_level.viewed` / `access.staff_level.viewed_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | 查询员工档案 | `staff.profile.view` | `staff.profile.viewed` / `staff.profile.view_failed` | web, mobile_admin | operation 级补充 |
+| AUTH-账号权限 | `removeRolePermission` | `POST` | `/api/v1/access/roles/{role_id}/permissions/{permission_code}/remove` | 从角色移除一条权限 | `access.role.manage` | `access.role_permission.removed` / `access.role_permission.remove_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `reportStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | 端侧完整性上报 | `staff.device.bind` | `staff_device.integrity_reported` / `staff_device.integrity_report_failed` | staff_private_phone | operation 级补充 |
 | AUTH-账号权限 | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | 审批员工注册 | `staff.profile.review` | `staff.approved` / `staff.review_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | 解绑/失效设备凭证 | `staff.device.revoke` | `staff_device.revoked` / `staff_device.revoke_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeTemporaryGrant` | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | 撤销临时授权 | `access.temporary_grant.revoke` | `permission_template.revoked` / `temporary_grant.revoke_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | 员工自助注册 | `staff.profile.submit` | `staff.registered` / `staff.register_failed` | staff_private_phone, web | operation 级补充 |
+| AUTH-账号权限 | `unassignUserRole` | `POST` | `/api/v1/access/users/{user_id}/roles/{role_id}/unassign` | 解绑用户角色 | `access.role.assign` | `access.user_role.unassigned` / `access.user_role.unassign_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `updatePermissionTemplate` | `PUT` | `/api/v1/access/permission-templates/{id}` | 修改权限模板 | `access.permission_template.manage` | `permission_template.changed` / `permission_template.change_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `addBarBillTip` | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | 账单加小费 | `bar.bill.tip` | `bar.bill_tip_added` / `bar.bill_tip_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | 新增酒吧订单物品 | `bar.order.create` | `bar.order_item.created` / `bar.order_item.created_failed` | web | operation 级补充 |

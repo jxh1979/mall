@@ -63,6 +63,60 @@ class AccessServiceTests {
     }
 
     @Test
+    void assignAndUnassignUserRoleUnderPlatformAdmin() {
+        seedUser("usr_a", "seed-org");
+        seedRole("role_ops", "seed-org", List.of("ops.production_readiness.view"));
+        service.assignUserRole("usr_a", "role_ops", "k1");
+        assertThat(accessRepository.userRoles).contains("usr_a|role_ops");
+        // 幂等：重复装配不报错、不重复。
+        service.assignUserRole("usr_a", "role_ops", "k1b");
+        assertThat(accessRepository.userRoles).containsOnlyOnce("usr_a|role_ops");
+        service.unassignUserRole("usr_a", "role_ops");
+        assertThat(accessRepository.userRoles).doesNotContain("usr_a|role_ops");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("access.user_role.assigned", "access.user_role.unassigned");
+    }
+
+    @Test
+    void addAndRemoveRolePermissionRuntime() {
+        seedRole("role_ops", null, List.of()); // 全局角色，平台管理员可改
+        RoleRecord added = service.addRolePermission("role_ops", "ops.production_readiness.view", "k1");
+        assertThat(added.permissionCodes()).contains("ops.production_readiness.view");
+        RoleRecord removed = service.removeRolePermission("role_ops", "ops.production_readiness.view");
+        assertThat(removed.permissionCodes()).doesNotContain("ops.production_readiness.view");
+    }
+
+    @Test
+    void assignUserRoleRejectsUnknownUserAndRole() {
+        seedRole("role_ops", "seed-org", List.of());
+        assertThatThrownBy(() -> service.assignUserRole("usr_missing", "role_ops", "k1"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("USER_NOT_FOUND"));
+        seedUser("usr_a", "seed-org");
+        assertThatThrownBy(() -> service.assignUserRole("usr_a", "role_missing", "k2"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("ROLE_NOT_FOUND"));
+    }
+
+    @Test
+    void assignUserRoleRejectsCrossOrg() {
+        seedUser("usr_other", "other-org");
+        seedRole("role_ops", "other-org", List.of());
+        authenticateAsOrgUser("usr_admin", "admin", "my-org");
+        assertThatThrownBy(() -> service.assignUserRole("usr_other", "role_ops", "k1"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_ORG_FORBIDDEN"));
+    }
+
+    private void seedUser(String id, String org) {
+        accessRepository.users.put(id, new AccessUser(id, id, "staff", org, null, "active",
+                Instant.parse("2026-06-14T00:00:00Z"), null, "test", null, List.of(), null));
+    }
+
+    private void seedRole(String id, String org, List<String> perms) {
+        accessRepository.roles.put(id, new RoleRecord(id, id, null, "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), perms, org));
+        accessRepository.rolePermissions.put(id, new java.util.LinkedHashSet<>(perms));
+    }
+
+    @Test
     void copyPermissionTemplateKeepsSnapshotWhenSourceChangesAndWritesAuditEvent() {
         service.createPermissionTemplate(new PermissionTemplateRequest(
                 "create-source",
@@ -590,6 +644,9 @@ class AccessServiceTests {
                 "lvl_m10_upper", new StaffLevelRecord("lvl_m10_upper", "M10", "upper", 30, "M10 薪资大范围", "active", Instant.parse("2026-06-14T00:00:00Z"))
         ));
         final Map<String, StaffLevelAssignment> staffLevelAssignments = new LinkedHashMap<>();
+        final Map<String, RoleRecord> roles = new LinkedHashMap<>();
+        final Set<String> userRoles = new java.util.LinkedHashSet<>();
+        final Map<String, Set<String>> rolePermissions = new LinkedHashMap<>();
 
         @Override
         public List<StaffLevelRecord> listStaffLevels() {
@@ -679,12 +736,46 @@ class AccessServiceTests {
 
         @Override
         public List<RoleRecord> listRoles() {
-            return List.of();
+            return roles.keySet().stream().map(id -> findRoleById(id).orElseThrow()).toList();
         }
 
         @Override
         public RoleRecord createRole(RoleRecord role) {
+            roles.put(role.id(), role);
+            rolePermissions.put(role.id(), new java.util.LinkedHashSet<>(
+                    role.permissionCodes() == null ? List.of() : role.permissionCodes()));
             return role;
+        }
+
+        @Override
+        public Optional<RoleRecord> findRoleById(String roleId) {
+            RoleRecord r = roles.get(roleId);
+            if (r == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new RoleRecord(r.id(), r.roleName(), r.description(), r.dataScope(), r.status(),
+                    r.createdAt(), new ArrayList<>(rolePermissions.getOrDefault(roleId, new java.util.LinkedHashSet<>())),
+                    r.organizationId()));
+        }
+
+        @Override
+        public void assignUserRole(String userId, String roleId) {
+            userRoles.add(userId + "|" + roleId);
+        }
+
+        @Override
+        public void unassignUserRole(String userId, String roleId) {
+            userRoles.remove(userId + "|" + roleId);
+        }
+
+        @Override
+        public void addRolePermission(String roleId, String permissionCode) {
+            rolePermissions.computeIfAbsent(roleId, k -> new java.util.LinkedHashSet<>()).add(permissionCode);
+        }
+
+        @Override
+        public void removeRolePermission(String roleId, String permissionCode) {
+            rolePermissions.getOrDefault(roleId, new java.util.LinkedHashSet<>()).remove(permissionCode);
         }
 
         @Override

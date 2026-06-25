@@ -40,9 +40,44 @@ class AccessJdbcIntegrationTests {
                         "access.permission_template.manage",
                         "access.permission_template.apply",
                         "access.temporary_grant.create",
+                        "access.role.assign",
                         "ops.production_readiness.manage",
                         "ops.production_readiness.check"
                 );
+    }
+
+    @Test
+    void roleAssignmentAndRolePermissionEditsReflectInPermissionEffects() {
+        Instant now = Instant.parse("2026-06-24T00:00:00Z");
+        repository.createUser(new AccessUser(
+                "usr_jdbc_assign", "jdbc-assign", "staff", "org", "merchant", "active", now));
+        repository.createRole(new RoleRecord(
+                "role_jdbc_assign", "jdbc-assign-role", null, "project", "active", now,
+                List.of("access.role.assign"), null));
+
+        // 装配前无该权限；装配后经 user_roles→role_permissions 反映（幂等：重复装配不报错）。
+        assertThat(grantedCodes("usr_jdbc_assign", now)).doesNotContain("access.role.assign");
+        repository.assignUserRole("usr_jdbc_assign", "role_jdbc_assign");
+        repository.assignUserRole("usr_jdbc_assign", "role_jdbc_assign");
+        assertThat(grantedCodes("usr_jdbc_assign", now)).contains("access.role.assign");
+
+        // 运行时给角色加权限 → 角色与有效权限均反映。
+        repository.addRolePermission("role_jdbc_assign", "access.role.manage");
+        assertThat(repository.findRoleById("role_jdbc_assign").orElseThrow().permissionCodes())
+                .contains("access.role.assign", "access.role.manage");
+        assertThat(grantedCodes("usr_jdbc_assign", now)).contains("access.role.manage");
+
+        // 减权限 + 解绑 → 撤销。
+        repository.removeRolePermission("role_jdbc_assign", "access.role.manage");
+        repository.unassignUserRole("usr_jdbc_assign", "role_jdbc_assign");
+        assertThat(grantedCodes("usr_jdbc_assign", now)).doesNotContain("access.role.assign", "access.role.manage");
+    }
+
+    private List<String> grantedCodes(String userId, Instant at) {
+        return repository.findPermissionEffects(userId, at).stream()
+                .filter(e -> e.effect() == AccessRepository.Effect.GRANT)
+                .map(AccessRepository.PermissionEffect::permissionCode)
+                .toList();
     }
 
     @Test

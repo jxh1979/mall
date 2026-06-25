@@ -1,9 +1,11 @@
 package com.complex.platform.access;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.access.dto.AccessRoleAssignmentRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
+import com.complex.platform.access.dto.RolePermissionRequest;
 import com.complex.platform.access.dto.RoleRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
@@ -91,6 +93,38 @@ public class AccessController {
         authorizationService.requirePermission("access.role.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createRole(request));
+    }
+
+    @PostMapping("/users/{user_id}/roles")
+    public ApiResponse<AccessUser> assignUserRole(
+            @PathVariable("user_id") String userId, @RequestBody AccessRoleAssignmentRequest request) {
+        authorizationService.requirePermission("access.role.assign");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.assignUserRole(userId, request == null ? null : request.roleId(),
+                request == null ? null : request.idempotencyKey()));
+    }
+
+    @PostMapping("/users/{user_id}/roles/{role_id}/unassign")
+    public ApiResponse<AccessUser> unassignUserRole(
+            @PathVariable("user_id") String userId, @PathVariable("role_id") String roleId) {
+        authorizationService.requirePermission("access.role.assign");
+        return ApiResponse.ok(service.unassignUserRole(userId, roleId));
+    }
+
+    @PostMapping("/roles/{role_id}/permissions")
+    public ApiResponse<RoleRecord> addRolePermission(
+            @PathVariable("role_id") String roleId, @RequestBody RolePermissionRequest request) {
+        authorizationService.requirePermission("access.role.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.addRolePermission(roleId, request == null ? null : request.permissionCode(),
+                request == null ? null : request.idempotencyKey()));
+    }
+
+    @PostMapping("/roles/{role_id}/permissions/{permission_code}/remove")
+    public ApiResponse<RoleRecord> removeRolePermission(
+            @PathVariable("role_id") String roleId, @PathVariable("permission_code") String permissionCode) {
+        authorizationService.requirePermission("access.role.manage");
+        return ApiResponse.ok(service.removeRolePermission(roleId, permissionCode));
     }
 
     @PostMapping("/temporary-grants")

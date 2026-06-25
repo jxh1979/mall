@@ -13,6 +13,7 @@ import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, Effec
 const OverviewPage = React.lazy(() => import("./pages/OverviewPage").then((m) => ({ default: m.OverviewPage })));
 const AccessUsersPage = React.lazy(() => import("./pages/AccessUsersPage").then((m) => ({ default: m.AccessUsersPage })));
 const PermissionTemplatesPage = React.lazy(() => import("./pages/PermissionTemplatesPage").then((m) => ({ default: m.PermissionTemplatesPage })));
+const AccessRoleAssignmentPage = React.lazy(() => import("./pages/AccessRoleAssignmentPage").then((m) => ({ default: m.AccessRoleAssignmentPage })));
 const TicketingPoliciesPage = React.lazy(() => import("./pages/TicketingPoliciesPage").then((m) => ({ default: m.TicketingPoliciesPage })));
 const DynamicPricingPage = React.lazy(() => import("./pages/DynamicPricingPage").then((m) => ({ default: m.DynamicPricingPage })));
 const TicketOrdersPage = React.lazy(() => import("./pages/TicketOrdersPage").then((m) => ({ default: m.TicketOrdersPage })));
@@ -113,6 +114,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AccessUsersPage {...props} />;
     case "ADM-ACC-002":
       return <PermissionTemplatesPage {...props} />;
+    case "ADM-ACC-003":
+      return <AccessRoleAssignmentPage {...props} />;
     case "ADM-TKT-001":
       return <TicketingPoliciesPage {...props} />;
     case "ADM-TKT-002":

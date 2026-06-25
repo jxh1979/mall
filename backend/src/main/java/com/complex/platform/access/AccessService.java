@@ -290,6 +290,125 @@ public class AccessService {
         }
     }
 
+    /** ④ S1：用户↔角色装配。派角色＝授该角色全部权限，过提权闸 + 跨组织闸；幂等 + 审计。 */
+    public AccessUser assignUserRole(String userId, String roleId, String idempotencyKey) {
+        AccessActor actor = authorizationService.currentActor();
+        try {
+            return idempotencyService.execute("assignUserRole:" + userId + ":" + roleId, idempotencyKey,
+                    Map.of("userId", trimToDefault(userId, ""), "roleId", trimToDefault(roleId, "")),
+                    () -> {
+                        AccessUser target = requireUser(userId);
+                        RoleRecord role = requireRole(roleId);
+                        requireSameOrgForRoleAssignment(actor, target, role);
+                        // 提权防护：派角色＝授该角色全部权限，授权人须自身已持有（复用 createRole 同款闸）。
+                        requireActorCanGrant(role.permissionCodes());
+                        repository.assignUserRole(target.id(), role.id());
+                        auditEventService.recordSuccess("access.user_role.assigned", "access.role.assign",
+                                "access_user", target.id(), null, idempotencyKey, Map.of("role_id", role.id()));
+                        return target;
+                    }, AccessUser.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.user_role.assign_failed", "access.role.assign",
+                    "access_user", userId, null, idempotencyKey, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /** ④ S1：解绑用户角色。DELETE 天然幂等，无需幂等键。 */
+    public AccessUser unassignUserRole(String userId, String roleId) {
+        AccessActor actor = authorizationService.currentActor();
+        try {
+            AccessUser target = requireUser(userId);
+            RoleRecord role = requireRole(roleId);
+            requireSameOrgForRoleAssignment(actor, target, role);
+            repository.unassignUserRole(target.id(), role.id());
+            auditEventService.recordSuccess("access.user_role.unassigned", "access.role.assign",
+                    "access_user", target.id(), null, null, Map.of("role_id", role.id()));
+            return target;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.user_role.unassign_failed", "access.role.assign",
+                    "access_user", userId, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /** ④ S1：给角色加一条权限（运行时）。过提权闸 + 自有角色闸 + 已知权限校验；幂等 + 审计。 */
+    public RoleRecord addRolePermission(String roleId, String permissionCode, String idempotencyKey) {
+        AccessActor actor = authorizationService.currentActor();
+        try {
+            return idempotencyService.execute("addRolePermission:" + roleId + ":" + permissionCode, idempotencyKey,
+                    Map.of("roleId", trimToDefault(roleId, ""), "permissionCode", trimToDefault(permissionCode, "")),
+                    () -> {
+                        RoleRecord role = requireRole(roleId);
+                        requireOwnedRole(actor, role);
+                        requireKnownPermissions(List.of(requireText(permissionCode, "permissionCode")));
+                        // 提权防护：不得给角色加授权人自身没有的权限。
+                        requireActorCanGrant(List.of(permissionCode));
+                        repository.addRolePermission(role.id(), permissionCode.trim());
+                        auditEventService.recordSuccess("access.role_permission.added", "access.role.manage",
+                                "role", role.id(), null, idempotencyKey, Map.of("permission_code", permissionCode.trim()));
+                        return requireRole(role.id());
+                    }, RoleRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.role_permission.add_failed", "access.role.manage",
+                    "role", roleId, null, idempotencyKey, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /** ④ S1：从角色移除一条权限。DELETE 天然幂等。 */
+    public RoleRecord removeRolePermission(String roleId, String permissionCode) {
+        AccessActor actor = authorizationService.currentActor();
+        try {
+            RoleRecord role = requireRole(roleId);
+            requireOwnedRole(actor, role);
+            repository.removeRolePermission(role.id(), requireText(permissionCode, "permissionCode"));
+            auditEventService.recordSuccess("access.role_permission.removed", "access.role.manage",
+                    "role", role.id(), null, null, Map.of("permission_code", permissionCode.trim()));
+            return requireRole(role.id());
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("access.role_permission.remove_failed", "access.role.manage",
+                    "role", roleId, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private AccessUser requireUser(String userId) {
+        return repository.findUserById(requireText(userId, "userId"))
+                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "access user not found: " + userId));
+    }
+
+    private RoleRecord requireRole(String roleId) {
+        return repository.findRoleById(requireText(roleId, "roleId"))
+                .orElseThrow(() -> ApiException.notFound("ROLE_NOT_FOUND", "role not found: " + roleId));
+    }
+
+    /** 非平台管理员：目标用户须同组织，且角色须本组织或全局（不得跨组织派角色）。 */
+    private void requireSameOrgForRoleAssignment(AccessActor actor, AccessUser target, RoleRecord role) {
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return;
+        }
+        if (actor.organizationId() == null || !actor.organizationId().equals(target.organizationId())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                    "cannot assign role to a user in another organization: " + target.id());
+        }
+        if (role.organizationId() != null && !actor.organizationId().equals(role.organizationId())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                    "cannot assign a role owned by another organization: " + role.id());
+        }
+    }
+
+    /** 非平台管理员：只能改本组织自有角色（全局角色仅平台管理员可改）。 */
+    private void requireOwnedRole(AccessActor actor, RoleRecord role) {
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return;
+        }
+        if (role.organizationId() == null || !actor.organizationId().equals(role.organizationId())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                    "cannot modify a role owned by another scope: " + role.id());
+        }
+    }
+
     /**
      * P0-1 提权防护：发证/授权动作不得授予超出「授权人自身有效权限」的权限码。
      * 平台管理员（wildcard）可授予任意权限；其余主体所授权限码必须 ⊆ 自身有效授予集（denies 已扣减）。

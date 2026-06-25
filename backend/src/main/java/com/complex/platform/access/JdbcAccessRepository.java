@@ -368,6 +368,42 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public Optional<RoleRecord> findRoleById(String roleId) {
+        return jdbcTemplate.query("""
+                SELECT id, role_name, description, data_scope, status, created_at, organization_id
+                  FROM roles WHERE id = :id
+                """, Map.of("id", roleId), this::mapRole).stream().findFirst();
+    }
+
+    @Override
+    public void assignUserRole(String userId, String roleId) {
+        jdbcTemplate.update("""
+                INSERT INTO user_roles (user_id, role_id) VALUES (:user_id, :role_id)
+                ON CONFLICT (user_id, role_id) DO NOTHING
+                """, Map.of("user_id", userId, "role_id", roleId));
+    }
+
+    @Override
+    public void unassignUserRole(String userId, String roleId) {
+        jdbcTemplate.update("DELETE FROM user_roles WHERE user_id = :user_id AND role_id = :role_id",
+                Map.of("user_id", userId, "role_id", roleId));
+    }
+
+    @Override
+    public void addRolePermission(String roleId, String permissionCode) {
+        jdbcTemplate.update("""
+                INSERT INTO role_permissions (role_id, permission_code) VALUES (:role_id, :permission_code)
+                ON CONFLICT (role_id, permission_code) DO NOTHING
+                """, Map.of("role_id", roleId, "permission_code", permissionCode));
+    }
+
+    @Override
+    public void removeRolePermission(String roleId, String permissionCode) {
+        jdbcTemplate.update("DELETE FROM role_permissions WHERE role_id = :role_id AND permission_code = :permission_code",
+                Map.of("role_id", roleId, "permission_code", permissionCode));
+    }
+
+    @Override
     public List<PermissionTemplateApplication> applyTemplate(
             String templateId,
             List<String> targetUserIds,
