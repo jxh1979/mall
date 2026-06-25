@@ -104,6 +104,7 @@ evidence_attachments,direct,merchant_id,merchant_id column on evidence_attachmen
 evidence_events,direct,merchant_id,merchant_id column on evidence_events,ready for project/merchant scoped query enforcement,covered
 evidence_reviews,direct,merchant_id,merchant_id column on evidence_reviews,ready for project/merchant scoped query enforcement,covered
 facility_equipment,direct,project_id,project_id column on facility_equipment,ready for project/merchant scoped query enforcement,covered
+facility_work_orders,direct,project_id,project_id column on facility_work_orders,ready for project/merchant scoped query enforcement,covered
 finance_ar_ap_items,direct,business_entity_id,business_entity_id column on finance_ar_ap_items,ready for project/merchant scoped query enforcement,covered
 finance_ar_ap_payments,inherited,ar_ap_item_id,ar_ap_item_id -> finance_ar_ap_items -> merchant/entity scope,must join through scope path before multi-complex rollout,covered
 finance_daily_close_summaries,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered

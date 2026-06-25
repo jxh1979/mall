@@ -69,4 +69,50 @@ class JdbcFacilityRepository implements FacilityRepository {
                 nullableInstant(rs, "last_maintenance_at"), rs.getString("project_id"), rs.getString("merchant_id"),
                 nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
     }
+
+    @Override
+    public FacilityWorkOrderRecord saveWorkOrder(FacilityWorkOrderRecord w) {
+        jdbcTemplate.update("""
+                INSERT INTO facility_work_orders (id, equipment_id, space_id, title, description, category, priority,
+                        status, assignee, reported_by, sla_due_at, resolved_at, project_id, merchant_id, created_at, updated_at)
+                VALUES (:id, :equipment_id, :space_id, :title, :description, :category, :priority,
+                        :status, :assignee, :reported_by, :sla_due_at, :resolved_at, :project_id, :merchant_id, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET
+                    equipment_id = EXCLUDED.equipment_id, space_id = EXCLUDED.space_id, title = EXCLUDED.title,
+                    description = EXCLUDED.description, category = EXCLUDED.category, priority = EXCLUDED.priority,
+                    status = EXCLUDED.status, assignee = EXCLUDED.assignee, reported_by = EXCLUDED.reported_by,
+                    sla_due_at = EXCLUDED.sla_due_at, resolved_at = EXCLUDED.resolved_at, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", w.id()).addValue("equipment_id", w.equipmentId()).addValue("space_id", w.spaceId())
+                .addValue("title", w.title()).addValue("description", w.description()).addValue("category", w.category())
+                .addValue("priority", w.priority()).addValue("status", w.status()).addValue("assignee", w.assignee())
+                .addValue("reported_by", w.reportedBy())
+                .addValue("sla_due_at", timestampWithTimeZone(w.slaDueAt()))
+                .addValue("resolved_at", timestampWithTimeZone(w.resolvedAt()))
+                .addValue("project_id", w.projectId()).addValue("merchant_id", w.merchantId())
+                .addValue("created_at", timestampWithTimeZone(w.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(w.updatedAt())));
+        return w;
+    }
+
+    @Override
+    public List<FacilityWorkOrderRecord> listWorkOrders() {
+        return jdbcTemplate.query("SELECT * FROM facility_work_orders ORDER BY created_at DESC, id LIMIT 500", this::mapWorkOrder);
+    }
+
+    @Override
+    public Optional<FacilityWorkOrderRecord> findWorkOrderById(String id) {
+        return jdbcTemplate.query("SELECT * FROM facility_work_orders WHERE id = :id", Map.of("id", id), this::mapWorkOrder)
+                .stream().findFirst();
+    }
+
+    private FacilityWorkOrderRecord mapWorkOrder(ResultSet rs, int n) throws SQLException {
+        return new FacilityWorkOrderRecord(
+                rs.getString("id"), rs.getString("equipment_id"), rs.getString("space_id"), rs.getString("title"),
+                rs.getString("description"), rs.getString("category"), rs.getString("priority"), rs.getString("status"),
+                rs.getString("assignee"), rs.getString("reported_by"),
+                nullableInstant(rs, "sla_due_at"), nullableInstant(rs, "resolved_at"),
+                rs.getString("project_id"), rs.getString("merchant_id"),
+                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+    }
 }

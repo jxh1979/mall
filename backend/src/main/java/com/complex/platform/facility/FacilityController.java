@@ -7,6 +7,9 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.facility.dto.FacilityEquipmentRequest;
 import com.complex.platform.facility.dto.FacilityStatusRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderStatusRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,5 +49,34 @@ public class FacilityController {
         authorizationService.requirePermission("facility.equipment.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updateEquipmentStatus(equipmentId, request));
+    }
+
+    @GetMapping("/work-orders")
+    public ApiResponse<PageResponse<FacilityWorkOrderRecord>> listWorkOrders() {
+        authorizationService.requirePermission("facility.work_order.manage");
+        return ApiResponse.ok(service.listWorkOrders());
+    }
+
+    @PostMapping("/work-orders")
+    public ApiResponse<FacilityWorkOrderRecord> createWorkOrder(@RequestBody FacilityWorkOrderRequest request) {
+        authorizationService.requirePermission("facility.work_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.createWorkOrder(request));
+    }
+
+    @PostMapping("/work-orders/{work_order_id}/assign")
+    public ApiResponse<FacilityWorkOrderRecord> assignWorkOrder(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderAssignRequest request) {
+        authorizationService.requirePermission("facility.work_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.assignWorkOrder(workOrderId, request));
+    }
+
+    @PostMapping("/work-orders/{work_order_id}/status")
+    public ApiResponse<FacilityWorkOrderRecord> updateWorkOrderStatus(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderStatusRequest request) {
+        authorizationService.requirePermission("facility.work_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.updateWorkOrderStatus(workOrderId, request));
     }
 }

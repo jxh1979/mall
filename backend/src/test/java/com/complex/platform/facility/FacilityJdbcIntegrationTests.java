@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.complex.platform.support.MigrationVersions;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,11 +28,12 @@ class FacilityJdbcIntegrationTests {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void migrationCreatesFacilityTableAndSeedsPermission() {
+    void migrationCreatesFacilityTablesAndSeedsPermissions() {
         assertThat(regclass("facility_equipment")).isEqualTo("facility_equipment");
+        assertThat(regclass("facility_work_orders")).isEqualTo("facility_work_orders");
         assertThat(currentFlywayVersion()).isEqualTo(MigrationVersions.latest());
-        assertThat(permissionCodes()).contains("facility.equipment.manage");
-        assertThat(platformAdminPermissionCodes()).contains("facility.equipment.manage");
+        assertThat(permissionCodes()).contains("facility.equipment.manage", "facility.work_order.manage");
+        assertThat(platformAdminPermissionCodes()).contains("facility.equipment.manage", "facility.work_order.manage");
     }
 
     @Test
@@ -66,6 +68,42 @@ class FacilityJdbcIntegrationTests {
         assertThat(repository.listEquipment())
                 .extracting(FacilityEquipmentRecord::id)
                 .contains("eq_jdbc");
+    }
+
+    @Test
+    void repositoryPersistsWorkOrderAndReadsBack() {
+        Instant now = Instant.parse("2026-06-24T00:00:00Z");
+        repository.saveWorkOrder(new FacilityWorkOrderRecord(
+                "fwo_jdbc",
+                null,
+                "sp_jdbc",
+                "电梯异响",
+                "三号梯异响明显",
+                "repair",
+                "high",
+                "open",
+                null,
+                "u_report",
+                now.plus(24, ChronoUnit.HOURS),
+                null,
+                null,
+                null,
+                now,
+                now));
+
+        assertThat(repository.findWorkOrderById("fwo_jdbc"))
+                .isPresent()
+                .get()
+                .extracting(
+                        FacilityWorkOrderRecord::title,
+                        FacilityWorkOrderRecord::category,
+                        FacilityWorkOrderRecord::priority,
+                        FacilityWorkOrderRecord::status,
+                        FacilityWorkOrderRecord::slaDueAt)
+                .containsExactly("电梯异响", "repair", "high", "open", now.plus(24, ChronoUnit.HOURS));
+        assertThat(repository.listWorkOrders())
+                .extracting(FacilityWorkOrderRecord::id)
+                .contains("fwo_jdbc");
     }
 
     private String regclass(String tableName) {
