@@ -11,6 +11,7 @@ import com.complex.platform.contract.dto.ContractApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
+import com.complex.platform.contract.dto.ContractRentBillRequest;
 import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.contract.dto.ContractSubmitRequest;
@@ -126,6 +127,14 @@ public class ContractController {
             @PathVariable("settlement_id") String settlementId, @RequestBody ContractResolveDisputeRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.resolveDispute(settlementId, request));
+    }
+
+    // ---- 租金 AR 挂账 ----
+    @PostMapping("/{contract_id}/rent-bills")
+    public ApiResponse<ContractRentBillRecord> generateRentBill(
+            @PathVariable("contract_id") String contractId, @RequestBody ContractRentBillRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.generateRentBill(contractId, request));
     }
 
     // ---- 配置：审批链 ----

@@ -9,6 +9,7 @@ import com.complex.platform.contract.dto.ContractApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
+import com.complex.platform.contract.dto.ContractRentBillRequest;
 import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
@@ -383,6 +384,37 @@ public class ContractService {
                             raw.daysToExpiry()));
         }
         return out;
+    }
+
+    // ============ 租金 AR 逐期挂账（用 ContractRentMath：base+递增−免租）============
+    /** 生效合同某期挂账：算应收 → 联动 ar_ap_items(receivable)+contract_rent_bills。免租/生效前返回 null。 */
+    @Transactional
+    public ContractRentBillRecord generateRentBill(String contractId, ContractRentBillRequest request) {
+        authorizationService.requirePermission("finance.ar_ap.manage");
+        ContractRentBillRequest actual = requireRequest(request);
+        String period = requireText(actual.period(), "period");
+        if (!period.matches("\\d{4}-\\d{2}")) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "period must be YYYY-MM");
+        }
+        ContractRecord c = requireContract(contractId);
+        if (!"effective".equals(c.lifecycleStatus())) {
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract bills rent");
+        }
+        if (repository.rentBillExists(contractId, period)) {
+            throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "rent already billed for " + period);
+        }
+        long amountCent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
+        if (amountCent <= 0) {
+            return null;   // 免租期 / 生效前：无应收
+        }
+        String[] ym = period.split("-");
+        LocalDate dueDate = LocalDate.of(Integer.parseInt(ym[0]), Integer.parseInt(ym[1]), 1);
+        ContractRentBillRecord bill = repository.insertRentBill(new ContractRentBillRecord(
+                "crb_" + UUID.randomUUID(), contractId, c.merchantId(), c.projectId(), period, amountCent,
+                "arap_rent_" + UUID.randomUUID(), Instant.now()), dueDate);
+        auditEventService.recordSuccess("contract.rent_billed", "finance.ar_ap.manage", "contract_rent_bill",
+                bill.id(), null, actual.idempotencyKey(), Map.of("period", period, "amount_cent", amountCent));
+        return bill;
     }
 
     // ============ engine helpers ============

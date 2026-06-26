@@ -64,4 +64,13 @@ public interface ContractRepository {
 
     /** 铺位租赁状态原始数据（每铺当前生效合同 + 距到期天数）；着色由 service 套用着色分类。 */
     List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf);
+
+    /** 该 (合同,期) 是否已挂账（幂等依据）。 */
+    boolean rentBillExists(String contractId, String period);
+
+    /**
+     * 逐期挂账：联动建 ar_ap_items 应收(direction=receivable/status=pending_collection/source=contract_rent)
+     * + ar_ap_item_sources + contract_rent_bills。原子。
+     */
+    ContractRentBillRecord insertRentBill(ContractRentBillRecord bill, LocalDate dueDate);
 }

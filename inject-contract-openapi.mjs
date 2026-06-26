@@ -105,11 +105,18 @@ spec.paths['/api/v1/contracts/space-rental-status'] = {
     params: [projectQuery], evOk: 'contract.space_rental_viewed', evFail: 'contract.space_rental_view_failed' }),
 };
 
+spec.paths['/api/v1/contracts/{contract_id}/rent-bills'] = {
+  post: op({ id: 'generateContractRentBill', perm: 'finance.ar_ap.manage', summary: '生成某期合同租金应收(base+递增−免租)', idemReq: true,
+    desc: '生效合同按 ContractRentMath 算该期应收 → 联动 ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期)。免租/生效前无应收。',
+    params: [pathParam('contract_id', '合同 id。')], body: 'ContractRentBillRequest',
+    evOk: 'contract.rent_billed', evFail: 'contract.rent_bill_failed' }),
+};
+
 // ---- requestBodies ----
 const rb = (name) => ({ required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/' + name } } } });
 for (const n of ['ContractDraftRequest', 'ContractSubmitRequest', 'ContractApproveRequest', 'ContractActivateRequest',
   'ContractChangeRequest', 'ContractChangeApproveRequest', 'ContractSettleRequest', 'ContractResolveDisputeRequest',
-  'ContractApprovalFlowRequest', 'SpaceExpiryColorRuleRequest']) {
+  'ContractApprovalFlowRequest', 'SpaceExpiryColorRuleRequest', 'ContractRentBillRequest']) {
   spec.components.requestBodies[n] = rb(n);
 }
 
@@ -202,5 +209,11 @@ S.SpaceExpiryColorRuleRequest = {
   },
 };
 
+S.ContractRentBillRequest = {
+  type: 'object', description: '请求载荷 ContractRentBillRequest（生成某期合同租金应收）。', additionalProperties: false,
+  required: ['period'],
+  properties: { idempotency_key: idem, period: { type: 'string', description: '账期 YYYY-MM。', pattern: '^\\d{4}-\\d{2}$' } },
+};
+
 writeFileSync(path, JSON.stringify(spec, null, 2) + '\n');
-console.log('injected 合同: 13 paths(17 ops) + 10 requestBodies + 10 schemas');
+console.log('injected 合同: 14 paths(18 ops) + 11 requestBodies + 11 schemas');

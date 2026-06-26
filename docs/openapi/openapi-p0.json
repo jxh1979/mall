@@ -22291,6 +22291,60 @@
           }
         }
       }
+    },
+    "/api/v1/contracts/{contract_id}/rent-bills": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "generateContractRentBill",
+        "summary": "生成某期合同租金应收(base+递增−免租)",
+        "x-permission": "finance.ar_ap.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.rent_billed",
+        "x-audit-event-failure": "contract.rent_bill_failed",
+        "x-auth-context": "staff-token",
+        "description": "生效合同按 ContractRentMath 算该期应收 → 联动 ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期)。免租/生效前无应收。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractRentBillRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -24490,6 +24544,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/SpaceExpiryColorRuleRequest"
+            }
+          }
+        }
+      },
+      "ContractRentBillRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractRentBillRequest"
             }
           }
         }
@@ -33718,6 +33782,26 @@
           "seq": {
             "type": "integer",
             "description": "排序。"
+          }
+        }
+      },
+      "ContractRentBillRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractRentBillRequest（生成某期合同租金应收）。",
+        "additionalProperties": false,
+        "required": [
+          "period"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "period": {
+            "type": "string",
+            "description": "账期 YYYY-MM。",
+            "pattern": "^\\d{4}-\\d{2}$"
           }
         }
       }

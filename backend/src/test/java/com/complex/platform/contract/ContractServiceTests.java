@@ -13,6 +13,7 @@ import com.complex.platform.contract.dto.ContractApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
+import com.complex.platform.contract.dto.ContractRentBillRequest;
 import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.evidence.AuditEventService;
@@ -159,6 +160,19 @@ class ContractServiceTests {
         return service.approveChange(changeId, new ContractChangeApproveRequest("k_" + code, code, "approve", "ok"));
     }
 
+    @Test
+    void rentBillUsesContractRentMathAndIsIdempotent() {
+        ContractRecord c = effectiveContract();   // rentTerms baseRentCent=100000, 生效 2026-07-01
+        ContractRentBillRecord bill = service.generateRentBill(c.id(), new ContractRentBillRequest("k_rb", "2026-08"));
+        assertThat(bill).isNotNull();
+        assertThat(bill.amountCent()).isEqualTo(100000);
+        assertThat(bill.arApItemId()).startsWith("arap_rent_");
+        // 同期重复 → 幂等冲突。
+        assertThatThrownBy(() -> service.generateRentBill(c.id(), new ContractRentBillRequest("k_rb2", "2026-08")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CONTRACT_RENT_ALREADY_BILLED"));
+    }
+
     private ContractRecord effectiveContract() {
         ContractRecord c = newDraft();
         service.submit(c.id(), "k_submit");
@@ -176,6 +190,7 @@ class ContractServiceTests {
         private final Map<String, ContractChangeRecord> changes = new LinkedHashMap<>();
         private final Map<String, ContractSettlementRecord> settlements = new LinkedHashMap<>();
         private final List<SpaceExpiryColorRuleRecord> colorRules = new ArrayList<>();
+        private final List<ContractRentBillRecord> rentBills = new ArrayList<>();
         private final List<ContractApprovalFlowStepRecord> defaultSteps = List.of(
                 new ContractApprovalFlowStepRecord("s1", "caf_default", null, 1, "业务审核", "contract.approve.business", true),
                 new ContractApprovalFlowStepRecord("s2", "caf_default", null, 1, "财务审核", "contract.approve.finance", true),
@@ -304,6 +319,17 @@ class ContractServiceTests {
         @Override
         public List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf) {
             return List.of();
+        }
+
+        @Override
+        public boolean rentBillExists(String contractId, String period) {
+            return rentBills.stream().anyMatch(b -> b.contractId().equals(contractId) && b.period().equals(period));
+        }
+
+        @Override
+        public ContractRentBillRecord insertRentBill(ContractRentBillRecord bill, LocalDate dueDate) {
+            rentBills.add(bill);
+            return bill;
         }
     }
 }
