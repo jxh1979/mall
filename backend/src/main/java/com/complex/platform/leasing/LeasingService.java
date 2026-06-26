@@ -3,10 +3,10 @@ package com.complex.platform.leasing;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.contract.ContractRecord;
+import com.complex.platform.contract.ContractService;
+import com.complex.platform.contract.dto.ContractDraftRequest;
 import com.complex.platform.evidence.AuditEventService;
-import com.complex.platform.governance.ContractRecord;
-import com.complex.platform.governance.PlatformService;
-import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
 import com.complex.platform.leasing.dto.LeasingFollowUpRequest;
@@ -45,14 +45,14 @@ public class LeasingService {
     private final LeasingRepository repository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
-    private final PlatformService platformService;
+    private final ContractService contractService;
 
     public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
-            AuthorizationService authorizationService, PlatformService platformService) {
+            AuthorizationService authorizationService, ContractService contractService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
-        this.platformService = platformService;
+        this.contractService = contractService;
     }
 
     // ============ 线索 ============
@@ -176,9 +176,9 @@ public class LeasingService {
     }
 
     /**
-     * 签约：pending_signing 意向 → 喂入合同 draft（既有合同环），lead → signed。
+     * 签约：pending_signing 意向 → 喂入合同 draft（V162 合同域 ContractService），lead → signed。
      * 四类主体默认同一公司：operation/settlement 缺省指向 contractSubjectId，后续可拆。
-     * ponytail: 商户档案的自动创建在「合同/商户域重建」时接线（当前签约须带已建 merchantId）；招商负责把线索/意向条款喂入合同 draft。
+     * 合同后续在合同域走 提交→分组并行审批→生效固化；本入口只把意向条款喂入 draft（带 projectId 隔离）。
      */
     public ContractRecord signIntent(String intentId, LeasingSignRequest request) {
         authorizationService.requirePlatformScope();
@@ -191,12 +191,13 @@ public class LeasingService {
         String contractSubjectId = requireText(actual.contractSubjectId(), "contract_subject_id");
         String operationSubjectId = trimToNull(actual.operationSubjectId());
         String settlementSubjectId = trimToNull(actual.settlementSubjectId());
-        ContractRecord contract = platformService.createContractDraft(new ContractDraftRequest(
-                "lease-sign-" + intent.id(), "signed from leasing intent " + intent.id(), List.of(),
+        ContractRecord contract = contractService.createDraft(new ContractDraftRequest(
+                "lease-sign-" + intent.id(),
                 requireText(actual.merchantId(), "merchant_id"), contractSubjectId,
                 operationSubjectId != null ? operationSubjectId : contractSubjectId,
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
-                actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(), null, List.of()));
+                actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(),
+                null, null, null, null, null, List.of(), intent.projectId()));
         repository.findLeadById(intent.leadId()).ifPresent(lead -> repository.saveLead(new LeasingLeadRecord(
                 lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
                 lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(), "signed",

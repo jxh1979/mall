@@ -9,9 +9,9 @@ import static org.mockito.Mockito.when;
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.contract.ContractRecord;
+import com.complex.platform.contract.ContractService;
 import com.complex.platform.evidence.AuditEventService;
-import com.complex.platform.governance.ContractRecord;
-import com.complex.platform.governance.PlatformService;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
 import com.complex.platform.leasing.dto.LeasingFollowUpRequest;
@@ -36,14 +36,14 @@ class LeasingServiceTests {
 
     private final InMemoryLeasingRepository repo = new InMemoryLeasingRepository();
     private final AuthorizationService authz = mock(AuthorizationService.class);
-    private final PlatformService platform = mock(PlatformService.class);
+    private final ContractService contractService = mock(ContractService.class);
     private LeasingService service;
 
     @BeforeEach
     void setUp() {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
-        service = new LeasingService(repo, mock(AuditEventService.class), authz, platform);
+        service = new LeasingService(repo, mock(AuditEventService.class), authz, contractService);
     }
 
     @Test
@@ -105,9 +105,10 @@ class LeasingServiceTests {
 
     @Test
     void signPendingSigningIntentCreatesContractAndMarksLeadSigned() {
-        when(platform.createContractDraft(any())).thenReturn(new ContractRecord(
-                "ctr_new", "mch_1", "cs", "cs", "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
-                Map.of(), null, List.of(), "draft", Instant.now(), Instant.now()));
+        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+                "ctr_new", "mch_1", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
+                null, null, null, Instant.now(), Instant.now()));
         LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
                 "钱七", null, "online_inquiry", null, null, null, null, "k1"));
         LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), null, null, Map.of(), "k2"));

@@ -5,7 +5,7 @@ import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.governance.ContractRecord;
+import com.complex.platform.contract.ContractRecord;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
 import com.complex.platform.leasing.dto.LeasingFollowUpRequest;

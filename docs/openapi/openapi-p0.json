@@ -21495,6 +21495,802 @@
           }
         }
       }
+    },
+    "/api/v1/contracts": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listContracts",
+        "summary": "合同清单",
+        "x-permission": "contract.draft.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.viewed",
+        "x-audit-event-failure": "contract.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "createContractDraft",
+        "summary": "起草合同(草拟)",
+        "x-permission": "contract.draft.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.drafted",
+        "x-audit-event-failure": "contract.draft_failed",
+        "x-auth-context": "staff-token",
+        "description": "V162 重建：手工或招商签约带入。租金/递增/免租/物业费放 rent_terms；抽成 4 模式可空、能源费分摊 4 模式。状态默认 drafting。",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractDraftRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/submit": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "submitContract",
+        "summary": "提交进审批链(→待确认)",
+        "x-permission": "contract.draft.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.submitted",
+        "x-audit-event-failure": "contract.submit_failed",
+        "x-auth-context": "staff-token",
+        "description": "按所属综合体生效链物化第一并行阶段。链未配则拒。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractSubmitRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/approve": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "approveContractStage",
+        "summary": "审批当前阶段并行槽(会签)",
+        "x-permission": "contract.approve.business",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.approved_slot",
+        "x-audit-event-failure": "contract.approve_failed",
+        "x-auth-context": "staff-token",
+        "description": "分组并行：实际权限按 body.approver_permission_code 动态校验(业务/财务/法务/总经理…)。当前阶段全过进下一阶段，任一驳回整单退回起草。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractApproveRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/approvals": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listContractApprovals",
+        "summary": "合同审批留痕(按阶段)",
+        "x-permission": "contract.draft.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.approvals_viewed",
+        "x-audit-event-failure": "contract.approvals_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/activate": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "activateContract",
+        "summary": "生效(固化快照+绑铺位)",
+        "x-permission": "contract.lifecycle.activate",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.activated",
+        "x-audit-event-failure": "contract.activate_failed",
+        "x-auth-context": "staff-token",
+        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractActivateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/changes": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listContractChanges",
+        "summary": "合同变更清单",
+        "x-permission": "contract.change.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.changes_viewed",
+        "x-audit-event-failure": "contract.changes_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "raiseContractChange",
+        "summary": "发起合同变更(6 类)",
+        "x-permission": "contract.change.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.change_raised",
+        "x-audit-event-failure": "contract.change_raise_failed",
+        "x-auth-context": "staff-token",
+        "description": "6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractChangeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/changes/{change_id}/approve": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "approveContractChange",
+        "summary": "变更审批(走同一并行链,全过即应用+新版本快照)",
+        "x-permission": "contract.approve.business",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.change_approved",
+        "x-audit-event-failure": "contract.change_approve_failed",
+        "x-auth-context": "staff-token",
+        "description": "变更走与新签同一可配分组并行链；实际权限按 body.approver_permission_code 动态校验。全阶段通过即应用变更，任一驳回整变更退回。",
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "description": "变更 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractChangeApproveRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/settle": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "settleContract",
+        "summary": "退租/到期结算(逐例顺序)",
+        "x-permission": "contract.settlement.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.settled",
+        "x-audit-event-failure": "contract.settle_failed",
+        "x-auth-context": "staff-token",
+        "description": "按合同 settlement_rules 逐例算；带 dispute_reason 则挂起「有争议」等主管裁决。结清→合同终止/到期。",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractSettleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/{contract_id}/settlements": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listContractSettlements",
+        "summary": "退租结算清单",
+        "x-permission": "contract.settlement.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.settlements_viewed",
+        "x-audit-event-failure": "contract.settlements_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/settlements/{settlement_id}/resolve-dispute": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "resolveContractDispute",
+        "summary": "裁决退租争议→结清",
+        "x-permission": "contract.settlement.dispute.resolve",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.dispute_resolved",
+        "x-audit-event-failure": "contract.dispute_resolve_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "settlement_id",
+            "in": "path",
+            "required": true,
+            "description": "结算 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractResolveDisputeRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/approval-flow": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listContractApprovalFlow",
+        "summary": "查审批链(生效链：项目覆盖优先)",
+        "x-permission": "contract.approval.flow.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.approval_flow_viewed",
+        "x-audit-event-failure": "contract.approval_flow_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体 id(空=平台默认)。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "saveContractApprovalFlow",
+        "summary": "配置审批链(分组并行,按综合体覆盖)",
+        "x-permission": "contract.approval.flow.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.approval_flow_saved",
+        "x-audit-event-failure": "contract.approval_flow_save_failed",
+        "x-auth-context": "staff-token",
+        "description": "同 stage_seq 多步 = 一个并行会签阶段；阶段间串行。project_id 空=改平台默认链。",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractApprovalFlowRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/expiry-color-rules": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listSpaceExpiryColorRules",
+        "summary": "查到期着色分类",
+        "x-permission": "contract.space.color.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.color_rules_viewed",
+        "x-audit-event-failure": "contract.color_rules_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体 id(空=平台默认)。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "saveSpaceExpiryColorRule",
+        "summary": "配置到期着色分类(颜色+提前天数)",
+        "x-permission": "contract.space.color.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.color_rule_saved",
+        "x-audit-event-failure": "contract.color_rule_save_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/SpaceExpiryColorRuleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/space-rental-status": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "listSpaceRentalStatus",
+        "summary": "铺位平面图着色数据源(可租/已租/即将到期)",
+        "x-permission": "contract.draft.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "contract.space_rental_viewed",
+        "x-audit-event-failure": "contract.space_rental_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体 id(空=平台默认)。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -23607,6 +24403,96 @@
             }
           }
         }
+      },
+      "ContractSubmitRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractSubmitRequest"
+            }
+          }
+        }
+      },
+      "ContractApproveRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractApproveRequest"
+            }
+          }
+        }
+      },
+      "ContractActivateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractActivateRequest"
+            }
+          }
+        }
+      },
+      "ContractChangeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractChangeRequest"
+            }
+          }
+        }
+      },
+      "ContractChangeApproveRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractChangeApproveRequest"
+            }
+          }
+        }
+      },
+      "ContractSettleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractSettleRequest"
+            }
+          }
+        }
+      },
+      "ContractResolveDisputeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractResolveDisputeRequest"
+            }
+          }
+        }
+      },
+      "ContractApprovalFlowRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContractApprovalFlowRequest"
+            }
+          }
+        }
+      },
+      "SpaceExpiryColorRuleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SpaceExpiryColorRuleRequest"
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -24465,7 +25351,7 @@
       },
       "ContractDraftRequest": {
         "type": "object",
-        "description": "请求载荷 `ContractDraftRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
+        "description": "请求载荷 ContractDraftRequest（V162 起草合同）。",
         "additionalProperties": false,
         "required": [
           "merchant_id",
@@ -24477,72 +25363,95 @@
         "properties": {
           "idempotency_key": {
             "type": "string",
-            "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+            "description": "操作幂等键。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "merchant_id": {
             "type": "string",
-            "description": "商户唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
+            "description": "商户 id。",
             "maxLength": 64
           },
           "contract_subject_id": {
             "type": "string",
-            "description": "合同唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
+            "description": "合同主体 id。",
             "maxLength": 64
           },
           "operation_subject_id": {
             "type": "string",
-            "description": "业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
+            "description": "运营主体 id(缺省=合同主体)。",
             "maxLength": 64
           },
           "settlement_subject_id": {
             "type": "string",
-            "description": "结算唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
+            "description": "结算主体 id(缺省=合同主体)。",
             "maxLength": 64
           },
           "effective_date": {
             "type": "string",
-            "description": "`effective_date` 日期字段；使用 YYYY-MM-DD。",
-            "format": "date"
+            "format": "date",
+            "description": "生效日期。"
           },
           "expiry_date": {
             "type": "string",
-            "description": "`expiry_date` 日期字段；使用 YYYY-MM-DD。",
-            "format": "date"
+            "format": "date",
+            "description": "到期日期。"
           },
           "rent_terms": {
             "type": "object",
-            "description": "ContractDraftRequest.rent_terms 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。"
+            "description": "租金条款：基础租金/递增/免租/物业费(自由结构)。",
+            "additionalProperties": true
           },
-          "shareholder_ratio_for_report": {
-            "type": "number",
-            "description": "比例字段，按百分比数值保存；必须在 0 到 100 范围内。",
-            "minimum": 0,
-            "maximum": 100,
-            "multipleOf": 0.01
+          "commission_mode": {
+            "type": "string",
+            "description": "抽成模式(空=无抽成)。",
+            "enum": [
+              "guarantee_or_commission_higher",
+              "fixed_ratio",
+              "tiered_ratio",
+              "guarantee_plus_commission"
+            ]
+          },
+          "energy_fee_basis": {
+            "type": "string",
+            "description": "公区能耗分摊。",
+            "enum": [
+              "none",
+              "by_contract",
+              "by_area",
+              "by_usage"
+            ]
+          },
+          "deposit_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "保证金(分)。",
+            "minimum": 0
+          },
+          "penalty_terms": {
+            "type": "object",
+            "description": "违约金条款。",
+            "additionalProperties": true
+          },
+          "settlement_rules": {
+            "type": "array",
+            "description": "退租结算逐例顺序(每份可不同)。",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
           },
           "attachment_ids": {
             "type": "array",
-            "description": "`attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。",
+            "description": "附件 id(线下签扫描件)。",
             "items": {
               "type": "string",
               "maxLength": 64
-            },
-            "maxItems": 50
+            }
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id。",
+            "maxLength": 64
           }
         }
       },
@@ -32533,6 +33442,282 @@
             "type": "string",
             "format": "date-time",
             "description": "下次跟进计划时间。"
+          }
+        }
+      },
+      "ContractSubmitRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractSubmitRequest（提交进审批链）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          }
+        }
+      },
+      "ContractApproveRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractApproveRequest（审批当前阶段并行槽）。",
+        "additionalProperties": false,
+        "required": [
+          "approver_permission_code",
+          "decision"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "approver_permission_code": {
+            "type": "string",
+            "description": "审批岗位权限码(定位并行槽)。",
+            "maxLength": 120
+          },
+          "decision": {
+            "type": "string",
+            "description": "决议。",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "description": "审批意见。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "ContractActivateRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractActivateRequest（生效+绑铺位）。",
+        "additionalProperties": false,
+        "required": [
+          "space_ids"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "space_ids": {
+            "type": "array",
+            "description": "所租空间 id(防重复出租)。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        }
+      },
+      "ContractChangeRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractChangeRequest（发起变更 6 类）。",
+        "additionalProperties": false,
+        "required": [
+          "change_type"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "change_type": {
+            "type": "string",
+            "description": "变更类型(无转租)。",
+            "enum": [
+              "renewal",
+              "move_out",
+              "area_change",
+              "rent_change",
+              "business_scope_change",
+              "early_termination"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "description": "变更载荷(改对应条款细节)。",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ContractChangeApproveRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractChangeApproveRequest（变更审批，走与新签同一并行链）。",
+        "additionalProperties": false,
+        "required": [
+          "approver_permission_code",
+          "decision"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "approver_permission_code": {
+            "type": "string",
+            "description": "审批岗位权限码(定位当前阶段并行槽)。",
+            "maxLength": 120
+          },
+          "decision": {
+            "type": "string",
+            "description": "决议。",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "description": "审批意见。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "ContractSettleRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractSettleRequest（退租/到期结算）。",
+        "additionalProperties": false,
+        "required": [
+          "trigger_type"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "trigger_type": {
+            "type": "string",
+            "description": "触发。",
+            "enum": [
+              "move_out",
+              "expiry",
+              "early_termination"
+            ]
+          },
+          "dispute_reason": {
+            "type": "string",
+            "description": "争议原因(填则挂起有争议)。",
+            "maxLength": 500
+          }
+        }
+      },
+      "ContractResolveDisputeRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractResolveDisputeRequest（裁决退租争议）。",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "resolution_note": {
+            "type": "string",
+            "description": "裁决结论。",
+            "maxLength": 500
+          }
+        }
+      },
+      "ContractApprovalFlowRequest": {
+        "type": "object",
+        "description": "请求载荷 ContractApprovalFlowRequest（配置审批链，分组并行）。",
+        "additionalProperties": false,
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id(空=平台默认链)。",
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "description": "链名。",
+            "maxLength": 160
+          },
+          "steps": {
+            "type": "array",
+            "description": "步骤；同 stage_seq = 一个并行会签阶段。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "stage_seq",
+                "stage_name",
+                "approver_permission_code"
+              ],
+              "properties": {
+                "stage_seq": {
+                  "type": "integer",
+                  "description": "阶段序(升序串行)。"
+                },
+                "stage_name": {
+                  "type": "string",
+                  "description": "阶段名。",
+                  "maxLength": 80
+                },
+                "approver_permission_code": {
+                  "type": "string",
+                  "description": "审批岗位权限码。",
+                  "maxLength": 120
+                }
+              }
+            }
+          }
+        }
+      },
+      "SpaceExpiryColorRuleRequest": {
+        "type": "object",
+        "description": "请求载荷 SpaceExpiryColorRuleRequest（配置到期着色分类）。",
+        "additionalProperties": false,
+        "required": [
+          "category_name",
+          "color",
+          "threshold_days"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id(空=平台默认)。",
+            "maxLength": 64
+          },
+          "category_name": {
+            "type": "string",
+            "description": "分类名。",
+            "maxLength": 80
+          },
+          "color": {
+            "type": "string",
+            "description": "颜色(十六进制/色名)。",
+            "maxLength": 32
+          },
+          "threshold_days": {
+            "type": "integer",
+            "description": "到期前 N 天亮起。",
+            "minimum": 1
+          },
+          "seq": {
+            "type": "integer",
+            "description": "排序。"
           }
         }
       }
