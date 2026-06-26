@@ -12,12 +12,28 @@ type ContractRow = {
 };
 type FlowStep = { stageSeq: number; stageName: string; approverPermissionCode: string };
 type ColorRule = { id: string; categoryName: string; color: string; thresholdDays: number };
+type ChangeRow = { id: string; contractId: string; changeType: string; approvalStatus: string };
+type SettlementRow = { id: string; contractId: string; triggerType: string; status: string };
+type SpaceRental = { spaceId: string; spaceName: string; rentalStatus: string; color?: string | null; daysToExpiry?: number | null };
 
 const DRAFT = ["contract.draft.manage"];
 const ACTIVATE = ["contract.lifecycle.activate"];
 const SETTLE = ["contract.settlement.manage"];
 const FLOW_CFG = ["contract.approval.flow.manage"];
 const COLOR_CFG = ["contract.space.color.manage"];
+const CHANGE_MANAGE = ["contract.change.manage"];
+const DISPUTE_RESOLVE = ["contract.settlement.dispute.resolve"];
+const CHANGE_TYPES = [
+  { v: "renewal", l: "续租" }, { v: "move_out", l: "退租" }, { v: "area_change", l: "面积变更" },
+  { v: "rent_change", l: "租金变更" }, { v: "business_scope_change", l: "经营范围变更" }, { v: "early_termination", l: "提前终止" },
+];
+const RENTAL_LABEL: Record<string, string> = {
+  vacant: "空置", negotiating: "洽谈中", let: "已租", expiring: "即将到期", moved_out: "已退租", unavailable: "不可租",
+};
+const RENTAL_COLOR: Record<string, string> = {
+  vacant: "#9ca3af", negotiating: "#3b82f6", let: "#10b981", expiring: "#F59E0B", moved_out: "#6b7280", unavailable: "#ef4444",
+};
+const OPEN_SETTLEMENT = ["pending_settlement", "deposit_offsetting", "arrears_collecting"];
 
 // 分组并行审批：默认四岗，按 stageSeq 串行。审批权限码即并行槽 id。
 const APPROVE_ROLES: { code: string; label: string }[] = [
@@ -41,17 +57,25 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   });
   const [spaceId, setSpaceId] = React.useState("");
   const [colorForm, setColorForm] = React.useState({ categoryName: "", color: "#F59E0B", thresholdDays: "30" });
+  const [selectedId, setSelectedId] = React.useState("");
+  const [changes, setChanges] = React.useState<ChangeRow[]>([]);
+  const [settlements, setSettlements] = React.useState<SettlementRow[]>([]);
+  const [spaceRental, setSpaceRental] = React.useState<SpaceRental[]>([]);
+  const [changeForm, setChangeForm] = React.useState({ changeType: "rent_change", note: "" });
+  const [disputeReason, setDisputeReason] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [rows, steps, rules] = await Promise.all([
+      const [rows, steps, rules, spaces] = await Promise.all([
         api.get<ContractRow[]>("/api/v1/contracts"),
         api.get<FlowStep[]>("/api/v1/contracts/approval-flow"),
         api.get<ColorRule[]>("/api/v1/contracts/expiry-color-rules"),
+        api.get<SpaceRental[]>("/api/v1/contracts/space-rental-status"),
       ]);
       setContracts(rows ?? []);
       setFlow(steps ?? []);
       setColorRules(rules ?? []);
+      setSpaceRental(spaces ?? []);
     },
     { onError: setGlobalError, fallbackMessage: "合同数据读取失败", onStart: () => setGlobalError(null) },
   );
@@ -100,8 +124,48 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   }
 
   async function settle(row: ContractRow) {
-    await api.post(`/api/v1/contracts/${row.id}/settle`, { triggerType: "move_out" });
-    setActionResult({ action: "contract_settled", contractId: row.id });
+    // 退租开账 → 待结算（填争议原因则挂起有争议）。
+    await api.post(`/api/v1/contracts/${row.id}/settle`, {
+      triggerType: "move_out", disputeReason: disputeReason.trim() || null,
+    });
+    setActionResult({ action: "contract_settle_opened", contractId: row.id });
+    setDisputeReason("");
+    await selectContract(row.id);
+    reload();
+  }
+
+  async function selectContract(id: string) {
+    setSelectedId(id);
+    const [chs, sts] = await Promise.all([
+      api.get<ChangeRow[]>(`/api/v1/contracts/${id}/changes`),
+      api.get<SettlementRow[]>(`/api/v1/contracts/${id}/settlements`),
+    ]);
+    setChanges(chs ?? []);
+    setSettlements(sts ?? []);
+  }
+
+  async function raiseChange() {
+    if (!selectedId) {
+      setGlobalError("先点合同行『明细』选一份合同");
+      return;
+    }
+    await api.post(`/api/v1/contracts/${selectedId}/changes`, {
+      changeType: changeForm.changeType, payload: changeForm.note.trim() ? { note: changeForm.note.trim() } : {},
+    });
+    setActionResult({ action: "contract_change_raised", contractId: selectedId, type: changeForm.changeType });
+    void selectContract(selectedId);
+  }
+
+  async function approveChange(changeId: string, code: string) {
+    await api.post(`/api/v1/contracts/changes/${changeId}/approve`, { approverPermissionCode: code, decision: "approve" });
+    setActionResult({ action: "contract_change_approved", changeId, role: code });
+    void selectContract(selectedId);
+  }
+
+  async function settlementAction(sid: string, action: "advance" | "complete" | "resolve-dispute") {
+    await api.post(`/api/v1/contracts/settlements/${sid}/${action}`, {});
+    setActionResult({ action: "contract_settlement_" + action, settlementId: sid });
+    await selectContract(selectedId);
     reload();
   }
 
@@ -165,8 +229,9 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                     )}
                     {row.lifecycleStatus === "effective" && (
                       <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
-                        data-testid={`contract-settle-${row.id}`} onClick={() => void settle(row)}>退租结算</PermissionButton>
+                        data-testid={`contract-settle-${row.id}`} onClick={() => void settle(row)}>退租开账</PermissionButton>
                     )}
+                    <button data-testid={`contract-detail-${row.id}`} onClick={() => void selectContract(row.id)}>明细</button>
                   </td>
                 </tr>
               ))}
@@ -238,6 +303,77 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <input aria-label="提前天数" type="number" min="1" placeholder="提前天数" value={colorForm.thresholdDays} onChange={(e) => setColorForm({ ...colorForm, thresholdDays: e.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={COLOR_CFG}
             data-testid="contract-color-add" onClick={() => void addColorRule()}>新增着色分类</PermissionButton>
+        </div>
+
+        <h3>合同变更（6 类，走同一审批链）{selectedId ? ` · ${selectedId}` : "（点合同『明细』选）"}</h3>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="contract-changes-table">
+            <thead><tr><th>id</th><th>类型</th><th>审批</th><th>操作</th></tr></thead>
+            <tbody>
+              {changes.map((ch) => (
+                <tr key={ch.id} data-testid={`contract-change-${ch.id}`}>
+                  <td>{ch.id}</td><td>{ch.changeType}</td><td>{ch.approvalStatus}</td>
+                  <td>{ch.approvalStatus === "pending" && APPROVE_ROLES.map((r) => (
+                    <PermissionButton key={r.code} permissionsState={effectivePermissions} permissions={[r.code]}
+                      data-testid={`change-approve-${r.code}-${ch.id}`} onClick={() => void approveChange(ch.id, r.code)}>{r.label}</PermissionButton>
+                  ))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-inline-form" data-testid="contract-change-form">
+          <select aria-label="变更类型" value={changeForm.changeType} onChange={(e) => setChangeForm({ ...changeForm, changeType: e.target.value })}>
+            {CHANGE_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+          </select>
+          <input aria-label="变更说明" placeholder="变更说明 / payload" value={changeForm.note} onChange={(e) => setChangeForm({ ...changeForm, note: e.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={CHANGE_MANAGE}
+            data-testid="contract-change-raise" onClick={() => void raiseChange()}>发起变更</PermissionButton>
+        </div>
+
+        <h3>退租结算（5 态：待结算→保证金抵扣中→欠费追缴中→已结清 / 有争议）</h3>
+        <div className="admin-inline-form" data-testid="contract-dispute-form">
+          <input aria-label="争议原因" placeholder="争议原因（退租开账时填则挂起『有争议』）" value={disputeReason} onChange={(e) => setDisputeReason(e.target.value)} />
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="contract-settlements-table">
+            <thead><tr><th>id</th><th>触发</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              {settlements.map((st) => (
+                <tr key={st.id} data-testid={`contract-settlement-${st.id}`}>
+                  <td>{st.id}</td><td>{st.triggerType}</td><td>{st.status}</td>
+                  <td>
+                    {st.status === "disputed" && (
+                      <PermissionButton permissionsState={effectivePermissions} permissions={DISPUTE_RESOLVE}
+                        data-testid={`settlement-resolve-${st.id}`} onClick={() => void settlementAction(st.id, "resolve-dispute")}>裁决→待结算</PermissionButton>
+                    )}
+                    {OPEN_SETTLEMENT.includes(st.status) && (
+                      <>
+                        <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
+                          data-testid={`settlement-advance-${st.id}`} onClick={() => void settlementAction(st.id, "advance")}>推进一相</PermissionButton>
+                        <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
+                          data-testid={`settlement-complete-${st.id}`} onClick={() => void settlementAction(st.id, "complete")}>结清</PermissionButton>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h3>铺位平面图（6 态着色）</h3>
+        <div data-testid="contract-floorplan" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {spaceRental.map((sp) => (
+            <div key={sp.spaceId} data-testid={`space-${sp.spaceId}`}
+              title={`${RENTAL_LABEL[sp.rentalStatus] ?? sp.rentalStatus}${sp.daysToExpiry != null ? ` · ${sp.daysToExpiry} 天到期` : ""}`}
+              style={{ minWidth: 96, padding: "8px 10px", borderRadius: 6, color: "#fff",
+                background: sp.color ?? RENTAL_COLOR[sp.rentalStatus] ?? "#9ca3af" }}>
+              <div style={{ fontWeight: 600 }}>{sp.spaceName}</div>
+              <div style={{ fontSize: 12 }}>{RENTAL_LABEL[sp.rentalStatus] ?? sp.rentalStatus}</div>
+            </div>
+          ))}
+          {spaceRental.length === 0 && <span className="admin-muted">暂无铺位</span>}
         </div>
       </AdminDataState>
     </section>
