@@ -374,7 +374,7 @@ class JdbcContractRepository implements ContractRepository {
                        WHERE cs.space_id = s.id AND c.lifecycle_status = 'effective'
                          AND c.effective_date <= :as_of AND c.expiry_date >= :as_of
                        ORDER BY c.expiry_date LIMIT 1) e ON true
-                 WHERE (:pid IS NULL OR s.project_id = :pid)
+                 WHERE (CAST(:pid AS text) IS NULL OR s.project_id = :pid)
                  ORDER BY s.id LIMIT 1000
                 """, new MapSqlParameterSource().addValue("pid", projectId).addValue("as_of", asOf), (rs, n) -> {
             // 6 态（对齐 HTML §十 铺位租赁状态）：不可租(人工 status=unavailable) > 已租(生效合同；service 再判即将到期)
