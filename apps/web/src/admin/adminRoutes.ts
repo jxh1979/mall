@@ -12,7 +12,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-GOV-001", label: "集团/综合体拓扑", module: "治理", group: "governance", route: "/admin/governance/topology", requiredPermissions: ["governance.project.view", "governance.space.view", "merchant.profile.view"] },
   { pageId: "ADM-GOV-002", label: "组织与商户档案", module: "治理", group: "governance", route: "/admin/governance/organizations", requiredPermissions: ["merchant.profile.view", "governance.project.view"] },
   { pageId: "ADM-GOV-003", label: "四类主体绑定", module: "治理", group: "governance", route: "/admin/governance/subject-bindings", requiredPermissions: ["entity.binding.view"] },
-  { pageId: "ADM-GOV-004", label: "合同审批与附件归档", module: "合同", group: "governance", route: "/admin/contracts", requiredPermissions: ["contract.view"] },
+  { pageId: "ADM-CONT-001", label: "合同生命周期工作台", module: "合同", group: "governance", route: "/admin/contracts", requiredPermissions: ["contract.draft.manage"] },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", module: "治理", group: "governance", route: "/admin/governance/admission-audits", requiredPermissions: ["merchant.profile.view", "entity.binding.view", "contract.view"] },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", module: "治理", group: "governance", route: "/admin/governance/supervisor-review", requiredPermissions: ["governance.supervisor_review.view"] },
   { pageId: "ADM-TKT-002", label: "动态定价", module: "票务", group: "ticketing", route: "/admin/ticketing/dynamic-pricing", requiredPermissions: ["ticket.dynamic_pricing.view"] },

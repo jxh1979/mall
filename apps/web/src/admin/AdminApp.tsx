@@ -26,7 +26,7 @@ const AmusementInspectionTasksPage = React.lazy(() => import("./pages/AmusementI
 const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessionsPage").then((m) => ({ default: m.AmusementSessionsPage })));
 const AmusementGroupBookingsPage = React.lazy(() => import("./pages/AmusementGroupBookingsPage").then((m) => ({ default: m.AmusementGroupBookingsPage })));
 const SupervisorReviewPage = React.lazy(() => import("./pages/SupervisorReviewPage").then((m) => ({ default: m.SupervisorReviewPage })));
-const ContractApprovalPage = React.lazy(() => import("./pages/ContractApprovalPage").then((m) => ({ default: m.ContractApprovalPage })));
+const ContractWorkbenchPage = React.lazy(() => import("./pages/ContractWorkbenchPage").then((m) => ({ default: m.ContractWorkbenchPage })));
 const GovernanceTopologyPage = React.lazy(() => import("./pages/GovernanceTopologyPage").then((m) => ({ default: m.GovernanceTopologyPage })));
 const OrganizationMerchantPage = React.lazy(() => import("./pages/OrganizationMerchantPage").then((m) => ({ default: m.OrganizationMerchantPage })));
 const SubjectBindingsPage = React.lazy(() => import("./pages/SubjectBindingsPage").then((m) => ({ default: m.SubjectBindingsPage })));
@@ -146,8 +146,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <SupervisorReviewPage {...props} />;
     case "ADM-GOV-003":
       return <SubjectBindingsPage {...props} />;
-    case "ADM-GOV-004":
-      return <ContractApprovalPage {...props} />;
+    case "ADM-CONT-001":
+      return <ContractWorkbenchPage {...props} />;
     case "ADM-GOV-005":
       return <AdmissionAuditsPage {...props} />;
     case "ADM-RISK-001":
