@@ -20901,6 +20901,600 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/leasing/leads": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingLeads",
+        "summary": "招商线索清单",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.lead.viewed",
+        "x-audit-event-failure": "leasing.lead.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "createLeasingLead",
+        "summary": "新建招商线索",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.lead.created",
+        "x-audit-event-failure": "leasing.lead.create_failed",
+        "x-auth-context": "staff-token",
+        "description": "V161 重建：来源 4 类(outbound/online_inquiry/referral/exhibition)，同品牌黑名单则拦截。状态默认 pending_follow_up。",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingLeadRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/leads/follow-up-due": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingLeadsFollowUpDue",
+        "summary": "待跟进线索(3 天未跟进)",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.lead.viewed",
+        "x-audit-event-failure": "leasing.lead.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/leads/{lead_id}/assign": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "assignLeasingLead",
+        "summary": "招商线索派单(主管手动指派)",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.lead.assigned",
+        "x-audit-event-failure": "leasing.lead.assign_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "description": "线索 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingLeadAssignRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/leads/{lead_id}/status": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "updateLeasingLeadStatus",
+        "summary": "招商线索状态流转(7 态)",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.lead.status_changed",
+        "x-audit-event-failure": "leasing.lead.status_change_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "description": "线索 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingLeadStatusRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/intents": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingIntents",
+        "summary": "招商意向清单",
+        "x-permission": "leasing.intent.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.intent.viewed",
+        "x-audit-event-failure": "leasing.intent.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "createLeasingIntent",
+        "summary": "线索转意向(stage 起始 initial_contact)",
+        "x-permission": "leasing.intent.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.intent.created",
+        "x-audit-event-failure": "leasing.intent.create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingIntentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/intents/{intent_id}/advance": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "advanceLeasingIntent",
+        "summary": "意向阶段推进(5 阶段)",
+        "x-permission": "leasing.intent.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.intent.advanced",
+        "x-audit-event-failure": "leasing.intent.advance_failed",
+        "x-auth-context": "staff-token",
+        "description": "关键阶段(proposal_quoted/negotiation)须带 supervisor_user_id 主管确认，否则阻断。",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "description": "意向 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingIntentAdvanceRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/intents/{intent_id}/sign": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "signLeasingIntent",
+        "summary": "意向签约→转商户+喂入合同 draft",
+        "x-permission": "leasing.convert",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.intent.signed",
+        "x-audit-event-failure": "leasing.intent.sign_failed",
+        "x-auth-context": "staff-token",
+        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。",
+        "parameters": [
+          {
+            "name": "intent_id",
+            "in": "path",
+            "required": true,
+            "description": "意向 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingSignRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/brands": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingBrands",
+        "summary": "招商品牌/客户库清单",
+        "x-permission": "leasing.brand.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.brand.viewed",
+        "x-audit-event-failure": "leasing.brand.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "createLeasingBrand",
+        "summary": "新建品牌(4 类)",
+        "x-permission": "leasing.brand.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.brand.created",
+        "x-audit-event-failure": "leasing.brand.create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingBrandRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/brands/{brand_id}/blacklist": {
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "blacklistLeasingBrand",
+        "summary": "品牌拉黑/解黑(高危需审批)",
+        "x-permission": "leasing.brand.blacklist",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.brand.blacklist_changed",
+        "x-audit-event-failure": "leasing.brand.blacklist_change_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "brand_id",
+            "in": "path",
+            "required": true,
+            "description": "品牌 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingBrandBlacklistRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/follow-ups": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingFollowUps",
+        "summary": "跟进记录(按 ref 查)",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.follow_up.viewed",
+        "x-audit-event-failure": "leasing.follow_up.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "ref_type",
+            "in": "query",
+            "required": true,
+            "description": "关联类型。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "lead",
+                "intent"
+              ]
+            }
+          },
+          {
+            "name": "ref_id",
+            "in": "query",
+            "required": true,
+            "description": "关联对象 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "createLeasingFollowUp",
+        "summary": "新建跟进记录(回写 last_follow_up_at)",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.follow_up.created",
+        "x-audit-event-failure": "leasing.follow_up.create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingFollowUpRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -22920,6 +23514,96 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/OperatingParamsRequest"
+            }
+          }
+        }
+      },
+      "LeasingLeadRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingLeadRequest"
+            }
+          }
+        }
+      },
+      "LeasingLeadAssignRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingLeadAssignRequest"
+            }
+          }
+        }
+      },
+      "LeasingLeadStatusRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingLeadStatusRequest"
+            }
+          }
+        }
+      },
+      "LeasingIntentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingIntentRequest"
+            }
+          }
+        }
+      },
+      "LeasingIntentAdvanceRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingIntentAdvanceRequest"
+            }
+          }
+        }
+      },
+      "LeasingSignRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingSignRequest"
+            }
+          }
+        }
+      },
+      "LeasingBrandRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingBrandRequest"
+            }
+          }
+        }
+      },
+      "LeasingBrandBlacklistRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingBrandBlacklistRequest"
+            }
+          }
+        }
+      },
+      "LeasingFollowUpRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingFollowUpRequest"
             }
           }
         }
@@ -31523,6 +32207,332 @@
               "active",
               "inactive"
             ]
+          }
+        }
+      },
+      "LeasingLeadRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingLeadRequest（V161 招商线索创建）。",
+        "additionalProperties": false,
+        "required": [
+          "contact_name",
+          "source"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "contact_name": {
+            "type": "string",
+            "description": "联系人姓名。",
+            "maxLength": 120
+          },
+          "contact_phone": {
+            "type": "string",
+            "description": "联系电话。",
+            "maxLength": 40
+          },
+          "source": {
+            "type": "string",
+            "description": "线索来源。",
+            "enum": [
+              "outbound",
+              "online_inquiry",
+              "referral",
+              "exhibition"
+            ]
+          },
+          "intended_business_type": {
+            "type": "string",
+            "description": "意向业态。",
+            "maxLength": 64
+          },
+          "intended_space_id": {
+            "type": "string",
+            "description": "意向铺位/空间 id。",
+            "maxLength": 64
+          },
+          "intended_area_sqm": {
+            "type": "number",
+            "description": "意向面积(平米)。",
+            "minimum": 0
+          },
+          "brand_id": {
+            "type": "string",
+            "description": "关联品牌库 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "LeasingLeadAssignRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingLeadAssignRequest（V161 线索派单）。",
+        "additionalProperties": false,
+        "required": [
+          "owner_user_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "owner_user_id": {
+            "type": "string",
+            "description": "负责人用户 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "LeasingLeadStatusRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingLeadStatusRequest（V161 线索 7 态流转，lost/on_hold 须填 reason）。",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "description": "目标状态。",
+            "enum": [
+              "pending_follow_up",
+              "following_up",
+              "converted_to_intent",
+              "negotiating",
+              "signed",
+              "lost",
+              "on_hold"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "原因(lost/on_hold 必填)。",
+            "maxLength": 500
+          }
+        }
+      },
+      "LeasingIntentRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingIntentRequest（V161 线索转意向）。",
+        "additionalProperties": false,
+        "required": [
+          "lead_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "lead_id": {
+            "type": "string",
+            "description": "线索 id。",
+            "maxLength": 64
+          },
+          "intended_space_id": {
+            "type": "string",
+            "description": "意向铺位/空间 id。",
+            "maxLength": 64
+          },
+          "intended_area_sqm": {
+            "type": "number",
+            "description": "意向面积(平米)。",
+            "minimum": 0
+          },
+          "rent_terms": {
+            "type": "object",
+            "description": "报价租金条款(自由结构，签约时喂入合同)。",
+            "additionalProperties": true
+          }
+        }
+      },
+      "LeasingIntentAdvanceRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingIntentAdvanceRequest（V161 意向 5 阶段推进，关键阶段须主管确认）。",
+        "additionalProperties": false,
+        "required": [
+          "target_stage"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "target_stage": {
+            "type": "string",
+            "description": "目标阶段。",
+            "enum": [
+              "initial_contact",
+              "requirement_confirmed",
+              "proposal_quoted",
+              "negotiation",
+              "pending_signing"
+            ]
+          },
+          "supervisor_user_id": {
+            "type": "string",
+            "description": "主管确认人 id(关键阶段必填)。",
+            "maxLength": 64
+          }
+        }
+      },
+      "LeasingSignRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingSignRequest（V161 意向签约转合同，四类主体默认同公司）。",
+        "additionalProperties": false,
+        "required": [
+          "merchant_id",
+          "contract_subject_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "商户 id。",
+            "maxLength": 64
+          },
+          "contract_subject_id": {
+            "type": "string",
+            "description": "合同主体 id。",
+            "maxLength": 64
+          },
+          "operation_subject_id": {
+            "type": "string",
+            "description": "运营主体 id(缺省=合同主体)。",
+            "maxLength": 64
+          },
+          "settlement_subject_id": {
+            "type": "string",
+            "description": "结算主体 id(缺省=合同主体)。",
+            "maxLength": 64
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "description": "生效日期。"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date",
+            "description": "到期日期。"
+          }
+        }
+      },
+      "LeasingBrandRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingBrandRequest（V161 品牌库 4 类）。",
+        "additionalProperties": false,
+        "required": [
+          "brand_name",
+          "brand_type"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "brand_name": {
+            "type": "string",
+            "description": "品牌名(同综合体唯一，去重依据)。",
+            "maxLength": 160
+          },
+          "brand_type": {
+            "type": "string",
+            "description": "品牌类型。",
+            "enum": [
+              "intentional",
+              "prospective",
+              "partner",
+              "blacklist"
+            ]
+          },
+          "business_type": {
+            "type": "string",
+            "description": "业态。",
+            "maxLength": 64
+          }
+        }
+      },
+      "LeasingBrandBlacklistRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingBrandBlacklistRequest（V161 拉黑/解黑，高危需审批）。",
+        "additionalProperties": false,
+        "required": [
+          "blacklist"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "blacklist": {
+            "type": "boolean",
+            "description": "true 拉黑、false 解黑。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "拉黑原因(拉黑时必填)。",
+            "maxLength": 500
+          }
+        }
+      },
+      "LeasingFollowUpRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingFollowUpRequest（V161 跟进记录）。",
+        "additionalProperties": false,
+        "required": [
+          "ref_type",
+          "ref_id",
+          "content"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "ref_type": {
+            "type": "string",
+            "description": "关联类型。",
+            "enum": [
+              "lead",
+              "intent"
+            ]
+          },
+          "ref_id": {
+            "type": "string",
+            "description": "关联对象 id。",
+            "maxLength": 64
+          },
+          "method": {
+            "type": "string",
+            "description": "跟进方式(phone/visit/wechat 等)。",
+            "maxLength": 32
+          },
+          "content": {
+            "type": "string",
+            "description": "跟进内容。",
+            "maxLength": 1000
+          },
+          "next_plan_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "下次跟进计划时间。"
           }
         }
       }

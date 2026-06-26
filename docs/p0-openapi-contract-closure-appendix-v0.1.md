@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 427 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 253 | 人工权限矩阵正文未覆盖 149 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 854 | 人工事件矩阵正文未覆盖 812 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 427 | 人工任务映射正文未逐项覆盖 421 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 261 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 441 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 258 | 人工权限矩阵正文未覆盖 154 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 882 | 人工事件矩阵正文未覆盖 840 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 441 | 人工任务映射正文未逐项覆盖 435 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 270 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -210,6 +210,11 @@
 | `inventory.trace_code.register` | staff-token | project | 1 | registerInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.trace_code.view` | staff-token | project | 2 | listInventoryTraceCodes, getInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.warehouse.manage` | staff-token | project-warehouse-bar, warehouse | 2 | listWarehouses, createWarehouse | OpenAPI 补充，以本附录为准 |
+| `leasing.brand.blacklist` | staff-token | platform | 1 | blacklistLeasingBrand | OpenAPI 补充，以本附录为准 |
+| `leasing.brand.manage` | staff-token | platform | 2 | listLeasingBrands, createLeasingBrand | OpenAPI 补充，以本附录为准 |
+| `leasing.convert` | staff-token | platform | 1 | signLeasingIntent | OpenAPI 补充，以本附录为准 |
+| `leasing.intent.manage` | staff-token | platform | 3 | listLeasingIntents, createLeasingIntent, advanceLeasingIntent | OpenAPI 补充，以本附录为准 |
+| `leasing.lead.manage` | staff-token | platform | 7 | listLeasingLeads, createLeasingLead, listLeasingLeadsFollowUpDue, assignLeasingLead, updateLeasingLeadStatus, listLeasingFollowUps, createLeasingFollowUp | OpenAPI 补充，以本附录为准 |
 | `mdm.device.manage` | staff-token | -, project-device | 3 | enrollMdmDevice, reportMdmPolicyViolation, detectMdmViolations | OpenAPI 补充，以本附录为准 |
 | `mdm.policy.manage` | staff-token | project-device | 4 | listMdmAppWhitelist, upsertMdmAppWhitelist, listMdmSiteWhitelist, upsertMdmSiteWhitelist | OpenAPI 补充，以本附录为准 |
 | `mdm.violation.handle` | staff-token | - | 1 | handleMdmViolation | OpenAPI 补充，以本附录为准 |
@@ -905,6 +910,34 @@
 | `inventory.warehouse.created` | success | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.list` | success | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.list_failed` | failure | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
+| `leasing.brand.blacklist_change_failed` | failure | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | P0-待归类 | `leasing.brand.blacklist` | 接口级事件，以本附录为准 |
+| `leasing.brand.blacklist_changed` | success | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | P0-待归类 | `leasing.brand.blacklist` | 接口级事件，以本附录为准 |
+| `leasing.brand.create_failed` | failure | `createLeasingBrand` | `POST` | `/api/v1/leasing/brands` | P0-待归类 | `leasing.brand.manage` | 接口级事件，以本附录为准 |
+| `leasing.brand.created` | success | `createLeasingBrand` | `POST` | `/api/v1/leasing/brands` | P0-待归类 | `leasing.brand.manage` | 接口级事件，以本附录为准 |
+| `leasing.brand.view_failed` | failure | `listLeasingBrands` | `GET` | `/api/v1/leasing/brands` | P0-待归类 | `leasing.brand.manage` | 接口级事件，以本附录为准 |
+| `leasing.brand.viewed` | success | `listLeasingBrands` | `GET` | `/api/v1/leasing/brands` | P0-待归类 | `leasing.brand.manage` | 接口级事件，以本附录为准 |
+| `leasing.follow_up.create_failed` | failure | `createLeasingFollowUp` | `POST` | `/api/v1/leasing/follow-ups` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.follow_up.created` | success | `createLeasingFollowUp` | `POST` | `/api/v1/leasing/follow-ups` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.follow_up.view_failed` | failure | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.follow_up.viewed` | success | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.intent.advance_failed` | failure | `advanceLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/advance` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
+| `leasing.intent.advanced` | success | `advanceLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/advance` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
+| `leasing.intent.create_failed` | failure | `createLeasingIntent` | `POST` | `/api/v1/leasing/intents` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
+| `leasing.intent.created` | success | `createLeasingIntent` | `POST` | `/api/v1/leasing/intents` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
+| `leasing.intent.sign_failed` | failure | `signLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/sign` | P0-待归类 | `leasing.convert` | 接口级事件，以本附录为准 |
+| `leasing.intent.signed` | success | `signLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/sign` | P0-待归类 | `leasing.convert` | 接口级事件，以本附录为准 |
+| `leasing.intent.view_failed` | failure | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
+| `leasing.intent.viewed` | success | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | P0-待归类 | `leasing.intent.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.assign_failed` | failure | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.assigned` | success | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.create_failed` | failure | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.created` | success | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.status_change_failed` | failure | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.status_changed` | success | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.view_failed` | failure | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.view_failed` | failure | `listLeasingLeadsFollowUpDue` | `GET` | `/api/v1/leasing/leads/follow-up-due` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.viewed` | success | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.lead.viewed` | success | `listLeasingLeadsFollowUpDue` | `GET` | `/api/v1/leasing/leads/follow-up-due` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.change_failed` | failure | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.changed` | success | `upsertMdmAppWhitelist` | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
 | `mdm.app_whitelist.view_failed` | failure | `listMdmAppWhitelist` | `GET` | `/api/v1/terminals/mdm/app-whitelist` | TERM-终端设备 | `mdm.policy.manage` | 接口级事件，以本附录为准 |
@@ -1494,13 +1527,20 @@
 | OPS-生产前置 | `listProductionReadinessItems` | `GET` | `/api/v1/ops/production-readiness/items` | 查询生产前置责任状态 | `ops.production_readiness.view` | `production_readiness.viewed` / `production_readiness.view_failed` | web, mobile_admin | 已在任务映射正文出现 |
 | OPS-生产前置 | `updateProductionReadinessItem` | `PUT` | `/api/v1/ops/production-readiness/items/{id}` | 更新生产前置责任状态 | `ops.production_readiness.manage` | `production_readiness.updated` / `production_readiness.update_failed` | web, mobile_admin | 已在任务映射正文出现 |
 | P0-待归类 | `addMerchantServiceWorkOrderAction` | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | Append merchant service work order action | `merchant.service_work_order.process` | `merchant_service.addMerchantServiceWorkOrderAction.succeeded` / `merchant_service.addMerchantServiceWorkOrderAction.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `advanceLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/advance` | 意向阶段推进(5 阶段) | `leasing.intent.manage` | `leasing.intent.advanced` / `leasing.intent.advance_failed` | web | operation 级补充 |
+| P0-待归类 | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | 招商线索派单(主管手动指派) | `leasing.lead.manage` | `leasing.lead.assigned` / `leasing.lead.assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | Assign merchant service work order | `merchant.service_work_order.assign` | `merchant_service.assignMerchantServiceWorkOrder.succeeded` / `merchant_service.assignMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | 品牌拉黑/解黑(高危需审批) | `leasing.brand.blacklist` | `leasing.brand.blacklist_changed` / `leasing.brand.blacklist_change_failed` | web | operation 级补充 |
 | P0-待归类 | `closeMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | Close merchant service work order | `merchant.service_work_order.close` | `merchant_service.closeMerchantServiceWorkOrder.succeeded` / `merchant_service.closeMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | 创建合同关键日期 | `compliance.contract_key_date.manage` | `compliance.contract_key_date.create` / `compliance.contract_key_date.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | 创建 P1/P2 商场平面图 | `floor_plan.manage` | `floor_plan.created` / `floor_plan.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports` | 创建 SVG 或标准 JSON 导入任务 | `floor_plan.import.manage` | `floor_plan.import_created` / `floor_plan.import_create_failed` | web | operation 级补充 |
+| P0-待归类 | `createLeasingBrand` | `POST` | `/api/v1/leasing/brands` | 新建品牌(4 类) | `leasing.brand.manage` | `leasing.brand.created` / `leasing.brand.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createLeasingFollowUp` | `POST` | `/api/v1/leasing/follow-ups` | 新建跟进记录(回写 last_follow_up_at) | `leasing.lead.manage` | `leasing.follow_up.created` / `leasing.follow_up.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createLeasingIntent` | `POST` | `/api/v1/leasing/intents` | 线索转意向(stage 起始 initial_contact) | `leasing.intent.manage` | `leasing.intent.created` / `leasing.intent.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | 新建招商线索 | `leasing.lead.manage` | `leasing.lead.created` / `leasing.lead.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | 创建商户账单 | `merchant.billing.manage` | `merchant.billing.create` / `merchant.billing.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | Create merchant service work order | `merchant.service_work_order.create` | `merchant_service.createMerchantServiceWorkOrder.succeeded` / `merchant_service.createMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
@@ -1510,6 +1550,11 @@
 | P0-待归类 | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | 查询平面图导入任务 | `floor_plan.import.view` | `floor_plan.import_viewed` / `floor_plan.import_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | 查询 P1/P2 商场平面图 | `floor_plan.view` | `floor_plan.viewed` / `floor_plan.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | 查询平面图正式区域 | `floor_plan.view` | `floor_plan.shape_viewed` / `floor_plan.shape_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listLeasingBrands` | `GET` | `/api/v1/leasing/brands` | 招商品牌/客户库清单 | `leasing.brand.manage` | `leasing.brand.viewed` / `leasing.brand.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | 跟进记录(按 ref 查) | `leasing.lead.manage` | `leasing.follow_up.viewed` / `leasing.follow_up.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | 招商意向清单 | `leasing.intent.manage` | `leasing.intent.viewed` / `leasing.intent.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listLeasingLeads` | `GET` | `/api/v1/leasing/leads` | 招商线索清单 | `leasing.lead.manage` | `leasing.lead.viewed` / `leasing.lead.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listLeasingLeadsFollowUpDue` | `GET` | `/api/v1/leasing/leads/follow-up-due` | 待跟进线索(3 天未跟进) | `leasing.lead.manage` | `leasing.lead.viewed` / `leasing.lead.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | List merchant bills | `merchant.billing.view` | `merchant_billing.bill.viewed` / `merchant_billing.bill.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | 企微留存策略列表 | `wecom.retention.manage` | `wecom.retention_policy_viewed` / `wecom.retention_policy_view_failed` | web | operation 级补充 |
@@ -1519,8 +1564,10 @@
 | P0-待归类 | `reviewWecomRiskHit` | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | 复核处置企微违规命中 | `wecom.risk_hit.review` | `wecom.risk_hit.review` / `wecom.risk_hit.review_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | 保存平面图图形 | `floor_plan.manage` | `floor_plan.shape.save` / `floor_plan.shape.save_failed` | web | operation 级补充 |
 | P0-待归类 | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | 触发合规提醒扫描 | `compliance.reminder.scan` | `compliance.reminder.scan` / `compliance.reminder.scan_failed` | web | operation 级补充 |
+| P0-待归类 | `signLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/sign` | 意向签约→转商户+喂入合同 draft | `leasing.convert` | `leasing.intent.signed` / `leasing.intent.sign_failed` | web | operation 级补充 |
 | P0-待归类 | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | 提交账单争议 | `merchant.billing.dispute.submit` | `merchant.billing.dispute.submit` / `merchant.billing.dispute.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `syncWecomConversation` | `POST` | `/api/v1/compliance/wecom/conversations/sync` | 企微会话同步入站（PIPL 合规，开关门控） | `wecom.sync` | `wecom.conversation_synced` / `wecom.conversation_sync_failed` | <br>channel: provider-webhook | operation 级补充 |
+| P0-待归类 | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | 招商线索状态流转(7 态) | `leasing.lead.manage` | `leasing.lead.status_changed` / `leasing.lead.status_change_failed` | web | operation 级补充 |
 | P0-待归类 | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | 配置企微留存策略（默认180天） | `wecom.retention.manage` | `wecom.retention_policy_set` / `wecom.retention_policy_failed` | web | operation 级补充 |
 | P0-待归类 | `viewWecomConversationMessages` | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | 分级查看企微会话消息（脱敏/原文，原文需审批+审计） | `wecom.view_raw` | `wecom.raw_viewed` / `wecom.raw_view_failed` | web, mobile_admin | operation 级补充 |
 | SYS-系统健康 | `getSystemHealth` | `GET` | `/api/v1/system/health` | 健康检查 | `public` | `system.health_checked` / `system.health_check_failed` | web, mobile_admin<br>channel: monitoring | operation 级补充 |

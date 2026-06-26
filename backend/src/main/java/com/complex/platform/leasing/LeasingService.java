@@ -1,0 +1,334 @@
+package com.complex.platform.leasing;
+
+import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.ContractRecord;
+import com.complex.platform.governance.PlatformService;
+import com.complex.platform.governance.dto.ContractDraftRequest;
+import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
+import com.complex.platform.leasing.dto.LeasingBrandRequest;
+import com.complex.platform.leasing.dto.LeasingFollowUpRequest;
+import com.complex.platform.leasing.dto.LeasingIntentAdvanceRequest;
+import com.complex.platform.leasing.dto.LeasingIntentRequest;
+import com.complex.platform.leasing.dto.LeasingLeadAssignRequest;
+import com.complex.platform.leasing.dto.LeasingLeadRequest;
+import com.complex.platform.leasing.dto.LeasingLeadStatusRequest;
+import com.complex.platform.leasing.dto.LeasingSignRequest;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+
+/**
+ * 招商获客（V161 重建，据 leasing-acquisition-prd-v1.0 + 业务 HTML §10 + M1 需求采集 §1）。
+ * 纠正旧版：线索 7 态、意向 5 阶段独立流转、品牌库 4 类+黑名单拦截、跟进+3 天提醒、签约转合同四类主体默认同公司。
+ */
+@Service
+public class LeasingService {
+
+    private static final Set<String> LEAD_SOURCES = Set.of("outbound", "online_inquiry", "referral", "exhibition");
+    private static final Set<String> LEAD_STATUSES = Set.of("pending_follow_up", "following_up",
+            "converted_to_intent", "negotiating", "signed", "lost", "on_hold");
+    private static final Set<String> LEAD_REASON_REQUIRED = Set.of("lost", "on_hold");
+    private static final Set<String> INTENT_STAGES = Set.of("initial_contact", "requirement_confirmed",
+            "proposal_quoted", "negotiation", "pending_signing");
+    private static final Set<String> INTENT_KEY_STAGES = Set.of("proposal_quoted", "negotiation");
+    private static final Set<String> BRAND_TYPES = Set.of("intentional", "prospective", "partner", "blacklist");
+    private static final Set<String> FOLLOW_UP_REF_TYPES = Set.of("lead", "intent");
+    private static final long FOLLOW_UP_REMINDER_DAYS = 3;
+
+    private final LeasingRepository repository;
+    private final AuditEventService auditEventService;
+    private final AuthorizationService authorizationService;
+    private final PlatformService platformService;
+
+    public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, PlatformService platformService) {
+        this.repository = repository;
+        this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
+        this.platformService = platformService;
+    }
+
+    // ============ 线索 ============
+    public PageResponse<LeasingLeadRecord> listLeads() {
+        List<LeasingLeadRecord> items = repository.listLeads();
+        auditEventService.recordSuccess("leasing.lead.viewed", "leasing.lead.manage", "leasing_lead", "all",
+                null, null, Map.of("count", items.size()));
+        return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    /** 3 天未跟进的活跃线索（负责人待办提醒）。 */
+    public PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUp() {
+        Instant cutoff = Instant.now().minus(FOLLOW_UP_REMINDER_DAYS, ChronoUnit.DAYS);
+        List<LeasingLeadRecord> items = repository.listLeads().stream()
+                .filter(l -> !"signed".equals(l.status()) && !"lost".equals(l.status()))
+                .filter(l -> reference(l) != null && reference(l).isBefore(cutoff))
+                .toList();
+        return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    private Instant reference(LeasingLeadRecord l) {
+        return l.lastFollowUpAt() != null ? l.lastFollowUpAt() : l.createdAt();
+    }
+
+    public LeasingLeadRecord createLead(LeasingLeadRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingLeadRequest actual = requireRequest(request);
+        String source = requireEnum(actual.source(), LEAD_SOURCES, "source");
+        String brandId = trimToNull(actual.brandId());
+        requireBrandNotBlacklisted(brandId);
+        Instant now = Instant.now();
+        LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(
+                "lead_" + UUID.randomUUID(), requireText(actual.contactName(), "contact_name"),
+                trimToNull(actual.contactPhone()), source, trimToNull(actual.intendedBusinessType()),
+                trimToNull(actual.intendedSpaceId()), actual.intendedAreaSqm(), brandId, null,
+                "pending_follow_up", null, null, null, now, now));
+        auditEventService.recordSuccess("leasing.lead.created", "leasing.lead.manage", "leasing_lead", saved.id(),
+                null, actual.idempotencyKey(), Map.of("source", source));
+        return saved;
+    }
+
+    public LeasingLeadRecord assignLead(String leadId, LeasingLeadAssignRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingLeadAssignRequest actual = requireRequest(request);
+        String ownerUserId = requireText(actual.ownerUserId(), "owner_user_id");
+        LeasingLeadRecord ex = requireLead(leadId);
+        LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(ex.id(), ex.contactName(),
+                ex.contactPhone(), ex.source(), ex.intendedBusinessType(), ex.intendedSpaceId(), ex.intendedAreaSqm(),
+                ex.brandId(), ownerUserId, ex.status(), ex.lostOrHoldReason(), ex.lastFollowUpAt(), ex.projectId(),
+                ex.createdAt(), Instant.now()));
+        auditEventService.recordSuccess("leasing.lead.assigned", "leasing.lead.manage", "leasing_lead", ex.id(),
+                null, actual.idempotencyKey(), Map.of("owner_user_id", ownerUserId));
+        return saved;
+    }
+
+    public LeasingLeadRecord updateLeadStatus(String leadId, LeasingLeadStatusRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingLeadStatusRequest actual = requireRequest(request);
+        String status = requireEnum(actual.status(), LEAD_STATUSES, "status");
+        String reason = trimToNull(actual.reason());
+        if (LEAD_REASON_REQUIRED.contains(status) && reason == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "reason is required for status " + status);
+        }
+        LeasingLeadRecord ex = requireLead(leadId);
+        LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(ex.id(), ex.contactName(),
+                ex.contactPhone(), ex.source(), ex.intendedBusinessType(), ex.intendedSpaceId(), ex.intendedAreaSqm(),
+                ex.brandId(), ex.ownerUserId(), status, reason, ex.lastFollowUpAt(), ex.projectId(),
+                ex.createdAt(), Instant.now()));
+        auditEventService.recordSuccess("leasing.lead.status_changed", "leasing.lead.manage", "leasing_lead", ex.id(),
+                null, actual.idempotencyKey(), Map.of("status", status));
+        return saved;
+    }
+
+    // ============ 意向 ============
+    public PageResponse<LeasingIntentRecord> listIntents() {
+        List<LeasingIntentRecord> items = repository.listIntents();
+        auditEventService.recordSuccess("leasing.intent.viewed", "leasing.intent.manage", "leasing_intent", "all",
+                null, null, Map.of("count", items.size()));
+        return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    /** 线索转意向：lead → converted_to_intent，生成意向（stage 起始 initial_contact）。 */
+    public LeasingIntentRecord createIntent(LeasingIntentRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingIntentRequest actual = requireRequest(request);
+        LeasingLeadRecord lead = requireLead(actual.leadId());
+        Instant now = Instant.now();
+        LeasingIntentRecord saved = repository.saveIntent(new LeasingIntentRecord(
+                "intent_" + UUID.randomUUID(), lead.id(), "initial_contact",
+                trimToNull(actual.intendedSpaceId()) != null ? trimToNull(actual.intendedSpaceId()) : lead.intendedSpaceId(),
+                actual.intendedAreaSqm() != null ? actual.intendedAreaSqm() : lead.intendedAreaSqm(),
+                actual.rentTerms() == null ? Map.of() : actual.rentTerms(), now, null, lead.projectId(), now, now));
+        repository.saveLead(new LeasingLeadRecord(lead.id(), lead.contactName(), lead.contactPhone(), lead.source(),
+                lead.intendedBusinessType(), lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(),
+                lead.ownerUserId(), "converted_to_intent", lead.lostOrHoldReason(), lead.lastFollowUpAt(),
+                lead.projectId(), lead.createdAt(), now));
+        auditEventService.recordSuccess("leasing.intent.created", "leasing.intent.manage", "leasing_intent", saved.id(),
+                null, actual.idempotencyKey(), Map.of("lead_id", lead.id()));
+        return saved;
+    }
+
+    /** 意向阶段推进；关键阶段（方案报价/商务谈判）须带主管确认人，否则阻断。 */
+    public LeasingIntentRecord advanceIntent(String intentId, LeasingIntentAdvanceRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingIntentAdvanceRequest actual = requireRequest(request);
+        String target = requireEnum(actual.targetStage(), INTENT_STAGES, "target_stage");
+        String supervisor = trimToNull(actual.supervisorUserId());
+        if (INTENT_KEY_STAGES.contains(target) && supervisor == null) {
+            throw ApiException.conflict("LEASING_INTENT_SUPERVISOR_REQUIRED",
+                    "advancing to " + target + " requires supervisor confirmation");
+        }
+        LeasingIntentRecord ex = requireIntent(intentId);
+        Instant now = Instant.now();
+        LeasingIntentRecord saved = repository.saveIntent(new LeasingIntentRecord(ex.id(), ex.leadId(), target,
+                ex.intendedSpaceId(), ex.intendedAreaSqm(), ex.rentTerms(), now, supervisor, ex.projectId(),
+                ex.createdAt(), now));
+        auditEventService.recordSuccess("leasing.intent.advanced", "leasing.intent.manage", "leasing_intent", ex.id(),
+                null, actual.idempotencyKey(), Map.of("stage", target, "supervisor_user_id",
+                        supervisor == null ? "" : supervisor));
+        return saved;
+    }
+
+    /**
+     * 签约：pending_signing 意向 → 喂入合同 draft（既有合同环），lead → signed。
+     * 四类主体默认同一公司：operation/settlement 缺省指向 contractSubjectId，后续可拆。
+     * ponytail: 商户档案的自动创建在「合同/商户域重建」时接线（当前签约须带已建 merchantId）；招商负责把线索/意向条款喂入合同 draft。
+     */
+    public ContractRecord signIntent(String intentId, LeasingSignRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingSignRequest actual = requireRequest(request);
+        LeasingIntentRecord intent = requireIntent(intentId);
+        if (!"pending_signing".equals(intent.stage())) {
+            throw ApiException.conflict("LEASING_INTENT_NOT_PENDING_SIGNING",
+                    "only pending_signing intent can be signed");
+        }
+        String contractSubjectId = requireText(actual.contractSubjectId(), "contract_subject_id");
+        String operationSubjectId = trimToNull(actual.operationSubjectId());
+        String settlementSubjectId = trimToNull(actual.settlementSubjectId());
+        ContractRecord contract = platformService.createContractDraft(new ContractDraftRequest(
+                "lease-sign-" + intent.id(), "signed from leasing intent " + intent.id(), List.of(),
+                requireText(actual.merchantId(), "merchant_id"), contractSubjectId,
+                operationSubjectId != null ? operationSubjectId : contractSubjectId,
+                settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
+                actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(), null, List.of()));
+        repository.findLeadById(intent.leadId()).ifPresent(lead -> repository.saveLead(new LeasingLeadRecord(
+                lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
+                lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(), "signed",
+                lead.lostOrHoldReason(), lead.lastFollowUpAt(), lead.projectId(), lead.createdAt(), Instant.now())));
+        auditEventService.recordSuccess("leasing.intent.signed", "leasing.convert", "leasing_intent", intent.id(),
+                null, actual.idempotencyKey(), Map.of("contract_id", contract.id()));
+        return contract;
+    }
+
+    // ============ 品牌库 ============
+    public PageResponse<LeasingBrandRecord> listBrands() {
+        List<LeasingBrandRecord> items = repository.listBrands();
+        auditEventService.recordSuccess("leasing.brand.viewed", "leasing.brand.manage", "leasing_brand", "all",
+                null, null, Map.of("count", items.size()));
+        return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    public LeasingBrandRecord createBrand(LeasingBrandRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingBrandRequest actual = requireRequest(request);
+        String type = requireEnum(actual.brandType(), BRAND_TYPES, "brand_type");
+        Instant now = Instant.now();
+        LeasingBrandRecord saved = repository.saveBrand(new LeasingBrandRecord(
+                "brand_" + UUID.randomUUID(), requireText(actual.brandName(), "brand_name"), type,
+                trimToNull(actual.businessType()), null, null, null, null, now, now));
+        auditEventService.recordSuccess("leasing.brand.created", "leasing.brand.manage", "leasing_brand", saved.id(),
+                null, actual.idempotencyKey(), Map.of("brand_type", type));
+        return saved;
+    }
+
+    /** 拉黑/解黑品牌（高危需审批 leasing.brand.blacklist）。拉黑后同品牌新线索被 createLead 拦截。 */
+    public LeasingBrandRecord blacklistBrand(String brandId, LeasingBrandBlacklistRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingBrandBlacklistRequest actual = requireRequest(request);
+        LeasingBrandRecord ex = repository.findBrandById(requireText(brandId, "brand_id"))
+                .orElseThrow(() -> ApiException.notFound("LEASING_BRAND_NOT_FOUND", "brand not found"));
+        Instant now = Instant.now();
+        LeasingBrandRecord saved;
+        if (actual.blacklist()) {
+            String reason = requireText(actual.reason(), "reason");
+            saved = repository.saveBrand(new LeasingBrandRecord(ex.id(), ex.brandName(), "blacklist",
+                    ex.businessType(), reason, authorizationService.currentActor().id(), now, ex.projectId(),
+                    ex.createdAt(), now));
+        } else {
+            saved = repository.saveBrand(new LeasingBrandRecord(ex.id(), ex.brandName(), "prospective",
+                    ex.businessType(), null, null, null, ex.projectId(), ex.createdAt(), now));
+        }
+        auditEventService.recordSuccess("leasing.brand.blacklist_changed", "leasing.brand.blacklist", "leasing_brand",
+                ex.id(), null, actual.idempotencyKey(), Map.of("blacklist", actual.blacklist()));
+        return saved;
+    }
+
+    // ============ 跟进 ============
+    public PageResponse<LeasingFollowUpRecord> listFollowUps(String refType, String refId) {
+        String type = requireEnum(refType, FOLLOW_UP_REF_TYPES, "ref_type");
+        List<LeasingFollowUpRecord> items = repository.listFollowUpsByRef(type, requireText(refId, "ref_id"));
+        return new PageResponse<>(items, 1, 500, items.size());
+    }
+
+    public LeasingFollowUpRecord createFollowUp(LeasingFollowUpRequest request) {
+        authorizationService.requirePlatformScope();
+        LeasingFollowUpRequest actual = requireRequest(request);
+        String type = requireEnum(actual.refType(), FOLLOW_UP_REF_TYPES, "ref_type");
+        String refId = requireText(actual.refId(), "ref_id");
+        Instant now = Instant.now();
+        LeasingFollowUpRecord saved = repository.saveFollowUp(new LeasingFollowUpRecord(
+                "follow_" + UUID.randomUUID(), type, refId, trimToNull(actual.method()),
+                requireText(actual.content(), "content"), actual.nextPlanAt(),
+                authorizationService.currentActor().id(), null, now));
+        // 回写线索 last_follow_up_at（3 天提醒依据）：ref=lead 直接回写，ref=intent 回写其所属线索。
+        String leadId = "lead".equals(type) ? refId
+                : repository.findIntentById(refId).map(LeasingIntentRecord::leadId).orElse(null);
+        if (leadId != null) {
+            repository.findLeadById(leadId).ifPresent(lead -> repository.saveLead(new LeasingLeadRecord(
+                    lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
+                    lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(),
+                    "pending_follow_up".equals(lead.status()) ? "following_up" : lead.status(),
+                    lead.lostOrHoldReason(), now, lead.projectId(), lead.createdAt(), now)));
+        }
+        auditEventService.recordSuccess("leasing.follow_up.created", "leasing.lead.manage", "leasing_follow_up",
+                saved.id(), null, actual.idempotencyKey(), Map.of("ref_type", type, "ref_id", refId));
+        return saved;
+    }
+
+    // ============ helpers ============
+    private void requireBrandNotBlacklisted(String brandId) {
+        if (brandId == null) {
+            return;
+        }
+        repository.findBrandById(brandId).ifPresent(b -> {
+            if ("blacklist".equals(b.brandType())) {
+                throw ApiException.conflict("LEASING_BRAND_BLACKLISTED",
+                        "brand is blacklisted; new lead blocked, needs higher authority to override");
+            }
+        });
+    }
+
+    private LeasingLeadRecord requireLead(String leadId) {
+        return repository.findLeadById(requireText(leadId, "lead_id"))
+                .orElseThrow(() -> ApiException.notFound("LEASING_LEAD_NOT_FOUND", "lead not found"));
+    }
+
+    private LeasingIntentRecord requireIntent(String intentId) {
+        return repository.findIntentById(requireText(intentId, "intent_id"))
+                .orElseThrow(() -> ApiException.notFound("LEASING_INTENT_NOT_FOUND", "intent not found"));
+    }
+
+    private <T> T requireRequest(T request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        return request;
+    }
+
+    private String requireText(String value, String field) {
+        String t = value == null ? "" : value.trim();
+        if (t.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        return t;
+    }
+
+    private String requireEnum(String value, Set<String> allowed, String field) {
+        String t = requireText(value, field);
+        if (!allowed.contains(t)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " is invalid");
+        }
+        return t;
+    }
+
+    private String trimToNull(String value) {
+        String t = value == null ? "" : value.trim();
+        return t.isEmpty() ? null : t;
+    }
+}
