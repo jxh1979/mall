@@ -54,6 +54,21 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, String> projectBusinessEntityMap() {
+        Map<String, String> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT p.id AS project_id, m.business_entity_id AS business_entity_id
+                  FROM projects p
+                  JOIN merchants m ON m.id = p.merchant_id
+                 WHERE m.business_entity_id IS NOT NULL
+                 ORDER BY p.id
+                """, new MapSqlParameterSource(), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("project_id"), resultSet.getString("business_entity_id"))
+        );
+        return result;
+    }
+
+    @Override
     public List<AiQualityResultRecord> listAiQualityResults() {
         return jdbcTemplate.query("""
                 SELECT result_id, task_id, source_type, source_id, quality_score, risk_level,
@@ -850,6 +865,23 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 result.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("actual_value"))
         );
         return result;
+    }
+
+    @Override
+    public long countMerchantsWithEtlSnapshotByProject(LocalDate businessDate, String projectId) {
+        Long count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(DISTINCT s.segment_id)
+                  FROM analytics_business_metric_snapshots s
+                  JOIN projects p ON p.merchant_id = s.segment_id
+                 WHERE s.business_date = :business_date
+                   AND s.period_type = 'daily'
+                   AND s.segment_type = 'merchant'
+                   AND s.projection_method = 'etl_aggregate'
+                   AND p.id = :project_id
+                """, new MapSqlParameterSource()
+                        .addValue("business_date", businessDate)
+                        .addValue("project_id", projectId), Long.class);
+        return count == null ? 0L : count;
     }
 
     private MapSqlParameterSource dayRange(LocalDate businessDate) {

@@ -23,6 +23,11 @@ import java.util.Optional;
 
 public interface AnalyticsRepository {
 
+    /** project_id -> business_entity_id（projects ⋈ merchants），供 group-overview groupBy=entity 派生。 */
+    default Map<String, String> projectBusinessEntityMap() {
+        return Map.of();
+    }
+
     List<AiQualityResultRecord> listAiQualityResults();
 
     List<AiQualityTaskRecord> listAiQualityTasks();

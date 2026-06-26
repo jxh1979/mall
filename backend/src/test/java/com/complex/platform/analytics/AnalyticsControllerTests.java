@@ -2,6 +2,8 @@ package com.complex.platform.analytics;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -25,6 +27,7 @@ import com.complex.platform.analytics.AnalyticsRecords.RiskRuleRecord;
 import com.complex.platform.analytics.AnalyticsRecords.RobotMetricRecord;
 import com.complex.platform.analytics.AnalyticsRecords.StaffServiceScoreRecord;
 import com.complex.platform.auth.AuthService;
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.GlobalExceptionHandler;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.config.SecurityConfig;
@@ -34,6 +37,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
@@ -85,7 +89,7 @@ class AnalyticsControllerTests {
         when(authorizationService.currentMerchantScope()).thenReturn(java.util.Optional.empty());
         when(service.overview(any())).thenReturn(overviewResponse());
         when(service.dashboardDomain(anyString(), any())).thenReturn(overviewResponse());
-        when(service.groupOverview()).thenReturn(groupOverviewResponse());
+        when(service.groupOverview(any())).thenReturn(groupOverviewResponse());
         when(service.listBusinessMetricSnapshots()).thenReturn(new PageResponse<>(List.of(businessMetricSnapshot()), 1, 50, 1));
         when(service.listMerchantHealthScores(any())).thenReturn(new PageResponse<>(List.of(merchantHealth()), 1, 50, 1));
         when(service.listAnalyticsMerchants(any())).thenReturn(new PageResponse<>(List.of(merchantSummary()), 1, 50, 1));
@@ -138,6 +142,30 @@ class AnalyticsControllerTests {
         }
 
         verify(authorizationService).requirePermission(permission);
+    }
+
+    @Test
+    void groupOverviewPassesGroupByToService() throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/group-overview")
+                        .param("groupBy", "entity")
+                        .with(user("analytics").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("OK"));
+
+        verify(service).groupOverview("entity");
+    }
+
+    @Test
+    void groupOverviewBlocksMerchantScopedCallerBeforeService() throws Exception {
+        doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "platform-level analytics is not accessible"))
+                .when(authorizationService).requirePlatformScope();
+
+        mockMvc.perform(get("/api/v1/analytics/group-overview")
+                        .with(user("merchant").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PLATFORM_SCOPE_REQUIRED"));
+
+        verify(service, never()).groupOverview(any());
     }
 
     @ParameterizedTest
@@ -206,11 +234,14 @@ class AnalyticsControllerTests {
         return new AnalyticsRecords.GroupOverviewResponse(
                 now(),
                 LocalDate.parse("2026-06-14"),
+                "project",
+                Map.of(),
                 List.of(new AnalyticsRecords.GroupProjectRollup(
                         "project_1",
                         "综合体（默认）",
                         1L,
-                        Map.of("revenue.net", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent"))
+                        Map.of("revenue.net", AnalyticsRecords.MetricValue.of(new BigDecimal("128800"), "cent")),
+                        List.of()
                 ))
         );
     }

@@ -327,6 +327,7 @@ class AnalyticsJdbcIntegrationTests {
                 VALUES ('tpl_share', 'Share Tpl', 'entry', 1, 0, 'active', :at, :at)
                 ON CONFLICT (id) DO NOTHING
                 """, Map.of("at", ts));
+        insertTicketOrder(id, allocatedRevenueCent == null ? 0L : allocatedRevenueCent, businessDate);
         var params = new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("type", entitlementType)

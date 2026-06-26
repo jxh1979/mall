@@ -282,6 +282,41 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void groupOverviewProjectGroupByFlagsBelowBenchmarkMetrics() {
+        // 均值 75_000；阈值默认 20%，低于 60_000 标 below_benchmark。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_2"), new BigDecimal("30000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+
+        var group = service.groupOverview("project");
+
+        assertThat(group.groupBy()).isEqualTo("project");
+        assertThat(group.groupAverages().get("revenue.net").value()).isEqualByComparingTo("75000");
+        var p1 = group.projects().stream().filter(p -> p.projectId().equals("project_1")).findFirst().orElseThrow();
+        var p2 = group.projects().stream().filter(p -> p.projectId().equals("project_2")).findFirst().orElseThrow();
+        assertThat(p1.belowBenchmarkMetrics()).doesNotContain("revenue.net");
+        assertThat(p2.belowBenchmarkMetrics()).containsExactly("revenue.net");
+        assertThat(p2.metrics().get("revenue.net").dimension()).containsEntry("below_benchmark", true);
+    }
+
+    @Test
+    void groupOverviewEntityGroupByAggregatesProjectMetricsByBusinessEntity() {
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_1"), new BigDecimal("120000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_2"), new BigDecimal("80000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.net", "project", "project_3"), new BigDecimal("70000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        analyticsRepository.projectEntityMap.put("project_1", "entity_a");
+        analyticsRepository.projectEntityMap.put("project_2", "entity_a");
+        analyticsRepository.projectEntityMap.put("project_3", "entity_b");
+
+        var group = service.groupOverview("entity");
+
+        assertThat(group.groupBy()).isEqualTo("entity");
+        assertThat(group.projects()).extracting(AnalyticsRecords.GroupProjectRollup::projectId)
+                .containsExactly("entity_a", "entity_b");
+        var entityA = group.projects().stream().filter(p -> p.projectId().equals("entity_a")).findFirst().orElseThrow();
+        assertThat(entityA.metrics().get("revenue.net").value()).isEqualByComparingTo("200000");
+    }
+
+    @Test
     void dashboardDomainFiltersByDomainAndIsScopeIsolated() {
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.bar", "merchant", "merchant_a"), new BigDecimal("5000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
 
@@ -840,6 +875,7 @@ class AnalyticsServiceTests {
     }
 
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
+        private final Map<String, String> projectEntityMap = new LinkedHashMap<>();
         private final List<MetricDefinitionRecord> metricDefinitions = new ArrayList<>();
         private DashboardSnapshotRecord dashboardSnapshot;
         private final List<BusinessMetricSnapshotRecord> businessMetricSnapshots = new ArrayList<>();
@@ -860,6 +896,11 @@ class AnalyticsServiceTests {
         private int riskAlertUpdateCount;
         private int aiQualityTaskSaveCount;
         private int aiQualityResultSaveCount;
+
+        @Override
+        public Map<String, String> projectBusinessEntityMap() {
+            return projectEntityMap;
+        }
 
         @Override
         public List<AiQualityResultRecord> listAiQualityResults() {

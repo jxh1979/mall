@@ -109,6 +109,7 @@ public class AnalyticsService {
      */
     private static final String GROUP_PROJECT_ID = "project_1";
     private static final String GROUP_PROJECT_NAME = "综合体（默认）";
+    private static final BigDecimal BENCHMARK_THRESHOLD = new BigDecimal("0.20");
 
     /**
      * 集团总览汇总指标目录：收入（净收入/售票/酒吧）/客流/核销/风险，来源均为 DashboardAggregationJob 平台口径 ETL 快照。
@@ -333,19 +334,25 @@ public class AnalyticsService {
      * 无 ETL 快照时 metrics 诚实置 null + note，merchantCount=0。
      */
     public GroupOverviewResponse groupOverview() {
+        return groupOverview(null);
+    }
+
+    public GroupOverviewResponse groupOverview(String groupBy) {
+        String normalizedGroupBy = normalizeGroupBy(groupBy);
         return readSingle(
                 "analytics.group_overview.viewed",
                 "analytics.group_overview.view_failed",
                 "analytics.group.view",
                 "analytics_business_metric_snapshot",
-                this::buildGroupOverview
+                () -> buildGroupOverview(normalizedGroupBy)
         );
     }
 
-    private GroupOverviewResponse buildGroupOverview() {
+    private GroupOverviewResponse buildGroupOverview(String groupBy) {
         Instant now = Instant.now(clock);
         Optional<LocalDate> etlDate = repository.latestEtlBusinessDate(null);
         LocalDate businessDate = etlDate.orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
+        boolean byEntity = "entity".equals(groupBy);
 
         // ⑤ 集团多项目 ETL：优先读 segment_type='project' 维度，按 project_id 产出 per-project rollup（多综合体→多行）。
         // 无 project 口径快照时回退到平台口径单行（向后兼容旧 ETL 与"无快照诚实空态"），不伪造多 project。
@@ -353,28 +360,62 @@ public class AnalyticsService {
                 ? repository.listProjectIdsWithEtlSnapshot(businessDate)
                 : List.of();
 
-        List<GroupProjectRollup> rollups = new java.util.ArrayList<>();
+        LinkedHashMap<String, RawGroupUnit> units = new LinkedHashMap<>();
         if (!projectIds.isEmpty()) {
+            Map<String, String> projectToEntity = byEntity ? repository.projectBusinessEntityMap() : Map.of();
             for (String projectId : projectIds) {
                 Map<String, BigDecimal> snapshots = repository.readProjectMetricSnapshots(businessDate, projectId);
-                Map<String, MetricValue> metrics = buildGroupMetrics(snapshots, true);
                 long merchantCount = repository.countMerchantsWithEtlSnapshotByProject(businessDate, projectId);
-                rollups.add(new GroupProjectRollup(projectId, projectDisplayName(projectId), merchantCount, metrics));
+                String unitId = byEntity ? entityId(projectToEntity.get(projectId)) : projectId;
+                RawGroupUnit unit = units.computeIfAbsent(
+                        unitId,
+                        ignored -> new RawGroupUnit(byEntity ? unitId : projectDisplayName(projectId)));
+                unit.merchantCount += merchantCount;
+                snapshots.forEach((metric, value) -> unit.snapshots.merge(metric, value, BigDecimal::add));
             }
-        } else {
+        }
+
+        if (units.isEmpty()) {
             // 回退：平台口径单 project rollup（单综合体合成 project 标识，口径与现状一致）。
             Map<String, BigDecimal> snapshots = etlDate.isPresent()
                     ? repository.readMetricSnapshots(businessDate, null)
                     : Map.of();
             Map<String, MetricValue> metrics = buildGroupMetrics(snapshots, etlDate.isPresent());
             long merchantCount = etlDate.isPresent() ? repository.countMerchantsWithEtlSnapshot(businessDate) : 0L;
-            rollups.add(new GroupProjectRollup(GROUP_PROJECT_ID, GROUP_PROJECT_NAME, merchantCount, metrics));
+            GroupProjectRollup rollup = new GroupProjectRollup(
+                    GROUP_PROJECT_ID, GROUP_PROJECT_NAME, merchantCount, metrics, List.of());
+            return new GroupOverviewResponse(now, businessDate, groupBy, Map.of(), List.of(rollup));
         }
-        return new GroupOverviewResponse(now, businessDate, List.copyOf(rollups));
+
+        Map<String, BigDecimal> averages = groupAverages(units);
+        List<GroupProjectRollup> rollups = new java.util.ArrayList<>();
+        for (Map.Entry<String, RawGroupUnit> item : units.entrySet()) {
+            RawGroupUnit unit = item.getValue();
+            Set<String> below = belowBenchmarkMetrics(unit.snapshots, averages);
+            rollups.add(new GroupProjectRollup(
+                    item.getKey(),
+                    unit.displayName,
+                    unit.merchantCount,
+                    buildGroupMetrics(unit.snapshots, true, below),
+                    List.copyOf(below)));
+        }
+        return new GroupOverviewResponse(
+                now,
+                businessDate,
+                groupBy,
+                buildGroupAverageMetrics(averages),
+                List.copyOf(rollups));
     }
 
     /** 按集团指标目录从快照构造 metrics；无快照按"不伪造"返回 null + note。 */
     private Map<String, MetricValue> buildGroupMetrics(Map<String, BigDecimal> snapshots, boolean hasEtl) {
+        return buildGroupMetrics(snapshots, hasEtl, Set.of());
+    }
+
+    private Map<String, MetricValue> buildGroupMetrics(
+            Map<String, BigDecimal> snapshots,
+            boolean hasEtl,
+            Set<String> belowBenchmarkMetrics) {
         Map<String, MetricValue> metrics = new LinkedHashMap<>();
         for (GroupMetricEntry entry : GROUP_METRIC_CATALOG) {
             BigDecimal value = snapshots.get(entry.metricCode());
@@ -384,15 +425,83 @@ public class AnalyticsService {
                                 ? "no etl snapshot for metric on business date"
                                 : "no etl snapshot available yet"));
             } else {
-                metrics.put(entry.metricCode(), MetricValue.of(value, entry.unit()));
+                metrics.put(entry.metricCode(), belowBenchmarkMetrics.contains(entry.metricCode())
+                        ? MetricValue.of(value, entry.unit(), Map.of("below_benchmark", true))
+                        : MetricValue.of(value, entry.unit()));
             }
         }
         return metrics;
     }
 
+    private Map<String, BigDecimal> groupAverages(Map<String, RawGroupUnit> units) {
+        Map<String, BigDecimal> averages = new LinkedHashMap<>();
+        for (GroupMetricEntry entry : GROUP_METRIC_CATALOG) {
+            List<BigDecimal> values = units.values().stream()
+                    .map(unit -> unit.snapshots.get(entry.metricCode()))
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            if (!values.isEmpty()) {
+                BigDecimal sum = values.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+                averages.put(entry.metricCode(), sum.divide(
+                        BigDecimal.valueOf(values.size()), 4, java.math.RoundingMode.HALF_UP));
+            }
+        }
+        return averages;
+    }
+
+    private Set<String> belowBenchmarkMetrics(Map<String, BigDecimal> snapshots, Map<String, BigDecimal> averages) {
+        java.util.LinkedHashSet<String> below = new java.util.LinkedHashSet<>();
+        BigDecimal floorMultiplier = BigDecimal.ONE.subtract(BENCHMARK_THRESHOLD);
+        for (GroupMetricEntry entry : GROUP_METRIC_CATALOG) {
+            BigDecimal value = snapshots.get(entry.metricCode());
+            BigDecimal average = averages.get(entry.metricCode());
+            if (value != null && average != null && average.signum() > 0
+                    && value.compareTo(average.multiply(floorMultiplier)) < 0) {
+                below.add(entry.metricCode());
+            }
+        }
+        return below;
+    }
+
+    private Map<String, MetricValue> buildGroupAverageMetrics(Map<String, BigDecimal> averages) {
+        Map<String, MetricValue> metrics = new LinkedHashMap<>();
+        for (GroupMetricEntry entry : GROUP_METRIC_CATALOG) {
+            BigDecimal average = averages.get(entry.metricCode());
+            if (average != null) {
+                metrics.put(entry.metricCode(), MetricValue.of(average, entry.unit()));
+            }
+        }
+        return metrics;
+    }
+
+    private String normalizeGroupBy(String groupBy) {
+        String value = groupBy == null || groupBy.isBlank()
+                ? "project"
+                : groupBy.trim().toLowerCase(Locale.ROOT);
+        if (!"project".equals(value) && !"entity".equals(value)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "group_by must be project or entity");
+        }
+        return value;
+    }
+
+    private String entityId(String value) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? "entity_unassigned" : trimmed;
+    }
+
     /** 单综合体默认 project 用既有展示名；其余 project_id 暂以 id 作展示名（多综合体接入主数据后替换）。 */
     private String projectDisplayName(String projectId) {
         return GROUP_PROJECT_ID.equals(projectId) ? GROUP_PROJECT_NAME : projectId;
+    }
+
+    private static final class RawGroupUnit {
+        private final String displayName;
+        private long merchantCount;
+        private final Map<String, BigDecimal> snapshots = new LinkedHashMap<>();
+
+        private RawGroupUnit(String displayName) {
+            this.displayName = displayName;
+        }
     }
 
     public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots() {

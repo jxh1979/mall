@@ -61,6 +61,10 @@ public final class AnalyticsRecords {
             return new MetricValue(value, unit, null, null);
         }
 
+        public static MetricValue of(BigDecimal value, String unit, Map<String, Object> dimension) {
+            return new MetricValue(value, unit, null, dimension);
+        }
+
         public static MetricValue unavailable(String note) {
             return new MetricValue(null, null, note, null);
         }
@@ -74,6 +78,8 @@ public final class AnalyticsRecords {
     public record GroupOverviewResponse(
             Instant asOf,
             LocalDate businessDate,
+            String groupBy,
+            Map<String, MetricValue> groupAverages,
             List<GroupProjectRollup> projects
     ) {
     }
@@ -86,7 +92,8 @@ public final class AnalyticsRecords {
             String projectId,
             String projectName,
             long merchantCount,
-            Map<String, MetricValue> metrics
+            Map<String, MetricValue> metrics,
+            List<String> belowBenchmarkMetrics
     ) {
     }
 
