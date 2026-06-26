@@ -417,28 +417,32 @@ class JdbcContractRepository implements ContractRepository {
 
     // ---------- 租金账单 + AR 联动 ----------
     @Override
-    public boolean rentBillExists(String contractId, String period) {
+    public boolean rentBillExists(String contractId, String period, String feeType) {
         Boolean exists = jdbcTemplate.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM contract_rent_bills WHERE contract_id = :cid AND period = :p)",
-                new MapSqlParameterSource().addValue("cid", contractId).addValue("p", period), Boolean.class);
+                "SELECT EXISTS (SELECT 1 FROM contract_rent_bills WHERE contract_id = :cid AND period = :p "
+                        + "AND fee_type = :ft)",
+                new MapSqlParameterSource().addValue("cid", contractId).addValue("p", period).addValue("ft", feeType),
+                Boolean.class);
         return Boolean.TRUE.equals(exists);
     }
 
     @Override
     public ContractRentBillRecord insertRentBill(ContractRentBillRecord b, LocalDate dueDate) {
         Instant now = Instant.now();
-        String sourceId = b.contractId() + "|" + b.period();
+        String sourceType = "contract_" + b.feeType();          // contract_rent / contract_property_fee / contract_energy_fee
+        String sourceId = b.contractId() + "|" + b.period();    // 同 sourceType 内按期唯一
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
                         amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
                         status, created_at, updated_at, merchant_id)
-                VALUES (:id, :item_no, 'receivable', :merchant_id, 'contract_rent', :source_id,
+                VALUES (:id, :item_no, 'receivable', :merchant_id, :source_type, :source_id,
                         :amount, 0, :amount, 'CNY', :due_date, :period, 'pending_collection', :now, :now, :merchant_id)
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", b.arApItemId())
-                .addValue("item_no", "RENT-" + b.contractId() + "-" + b.period())
+                .addValue("item_no", b.feeType().toUpperCase() + "-" + b.contractId() + "-" + b.period())
                 .addValue("merchant_id", b.merchantId())
+                .addValue("source_type", sourceType)
                 .addValue("source_id", sourceId)
                 .addValue("amount", b.amountCent())
                 .addValue("due_date", dueDate)
@@ -446,29 +450,40 @@ class JdbcContractRepository implements ContractRepository {
                 .addValue("now", timestampWithTimeZone(now)));
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_item_sources (id, ar_ap_item_id, source_type, source_id, amount_cent, created_at)
-                VALUES (:id, :item_id, 'contract_rent', :source_id, :amount, :now)
+                VALUES (:id, :item_id, :source_type, :source_id, :amount, :now)
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", "arsrc_" + b.id())
                 .addValue("item_id", b.arApItemId())
+                .addValue("source_type", sourceType)
                 .addValue("source_id", sourceId)
                 .addValue("amount", b.amountCent())
                 .addValue("now", timestampWithTimeZone(now)));
         jdbcTemplate.update("""
-                INSERT INTO contract_rent_bills (id, contract_id, merchant_id, project_id, period, amount_cent,
-                        ar_ap_item_id, created_at)
-                VALUES (:id, :contract_id, :merchant_id, :project_id, :period, :amount, :ar_item, :now)
-                ON CONFLICT (contract_id, period) DO NOTHING
+                INSERT INTO contract_rent_bills (id, contract_id, merchant_id, project_id, period, fee_type,
+                        amount_cent, ar_ap_item_id, created_at)
+                VALUES (:id, :contract_id, :merchant_id, :project_id, :period, :fee_type, :amount, :ar_item, :now)
+                ON CONFLICT (contract_id, period, fee_type) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", b.id())
                 .addValue("contract_id", b.contractId())
                 .addValue("merchant_id", b.merchantId())
                 .addValue("project_id", b.projectId())
                 .addValue("period", b.period())
+                .addValue("fee_type", b.feeType())
                 .addValue("amount", b.amountCent())
                 .addValue("ar_item", b.arApItemId())
                 .addValue("now", timestampWithTimeZone(now)));
         return b;
+    }
+
+    @Override
+    public long sumUnpaidArForContract(String contractId) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(unpaid_amount_cent), 0) FROM ar_ap_items
+                 WHERE direction = 'receivable' AND source_id LIKE :prefix
+                """, new MapSqlParameterSource().addValue("prefix", contractId + "|%"), Long.class);
+        return sum == null ? 0L : sum;
     }
 
     // ---------- row mappers ----------

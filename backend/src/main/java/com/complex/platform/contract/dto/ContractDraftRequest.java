@@ -20,6 +20,7 @@ public record ContractDraftRequest(
         Map<String, Object> penaltyTerms,
         List<Map<String, Object>> settlementRules,
         List<String> attachmentIds,
-        String projectId
+        String projectId,
+        String businessScope
 ) {
 }

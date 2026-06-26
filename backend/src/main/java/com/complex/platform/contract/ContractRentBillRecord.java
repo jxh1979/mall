@@ -9,6 +9,7 @@ public record ContractRentBillRecord(
         String merchantId,
         String projectId,
         String period,          // YYYY-MM
+        String feeType,         // rent / property_fee / energy_fee
         long amountCent,
         String arApItemId,
         Instant createdAt

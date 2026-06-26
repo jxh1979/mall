@@ -7,6 +7,7 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.contract.dto.ContractActivateRequest;
 import com.complex.platform.contract.dto.ContractApprovalFlowRequest;
+import com.complex.platform.contract.dto.ContractAttachmentRequest;
 import com.complex.platform.contract.dto.ContractApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeRequest;
@@ -50,6 +51,13 @@ public class ContractController {
         authorizationService.requirePermission("contract.draft.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createDraft(request));
+    }
+
+    @PostMapping("/{contract_id}/attachments")
+    public ApiResponse<ContractRecord> addAttachments(
+            @PathVariable("contract_id") String contractId, @RequestBody ContractAttachmentRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.addAttachments(contractId, request));
     }
 
     // ---- 审批 ----
@@ -136,12 +144,28 @@ public class ContractController {
         return ApiResponse.ok(service.completeSettlement(settlementId, request));
     }
 
+    /** 逐相推进退租结算（待结算→保证金抵扣中→欠费追缴中→已结清）。 */
+    @PostMapping("/settlements/{settlement_id}/advance")
+    public ApiResponse<ContractSettlementRecord> advanceSettlement(
+            @PathVariable("settlement_id") String settlementId, @RequestBody ContractResolveDisputeRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.advanceSettlement(settlementId, request));
+    }
+
     // ---- 租金 AR 挂账 ----
     @PostMapping("/{contract_id}/rent-bills")
     public ApiResponse<ContractRentBillRecord> generateRentBill(
             @PathVariable("contract_id") String contractId, @RequestBody ContractRentBillRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.generateRentBill(contractId, request));
+    }
+
+    /** 一期全费目挂账（租金+物业费+能源费）。 */
+    @PostMapping("/{contract_id}/period-bills")
+    public ApiResponse<List<ContractRentBillRecord>> generatePeriodBills(
+            @PathVariable("contract_id") String contractId, @RequestBody ContractRentBillRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.generatePeriodBills(contractId, request));
     }
 
     // ---- 配置：审批链 ----

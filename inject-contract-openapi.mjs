@@ -36,6 +36,12 @@ spec.paths['/api/v1/contracts'] = {
     desc: 'V162 重建：手工或招商签约带入。租金/递增/免租/物业费放 rent_terms；抽成 4 模式可空、能源费分摊 4 模式。状态默认 drafting。',
     body: 'ContractDraftRequest', evOk: 'contract.drafted', evFail: 'contract.draft_failed' }),
 };
+spec.paths['/api/v1/contracts/{contract_id}/attachments'] = {
+  post: op({ id: 'addContractAttachments', perm: 'contract.draft.manage', summary: '追加合同附件(电子签章扫描件归档)', idemReq: true,
+    desc: '线下签后上传扫描件归档；去重合并到 attachment_ids。',
+    params: [pathParam('contract_id', '合同 id。')], body: 'ContractAttachmentRequest',
+    evOk: 'contract.attachments_added', evFail: 'contract.attachments_add_failed' }),
+};
 spec.paths['/api/v1/contracts/{contract_id}/submit'] = {
   post: op({ id: 'submitContract', perm: 'contract.draft.manage', summary: '提交进审批链(→待确认)', idemReq: true,
     desc: '按所属综合体生效链物化第一并行阶段。链未配则拒。',
@@ -90,9 +96,15 @@ spec.paths['/api/v1/contracts/settlements/{settlement_id}/resolve-dispute'] = {
 };
 spec.paths['/api/v1/contracts/settlements/{settlement_id}/complete'] = {
   post: op({ id: 'completeContractSettlement', perm: 'contract.settlement.manage', summary: '结清退租结算→已结清+终止合同', idemReq: true,
-    desc: '待结算/保证金抵扣中/欠费追缴中 → 已结清，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。',
+    desc: '待结算/保证金抵扣中/欠费追缴中 → 已结清(直推)，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。',
     params: [pathParam('settlement_id', '结算 id。')], body: 'ContractResolveDisputeRequest',
     evOk: 'contract.settlement_completed', evFail: 'contract.settlement_complete_failed' }),
+};
+spec.paths['/api/v1/contracts/settlements/{settlement_id}/advance'] = {
+  post: op({ id: 'advanceContractSettlement', perm: 'contract.settlement.manage', summary: '逐相推进退租结算', idemReq: true,
+    desc: '待结算→保证金抵扣中→欠费追缴中→已结清，逐相推进(让中间态成真实驻留态);到已结清即终止/到期合同。',
+    params: [pathParam('settlement_id', '结算 id。')], body: 'ContractResolveDisputeRequest',
+    evOk: 'contract.settlement_advanced', evFail: 'contract.settlement_advance_failed' }),
 };
 spec.paths['/api/v1/contracts/approval-flow'] = {
   get: op({ id: 'listContractApprovalFlow', perm: 'contract.approval.flow.manage', summary: '查审批链(生效链：项目覆盖优先)',
@@ -114,16 +126,23 @@ spec.paths['/api/v1/contracts/space-rental-status'] = {
 
 spec.paths['/api/v1/contracts/{contract_id}/rent-bills'] = {
   post: op({ id: 'generateContractRentBill', perm: 'finance.ar_ap.manage', summary: '生成某期合同租金应收(base+递增−免租)', idemReq: true,
-    desc: '生效合同按 ContractRentMath 算该期应收 → 联动 ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期)。免租/生效前无应收。',
+    desc: '生效合同按 ContractRentMath 算该期租金应收 → 联动 ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。',
     params: [pathParam('contract_id', '合同 id。')], body: 'ContractRentBillRequest',
     evOk: 'contract.rent_billed', evFail: 'contract.rent_bill_failed' }),
+};
+spec.paths['/api/v1/contracts/{contract_id}/period-bills'] = {
+  post: op({ id: 'generateContractPeriodBills', perm: 'finance.ar_ap.manage', summary: '某期全费目挂账(租金+物业费+能源费)', idemReq: true,
+    desc: '一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent) 应收;各费目幂等;0/免租跳过。',
+    params: [pathParam('contract_id', '合同 id。')], body: 'ContractRentBillRequest',
+    evOk: 'contract.fee_billed', evFail: 'contract.period_bill_failed' }),
 };
 
 // ---- requestBodies ----
 const rb = (name) => ({ required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/' + name } } } });
 for (const n of ['ContractDraftRequest', 'ContractSubmitRequest', 'ContractApproveRequest', 'ContractActivateRequest',
   'ContractChangeRequest', 'ContractChangeApproveRequest', 'ContractSettleRequest', 'ContractResolveDisputeRequest',
-  'ContractApprovalFlowRequest', 'SpaceExpiryColorRuleRequest', 'ContractRentBillRequest']) {
+  'ContractApprovalFlowRequest', 'SpaceExpiryColorRuleRequest', 'ContractRentBillRequest',
+  'ContractAttachmentRequest']) {
   spec.components.requestBodies[n] = rb(n);
 }
 
@@ -146,6 +165,7 @@ S.ContractDraftRequest = {
     settlement_rules: { type: 'array', description: '退租结算逐例顺序(每份可不同)。', items: { type: 'object', additionalProperties: true } },
     attachment_ids: { type: 'array', description: '附件 id(线下签扫描件)。', items: { type: 'string', maxLength: 64 } },
     project_id: str('综合体 id。', 64),
+    business_scope: str('经营范围(存 rent_terms；越界 enforcement 属下游)。', 500),
   },
 };
 S.ContractSubmitRequest = {
@@ -222,5 +242,11 @@ S.ContractRentBillRequest = {
   properties: { idempotency_key: idem, period: { type: 'string', description: '账期 YYYY-MM。', pattern: '^\\d{4}-\\d{2}$' } },
 };
 
+S.ContractAttachmentRequest = {
+  type: 'object', description: '请求载荷 ContractAttachmentRequest（追加合同附件/扫描件）。', additionalProperties: false,
+  required: ['attachment_ids'],
+  properties: { idempotency_key: idem, attachment_ids: { type: 'array', description: '附件 id(扫描件归档)。', items: { type: 'string', maxLength: 64 } } },
+};
+
 writeFileSync(path, JSON.stringify(spec, null, 2) + '\n');
-console.log('injected 合同: 15 paths(19 ops) + 11 requestBodies + 11 schemas');
+console.log('injected 合同: 18 paths(22 ops) + 12 requestBodies + 12 schemas');

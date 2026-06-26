@@ -10,6 +10,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.contract.dto.ContractActivateRequest;
 import com.complex.platform.contract.dto.ContractApproveRequest;
+import com.complex.platform.contract.dto.ContractAttachmentRequest;
 import com.complex.platform.contract.dto.ContractChangeApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
@@ -48,7 +49,7 @@ class ContractServiceTests {
         return service.createDraft(new ContractDraftRequest("k_draft", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
                 "fixed_ratio", "by_area", 500000L, Map.of("breach", "2x"),
-                List.of(Map.of("item", "deposit_offset"), Map.of("item", "unpaid_fee")), List.of(), null));
+                List.of(Map.of("item", "deposit_offset"), Map.of("item", "unpaid_fee")), List.of(), null, "餐饮"));
     }
 
     private ContractRecord approve(ContractRecord c, String code) {
@@ -190,6 +191,57 @@ class ContractServiceTests {
         assertThatThrownBy(() -> service.generateRentBill(c.id(), new ContractRentBillRequest("k_rb2", "2026-08")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("CONTRACT_RENT_ALREADY_BILLED"));
+    }
+
+    @Test
+    void draftStoresBusinessScopeAndAttachmentsMergeDedup() {
+        ContractRecord c = newDraft();
+        assertThat(c.rentTerms()).containsEntry("businessScope", "餐饮");   // 缺口3 经营范围入 rent_terms
+        ContractRecord a1 = service.addAttachments(c.id(),
+                new ContractAttachmentRequest("k_a1", List.of("scan_1", "scan_2")));
+        assertThat(a1.attachmentIds()).containsExactly("scan_1", "scan_2");
+        ContractRecord a2 = service.addAttachments(c.id(),
+                new ContractAttachmentRequest("k_a2", List.of("scan_2", "scan_3")));   // 去重合并
+        assertThat(a2.attachmentIds()).containsExactly("scan_1", "scan_2", "scan_3");
+    }
+
+    @Test
+    void periodBillsGeneratesRentPropertyEnergyAndSkipsZero() {
+        ContractRecord d = service.createDraft(new ContractDraftRequest("k_pf", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                Map.of("baseRentCent", 100000, "propertyFeeCent", 20000, "energyFeeCent", 5000),
+                "fixed_ratio", "by_area", 500000L, Map.of(), List.of(), List.of(), null, null));
+        service.submit(d.id(), "k_sub");
+        approve(d, "contract.approve.business");
+        approve(d, "contract.approve.finance");
+        approve(d, "contract.approve.legal");
+        approve(d, "contract.approve.gm");
+        service.activate(d.id(), new ContractActivateRequest("k_act", List.of("sp_pf")));
+        List<ContractRentBillRecord> bills = service.generatePeriodBills(d.id(),
+                new ContractRentBillRequest("k_pb", "2026-08"));
+        assertThat(bills).hasSize(3);
+        assertThat(bills).extracting(ContractRentBillRecord::feeType)
+                .containsExactlyInAnyOrder("rent", "property_fee", "energy_fee");
+        assertThat(bills).extracting(ContractRentBillRecord::amountCent)
+                .containsExactlyInAnyOrder(100000L, 20000L, 5000L);
+    }
+
+    @Test
+    void settlementItemsCarryRealAmountsAndPhasesAdvanceToSettled() {
+        ContractRecord c = effectiveContract();   // deposit 500000；rules [deposit_offset, unpaid_fee]
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_s3", "move_out", null));
+        assertThat(opened.status()).isEqualTo("pending_settlement");
+        // 缺口2 真实金额：保证金抵扣=500000；欠费=0(内存无未付AR)
+        assertThat(opened.settlementItems().get(0)).containsEntry("amountCent", 500000L);
+        // 缺口6 逐相推进：待结算→保证金抵扣中→欠费追缴中→已结清
+        assertThat(service.advanceSettlement(opened.id(), new ContractResolveDisputeRequest("k_a1", null)).status())
+                .isEqualTo("deposit_offsetting");
+        assertThat(service.advanceSettlement(opened.id(), new ContractResolveDisputeRequest("k_a2", null)).status())
+                .isEqualTo("arrears_collecting");
+        ContractSettlementRecord done = service.advanceSettlement(opened.id(),
+                new ContractResolveDisputeRequest("k_a3", null));
+        assertThat(done.status()).isEqualTo("settled");
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("terminated");
     }
 
     private ContractRecord effectiveContract() {
@@ -341,14 +393,20 @@ class ContractServiceTests {
         }
 
         @Override
-        public boolean rentBillExists(String contractId, String period) {
-            return rentBills.stream().anyMatch(b -> b.contractId().equals(contractId) && b.period().equals(period));
+        public boolean rentBillExists(String contractId, String period, String feeType) {
+            return rentBills.stream().anyMatch(b -> b.contractId().equals(contractId) && b.period().equals(period)
+                    && b.feeType().equals(feeType));
         }
 
         @Override
         public ContractRentBillRecord insertRentBill(ContractRentBillRecord bill, LocalDate dueDate) {
             rentBills.add(bill);
             return bill;
+        }
+
+        @Override
+        public long sumUnpaidArForContract(String contractId) {
+            return 0L;
         }
     }
 }

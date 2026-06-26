@@ -5,6 +5,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.contract.dto.ContractActivateRequest;
 import com.complex.platform.contract.dto.ContractApprovalFlowRequest;
+import com.complex.platform.contract.dto.ContractAttachmentRequest;
 import com.complex.platform.contract.dto.ContractApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeApproveRequest;
 import com.complex.platform.contract.dto.ContractChangeRequest;
@@ -70,6 +71,10 @@ public class ContractService {
             throw ApiException.badRequest("VALIDATION_FAILED", "energy_fee_basis is invalid");
         }
         Instant now = Instant.now();
+        Map<String, Object> rentTerms = new HashMap<>(actual.rentTerms() == null ? Map.of() : actual.rentTerms());
+        if (trimToNull(actual.businessScope()) != null) {
+            rentTerms.put("businessScope", actual.businessScope().trim());   // 经营范围存 rent_terms；越界 enforcement 属下游(bar/票务查合同范围)
+        }
         ContractRecord saved = repository.saveContract(new ContractRecord(
                 "ctr_" + UUID.randomUUID(),
                 requireText(actual.merchantId(), "merchant_id"),
@@ -78,7 +83,7 @@ public class ContractService {
                 requireText(actual.settlementSubjectId(), "settlement_subject_id"),
                 requireDate(actual.effectiveDate(), "effective_date"),
                 requireDate(actual.expiryDate(), "expiry_date"),
-                actual.rentTerms() == null ? Map.of() : Map.copyOf(actual.rentTerms()),
+                rentTerms,
                 commissionMode, energyBasis, actual.depositCent(),
                 actual.penaltyTerms() == null ? Map.of() : Map.copyOf(actual.penaltyTerms()),
                 actual.settlementRules() == null ? List.of() : List.copyOf(actual.settlementRules()),
@@ -87,6 +92,29 @@ public class ContractService {
                 "drafting", trimToNull(actual.projectId()), null, null, null, now, now));
         auditEventService.recordSuccess("contract.drafted", "contract.draft.manage", "contract", saved.id(),
                 null, actual.idempotencyKey(), Map.of("merchant_id", saved.merchantId()));
+        return saved;
+    }
+
+    /** 追加合同附件（电子签章扫描件归档），去重合并。 */
+    @Transactional
+    public ContractRecord addAttachments(String contractId, ContractAttachmentRequest request) {
+        authorizationService.requirePermission("contract.draft.manage");
+        ContractAttachmentRequest actual = requireRequest(request);
+        List<String> add = (actual.attachmentIds() == null ? List.<String>of() : actual.attachmentIds())
+                .stream().map(s -> requireText(s, "attachment_id")).distinct().toList();
+        if (add.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "attachment_ids is required");
+        }
+        ContractRecord c = requireContract(contractId);
+        List<String> merged = new ArrayList<>(c.attachmentIds() == null ? List.of() : c.attachmentIds());
+        for (String a : add) {
+            if (!merged.contains(a)) {
+                merged.add(a);
+            }
+        }
+        ContractRecord saved = repository.saveContract(withAttachments(c, merged));
+        auditEventService.recordSuccess("contract.attachments_added", "contract.draft.manage", "contract", contractId,
+                null, actual.idempotencyKey(), Map.of("added", add.size(), "total", merged.size()));
         return saved;
     }
 
@@ -329,6 +357,32 @@ public class ContractService {
         return settled;
     }
 
+    /** 逐相推进退租结算：待结算→保证金抵扣中→欠费追缴中→已结清；到已结清即终止/到期合同（让 2 中间态成真实驻留态）。 */
+    @Transactional
+    public ContractSettlementRecord advanceSettlement(String settlementId, ContractResolveDisputeRequest request) {
+        authorizationService.requirePermission("contract.settlement.manage");
+        ContractResolveDisputeRequest actual = requireRequest(request);
+        ContractSettlementRecord s = repository.findSettlementById(requireText(settlementId, "settlement_id"))
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "settlement not found"));
+        String next = switch (s.status()) {
+            case "pending_settlement" -> "deposit_offsetting";
+            case "deposit_offsetting" -> "arrears_collecting";
+            case "arrears_collecting" -> "settled";
+            default -> throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_ADVANCEABLE",
+                    "settlement at " + s.status() + " cannot advance");
+        };
+        Instant now = Instant.now();
+        ContractSettlementRecord moved = repository.saveSettlement(new ContractSettlementRecord(s.id(),
+                s.contractId(), s.triggerType(), next, s.settlementItems(), s.disputeReason(), s.resolvedBy(),
+                s.resolvedAt(), s.projectId(), s.createdAt(), now));
+        if ("settled".equals(next)) {
+            finalizeContractAfterSettlement(requireContract(s.contractId()), s.triggerType(), now);
+        }
+        auditEventService.recordSuccess("contract.settlement_advanced", "contract.settlement.manage",
+                "contract_settlement", s.id(), null, actual.idempotencyKey(), Map.of("to", next));
+        return moved;
+    }
+
     public PageResponse<ContractSettlementRecord> listSettlements(String contractId) {
         List<ContractSettlementRecord> items = repository.listSettlementsByContract(contractId);
         return new PageResponse<>(items, 1, 500, items.size());
@@ -424,21 +478,75 @@ public class ContractService {
         if (!"effective".equals(c.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract bills rent");
         }
-        if (repository.rentBillExists(contractId, period)) {
+        if (repository.rentBillExists(contractId, period, "rent")) {
             throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "rent already billed for " + period);
         }
         long amountCent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
         if (amountCent <= 0) {
             return null;   // 免租期 / 生效前：无应收
         }
-        String[] ym = period.split("-");
-        LocalDate dueDate = LocalDate.of(Integer.parseInt(ym[0]), Integer.parseInt(ym[1]), 1);
+        return genFeeBill(c, period, "rent", amountCent, dueDateOf(period), actual.idempotencyKey());
+    }
+
+    /**
+     * 生成某期全部应收：租金 + 物业费(rent_terms.propertyFeeCent) + 能源费(基非 none 取 rent_terms.energyFeeCent)。
+     * 各费目幂等(合同,期,费目)；免租/0 金额跳过。
+     * ponytail: 能源费按面积/按用量的金额由能耗域/上游派生后落 rent_terms.energyFeeCent，本处只挂账；不分摊则 0。
+     */
+    @Transactional
+    public List<ContractRentBillRecord> generatePeriodBills(String contractId, ContractRentBillRequest request) {
+        authorizationService.requirePermission("finance.ar_ap.manage");
+        ContractRentBillRequest actual = requireRequest(request);
+        String period = requireText(actual.period(), "period");
+        if (!period.matches("\\d{4}-\\d{2}")) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "period must be YYYY-MM");
+        }
+        ContractRecord c = requireContract(contractId);
+        if (!"effective".equals(c.lifecycleStatus())) {
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract bills");
+        }
+        Map<String, Object> rt = c.rentTerms() == null ? Map.of() : c.rentTerms();
+        LocalDate dueDate = dueDateOf(period);
+        long rent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
+        long property = numLong(rt.get("propertyFeeCent"));
+        long energy = "none".equals(c.energyFeeBasis()) ? 0L : numLong(rt.get("energyFeeCent"));
+        List<ContractRentBillRecord> out = new ArrayList<>();
+        ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent, dueDate, actual.idempotencyKey());
+        if (rb != null) {
+            out.add(rb);
+        }
+        ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, dueDate, actual.idempotencyKey());
+        if (pb != null) {
+            out.add(pb);
+        }
+        ContractRentBillRecord eb = genFeeBill(c, period, "energy_fee", energy, dueDate, actual.idempotencyKey());
+        if (eb != null) {
+            out.add(eb);
+        }
+        return out;
+    }
+
+    /** 单费目挂账：金额≤0 或已挂账则跳过返 null；否则建 ar_ap_items 应收 + contract_rent_bills。 */
+    private ContractRentBillRecord genFeeBill(ContractRecord c, String period, String feeType, long amountCent,
+            LocalDate dueDate, String idemKey) {
+        if (amountCent <= 0 || repository.rentBillExists(c.id(), period, feeType)) {
+            return null;
+        }
         ContractRentBillRecord bill = repository.insertRentBill(new ContractRentBillRecord(
-                "crb_" + UUID.randomUUID(), contractId, c.merchantId(), c.projectId(), period, amountCent,
-                "arap_rent_" + UUID.randomUUID(), Instant.now()), dueDate);
-        auditEventService.recordSuccess("contract.rent_billed", "finance.ar_ap.manage", "contract_rent_bill",
-                bill.id(), null, actual.idempotencyKey(), Map.of("period", period, "amount_cent", amountCent));
+                "crb_" + UUID.randomUUID(), c.id(), c.merchantId(), c.projectId(), period, feeType, amountCent,
+                "arap_" + feeType + "_" + UUID.randomUUID(), Instant.now()), dueDate);
+        auditEventService.recordSuccess("contract.fee_billed", "finance.ar_ap.manage", "contract_rent_bill",
+                bill.id(), null, idemKey, Map.of("period", period, "fee_type", feeType, "amount_cent", amountCent));
         return bill;
+    }
+
+    private LocalDate dueDateOf(String period) {
+        String[] ym = period.split("-");
+        return LocalDate.of(Integer.parseInt(ym[0]), Integer.parseInt(ym[1]), 1);
+    }
+
+    private long numLong(Object o) {
+        return o instanceof Number n ? n.longValue() : 0L;
     }
 
     // ============ engine helpers ============
@@ -542,14 +650,23 @@ public class ContractService {
     }
 
     private List<Map<String, Object>> runSettlementRules(ContractRecord contract) {
-        // 逐例按合同 settlement_rules 顺序产出结算项（实际金额计算连财务，本切片留规则回执）。
-        // ponytail: 金额结算接 ar_ap_items 在「合同↔财务」切片做；此处逐例回执保证顺序与项可见、可审计。
+        // 逐例按合同 settlement_rules 顺序产出结算项 + 真实金额：保证金抵扣(deposit)/违约金(penalty)/欠费追缴(未付AR)。
         List<Map<String, Object>> rules = contract.settlementRules() == null ? List.of() : contract.settlementRules();
+        long deposit = contract.depositCent() == null ? 0L : contract.depositCent();
+        long penalty = numLong(contract.penaltyTerms() == null ? null : contract.penaltyTerms().get("amountCent"));
+        long arrears = repository.sumUnpaidArForContract(contract.id());
         List<Map<String, Object>> items = new ArrayList<>();
         int order = 1;
         for (Map<String, Object> rule : rules) {
             Map<String, Object> item = new HashMap<>(rule);
+            long amount = switch (String.valueOf(rule.get("item"))) {
+                case "deposit_offset" -> deposit;
+                case "penalty" -> penalty;
+                case "arrears", "unpaid_fee" -> arrears;
+                default -> numLong(rule.get("amountCent"));
+            };
             item.put("order", order++);
+            item.put("amountCent", amount);
             item.put("status", "applied");
             items.add(item);
         }
@@ -572,6 +689,14 @@ public class ContractService {
                 c.settlementSubjectId(), c.effectiveDate(), c.expiryDate(), c.rentTerms(), c.commissionMode(),
                 c.energyFeeBasis(), c.depositCent(), c.penaltyTerms(), c.settlementRules(), c.snapshot(),
                 c.shareholderRatioForReport(), c.attachmentIds(), status, c.projectId(), c.terminatedAt(),
+                c.terminationReason(), c.renewedFromContractId(), c.createdAt(), Instant.now());
+    }
+
+    private ContractRecord withAttachments(ContractRecord c, List<String> attachmentIds) {
+        return new ContractRecord(c.id(), c.merchantId(), c.contractSubjectId(), c.operationSubjectId(),
+                c.settlementSubjectId(), c.effectiveDate(), c.expiryDate(), c.rentTerms(), c.commissionMode(),
+                c.energyFeeBasis(), c.depositCent(), c.penaltyTerms(), c.settlementRules(), c.snapshot(),
+                c.shareholderRatioForReport(), attachmentIds, c.lifecycleStatus(), c.projectId(), c.terminatedAt(),
                 c.terminationReason(), c.renewedFromContractId(), c.createdAt(), Instant.now());
     }
 

@@ -197,7 +197,7 @@ public class LeasingService {
                 operationSubjectId != null ? operationSubjectId : contractSubjectId,
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
                 actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(),
-                null, null, null, null, null, List.of(), intent.projectId()));
+                null, null, null, null, null, List.of(), intent.projectId(), null));
         repository.findLeadById(intent.leadId()).ifPresent(lead -> repository.saveLead(new LeasingLeadRecord(
                 lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
                 lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(), "signed",
