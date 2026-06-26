@@ -270,15 +270,13 @@ public class ContractService {
         }
         String dispute = trimToNull(actual.disputeReason());
         Instant now = Instant.now();
-        String status = dispute != null ? "disputed" : "settled";
+        // 开账：非争议→待结算（合同仍 effective，待 completeSettlement 结清才终止）；争议→挂起。
+        String status = dispute != null ? "disputed" : "pending_settlement";
         List<Map<String, Object>> items = dispute != null ? List.of() : runSettlementRules(contract);
         ContractSettlementRecord settlement = repository.saveSettlement(new ContractSettlementRecord(
                 "cst_" + UUID.randomUUID(), contractId, trigger, status, items, dispute, null, null,
                 contract.projectId(), now, now));
-        if (dispute == null) {
-            finalizeContractAfterSettlement(contract, trigger, now);
-        }
-        auditEventService.recordSuccess("contract.settled", "contract.settlement.manage", "contract_settlement",
+        auditEventService.recordSuccess("contract.settle_opened", "contract.settlement.manage", "contract_settlement",
                 settlement.id(), null, actual.idempotencyKey(), Map.of("trigger", trigger, "status", status));
         return settlement;
     }
@@ -295,13 +293,39 @@ public class ContractService {
         }
         ContractRecord contract = requireContract(settlement.contractId());
         Instant now = Instant.now();
-        ContractSettlementRecord settled = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
-                settlement.contractId(), settlement.triggerType(), "settled", runSettlementRules(contract),
+        ContractSettlementRecord resumed = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
+                settlement.contractId(), settlement.triggerType(), "pending_settlement", runSettlementRules(contract),
                 settlement.disputeReason(), authorizationService.currentActor().id(), now, settlement.projectId(),
                 settlement.createdAt(), now));
-        finalizeContractAfterSettlement(contract, settlement.triggerType(), now);
+        // 裁决后回到待结算，待 completeSettlement 结清并终止合同。
         auditEventService.recordSuccess("contract.dispute_resolved", "contract.settlement.dispute.resolve",
                 "contract_settlement", settlement.id(), null, actual.idempotencyKey(), Map.of());
+        return resumed;
+    }
+
+    /**
+     * 结清退租结算 → 已结清 + 终止合同。接受 待结算/保证金抵扣中/欠费追缴中。
+     * ponytail: 两个中间态(保证金抵扣中/欠费追缴中)为枚举可选相，留作逐相推进的人工流；本切片 开账→结清 两段直推。
+     */
+    @Transactional
+    public ContractSettlementRecord completeSettlement(String settlementId, ContractResolveDisputeRequest request) {
+        authorizationService.requirePermission("contract.settlement.manage");
+        ContractResolveDisputeRequest actual = requireRequest(request);
+        ContractSettlementRecord settlement = repository.findSettlementById(requireText(settlementId, "settlement_id"))
+                .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "settlement not found"));
+        if (!Set.of("pending_settlement", "deposit_offsetting", "arrears_collecting").contains(settlement.status())) {
+            throw ApiException.conflict("CONTRACT_SETTLEMENT_NOT_OPEN", "settlement is not open for completion");
+        }
+        ContractRecord contract = requireContract(settlement.contractId());
+        Instant now = Instant.now();
+        ContractSettlementRecord settled = repository.saveSettlement(new ContractSettlementRecord(settlement.id(),
+                settlement.contractId(), settlement.triggerType(), "settled", settlement.settlementItems(),
+                settlement.disputeReason(), settlement.resolvedBy(), settlement.resolvedAt(), settlement.projectId(),
+                settlement.createdAt(), now));
+        finalizeContractAfterSettlement(contract, settlement.triggerType(), now);
+        auditEventService.recordSuccess("contract.settlement_completed", "contract.settlement.manage",
+                "contract_settlement", settlement.id(), null, actual.idempotencyKey(),
+                Map.of("trigger", settlement.triggerType()));
         return settled;
     }
 

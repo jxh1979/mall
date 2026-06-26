@@ -83,9 +83,16 @@ spec.paths['/api/v1/contracts/{contract_id}/settlements'] = {
     params: [pathParam('contract_id', '合同 id。')], evOk: 'contract.settlements_viewed', evFail: 'contract.settlements_view_failed' }),
 };
 spec.paths['/api/v1/contracts/settlements/{settlement_id}/resolve-dispute'] = {
-  post: op({ id: 'resolveContractDispute', perm: 'contract.settlement.dispute.resolve', summary: '裁决退租争议→结清', idemReq: true,
+  post: op({ id: 'resolveContractDispute', perm: 'contract.settlement.dispute.resolve', summary: '裁决退租争议→回到待结算', idemReq: true,
+    desc: '有争议 → 待结算（逐例备齐，合同仍生效），待 complete 结清。',
     params: [pathParam('settlement_id', '结算 id。')], body: 'ContractResolveDisputeRequest',
     evOk: 'contract.dispute_resolved', evFail: 'contract.dispute_resolve_failed' }),
+};
+spec.paths['/api/v1/contracts/settlements/{settlement_id}/complete'] = {
+  post: op({ id: 'completeContractSettlement', perm: 'contract.settlement.manage', summary: '结清退租结算→已结清+终止合同', idemReq: true,
+    desc: '待结算/保证金抵扣中/欠费追缴中 → 已结清，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。',
+    params: [pathParam('settlement_id', '结算 id。')], body: 'ContractResolveDisputeRequest',
+    evOk: 'contract.settlement_completed', evFail: 'contract.settlement_complete_failed' }),
 };
 spec.paths['/api/v1/contracts/approval-flow'] = {
   get: op({ id: 'listContractApprovalFlow', perm: 'contract.approval.flow.manage', summary: '查审批链(生效链：项目覆盖优先)',
@@ -216,4 +223,4 @@ S.ContractRentBillRequest = {
 };
 
 writeFileSync(path, JSON.stringify(spec, null, 2) + '\n');
-console.log('injected 合同: 14 paths(18 ops) + 11 requestBodies + 11 schemas');
+console.log('injected 合同: 15 paths(19 ops) + 11 requestBodies + 11 schemas');

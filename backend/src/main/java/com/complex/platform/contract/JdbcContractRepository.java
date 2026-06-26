@@ -363,7 +363,10 @@ class JdbcContractRepository implements ContractRepository {
     @Override
     public List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf) {
         return jdbcTemplate.query("""
-                SELECT s.id AS space_id, s.space_name, e.contract_id, e.days_to_expiry
+                SELECT s.id AS space_id, s.space_name, COALESCE(s.status, '') AS space_status,
+                       e.contract_id, e.days_to_expiry,
+                       EXISTS(SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) AS in_negotiation,
+                       EXISTS(SELECT 1 FROM contract_spaces cs2 WHERE cs2.space_id = s.id) AS ever_bound
                   FROM spaces s
                   LEFT JOIN LATERAL (
                       SELECT c.id AS contract_id, (c.expiry_date - :as_of) AS days_to_expiry
@@ -374,10 +377,24 @@ class JdbcContractRepository implements ContractRepository {
                  WHERE (:pid IS NULL OR s.project_id = :pid)
                  ORDER BY s.id LIMIT 1000
                 """, new MapSqlParameterSource().addValue("pid", projectId).addValue("as_of", asOf), (rs, n) -> {
+            // 6 态（对齐 HTML §十 铺位租赁状态）：不可租(人工 status=unavailable) > 已租(生效合同；service 再判即将到期)
+            //   > 洽谈中(招商意向占用) > 已退租(曾绑约、现无生效) > 空置
             String contractId = rs.getString("contract_id");
-            boolean let = contractId != null;
-            return new SpaceRentalStatusRecord(rs.getString("space_id"), rs.getString("space_name"),
-                    let ? "let" : "available", null, let ? rs.getObject("days_to_expiry", Integer.class) : null);
+            String status;
+            Integer days = null;
+            if ("unavailable".equals(rs.getString("space_status"))) {
+                status = "unavailable";
+            } else if (contractId != null) {
+                status = "let";
+                days = rs.getObject("days_to_expiry", Integer.class);
+            } else if (rs.getBoolean("in_negotiation")) {
+                status = "negotiating";
+            } else if (rs.getBoolean("ever_bound")) {
+                status = "moved_out";
+            } else {
+                status = "vacant";
+            }
+            return new SpaceRentalStatusRecord(rs.getString("space_id"), rs.getString("space_name"), status, null, days);
         });
     }
 

@@ -129,6 +129,13 @@ public class ContractController {
         return ApiResponse.ok(service.resolveDispute(settlementId, request));
     }
 
+    @PostMapping("/settlements/{settlement_id}/complete")
+    public ApiResponse<ContractSettlementRecord> completeSettlement(
+            @PathVariable("settlement_id") String settlementId, @RequestBody ContractResolveDisputeRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.completeSettlement(settlementId, request));
+    }
+
     // ---- 租金 AR 挂账 ----
     @PostMapping("/{contract_id}/rent-bills")
     public ApiResponse<ContractRentBillRecord> generateRentBill(

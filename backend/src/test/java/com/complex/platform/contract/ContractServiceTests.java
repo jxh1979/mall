@@ -119,21 +119,40 @@ class ContractServiceTests {
     }
 
     @Test
-    void settleWithDisputeHangsThenResolveSettlesAndTerminates() {
+    void settleDisputeResolveToPendingThenCompleteTerminates() {
         ContractRecord c = effectiveContract();
-        // 带争议 → 挂起。
+        // 带争议 → 挂起（有争议），合同仍生效。
         ContractSettlementRecord disputed = service.settle(c.id(),
                 new ContractSettleRequest("k_s", "move_out", "押金抵扣有异议"));
         assertThat(disputed.status()).isEqualTo("disputed");
         assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
 
-        // 主管裁决 → 结清 + 合同终止 + 逐例结算项按 settlement_rules 顺序。
-        ContractSettlementRecord settled = service.resolveDispute(disputed.id(),
+        // 主管裁决 → 回到待结算（逐例项备齐），合同仍生效。
+        ContractSettlementRecord resumed = service.resolveDispute(disputed.id(),
                 new ContractResolveDisputeRequest("k_rd", "押金按约抵扣"));
+        assertThat(resumed.status()).isEqualTo("pending_settlement");
+        assertThat(resumed.settlementItems()).hasSize(2);
+        assertThat(resumed.settlementItems().get(0)).containsEntry("order", 1);
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
+
+        // 结清 → 已结清 + 合同终止。
+        ContractSettlementRecord settled = service.completeSettlement(resumed.id(),
+                new ContractResolveDisputeRequest("k_cs", null));
         assertThat(settled.status()).isEqualTo("settled");
-        assertThat(settled.settlementItems()).hasSize(2);
-        assertThat(settled.settlementItems().get(0)).containsEntry("order", 1);
         assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("terminated");
+    }
+
+    @Test
+    void settleNoDisputeOpensPendingThenCompleteSettles() {
+        ContractRecord c = effectiveContract();
+        ContractSettlementRecord opened = service.settle(c.id(), new ContractSettleRequest("k_s2", "expiry", null));
+        assertThat(opened.status()).isEqualTo("pending_settlement");
+        assertThat(opened.settlementItems()).hasSize(2);
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("effective");
+        ContractSettlementRecord settled = service.completeSettlement(opened.id(),
+                new ContractResolveDisputeRequest("k_cs2", null));
+        assertThat(settled.status()).isEqualTo("settled");
+        assertThat(repo.findContractById(c.id()).orElseThrow().lifecycleStatus()).isEqualTo("expired");
     }
 
     @Test

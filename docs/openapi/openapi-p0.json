@@ -22016,7 +22016,7 @@
           "contract"
         ],
         "operationId": "resolveContractDispute",
-        "summary": "裁决退租争议→结清",
+        "summary": "裁决退租争议→回到待结算",
         "x-permission": "contract.settlement.dispute.resolve",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -22026,6 +22026,7 @@
         "x-audit-event-success": "contract.dispute_resolved",
         "x-audit-event-failure": "contract.dispute_resolve_failed",
         "x-auth-context": "staff-token",
+        "description": "有争议 → 待结算（逐例备齐，合同仍生效），待 complete 结清。",
         "parameters": [
           {
             "name": "settlement_id",
@@ -22323,6 +22324,60 @@
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/ContractRentBillRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/contracts/settlements/{settlement_id}/complete": {
+      "post": {
+        "tags": [
+          "contract"
+        ],
+        "operationId": "completeContractSettlement",
+        "summary": "结清退租结算→已结清+终止合同",
+        "x-permission": "contract.settlement.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "contract.settlement_completed",
+        "x-audit-event-failure": "contract.settlement_complete_failed",
+        "x-auth-context": "staff-token",
+        "description": "待结算/保证金抵扣中/欠费追缴中 → 已结清，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。",
+        "parameters": [
+          {
+            "name": "settlement_id",
+            "in": "path",
+            "required": true,
+            "description": "结算 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ContractResolveDisputeRequest"
         },
         "responses": {
           "200": {
