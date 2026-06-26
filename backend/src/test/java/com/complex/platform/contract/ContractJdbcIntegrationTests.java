@@ -85,11 +85,11 @@ class ContractJdbcIntegrationTests {
                 .containsExactly("rent_change", "pending");
 
         // 退租结算 items JSONB + 状态 CHECK。
-        repository.saveSettlement(new ContractSettlementRecord("cst_jdbc", "ctr_jdbc", "move_out", "in_progress",
+        repository.saveSettlement(new ContractSettlementRecord("cst_jdbc", "ctr_jdbc", "move_out", "pending_settlement",
                 List.of(Map.of("item", "deposit")), null, null, null, "proj_1", now, now));
         assertThat(repository.findSettlementById("cst_jdbc")).isPresent().get()
                 .extracting(ContractSettlementRecord::status, s -> s.settlementItems().size())
-                .containsExactly("in_progress", 1);
+                .containsExactly("pending_settlement", 1);
     }
 
     private String regclass(String tableName) {
