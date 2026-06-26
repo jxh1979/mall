@@ -13,13 +13,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 楼宇机电设备台账（③楼宇运营 S1，据 M1 第3节 + 速查表第十节重建）。
  * 状态6态、4分类、每台维保周期+到期提醒、告警源(人工/IoT)。
- * ponytail: 告警/故障到自动转物业工单 的钩子在 S2(维保工单)接 changeStatus(alarm) 后建单；本切片只落设备侧状态。
  */
 @Service
 public class FacilityEquipmentService {
@@ -27,17 +27,20 @@ public class FacilityEquipmentService {
     static final Set<String> TYPES = Set.of("elevator", "hvac", "power", "water_fire");
     static final Set<String> STATUSES = Set.of("normal", "alarm", "fault", "maintenance", "disabled", "retired");
     static final Set<String> ALARM_SOURCES = Set.of("manual", "iot");
+    private static final Set<String> WORK_ORDER_TRIGGER_STATUSES = Set.of("alarm", "fault");
     private static final String PERM = "facility.equipment.manage";
 
     private final FacilityRepository repository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public FacilityEquipmentService(FacilityRepository repository, AuditEventService auditEventService,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService, ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.eventPublisher = eventPublisher;
     }
 
     public PageResponse<FacilityEquipmentRecord> listEquipment() {
@@ -115,6 +118,10 @@ public class FacilityEquipmentService {
         repository.updateEquipment(rec);
         auditEventService.recordSuccess("facility.equipment_status_changed", PERM, "facility_equipment", id,
                 null, request.idempotencyKey(), Map.of("status", target));
+        if (WORK_ORDER_TRIGGER_STATUSES.contains(target)) {
+            eventPublisher.publishEvent(new FacilityEquipmentAlarmedEvent(id, rec.name(),
+                    request.alarmSource(), request.alarmNote()));
+        }
         return rec;
     }
 

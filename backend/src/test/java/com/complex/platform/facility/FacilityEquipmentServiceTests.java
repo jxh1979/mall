@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * 楼宇设备台账 unit 测试（S1）：验 4分类/6态枚举校验、告警源必填、离开告警清字段、
@@ -25,7 +26,8 @@ class FacilityEquipmentServiceTests {
 
     private final InMemoryFacilityRepository repo = new InMemoryFacilityRepository();
     private final FacilityEquipmentService service =
-            new FacilityEquipmentService(repo, mock(AuditEventService.class), mock(AuthorizationService.class));
+            new FacilityEquipmentService(repo, mock(AuditEventService.class), mock(AuthorizationService.class),
+                    mock(ApplicationEventPublisher.class));
 
     private FacilityEquipmentRequest req(String type, Integer cycle, LocalDate install) {
         return new FacilityEquipmentRequest(null, "电梯1号", type, "sp_1", "三菱", "M-100", "三菱电梯",
