@@ -18,9 +18,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.GlobalExceptionHandler;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.config.SecurityConfig;
-import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
-import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
 import java.math.BigDecimal;
@@ -289,75 +287,6 @@ class PlatformControllerTests {
         verify(authorizationService).requirePermission("entity.binding.manage");
     }
 
-    @Test
-    void contractDraftAndApprovalUseOpenApiPermissions() throws Exception {
-        when(service.createContractDraft(any(ContractDraftRequest.class)))
-                .thenReturn(new ContractRecord(
-                        "ctr_1",
-                        "mch_1",
-                        "be_contract",
-                        "be_operation",
-                        "be_settlement",
-                        LocalDate.parse("2026-07-01"),
-                        LocalDate.parse("2027-06-30"),
-                        Map.of("monthly_rent_cent", 100000),
-                        java.math.BigDecimal.valueOf(12.50),
-                        List.of("att_contract"),
-                        "draft",
-                        Instant.parse("2026-06-14T00:00:00Z"),
-                        Instant.parse("2026-06-14T00:00:00Z")
-                ));
-        when(service.approveContract(eq("ctr_1"), any(ApprovalRequest.class)))
-                .thenReturn(new ContractRecord(
-                        "ctr_1",
-                        "mch_1",
-                        "be_contract",
-                        "be_operation",
-                        "be_settlement",
-                        LocalDate.parse("2026-07-01"),
-                        LocalDate.parse("2027-06-30"),
-                        Map.of("monthly_rent_cent", 100000),
-                        java.math.BigDecimal.valueOf(12.50),
-                        List.of("att_contract"),
-                        "approved",
-                        Instant.parse("2026-06-14T00:00:00Z"),
-                        Instant.parse("2026-06-14T01:00:00Z")
-                ));
-
-        mockMvc.perform(post("/api/v1/platform/contracts")
-                        .with(user("ops").roles("P0_SMOKE"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "idempotency_key": "contract-draft",
-                                  "merchant_id": "mch_1",
-                                  "contract_subject_id": "be_contract",
-                                  "operation_subject_id": "be_operation",
-                                  "settlement_subject_id": "be_settlement",
-                                  "effective_date": "2026-07-01",
-                                  "expiry_date": "2027-06-30",
-                                  "attachment_ids": ["att_contract"]
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.lifecycle_status").value("draft"));
-
-        mockMvc.perform(post("/api/v1/platform/contracts/ctr_1/approve")
-                        .with(user("ops").roles("P0_SMOKE"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "idempotency_key": "contract-approve",
-                                  "decision": "approve",
-                                  "comment": "legal ok"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.lifecycle_status").value("approved"));
-
-        verify(authorizationService).requirePermission("contract.draft.manage");
-        verify(authorizationService).requirePermission("contract.lifecycle.approve");
-    }
 
     @TestConfiguration
     static class TestBeans {

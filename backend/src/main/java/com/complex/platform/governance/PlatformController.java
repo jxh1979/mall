@@ -5,10 +5,8 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
-import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
@@ -120,26 +118,6 @@ public class PlatformController {
         return ApiResponse.ok(service.changeBusinessEntityBinding(id, request));
     }
 
-    @GetMapping("/contracts")
-    public ApiResponse<PageResponse<ContractRecord>> listContracts() {
-        authorizationService.requirePermission("contract.view");
-        return ApiResponse.ok(service.listContracts());
-    }
 
-    @PostMapping("/contracts")
-    public ApiResponse<ContractRecord> createContractDraft(@RequestBody ContractDraftRequest request) {
-        authorizationService.requirePermission("contract.draft.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createContractDraft(request));
-    }
 
-    @PostMapping("/contracts/{contract_id}/approve")
-    public ApiResponse<ContractRecord> approveContract(
-            @PathVariable("contract_id") String contractId,
-            @RequestBody ApprovalRequest request
-    ) {
-        authorizationService.requirePermission("contract.lifecycle.approve");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.approveContract(contractId, request));
-    }
 }

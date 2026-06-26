@@ -30,12 +30,12 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
             return false;
         }
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        // 存在一份生效合同（approved 且日期区间覆盖今天） → 未过期。
+        // 存在一份生效合同（effective 且日期区间覆盖今天） → 未过期。
         Integer activeCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(1)
                   FROM contracts
                  WHERE merchant_id = :merchant_id
-                   AND lifecycle_status = 'approved'
+                   AND lifecycle_status = 'effective'
                    AND effective_date <= :today
                    AND expiry_date >= :today
                 """, Map.of("merchant_id", merchantId, "today", today), Integer.class);
@@ -66,12 +66,12 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
             return false;
         }
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        // 该商户当前所有生效合同（approved + 日期覆盖今天）。无生效合同 → 命中（与 expired 一致）。
+        // 该商户当前所有生效合同（effective + 日期覆盖今天）。无生效合同 → 命中（与 expired 一致）。
         Integer activeContractCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(1)
                   FROM contracts
                  WHERE merchant_id = :merchant_id
-                   AND lifecycle_status = 'approved'
+                   AND lifecycle_status = 'effective'
                    AND effective_date <= :today
                    AND expiry_date >= :today
                 """, Map.of("merchant_id", merchantId, "today", today), Integer.class);
@@ -83,7 +83,7 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
                 SELECT COUNT(1)
                   FROM contracts
                  WHERE merchant_id = :merchant_id
-                   AND lifecycle_status = 'approved'
+                   AND lifecycle_status = 'effective'
                    AND effective_date <= :today
                    AND expiry_date >= :today
                    AND (
@@ -109,7 +109,7 @@ class JdbcAdmissionFactRepository implements AdmissionFactRepository {
                   JOIN contracts c ON c.id = cs.contract_id
                  WHERE cs.space_id = :space_id
                    AND c.merchant_id = :merchant_id
-                   AND c.lifecycle_status = 'approved'
+                   AND c.lifecycle_status = 'effective'
                    AND c.effective_date <= :today
                    AND c.expiry_date >= :today
                 """,

@@ -6,10 +6,8 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
-import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
-import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
@@ -333,112 +331,8 @@ public class PlatformService {
         );
     }
 
-    public PageResponse<ContractRecord> listContracts() {
-        try {
-            List<ContractRecord> records = repository.listContracts();
-            auditEventService.recordSuccess(
-                    "contract.viewed",
-                    "contract.view",
-                    "contract",
-                    "all",
-                    null,
-                    null,
-                    Map.of("count", records.size())
-            );
-            return page(records);
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    "contract.view_failed",
-                    "contract.view",
-                    "contract",
-                    "all",
-                    null,
-                    null,
-                    codeOf(exception)
-            );
-            throw exception;
-        }
-    }
 
-    public ContractRecord createContractDraft(ContractDraftRequest request) {
-        authorizationService.requirePlatformScope();
-        return executeWrite(
-                "createContractDraft",
-                idempotencyKey(request),
-                request,
-                ContractRecord.class,
-                "contract.draft_saved",
-                "contract.draft_save_failed",
-                "contract.draft.manage",
-                "contract",
-                () -> {
-                    ContractDraftRequest actual = requireRequest(request);
-                    Instant now = Instant.now();
-                    List<String> attachmentIds = actual.attachmentIds() == null
-                            ? List.of()
-                            : List.copyOf(actual.attachmentIds());
-                    return repository.saveContract(new ContractRecord(
-                            "ctr_" + UUID.randomUUID(),
-                            requireText(actual.merchantId(), "merchant_id"),
-                            requireText(actual.contractSubjectId(), "contract_subject_id"),
-                            trimToNull(actual.operationSubjectId()),
-                            requireText(actual.settlementSubjectId(), "settlement_subject_id"),
-                            requireDate(actual.effectiveDate(), "effective_date"),
-                            requireDate(actual.expiryDate(), "expiry_date"),
-                            actual.rentTerms() == null ? Map.of() : Map.copyOf(actual.rentTerms()),
-                            actual.shareholderRatioForReport(),
-                            attachmentIds,
-                            "draft",
-                            now,
-                            now
-                    ));
-                }
-        );
-    }
 
-    public ContractRecord approveContract(String contractId, ApprovalRequest request) {
-        authorizationService.requirePlatformScope();
-        String id = requireText(contractId, "contract_id");
-        return executeWrite(
-                "approveContract:" + id,
-                idempotencyKey(request),
-                request,
-                ContractRecord.class,
-                "contract.lifecycle_changed",
-                "contract.lifecycle_change_failed",
-                "contract.lifecycle.approve",
-                "contract",
-                () -> {
-                    ApprovalRequest actual = requireRequest(request);
-                    String lifecycleStatus = switch (requireText(actual.decision(), "decision")) {
-                        case "approve" -> "approved";
-                        case "reject" -> "rejected";
-                        case "return" -> "returned";
-                        default -> throw ApiException.badRequest("VALIDATION_FAILED", "decision is invalid");
-                    };
-                    ContractRecord existing = repository.findContractById(id)
-                            .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "contract not found"));
-                    if (!"draft".equals(existing.lifecycleStatus())) {
-                        throw ApiException.conflict("INVALID_STATUS_TRANSITION", "contract is not in draft state");
-                    }
-                    return repository.saveContract(new ContractRecord(
-                            existing.id(),
-                            existing.merchantId(),
-                            existing.contractSubjectId(),
-                            existing.operationSubjectId(),
-                            existing.settlementSubjectId(),
-                            existing.effectiveDate(),
-                            existing.expiryDate(),
-                            existing.rentTerms(),
-                            existing.shareholderRatioForReport(),
-                            existing.attachmentIds(),
-                            lifecycleStatus,
-                            existing.createdAt(),
-                            Instant.now()
-                    ));
-                }
-        );
-    }
 
     private MerchantRecord saveMerchant(
             String operationId,
@@ -566,13 +460,7 @@ public class PlatformService {
         return request == null ? null : request.idempotencyKey();
     }
 
-    private String idempotencyKey(ContractDraftRequest request) {
-        return request == null ? null : request.idempotencyKey();
-    }
 
-    private String idempotencyKey(ApprovalRequest request) {
-        return request == null ? null : request.idempotencyKey();
-    }
 
     private String businessId(Object value) {
         if (value instanceof BusinessEntityRecord record) {
@@ -588,9 +476,6 @@ public class PlatformService {
             return record.id();
         }
         if (value instanceof BusinessEntityBindingRecord record) {
-            return record.id();
-        }
-        if (value instanceof ContractRecord record) {
             return record.id();
         }
         return null;

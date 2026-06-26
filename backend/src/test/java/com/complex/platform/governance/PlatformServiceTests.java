@@ -15,7 +15,6 @@ import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.ApprovalRequest;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
-import com.complex.platform.governance.dto.ContractDraftRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
@@ -278,30 +277,6 @@ class PlatformServiceTests {
                 .containsExactly("active", "inactive", "active");
     }
 
-    // P1-3 red→green: 已 approved 合同不得再次审批
-    @Test
-    void approveContractRejectsNonDraftStatus() {
-        ContractRecord draft = service.createContractDraft(new ContractDraftRequest(
-                "contract-state-draft",
-                "draft",
-                List.of(),
-                "mch_state",
-                "be_contract",
-                "be_operation",
-                "be_settlement",
-                LocalDate.parse("2026-07-01"),
-                LocalDate.parse("2027-06-30"),
-                Map.of(),
-                null,
-                List.of()
-        ));
-        service.approveContract(draft.id(), new ApprovalRequest("contract-state-approve1", "approve", List.of(), "approve", "legal ok", "ops"));
-
-        assertThatThrownBy(() -> service.approveContract(draft.id(),
-                new ApprovalRequest("contract-state-approve2", "reject", List.of(), "reject", "changed mind", "ops")))
-                .isInstanceOfSatisfying(ApiException.class, exception ->
-                        assertThat(exception.code()).isEqualTo("INVALID_STATUS_TRANSITION"));
-    }
 
     // P1-4 red→green: action 字段拒绝非法枚举值
     @Test
@@ -355,36 +330,6 @@ class PlatformServiceTests {
         assertThat(e2.entityName()).isEqualTo("Corp B");
     }
 
-    @Test
-    void createContractDraftPersistsAttachmentsAndApprovalKeepsDraftFields() {
-        ContractRecord draft = service.createContractDraft(new ContractDraftRequest(
-                "contract-draft",
-                "draft contract",
-                List.of("att_evidence"),
-                "mch_contract",
-                "be_contract",
-                "be_operation",
-                "be_settlement",
-                LocalDate.parse("2026-07-01"),
-                LocalDate.parse("2027-06-30"),
-                Map.of("monthly_rent_cent", 100_000),
-                java.math.BigDecimal.valueOf(12.50),
-                List.of("att_contract_pdf", "att_appendix")
-        ));
-
-        ContractRecord approved = service.approveContract(
-                draft.id(),
-                new ApprovalRequest("contract-approve", "approve", List.of("att_approval"), "approve", "legal ok", "staff_finance")
-        );
-
-        assertThat(approved.id()).isEqualTo(draft.id());
-        assertThat(approved.lifecycleStatus()).isEqualTo("approved");
-        assertThat(approved.attachmentIds()).containsExactly("att_contract_pdf", "att_appendix");
-        assertThat(approved.effectiveDate()).isEqualTo(LocalDate.parse("2026-07-01"));
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("contract.draft_saved", "contract.lifecycle_changed");
-    }
 
     private static final class InMemoryPlatformRepository implements PlatformRepository {
         private final Map<String, BusinessEntityRecord> businessEntities = new LinkedHashMap<>();
@@ -393,7 +338,6 @@ class PlatformServiceTests {
         private final Map<String, SpaceRecord> spaces = new LinkedHashMap<>();
         private final Map<String, BusinessEntityBindingRecord> businessEntityBindings = new LinkedHashMap<>();
         private final List<String> businessEntityBindingStatusHistory = new ArrayList<>();
-        private final Map<String, ContractRecord> contracts = new LinkedHashMap<>();
         private int businessEntitySaveCount;
 
         @Override
@@ -466,21 +410,8 @@ class PlatformServiceTests {
                     .findFirst();
         }
 
-        @Override
-        public ContractRecord saveContract(ContractRecord contract) {
-            contracts.put(contract.id(), contract);
-            return contract;
-        }
 
-        @Override
-        public List<ContractRecord> listContracts() {
-            return new ArrayList<>(contracts.values());
-        }
 
-        @Override
-        public Optional<ContractRecord> findContractById(String id) {
-            return Optional.ofNullable(contracts.get(id));
-        }
     }
 
     private static final class InMemoryIdempotencyRepository implements IdempotencyRepository {

@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -25,6 +26,7 @@ public class OperatingParamsService {
     private final AuditEventService auditEventService;
     private final Clock clock;
 
+    @Autowired
     public OperatingParamsService(AnalyticsRepository repository, AuditEventService auditEventService) {
         this(repository, auditEventService, Clock.systemUTC());
     }

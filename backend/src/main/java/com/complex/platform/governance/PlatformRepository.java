@@ -41,9 +41,6 @@ public interface PlatformRepository {
 
     Optional<BusinessEntityBindingRecord> findActiveBusinessEntityBindingByMerchantId(String merchantId);
 
-    ContractRecord saveContract(ContractRecord contract);
 
-    List<ContractRecord> listContracts();
 
-    Optional<ContractRecord> findContractById(String id);
 }

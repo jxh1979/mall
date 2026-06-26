@@ -310,48 +310,6 @@ class PlatformJdbcIntegrationTests {
         ))).hasMessageContaining("uq_business_entity_bindings_active_merchant");
     }
 
-    @Test
-    void contractRepositoryPersistsDraftAttachmentsAndApprovalStatus() {
-        Instant createdAt = Instant.parse("2026-06-14T06:00:00Z");
-        repository.saveContract(new ContractRecord(
-                "ctr_jdbc",
-                "mch_contract_jdbc",
-                "be_contract",
-                "be_operation",
-                "be_settlement",
-                LocalDate.parse("2026-07-01"),
-                LocalDate.parse("2027-06-30"),
-                Map.of("monthly_rent_cent", 100000),
-                BigDecimal.valueOf(12.50),
-                List.of("att_contract_pdf", "att_appendix"),
-                "draft",
-                createdAt,
-                createdAt
-        ));
-        repository.saveContract(new ContractRecord(
-                "ctr_jdbc",
-                "mch_contract_jdbc",
-                "be_contract",
-                "be_operation",
-                "be_settlement",
-                LocalDate.parse("2026-07-01"),
-                LocalDate.parse("2027-06-30"),
-                Map.of("monthly_rent_cent", 100000),
-                BigDecimal.valueOf(12.50),
-                List.of("att_contract_pdf", "att_appendix"),
-                "approved",
-                createdAt,
-                createdAt.plusSeconds(60)
-        ));
-
-        assertThat(repository.findContractById("ctr_jdbc"))
-                .get()
-                .satisfies(contract -> {
-                    assertThat(contract.lifecycleStatus()).isEqualTo("approved");
-                    assertThat(contract.attachmentIds()).containsExactly("att_contract_pdf", "att_appendix");
-                    assertThat(contract.effectiveDate()).isEqualTo(LocalDate.parse("2026-07-01"));
-                });
-    }
 
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);

@@ -269,59 +269,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 """, Map.of("merchant_id", merchantId), this::mapBusinessEntityBinding).stream().findFirst();
     }
 
-    @Override
-    public ContractRecord saveContract(ContractRecord contract) {
-        jdbcTemplate.update("""
-                INSERT INTO contracts (
-                    id, merchant_id, contract_subject_id, operation_subject_id, settlement_subject_id,
-                    effective_date, expiry_date, rent_terms, shareholder_ratio_for_report, attachment_ids,
-                    lifecycle_status, created_at, updated_at
-                )
-                VALUES (
-                    :id, :merchant_id, :contract_subject_id, :operation_subject_id, :settlement_subject_id,
-                    :effective_date, :expiry_date, CAST(:rent_terms AS jsonb), :shareholder_ratio_for_report,
-                    CAST(:attachment_ids AS jsonb), :lifecycle_status, :created_at, :updated_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    merchant_id = EXCLUDED.merchant_id,
-                    contract_subject_id = EXCLUDED.contract_subject_id,
-                    operation_subject_id = EXCLUDED.operation_subject_id,
-                    settlement_subject_id = EXCLUDED.settlement_subject_id,
-                    effective_date = EXCLUDED.effective_date,
-                    expiry_date = EXCLUDED.expiry_date,
-                    rent_terms = EXCLUDED.rent_terms,
-                    shareholder_ratio_for_report = EXCLUDED.shareholder_ratio_for_report,
-                    attachment_ids = EXCLUDED.attachment_ids,
-                    lifecycle_status = EXCLUDED.lifecycle_status,
-                    updated_at = EXCLUDED.updated_at
-                """, contractParameters(contract));
-        return contract;
-    }
 
-    @Override
-    public List<ContractRecord> listContracts() {
-        return jdbcTemplate.query("""
-                SELECT id, merchant_id, contract_subject_id, operation_subject_id, settlement_subject_id,
-                       effective_date, expiry_date, rent_terms::text AS rent_terms,
-                       shareholder_ratio_for_report, attachment_ids::text AS attachment_ids,
-                       lifecycle_status, created_at, updated_at
-                  FROM contracts
-                 ORDER BY created_at DESC, id
-                 LIMIT 500
-                """, this::mapContract);
-    }
 
-    @Override
-    public Optional<ContractRecord> findContractById(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, merchant_id, contract_subject_id, operation_subject_id, settlement_subject_id,
-                       effective_date, expiry_date, rent_terms::text AS rent_terms,
-                       shareholder_ratio_for_report, attachment_ids::text AS attachment_ids,
-                       lifecycle_status, created_at, updated_at
-                  FROM contracts
-                 WHERE id = :id
-                """, Map.of("id", id), this::mapContract).stream().findFirst();
-    }
 
     private MapSqlParameterSource businessEntityParameters(BusinessEntityRecord businessEntity) {
         return new MapSqlParameterSource()
@@ -404,22 +353,6 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("updated_at", timestampWithTimeZone(binding.updatedAt()));
     }
 
-    private MapSqlParameterSource contractParameters(ContractRecord contract) {
-        return new MapSqlParameterSource()
-                .addValue("id", contract.id())
-                .addValue("merchant_id", contract.merchantId())
-                .addValue("contract_subject_id", contract.contractSubjectId())
-                .addValue("operation_subject_id", contract.operationSubjectId())
-                .addValue("settlement_subject_id", contract.settlementSubjectId())
-                .addValue("effective_date", contract.effectiveDate())
-                .addValue("expiry_date", contract.expiryDate())
-                .addValue("rent_terms", writeJson(contract.rentTerms() == null ? Map.of() : contract.rentTerms()))
-                .addValue("shareholder_ratio_for_report", contract.shareholderRatioForReport())
-                .addValue("attachment_ids", writeJson(contract.attachmentIds() == null ? List.of() : contract.attachmentIds()))
-                .addValue("lifecycle_status", contract.lifecycleStatus())
-                .addValue("created_at", timestampWithTimeZone(contract.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(contract.updatedAt()));
-    }
 
     private BusinessEntityRecord mapBusinessEntity(ResultSet resultSet, int rowNumber) throws SQLException {
         return new BusinessEntityRecord(
@@ -507,23 +440,6 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         );
     }
 
-    private ContractRecord mapContract(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new ContractRecord(
-                resultSet.getString("id"),
-                resultSet.getString("merchant_id"),
-                resultSet.getString("contract_subject_id"),
-                resultSet.getString("operation_subject_id"),
-                resultSet.getString("settlement_subject_id"),
-                nullableLocalDate(resultSet, "effective_date"),
-                nullableLocalDate(resultSet, "expiry_date"),
-                readObjectMap(resultSet.getString("rent_terms")),
-                resultSet.getObject("shareholder_ratio_for_report", BigDecimal.class),
-                readStringList(resultSet.getString("attachment_ids")),
-                resultSet.getString("lifecycle_status"),
-                nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
 
     private Integer integerValue(ResultSet resultSet, String columnName) throws SQLException {
         int value = resultSet.getInt(columnName);
