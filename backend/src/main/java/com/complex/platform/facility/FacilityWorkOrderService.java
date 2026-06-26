@@ -15,6 +15,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,18 +33,29 @@ public class FacilityWorkOrderService {
             Set.of("pending_assign", "assigned", "processing", "pending_review", "pending_acceptance");
     private static final String PERM = "facility.work_order.manage";
     private static final String BUSINESS_TYPE = "facility_work_order";
+    private static final String INSPECTION_PERM = "facility.inspection.manage";
+    private static final String INSPECTION_TASK_BUSINESS_TYPE = "facility_inspection_task";
 
     private final FacilityWorkOrderRepository repository;
     private final FacilityRepository facilityRepository;
+    private final FacilityInspectionRepository inspectionRepository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
 
+    @Autowired
     public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
-            AuditEventService auditEventService, AuthorizationService authorizationService) {
+            AuditEventService auditEventService, AuthorizationService authorizationService,
+            FacilityInspectionRepository inspectionRepository) {
         this.repository = repository;
         this.facilityRepository = facilityRepository;
+        this.inspectionRepository = inspectionRepository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+    }
+
+    public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
+            AuditEventService auditEventService, AuthorizationService authorizationService) {
+        this(repository, facilityRepository, auditEventService, authorizationService, null);
     }
 
     public PageResponse<FacilityWorkOrderRecord> list() {
@@ -232,6 +244,23 @@ public class FacilityWorkOrderService {
                 "设备告警: " + requireText(event.equipmentName(), "equipment_name"), event.note(),
                 "equipment_alarm", null, event.equipmentId(), "system", "system", null, null, null);
         createInternal(request, null);
+    }
+
+    @EventListener
+    @Transactional
+    public void onInspectionAbnormal(FacilityInspectionAbnormalEvent event) {
+        authorizationService.requirePlatformScope();
+        String taskId = requireText(event.taskId(), "task_id");
+        FacilityWorkOrderRequest request = new FacilityWorkOrderRequest("rectification", "normal",
+                "巡检异常整改: " + requireText(event.title(), "title"), event.abnormalNote(),
+                "inspection", event.spaceId(), null, trimToNull(event.inspectorId()), "staff",
+                event.projectId(), null, null);
+        FacilityWorkOrderRecord workOrder = createInternal(request, null);
+        if (inspectionRepository != null) {
+            inspectionRepository.updateTaskWorkOrderId(taskId, workOrder.id(), Instant.now());
+            auditEventService.recordSuccess("facility.inspection_work_order_linked", INSPECTION_PERM,
+                    INSPECTION_TASK_BUSINESS_TYPE, taskId, null, null, Map.of("work_order_id", workOrder.id()));
+        }
     }
 
     private FacilityWorkOrderRecord createInternal(FacilityWorkOrderRequest request, String idempotencyKey) {

@@ -1,0 +1,34 @@
+package com.complex.platform.facility;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+public interface FacilityInspectionRepository {
+    List<FacilityInspectionTemplateRecord> listTemplates();
+
+    List<FacilityInspectionTemplateRecord> listSchedulableTemplates();
+
+    Optional<FacilityInspectionTemplateRecord> findTemplateById(String id);
+
+    void insertTemplate(FacilityInspectionTemplateRecord record);
+
+    List<FacilityInspectionTaskRecord> listTasks();
+
+    Optional<FacilityInspectionTaskRecord> findTaskById(String id);
+
+    Optional<LocalDate> latestScheduledDateForTemplate(String templateId);
+
+    boolean existsTaskForTemplateDate(String templateId, LocalDate scheduledDate);
+
+    void insertTask(FacilityInspectionTaskRecord record);
+
+    void updateTask(FacilityInspectionTaskRecord record);
+
+    void updateTaskWorkOrderId(String taskId, String workOrderId, Instant updatedAt);
+
+    void insertRecord(FacilityInspectionRecordRecord record);
+
+    List<FacilityInspectionRecordRecord> listRecords(String taskId);
+}
