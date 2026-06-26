@@ -141,6 +141,18 @@ public interface AccessRepository {
         return Optional.empty();
     }
 
+    default AccessGrantRequestRecord saveGrantRequest(AccessGrantRequestRecord request) {
+        throw new UnsupportedOperationException("saveGrantRequest not supported by this repository");
+    }
+
+    default Optional<AccessGrantRequestRecord> findGrantRequestById(String id) {
+        return Optional.empty();
+    }
+
+    default List<AccessGrantRequestRecord> listGrantRequests(Instant createdAtFrom) {
+        return List.of();
+    }
+
     /** 职级定义列表（参考数据，平台全局）。默认空，JdbcAccessRepository 覆盖。 */
     default List<StaffLevelRecord> listStaffLevels() {
         return List.of();

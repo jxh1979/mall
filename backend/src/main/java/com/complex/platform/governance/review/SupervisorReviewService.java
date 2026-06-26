@@ -37,7 +37,10 @@ public class SupervisorReviewService {
             new SupervisorReviewPolicyRecord("refund_l2", "refund", 1, 2, true, List.of("reason"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
             new SupervisorReviewPolicyRecord("ar_ap_adjustment_l3", "ar_ap_adjustment", 1, 3, true, List.of("reason", "before_after"), "active", "specific_role", DEFAULT_SPECIFIC_ROLE_PERMISSION),
             new SupervisorReviewPolicyRecord("contract_violation_l3", "contract_violation", 0, 3, true, List.of("violation_summary", "contract_snapshot"), "active", "two_levels_up"),
-            new SupervisorReviewPolicyRecord("base_definition_violation_l3", "base_definition_violation", 0, 3, true, List.of("violation_summary", "definition_snapshot"), "active", "top_authority")
+            new SupervisorReviewPolicyRecord("base_definition_violation_l3", "base_definition_violation", 0, 3, true, List.of("violation_summary", "definition_snapshot"), "active", "top_authority"),
+            new SupervisorReviewPolicyRecord("permission_grant_l1", "permission_grant_l1", 0, 1, true, List.of("reason"), "active", "one_level_up"),
+            new SupervisorReviewPolicyRecord("permission_grant_l2", "permission_grant_l2", 0, 2, true, List.of("reason"), "active", "two_levels_up"),
+            new SupervisorReviewPolicyRecord("permission_grant_l3", "permission_grant_l3", 0, 3, true, List.of("reason"), "active", "top_authority")
     );
 
     public SupervisorReviewService(

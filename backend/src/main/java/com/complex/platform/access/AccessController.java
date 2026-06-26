@@ -1,6 +1,8 @@
 package com.complex.platform.access;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.access.dto.AccessGrantApplyRequest;
+import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -109,6 +112,42 @@ public class AccessController {
         authorizationService.requirePermission("access.role.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.unassignUserRole(request));
+    }
+
+    @PostMapping("/grant-requests")
+    public ApiResponse<AccessGrantRequestRecord> applyGrant(@RequestBody AccessGrantApplyRequest request) {
+        authorizationService.requirePermission("access.grant_request.apply");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.applyGrant(request));
+    }
+
+    @GetMapping("/grant-requests")
+    public ApiResponse<PageResponse<AccessGrantRequestRecord>> listGrantRequests(
+            @RequestParam(name = "window_days", required = false) Integer windowDays
+    ) {
+        authorizationService.requirePermission("access.grant_request.view");
+        return ApiResponse.ok(service.listGrantRequests(windowDays));
+    }
+
+    @PostMapping("/grant-requests/{id}/review")
+    public ApiResponse<AccessGrantRequestRecord> reviewGrant(
+            @PathVariable String id,
+            @RequestBody AccessGrantReviewRequest request
+    ) {
+        authorizationService.requirePermission("access.grant_request.review");
+        authorizationService.requirePermission("governance.supervisor_review.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reviewGrant(id, request));
+    }
+
+    @GetMapping("/grant-requests/summary")
+    public ApiResponse<AccessGrantSummary> grantSummary(
+            @RequestParam(name = "window_days", required = false) Integer windowDays,
+            @RequestParam(name = "position_threshold", required = false) Integer positionThreshold,
+            @RequestParam(name = "user_threshold", required = false) Integer userThreshold
+    ) {
+        authorizationService.requirePermission("access.grant_request.view");
+        return ApiResponse.ok(service.grantSummary(windowDays, positionThreshold, userThreshold));
     }
 
     @GetMapping("/position-role-templates")

@@ -11,6 +11,8 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.access.dto.AccessGrantApplyRequest;
+import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
@@ -20,6 +22,9 @@ import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
 import com.complex.platform.access.dto.UserPositionAssignmentRequest;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewRepository;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,6 +46,7 @@ class AccessServiceTests {
     private InMemoryAccessRepository accessRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private RecordingCredentialProvisioner credentialProvisioner;
+    private AuthorizationService authorizationService;
     private AccessService service;
 
     @BeforeEach
@@ -48,16 +54,10 @@ class AccessServiceTests {
         accessRepository = new InMemoryAccessRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
         credentialProvisioner = new RecordingCredentialProvisioner();
-        accessRepository.knownPermissions.add("ops.production_readiness.view");
-        accessRepository.knownPermissions.add("ops.production_readiness.check");
-        AuthorizationService authorizationService = new AuthorizationService(accessRepository);
-        service = new AccessService(
-                accessRepository,
-                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                new AuditEventService(auditEventRepository),
-                authorizationService,
-                credentialProvisioner
-        );
+        accessRepository.addPermission("ops.production_readiness.view", "medium", false);
+        accessRepository.addPermission("ops.production_readiness.check", "high", false);
+        authorizationService = new AuthorizationService(accessRepository);
+        service = newAccessService(false, null);
         authenticateAsPlatformAdmin("seed-org");
     }
 
@@ -445,6 +445,180 @@ class AccessServiceTests {
                 });
     }
 
+    @Test
+    void assignUserRoleRequiresApprovalWhenHighRiskGrantFlagIsEnabled() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        service = newAccessService(true, null);
+        accessRepository.users.put("usr_high_risk_target", new AccessUser(
+                "usr_high_risk_target", "high-risk-target", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"),
+                null));
+
+        assertThatThrownBy(() -> service.assignUserRole(new RoleAssignmentRequest(
+                "assign-high-risk-direct", null, "usr_high_risk_target", "role_ops_check")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL");
+                });
+        assertThat(accessRepository.userRoles.getOrDefault("usr_high_risk_target", Set.of()))
+                .doesNotContain("role_ops_check");
+    }
+
+    @Test
+    void assignUserPositionRequiresApprovalWhenMappedRoleOrTemplateIsHighRisk() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        service = newAccessService(true, null);
+        accessRepository.users.put("usr_position_high_risk", new AccessUser(
+                "usr_position_high_risk", "position-high-risk", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"),
+                null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(
+                        "tpl_ops_check",
+                        "ops.production_readiness.check",
+                        AccessRepository.Effect.GRANT,
+                        "project",
+                        false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-high-risk-position", null, "ops_manager", "lvl_m1_lower",
+                "role_ops_check", "tpl_ops_check", "active"));
+
+        assertThatThrownBy(() -> service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-high-risk-position", null, "usr_position_high_risk", "ops_manager", "lvl_m1_lower",
+                null, null, null))).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status().value()).isEqualTo(403);
+            assertThat(e.code()).isEqualTo("GRANT_REQUIRES_APPROVAL");
+        });
+        assertThat(accessRepository.findUserPositionAssignment("usr_position_high_risk")).isEmpty();
+    }
+
+    @Test
+    void grantRequestRejectsPermissionsThatDoNotRequireApproval() {
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_low_risk_target", new AccessUser(
+                "usr_low_risk_target", "low-risk-target", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_view", new RoleRecord(
+                "role_ops_view", "ops_view", "Ops viewer", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.view"),
+                null));
+
+        assertThatThrownBy(() -> service.applyGrant(new AccessGrantApplyRequest(
+                "apply-low-risk", null, List.of(), "user_role", "usr_low_risk_target",
+                "role_ops_view", null, null, null, null, null, null,
+                null, null, false, "not high risk")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(400);
+                    assertThat(e.code()).isEqualTo("GRANT_APPROVAL_NOT_REQUIRED");
+                });
+        assertThat(reviewRepository.reviews).isEmpty();
+    }
+
+    @Test
+    void approvedUserRoleGrantRequestUsesSupervisorReviewAndLandsAssignment() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_grant_target", new AccessUser(
+                "usr_grant_target", "grant-target", "staff", "org_a", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"),
+                null));
+        accessRepository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                "usr_admin", "lvl_m10_upper", null, "CNY", null, "seed-org", null,
+                "test", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_requester", "requester", "org_a");
+
+        AccessGrantRequestRecord pending = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-grant-role", "need checker", List.of(), "user_role",
+                "usr_grant_target", "role_ops_check", null, null, null, null, null,
+                null, null, null, false, "need checker"));
+
+        assertThat(pending.status()).isEqualTo("pending");
+        assertThat(reviewRepository.reviews.get(pending.reviewId()).policyCode()).isEqualTo("permission_grant_l2");
+
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord applied = service.reviewGrant(pending.id(), new AccessGrantReviewRequest(
+                "review-grant-role", "approve", List.of(), "approve", "ok"));
+
+        assertThat(applied.status()).isEqualTo("applied");
+        assertThat(accessRepository.userRoles.get("usr_grant_target")).contains("role_ops_check");
+    }
+
+    @Test
+    void approvedTemporaryGrantExpiresByEffectivePermissionRead() {
+        accessRepository.markRequiresApproval("ops.production_readiness.check", "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_temp_target", new AccessUser(
+                "usr_temp_target", "temp-target", "staff", "org_a", "merchant_a", "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                "usr_admin", "lvl_m10_upper", null, "CNY", null, "seed-org", null,
+                "test", Instant.parse("2026-06-14T00:00:00Z")));
+        authenticateAsOrgUser("usr_requester", "requester", "org_a");
+
+        AccessGrantRequestRecord pending = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-temp-expired", "temporary", List.of(), "temporary_permission",
+                "usr_temp_target", null, null, null, null, null, null,
+                List.of("ops.production_readiness.check"),
+                Instant.parse("2020-01-01T00:00:00Z"),
+                Instant.parse("2020-01-02T00:00:00Z"),
+                false,
+                "break glass"));
+
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord applied = service.reviewGrant(pending.id(), new AccessGrantReviewRequest(
+                "review-temp-expired", "approve", List.of(), "approve", "ok"));
+
+        assertThat(applied.status()).isEqualTo("applied");
+        assertThat(accessRepository.temporaryGrants.values()).hasSize(1);
+        assertThat(authorizationService.effectivePermissionsForUser("usr_temp_target").grants())
+                .doesNotContain("ops.production_readiness.check");
+    }
+
+    @Test
+    void grantSummaryReportsFrequentTemporaryRequestsByPositionAndUser() {
+        Instant now = Instant.now();
+        accessRepository.users.put("usr_summary", new AccessUser(
+                "usr_summary", "summary", "staff", "seed-org", null, "active", now));
+        accessRepository.grantRequests.put("agr_summary_1", temporaryGrantRequest(
+                "agr_summary_1", "usr_summary", "cashier", "lvl_m1_lower", "ops.production_readiness.check", now));
+        accessRepository.grantRequests.put("agr_summary_2", temporaryGrantRequest(
+                "agr_summary_2", "usr_summary", "cashier", "lvl_m1_lower", "ops.production_readiness.check", now));
+
+        AccessGrantSummary summary = service.grantSummary(30, 2, 2);
+
+        assertThat(summary.positionRecommendations())
+                .extracting(AccessGrantPositionSummary::positionCode,
+                        AccessGrantPositionSummary::staffLevelId,
+                        AccessGrantPositionSummary::permissionCode,
+                        AccessGrantPositionSummary::requestCount)
+                .contains(org.assertj.core.groups.Tuple.tuple(
+                        "cashier", "lvl_m1_lower", "ops.production_readiness.check", 2L));
+        assertThat(summary.userAnomalies())
+                .extracting(AccessGrantUserSummary::userId, AccessGrantUserSummary::requestCount)
+                .contains(org.assertj.core.groups.Tuple.tuple("usr_summary", 2L));
+    }
+
     // ── P1: applyPermissionTemplate 跨组织校验 ─────────────────────────────
 
     @Test
@@ -631,6 +805,65 @@ class AccessServiceTests {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
+    private AccessGrantRequestRecord temporaryGrantRequest(
+            String id,
+            String userId,
+            String positionCode,
+            String staffLevelId,
+            String permissionCode,
+            Instant createdAt
+    ) {
+        return new AccessGrantRequestRecord(
+                id,
+                "temporary_permission",
+                userId,
+                null,
+                null,
+                positionCode,
+                staffLevelId,
+                null,
+                null,
+                null,
+                List.of(permissionCode),
+                createdAt,
+                createdAt.plusSeconds(3600),
+                false,
+                "applied",
+                "review_" + id,
+                "summary",
+                "usr_requester",
+                "usr_admin",
+                createdAt,
+                null,
+                null,
+                createdAt,
+                createdAt
+        );
+    }
+
+    private AccessService newAccessService(boolean grantApprovalEnabled, SupervisorReviewService supervisorReviewService) {
+        return new AccessService(
+                accessRepository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                authorizationService,
+                credentialProvisioner,
+                supervisorReviewService,
+                grantApprovalEnabled,
+                3,
+                3
+        );
+    }
+
+    private SupervisorReviewService supervisorReviewService(InMemorySupervisorReviewRepository reviewRepository) {
+        return new SupervisorReviewService(
+                authorizationService,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository)
+        );
+    }
+
     private void authenticateAsPlatformAdmin(String organizationId) {
         AuthService.UserRecord user = new AuthService.UserRecord(
                 "usr_admin", "seed-admin", "hash", "platform_admin", organizationId, null, "active",
@@ -674,10 +907,11 @@ class AccessServiceTests {
     }
 
     private static final class InMemoryAccessRepository implements AccessRepository {
-        final List<String> knownPermissions = new ArrayList<>();
+        final Map<String, PermissionDefinition> permissions = new LinkedHashMap<>();
         final Map<String, PermissionTemplate> templates = new LinkedHashMap<>();
         final Map<String, List<PermissionTemplateItem>> items = new LinkedHashMap<>();
         final Map<String, TemporaryGrant> temporaryGrants = new LinkedHashMap<>();
+        final Map<String, AccessGrantRequestRecord> grantRequests = new LinkedHashMap<>();
         final Map<String, AccessUser> users = new LinkedHashMap<>();
         final Map<String, RoleRecord> roles = new LinkedHashMap<>();
         final Map<String, Set<String>> userRoles = new LinkedHashMap<>();
@@ -713,21 +947,27 @@ class AccessServiceTests {
 
         @Override
         public boolean permissionExists(String permissionCode) {
-            return knownPermissions.contains(permissionCode);
+            return permissions.containsKey(permissionCode);
         }
 
         @Override
         public List<PermissionDefinition> listPermissions() {
-            return knownPermissions.stream()
-                    .map(permissionCode -> new PermissionDefinition(
-                            permissionCode,
-                            permissionCode,
-                            "ops",
-                            "medium",
-                            false,
-                            "active"
-                    ))
-                    .toList();
+            return new ArrayList<>(permissions.values());
+        }
+
+        void addPermission(String permissionCode, String riskLevel, boolean requiresApproval) {
+            permissions.put(permissionCode, new PermissionDefinition(
+                    permissionCode,
+                    permissionCode,
+                    "ops",
+                    riskLevel,
+                    requiresApproval,
+                    "active"
+            ));
+        }
+
+        void markRequiresApproval(String permissionCode, String riskLevel) {
+            addPermission(permissionCode, riskLevel, true);
         }
 
         @Override
@@ -923,6 +1163,24 @@ class AccessServiceTests {
         }
 
         @Override
+        public AccessGrantRequestRecord saveGrantRequest(AccessGrantRequestRecord request) {
+            grantRequests.put(request.id(), request);
+            return request;
+        }
+
+        @Override
+        public Optional<AccessGrantRequestRecord> findGrantRequestById(String id) {
+            return Optional.ofNullable(grantRequests.get(id));
+        }
+
+        @Override
+        public List<AccessGrantRequestRecord> listGrantRequests(Instant createdAtFrom) {
+            return grantRequests.values().stream()
+                    .filter(request -> createdAtFrom == null || !request.createdAt().isBefore(createdAtFrom))
+                    .toList();
+        }
+
+        @Override
         public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
             List<PermissionEffect> effects = new ArrayList<>();
             for (String roleId : userRoles.getOrDefault(userId, Set.of())) {
@@ -962,12 +1220,46 @@ class AccessServiceTests {
                     ));
                 }
             }
+            for (TemporaryGrant grant : temporaryGrants.values()) {
+                if (!userId.equals(grant.targetUserId()) || !"active".equals(grant.status())) {
+                    continue;
+                }
+                for (String permissionCode : grant.permissionCodes()) {
+                    effects.add(new PermissionEffect(
+                            userId,
+                            permissionCode,
+                            Effect.GRANT,
+                            Source.TEMPORARY_GRANT,
+                            grant.id(),
+                            grant.validFrom(),
+                            grant.validUntil(),
+                            grant.singleUse(),
+                            grant.consumed()
+                    ));
+                }
+            }
             return effects;
         }
 
         @Override
         public boolean markSingleUsePermissionConsumed(String sourceId, String permissionCode, String userId, Instant consumedAt) {
             return true;
+        }
+    }
+
+    private static final class InMemorySupervisorReviewRepository implements SupervisorReviewRepository {
+        final Map<String, SupervisorReviewDecisionRecord> reviews = new LinkedHashMap<>();
+
+        @Override
+        public SupervisorReviewDecisionRecord saveSupervisorReview(SupervisorReviewDecisionRecord record) {
+            reviews.put(record.reviewId(), record);
+            return record;
+        }
+
+        @Override
+        public Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId) {
+            return Optional.ofNullable(reviews.get(reviewId))
+                    .filter(review -> "pending_review".equals(review.reviewStatus()));
         }
     }
 

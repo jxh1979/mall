@@ -643,6 +643,89 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public AccessGrantRequestRecord saveGrantRequest(AccessGrantRequestRecord request) {
+        jdbcTemplate.update("""
+                INSERT INTO access_grant_requests (
+                    id, request_type, target_user_id, target_role_id, template_id, position_code,
+                    staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                    permission_codes, valid_from, expires_at, single_use, status, review_id,
+                    reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                    created_at, updated_at
+                )
+                VALUES (
+                    :id, :request_type, :target_user_id, :target_role_id, :template_id, :position_code,
+                    :staff_level_id, :base_salary_amount_cent, :salary_currency, :salary_detail,
+                    :permission_codes, :valid_from, :expires_at, :single_use, :status, :review_id,
+                    :reason, :requested_by, :decided_by, :decided_at, :project_id, :merchant_id,
+                    :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    request_type = EXCLUDED.request_type,
+                    target_user_id = EXCLUDED.target_user_id,
+                    target_role_id = EXCLUDED.target_role_id,
+                    template_id = EXCLUDED.template_id,
+                    position_code = EXCLUDED.position_code,
+                    staff_level_id = EXCLUDED.staff_level_id,
+                    base_salary_amount_cent = EXCLUDED.base_salary_amount_cent,
+                    salary_currency = EXCLUDED.salary_currency,
+                    salary_detail = EXCLUDED.salary_detail,
+                    permission_codes = EXCLUDED.permission_codes,
+                    valid_from = EXCLUDED.valid_from,
+                    expires_at = EXCLUDED.expires_at,
+                    single_use = EXCLUDED.single_use,
+                    status = EXCLUDED.status,
+                    review_id = EXCLUDED.review_id,
+                    reason = EXCLUDED.reason,
+                    decided_by = EXCLUDED.decided_by,
+                    decided_at = EXCLUDED.decided_at,
+                    project_id = EXCLUDED.project_id,
+                    merchant_id = EXCLUDED.merchant_id,
+                    updated_at = EXCLUDED.updated_at
+                """, grantRequestParameters(request));
+        return request;
+    }
+
+    @Override
+    public Optional<AccessGrantRequestRecord> findGrantRequestById(String id) {
+        List<AccessGrantRequestRecord> result = jdbcTemplate.query("""
+                SELECT id, request_type, target_user_id, target_role_id, template_id, position_code,
+                       staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       permission_codes, valid_from, expires_at, single_use, status, review_id,
+                       reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                       created_at, updated_at
+                  FROM access_grant_requests
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapGrantRequest);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public List<AccessGrantRequestRecord> listGrantRequests(Instant createdAtFrom) {
+        if (createdAtFrom == null) {
+            return jdbcTemplate.query("""
+                    SELECT id, request_type, target_user_id, target_role_id, template_id, position_code,
+                           staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                           permission_codes, valid_from, expires_at, single_use, status, review_id,
+                           reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                           created_at, updated_at
+                      FROM access_grant_requests
+                     ORDER BY created_at DESC, id
+                    """, this::mapGrantRequest);
+        }
+        return jdbcTemplate.query("""
+                SELECT id, request_type, target_user_id, target_role_id, template_id, position_code,
+                       staff_level_id, base_salary_amount_cent, salary_currency, salary_detail,
+                       permission_codes, valid_from, expires_at, single_use, status, review_id,
+                       reason, requested_by, decided_by, decided_at, project_id, merchant_id,
+                       created_at, updated_at
+                  FROM access_grant_requests
+                 WHERE created_at >= :created_at_from
+                 ORDER BY created_at DESC, id
+                """, new MapSqlParameterSource()
+                .addValue("created_at_from", timestampWithTimeZone(createdAtFrom)), this::mapGrantRequest);
+    }
+
+    @Override
     public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
         List<PermissionEffect> effects = new ArrayList<>();
         effects.addAll(jdbcTemplate.query("""
@@ -793,6 +876,34 @@ class JdbcAccessRepository implements AccessRepository {
                 .addValue("revoked_at", timestampWithTimeZone(application.revokedAt()));
     }
 
+    private MapSqlParameterSource grantRequestParameters(AccessGrantRequestRecord request) {
+        return new MapSqlParameterSource()
+                .addValue("id", request.id())
+                .addValue("request_type", request.requestType())
+                .addValue("target_user_id", request.targetUserId())
+                .addValue("target_role_id", request.targetRoleId())
+                .addValue("template_id", request.templateId())
+                .addValue("position_code", request.positionCode())
+                .addValue("staff_level_id", request.staffLevelId())
+                .addValue("base_salary_amount_cent", request.baseSalaryAmountCent())
+                .addValue("salary_currency", request.salaryCurrency())
+                .addValue("salary_detail", request.salaryDetail())
+                .addValue("permission_codes", encodeEvidenceIds(request.permissionCodes()))
+                .addValue("valid_from", timestampWithTimeZone(request.validFrom()))
+                .addValue("expires_at", timestampWithTimeZone(request.expiresAt()))
+                .addValue("single_use", request.singleUse())
+                .addValue("status", request.status())
+                .addValue("review_id", request.reviewId())
+                .addValue("reason", request.reason())
+                .addValue("requested_by", request.requestedBy())
+                .addValue("decided_by", request.decidedBy())
+                .addValue("decided_at", timestampWithTimeZone(request.decidedAt()))
+                .addValue("project_id", request.projectId())
+                .addValue("merchant_id", request.merchantId())
+                .addValue("created_at", timestampWithTimeZone(request.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(request.updatedAt()));
+    }
+
     private PermissionDefinition mapPermission(ResultSet resultSet, int rowNumber) throws SQLException {
         return new PermissionDefinition(
                 resultSet.getString("permission_code"),
@@ -928,6 +1039,37 @@ class JdbcAccessRepository implements AccessRepository {
                 resultSet.getString("merchant_id"),
                 resultSet.getString("assigned_by"),
                 nullableInstant(resultSet, "assigned_at")
+        );
+    }
+
+    private AccessGrantRequestRecord mapGrantRequest(ResultSet resultSet, int rowNumber) throws SQLException {
+        long salary = resultSet.getLong("base_salary_amount_cent");
+        Long baseSalary = resultSet.wasNull() ? null : salary;
+        return new AccessGrantRequestRecord(
+                resultSet.getString("id"),
+                resultSet.getString("request_type"),
+                resultSet.getString("target_user_id"),
+                resultSet.getString("target_role_id"),
+                resultSet.getString("template_id"),
+                resultSet.getString("position_code"),
+                resultSet.getString("staff_level_id"),
+                baseSalary,
+                resultSet.getString("salary_currency"),
+                resultSet.getString("salary_detail"),
+                decodeEvidenceIds(resultSet.getString("permission_codes")),
+                nullableInstant(resultSet, "valid_from"),
+                nullableInstant(resultSet, "expires_at"),
+                resultSet.getBoolean("single_use"),
+                resultSet.getString("status"),
+                resultSet.getString("review_id"),
+                resultSet.getString("reason"),
+                resultSet.getString("requested_by"),
+                resultSet.getString("decided_by"),
+                nullableInstant(resultSet, "decided_at"),
+                resultSet.getString("project_id"),
+                resultSet.getString("merchant_id"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
         );
     }
 

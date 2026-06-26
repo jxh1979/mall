@@ -1,5 +1,7 @@
 package com.complex.platform.access;
 
+import com.complex.platform.access.dto.AccessGrantApplyRequest;
+import com.complex.platform.access.dto.AccessGrantReviewRequest;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
@@ -14,11 +16,20 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -27,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,12 +48,19 @@ public class AccessService {
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> ALLOWED_ACCOUNT_TYPES = Set.of("staff", "merchant", "merchant_admin", "supervisor", "sales");
+    private static final String REQUEST_USER_ROLE = "user_role";
+    private static final String REQUEST_USER_POSITION = "user_position";
+    private static final String REQUEST_TEMPORARY_PERMISSION = "temporary_permission";
 
     private final AccessRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final AccessCredentialProvisioner credentialProvisioner;
+    private final SupervisorReviewService supervisorReviewService;
+    private final boolean grantApprovalEnabled;
+    private final int summaryPositionThreshold;
+    private final int summaryUserThreshold;
 
     @Autowired
     public AccessService(
@@ -49,10 +68,16 @@ public class AccessService {
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
             AuthorizationService authorizationService,
-            ObjectProvider<AccessCredentialProvisioner> credentialProvisioner
+            ObjectProvider<AccessCredentialProvisioner> credentialProvisioner,
+            ObjectProvider<SupervisorReviewService> supervisorReviewService,
+            @Value("${access.grant_approval.enabled:false}") boolean grantApprovalEnabled,
+            @Value("${access.grant_approval.summary.position_threshold:3}") int summaryPositionThreshold,
+            @Value("${access.grant_approval.summary.user_threshold:3}") int summaryUserThreshold
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                credentialProvisioner.getIfAvailable(AccessCredentialProvisioner::noop));
+                credentialProvisioner.getIfAvailable(AccessCredentialProvisioner::noop),
+                supervisorReviewService.getIfAvailable(), grantApprovalEnabled,
+                summaryPositionThreshold, summaryUserThreshold);
     }
 
     AccessService(
@@ -61,7 +86,8 @@ public class AccessService {
             AuditEventService auditEventService,
             AuthorizationService authorizationService
     ) {
-        this(repository, idempotencyService, auditEventService, authorizationService, AccessCredentialProvisioner.noop());
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                AccessCredentialProvisioner.noop(), null, false, 3, 3);
     }
 
     AccessService(
@@ -71,11 +97,30 @@ public class AccessService {
             AuthorizationService authorizationService,
             AccessCredentialProvisioner credentialProvisioner
     ) {
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                credentialProvisioner, null, false, 3, 3);
+    }
+
+    AccessService(
+            AccessRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            AccessCredentialProvisioner credentialProvisioner,
+            SupervisorReviewService supervisorReviewService,
+            boolean grantApprovalEnabled,
+            int summaryPositionThreshold,
+            int summaryUserThreshold
+    ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.credentialProvisioner = credentialProvisioner == null ? AccessCredentialProvisioner.noop() : credentialProvisioner;
+        this.supervisorReviewService = supervisorReviewService;
+        this.grantApprovalEnabled = grantApprovalEnabled;
+        this.summaryPositionThreshold = Math.max(1, summaryPositionThreshold);
+        this.summaryUserThreshold = Math.max(1, summaryUserThreshold);
     }
 
     public PageResponse<PermissionTemplate> listPermissionTemplates() {
@@ -301,25 +346,7 @@ public class AccessService {
                     "assignUserRole:" + trimToDefault(r.userId(), "") + ":" + trimToDefault(r.roleId(), ""),
                     r.idempotencyKey(),
                     r,
-                    () -> {
-                        AccessActor actor = authorizationService.currentActor();
-                        AccessUser targetUser = requireTargetUser(requireText(r.userId(), "user_id"));
-                        RoleRecord role = requireRole(requireText(r.roleId(), "role_id"));
-                        requireSameOrganization(actor, targetUser);
-                        requireRoleAssignableToTarget(role, targetUser);
-                        requireActorCanGrant(role.permissionCodes());
-                        RoleAssignmentRecord saved = repository.assignUserRole(targetUser.id(), role.id());
-                        auditEventService.recordSuccess(
-                                "access.role.assigned",
-                                "access.role.assign",
-                                "user_role",
-                                targetUser.id() + ":" + role.id(),
-                                null,
-                                r.idempotencyKey(),
-                                Map.of("role_id", role.id())
-                        );
-                        return saved;
-                    },
+                    () -> assignUserRoleDirect(r, true),
                     RoleAssignmentRecord.class
             );
         } catch (RuntimeException exception) {
@@ -471,91 +498,7 @@ public class AccessService {
                     "assignUserPosition:" + trimToDefault(r.userId(), ""),
                     r.idempotencyKey(),
                     r,
-                    () -> {
-                        AccessActor actor = authorizationService.currentActor();
-                        String userId = requireText(r.userId(), "user_id");
-                        String staffLevelId = requireText(r.staffLevelId(), "staff_level_id");
-                        String positionCode = requireText(r.positionCode(), "position_code");
-                        AccessUser targetUser = requireTargetUser(userId);
-                        requireSameOrganization(actor, targetUser);
-                        if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
-                            throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
-                                    "unknown staff_level_id: " + staffLevelId);
-                        }
-                        PositionRoleTemplate mapping = repository.findPositionRoleTemplate(
-                                        targetUser.organizationId(), positionCode, staffLevelId)
-                                .orElseThrow(() -> ApiException.notFound("POSITION_ROLE_TEMPLATE_NOT_FOUND",
-                                        "position role template not found for " + positionCode + "/" + staffLevelId));
-                        RoleRecord role = requireRole(mapping.roleId());
-                        PermissionTemplate template = repository.findTemplateById(mapping.templateId())
-                                .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND",
-                                        "permission template not found: " + mapping.templateId()));
-                        requireRoleAssignableToTarget(role, targetUser);
-                        requireTemplateAssignableToTarget(template, targetUser);
-                        requireActorCanGrant(role.permissionCodes());
-                        requireActorCanGrant(repository.findTemplateItems(template.id()).stream()
-                                .map(PermissionTemplateItem::permissionCode)
-                                .toList());
-                        String currency = trimToDefault(r.salaryCurrency(), "CNY");
-                        if (!"CNY".equals(currency)) {
-                            throw ApiException.badRequest("UNSUPPORTED_CURRENCY",
-                                    "P0 only supports CNY salary currency, got: " + currency);
-                        }
-                        if (r.baseSalaryAmountCent() != null && r.baseSalaryAmountCent() < 0) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "baseSalaryAmountCent must be >= 0");
-                        }
-                        Instant now = Instant.now();
-                        StaffLevelAssignment staffLevelAssignment = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
-                                targetUser.id(),
-                                staffLevelId,
-                                r.baseSalaryAmountCent(),
-                                currency,
-                                r.salaryDetail(),
-                                targetUser.organizationId(),
-                                targetUser.merchantId(),
-                                actor.id(),
-                                now
-                        ));
-                        UserPositionAssignment assignment = repository.saveUserPositionAssignment(new UserPositionAssignment(
-                                targetUser.id(),
-                                positionCode,
-                                staffLevelId,
-                                targetUser.organizationId(),
-                                targetUser.merchantId(),
-                                actor.id(),
-                                now
-                        ));
-                        repository.assignUserRole(targetUser.id(), role.id());
-                        List<PermissionTemplateApplication> applications = repository.applyTemplate(
-                                template.id(),
-                                List.of(targetUser.id()),
-                                template.validFrom(),
-                                template.validUntil(),
-                                template.singleUse(),
-                                actor.id()
-                        );
-                        auditEventService.recordSuccess(
-                                "access.user_position.assigned",
-                                "access.role.assign",
-                                "user_position_assignment",
-                                targetUser.id(),
-                                null,
-                                r.idempotencyKey(),
-                                Map.of(
-                                        "position_code", positionCode,
-                                        "staff_level_id", staffLevelId,
-                                        "role_id", role.id(),
-                                        "template_id", template.id()
-                                )
-                        );
-                        return new UserPositionAssignmentResult(
-                                assignment,
-                                staffLevelAssignment,
-                                role.id(),
-                                template.id(),
-                                applications.size()
-                        );
-                    },
+                    () -> assignUserPositionDirect(r, true),
                     UserPositionAssignmentResult.class
             );
         } catch (RuntimeException exception) {
@@ -597,49 +540,7 @@ public class AccessService {
                     "createTemporaryGrant",
                     request.idempotencyKey(),
                     request,
-                    () -> {
-                        requireKnownPermissions(request.permissionCodes());
-                        // P0 A-01：临时授权必须校验目标用户租户归属，禁止跨组织/向平台用户越权授权
-                        // （与 applyPermissionTemplate 同范式，fail-closed）。
-                        if (!authorizationService.isPlatformAdmin(actor)) {
-                            AccessUser targetUser = repository.findUserById(request.targetUserId())
-                                    .orElseThrow(() -> ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                            "target user not found in your organization: " + request.targetUserId()));
-                            if (actor.organizationId() == null
-                                    || !actor.organizationId().equals(targetUser.organizationId())) {
-                                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
-                                        "cannot grant to a user in another organization: " + request.targetUserId());
-                            }
-                        }
-                        // P0-1：临时授权不得授予超出授权人自身有效权限的权限码（提权防护）。
-                        requireActorCanGrant(request.permissionCodes());
-                        TemporaryGrant grant = new TemporaryGrant(
-                                UUID.randomUUID().toString(),
-                                request.targetUserId(),
-                                safeList(request.permissionCodes()),
-                                request.validFrom() == null ? Instant.now() : request.validFrom(),
-                                request.validUntil(),
-                                Boolean.TRUE.equals(request.singleUse()),
-                                false,
-                                "active",
-                                request.reason(),
-                                "access-api",
-                                Instant.now(),
-                                null,
-                                null
-                        );
-                        TemporaryGrant saved = repository.createTemporaryGrant(grant);
-                        auditEventService.recordSuccess(
-                                "permission_template.applied",
-                                "access.temporary_grant.create",
-                                "temporary_permission_grant",
-                                saved.id(),
-                                null,
-                                request.idempotencyKey(),
-                                Map.of("permission_count", saved.permissionCodes().size())
-                        );
-                        return saved;
-                    },
+                    () -> createTemporaryGrantDirect(request, true),
                     TemporaryGrant.class
             );
         } catch (RuntimeException exception) {
@@ -701,6 +602,209 @@ public class AccessService {
             );
             throw exception;
         }
+    }
+
+    @Transactional
+    public AccessGrantRequestRecord applyGrant(AccessGrantApplyRequest request) {
+        AccessGrantApplyRequest r = requireRequest(request);
+        try {
+            return idempotencyService.execute(
+                    "accessGrantApply:" + trimToDefault(r.requestType(), ""),
+                    r.idempotencyKey(),
+                    r,
+                    () -> {
+                        AccessGrantRequestRecord draft = buildGrantRequest(r);
+                        List<PermissionDefinition> approvalRequired = approvalRequiredPermissions(draft.permissionCodes());
+                        if (approvalRequired.isEmpty()) {
+                            throw ApiException.badRequest("GRANT_APPROVAL_NOT_REQUIRED",
+                                    "target grant has no approval-required permission; assign directly");
+                        }
+                        GrantReviewPolicy policy = grantReviewPolicy(approvalRequired.stream()
+                                .map(PermissionDefinition::permissionCode)
+                                .toList());
+                        SupervisorReviewDecisionRecord review = requireSupervisorReviewService().blockForAdmission(
+                                policy.policyCode(),
+                                policy.policyCode(),
+                                "access_grant_request",
+                                draft.id(),
+                                policy.approvalLevel(),
+                                policy.requiredLevel()
+                        );
+                        AccessGrantRequestRecord saved = repository.saveGrantRequest(withReview(draft, review.reviewId()));
+                        auditEventService.recordSuccess(
+                                "access.grant_request.applied",
+                                "access.grant_request.apply",
+                                "access_grant_request",
+                                saved.id(),
+                                null,
+                                r.idempotencyKey(),
+                                Map.of("request_type", saved.requestType(), "review_id", saved.reviewId())
+                        );
+                        return saved;
+                    },
+                    AccessGrantRequestRecord.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.grant_request.apply_failed",
+                    "access.grant_request.apply",
+                    "access_grant_request",
+                    null,
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    @Transactional
+    public AccessGrantRequestRecord reviewGrant(String id, AccessGrantReviewRequest request) {
+        AccessGrantReviewRequest r = requireRequest(request);
+        try {
+            return idempotencyService.execute(
+                    "accessGrantReview:" + id,
+                    r.idempotencyKey(),
+                    r,
+                    () -> {
+                        AccessGrantRequestRecord pending = repository.findGrantRequestById(requireText(id, "id"))
+                                .filter(grant -> "pending".equals(grant.status()))
+                                .orElseThrow(() -> ApiException.notFound("ACCESS_GRANT_REQUEST_NOT_FOUND",
+                                        "grant request is not pending or does not exist: " + id));
+                        String decision = normalizeDecision(r.decision());
+                        SupervisorReviewDecisionRecord review = requireSupervisorReviewService().approve(
+                                pending.reviewId(),
+                                new SupervisorReviewApprovalRequest(
+                                        r.idempotencyKey(),
+                                        r.operatorNote(),
+                                        safeList(r.evidenceAttachmentIds()),
+                                        null,
+                                        "approve".equals(decision) ? "approved" : "rejected",
+                                        r.comment()
+                                )
+                        );
+                        Instant now = Instant.now();
+                        AccessActor actor = authorizationService.currentActor();
+                        AccessGrantRequestRecord reviewed;
+                        if ("reject".equals(decision)) {
+                            reviewed = repository.saveGrantRequest(withDecision(pending, "rejected", actor.id(), now));
+                        } else {
+                            applyApprovedGrant(pending, r.idempotencyKey());
+                            reviewed = repository.saveGrantRequest(withDecision(pending, "applied", actor.id(), now));
+                        }
+                        auditEventService.recordSuccess(
+                                "access.grant_request.reviewed",
+                                "access.grant_request.review",
+                                "access_grant_request",
+                                reviewed.id(),
+                                null,
+                                r.idempotencyKey(),
+                                Map.of("decision", review.decision(), "status", reviewed.status())
+                        );
+                        return reviewed;
+                    },
+                    AccessGrantRequestRecord.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.grant_request.review_failed",
+                    "access.grant_request.review",
+                    "access_grant_request",
+                    id,
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public PageResponse<AccessGrantRequestRecord> listGrantRequests(Integer windowDays) {
+        int days = windowDays == null ? 0 : Math.max(1, windowDays);
+        Instant cutoff = days == 0 ? null : Instant.now().minus(Duration.ofDays(days));
+        List<AccessGrantRequestRecord> requests = visibleGrantRequests(cutoff);
+        auditEventService.recordSuccess(
+                "access.grant_request.viewed",
+                "access.grant_request.view",
+                "access_grant_request",
+                "all",
+                null,
+                null,
+                Map.of("count", requests.size())
+        );
+        return page(requests);
+    }
+
+    public AccessGrantSummary grantSummary(Integer windowDays, Integer positionThreshold, Integer userThreshold) {
+        int days = windowDays == null ? 30 : Math.max(1, windowDays);
+        int perPositionThreshold = positionThreshold == null ? summaryPositionThreshold : Math.max(1, positionThreshold);
+        int perUserThreshold = userThreshold == null ? summaryUserThreshold : Math.max(1, userThreshold);
+        Instant cutoff = Instant.now().minus(Duration.ofDays(days));
+        List<AccessGrantRequestRecord> temporaryRequests = visibleGrantRequests(cutoff).stream()
+                .filter(request -> REQUEST_TEMPORARY_PERMISSION.equals(request.requestType()))
+                .toList();
+
+        Map<PositionSummaryKey, Long> byPosition = new HashMap<>();
+        Map<String, Long> byUser = new HashMap<>();
+        for (AccessGrantRequestRecord request : temporaryRequests) {
+            String userId = trimToDefault(request.targetUserId(), "unknown");
+            byUser.merge(userId, 1L, Long::sum);
+            PositionSummaryKey base = positionSummaryKey(request);
+            for (String permissionCode : safeList(request.permissionCodes())) {
+                byPosition.merge(new PositionSummaryKey(
+                        base.positionCode(),
+                        base.staffLevelId(),
+                        trimToDefault(permissionCode, "unknown")
+                ), 1L, Long::sum);
+            }
+        }
+
+        List<AccessGrantPositionSummary> positionRecommendations = byPosition.entrySet().stream()
+                .filter(entry -> entry.getValue() >= perPositionThreshold)
+                .sorted(Map.Entry.<PositionSummaryKey, Long>comparingByValue(Comparator.reverseOrder())
+                        .thenComparing(entry -> entry.getKey().positionCode())
+                        .thenComparing(entry -> entry.getKey().staffLevelId())
+                        .thenComparing(entry -> entry.getKey().permissionCode()))
+                .map(entry -> new AccessGrantPositionSummary(
+                        entry.getKey().positionCode(),
+                        entry.getKey().staffLevelId(),
+                        entry.getKey().permissionCode(),
+                        entry.getValue(),
+                        "frequent temporary grants; consider fixed permission"
+                ))
+                .toList();
+        List<AccessGrantUserSummary> userAnomalies = byUser.entrySet().stream()
+                .filter(entry -> entry.getValue() >= perUserThreshold)
+                .sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()).thenComparing(Map.Entry::getKey))
+                .map(entry -> new AccessGrantUserSummary(
+                        entry.getKey(),
+                        entry.getValue(),
+                        "frequent temporary permission requests; review abnormal pattern"
+                ))
+                .toList();
+        return new AccessGrantSummary(positionRecommendations, userAnomalies);
+    }
+
+    private List<AccessGrantRequestRecord> visibleGrantRequests(Instant cutoff) {
+        AccessActor actor = authorizationService.currentActor();
+        return repository.listGrantRequests(cutoff).stream()
+                .filter(request -> canViewGrantRequest(actor, request))
+                .toList();
+    }
+
+    private boolean canViewGrantRequest(AccessActor actor, AccessGrantRequestRecord request) {
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return true;
+        }
+        if (!isBlank(actor.merchantId())) {
+            return actor.merchantId().equals(request.merchantId());
+        }
+        if (isBlank(actor.organizationId()) || isBlank(request.targetUserId())) {
+            return false;
+        }
+        return repository.findUserById(request.targetUserId())
+                .map(user -> actor.organizationId().equals(user.organizationId()))
+                .orElse(false);
     }
 
     public PageResponse<AccessUser> listAccessUsers() {
@@ -935,6 +1039,532 @@ public class AccessService {
         }
     }
 
+    private RoleAssignmentRecord assignUserRoleDirect(RoleAssignmentRequest request, boolean enforceApproval) {
+        RoleGrantContext context = resolveRoleGrant(request, true);
+        if (enforceApproval) {
+            requireGrantApprovalIfNeeded(context.role().permissionCodes());
+        }
+        RoleAssignmentRecord saved = repository.assignUserRole(context.targetUser().id(), context.role().id());
+        auditEventService.recordSuccess(
+                "access.role.assigned",
+                "access.role.assign",
+                "user_role",
+                context.targetUser().id() + ":" + context.role().id(),
+                null,
+                request.idempotencyKey(),
+                Map.of("role_id", context.role().id())
+        );
+        return saved;
+    }
+
+    private UserPositionAssignmentResult assignUserPositionDirect(
+            UserPositionAssignmentRequest request,
+            boolean enforceApproval
+    ) {
+        PositionGrantContext context = resolvePositionGrant(request, true);
+        if (enforceApproval) {
+            requireGrantApprovalIfNeeded(context.permissionCodes());
+        }
+        Instant now = Instant.now();
+        StaffLevelAssignment staffLevelAssignment = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                context.targetUser().id(),
+                context.staffLevelId(),
+                request.baseSalaryAmountCent(),
+                context.salaryCurrency(),
+                request.salaryDetail(),
+                context.targetUser().organizationId(),
+                context.targetUser().merchantId(),
+                context.actor().id(),
+                now
+        ));
+        UserPositionAssignment assignment = repository.saveUserPositionAssignment(new UserPositionAssignment(
+                context.targetUser().id(),
+                context.positionCode(),
+                context.staffLevelId(),
+                context.targetUser().organizationId(),
+                context.targetUser().merchantId(),
+                context.actor().id(),
+                now
+        ));
+        repository.assignUserRole(context.targetUser().id(), context.role().id());
+        List<PermissionTemplateApplication> applications = repository.applyTemplate(
+                context.template().id(),
+                List.of(context.targetUser().id()),
+                context.template().validFrom(),
+                context.template().validUntil(),
+                context.template().singleUse(),
+                context.actor().id()
+        );
+        auditEventService.recordSuccess(
+                "access.user_position.assigned",
+                "access.role.assign",
+                "user_position_assignment",
+                context.targetUser().id(),
+                null,
+                request.idempotencyKey(),
+                Map.of(
+                        "position_code", context.positionCode(),
+                        "staff_level_id", context.staffLevelId(),
+                        "role_id", context.role().id(),
+                        "template_id", context.template().id()
+                )
+        );
+        return new UserPositionAssignmentResult(
+                assignment,
+                staffLevelAssignment,
+                context.role().id(),
+                context.template().id(),
+                applications.size()
+        );
+    }
+
+    private TemporaryGrant createTemporaryGrantDirect(TemporaryGrantRequest request, boolean enforceApproval) {
+        AccessActor actor = authorizationService.currentActor();
+        requireKnownPermissions(request.permissionCodes());
+        // P0 A-01：临时授权必须校验目标用户租户归属，禁止跨组织/向平台用户越权授权
+        // （与 applyPermissionTemplate 同范式，fail-closed）。
+        if (!authorizationService.isPlatformAdmin(actor)) {
+            AccessUser targetUser = repository.findUserById(request.targetUserId())
+                    .orElseThrow(() -> ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                            "target user not found in your organization: " + request.targetUserId()));
+            if (actor.organizationId() == null
+                    || !actor.organizationId().equals(targetUser.organizationId())) {
+                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                        "cannot grant to a user in another organization: " + request.targetUserId());
+            }
+        }
+        // P0-1：临时授权不得授予超出授权人自身有效权限的权限码（提权防护）。
+        requireActorCanGrant(request.permissionCodes());
+        if (enforceApproval) {
+            requireGrantApprovalIfNeeded(request.permissionCodes());
+        }
+        TemporaryGrant grant = new TemporaryGrant(
+                UUID.randomUUID().toString(),
+                request.targetUserId(),
+                safeList(request.permissionCodes()),
+                request.validFrom() == null ? Instant.now() : request.validFrom(),
+                request.validUntil(),
+                Boolean.TRUE.equals(request.singleUse()),
+                false,
+                "active",
+                request.reason(),
+                "access-api",
+                Instant.now(),
+                null,
+                null
+        );
+        TemporaryGrant saved = repository.createTemporaryGrant(grant);
+        auditEventService.recordSuccess(
+                "permission_template.applied",
+                "access.temporary_grant.create",
+                "temporary_permission_grant",
+                saved.id(),
+                null,
+                request.idempotencyKey(),
+                Map.of("permission_count", saved.permissionCodes().size())
+        );
+        return saved;
+    }
+
+    private AccessGrantRequestRecord buildGrantRequest(AccessGrantApplyRequest request) {
+        String type = normalizeGrantRequestType(request.requestType());
+        return switch (type) {
+            case REQUEST_USER_ROLE -> buildUserRoleGrantRequest(request);
+            case REQUEST_USER_POSITION -> buildUserPositionGrantRequest(request);
+            case REQUEST_TEMPORARY_PERMISSION -> buildTemporaryPermissionGrantRequest(request);
+            default -> throw ApiException.badRequest("VALIDATION_FAILED", "unsupported request_type: " + request.requestType());
+        };
+    }
+
+    private AccessGrantRequestRecord buildUserRoleGrantRequest(AccessGrantApplyRequest request) {
+        RoleGrantContext context = resolveRoleGrant(new RoleAssignmentRequest(
+                request.idempotencyKey(),
+                request.operatorNote(),
+                request.targetUserId(),
+                request.roleId()
+        ), false);
+        Instant now = Instant.now();
+        return new AccessGrantRequestRecord(
+                "agr_" + slug(request.idempotencyKey()),
+                REQUEST_USER_ROLE,
+                context.targetUser().id(),
+                context.role().id(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                safeList(context.role().permissionCodes()),
+                null,
+                null,
+                false,
+                "pending",
+                null,
+                trimToDefault(request.reason(), request.operatorNote()),
+                context.actor().id(),
+                null,
+                null,
+                null,
+                context.targetUser().merchantId(),
+                now,
+                now
+        );
+    }
+
+    private AccessGrantRequestRecord buildUserPositionGrantRequest(AccessGrantApplyRequest request) {
+        PositionGrantContext context = resolvePositionGrant(new UserPositionAssignmentRequest(
+                request.idempotencyKey(),
+                request.operatorNote(),
+                request.targetUserId(),
+                request.positionCode(),
+                request.staffLevelId(),
+                request.baseSalaryAmountCent(),
+                request.salaryCurrency(),
+                request.salaryDetail()
+        ), false);
+        Instant now = Instant.now();
+        return new AccessGrantRequestRecord(
+                "agr_" + slug(request.idempotencyKey()),
+                REQUEST_USER_POSITION,
+                context.targetUser().id(),
+                context.role().id(),
+                context.template().id(),
+                context.positionCode(),
+                context.staffLevelId(),
+                request.baseSalaryAmountCent(),
+                context.salaryCurrency(),
+                request.salaryDetail(),
+                context.permissionCodes(),
+                null,
+                null,
+                false,
+                "pending",
+                null,
+                trimToDefault(request.reason(), request.operatorNote()),
+                context.actor().id(),
+                null,
+                null,
+                null,
+                context.targetUser().merchantId(),
+                now,
+                now
+        );
+    }
+
+    private AccessGrantRequestRecord buildTemporaryPermissionGrantRequest(AccessGrantApplyRequest request) {
+        AccessActor actor = authorizationService.currentActor();
+        AccessUser targetUser = requireTargetUser(requireText(request.targetUserId(), "target_user_id"));
+        requireSameOrganization(actor, targetUser);
+        List<String> permissionCodes = safeList(request.permissionCodes());
+        if (permissionCodes.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "permissionCodes is required");
+        }
+        requireKnownPermissions(permissionCodes);
+        Instant expiresAt = request.expiresAt();
+        if (expiresAt == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "expires_at is required");
+        }
+        UserPositionAssignment position = repository.findUserPositionAssignment(targetUser.id()).orElse(null);
+        String staffLevelId = position == null
+                ? repository.findStaffLevelAssignment(targetUser.id()).map(StaffLevelAssignment::staffLevelId).orElse(null)
+                : position.staffLevelId();
+        Instant now = Instant.now();
+        return new AccessGrantRequestRecord(
+                "agr_" + slug(request.idempotencyKey()),
+                REQUEST_TEMPORARY_PERMISSION,
+                targetUser.id(),
+                null,
+                null,
+                position == null ? null : position.positionCode(),
+                staffLevelId,
+                null,
+                null,
+                null,
+                permissionCodes,
+                request.validFrom(),
+                expiresAt,
+                Boolean.TRUE.equals(request.singleUse()),
+                "pending",
+                null,
+                trimToDefault(request.reason(), request.operatorNote()),
+                actor.id(),
+                null,
+                null,
+                null,
+                targetUser.merchantId(),
+                now,
+                now
+        );
+    }
+
+    private void applyApprovedGrant(AccessGrantRequestRecord request, String idempotencyKey) {
+        switch (request.requestType()) {
+            case REQUEST_USER_ROLE -> assignUserRoleDirect(new RoleAssignmentRequest(
+                    idempotencyKey,
+                    request.reason(),
+                    request.targetUserId(),
+                    request.targetRoleId()
+            ), false);
+            case REQUEST_USER_POSITION -> assignUserPositionDirect(new UserPositionAssignmentRequest(
+                    idempotencyKey,
+                    request.reason(),
+                    request.targetUserId(),
+                    request.positionCode(),
+                    request.staffLevelId(),
+                    request.baseSalaryAmountCent(),
+                    request.salaryCurrency(),
+                    request.salaryDetail()
+            ), false);
+            case REQUEST_TEMPORARY_PERMISSION -> createTemporaryGrantDirect(new TemporaryGrantRequest(
+                    idempotencyKey,
+                    request.reason(),
+                    List.of(),
+                    request.targetUserId(),
+                    request.permissionCodes(),
+                    request.validFrom(),
+                    request.expiresAt(),
+                    request.singleUse(),
+                    request.reason()
+            ), false);
+            default -> throw ApiException.badRequest("VALIDATION_FAILED",
+                    "unsupported request_type: " + request.requestType());
+        }
+    }
+
+    private RoleGrantContext resolveRoleGrant(RoleAssignmentRequest request, boolean requireGrantorCanGrant) {
+        AccessActor actor = authorizationService.currentActor();
+        AccessUser targetUser = requireTargetUser(requireText(request.userId(), "user_id"));
+        RoleRecord role = requireRole(requireText(request.roleId(), "role_id"));
+        requireSameOrganization(actor, targetUser);
+        requireRoleAssignableToTarget(role, targetUser);
+        if (requireGrantorCanGrant) {
+            requireActorCanGrant(role.permissionCodes());
+        }
+        return new RoleGrantContext(actor, targetUser, role);
+    }
+
+    private PositionGrantContext resolvePositionGrant(
+            UserPositionAssignmentRequest request,
+            boolean requireGrantorCanGrant
+    ) {
+        AccessActor actor = authorizationService.currentActor();
+        String userId = requireText(request.userId(), "user_id");
+        String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
+        String positionCode = requireText(request.positionCode(), "position_code");
+        AccessUser targetUser = requireTargetUser(userId);
+        requireSameOrganization(actor, targetUser);
+        if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
+            throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
+                    "unknown staff_level_id: " + staffLevelId);
+        }
+        PositionRoleTemplate mapping = repository.findPositionRoleTemplate(
+                        targetUser.organizationId(), positionCode, staffLevelId)
+                .orElseThrow(() -> ApiException.notFound("POSITION_ROLE_TEMPLATE_NOT_FOUND",
+                        "position role template not found for " + positionCode + "/" + staffLevelId));
+        RoleRecord role = requireRole(mapping.roleId());
+        PermissionTemplate template = repository.findTemplateById(mapping.templateId())
+                .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND",
+                        "permission template not found: " + mapping.templateId()));
+        requireRoleAssignableToTarget(role, targetUser);
+        requireTemplateAssignableToTarget(template, targetUser);
+        List<String> templatePermissionCodes = repository.findTemplateItems(template.id()).stream()
+                .map(PermissionTemplateItem::permissionCode)
+                .toList();
+        if (requireGrantorCanGrant) {
+            requireActorCanGrant(role.permissionCodes());
+            requireActorCanGrant(templatePermissionCodes);
+        }
+        String currency = trimToDefault(request.salaryCurrency(), "CNY");
+        if (!"CNY".equals(currency)) {
+            throw ApiException.badRequest("UNSUPPORTED_CURRENCY",
+                    "P0 only supports CNY salary currency, got: " + currency);
+        }
+        if (request.baseSalaryAmountCent() != null && request.baseSalaryAmountCent() < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "baseSalaryAmountCent must be >= 0");
+        }
+        return new PositionGrantContext(
+                actor,
+                targetUser,
+                positionCode,
+                staffLevelId,
+                role,
+                template,
+                currency,
+                grantPermissionCodes(role.permissionCodes(), templatePermissionCodes)
+        );
+    }
+
+    private void requireGrantApprovalIfNeeded(List<String> permissionCodes) {
+        if (!grantApprovalEnabled) {
+            return;
+        }
+        List<PermissionDefinition> blocked = approvalRequiredPermissions(permissionCodes);
+        if (!blocked.isEmpty()) {
+            throw ApiException.forbidden("GRANT_REQUIRES_APPROVAL",
+                    "grant requires approval for permissions: " + blocked.stream()
+                            .map(PermissionDefinition::permissionCode)
+                            .sorted()
+                            .toList());
+        }
+    }
+
+    private List<PermissionDefinition> approvalRequiredPermissions(List<String> permissionCodes) {
+        Set<String> codes = new HashSet<>(safeList(permissionCodes));
+        if (codes.isEmpty()) {
+            return List.of();
+        }
+        return repository.listPermissions().stream()
+                .filter(permission -> codes.contains(permission.permissionCode()))
+                .filter(PermissionDefinition::requiresApproval)
+                .toList();
+    }
+
+    private GrantReviewPolicy grantReviewPolicy(List<String> permissionCodes) {
+        int risk = permissionDefinitions(permissionCodes).stream()
+                .filter(permission -> safeList(permissionCodes).contains(permission.permissionCode()))
+                .map(PermissionDefinition::riskLevel)
+                .mapToInt(this::riskRank)
+                .max()
+                .orElse(1);
+        if (risk >= 3) {
+            return new GrantReviewPolicy("permission_grant_l3", "top_authority", 3);
+        }
+        if (risk == 2) {
+            return new GrantReviewPolicy("permission_grant_l2", "two_levels_up", 2);
+        }
+        return new GrantReviewPolicy("permission_grant_l1", "one_level_up", 1);
+    }
+
+    private List<PermissionDefinition> permissionDefinitions(Collection<String> permissionCodes) {
+        Set<String> codes = new HashSet<>(permissionCodes == null ? List.of() : permissionCodes);
+        if (codes.isEmpty()) {
+            return List.of();
+        }
+        return repository.listPermissions().stream()
+                .filter(permission -> codes.contains(permission.permissionCode()))
+                .toList();
+    }
+
+    private int riskRank(String riskLevel) {
+        return switch (riskLevel == null ? "" : riskLevel.toLowerCase(Locale.ROOT)) {
+            case "critical" -> 3;
+            case "high" -> 2;
+            default -> 1;
+        };
+    }
+
+    private List<String> grantPermissionCodes(List<String> rolePermissionCodes, List<String> templatePermissionCodes) {
+        List<String> result = new ArrayList<>();
+        result.addAll(safeList(rolePermissionCodes));
+        result.addAll(safeList(templatePermissionCodes));
+        return result.stream().filter(code -> code != null && !code.isBlank()).distinct().toList();
+    }
+
+    private AccessGrantRequestRecord withReview(AccessGrantRequestRecord request, String reviewId) {
+        return new AccessGrantRequestRecord(
+                request.id(),
+                request.requestType(),
+                request.targetUserId(),
+                request.targetRoleId(),
+                request.templateId(),
+                request.positionCode(),
+                request.staffLevelId(),
+                request.baseSalaryAmountCent(),
+                request.salaryCurrency(),
+                request.salaryDetail(),
+                request.permissionCodes(),
+                request.validFrom(),
+                request.expiresAt(),
+                request.singleUse(),
+                request.status(),
+                reviewId,
+                request.reason(),
+                request.requestedBy(),
+                request.decidedBy(),
+                request.decidedAt(),
+                request.projectId(),
+                request.merchantId(),
+                request.createdAt(),
+                Instant.now()
+        );
+    }
+
+    private AccessGrantRequestRecord withDecision(
+            AccessGrantRequestRecord request,
+            String status,
+            String decidedBy,
+            Instant decidedAt
+    ) {
+        return new AccessGrantRequestRecord(
+                request.id(),
+                request.requestType(),
+                request.targetUserId(),
+                request.targetRoleId(),
+                request.templateId(),
+                request.positionCode(),
+                request.staffLevelId(),
+                request.baseSalaryAmountCent(),
+                request.salaryCurrency(),
+                request.salaryDetail(),
+                request.permissionCodes(),
+                request.validFrom(),
+                request.expiresAt(),
+                request.singleUse(),
+                status,
+                request.reviewId(),
+                request.reason(),
+                request.requestedBy(),
+                decidedBy,
+                decidedAt,
+                request.projectId(),
+                request.merchantId(),
+                request.createdAt(),
+                decidedAt
+        );
+    }
+
+    private PositionSummaryKey positionSummaryKey(AccessGrantRequestRecord request) {
+        UserPositionAssignment position = request.positionCode() == null
+                ? repository.findUserPositionAssignment(request.targetUserId()).orElse(null)
+                : null;
+        String positionCode = request.positionCode() == null && position != null
+                ? position.positionCode()
+                : request.positionCode();
+        String staffLevelId = request.staffLevelId() == null && position != null
+                ? position.staffLevelId()
+                : request.staffLevelId();
+        if (staffLevelId == null) {
+            staffLevelId = repository.findStaffLevelAssignment(request.targetUserId())
+                    .map(StaffLevelAssignment::staffLevelId)
+                    .orElse("unknown");
+        }
+        return new PositionSummaryKey(trimToDefault(positionCode, "unknown"), trimToDefault(staffLevelId, "unknown"), "");
+    }
+
+    private SupervisorReviewService requireSupervisorReviewService() {
+        if (supervisorReviewService == null) {
+            throw ApiException.conflict("GRANT_APPROVAL_UNAVAILABLE", "supervisor review service is unavailable");
+        }
+        return supervisorReviewService;
+    }
+
+    private String normalizeGrantRequestType(String requestType) {
+        String normalized = trimToDefault(requestType, "").toLowerCase(Locale.ROOT);
+        if (List.of(REQUEST_USER_ROLE, REQUEST_USER_POSITION, REQUEST_TEMPORARY_PERMISSION).contains(normalized)) {
+            return normalized;
+        }
+        throw ApiException.badRequest("VALIDATION_FAILED", "request_type is invalid");
+    }
+
+    private String normalizeDecision(String decision) {
+        String normalized = trimToDefault(decision, "").toLowerCase(Locale.ROOT);
+        if (List.of("approve", "reject").contains(normalized)) {
+            return normalized;
+        }
+        throw ApiException.badRequest("VALIDATION_FAILED", "decision must be approve or reject");
+    }
+
     private PositionRoleTemplate savePositionRoleTemplate(String id, PositionRoleTemplateRequest request) {
         AccessActor actor = authorizationService.currentActor();
         requirePlatformAdmin(actor);
@@ -1135,6 +1765,39 @@ public class AccessService {
                 .replaceAll("[^a-z0-9]+", "_")
                 .replaceAll("^_+|_+$", "");
         return slug.isEmpty() ? UUID.randomUUID().toString().replace("-", "") : slug;
+    }
+
+    private record RoleGrantContext(
+            AccessActor actor,
+            AccessUser targetUser,
+            RoleRecord role
+    ) {
+    }
+
+    private record PositionGrantContext(
+            AccessActor actor,
+            AccessUser targetUser,
+            String positionCode,
+            String staffLevelId,
+            RoleRecord role,
+            PermissionTemplate template,
+            String salaryCurrency,
+            List<String> permissionCodes
+    ) {
+    }
+
+    private record GrantReviewPolicy(
+            String policyCode,
+            String approvalLevel,
+            int requiredLevel
+    ) {
+    }
+
+    private record PositionSummaryKey(
+            String positionCode,
+            String staffLevelId,
+            String permissionCode
+    ) {
     }
 
     private String codeOf(RuntimeException exception) {
