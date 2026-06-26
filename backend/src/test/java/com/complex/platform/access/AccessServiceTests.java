@@ -14,13 +14,17 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
+import com.complex.platform.access.dto.PositionRoleTemplateRequest;
+import com.complex.platform.access.dto.RoleAssignmentRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
+import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -351,6 +355,96 @@ class AccessServiceTests {
                 .contains("lvl_m1_lower", "lvl_m10_upper");
     }
 
+    @Test
+    void assignAndUnassignUserRoleUpdateUserRoles() {
+        accessRepository.users.put("usr_role_target", new AccessUser(
+                "usr_role_target", "role-target", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_view", new RoleRecord(
+                "role_ops_view", "ops_view", "Ops viewer", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.view"),
+                null));
+
+        RoleAssignmentRecord assigned = service.assignUserRole(new RoleAssignmentRequest(
+                "assign-role", null, "usr_role_target", "role_ops_view"));
+        RoleAssignmentRecord unassigned = service.unassignUserRole(new RoleAssignmentRequest(
+                "unassign-role", null, "usr_role_target", "role_ops_view"));
+
+        assertThat(assigned).isEqualTo(new RoleAssignmentRecord("usr_role_target", "role_ops_view"));
+        assertThat(unassigned).isEqualTo(new RoleAssignmentRecord("usr_role_target", "role_ops_view"));
+        assertThat(accessRepository.userRoles.getOrDefault("usr_role_target", Set.of()))
+                .doesNotContain("role_ops_view");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("access.role.assigned", "access.role.unassigned");
+    }
+
+    @Test
+    void assignUserPositionAppliesMappedRoleAndTemplate() {
+        accessRepository.users.put("usr_position_target", new AccessUser(
+                "usr_position_target", "position-target", "staff", "seed-org", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"),
+                null));
+        accessRepository.saveTemplate(new PermissionTemplate(
+                "tpl_ops_check", "tpl_ops_check", "Ops Check", null, "base",
+                null, "platform", null, "merge", null, null, false,
+                "active", null, null, null,
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2026-06-14T00:00:00Z")),
+                List.of(new PermissionTemplateItem(
+                        "tpl_ops_check",
+                        "ops.production_readiness.check",
+                        AccessRepository.Effect.GRANT,
+                        "project",
+                        false)));
+        service.createPositionRoleTemplate(new PositionRoleTemplateRequest(
+                "map-ops-manager", null, "ops_manager", "lvl_m1_lower",
+                "role_ops_check", "tpl_ops_check", "active"));
+
+        UserPositionAssignmentResult result = service.assignUserPosition(new UserPositionAssignmentRequest(
+                "assign-position", null, "usr_position_target", "ops_manager", "lvl_m1_lower",
+                null, null, null));
+
+        assertThat(result.roleId()).isEqualTo("role_ops_check");
+        assertThat(result.templateId()).isEqualTo("tpl_ops_check");
+        assertThat(result.templateApplicationCount()).isEqualTo(1);
+        assertThat(accessRepository.userRoles.get("usr_position_target")).contains("role_ops_check");
+        assertThat(accessRepository.findUserPositionAssignment("usr_position_target")).get()
+                .extracting(UserPositionAssignment::positionCode, UserPositionAssignment::staffLevelId)
+                .containsExactly("ops_manager", "lvl_m1_lower");
+        assertThat(accessRepository.findStaffLevelAssignment("usr_position_target")).get()
+                .extracting(StaffLevelAssignment::staffLevelId)
+                .isEqualTo("lvl_m1_lower");
+        assertThat(accessRepository.templateApplications)
+                .extracting(PermissionTemplateApplication::templateId, PermissionTemplateApplication::targetId)
+                .contains(org.assertj.core.groups.Tuple.tuple("tpl_ops_check", "usr_position_target"));
+    }
+
+    @Test
+    void assignUserRoleRejectsRolePermissionsActorDoesNotHold() {
+        accessRepository.users.put("usr_escalation_target", new AccessUser(
+                "usr_escalation_target", "escalation-target", "staff", "org_a", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_ops_check", new RoleRecord(
+                "role_ops_check", "ops_check", "Ops checker", "project", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("ops.production_readiness.check"),
+                null));
+        authenticateAsOrgUser("usr_org_a_actor", "org-a-actor", "org_a");
+
+        assertThatThrownBy(() -> service.assignUserRole(new RoleAssignmentRequest(
+                "assign-escalation", null, "usr_escalation_target", "role_ops_check")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("GRANT_EXCEEDS_OWN_PERMISSIONS");
+                });
+    }
+
     // ── P1: applyPermissionTemplate 跨组织校验 ─────────────────────────────
 
     @Test
@@ -585,6 +679,11 @@ class AccessServiceTests {
         final Map<String, List<PermissionTemplateItem>> items = new LinkedHashMap<>();
         final Map<String, TemporaryGrant> temporaryGrants = new LinkedHashMap<>();
         final Map<String, AccessUser> users = new LinkedHashMap<>();
+        final Map<String, RoleRecord> roles = new LinkedHashMap<>();
+        final Map<String, Set<String>> userRoles = new LinkedHashMap<>();
+        final Map<String, PositionRoleTemplate> positionRoleTemplates = new LinkedHashMap<>();
+        final Map<String, UserPositionAssignment> userPositionAssignments = new LinkedHashMap<>();
+        final List<PermissionTemplateApplication> templateApplications = new ArrayList<>();
         final Map<String, StaffLevelRecord> staffLevels = new LinkedHashMap<>(Map.of(
                 "lvl_m1_lower", new StaffLevelRecord("lvl_m1_lower", "M1", "lower", 1, "M1 薪资大范围", "active", Instant.parse("2026-06-14T00:00:00Z")),
                 "lvl_m10_upper", new StaffLevelRecord("lvl_m10_upper", "M10", "upper", 30, "M10 薪资大范围", "active", Instant.parse("2026-06-14T00:00:00Z"))
@@ -679,12 +778,85 @@ class AccessServiceTests {
 
         @Override
         public List<RoleRecord> listRoles() {
-            return List.of();
+            return new ArrayList<>(roles.values());
+        }
+
+        @Override
+        public Optional<RoleRecord> findRoleById(String roleId) {
+            return Optional.ofNullable(roles.get(roleId));
         }
 
         @Override
         public RoleRecord createRole(RoleRecord role) {
+            roles.put(role.id(), role);
             return role;
+        }
+
+        @Override
+        public RoleAssignmentRecord assignUserRole(String userId, String roleId) {
+            userRoles.computeIfAbsent(userId, ignored -> new LinkedHashSet<>()).add(roleId);
+            return new RoleAssignmentRecord(userId, roleId);
+        }
+
+        @Override
+        public void unassignUserRole(String userId, String roleId) {
+            userRoles.computeIfAbsent(userId, ignored -> new LinkedHashSet<>()).remove(roleId);
+        }
+
+        @Override
+        public List<PositionRoleTemplate> listPositionRoleTemplates(String organizationId) {
+            return positionRoleTemplates.values().stream()
+                    .filter(mapping -> organizationId == null
+                            || mapping.organizationId() == null
+                            || organizationId.equals(mapping.organizationId()))
+                    .toList();
+        }
+
+        @Override
+        public Optional<PositionRoleTemplate> findPositionRoleTemplateById(String id) {
+            return Optional.ofNullable(positionRoleTemplates.get(id));
+        }
+
+        @Override
+        public Optional<PositionRoleTemplate> findPositionRoleTemplate(
+                String organizationId,
+                String positionCode,
+                String staffLevelId
+        ) {
+            Optional<PositionRoleTemplate> own = positionRoleTemplates.values().stream()
+                    .filter(mapping -> "active".equals(mapping.status()))
+                    .filter(mapping -> positionCode.equals(mapping.positionCode()))
+                    .filter(mapping -> staffLevelId.equals(mapping.staffLevelId()))
+                    .filter(mapping -> organizationId != null && organizationId.equals(mapping.organizationId()))
+                    .findFirst();
+            return own.or(() -> positionRoleTemplates.values().stream()
+                    .filter(mapping -> "active".equals(mapping.status()))
+                    .filter(mapping -> positionCode.equals(mapping.positionCode()))
+                    .filter(mapping -> staffLevelId.equals(mapping.staffLevelId()))
+                    .filter(mapping -> mapping.organizationId() == null)
+                    .findFirst());
+        }
+
+        @Override
+        public PositionRoleTemplate savePositionRoleTemplate(PositionRoleTemplate mapping) {
+            positionRoleTemplates.put(mapping.id(), mapping);
+            return mapping;
+        }
+
+        @Override
+        public void deletePositionRoleTemplate(String id) {
+            positionRoleTemplates.remove(id);
+        }
+
+        @Override
+        public UserPositionAssignment saveUserPositionAssignment(UserPositionAssignment assignment) {
+            userPositionAssignments.put(assignment.userId(), assignment);
+            return assignment;
+        }
+
+        @Override
+        public Optional<UserPositionAssignment> findUserPositionAssignment(String userId) {
+            return Optional.ofNullable(userPositionAssignments.get(userId));
         }
 
         @Override
@@ -696,7 +868,7 @@ class AccessServiceTests {
                 boolean singleUse,
                 String appliedBy
         ) {
-            return targetUserIds.stream()
+            List<PermissionTemplateApplication> applications = targetUserIds.stream()
                     .map(userId -> new PermissionTemplateApplication(
                             "app_" + userId,
                             templateId,
@@ -713,6 +885,8 @@ class AccessServiceTests {
                             null
                     ))
                     .toList();
+            templateApplications.addAll(applications);
+            return applications;
         }
 
         @Override
@@ -750,7 +924,45 @@ class AccessServiceTests {
 
         @Override
         public List<PermissionEffect> findPermissionEffects(String userId, Instant checkedAt) {
-            return List.of();
+            List<PermissionEffect> effects = new ArrayList<>();
+            for (String roleId : userRoles.getOrDefault(userId, Set.of())) {
+                RoleRecord role = roles.get(roleId);
+                if (role == null || !"active".equals(role.status())) {
+                    continue;
+                }
+                for (String permissionCode : role.permissionCodes()) {
+                    effects.add(new PermissionEffect(
+                            userId,
+                            permissionCode,
+                            Effect.GRANT,
+                            Source.ROLE,
+                            roleId,
+                            null,
+                            null,
+                            false,
+                            false
+                    ));
+                }
+            }
+            for (PermissionTemplateApplication application : templateApplications) {
+                if (!userId.equals(application.targetId()) || !"active".equals(application.status())) {
+                    continue;
+                }
+                for (PermissionTemplateItem item : findTemplateItems(application.templateId())) {
+                    effects.add(new PermissionEffect(
+                            userId,
+                            item.permissionCode(),
+                            item.effect(),
+                            Source.TEMPLATE_APPLICATION,
+                            application.id(),
+                            application.validFrom(),
+                            application.validUntil(),
+                            application.singleUse(),
+                            application.consumed()
+                    ));
+                }
+            }
+            return effects;
         }
 
         @Override

@@ -368,6 +368,170 @@ class JdbcAccessRepository implements AccessRepository {
     }
 
     @Override
+    public Optional<RoleRecord> findRoleById(String roleId) {
+        List<RoleRecord> result = jdbcTemplate.query("""
+                SELECT id, role_name, description, data_scope, status, created_at, organization_id
+                  FROM roles
+                 WHERE id = :id
+                """, Map.of("id", roleId), this::mapRole);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public RoleAssignmentRecord assignUserRole(String userId, String roleId) {
+        jdbcTemplate.update("""
+                INSERT INTO user_roles (user_id, role_id)
+                VALUES (:user_id, :role_id)
+                ON CONFLICT (user_id, role_id) DO NOTHING
+                """, Map.of("user_id", userId, "role_id", roleId));
+        return new RoleAssignmentRecord(userId, roleId);
+    }
+
+    @Override
+    public void unassignUserRole(String userId, String roleId) {
+        jdbcTemplate.update("""
+                DELETE FROM user_roles
+                 WHERE user_id = :user_id
+                   AND role_id = :role_id
+                """, Map.of("user_id", userId, "role_id", roleId));
+    }
+
+    @Override
+    public List<PositionRoleTemplate> listPositionRoleTemplates(String organizationId) {
+        if (organizationId == null) {
+            return jdbcTemplate.query("""
+                    SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
+                           status, created_by, created_at, updated_at
+                      FROM position_role_templates
+                     ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
+                    """, this::mapPositionRoleTemplate);
+        }
+        return jdbcTemplate.query("""
+                SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
+                       status, created_by, created_at, updated_at
+                  FROM position_role_templates
+                 WHERE organization_id IS NULL OR organization_id = :organization_id
+                 ORDER BY position_code, staff_level_id, organization_id NULLS FIRST
+                """, Map.of("organization_id", organizationId), this::mapPositionRoleTemplate);
+    }
+
+    @Override
+    public Optional<PositionRoleTemplate> findPositionRoleTemplateById(String id) {
+        List<PositionRoleTemplate> result = jdbcTemplate.query("""
+                SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
+                       status, created_by, created_at, updated_at
+                  FROM position_role_templates
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapPositionRoleTemplate);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public Optional<PositionRoleTemplate> findPositionRoleTemplate(
+            String organizationId,
+            String positionCode,
+            String staffLevelId
+    ) {
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("organization_id", organizationId)
+                .addValue("position_code", positionCode)
+                .addValue("staff_level_id", staffLevelId);
+        List<PositionRoleTemplate> result = jdbcTemplate.query("""
+                SELECT id, position_code, staff_level_id, role_id, template_id, organization_id,
+                       status, created_by, created_at, updated_at
+                  FROM position_role_templates
+                 WHERE status = 'active'
+                   AND position_code = :position_code
+                   AND staff_level_id = :staff_level_id
+                   AND (
+                        (:organization_id IS NULL AND organization_id IS NULL)
+                        OR (:organization_id IS NOT NULL AND (organization_id = :organization_id OR organization_id IS NULL))
+                   )
+                 ORDER BY CASE WHEN organization_id = :organization_id THEN 0 ELSE 1 END
+                 LIMIT 1
+                """, parameters, this::mapPositionRoleTemplate);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public PositionRoleTemplate savePositionRoleTemplate(PositionRoleTemplate mapping) {
+        jdbcTemplate.update("""
+                INSERT INTO position_role_templates (
+                    id, position_code, staff_level_id, role_id, template_id, organization_id,
+                    status, created_by, created_at, updated_at
+                )
+                VALUES (
+                    :id, :position_code, :staff_level_id, :role_id, :template_id, :organization_id,
+                    :status, :created_by, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    position_code = EXCLUDED.position_code,
+                    staff_level_id = EXCLUDED.staff_level_id,
+                    role_id = EXCLUDED.role_id,
+                    template_id = EXCLUDED.template_id,
+                    organization_id = EXCLUDED.organization_id,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", mapping.id())
+                .addValue("position_code", mapping.positionCode())
+                .addValue("staff_level_id", mapping.staffLevelId())
+                .addValue("role_id", mapping.roleId())
+                .addValue("template_id", mapping.templateId())
+                .addValue("organization_id", mapping.organizationId())
+                .addValue("status", mapping.status())
+                .addValue("created_by", mapping.createdBy())
+                .addValue("created_at", timestampWithTimeZone(mapping.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(mapping.updatedAt())));
+        return mapping;
+    }
+
+    @Override
+    public void deletePositionRoleTemplate(String id) {
+        jdbcTemplate.update("""
+                DELETE FROM position_role_templates
+                 WHERE id = :id
+                """, Map.of("id", id));
+    }
+
+    @Override
+    public UserPositionAssignment saveUserPositionAssignment(UserPositionAssignment assignment) {
+        jdbcTemplate.update("""
+                INSERT INTO user_position_assignments (
+                    user_id, position_code, staff_level_id, organization_id, merchant_id, assigned_by, assigned_at
+                )
+                VALUES (
+                    :user_id, :position_code, :staff_level_id, :organization_id, :merchant_id, :assigned_by, :assigned_at
+                )
+                ON CONFLICT (user_id) DO UPDATE SET
+                    position_code = EXCLUDED.position_code,
+                    staff_level_id = EXCLUDED.staff_level_id,
+                    organization_id = EXCLUDED.organization_id,
+                    merchant_id = EXCLUDED.merchant_id,
+                    assigned_by = EXCLUDED.assigned_by,
+                    assigned_at = EXCLUDED.assigned_at
+                """, new MapSqlParameterSource()
+                .addValue("user_id", assignment.userId())
+                .addValue("position_code", assignment.positionCode())
+                .addValue("staff_level_id", assignment.staffLevelId())
+                .addValue("organization_id", assignment.organizationId())
+                .addValue("merchant_id", assignment.merchantId())
+                .addValue("assigned_by", assignment.assignedBy())
+                .addValue("assigned_at", timestampWithTimeZone(assignment.assignedAt())));
+        return assignment;
+    }
+
+    @Override
+    public Optional<UserPositionAssignment> findUserPositionAssignment(String userId) {
+        List<UserPositionAssignment> result = jdbcTemplate.query("""
+                SELECT user_id, position_code, staff_level_id, organization_id, merchant_id, assigned_by, assigned_at
+                  FROM user_position_assignments
+                 WHERE user_id = :user_id
+                """, Map.of("user_id", userId), this::mapUserPositionAssignment);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
     public List<PermissionTemplateApplication> applyTemplate(
             String templateId,
             List<String> targetUserIds,
@@ -733,6 +897,33 @@ class JdbcAccessRepository implements AccessRepository {
                 baseSalary,
                 resultSet.getString("salary_currency"),
                 resultSet.getString("salary_detail"),
+                resultSet.getString("organization_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("assigned_by"),
+                nullableInstant(resultSet, "assigned_at")
+        );
+    }
+
+    private PositionRoleTemplate mapPositionRoleTemplate(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new PositionRoleTemplate(
+                resultSet.getString("id"),
+                resultSet.getString("position_code"),
+                resultSet.getString("staff_level_id"),
+                resultSet.getString("role_id"),
+                resultSet.getString("template_id"),
+                resultSet.getString("organization_id"),
+                resultSet.getString("status"),
+                resultSet.getString("created_by"),
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "updated_at")
+        );
+    }
+
+    private UserPositionAssignment mapUserPositionAssignment(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new UserPositionAssignment(
+                resultSet.getString("user_id"),
+                resultSet.getString("position_code"),
+                resultSet.getString("staff_level_id"),
                 resultSet.getString("organization_id"),
                 resultSet.getString("merchant_id"),
                 resultSet.getString("assigned_by"),

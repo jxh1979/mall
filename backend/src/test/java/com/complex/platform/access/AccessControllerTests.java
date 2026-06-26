@@ -124,6 +124,26 @@ class AccessControllerTests {
     }
 
     @Test
+    void assignUserRoleWithoutRoleAssignPermissionReturnsPermissionDenied() throws Exception {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("access.role.assign");
+
+        mockMvc.perform(post("/api/v1/access/role-assignments")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "assign-denied",
+                                  "user_id": "usr_1",
+                                  "role_id": "role_ops"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+    }
+
+    @Test
     void createTemporaryGrantMissingValidUntilReturnsValidationFailed() throws Exception {
         mockMvc.perform(post("/api/v1/access/temporary-grants")
                         .with(user("ops").roles("P0_SMOKE"))

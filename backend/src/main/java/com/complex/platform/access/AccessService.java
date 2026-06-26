@@ -3,10 +3,13 @@ package com.complex.platform.access;
 import com.complex.platform.access.dto.AccessUserRequest;
 import com.complex.platform.access.dto.PermissionTemplateApplyRequest;
 import com.complex.platform.access.dto.PermissionTemplateRequest;
+import com.complex.platform.access.dto.PositionRoleTemplateRequest;
+import com.complex.platform.access.dto.RoleAssignmentRequest;
 import com.complex.platform.access.dto.RoleRequest;
 import com.complex.platform.access.dto.StaffLevelAssignmentRequest;
 import com.complex.platform.access.dto.StatusChangeRequest;
 import com.complex.platform.access.dto.TemporaryGrantRequest;
+import com.complex.platform.access.dto.UserPositionAssignmentRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -25,6 +28,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AccessService {
@@ -286,6 +290,284 @@ public class AccessService {
             );
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("role.change_failed", "access.role.manage", "role", null, null, request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    public RoleAssignmentRecord assignUserRole(RoleAssignmentRequest request) {
+        RoleAssignmentRequest r = requireRequest(request);
+        try {
+            return idempotencyService.execute(
+                    "assignUserRole:" + trimToDefault(r.userId(), "") + ":" + trimToDefault(r.roleId(), ""),
+                    r.idempotencyKey(),
+                    r,
+                    () -> {
+                        AccessActor actor = authorizationService.currentActor();
+                        AccessUser targetUser = requireTargetUser(requireText(r.userId(), "user_id"));
+                        RoleRecord role = requireRole(requireText(r.roleId(), "role_id"));
+                        requireSameOrganization(actor, targetUser);
+                        requireRoleAssignableToTarget(role, targetUser);
+                        requireActorCanGrant(role.permissionCodes());
+                        RoleAssignmentRecord saved = repository.assignUserRole(targetUser.id(), role.id());
+                        auditEventService.recordSuccess(
+                                "access.role.assigned",
+                                "access.role.assign",
+                                "user_role",
+                                targetUser.id() + ":" + role.id(),
+                                null,
+                                r.idempotencyKey(),
+                                Map.of("role_id", role.id())
+                        );
+                        return saved;
+                    },
+                    RoleAssignmentRecord.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.role.assign_failed",
+                    "access.role.assign",
+                    "user_role",
+                    request == null ? null : request.userId(),
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public RoleAssignmentRecord unassignUserRole(RoleAssignmentRequest request) {
+        RoleAssignmentRequest r = requireRequest(request);
+        try {
+            return idempotencyService.execute(
+                    "unassignUserRole:" + trimToDefault(r.userId(), "") + ":" + trimToDefault(r.roleId(), ""),
+                    r.idempotencyKey(),
+                    r,
+                    () -> {
+                        AccessActor actor = authorizationService.currentActor();
+                        AccessUser targetUser = requireTargetUser(requireText(r.userId(), "user_id"));
+                        RoleRecord role = requireRole(requireText(r.roleId(), "role_id"));
+                        requireSameOrganization(actor, targetUser);
+                        requireRoleAssignableToTarget(role, targetUser);
+                        requireActorCanGrant(role.permissionCodes());
+                        repository.unassignUserRole(targetUser.id(), role.id());
+                        auditEventService.recordSuccess(
+                                "access.role.unassigned",
+                                "access.role.assign",
+                                "user_role",
+                                targetUser.id() + ":" + role.id(),
+                                null,
+                                r.idempotencyKey(),
+                                Map.of("role_id", role.id())
+                        );
+                        return new RoleAssignmentRecord(targetUser.id(), role.id());
+                    },
+                    RoleAssignmentRecord.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.role.unassign_failed",
+                    "access.role.assign",
+                    "user_role",
+                    request == null ? null : request.userId(),
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public PageResponse<PositionRoleTemplate> listPositionRoleTemplates() {
+        AccessActor actor = authorizationService.currentActor();
+        List<PositionRoleTemplate> mappings = repository.listPositionRoleTemplates(
+                authorizationService.isPlatformAdmin(actor) ? null : actor.organizationId());
+        auditEventService.recordSuccess(
+                "access.position_role_template.viewed",
+                "access.role.assign",
+                "position_role_template",
+                "all",
+                null,
+                null,
+                Map.of("count", mappings.size())
+        );
+        return page(mappings);
+    }
+
+    public PositionRoleTemplate createPositionRoleTemplate(PositionRoleTemplateRequest request) {
+        PositionRoleTemplateRequest r = requireRequest(request);
+        try {
+            return idempotencyService.execute(
+                    "createPositionRoleTemplate:" + trimToDefault(r.positionCode(), "") + ":" + trimToDefault(r.staffLevelId(), ""),
+                    r.idempotencyKey(),
+                    r,
+                    () -> savePositionRoleTemplate(
+                            "prt_" + slug(requireText(r.positionCode(), "position_code") + "_" + requireText(r.staffLevelId(), "staff_level_id")),
+                            r
+                    ),
+                    PositionRoleTemplate.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.position_role_template.save_failed",
+                    "access.role.assign",
+                    "position_role_template",
+                    null,
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public PositionRoleTemplate updatePositionRoleTemplate(String id, PositionRoleTemplateRequest request) {
+        PositionRoleTemplateRequest r = requireRequest(request);
+        try {
+            return idempotencyService.execute(
+                    "updatePositionRoleTemplate:" + id,
+                    r.idempotencyKey(),
+                    r,
+                    () -> savePositionRoleTemplate(requireText(id, "id"), r),
+                    PositionRoleTemplate.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.position_role_template.save_failed",
+                    "access.role.assign",
+                    "position_role_template",
+                    id,
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
+            throw exception;
+        }
+    }
+
+    public void deletePositionRoleTemplate(String id) {
+        AccessActor actor = authorizationService.currentActor();
+        requirePlatformAdmin(actor);
+        PositionRoleTemplate existing = repository.findPositionRoleTemplateById(id)
+                .orElseThrow(() -> ApiException.notFound("POSITION_ROLE_TEMPLATE_NOT_FOUND",
+                        "position role template not found: " + id));
+        repository.deletePositionRoleTemplate(existing.id());
+        auditEventService.recordSuccess(
+                "access.position_role_template.deleted",
+                "access.role.assign",
+                "position_role_template",
+                existing.id(),
+                null,
+                null,
+                Map.of("position_code", existing.positionCode(), "staff_level_id", existing.staffLevelId())
+        );
+    }
+
+    @Transactional
+    public UserPositionAssignmentResult assignUserPosition(UserPositionAssignmentRequest request) {
+        UserPositionAssignmentRequest r = requireRequest(request);
+        try {
+            return idempotencyService.execute(
+                    "assignUserPosition:" + trimToDefault(r.userId(), ""),
+                    r.idempotencyKey(),
+                    r,
+                    () -> {
+                        AccessActor actor = authorizationService.currentActor();
+                        String userId = requireText(r.userId(), "user_id");
+                        String staffLevelId = requireText(r.staffLevelId(), "staff_level_id");
+                        String positionCode = requireText(r.positionCode(), "position_code");
+                        AccessUser targetUser = requireTargetUser(userId);
+                        requireSameOrganization(actor, targetUser);
+                        if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
+                            throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
+                                    "unknown staff_level_id: " + staffLevelId);
+                        }
+                        PositionRoleTemplate mapping = repository.findPositionRoleTemplate(
+                                        targetUser.organizationId(), positionCode, staffLevelId)
+                                .orElseThrow(() -> ApiException.notFound("POSITION_ROLE_TEMPLATE_NOT_FOUND",
+                                        "position role template not found for " + positionCode + "/" + staffLevelId));
+                        RoleRecord role = requireRole(mapping.roleId());
+                        PermissionTemplate template = repository.findTemplateById(mapping.templateId())
+                                .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND",
+                                        "permission template not found: " + mapping.templateId()));
+                        requireRoleAssignableToTarget(role, targetUser);
+                        requireTemplateAssignableToTarget(template, targetUser);
+                        requireActorCanGrant(role.permissionCodes());
+                        requireActorCanGrant(repository.findTemplateItems(template.id()).stream()
+                                .map(PermissionTemplateItem::permissionCode)
+                                .toList());
+                        String currency = trimToDefault(r.salaryCurrency(), "CNY");
+                        if (!"CNY".equals(currency)) {
+                            throw ApiException.badRequest("UNSUPPORTED_CURRENCY",
+                                    "P0 only supports CNY salary currency, got: " + currency);
+                        }
+                        if (r.baseSalaryAmountCent() != null && r.baseSalaryAmountCent() < 0) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "baseSalaryAmountCent must be >= 0");
+                        }
+                        Instant now = Instant.now();
+                        StaffLevelAssignment staffLevelAssignment = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                                targetUser.id(),
+                                staffLevelId,
+                                r.baseSalaryAmountCent(),
+                                currency,
+                                r.salaryDetail(),
+                                targetUser.organizationId(),
+                                targetUser.merchantId(),
+                                actor.id(),
+                                now
+                        ));
+                        UserPositionAssignment assignment = repository.saveUserPositionAssignment(new UserPositionAssignment(
+                                targetUser.id(),
+                                positionCode,
+                                staffLevelId,
+                                targetUser.organizationId(),
+                                targetUser.merchantId(),
+                                actor.id(),
+                                now
+                        ));
+                        repository.assignUserRole(targetUser.id(), role.id());
+                        List<PermissionTemplateApplication> applications = repository.applyTemplate(
+                                template.id(),
+                                List.of(targetUser.id()),
+                                template.validFrom(),
+                                template.validUntil(),
+                                template.singleUse(),
+                                actor.id()
+                        );
+                        auditEventService.recordSuccess(
+                                "access.user_position.assigned",
+                                "access.role.assign",
+                                "user_position_assignment",
+                                targetUser.id(),
+                                null,
+                                r.idempotencyKey(),
+                                Map.of(
+                                        "position_code", positionCode,
+                                        "staff_level_id", staffLevelId,
+                                        "role_id", role.id(),
+                                        "template_id", template.id()
+                                )
+                        );
+                        return new UserPositionAssignmentResult(
+                                assignment,
+                                staffLevelAssignment,
+                                role.id(),
+                                template.id(),
+                                applications.size()
+                        );
+                    },
+                    UserPositionAssignmentResult.class
+            );
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "access.user_position.assign_failed",
+                    "access.role.assign",
+                    "user_position_assignment",
+                    request == null ? null : request.userId(),
+                    null,
+                    request == null ? null : request.idempotencyKey(),
+                    codeOf(exception)
+            );
             throw exception;
         }
     }
@@ -650,6 +932,101 @@ public class AccessService {
                     codeOf(exception)
             );
             throw exception;
+        }
+    }
+
+    private PositionRoleTemplate savePositionRoleTemplate(String id, PositionRoleTemplateRequest request) {
+        AccessActor actor = authorizationService.currentActor();
+        requirePlatformAdmin(actor);
+        String positionCode = requireText(request.positionCode(), "position_code");
+        String staffLevelId = requireText(request.staffLevelId(), "staff_level_id");
+        if (repository.findStaffLevelById(staffLevelId).isEmpty()) {
+            throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
+                    "unknown staff_level_id: " + staffLevelId);
+        }
+        RoleRecord role = requireRole(requireText(request.roleId(), "role_id"));
+        PermissionTemplate template = repository.findTemplateById(requireText(request.templateId(), "template_id"))
+                .orElseThrow(() -> ApiException.notFound("PERMISSION_TEMPLATE_NOT_FOUND",
+                        "permission template not found: " + request.templateId()));
+        requireActorCanGrant(role.permissionCodes());
+        requireActorCanGrant(repository.findTemplateItems(template.id()).stream()
+                .map(PermissionTemplateItem::permissionCode)
+                .toList());
+        String status = trimToDefault(request.status(), "active");
+        if (!Set.of("active", "inactive").contains(status)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "status is invalid");
+        }
+        Instant now = Instant.now();
+        PositionRoleTemplate existing = repository.findPositionRoleTemplateById(id).orElse(null);
+        PositionRoleTemplate saved = repository.savePositionRoleTemplate(new PositionRoleTemplate(
+                id,
+                positionCode,
+                staffLevelId,
+                role.id(),
+                template.id(),
+                null,
+                status,
+                existing == null ? actor.id() : existing.createdBy(),
+                existing == null ? now : existing.createdAt(),
+                now
+        ));
+        auditEventService.recordSuccess(
+                "access.position_role_template.saved",
+                "access.role.assign",
+                "position_role_template",
+                saved.id(),
+                null,
+                request.idempotencyKey(),
+                Map.of("position_code", saved.positionCode(), "staff_level_id", saved.staffLevelId())
+        );
+        return saved;
+    }
+
+    private <T> T requireRequest(T request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        return request;
+    }
+
+    private AccessUser requireTargetUser(String userId) {
+        return repository.findUserById(userId)
+                .orElseThrow(() -> ApiException.notFound("USER_NOT_FOUND", "access user not found: " + userId));
+    }
+
+    private RoleRecord requireRole(String roleId) {
+        return repository.findRoleById(roleId)
+                .orElseThrow(() -> ApiException.notFound("ROLE_NOT_FOUND", "role not found: " + roleId));
+    }
+
+    private void requireSameOrganization(AccessActor actor, AccessUser targetUser) {
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return;
+        }
+        if (actor.organizationId() == null || !actor.organizationId().equals(targetUser.organizationId())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                    "cannot assign access for a user in another organization: " + targetUser.id());
+        }
+    }
+
+    private void requirePlatformAdmin(AccessActor actor) {
+        if (!authorizationService.isPlatformAdmin(actor)) {
+            throw ApiException.forbidden("PLATFORM_ADMIN_REQUIRED",
+                    "platform administrator is required for this operation");
+        }
+    }
+
+    private void requireRoleAssignableToTarget(RoleRecord role, AccessUser targetUser) {
+        if (role.organizationId() != null && !role.organizationId().equals(targetUser.organizationId())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                    "cannot assign a role from another organization: " + role.id());
+        }
+    }
+
+    private void requireTemplateAssignableToTarget(PermissionTemplate template, AccessUser targetUser) {
+        if (template.ownerScopeId() != null && !template.ownerScopeId().equals(targetUser.organizationId())) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN",
+                    "cannot apply a template from another organization: " + template.id());
         }
     }
 

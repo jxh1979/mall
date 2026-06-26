@@ -74,7 +74,55 @@ public interface AccessRepository {
                 .toList();
     }
 
+    default Optional<RoleRecord> findRoleById(String roleId) {
+        return listRoles().stream().filter(r -> r.id().equals(roleId)).findFirst();
+    }
+
     RoleRecord createRole(RoleRecord role);
+
+    default RoleAssignmentRecord assignUserRole(String userId, String roleId) {
+        throw new UnsupportedOperationException("assignUserRole not supported by this repository");
+    }
+
+    default void unassignUserRole(String userId, String roleId) {
+        throw new UnsupportedOperationException("unassignUserRole not supported by this repository");
+    }
+
+    default List<PositionRoleTemplate> listPositionRoleTemplates(String organizationId) {
+        return List.of();
+    }
+
+    default Optional<PositionRoleTemplate> findPositionRoleTemplateById(String id) {
+        return listPositionRoleTemplates(null).stream().filter(mapping -> mapping.id().equals(id)).findFirst();
+    }
+
+    default Optional<PositionRoleTemplate> findPositionRoleTemplate(
+            String organizationId,
+            String positionCode,
+            String staffLevelId
+    ) {
+        return listPositionRoleTemplates(organizationId).stream()
+                .filter(mapping -> positionCode.equals(mapping.positionCode()))
+                .filter(mapping -> staffLevelId.equals(mapping.staffLevelId()))
+                .filter(mapping -> "active".equals(mapping.status()))
+                .findFirst();
+    }
+
+    default PositionRoleTemplate savePositionRoleTemplate(PositionRoleTemplate mapping) {
+        throw new UnsupportedOperationException("savePositionRoleTemplate not supported by this repository");
+    }
+
+    default void deletePositionRoleTemplate(String id) {
+        throw new UnsupportedOperationException("deletePositionRoleTemplate not supported by this repository");
+    }
+
+    default UserPositionAssignment saveUserPositionAssignment(UserPositionAssignment assignment) {
+        throw new UnsupportedOperationException("saveUserPositionAssignment not supported by this repository");
+    }
+
+    default Optional<UserPositionAssignment> findUserPositionAssignment(String userId) {
+        return Optional.empty();
+    }
 
     List<PermissionTemplateApplication> applyTemplate(
             String templateId,
