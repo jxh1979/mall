@@ -59,16 +59,19 @@ public class FacilityWorkOrderService {
     }
 
     public PageResponse<FacilityWorkOrderRecord> list() {
+        authorizationService.requirePlatformScope();
         List<FacilityWorkOrderRecord> items = repository.list();
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
     public PageResponse<FacilityWorkOrderRecord> listOverdue() {
+        authorizationService.requirePlatformScope();
         List<FacilityWorkOrderRecord> items = repository.listOverdue(Instant.now());
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
     public FacilityWorkOrderRecord findById(String id) {
+        authorizationService.requirePlatformScope();
         return load(id);
     }
 

@@ -56,6 +56,24 @@ class FacilityWorkOrderServiceTests {
     }
 
     @Test
+    void readMethodsRequirePlatformScopeSoMerchantCannotReadAllPlatformWorkOrders() {
+        // B1d 跨租户读隔离：list/listOverdue/findById 也必须过平台域闸，
+        // 否则持 facility.work_order.manage 的商户角色可读全平台工单。
+        AuthorizationService authz = mock(AuthorizationService.class);
+        org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "merchant-scoped"))
+                .when(authz).requirePlatformScope();
+        FacilityWorkOrderService scoped = new FacilityWorkOrderService(
+                workOrders, facility, mock(AuditEventService.class), authz);
+
+        assertThatThrownBy(scoped::list)
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+        assertThatThrownBy(scoped::listOverdue)
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+        assertThatThrownBy(() -> scoped.findById("fwo_any"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+    }
+
+    @Test
     void supervisorAcceptanceFlow_closesAndResetsEquipmentToNormal() {
         facility.store.put("feq_1", equipment("feq_1", "alarm"));
         FacilityWorkOrderRecord rec = service.create(req("repair", "high", "platform", "feq_1"));
