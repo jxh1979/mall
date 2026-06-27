@@ -313,6 +313,13 @@ And 班结数据进入日结对账（AC-FIN-03），班结锁定后更正只能�
 | 未开班直接收现金 | 拒绝或标记异常，当班现金台账须先有开班备用金记录 |
 | 班结后发现漏记现金收款 | 生成补录/调整单，不覆盖原班结记录 |
 
+### AC-FIN-07 对账差异正式关闭
+
+Given 对账差异处于 open、matched、resolved 或 ignored 状态
+When 财务人员提交关闭请求并填写 `idempotency_key`、`close_reason` 和证据附件引用
+Then 系统必须将差异正式关闭并写入关闭原因、操作人、时间和审计事件
+And 缺少关闭原因必须拒绝；重复提交同一幂等键必须返回同一关闭结果；关闭后不得无痕改写。
+
 ### AC-INV-04 按杯损耗（actual_pour_volume）
 
 Given 高价值酒水按杯/按盎司出品，配置标准出品量（standard_pour_volume）  
@@ -347,6 +354,20 @@ When 员工 A 尝试核销/操作归属其他商户 M2 或其他项目 P2 的权
 Then 系统必须按商户/项目归属与授权关系拒绝该操作（对齐票务 §5.4 跨商户隔离、§5.3 第 7 步商户校验）  
 And 拒绝必须写入越权事件并留痕（操作员工、目标商户/项目、被拒权益/单据、终端、时间）  
 And 越权拒绝进入事件中心供风控订阅（票务 §10.8"跨商户越权核销"）。
+
+### AC-AUTH-05 最终权限计算与显式拒绝优先
+
+Given 员工同时拥有角色权限、基础模板、有效临时模板和员工单独授予权限
+When 后台计算该员工最终权限
+Then 最终权限必须按“角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝”得到
+And 显式拒绝优先级最高；被拒绝的权限不得因角色或临时授权再次生效。
+
+### AC-AUTH-06 角色装配与高危授权审批
+
+Given 平台管理员配置职位角色模板，HR 设置员工职位和层级
+When 员工申请临时权限或高危授权
+Then 系统必须按职位层级自动适配默认权限，并将需审批的授权进入主管复核流程
+And 审批通过前高危权限不得生效；临时权限到期或单次使用后必须失效并留痕。
 
 ### 边界用例（越权补充）
 
@@ -391,6 +412,27 @@ And 安全巡检通过不得绕过容量控制（AC-AMU-05），容量校验与�
 | 并发核销争抢最后名额 | 以服务端锁定/版本号结果为准，只允许容量内一笔成功，其余落超容事件 |
 | 人工放行绕过容量 | 不允许；人工放行（AC-AMU-02）须独立审批留痕，不得规避容量与超容留痕 |
 
+### AC-LEAS-01 招商线索到签约转商户
+
+Given 招商线索已录入并指派负责人
+When 线索转意向、推进到待签约并完成签约确认
+Then 系统必须生成正式商户档案、四类主体默认绑定和合同草稿
+And 关键阶段推进必须有主管确认；黑名单品牌不得转为新线索；重复签约必须幂等返回同一商户和合同草稿。
+
+### AC-CON-01 合同起草到生效
+
+Given 合同草稿已填写商户、空间、合同主体、结算主体、租金和收益规则
+When 提交审批并完成业务、财务、法务并行会签和终审
+Then 合同才能生效，生效时必须固化收益规则快照并绑定铺位
+And 审批链未配置不可提交；并行会签未全过不可生效；同一铺位重复出租必须拒绝。
+
+### AC-CON-02 合同变更、退租结算与账单
+
+Given 合同已生效
+When 发起合同变更、退租结算或周期账单生成
+Then 变更必须走同一审批链，退租结算必须按待结算、保证金抵扣中、欠费追缴中、已结清或有争议留状态
+And 租金、物业费和能源费账单必须进入应收应付台账；争议结算须主管裁决后继续。
+
 ## 8A. 高风险 operation 验收映射
 
 本节用于把端到端验收标准和 OpenAPI operationId 直接绑定，避免开发、测试或供应商只看到业务验收描述但无法定位接口。P0 不要求 181 个 operation 全量逐条写 Given/When/Then；但以下高风险闭环必须能按 AC 编号、路径和 operationId 追溯。
@@ -407,6 +449,12 @@ And 安全巡检通过不得绕过容量控制（AC-AMU-05），容量校验与�
 | AC-INV-02 | 存酒与取酒 | `POST /api/v1/inventory/saved-bottles` / `createSavedBottle`；`POST /api/v1/inventory/saved-bottles/{id}/claim` / `claimSavedBottle` | 存酒、取酒、作废均必须有客户、员工、证据和状态变更 |
 | AC-FIN-01 | 聚合支付与直连抽象 | `POST /api/v1/finance/payment-intents` / `createPaymentIntent`；`POST /api/v1/bar/bills/{bill_id}/pay-intents` / `createBarBillPayIntent`；`POST /api/v1/ticketing/orders/{order_id}/pay-intents` / `createTicketOrderPayIntent` | P0 默认聚合支付；直连只保留抽象，不默认启用 |
 | AC-FIN-02 | 完整应收应付台账 | `GET /api/v1/finance/ar-ap-items` / `listArApItems`；`POST /api/v1/finance/ar-ap-items` / `createArApItem`；`POST /api/v1/finance/ar-ap-items/{id}/payments` / `createArApPayment` | 台账必须绑定来源单据、四类主体和收付款记录 |
+| AC-FIN-07 | 对账差异正式关闭 | `POST /api/v1/finance/reconciliation/differences/{difference_id}/close` / `closeFinanceReconciliationDifference` | 关闭必须有幂等键、关闭原因和证据附件引用；关闭后不得无痕改写 |
+| AC-AUTH-05 | 最终权限计算与显式拒绝 | `GET /api/v1/access/users/{id}/effective-permissions` / `getUserEffectivePermissions`；`GET /api/v1/access/effective-permissions` / `getEffectivePermissions` | 显式拒绝优先于角色、模板、临时和单独授予权限 |
+| AC-AUTH-06 | 角色装配与高危授权审批 | `GET/POST /api/v1/access/position-role-templates` / `listPositionRoleTemplates`、`createPositionRoleTemplate`；`POST /api/v1/access/grant-requests` / `createAccessGrantRequest`；`POST /api/v1/access/grant-requests/{id}/review` / `reviewAccessGrantRequest` | 职位层级自动适配；高危授权审批通过前不生效；临时权限到期失效 |
+| AC-LEAS-01 | 招商线索到签约转商户 | `POST /api/v1/leasing/leads` / `createLeasingLead`；`POST /api/v1/leasing/intents` / `createLeasingIntent`；`POST /api/v1/leasing/intents/{intent_id}/advance` / `advanceLeasingIntent`；`POST /api/v1/leasing/intents/{intent_id}/sign` / `signLeasingIntent` | 签约后生成正式商户、四类主体默认绑定和合同草稿；重复签约幂等 |
+| AC-CON-01 | 合同起草到生效 | `POST /api/v1/contracts` / `createContractDraft`；`POST /api/v1/contracts/{contract_id}/submit` / `submitContract`；`POST /api/v1/contracts/{contract_id}/approve` / `approveContractStage`；`POST /api/v1/contracts/{contract_id}/activate` / `activateContract` | 会签全过后才可生效；生效固化收益规则并绑定铺位 |
+| AC-CON-02 | 合同变更、退租结算与账单 | `POST /api/v1/contracts/{contract_id}/changes` / `raiseContractChange`；`POST /api/v1/contracts/changes/{change_id}/approve` / `approveContractChange`；`POST /api/v1/contracts/{contract_id}/settle` / `settleContract`；`POST /api/v1/contracts/settlements/{settlement_id}/advance` / `advanceContractSettlement`；`POST /api/v1/contracts/{contract_id}/period-bills` / `generateContractPeriodBills` | 变更走审批链；退租结算保留状态；账单进入应收应付台账 |
 | AC-OPEN-01 / AC-OPEN-03 | 双向开放与 Webhook + 轮询校验 | `POST /api/open/d/{endpoint_key}/webhooks/{provider}/{event}` / `receiveOpenWebhook` | Webhook 要验签、幂等、防重放；轮询用于校验关键状态和补偿差异 |
 | 生产前置-MDM | 设备纳管与终端限制 | `POST /api/v1/terminals/devices/bind` / `bindDevice`；`POST /api/v1/terminals/sync-tasks` / `syncTerminalTasks`；`PUT /api/v1/terminals/capability-switches/{id}` / `updateCapabilitySwitch` | 未纳管设备不得生产使用；高风险终端操作必须按设备凭证和能力开关拦截 |
 

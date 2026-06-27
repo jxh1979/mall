@@ -3130,6 +3130,66 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/finance/reconciliation/differences/{difference_id}/close:
+    post:
+      tags:
+        - finance
+      operationId: closeFinanceReconciliationDifference
+      summary: 正式关闭对账差异
+      x-auth-context: staff-token
+      x-permission: finance.reconciliation.resolve
+      x-data-scope: project-entity-channel
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.reconciliation.difference_closed
+      x-audit-event-failure: finance.reconciliation.difference_close_failed
+      parameters:
+        - name: difference_id
+          in: path
+          required: true
+          description: 对账差异 ID。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - close_reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复关闭。
+                  maxLength: 128
+                close_reason:
+                  type: string
+                  description: 关闭原因；进入审计留痕。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/refunds:
     post:
       tags:
