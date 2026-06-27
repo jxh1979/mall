@@ -3,6 +3,7 @@
 > 版本：V0.x ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
+> <!-- 2026-06-27 审计 P3 收口：本文正文残留的 /api/admin/* 路径为历史预研口径，正式后端契约一律以 docs/openapi/openapi-p0.{json,yaml} 的 /api/v1/* 为准（基线 D10）；旧路径仅作页面依赖参考，不得作为实现路径。 -->
 
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
 > 以业务说明地图（治理 #permission、business #analytics）为基准核验 `apps/web`：

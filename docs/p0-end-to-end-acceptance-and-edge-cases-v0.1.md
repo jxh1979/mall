@@ -315,6 +315,18 @@ And 班结数据进入日结对账（AC-FIN-03），班结锁定后更正只能�
 
 ### AC-FIN-07 对账差异正式关闭
 
+### AC-FAC-01 楼宇设备告警自动转工单与巡检闭环
+- Given 已建楼宇机电设备台账（电梯/暖通/配电/给排水）并配置维保周期；
+- When 设备上报告警/故障，或巡检任务发现重类异常；
+- Then 自动生成物业工单并派单（pending_assign→assigned→processing→accepted/closed）；巡检异常走 rectifying→rechecked→主管确认 closed；维保到期生成维保单。
+- 边界：轻类异常仅记录、重类强制转工单；超期工单 mark-overdue 升级；能耗抄表不在巡检内重复抄（归能耗域）。
+
+### AC-ENE-01 能耗抄表异常复核与能源费结算
+- Given 已建表计台账（电/水/燃气/冷热量）按公区/商户/回路归集；
+- When 抄表录入读数；
+- Then 正常读数 recorded→reviewed；异常（突增/突降/零读数/倒走）转 abnormal 进人工复核；公区能源费按四模式分摊、结算写 ar_ap_items(source_type=energy_fee, direction=receivable)。
+- 边界：总分表抹差核对；远程表自动读为主、异常才转人工。
+
 Given 对账差异处于 open、matched、resolved 或 ignored 状态
 When 财务人员提交关闭请求并填写 `idempotency_key`、`close_reason` 和证据附件引用
 Then 系统必须将差异正式关闭并写入关闭原因、操作人、时间和审计事件
