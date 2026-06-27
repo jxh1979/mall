@@ -88,8 +88,6 @@ customer_points_accounts,inherited,customer_id,customer_id -> customers -> proje
 customer_points_ledger,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_points_redemptions,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_points_rules,direct,project_id,project_id column on customer_points_rules,ready for project/merchant scoped query enforcement,covered
-customer_points_transfer_limits,direct,project_id,project_id column on customer_points_transfer_limits,ready for project/merchant scoped query enforcement,covered
-customer_points_transfers,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_redemption_catalog_items,direct,project_id,project_id column on customer_redemption_catalog_items,ready for project/merchant scoped query enforcement,covered
 customer_sessions,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_stored_value_accounts,direct,project_id,project_id column on customer_stored_value_accounts,ready for project/merchant scoped query enforcement,covered

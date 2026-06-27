@@ -220,30 +220,5 @@ public interface CustomerRepository {
         return List.of();
     }
 
-    // 积分转赠 + 风控
-    default CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord transfer) {
-        throw new UnsupportedOperationException("savePointsTransfer not supported by this repository");
-    }
-
-    default Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String key) {
-        return Optional.empty();
-    }
-
-    /** 某客今日（[dayStart, dayEnd)）已转出的积分总额（风控日限额用）。 */
-    default long sumPointsTransferredOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
-        return 0L;
-    }
-
-    /** 某客今日（[dayStart, dayEnd)）已成功转出次数（风控日次数用）。 */
-    default int countPointsTransfersOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
-        return 0;
-    }
-
-    default Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String projectId) {
-        return Optional.empty();
-    }
-
-    default CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord limit) {
-        throw new UnsupportedOperationException("savePointsTransferLimit not supported by this repository");
-    }
+    // 积分会员间转赠已下线（HTML：积分不支持会员间转赠；2026-06-24 裁决）。相关 repo 方法/记录类/表已随 V172 清理移除。
 }

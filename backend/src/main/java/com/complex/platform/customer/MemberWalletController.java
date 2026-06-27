@@ -125,8 +125,7 @@ public class MemberWalletController {
         return ApiResponse.ok(membershipService.activeBenefits(customerId));
     }
 
-    // 积分转赠（会员间转移）已下线：HTML 业务口径明确「积分不支持会员间转赠」，端点移除；
-    // V090 customer_points_transfers/limits 表与 repo/record/dto 暂留孤儿，待后续清理迁移统一删。
+    // 积分转赠（会员间转移）已下线：HTML 明确「积分不支持会员间转赠」，端点/表/记录类已随 V172 清理移除。
 
     private String token(String customerToken, String authorization) {
         if (customerToken != null && !customerToken.isBlank()) {

@@ -537,10 +537,7 @@ public class LoyaltyService {
         return checkIn;
     }
 
-    // 积分转赠（会员间转移）已下线：HTML 业务口径明确「积分不支持会员间转赠」。
-    // transferPoints / savePointsTransferLimit 服务方法移除；repo 接口的 savePointsTransfer/
-    // findPointsTransferByIdempotencyKey/sumPointsTransferredOut/countPointsTransfersOut/
-    // findPointsTransferLimit/savePointsTransferLimit 与 V090 转赠表暂留孤儿，待后续清理迁移统一删。
+    // 积分转赠（会员间转移）已下线：HTML 明确「积分不支持会员间转赠」；服务/repo方法、记录类、V090转赠表已随 V172 清理移除。
 
     // ============================================================
     // 辅助

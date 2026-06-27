@@ -1063,15 +1063,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 """, Map.of("project_id", projectId), this::mapPointsRule);
     }
 
-    public List<CustomerPointsTransferLimitRecord> listPointsTransferLimitsByProject(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, daily_points_limit, daily_count_limit, status, created_at, updated_at
-                  FROM customer_points_transfer_limits
-                 WHERE project_id = :project_id
-                 ORDER BY id
-                """, Map.of("project_id", projectId), this::mapPointsTransferLimit);
-    }
-
     public List<CustomerRedemptionCatalogItemRecord> listRedemptionCatalogItemsByProject(String projectId) {
         return jdbcTemplate.query("""
                 SELECT id, item_name, item_type, points_cost, inventory_item_id,
@@ -1398,96 +1389,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 Map.of("now", timestampWithTimeZone(now)), this::mapMembership);
     }
 
-    @Override
-    public CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord transfer) {
-        jdbcTemplate.update("""
-                INSERT INTO customer_points_transfers (
-                    id, from_customer_id, to_customer_id, points, status, reason, idempotency_key, created_at
-                )
-                VALUES (
-                    :id, :from_customer_id, :to_customer_id, :points, :status, :reason, :idempotency_key, :created_at
-                )
-                """, new MapSqlParameterSource()
-                .addValue("id", transfer.id())
-                .addValue("from_customer_id", transfer.fromCustomerId())
-                .addValue("to_customer_id", transfer.toCustomerId())
-                .addValue("points", transfer.points())
-                .addValue("status", transfer.status())
-                .addValue("reason", transfer.reason())
-                .addValue("idempotency_key", transfer.idempotencyKey())
-                .addValue("created_at", timestampWithTimeZone(transfer.createdAt())));
-        return transfer;
-    }
-
-    @Override
-    public Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String key) {
-        if (key == null) {
-            return Optional.empty();
-        }
-        return jdbcTemplate.query("""
-                SELECT id, from_customer_id, to_customer_id, points, status, reason, idempotency_key, created_at
-                  FROM customer_points_transfers WHERE idempotency_key = :key
-                """, Map.of("key", key), this::mapPointsTransfer).stream().findFirst();
-    }
-
-    @Override
-    public long sumPointsTransferredOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
-        Long sum = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(points), 0) FROM customer_points_transfers
-                 WHERE from_customer_id = :cid AND status = 'completed'
-                   AND created_at >= :start AND created_at < :end
-                """, new MapSqlParameterSource().addValue("cid", fromCustomerId)
-                .addValue("start", timestampWithTimeZone(dayStart))
-                .addValue("end", timestampWithTimeZone(dayEnd)), Long.class);
-        return sum == null ? 0L : sum;
-    }
-
-    @Override
-    public int countPointsTransfersOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT COUNT(*) FROM customer_points_transfers
-                 WHERE from_customer_id = :cid AND status = 'completed'
-                   AND created_at >= :start AND created_at < :end
-                """, new MapSqlParameterSource().addValue("cid", fromCustomerId)
-                .addValue("start", timestampWithTimeZone(dayStart))
-                .addValue("end", timestampWithTimeZone(dayEnd)), Integer.class);
-        return count == null ? 0 : count;
-    }
-
-    @Override
-    public Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String projectId) {
-        return jdbcTemplate.query("""
-                SELECT id, project_id, daily_points_limit, daily_count_limit, status, created_at, updated_at
-                  FROM customer_points_transfer_limits
-                 WHERE status = 'active'
-                   AND project_id IS NOT DISTINCT FROM :project_id
-                """, new MapSqlParameterSource().addValue("project_id", projectId),
-                this::mapPointsTransferLimit).stream().findFirst();
-    }
-
-    @Override
-    public CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord limit) {
-        jdbcTemplate.update("""
-                INSERT INTO customer_points_transfer_limits (
-                    id, project_id, daily_points_limit, daily_count_limit, status, created_at, updated_at
-                )
-                VALUES (:id, :project_id, :daily_points_limit, :daily_count_limit, :status, :created_at, :updated_at)
-                ON CONFLICT (project_id) DO UPDATE SET
-                    daily_points_limit = EXCLUDED.daily_points_limit,
-                    daily_count_limit = EXCLUDED.daily_count_limit,
-                    status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
-                """, new MapSqlParameterSource()
-                .addValue("id", limit.id())
-                .addValue("project_id", limit.projectId())
-                .addValue("daily_points_limit", limit.dailyPointsLimit())
-                .addValue("daily_count_limit", limit.dailyCountLimit())
-                .addValue("status", limit.status())
-                .addValue("created_at", timestampWithTimeZone(limit.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(limit.updatedAt())));
-        return limit;
-    }
-
     private CustomerStoredValueAccountRecord mapStoredValueAccount(ResultSet rs, int rowNumber) throws SQLException {
         return new CustomerStoredValueAccountRecord(
                 rs.getString("id"),
@@ -1543,26 +1444,4 @@ class JdbcCustomerRepository implements CustomerRepository {
                 nullableInstant(rs, "updated_at"));
     }
 
-    private CustomerPointsTransferRecord mapPointsTransfer(ResultSet rs, int rowNumber) throws SQLException {
-        return new CustomerPointsTransferRecord(
-                rs.getString("id"),
-                rs.getString("from_customer_id"),
-                rs.getString("to_customer_id"),
-                rs.getLong("points"),
-                rs.getString("status"),
-                rs.getString("reason"),
-                rs.getString("idempotency_key"),
-                nullableInstant(rs, "created_at"));
-    }
-
-    private CustomerPointsTransferLimitRecord mapPointsTransferLimit(ResultSet rs, int rowNumber) throws SQLException {
-        return new CustomerPointsTransferLimitRecord(
-                rs.getString("id"),
-                rs.getString("project_id"),
-                rs.getLong("daily_points_limit"),
-                rs.getInt("daily_count_limit"),
-                rs.getString("status"),
-                nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
-    }
 }

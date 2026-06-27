@@ -312,8 +312,6 @@ class MemberWalletServiceTests {
         final List<CustomerStoredValueTransactionRecord> storedValueTxns = new ArrayList<>();
         final Map<String, CustomerMembershipPlanRecord> plans = new java.util.LinkedHashMap<>();
         final Map<String, CustomerMembershipRecord> memberships = new java.util.LinkedHashMap<>();
-        final List<CustomerPointsTransferRecord> transfers = new ArrayList<>();
-        CustomerPointsTransferLimitRecord transferLimit;
 
         @Override public Optional<CustomerRecord> findCustomerByPhone(String phone) {
             return customers.values().stream().filter(c -> phone.equals(c.phone())).findFirst();
@@ -401,27 +399,5 @@ class MemberWalletServiceTests {
                     .filter(m -> "active".equals(m.status()) && !m.expireAt().isAfter(now)).toList();
         }
 
-        // V090 transfer
-        @Override public CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord t) {
-            transfers.add(t); return t;
-        }
-        @Override public Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String k) {
-            return transfers.stream().filter(t -> k != null && k.equals(t.idempotencyKey())).findFirst();
-        }
-        @Override public long sumPointsTransferredOut(String cid, Instant s, Instant e) {
-            return transfers.stream().filter(t -> cid.equals(t.fromCustomerId()) && "completed".equals(t.status()))
-                    .filter(t -> !t.createdAt().isBefore(s) && t.createdAt().isBefore(e))
-                    .mapToLong(CustomerPointsTransferRecord::points).sum();
-        }
-        @Override public int countPointsTransfersOut(String cid, Instant s, Instant e) {
-            return (int) transfers.stream().filter(t -> cid.equals(t.fromCustomerId()) && "completed".equals(t.status()))
-                    .filter(t -> !t.createdAt().isBefore(s) && t.createdAt().isBefore(e)).count();
-        }
-        @Override public Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String pid) {
-            return Optional.ofNullable(transferLimit);
-        }
-        @Override public CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord l) {
-            transferLimit = l; return l;
-        }
     }
 }

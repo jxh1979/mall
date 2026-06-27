@@ -467,50 +467,6 @@ class LoyaltyServiceTests {
         final Map<String, CustomerCheckInTierRecord> tiers = new java.util.LinkedHashMap<>();
         final Map<String, CustomerBirthdayRuleRecord> birthdayRules = new java.util.LinkedHashMap<>();
         final Map<String, CustomerCheckInRecord> checkIns = new java.util.LinkedHashMap<>();
-        final List<CustomerPointsTransferRecord> transfers = new ArrayList<>();
-        final Map<String, CustomerPointsTransferLimitRecord> transferLimits = new java.util.LinkedHashMap<>();
-
-        @Override
-        public CustomerPointsTransferRecord savePointsTransfer(CustomerPointsTransferRecord transfer) {
-            transfers.add(transfer);
-            return transfer;
-        }
-
-        @Override
-        public java.util.Optional<CustomerPointsTransferRecord> findPointsTransferByIdempotencyKey(String key) {
-            if (key == null) {
-                return java.util.Optional.empty();
-            }
-            return transfers.stream().filter(t -> key.equals(t.idempotencyKey())).findFirst();
-        }
-
-        @Override
-        public long sumPointsTransferredOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
-            return transfers.stream()
-                    .filter(t -> fromCustomerId.equals(t.fromCustomerId()))
-                    .filter(t -> !t.createdAt().isBefore(dayStart) && t.createdAt().isBefore(dayEnd))
-                    .mapToLong(CustomerPointsTransferRecord::points)
-                    .sum();
-        }
-
-        @Override
-        public int countPointsTransfersOut(String fromCustomerId, Instant dayStart, Instant dayEnd) {
-            return (int) transfers.stream()
-                    .filter(t -> fromCustomerId.equals(t.fromCustomerId()))
-                    .filter(t -> !t.createdAt().isBefore(dayStart) && t.createdAt().isBefore(dayEnd))
-                    .count();
-        }
-
-        @Override
-        public java.util.Optional<CustomerPointsTransferLimitRecord> findPointsTransferLimit(String projectId) {
-            return java.util.Optional.ofNullable(transferLimits.get(projectId == null ? "" : projectId));
-        }
-
-        @Override
-        public CustomerPointsTransferLimitRecord savePointsTransferLimit(CustomerPointsTransferLimitRecord limit) {
-            transferLimits.put(limit.projectId() == null ? "" : limit.projectId(), limit);
-            return limit;
-        }
 
         @Override
         public java.util.Optional<CustomerRecord> findCustomerByPhone(String phone) {
