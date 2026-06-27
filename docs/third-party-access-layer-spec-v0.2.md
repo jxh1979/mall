@@ -799,19 +799,19 @@ flowchart TD
 | 2026-06-07 收口 | 改 | §3 对外开放授权行、§7 结论 | "通过"下调为"本轮补齐，待复核"；§7 结论由"已闭环"据实下调为"本轮补齐、待复核" | 唯一漏做据实下调的域，与其它域处理不一致。依据 finding overclaim-1 |
 | 2026-06-07 收口 | 增 | §6A 已知缺口 | 新增"已知缺口（待复核）"节，登记 third-1 对外方向仅接口预留、双回流层级、团购渠道待复核 | 全文原无"已知缺口"节。依据 finding overclaim-1 |
 | 2026-06-08 | 改 | §3/§6A/§7 | 将 P0 接口预留与团购渠道口径由"待复核"收口为"已补齐并复核通过"，真实第三方字段改列为 P1/P2 实施依赖 | 对齐用户"第三方先留接口，自己的系统先开发"决策与产品流复核报告 |
-| `文档goalP1(2026-06-20)` | 增 | §8 | 新增"补登：人脸/年龄核验(bar_face_age)与设备/闸机(gate_nfc_scan_device)供应商接入规格"，补两类此前在本层只在字段字典 §7 出现专项字段、但无页面/字段/失败场景/核验留痕完整登记的供应商 | 产品规格层缺两类供应商完整口径；与 `third-party-integration-development-design` §13.6/§14.17 设备事件、合规 §2 年龄核验对齐 |
+| `文档goalP1(2026-06-20)` | 增 | §8 | 新增"补登：人脸/年龄核验(face.verification.enabled)与设备/闸机(gate_nfc_scan_device)供应商接入规格"，补两类此前在本层只在字段字典 §7 出现专项字段、但无页面/字段/失败场景/核验留痕完整登记的供应商 | 产品规格层缺两类供应商完整口径；与 `third-party-integration-development-design` §13.6/§14.17 设备事件、合规 §2 年龄核验对齐 |
 
 ---
 
-## 8. 补登：人脸/年龄核验（bar_face_age）与设备/闸机（gate_nfc_scan_device）供应商接入规格
+## 8. 补登：人脸/年龄核验（face.verification.enabled）与设备/闸机（gate_nfc_scan_device）供应商接入规格
 
-> 新增章节（`文档goalP1(2026-06-20)`）：本层此前仅在字段字典 §7（视频/企微专项字段）和接入治理页（§2 提及机器人/视频/企微）覆盖了视频、企微、机器人、团购渠道与餐饮/零售 POS，**人脸/年龄核验**与**设备/闸机**两类供应商虽已在 `integration-capability-switches-v0.1.md`（开关 `bar_face_age`、`gate_nfc_scan_device`）与合规文档 §2 出现，但本层无独立页面/字段/失败场景/核验留痕登记。本节据实补登，与 `third-party-integration-development-design`（§4.1 接入矩阵、§13.6 设备事件、§14.17 device_integration_events、§6.5 通用错误码）和 `compliance-and-personal-information-protection-requirements-v0.1.md` §2（未成年人售酒）对齐。两类供应商默认开关 off，真实供应商资料未定前以 mock adapter + 占位字段先行，不写死进酒吧/票务业务主模型。
+> 新增章节（`文档goalP1(2026-06-20)`）：本层此前仅在字段字典 §7（视频/企微专项字段）和接入治理页（§2 提及机器人/视频/企微）覆盖了视频、企微、机器人、团购渠道与餐饮/零售 POS，**人脸/年龄核验**与**设备/闸机**两类供应商虽已在 `integration-capability-switches-v0.1.md`（开关 `face.verification.enabled`、`gate_nfc_scan_device`）与合规文档 §2 出现，但本层无独立页面/字段/失败场景/核验留痕登记。本节据实补登，与 `third-party-integration-development-design`（§4.1 接入矩阵、§13.6 设备事件、§14.17 device_integration_events、§6.5 通用错误码）和 `compliance-and-personal-information-protection-requirements-v0.1.md` §2（未成年人售酒）对齐。两类供应商默认开关 off，真实供应商资料未定前以 mock adapter + 占位字段先行，不写死进酒吧/票务业务主模型。
 
-### 8.1 人脸/年龄核验（bar_face_age）
+### 8.1 人脸/年龄核验（face.verification.enabled）
 
 **业务定位**：酒吧门口"入场年龄核验"关卡的第三方人脸/年龄核验能力。仅用于售酒/入场合规判定（与合规 §2 对齐），**不扩大游客实名范围**（合规 §8）；核验仅返回最小必要结果（是否成年/活体），P0 默认不保存原始人脸图像。
 
-**关联开关**：`integration-capability-switches-v0.1.md` 的 `bar_face_age`（默认 off，关联证据 PRD-FACE-001）。关闭时酒吧入场只走人工证件核验 + 人工复核 + 审计留痕，不得展示"自动人脸核验已通过"。
+**关联开关**：`integration-capability-switches-v0.1.md` 的 `face.verification.enabled`（默认 off，关联证据 PRD-FACE-001）。关闭时全场入场只走人工证件核验 + 人工复核 + 审计留痕，不得展示"自动人脸核验已通过"。
 
 #### 8.1.1 页面（落在"接入治理 / 证据关联"页面组，新增专项视图）
 

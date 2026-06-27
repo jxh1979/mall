@@ -18,7 +18,7 @@
 | `aggregate_payment` | 聚合支付 | off | 仅现金/线下 POS/人工收款 + 留痕 | 抽象层 + mock 支付 + 对账口径 | 超时/验签失败/对账差异 `PAY_*` |
 | `groupbuy_ticket_channel` | 团购/渠道售票 | off | 仅平台自出票 + 后台补录 | 渠道订单回流 mock | 券码核销失败/退款同步 |
 | `wecom` | 企业微信 | off | **员工后台手动录入**（默认入口）；质检仅平台内数据 | — | 同步失败告警 |
-| `bar_face_age` | 人脸/年龄核验 | off | 人工证件核验 + 复核 + 留痕，不得标自动通过 | adapter 结果 + 证据附件 mock（REQ-23b）| `FACE_TIMEOUT/LOW_LIVENESS/MANUAL_REVIEW` |
+| `face.verification.enabled` | 人脸/年龄核验 | off | 人工证件核验 + 复核 + 留痕，不得标自动通过 | adapter 结果 + 证据附件 mock（REQ-23b）| `FACE_TIMEOUT/LOW_LIVENESS/MANUAL_REVIEW` |
 | `managed_work_devices` | MDM 纳管 | off | 工作手机/平板/一体机**不得**执行高风险核销/出酒/支付 | 字段映射占位（v0.2 补）| `MDM_ENROLL_TIMEOUT/CMD_FAILED` |
 | `object_storage` | 对象存储 | off | 仅记外部证据编号/手工 evidence_link | 字段映射占位（v0.2 补）| `STORAGE_PRESIGN_EXPIRED/HASH_MISMATCH` |
 | `open_platform` | 开放平台接入 | off | 仅内部 adapter/mock | provider adapter mock（REQ-40）| 验签/防重放 |

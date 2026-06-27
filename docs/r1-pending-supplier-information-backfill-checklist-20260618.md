@@ -11,7 +11,7 @@
 | S1 | 聚合支付（aggregate_payment）| switch_off / pending_info | 抽象接口、mock 支付、对账口径 | 真实收款/退款/生产对账 | 商户号、密钥引用、回调验签、退款权限、对账文件 | 财务/IT/采购 |
 | S2 | 团购/渠道售票（美团/点评/抖音）| switch_off | 渠道订单回流 mock、后台补录 | 真实券码核销/订单回流/退款同步 | 渠道 API/SDK、券码核销、对账口径、测试账号 | 运营/采购 |
 | S3 | 企业微信（wecom）| switch_off / pending_info | 基础同步占位、规则质检、失败告警设计 | AI 自动处罚/自动绩效 | 应用配置、通讯录/会话存档权限、回调、同步证据 | IT/运营/法务 |
-| S4 | 酒吧人脸/年龄核验（bar_face_age）| switch_off / pending_info | mock、接口占位、失败阻断逻辑 | 生产仅靠 mock 或口头确认标记通过 | 供应商 SDK/API、合规材料、测试账号、错误码 | 采购/法务/酒吧 |
+| S4 | 入场人脸/年龄核验（face.verification.enabled）| switch_off / pending_info | mock、接口占位、失败阻断逻辑 | 生产仅靠 mock 或口头确认标记通过 | 供应商 SDK/API、合规材料、测试账号、错误码 | 采购/法务/酒吧 |
 | S5 | MDM/Android Enterprise（managed_work_devices）| switch_off | 字段映射占位、设备能力字典 | 未纳管设备作正式工作手机/平板生产准入 | MDM 选型、enroll、策略下发、远程锁定/擦除测试、设备绑定证据 | IT |
 | S6 | 对象存储/证据桶（object_storage）| switch_off | 字段映射占位、外部证据编号/手工 link | 平台内文件上传/签名 URL 能力 | 桶、Access Key 引用、上传下载、签名 URL、备份轮换证据 | IT/运维 |
 | S7 | 开放平台/第三方应用接入（open_platform）| switch_off | 内部 adapter/mock | 真实 app_key/secret、动态 endpoint、入站 webhook | 开放应用、scopes、签名密钥、nonce、防重放、验签、轮换证据 | IT/安全 |

@@ -160,7 +160,7 @@
 
 | 能力 | 开启前置检查清单 |
 |---|---|
-| `bar_face_age` 人脸/年龄核验 | 供应商 SDK/API、成功/失败样例、错误码（`FACE_*`）、合规材料/数据处理协议、测试账号、credential_ref |
+| `face.verification.enabled` 人脸/年龄核验 | 供应商 SDK/API、成功/失败样例、错误码（`FACE_*`）、合规材料/数据处理协议、测试账号、credential_ref |
 | `gate_nfc_scan_device` 闸机/NFC/扫码设备 | 设备协议/API、核销校验、开闸结果、离线队列、设备事件、签名、补偿证据、credential_ref |
 | `aggregate_payment` 聚合支付 | 商户号、回调验签、退款权限、对账文件、credential_ref、失败补偿、生产证据 |
 | `groupbuy_ticket_channel` 团购/渠道 | 渠道 API/SDK、券码核销、订单回流、退款同步、对账口径、生产证据 |
