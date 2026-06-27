@@ -16,7 +16,13 @@
 | 事项 | 当前口径 |
 |---|---|
 | 正式技术栈 | Java 21 + Spring Boot 4.x + PostgreSQL + Flyway + Maven + springdoc-openapi |
-| P0 机器可读接口契约 | `docs/openapi/openapi-p0.yaml`、`docs/openapi/openapi-p0.json` |
+| 业务人员最高口径 HTML | `docs/business-system-map-for-operations-v0.1.html`、`docs/platform-governance-map-for-operations-v0.1.html`、`docs/business-enum-quick-reference-v0.1.html`；三份 HTML 为业务口径最终解释权，PRD、开发、OpenAPI、数据库、UI、测试、实现计划需向其对齐 |
+| 地产业务全链路 PRD | `docs/real-estate-full-chain-domain-prd-v0.1.md` |
+| 招商获客业务域 PRD | `docs/leasing-acquisition-prd-v1.0.md` |
+| 楼宇运营业务域 PRD | `docs/building-operations-prd-v1.0.md` |
+| 集团治理重建 PRD | `docs/group-governance-rebuild-prd-v1.0.md` |
+| P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。2026-06-27 核对发现 JSON 为 512 operations、YAML 为 427 operations；两者不一致时不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
+| OpenAPI 与业务 HTML 待核对缺口 | 2026-06-27 按 `docs/openapi/openapi-p0.json` path 只读核对：已见招商、合同、巡检、设备、能耗等直观路径；未见楼栋/楼层/铺位/公共区域资源建档、商户档案/入驻、发票/应收、审计日志的明确直观路径。后续需回到三份业务 HTML 逐条补 operation 或建立现有路径映射，不能用关键词命中替代覆盖结论 |
 | P0 operation 级验收矩阵 | `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` |
 | P0 OpenAPI 权限、事件、任务追溯附录 | `docs/p0-openapi-contract-closure-appendix-v0.1.md` |
 | P0 可编码入口包 | `docs/p0-coding-entry-pack-v0.1.md` |
@@ -232,6 +238,9 @@ npm run verify:production-evidence-crosslinks` |
 | 游乐项目、场次、容量、安全巡检 | `amusement-business-operations-product-prd-v0.1.md` | `amusement-operations-development-design.md` |
 | 商户、主体、合同、权限、设备 | `platform-governance-prd-v0.1.md` | `platform-governance-product-spec-v0.2.md` |
 | 应收应付、日结、对账、结算 | `finance-settlement-product-prd-v0.1.md` | `finance-ar-ap-ledger-development-design-v0.1.md` |
+| 会员忠诚度、积分两本账、签到、生日、储值、付费会员 | `member-loyalty-and-stored-value-product-prd-v0.1.md` | `member-loyalty-and-stored-value-development-design-v0.1.md` |
+| 经营看板、8 类指标、下钻 | `business-dashboard-metrics-product-prd-v0.1.md` | `r5-spec-T12-dashboard-aggregation-dev-design-20260618.md` |
+| 客人端 App/小程序、订台定金、订卡邀请函 | `customer-app-miniapp-product-prd-v0.1.md` | `customer-app-miniapp-development-design-v0.1.md` |
 
 ### 3.4 前端、Android、平板、一体机、小程序/App/Web
 

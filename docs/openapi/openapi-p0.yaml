@@ -2,8 +2,7 @@ openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
   version: 0.1.0
-  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
-    springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
+  description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
   - url: /
     description: 同域部署或由网关转发
@@ -386,8 +385,7 @@ paths:
         "200":
           $ref: "#/components/responses/Page"
         "403":
-          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope
-            仅可读取本商户账号，越界查询拒绝）。
+          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope 仅可读取本商户账号，越界查询拒绝）。
           content:
             application/json:
               schema:
@@ -450,8 +448,7 @@ paths:
         - amusement
       operationId: listAmusementGroupBookings
       summary: List P2 amusement group and private bookings
-      description: List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope,
-        idempotency and audit event requirements.
+      description: List P2 amusement group and private bookings. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.view
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -472,8 +469,7 @@ paths:
         - amusement
       operationId: createAmusementGroupBooking
       summary: Create P2 amusement group or private booking request
-      description: Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data
-        scope, idempotency and audit event requirements.
+      description: Create P2 amusement group or private booking request. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -503,8 +499,7 @@ paths:
         - amusement
       operationId: approveAmusementGroupBooking
       summary: Approve P2 amusement group booking and lock capacity
-      description: Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data
-        scope, idempotency and audit event requirements.
+      description: Approve P2 amusement group booking and lock capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.approve
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -537,8 +532,7 @@ paths:
         - amusement
       operationId: releaseAmusementGroupBooking
       summary: Release P2 amusement group booking and free locked capacity
-      description: Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission,
-        data scope, idempotency and audit event requirements.
+      description: Release P2 amusement group booking and free locked capacity. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: amusement.group_booking.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1249,9 +1243,7 @@ paths:
         - amusement
       operationId: createAmusementVerification
       summary: 游乐权益核销
-      description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople
-        整体占用场次/点位设备/项目安全三维容量→留痕。多人票任一受控维度余量不足 N
-        时整单拒绝并回补权益。失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(场次容量耗尽，已消费权益回补)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
+      description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用场次/点位设备/项目安全三维容量→留痕。多人票任一受控维度余量不足 N 时整单拒绝并回补权益。失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(场次容量耗尽，已消费权益回补)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
       x-permission: amusement.verification.execute
       x-failure-codes:
         - TICKET_NOT_FOUND
@@ -1313,9 +1305,7 @@ paths:
         - analytics
       operationId: generateLocalLlmAiQualitySuggestion
       summary: Generate local LLM AI quality suggestion
-      description: T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result
-        writes only AI quality task and result records and never changes payment, verification, refund, punishment,
-        commission, contract, inventory, or device state.
+      description: T3-D1 uses only a loopback local model service on host 160 to generate AI quality suggestions. The result writes only AI quality task and result records and never changes payment, verification, refund, punishment, commission, contract, inventory, or device state.
       x-permission: analytics.risk_alert.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -1387,8 +1377,7 @@ paths:
         - analytics
       operationId: listBusinessMetricSnapshots
       summary: List P2 business metric snapshots for operational analytics
-      description: List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission,
-        data scope, idempotency and audit event requirements.
+      description: List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: analytics.dashboard.view
       x-data-scope: project
       x-terminal-allowed:
@@ -3951,8 +3940,7 @@ paths:
         - integration
       operationId: reportIntegrationRobotTaskEvent
       summary: 机器人任务事件上报（被动留痕）
-      description: R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17
-        交接。真实回流闭环待厂商资料 + 开关开启后交付。
+      description: R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -3979,8 +3967,7 @@ paths:
         - integration
       operationId: listIntegrationVideoAnchors
       summary: 调阅视频点位时间锚点（敏感，写调阅审计）
-      description: R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer +
-        approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。
+      description: R5 T14：视频点位+时间锚点调阅。敏感操作需权限 integration.video.view，逐条写 integration_video_access_audits（viewer + approval_ref）。clip_index_ref 留空待厂商监控片段索引接入。
       x-permission: integration.video.view
       x-data-scope: project
       x-terminal-allowed:
@@ -4010,10 +3997,7 @@ paths:
         - integration
       operationId: receiveIntegrationTypedWebhook
       summary: 第三方统一 webhook 入口（开关门控）
-      description: R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook
-        入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用
-        TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping
-        占位空、process_status=accepted），不伪造对账。
+      description: R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。
       x-permission: not_applicable
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -4908,8 +4892,7 @@ paths:
         - inventory
       operationId: createStockAdjustment
       summary: 盘点差异、报损、报溢
-      description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review
-        调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
+      description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review 调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
       x-permission: inventory.stock.adjust
       x-data-scope: project-warehouse
       x-terminal-allowed:
@@ -5317,8 +5300,7 @@ paths:
         - merchant-service
       operationId: listMerchantServiceWorkOrders
       summary: List merchant service work orders
-      description: List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence.
+      description: List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5341,8 +5323,7 @@ paths:
         - merchant-service
       operationId: createMerchantServiceWorkOrder
       summary: Create merchant service work order
-      description: Create merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence.
+      description: Create merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.create
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5372,8 +5353,7 @@ paths:
         - merchant-service
       operationId: addMerchantServiceWorkOrderAction
       summary: Append merchant service work order action
-      description: Append merchant service work order action. This P1 merchant service workflow must enforce server-side
-        permissions, idempotent writes, and audit evidence.
+      description: Append merchant service work order action. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.process
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5413,8 +5393,7 @@ paths:
         - merchant-service
       operationId: assignMerchantServiceWorkOrder
       summary: Assign merchant service work order
-      description: Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence.
+      description: Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.assign
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5454,8 +5433,7 @@ paths:
         - merchant-service
       operationId: closeMerchantServiceWorkOrder
       summary: Close merchant service work order
-      description: Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence.
+      description: Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence.
       x-permission: merchant.service_work_order.close
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -6002,9 +5980,7 @@ paths:
         - terminals
       operationId: updateCapabilitySwitch
       summary: 修改端能力开关
-      description: 后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如
-        payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位
-        NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。
+      description: 后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如 payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位 NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。
       x-permission: terminal.switch.manage
       x-data-scope: project-device
       x-terminal-allowed:
@@ -6252,8 +6228,7 @@ paths:
         - ticketing
       operationId: listTicketDynamicPricingRules
       summary: List P2 ticket dynamic pricing rules
-      description: List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope,
-        idempotency and audit event requirements.
+      description: List P2 ticket dynamic pricing rules. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.view
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -6274,8 +6249,7 @@ paths:
         - ticketing
       operationId: createTicketDynamicPricingRule
       summary: Create P2 ticket dynamic pricing rule draft
-      description: Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope,
-        idempotency and audit event requirements.
+      description: Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.manage
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -6303,8 +6277,7 @@ paths:
         - ticketing
       operationId: publishTicketDynamicPricingRule
       summary: Publish P2 ticket dynamic pricing rule
-      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope,
-        idempotency and audit event requirements.
+      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.
       x-permission: ticket.dynamic_pricing.publish
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -6337,8 +6310,7 @@ paths:
         - ticketing
       operationId: simulateTicketDynamicPricing
       summary: Simulate P2 ticket dynamic pricing without creating an order
-      description: Simulate P2 ticket dynamic pricing. Simulation may include draft and published rules, but does not create
-        orders or receivables.
+      description: Simulate P2 ticket dynamic pricing. Simulation may include draft and published rules, but does not create orders or receivables.
       x-permission: ticket.dynamic_pricing.simulate
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -6461,9 +6433,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date,
-        sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted.
-        Draft rules only participate in simulation.
+      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation.
   /api/v1/ticketing/orders/{order_id}/issue:
     post:
       tags:
@@ -6909,8 +6879,7 @@ paths:
         - merchant-billing
       operationId: listMerchantBills
       summary: List merchant bills
-      description: List merchant bills for merchant portal and admin read-only scope checks. This P1/P2 merchant billing
-        workflow must enforce server-side permissions, project-merchant data scope, and audit evidence.
+      description: List merchant bills for merchant portal and admin read-only scope checks. This P1/P2 merchant billing workflow must enforce server-side permissions, project-merchant data scope, and audit evidence.
       x-permission: merchant.billing.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -7120,8 +7089,7 @@ paths:
         - access
       operationId: getEffectivePermissions
       summary: 查询当前账号有效权限集
-      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先
-        + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
+      description: 返回当前登录账号的有效权限集（四源合并、DENY 优先、剔除未生效/已过期项；grants 已预扣 denies，denies 单列供展示）。仅需已登录，scope 安全；只读不消费单次授权。前端按 DENY 优先 + wildcard + fail-safe 渲染入口显隐，与后端 requirePermission 同口径。
       x-permission: authenticated
       x-data-scope: self
       x-terminal-allowed:
@@ -7159,8 +7127,7 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
-          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope
-            不得查看其他商户账号的有效权限集）。
+          description: 权限不足或跨租户拒绝；含 `detail_code=CROSS_MERCHANT_FORBIDDEN`（F-AUTHZ-01：`access.user.view` 跨租户读收口，非平台 scope 不得查看其他商户账号的有效权限集）。
           content:
             application/json:
               schema:
@@ -7176,8 +7143,7 @@ paths:
         - access
       operationId: assignStaffLevel
       summary: 分配员工职级与薪资
-      description: 用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
-        深度能力不得反向扩大 P0 范围。
+      description: 用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: access.staff_level.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -7688,8 +7654,7 @@ paths:
         - access
       operationId: submitStaffRegistration
       summary: 员工自助注册
-      description: 员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建 staff_profiles(submitted)，待后台审批。必须按 OpenAPI
-        schema、权限、数据范围、终端、幂等和审计事件实现。
+      description: 员工私人手机 App 提交注册（个人信息只传不可逆哈希 phone_hash/id_doc_hash，PIPL）。建 staff_profiles(submitted)，待后台审批。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
       x-permission: staff.profile.submit
       x-data-scope: project
       x-terminal-allowed:
@@ -7720,8 +7685,7 @@ paths:
         - access
       operationId: reviewStaffRegistration
       summary: 审批员工注册
-      description: 后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带 reject_reason。仅 submitted
-        状态可审批；商户角色仅可审批本 merchant 范围。
+      description: 后台审批员工注册：approve 生成 user_id + 默认角色并发 approval_result 通知；reject 必须带 reject_reason。仅 submitted 状态可审批；商户角色仅可审批本 merchant 范围。
       x-permission: staff.profile.review
       x-data-scope: project
       x-terminal-allowed:
@@ -7782,8 +7746,7 @@ paths:
         - access
       operationId: bindStaffDeviceCredential
       summary: 绑定/换机申请员工设备凭证
-      description: 员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证 pending_review + supersedes 指向旧
-        active。与 kiosk 的 terminal_device_credentials 两套实体互不串值。
+      description: 员工私人手机绑定 Keystore 设备公钥 + 不可逆指纹（不读 NFC，D8）。若已有 active 且指纹不同则视为换机：新凭证 pending_review + supersedes 指向旧 active。与 kiosk 的 terminal_device_credentials 两套实体互不串值。
       x-permission: staff.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -7816,8 +7779,7 @@ paths:
         - access
       operationId: approveStaffDeviceRebind
       summary: 审批换机生效
-      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证
-        uq_staff_device_credentials_one_active 始终成立。
+      description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证 uq_staff_device_credentials_one_active 始终成立。
       x-permission: staff.device.review
       x-data-scope: project
       x-terminal-allowed:
@@ -7853,8 +7815,7 @@ paths:
         - access
       operationId: reportStaffDeviceIntegrity
       summary: 端侧完整性上报
-      description: 端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发
-        staff_device.integrity_failed + 通知复核。由端侧鉴权调用。
+      description: 端侧上报 integrity_status；非 trusted（root_detected/debug_detected/abnormal）→ 凭证自动 revoked + 发 staff_device.integrity_failed + 通知复核。由端侧鉴权调用。
       x-permission: staff.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -7983,9 +7944,7 @@ paths:
         - compliance
       operationId: syncWecomConversation
       summary: 企微会话同步入站（PIPL 合规，开关门控）
-      description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调
-        PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until
-        按生效留存策略（默认180天）推算。
+      description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调 PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until 按生效留存策略（默认180天）推算。
       x-permission: wecom.sync
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -8047,9 +8006,7 @@ paths:
         - compliance
       operationId: viewWecomConversationMessages
       summary: 分级查看企微会话消息（脱敏/原文，原文需审批+审计）
-      description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 +
-        approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件
-        wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
+      description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 + approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件 wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
       x-permission: wecom.view_raw
       x-data-scope: project
       x-terminal-allowed:
@@ -8117,8 +8074,7 @@ paths:
         - compliance
       operationId: upsertWecomRetentionPolicy
       summary: 配置企微留存策略（默认180天）
-      description: R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一
-        upsert。需 wecom.retention.manage（高敏需审批）。
+      description: R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一 upsert。需 wecom.retention.manage（高敏需审批）。
       x-permission: wecom.retention.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -9323,8 +9279,7 @@ paths:
         - bar
       operationId: assignBarTableSpace
       summary: 卡座/桌台空间指派（回填）
-      description: "处理清单 #8：设 bar_tables.space_id（运营录入/回填）。bar_tables 无可派生源，无法 SQL 自动回填；over_space
-        判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
+      description: "处理清单 #8：设 bar_tables.space_id（运营录入/回填）。bar_tables 无可派生源，无法 SQL 自动回填；over_space 判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
       x-permission: bar.table.manage
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -9378,8 +9333,7 @@ paths:
         - amusement
       operationId: assignAmusementProjectSpace
       summary: 游乐项目空间指派（回填）
-      description: "处理清单 #8：设 amusement_projects.space_id（运营录入/回填）。amusement_projects 无可派生源，无法 SQL 自动回填；over_space
-        判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
+      description: "处理清单 #8：设 amusement_projects.space_id（运营录入/回填）。amusement_projects 无可派生源，无法 SQL 自动回填；over_space 判定依赖该列。校验空间存在且同商户，currentMerchantScope 隔离。"
       x-permission: amusement.session.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -13895,6 +13849,16 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+      parameters:
+        - name: groupBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - project
+              - entity
+          description: 汇总维度：project(默认)按项目 / entity 按法律主体下钻。
   /api/v1/ticketing/refunds/{refund_id}/lines:
     get:
       tags:
@@ -14407,8 +14371,7 @@ paths:
         - bar
       operationId: redeemBarDrinkEntitlement
       summary: 酒水权益兑换承接
-      description: 承接已完成票务核销的赠饮权益领取结果。调用方必须先通过 /api/v1/ticketing/verifications 完成权益核销；本接口只按 verification_id 返回对应
-        bar_gift_redemptions，并记录酒吧侧领取审计。
+      description: 承接已完成票务核销的赠饮权益领取结果。调用方必须先通过 /api/v1/ticketing/verifications 完成权益核销；本接口只按 verification_id 返回对应 bar_gift_redemptions，并记录酒吧侧领取审计。
       x-auth-context: staff-token
       x-permission: bar.entitlement.redeem
       x-data-scope: project-bar
@@ -15029,6 +14992,2835 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/leasing/leads:
+    get:
+      tags:
+        - leasing
+      operationId: listLeasingLeads
+      summary: 招商线索清单
+      x-permission: leasing.lead.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: leasing.lead.viewed
+      x-audit-event-failure: leasing.lead.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - leasing
+      operationId: createLeasingLead
+      summary: 新建招商线索
+      x-permission: leasing.lead.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.lead.created
+      x-audit-event-failure: leasing.lead.create_failed
+      x-auth-context: staff-token
+      description: V161 重建：来源 4 类(outbound/online_inquiry/referral/exhibition)，同品牌黑名单则拦截。状态默认 pending_follow_up。
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingLeadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/leads/follow-up-due:
+    get:
+      tags:
+        - leasing
+      operationId: listLeasingLeadsFollowUpDue
+      summary: 待跟进线索(3 天未跟进)
+      x-permission: leasing.lead.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: leasing.lead.viewed
+      x-audit-event-failure: leasing.lead.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/leads/{lead_id}/assign:
+    post:
+      tags:
+        - leasing
+      operationId: assignLeasingLead
+      summary: 招商线索派单(主管手动指派)
+      x-permission: leasing.lead.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.lead.assigned
+      x-audit-event-failure: leasing.lead.assign_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          description: 线索 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingLeadAssignRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/leads/{lead_id}/status:
+    post:
+      tags:
+        - leasing
+      operationId: updateLeasingLeadStatus
+      summary: 招商线索状态流转(7 态)
+      x-permission: leasing.lead.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.lead.status_changed
+      x-audit-event-failure: leasing.lead.status_change_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          description: 线索 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingLeadStatusRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/intents:
+    get:
+      tags:
+        - leasing
+      operationId: listLeasingIntents
+      summary: 招商意向清单
+      x-permission: leasing.intent.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: leasing.intent.viewed
+      x-audit-event-failure: leasing.intent.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - leasing
+      operationId: createLeasingIntent
+      summary: 线索转意向(stage 起始 initial_contact)
+      x-permission: leasing.intent.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.intent.created
+      x-audit-event-failure: leasing.intent.create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingIntentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/intents/{intent_id}/advance:
+    post:
+      tags:
+        - leasing
+      operationId: advanceLeasingIntent
+      summary: 意向阶段推进(5 阶段)
+      x-permission: leasing.intent.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.intent.advanced
+      x-audit-event-failure: leasing.intent.advance_failed
+      x-auth-context: staff-token
+      description: 关键阶段(proposal_quoted/negotiation)须带 supervisor_user_id 主管确认，否则阻断。
+      parameters:
+        - name: intent_id
+          in: path
+          required: true
+          description: 意向 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingIntentAdvanceRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/intents/{intent_id}/sign:
+    post:
+      tags:
+        - leasing
+      operationId: signLeasingIntent
+      summary: 意向签约→转商户+喂入合同 draft
+      x-permission: leasing.convert
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.intent.signed
+      x-audit-event-failure: leasing.intent.sign_failed
+      x-auth-context: staff-token
+      description: 仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。
+      parameters:
+        - name: intent_id
+          in: path
+          required: true
+          description: 意向 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingSignRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/brands:
+    get:
+      tags:
+        - leasing
+      operationId: listLeasingBrands
+      summary: 招商品牌/客户库清单
+      x-permission: leasing.brand.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: leasing.brand.viewed
+      x-audit-event-failure: leasing.brand.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - leasing
+      operationId: createLeasingBrand
+      summary: 新建品牌(4 类)
+      x-permission: leasing.brand.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.brand.created
+      x-audit-event-failure: leasing.brand.create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingBrandRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/brands/{brand_id}/blacklist:
+    post:
+      tags:
+        - leasing
+      operationId: blacklistLeasingBrand
+      summary: 品牌拉黑/解黑(高危需审批)
+      x-permission: leasing.brand.blacklist
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.brand.blacklist_changed
+      x-audit-event-failure: leasing.brand.blacklist_change_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: brand_id
+          in: path
+          required: true
+          description: 品牌 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingBrandBlacklistRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/leasing/follow-ups:
+    get:
+      tags:
+        - leasing
+      operationId: listLeasingFollowUps
+      summary: 跟进记录(按 ref 查)
+      x-permission: leasing.lead.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: leasing.follow_up.viewed
+      x-audit-event-failure: leasing.follow_up.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: ref_type
+          in: query
+          required: true
+          description: 关联类型。
+          schema:
+            type: string
+            enum:
+              - lead
+              - intent
+        - name: ref_id
+          in: query
+          required: true
+          description: 关联对象 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - leasing
+      operationId: createLeasingFollowUp
+      summary: 新建跟进记录(回写 last_follow_up_at)
+      x-permission: leasing.lead.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: leasing.follow_up.created
+      x-audit-event-failure: leasing.follow_up.create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/LeasingFollowUpRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts:
+    get:
+      tags:
+        - contract
+      operationId: listContracts
+      summary: 合同清单
+      x-permission: contract.draft.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract.viewed
+      x-audit-event-failure: contract.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - contract
+      operationId: createContractDraft
+      summary: 起草合同(草拟)
+      x-permission: contract.draft.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.drafted
+      x-audit-event-failure: contract.draft_failed
+      x-auth-context: staff-token
+      description: V162 重建：手工或招商签约带入。租金/递增/免租/物业费放 rent_terms；抽成 4 模式可空、能源费分摊 4 模式。状态默认 drafting。
+      requestBody:
+        $ref: "#/components/requestBodies/ContractDraftRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/submit:
+    post:
+      tags:
+        - contract
+      operationId: submitContract
+      summary: 提交进审批链(→待确认)
+      x-permission: contract.draft.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.submitted
+      x-audit-event-failure: contract.submit_failed
+      x-auth-context: staff-token
+      description: 按所属综合体生效链物化第一并行阶段。链未配则拒。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractSubmitRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/approve:
+    post:
+      tags:
+        - contract
+      operationId: approveContractStage
+      summary: 审批当前阶段并行槽(会签)
+      x-permission: contract.approve.business
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.approved_slot
+      x-audit-event-failure: contract.approve_failed
+      x-auth-context: staff-token
+      description: 分组并行：实际权限按 body.approver_permission_code 动态校验(业务/财务/法务/总经理…)。当前阶段全过进下一阶段，任一驳回整单退回起草。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractApproveRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/approvals:
+    get:
+      tags:
+        - contract
+      operationId: listContractApprovals
+      summary: 合同审批留痕(按阶段)
+      x-permission: contract.draft.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract.approvals_viewed
+      x-audit-event-failure: contract.approvals_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/activate:
+    post:
+      tags:
+        - contract
+      operationId: activateContract
+      summary: 生效(固化快照+绑铺位)
+      x-permission: contract.lifecycle.activate
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.activated
+      x-audit-event-failure: contract.activate_failed
+      x-auth-context: staff-token
+      description: 须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractActivateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/changes:
+    get:
+      tags:
+        - contract
+      operationId: listContractChanges
+      summary: 合同变更清单
+      x-permission: contract.change.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract.changes_viewed
+      x-audit-event-failure: contract.changes_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - contract
+      operationId: raiseContractChange
+      summary: 发起合同变更(6 类)
+      x-permission: contract.change.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.change_raised
+      x-audit-event-failure: contract.change_raise_failed
+      x-auth-context: staff-token
+      description: 6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractChangeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/changes/{change_id}/approve:
+    post:
+      tags:
+        - contract
+      operationId: approveContractChange
+      summary: 变更审批(走同一并行链,全过即应用+新版本快照)
+      x-permission: contract.approve.business
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.change_approved
+      x-audit-event-failure: contract.change_approve_failed
+      x-auth-context: staff-token
+      description: 变更走与新签同一可配分组并行链；实际权限按 body.approver_permission_code 动态校验。全阶段通过即应用变更，任一驳回整变更退回。
+      parameters:
+        - name: change_id
+          in: path
+          required: true
+          description: 变更 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractChangeApproveRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/settle:
+    post:
+      tags:
+        - contract
+      operationId: settleContract
+      summary: 退租/到期结算(逐例顺序)
+      x-permission: contract.settlement.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.settled
+      x-audit-event-failure: contract.settle_failed
+      x-auth-context: staff-token
+      description: 按合同 settlement_rules 逐例算；带 dispute_reason 则挂起「有争议」等主管裁决。结清→合同终止/到期。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractSettleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/settlements:
+    get:
+      tags:
+        - contract
+      operationId: listContractSettlements
+      summary: 退租结算清单
+      x-permission: contract.settlement.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract.settlements_viewed
+      x-audit-event-failure: contract.settlements_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/settlements/{settlement_id}/resolve-dispute:
+    post:
+      tags:
+        - contract
+      operationId: resolveContractDispute
+      summary: 裁决退租争议→回到待结算
+      x-permission: contract.settlement.dispute.resolve
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.dispute_resolved
+      x-audit-event-failure: contract.dispute_resolve_failed
+      x-auth-context: staff-token
+      description: 有争议 → 待结算（逐例备齐，合同仍生效），待 complete 结清。
+      parameters:
+        - name: settlement_id
+          in: path
+          required: true
+          description: 结算 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractResolveDisputeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/approval-flow:
+    get:
+      tags:
+        - contract
+      operationId: listContractApprovalFlow
+      summary: 查审批链(生效链：项目覆盖优先)
+      x-permission: contract.approval.flow.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract.approval_flow_viewed
+      x-audit-event-failure: contract.approval_flow_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          description: 综合体 id(空=平台默认)。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - contract
+      operationId: saveContractApprovalFlow
+      summary: 配置审批链(分组并行,按综合体覆盖)
+      x-permission: contract.approval.flow.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.approval_flow_saved
+      x-audit-event-failure: contract.approval_flow_save_failed
+      x-auth-context: staff-token
+      description: 同 stage_seq 多步 = 一个并行会签阶段；阶段间串行。project_id 空=改平台默认链。
+      requestBody:
+        $ref: "#/components/requestBodies/ContractApprovalFlowRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/expiry-color-rules:
+    get:
+      tags:
+        - contract
+      operationId: listSpaceExpiryColorRules
+      summary: 查到期着色分类
+      x-permission: contract.space.color.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract.color_rules_viewed
+      x-audit-event-failure: contract.color_rules_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          description: 综合体 id(空=平台默认)。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - contract
+      operationId: saveSpaceExpiryColorRule
+      summary: 配置到期着色分类(颜色+提前天数)
+      x-permission: contract.space.color.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.color_rule_saved
+      x-audit-event-failure: contract.color_rule_save_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/SpaceExpiryColorRuleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/space-rental-status:
+    get:
+      tags:
+        - contract
+      operationId: listSpaceRentalStatus
+      summary: 铺位平面图着色数据源(可租/已租/即将到期)
+      x-permission: contract.draft.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: contract.space_rental_viewed
+      x-audit-event-failure: contract.space_rental_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          description: 综合体 id(空=平台默认)。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/rent-bills:
+    post:
+      tags:
+        - contract
+      operationId: generateContractRentBill
+      summary: 生成某期合同租金应收(base+递增−免租)
+      x-permission: finance.ar_ap.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.rent_billed
+      x-audit-event-failure: contract.rent_bill_failed
+      x-auth-context: staff-token
+      description: 生效合同按 ContractRentMath 算该期租金应收 → 联动 ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractRentBillRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/settlements/{settlement_id}/complete:
+    post:
+      tags:
+        - contract
+      operationId: completeContractSettlement
+      summary: 结清退租结算→已结清+终止合同
+      x-permission: contract.settlement.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.settlement_completed
+      x-audit-event-failure: contract.settlement_complete_failed
+      x-auth-context: staff-token
+      description: 待结算/保证金抵扣中/欠费追缴中 → 已结清(直推)，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。
+      parameters:
+        - name: settlement_id
+          in: path
+          required: true
+          description: 结算 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractResolveDisputeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/attachments:
+    post:
+      tags:
+        - contract
+      operationId: addContractAttachments
+      summary: 追加合同附件(电子签章扫描件归档)
+      x-permission: contract.draft.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.attachments_added
+      x-audit-event-failure: contract.attachments_add_failed
+      x-auth-context: staff-token
+      description: 线下签后上传扫描件归档；去重合并到 attachment_ids。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractAttachmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/settlements/{settlement_id}/advance:
+    post:
+      tags:
+        - contract
+      operationId: advanceContractSettlement
+      summary: 逐相推进退租结算
+      x-permission: contract.settlement.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.settlement_advanced
+      x-audit-event-failure: contract.settlement_advance_failed
+      x-auth-context: staff-token
+      description: 待结算→保证金抵扣中→欠费追缴中→已结清，逐相推进(让中间态成真实驻留态);到已结清即终止/到期合同。
+      parameters:
+        - name: settlement_id
+          in: path
+          required: true
+          description: 结算 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractResolveDisputeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/{contract_id}/period-bills:
+    post:
+      tags:
+        - contract
+      operationId: generateContractPeriodBills
+      summary: 某期全费目挂账(租金+物业费+能源费)
+      x-permission: finance.ar_ap.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.fee_billed
+      x-audit-event-failure: contract.period_bill_failed
+      x-auth-context: staff-token
+      description: 一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent) 应收;各费目幂等;0/免租跳过。
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          description: 合同 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/ContractRentBillRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/equipment:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityEquipment
+      summary: 设备台账列表
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.equipment.viewed
+      x-audit-event-failure: facility.equipment.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - facility
+      operationId: createFacilityEquipment
+      summary: 创建设备台账
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.equipment_created
+      x-audit-event-failure: facility.equipment_create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityEquipmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/equipment/maintenance-due:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityMaintenanceDueEquipment
+      summary: 查询维保到期设备
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.equipment.maintenance_due_viewed
+      x-audit-event-failure: facility.equipment.maintenance_due_view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/equipment/{equipment_id}:
+    post:
+      tags:
+        - facility
+      operationId: updateFacilityEquipment
+      summary: 更新设备台账
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.equipment_updated
+      x-audit-event-failure: facility.equipment_update_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          description: 设备 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityEquipmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/equipment/{equipment_id}/status:
+    post:
+      tags:
+        - facility
+      operationId: changeFacilityEquipmentStatus
+      summary: 变更设备状态/上报告警
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.equipment_status_changed
+      x-audit-event-failure: facility.equipment_status_change_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          description: 设备 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityEquipmentStatusRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/equipment/{equipment_id}/maintenance-done:
+    post:
+      tags:
+        - facility
+      operationId: recordFacilityEquipmentMaintenanceDone
+      summary: 记录设备维保完成
+      x-permission: facility.equipment.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.equipment_maintained
+      x-audit-event-failure: facility.equipment_maintain_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          description: 设备 id。
+          schema:
+            type: string
+            maxLength: 64
+        - name: idempotency_key
+          in: query
+          required: false
+          description: 操作幂等键。
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityWorkOrders
+      summary: 工单列表
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.work_order.viewed
+      x-audit-event-failure: facility.work_order.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - facility
+      operationId: createFacilityWorkOrder
+      summary: 创建维保/物业工单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_created
+      x-audit-event-failure: facility.work_order_create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/overdue:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityOverdueWorkOrders
+      summary: 逾期工单列表
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.work_order.overdue_viewed
+      x-audit-event-failure: facility.work_order.overdue_view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}:
+    get:
+      tags:
+        - facility
+      operationId: getFacilityWorkOrder
+      summary: 工单详情
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.work_order.viewed
+      x-audit-event-failure: facility.work_order.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}/assign:
+    post:
+      tags:
+        - facility
+      operationId: assignFacilityWorkOrder
+      summary: 工单派单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_assigned
+      x-audit-event-failure: facility.work_order_assign_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderAssignRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}/start:
+    post:
+      tags:
+        - facility
+      operationId: startFacilityWorkOrder
+      summary: 开始处理工单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_started
+      x-audit-event-failure: facility.work_order_start_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}/complete:
+    post:
+      tags:
+        - facility
+      operationId: completeFacilityWorkOrder
+      summary: 完成工单处理
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_completed
+      x-audit-event-failure: facility.work_order_complete_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}/accept:
+    post:
+      tags:
+        - facility
+      operationId: acceptFacilityWorkOrder
+      summary: 主管验收工单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_accepted
+      x-audit-event-failure: facility.work_order_accept_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}/review:
+    post:
+      tags:
+        - facility
+      operationId: reviewFacilityWorkOrder
+      summary: 报修方回访工单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_reviewed
+      x-audit-event-failure: facility.work_order_review_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}/suspend:
+    post:
+      tags:
+        - facility
+      operationId: suspendFacilityWorkOrder
+      summary: 挂起工单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_suspended
+      x-audit-event-failure: facility.work_order_suspend_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/{work_order_id}/resume:
+    post:
+      tags:
+        - facility
+      operationId: resumeFacilityWorkOrder
+      summary: 恢复工单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_resumed
+      x-audit-event-failure: facility.work_order_resume_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: work_order_id
+          in: path
+          required: true
+          description: 工单 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/mark-overdue:
+    post:
+      tags:
+        - facility
+      operationId: markFacilityWorkOrdersOverdue
+      summary: 批量标记逾期工单
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_overdue_marked
+      x-audit-event-failure: facility.work_order_overdue_mark_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: idempotency_key
+          in: query
+          required: true
+          description: 操作幂等键。
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/work-orders/policies:
+    post:
+      tags:
+        - facility
+      operationId: saveFacilityWorkOrderPolicy
+      summary: 保存工单 SLA/验收策略
+      x-permission: facility.work_order.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.work_order_policy_saved
+      x-audit-event-failure: facility.work_order_policy_save_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityWorkOrderPolicyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/inspections/templates:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityInspectionTemplates
+      summary: 巡检模板列表
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.inspection_template.viewed
+      x-audit-event-failure: facility.inspection_template.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - facility
+      operationId: createFacilityInspectionTemplate
+      summary: 创建巡检模板
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.inspection_template_created
+      x-audit-event-failure: facility.inspection_template_create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityInspectionTemplateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/inspections/tasks:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityInspectionTasks
+      summary: 巡检任务列表
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.inspection_task.viewed
+      x-audit-event-failure: facility.inspection_task.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - facility
+      operationId: createFacilityInspectionTask
+      summary: 创建巡检任务
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.inspection_task_created
+      x-audit-event-failure: facility.inspection_task_create_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityInspectionTaskRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/inspections/tasks/{task_id}:
+    get:
+      tags:
+        - facility
+      operationId: getFacilityInspectionTask
+      summary: 巡检任务详情
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.inspection_task.viewed
+      x-audit-event-failure: facility.inspection_task.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 巡检任务 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/inspections/tasks/{task_id}/start:
+    post:
+      tags:
+        - facility
+      operationId: startFacilityInspectionTask
+      summary: 开始巡检任务
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.inspection_task_started
+      x-audit-event-failure: facility.inspection_task_start_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 巡检任务 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityInspectionActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/inspections/tasks/{task_id}/records:
+    get:
+      tags:
+        - facility
+      operationId: listFacilityInspectionRecords
+      summary: 巡检记录列表
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.inspection_record.viewed
+      x-audit-event-failure: facility.inspection_record.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 巡检任务 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - facility
+      operationId: submitFacilityInspectionRecord
+      summary: 提交巡检记录
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.inspection_record_submitted
+      x-audit-event-failure: facility.inspection_record_submit_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 巡检任务 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityInspectionRecordSubmitRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/inspections/tasks/{task_id}/recheck:
+    post:
+      tags:
+        - facility
+      operationId: recheckFacilityInspectionTask
+      summary: 复查整改后的巡检任务
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.inspection_task_rechecked
+      x-audit-event-failure: facility.inspection_task_recheck_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 巡检任务 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityInspectionActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/facility/inspections/tasks/{task_id}/supervisor-confirm:
+    post:
+      tags:
+        - facility
+      operationId: confirmFacilityInspectionSupervisor
+      summary: 主管确认巡检任务关闭
+      x-permission: facility.inspection.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.inspection_task_closed
+      x-audit-event-failure: facility.inspection_task_close_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: 巡检任务 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/FacilityInspectionActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/energy/meters:
+    get:
+      tags:
+        - energy
+      operationId: listEnergyMeters
+      summary: 表计列表
+      x-permission: energy.meter.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: energy.meter.viewed
+      x-audit-event-failure: energy.meter.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - energy
+      operationId: createEnergyMeter
+      summary: 创建能源表计
+      x-permission: energy.meter.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: energy.meter_saved
+      x-audit-event-failure: energy.meter_save_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/EnergyMeterRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/energy/meters/{meter_id}:
+    post:
+      tags:
+        - energy
+      operationId: updateEnergyMeter
+      summary: 更新能源表计
+      x-permission: energy.meter.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: energy.meter_saved
+      x-audit-event-failure: energy.meter_save_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: meter_id
+          in: path
+          required: true
+          description: 表计 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/EnergyMeterRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/energy/readings:
+    get:
+      tags:
+        - energy
+      operationId: listEnergyReadings
+      summary: 抄表读数列表
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: energy.reading.viewed
+      x-audit-event-failure: energy.reading.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: period
+          in: query
+          required: false
+          description: 账期 YYYY-MM；空则查询全部。
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - energy
+      operationId: recordEnergyReading
+      summary: 录入抄表读数
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: energy.reading_recorded
+      x-audit-event-failure: energy.reading_record_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/EnergyReadingRecordRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/energy/readings/{reading_id}/review:
+    post:
+      tags:
+        - energy
+      operationId: reviewEnergyReading
+      summary: 复核异常抄表读数
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: energy.reading_reviewed
+      x-audit-event-failure: energy.reading_review_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: reading_id
+          in: path
+          required: true
+          description: 抄表读数 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/EnergyReadingReviewRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/energy/meters/{meter_id}/difference:
+    get:
+      tags:
+        - energy
+      operationId: getEnergyMeterDifference
+      summary: 查询总分表差异
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: energy.meter_difference.viewed
+      x-audit-event-failure: energy.meter_difference.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: meter_id
+          in: path
+          required: true
+          description: 总表 id。
+          schema:
+            type: string
+            maxLength: 64
+        - name: period
+          in: query
+          required: true
+          description: 账期 YYYY-MM。
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/energy/settlements/energy-fee:
+    post:
+      tags:
+        - energy
+      operationId: settleEnergyFee
+      summary: 按账期结算能源费
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: energy.fee_settled
+      x-audit-event-failure: energy.fee_settle_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/EnergySettleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/energy/settle-energy-fee:
+    post:
+      tags:
+        - energy
+      operationId: settleEnergyFeeShortcut
+      summary: 按账期结算能源费(兼容路径)
+      x-permission: energy.reading.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: energy.fee_settled
+      x-audit-event-failure: energy.fee_settle_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/EnergySettleRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/role-assignments:
+    post:
+      tags:
+        - access
+      operationId: assignUserRole
+      summary: 为用户分配角色
+      x-permission: access.role.assign
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.role.assigned
+      x-audit-event-failure: access.role.assign_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/RoleAssignmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/role-assignments/unassign:
+    post:
+      tags:
+        - access
+      operationId: unassignUserRole
+      summary: 取消用户角色
+      x-permission: access.role.assign
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.role.unassigned
+      x-audit-event-failure: access.role.unassign_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/RoleAssignmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/position-role-templates:
+    get:
+      tags:
+        - access
+      operationId: listPositionRoleTemplates
+      summary: 岗位角色模板列表
+      x-permission: access.role.assign
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: access.position_role_template.viewed
+      x-audit-event-failure: access.position_role_template.view_failed
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - access
+      operationId: createPositionRoleTemplate
+      summary: 创建岗位角色模板
+      x-permission: access.role.assign
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.position_role_template.saved
+      x-audit-event-failure: access.position_role_template.save_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/PositionRoleTemplateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/position-role-templates/{id}:
+    put:
+      tags:
+        - access
+      operationId: updatePositionRoleTemplate
+      summary: 更新岗位角色模板
+      x-permission: access.role.assign
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.position_role_template.saved
+      x-audit-event-failure: access.position_role_template.save_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 岗位角色模板 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/PositionRoleTemplateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags:
+        - access
+      operationId: deletePositionRoleTemplate
+      summary: 删除岗位角色模板
+      x-permission: access.role.assign
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: access.position_role_template.deleted
+      x-audit-event-failure: access.position_role_template.delete_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 岗位角色模板 id。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/users/{id}/position:
+    put:
+      tags:
+        - access
+      operationId: assignUserPosition
+      summary: 分配用户岗位并套用岗位权限
+      x-permission: access.role.assign
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.user_position.assigned
+      x-audit-event-failure: access.user_position.assign_failed
+      x-auth-context: staff-token
+      description: 目标 user_id 由路径参数提供；后端按岗位+职级匹配岗位角色模板并分配角色/权限模板。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 目标用户 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/UserPositionAssignmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/grant-requests:
+    get:
+      tags:
+        - access
+      operationId: listAccessGrantRequests
+      summary: 授权申请列表
+      x-permission: access.grant_request.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: access.grant_request.viewed
+      x-audit-event-failure: access.grant_request.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: window_days
+          in: query
+          required: false
+          description: 只看最近 N 天；空则不限窗口。
+          schema:
+            type: integer
+            description: 天数。
+            minimum: 1
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - access
+      operationId: createAccessGrantRequest
+      summary: 创建需主管复核的授权申请
+      x-permission: access.grant_request.apply
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.grant_request.applied
+      x-audit-event-failure: access.grant_request.apply_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/AccessGrantApplyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/grant-requests/{id}/review:
+    post:
+      tags:
+        - access
+      operationId: reviewAccessGrantRequest
+      summary: 复核授权申请
+      x-permission: access.grant_request.review
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: access.grant_request.reviewed
+      x-audit-event-failure: access.grant_request.review_failed
+      x-auth-context: staff-token
+      description: 除 access.grant_request.review 外，还必须具备 governance.supervisor_review.approve。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 授权申请 id。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/AccessGrantReviewRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/grant-requests/summary:
+    get:
+      tags:
+        - access
+      operationId: getAccessGrantSummary
+      summary: 授权申请治理汇总
+      x-permission: access.grant_request.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: access.grant_request.summary_viewed
+      x-audit-event-failure: access.grant_request.summary_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: window_days
+          in: query
+          required: false
+          description: 统计最近 N 天，默认 30。
+          schema:
+            type: integer
+            description: 天数。
+            minimum: 1
+        - name: position_threshold
+          in: query
+          required: false
+          description: 岗位维度推荐阈值。
+          schema:
+            type: integer
+            description: 次数阈值。
+            minimum: 1
+        - name: user_threshold
+          in: query
+          required: false
+          description: 用户异常阈值。
+          schema:
+            type: integer
+            description: 次数阈值。
+            minimum: 1
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     BearerAuth:
@@ -16341,6 +19133,240 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/OperatingParamsRequest"
+    LeasingLeadRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingLeadRequest"
+    LeasingLeadAssignRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingLeadAssignRequest"
+    LeasingLeadStatusRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingLeadStatusRequest"
+    LeasingIntentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingIntentRequest"
+    LeasingIntentAdvanceRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingIntentAdvanceRequest"
+    LeasingSignRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingSignRequest"
+    LeasingBrandRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingBrandRequest"
+    LeasingBrandBlacklistRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingBrandBlacklistRequest"
+    LeasingFollowUpRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeasingFollowUpRequest"
+    ContractSubmitRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractSubmitRequest"
+    ContractApproveRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractApproveRequest"
+    ContractActivateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractActivateRequest"
+    ContractChangeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractChangeRequest"
+    ContractChangeApproveRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractChangeApproveRequest"
+    ContractSettleRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractSettleRequest"
+    ContractResolveDisputeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractResolveDisputeRequest"
+    ContractApprovalFlowRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractApprovalFlowRequest"
+    SpaceExpiryColorRuleRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SpaceExpiryColorRuleRequest"
+    ContractRentBillRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractRentBillRequest"
+    ContractAttachmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractAttachmentRequest"
+    FacilityEquipmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityEquipmentRequest"
+    FacilityEquipmentStatusRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityEquipmentStatusRequest"
+    FacilityWorkOrderRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityWorkOrderRequest"
+    FacilityWorkOrderAssignRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityWorkOrderAssignRequest"
+    FacilityWorkOrderActionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityWorkOrderActionRequest"
+    FacilityWorkOrderPolicyRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityWorkOrderPolicyRequest"
+    FacilityInspectionTemplateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityInspectionTemplateRequest"
+    FacilityInspectionTaskRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityInspectionTaskRequest"
+    FacilityInspectionActionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityInspectionActionRequest"
+    FacilityInspectionRecordSubmitRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FacilityInspectionRecordSubmitRequest"
+    EnergyMeterRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EnergyMeterRequest"
+    EnergyReadingRecordRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EnergyReadingRecordRequest"
+    EnergyReadingReviewRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EnergyReadingReviewRequest"
+    EnergySettleRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EnergySettleRequest"
+    RoleAssignmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleAssignmentRequest"
+    PositionRoleTemplateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PositionRoleTemplateRequest"
+    UserPositionAssignmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserPositionAssignmentRequest"
+    AccessGrantApplyRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessGrantApplyRequest"
+    AccessGrantReviewRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessGrantReviewRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -17013,7 +20039,7 @@ components:
           maximum: 999999999999
     ContractDraftRequest:
       type: object
-      description: 请求载荷 `ContractDraftRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
+      description: 请求载荷 ContractDraftRequest（V162 起草合同）。
       additionalProperties: false
       required:
         - merchant_id
@@ -17024,59 +20050,81 @@ components:
       properties:
         idempotency_key:
           type: string
-          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          description: 操作幂等键。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         merchant_id:
           type: string
-          description: 商户唯一标识；必须引用当前数据范围内存在且允许访问的记录。
+          description: 商户 id。
           maxLength: 64
         contract_subject_id:
           type: string
-          description: 合同唯一标识；必须引用当前数据范围内存在且允许访问的记录。
+          description: 合同主体 id。
           maxLength: 64
         operation_subject_id:
           type: string
-          description: 业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。
+          description: 运营主体 id(缺省=合同主体)。
           maxLength: 64
         settlement_subject_id:
           type: string
-          description: 结算唯一标识；必须引用当前数据范围内存在且允许访问的记录。
+          description: 结算主体 id(缺省=合同主体)。
           maxLength: 64
         effective_date:
           type: string
-          description: "`effective_date` 日期字段；使用 YYYY-MM-DD。"
           format: date
+          description: 生效日期。
         expiry_date:
           type: string
-          description: "`expiry_date` 日期字段；使用 YYYY-MM-DD。"
           format: date
+          description: 到期日期。
         rent_terms:
           type: object
-          description: ContractDraftRequest.rent_terms 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
-        shareholder_ratio_for_report:
-          type: number
-          description: 比例字段，按百分比数值保存；必须在 0 到 100 范围内。
+          description: 租金条款：基础租金/递增/免租/物业费(自由结构)。
+          additionalProperties: true
+        commission_mode:
+          type: string
+          description: 抽成模式(空=无抽成)。
+          enum:
+            - guarantee_or_commission_higher
+            - fixed_ratio
+            - tiered_ratio
+            - guarantee_plus_commission
+        energy_fee_basis:
+          type: string
+          description: 公区能耗分摊。
+          enum:
+            - none
+            - by_contract
+            - by_area
+            - by_usage
+        deposit_cent:
+          type: integer
+          format: int64
+          description: 保证金(分)。
           minimum: 0
-          maximum: 100
-          multipleOf: 0.01
+        penalty_terms:
+          type: object
+          description: 违约金条款。
+          additionalProperties: true
+        settlement_rules:
+          type: array
+          description: 退租结算逐例顺序(每份可不同)。
+          items:
+            type: object
+            additionalProperties: true
         attachment_ids:
           type: array
-          description: "`attachment_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
+          description: 附件 id(线下签扫描件)。
           items:
             type: string
             maxLength: 64
-          maxItems: 50
+        project_id:
+          type: string
+          description: 综合体 id。
+          maxLength: 64
+        business_scope:
+          type: string
+          description: 经营范围(存 rent_terms；越界 enforcement 属下游)。
+          maxLength: 500
     ApprovalRequest:
       type: object
       description: 请求载荷 `ApprovalRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -17919,8 +20967,7 @@ components:
           description: TicketPriceRuleRequest.eligibility_rule 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
     TicketOrderRequest:
       type: object
-      description: Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount;
-        draft rules remain simulation-only.
+      description: Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount; draft rules remain simulation-only.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -17981,8 +21028,7 @@ components:
           maxLength: 64
         dynamic_pricing_context:
           type: object
-          description: Optional matching context for published dynamic pricing rules. Missing context only matches rules without
-            conditions.
+          description: Optional matching context for published dynamic pricing rules. Missing context only matches rules without conditions.
           additionalProperties: true
     TicketIssueRequest:
       type: object
@@ -18668,8 +21714,7 @@ components:
           maxLength: 128
     SavedBottleRequest:
       type: object
-      description: 请求载荷 `SavedBottleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id
-        改为可空（散客存酒），登记必填补 bottle_label_value/registration_photo_refs/customer_name_or_nickname。
+      description: 请求载荷 `SavedBottleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id 改为可空（散客存酒），登记必填补 bottle_label_value/registration_photo_refs/customer_name_or_nickname。
       additionalProperties: false
       required:
         - bar_id
@@ -20387,8 +23432,7 @@ components:
             $ref: "#/components/schemas/TerminalEventItem"
     TicketDynamicPricingRuleRequest:
       type: object
-      description: P2 ticket dynamic pricing rule write request. Draft rules are simulation-only; published matching rules may
-        affect formal ticket order settlement and must retain price trace evidence.
+      description: P2 ticket dynamic pricing rule write request. Draft rules are simulation-only; published matching rules may affect formal ticket order settlement and must retain price trace evidence.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -20477,8 +23521,7 @@ components:
           additionalProperties: true
     TicketDynamicPricingSimulationRequest:
       type: object
-      description: P2 ticket dynamic pricing simulation request. The response is for operational preview and must not create
-        ticket orders or receivables.
+      description: P2 ticket dynamic pricing simulation request. The response is for operational preview and must not create ticket orders or receivables.
       additionalProperties: false
       required:
         - ticket_type_id
@@ -20513,8 +23556,7 @@ components:
           additionalProperties: true
     AmusementGroupBookingRequest:
       type: object
-      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend
-        display cannot decide capacity success.
+      description: P2 amusement group/private booking request. Approval must lock capacity in backend transaction; frontend display cannot decide capacity success.
       additionalProperties: false
       required:
         - project_id
@@ -20596,8 +23638,7 @@ components:
           maxItems: 50
     AmusementGroupBookingReleaseRequest:
       type: object
-      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave
-        audit evidence.
+      description: P2 amusement group/private booking release request. Release frees previously locked capacity and must leave audit evidence.
       additionalProperties: false
       required:
         - idempotency_key
@@ -20620,8 +23661,7 @@ components:
           maxItems: 50
     AiQualitySuggestionRequest:
       type: object
-      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and
-        truncate before model invocation.
+      description: T3-D1 local LLM AI quality suggestion request. Only minimal text is allowed; backend must redact and truncate before model invocation.
       additionalProperties: false
       required:
         - idempotency_key
@@ -22314,8 +25354,7 @@ components:
           maxLength: 64
     AmusementCapacityConfigRequest:
       type: object
-      description: 请求载荷 `AmusementCapacityConfigRequest`（V083 点位/设备并发容量，三维容量第三维）；location_point_id 与 device_id
-        至少其一；max_concurrent 为该点位/设备并发在场上限。
+      description: 请求载荷 `AmusementCapacityConfigRequest`（V083 点位/设备并发容量，三维容量第三维）；location_point_id 与 device_id 至少其一；max_concurrent 为该点位/设备并发在场上限。
       additionalProperties: false
       required:
         - max_concurrent
@@ -22402,8 +25441,7 @@ components:
           description: 是否启用（省略默认 true）；停用后该设备不再参与三维容量校验与核销放行。
     BarTableSpaceAssignmentRequest:
       type: object
-      description: "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space
-        对该桌台关联账单（bar_bill→table_id→space_id）真实生效。bar_tables 无可派生源，无法 SQL 自动回填，须运营录入。"
+      description: "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space 对该桌台关联账单（bar_bill→table_id→space_id）真实生效。bar_tables 无可派生源，无法 SQL 自动回填，须运营录入。"
       additionalProperties: false
       required:
         - space_id
@@ -22429,9 +25467,7 @@ components:
           maxLength: 64
     AmusementProjectSpaceAssignmentRequest:
       type: object
-      description: "请求载荷 `AmusementProjectSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 amusement_projects.space_id。录入后
-        AdmissionGuard over_space 对该项目相关受控对象（inspection/maintenance_record/incident/group_booking 经
-        project_id→space_id）真实生效。amusement_projects 无可派生源，无法 SQL 自动回填，须运营录入。"
+      description: "请求载荷 `AmusementProjectSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 amusement_projects.space_id。录入后 AdmissionGuard over_space 对该项目相关受控对象（inspection/maintenance_record/incident/group_booking 经 project_id→space_id）真实生效。amusement_projects 无可派生源，无法 SQL 自动回填，须运营录入。"
       additionalProperties: false
       required:
         - space_id
@@ -22457,8 +25493,7 @@ components:
           maxLength: 64
     BarShiftOpenRequest:
       type: object
-      description: 请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省
-        0）、现金差异复核阈值（cash_diff_threshold_cent，默认 0=任何差异即复核）；同一吧台同一收银员仅允许一个 open 班次。
+      description: 请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省 0）、现金差异复核阈值（cash_diff_threshold_cent，默认 0=任何差异即复核）；同一吧台同一收银员仅允许一个 open 班次。
       additionalProperties: false
       required:
         - bar_id
@@ -22496,9 +25531,7 @@ components:
           maxLength: 1000
     BarShiftCloseRequest:
       type: object
-      description: 请求载荷 `BarShiftCloseRequest`（V095 班结对账）；录入实点现金
-        declared_cash_cent，可选交接下一班收银员（handover_to_user_id）。系统应收（各支付方式/退款/小费）按班次时间窗口聚合，无需客户端传入；现金差异 = 实点 -（备用金 +
-        系统现金应收），超阈值进复核。
+      description: 请求载荷 `BarShiftCloseRequest`（V095 班结对账）；录入实点现金 declared_cash_cent，可选交接下一班收银员（handover_to_user_id）。系统应收（各支付方式/退款/小费）按班次时间窗口聚合，无需客户端传入；现金差异 = 实点 -（备用金 + 系统现金应收），超阈值进复核。
       additionalProperties: false
       required:
         - declared_cash_cent
@@ -22545,9 +25578,7 @@ components:
           maxLength: 255
     RecordVarianceRequest:
       type: object
-      description: 请求载荷 `RecordVarianceRequest`（V108
-        库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按
-        variance_qty×unit_cost_cents 成本估算。
+      description: 请求载荷 `RecordVarianceRequest`（V108 库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按 variance_qty×unit_cost_cents 成本估算。
       additionalProperties: false
       required:
         - item_id
@@ -22594,8 +25625,7 @@ components:
           minimum: 0
     ReviewVarianceRequest:
       type: object
-      description: 请求载荷 `ReviewVarianceRequest`（V108 库存差异复核）；decision=approved/rejected，pending→终态，幂等，重复/非 pending 拒绝。approved
-        是解锁 finance postInventoryVariance 入账的关键。
+      description: 请求载荷 `ReviewVarianceRequest`（V108 库存差异复核）；decision=approved/rejected，pending→终态，幂等，重复/非 pending 拒绝。approved 是解锁 finance postInventoryVariance 入账的关键。
       additionalProperties: false
       required:
         - decision
@@ -22616,8 +25646,7 @@ components:
           maxLength: 1000
     ConfigureOverCapacityPolicyRequest:
       type: object
-      description: 请求载荷 `ConfigureOverCapacityPolicyRequest`（V104 amusement_over_capacity_policy 写入侧，按 project_id 幂等
-        upsert）；operating_capacity 为运营容量（软上限，>=0），disposal_mode 决定超容处置（block_hard 硬阻断+软告警 / warn_only 仅告警留痕不阻断）。
+      description: 请求载荷 `ConfigureOverCapacityPolicyRequest`（V104 amusement_over_capacity_policy 写入侧，按 project_id 幂等 upsert）；operating_capacity 为运营容量（软上限，>=0），disposal_mode 决定超容处置（block_hard 硬阻断+软告警 / warn_only 仅告警留痕不阻断）。
       additionalProperties: false
       required:
         - disposal_mode
@@ -22653,8 +25682,7 @@ components:
           description: 是否启用该策略（省略默认 true）；停用后退化为仅硬上限阻断、无软上限告警。
     RegisterTraceCodeRequest:
       type: object
-      description: 请求载荷 `RegisterTraceCodeRequest`（V128/REQ-39 溯源码贴码登记，入库）；status=registered，merchant_id
-        强制取自认证上下文不由请求体传入。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。
+      description: 请求载荷 `RegisterTraceCodeRequest`（V128/REQ-39 溯源码贴码登记，入库）；status=registered，merchant_id 强制取自认证上下文不由请求体传入。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。
       additionalProperties: false
       required:
         - item_id
@@ -22677,8 +25705,7 @@ components:
           maxLength: 128
     PrintTraceCodeRequest:
       type: object
-      description: 请求载荷 `PrintTraceCodeRequest`（V128/REQ-39 溯源码出库打印）；status registered→printed，记 printed_at，条件 UPDATE 防重复打印（非
-        registered 拒绝）。
+      description: 请求载荷 `PrintTraceCodeRequest`（V128/REQ-39 溯源码出库打印）；status registered→printed，记 printed_at，条件 UPDATE 防重复打印（非 registered 拒绝）。
       additionalProperties: false
       properties:
         idempotency_key:
@@ -22687,8 +25714,7 @@ components:
           maxLength: 128
     InitiateEntitlementSessionRequest:
       type: object
-      description: 请求载荷 `InitiateEntitlementSessionRequest`（V129/REQ-53 工作手机扫附赠权益码发起会话）；status=initiated，merchant_id
-        强制取自认证上下文不由请求体传入。entitlement_ref 为被扫权益引用（发放 id 或权益码，跨域通用字符串，不强加 FK）。
+      description: 请求载荷 `InitiateEntitlementSessionRequest`（V129/REQ-53 工作手机扫附赠权益码发起会话）；status=initiated，merchant_id 强制取自认证上下文不由请求体传入。entitlement_ref 为被扫权益引用（发放 id 或权益码，跨域通用字符串，不强加 FK）。
       additionalProperties: false
       required:
         - entitlement_ref
@@ -22716,8 +25742,7 @@ components:
           maxLength: 64
     ClaimEntitlementSessionRequest:
       type: object
-      description: 请求载荷 `ClaimEntitlementSessionRequest`（V129/REQ-53 一体机领取核销）；防错领由服务端条件 UPDATE 保证（仅 initiated/displayed
-        且未过期可领，→claimed），过期 / 已领 / 重复领 / 已取消均拒。
+      description: 请求载荷 `ClaimEntitlementSessionRequest`（V129/REQ-53 一体机领取核销）；防错领由服务端条件 UPDATE 保证（仅 initiated/displayed 且未过期可领，→claimed），过期 / 已领 / 重复领 / 已取消均拒。
       additionalProperties: false
       properties:
         idempotency_key:
@@ -22863,8 +25888,7 @@ components:
       description: 酒吧预约entryallowance核销record请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
     ConfirmTicketOrderPaymentRequest:
       type: object
-      description: 请求载荷 `ConfirmTicketOrderPaymentRequest`（2a-2 票务支付回写闭环）；payment_intent_id
-        必填，服务端据其校验归属（须属本订单）与金额（须等于订单金额）后置支付意图 succeeded 并回写订单 pay_status=paid。内部确认与真实回调共用本入口。
+      description: 请求载荷 `ConfirmTicketOrderPaymentRequest`（2a-2 票务支付回写闭环）；payment_intent_id 必填，服务端据其校验归属（须属本订单）与金额（须等于订单金额）后置支付意图 succeeded 并回写订单 pay_status=paid。内部确认与真实回调共用本入口。
       additionalProperties: false
       required:
         - payment_intent_id
@@ -22883,8 +25907,7 @@ components:
           maxLength: 128
     PropertyFeeRateRequest:
       type: object
-      description: 请求载荷 `PropertyFeeRateRequest`（F-OPS-08 物业费费率维护，upsert）；effective_period
-        为空=设为该项目默认费率（精确期未命中时回退）。rate_per_square_meter_cent 为每平米单价（分/㎡/期，>=0）。替代已废止的 CAM 权重分摊。
+      description: 请求载荷 `PropertyFeeRateRequest`（F-OPS-08 物业费费率维护，upsert）；effective_period 为空=设为该项目默认费率（精确期未命中时回退）。rate_per_square_meter_cent 为每平米单价（分/㎡/期，>=0）。替代已废止的 CAM 权重分摊。
       additionalProperties: false
       required:
         - project_id
@@ -22915,8 +25938,7 @@ components:
             - inactive
     PropertyFeeBillRequest:
       type: object
-      description: 请求载荷 `PropertyFeeBillRequest`（F-OPS-08 物业费按期计费）；对 project_id 下运营提供的 merchant_ids 按「每平米固定单价 ×
-        商户面积」逐户生成应收，不退不补、按 (项目,期,商户) 幂等。merchants 无 project_id，故商户名单由运营显式提供。
+      description: 请求载荷 `PropertyFeeBillRequest`（F-OPS-08 物业费按期计费）；对 project_id 下运营提供的 merchant_ids 按「每平米固定单价 × 商户面积」逐户生成应收，不退不补、按 (项目,期,商户) 幂等。merchants 无 project_id，故商户名单由运营显式提供。
       additionalProperties: false
       required:
         - project_id
@@ -23126,16 +26148,1322 @@ components:
           enum:
             - active
             - inactive
+    LeasingLeadRequest:
+      type: object
+      description: 请求载荷 LeasingLeadRequest（V161 招商线索创建）。
+      additionalProperties: false
+      required:
+        - contact_name
+        - source
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        contact_name:
+          type: string
+          description: 联系人姓名。
+          maxLength: 120
+        contact_phone:
+          type: string
+          description: 联系电话。
+          maxLength: 40
+        source:
+          type: string
+          description: 线索来源。
+          enum:
+            - outbound
+            - online_inquiry
+            - referral
+            - exhibition
+        intended_business_type:
+          type: string
+          description: 意向业态。
+          maxLength: 64
+        intended_space_id:
+          type: string
+          description: 意向铺位/空间 id。
+          maxLength: 64
+        intended_area_sqm:
+          type: number
+          description: 意向面积(平米)。
+          minimum: 0
+        brand_id:
+          type: string
+          description: 关联品牌库 id。
+          maxLength: 64
+    LeasingLeadAssignRequest:
+      type: object
+      description: 请求载荷 LeasingLeadAssignRequest（V161 线索派单）。
+      additionalProperties: false
+      required:
+        - owner_user_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        owner_user_id:
+          type: string
+          description: 负责人用户 id。
+          maxLength: 64
+    LeasingLeadStatusRequest:
+      type: object
+      description: 请求载荷 LeasingLeadStatusRequest（V161 线索 7 态流转，lost/on_hold 须填 reason）。
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        status:
+          type: string
+          description: 目标状态。
+          enum:
+            - pending_follow_up
+            - following_up
+            - converted_to_intent
+            - negotiating
+            - signed
+            - lost
+            - on_hold
+        reason:
+          type: string
+          description: 原因(lost/on_hold 必填)。
+          maxLength: 500
+    LeasingIntentRequest:
+      type: object
+      description: 请求载荷 LeasingIntentRequest（V161 线索转意向）。
+      additionalProperties: false
+      required:
+        - lead_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        lead_id:
+          type: string
+          description: 线索 id。
+          maxLength: 64
+        intended_space_id:
+          type: string
+          description: 意向铺位/空间 id。
+          maxLength: 64
+        intended_area_sqm:
+          type: number
+          description: 意向面积(平米)。
+          minimum: 0
+        rent_terms:
+          type: object
+          description: 报价租金条款(自由结构，签约时喂入合同)。
+          additionalProperties: true
+    LeasingIntentAdvanceRequest:
+      type: object
+      description: 请求载荷 LeasingIntentAdvanceRequest（V161 意向 5 阶段推进，关键阶段须主管确认）。
+      additionalProperties: false
+      required:
+        - target_stage
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        target_stage:
+          type: string
+          description: 目标阶段。
+          enum:
+            - initial_contact
+            - requirement_confirmed
+            - proposal_quoted
+            - negotiation
+            - pending_signing
+        supervisor_user_id:
+          type: string
+          description: 主管确认人 id(关键阶段必填)。
+          maxLength: 64
+    LeasingSignRequest:
+      type: object
+      description: 请求载荷 LeasingSignRequest（V161 意向签约转合同，四类主体默认同公司）。
+      additionalProperties: false
+      required:
+        - merchant_id
+        - contract_subject_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        merchant_id:
+          type: string
+          description: 商户 id。
+          maxLength: 64
+        contract_subject_id:
+          type: string
+          description: 合同主体 id。
+          maxLength: 64
+        operation_subject_id:
+          type: string
+          description: 运营主体 id(缺省=合同主体)。
+          maxLength: 64
+        settlement_subject_id:
+          type: string
+          description: 结算主体 id(缺省=合同主体)。
+          maxLength: 64
+        effective_date:
+          type: string
+          format: date
+          description: 生效日期。
+        expiry_date:
+          type: string
+          format: date
+          description: 到期日期。
+    LeasingBrandRequest:
+      type: object
+      description: 请求载荷 LeasingBrandRequest（V161 品牌库 4 类）。
+      additionalProperties: false
+      required:
+        - brand_name
+        - brand_type
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        brand_name:
+          type: string
+          description: 品牌名(同综合体唯一，去重依据)。
+          maxLength: 160
+        brand_type:
+          type: string
+          description: 品牌类型。
+          enum:
+            - intentional
+            - prospective
+            - partner
+            - blacklist
+        business_type:
+          type: string
+          description: 业态。
+          maxLength: 64
+    LeasingBrandBlacklistRequest:
+      type: object
+      description: 请求载荷 LeasingBrandBlacklistRequest（V161 拉黑/解黑，高危需审批）。
+      additionalProperties: false
+      required:
+        - blacklist
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        blacklist:
+          type: boolean
+          description: true 拉黑、false 解黑。
+        reason:
+          type: string
+          description: 拉黑原因(拉黑时必填)。
+          maxLength: 500
+    LeasingFollowUpRequest:
+      type: object
+      description: 请求载荷 LeasingFollowUpRequest（V161 跟进记录）。
+      additionalProperties: false
+      required:
+        - ref_type
+        - ref_id
+        - content
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        ref_type:
+          type: string
+          description: 关联类型。
+          enum:
+            - lead
+            - intent
+        ref_id:
+          type: string
+          description: 关联对象 id。
+          maxLength: 64
+        method:
+          type: string
+          description: 跟进方式(phone/visit/wechat 等)。
+          maxLength: 32
+        content:
+          type: string
+          description: 跟进内容。
+          maxLength: 1000
+        next_plan_at:
+          type: string
+          format: date-time
+          description: 下次跟进计划时间。
+    ContractSubmitRequest:
+      type: object
+      description: 请求载荷 ContractSubmitRequest（提交进审批链）。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+    ContractApproveRequest:
+      type: object
+      description: 请求载荷 ContractApproveRequest（审批当前阶段并行槽）。
+      additionalProperties: false
+      required:
+        - approver_permission_code
+        - decision
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        approver_permission_code:
+          type: string
+          description: 审批岗位权限码(定位并行槽)。
+          maxLength: 120
+        decision:
+          type: string
+          description: 决议。
+          enum:
+            - approve
+            - reject
+        comment:
+          type: string
+          description: 审批意见。
+          maxLength: 1000
+    ContractActivateRequest:
+      type: object
+      description: 请求载荷 ContractActivateRequest（生效+绑铺位）。
+      additionalProperties: false
+      required:
+        - space_ids
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        space_ids:
+          type: array
+          description: 所租空间 id(防重复出租)。
+          items:
+            type: string
+            maxLength: 64
+    ContractChangeRequest:
+      type: object
+      description: 请求载荷 ContractChangeRequest（发起变更 6 类）。
+      additionalProperties: false
+      required:
+        - change_type
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        change_type:
+          type: string
+          description: 变更类型(无转租)。
+          enum:
+            - renewal
+            - move_out
+            - area_change
+            - rent_change
+            - business_scope_change
+            - early_termination
+        payload:
+          type: object
+          description: 变更载荷(改对应条款细节)。
+          additionalProperties: true
+    ContractChangeApproveRequest:
+      type: object
+      description: 请求载荷 ContractChangeApproveRequest（变更审批，走与新签同一并行链）。
+      additionalProperties: false
+      required:
+        - approver_permission_code
+        - decision
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        approver_permission_code:
+          type: string
+          description: 审批岗位权限码(定位当前阶段并行槽)。
+          maxLength: 120
+        decision:
+          type: string
+          description: 决议。
+          enum:
+            - approve
+            - reject
+        comment:
+          type: string
+          description: 审批意见。
+          maxLength: 1000
+    ContractSettleRequest:
+      type: object
+      description: 请求载荷 ContractSettleRequest（退租/到期结算）。
+      additionalProperties: false
+      required:
+        - trigger_type
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        trigger_type:
+          type: string
+          description: 触发。
+          enum:
+            - move_out
+            - expiry
+            - early_termination
+        dispute_reason:
+          type: string
+          description: 争议原因(填则挂起有争议)。
+          maxLength: 500
+    ContractResolveDisputeRequest:
+      type: object
+      description: 请求载荷 ContractResolveDisputeRequest（裁决退租争议）。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        resolution_note:
+          type: string
+          description: 裁决结论。
+          maxLength: 500
+    ContractApprovalFlowRequest:
+      type: object
+      description: 请求载荷 ContractApprovalFlowRequest（配置审批链，分组并行）。
+      additionalProperties: false
+      required:
+        - steps
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        project_id:
+          type: string
+          description: 综合体 id(空=平台默认链)。
+          maxLength: 64
+        name:
+          type: string
+          description: 链名。
+          maxLength: 160
+        steps:
+          type: array
+          description: 步骤；同 stage_seq = 一个并行会签阶段。
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - stage_seq
+              - stage_name
+              - approver_permission_code
+            properties:
+              stage_seq:
+                type: integer
+                description: 阶段序(升序串行)。
+              stage_name:
+                type: string
+                description: 阶段名。
+                maxLength: 80
+              approver_permission_code:
+                type: string
+                description: 审批岗位权限码。
+                maxLength: 120
+    SpaceExpiryColorRuleRequest:
+      type: object
+      description: 请求载荷 SpaceExpiryColorRuleRequest（配置到期着色分类）。
+      additionalProperties: false
+      required:
+        - category_name
+        - color
+        - threshold_days
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        project_id:
+          type: string
+          description: 综合体 id(空=平台默认)。
+          maxLength: 64
+        category_name:
+          type: string
+          description: 分类名。
+          maxLength: 80
+        color:
+          type: string
+          description: 颜色(十六进制/色名)。
+          maxLength: 32
+        threshold_days:
+          type: integer
+          description: 到期前 N 天亮起。
+          minimum: 1
+        seq:
+          type: integer
+          description: 排序。
+    ContractRentBillRequest:
+      type: object
+      description: 请求载荷 ContractRentBillRequest（生成某期合同租金应收）。
+      additionalProperties: false
+      required:
+        - period
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        period:
+          type: string
+          description: 账期 YYYY-MM。
+          pattern: ^\d{4}-\d{2}$
+    ContractAttachmentRequest:
+      type: object
+      description: 请求载荷 ContractAttachmentRequest（追加合同附件/扫描件）。
+      additionalProperties: false
+      required:
+        - attachment_ids
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        attachment_ids:
+          type: array
+          description: 附件 id(扫描件归档)。
+          items:
+            type: string
+            maxLength: 64
+    FacilityEquipmentRequest:
+      type: object
+      description: 设备台账新建/更新请求。创建时 name 必填；更新可沿用原名称。
+      additionalProperties: false
+      required:
+        - equipment_type
+      properties:
+        id:
+          type: string
+          description: 外部指定设备 id。
+          maxLength: 64
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        name:
+          type: string
+          description: 设备名称。
+          maxLength: 120
+        equipment_type:
+          type: string
+          description: 设备类型。
+          enum:
+            - elevator
+            - hvac
+            - power
+            - water_fire
+        space_id:
+          type: string
+          description: 空间 id。
+          maxLength: 64
+        brand:
+          type: string
+          description: 品牌。
+          maxLength: 120
+        model:
+          type: string
+          description: 型号。
+          maxLength: 120
+        vendor:
+          type: string
+          description: 供应商。
+          maxLength: 160
+        responsible_user_id:
+          type: string
+          description: 责任人 user_id。
+          maxLength: 64
+        maintenance_cycle_days:
+          type: integer
+          description: 维保周期天数。
+          minimum: 1
+        install_date:
+          type: string
+          format: date
+          description: 安装日期。
+        warranty_until:
+          type: string
+          format: date
+          description: 质保到期日期。
+        project_id:
+          type: string
+          description: 综合体 id。
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 商户 id。
+          maxLength: 64
+    FacilityEquipmentStatusRequest:
+      type: object
+      description: 设备状态变更/告警上报请求。
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        status:
+          type: string
+          description: 目标状态。
+          enum:
+            - normal
+            - alarm
+            - fault
+            - maintenance
+            - disabled
+            - retired
+        alarm_source:
+          type: string
+          description: 告警来源；status=alarm 时必填。
+          enum:
+            - manual
+            - iot
+        alarm_note:
+          type: string
+          description: 告警说明。
+          maxLength: 1000
+    FacilityWorkOrderRequest:
+      type: object
+      description: 维保/物业工单创建请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - work_order_type
+        - title
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        work_order_type:
+          type: string
+          description: 工单类型。
+          enum:
+            - repair
+            - cleaning
+            - complaint
+            - rectification
+            - inspection
+            - other
+        priority:
+          type: string
+          description: 优先级，默认 normal。
+          enum:
+            - urgent
+            - high
+            - normal
+        title:
+          type: string
+          description: 工单标题。
+          maxLength: 160
+        description:
+          type: string
+          description: 工单描述。
+          maxLength: 2000
+        source:
+          type: string
+          description: 工单来源，默认 platform。
+          enum:
+            - merchant_self
+            - platform
+            - equipment_alarm
+            - inspection
+        space_id:
+          type: string
+          description: 空间 id。
+          maxLength: 64
+        equipment_id:
+          type: string
+          description: 设备 id。
+          maxLength: 64
+        reporter_id:
+          type: string
+          description: 报修人/上报人 id。
+          maxLength: 64
+        reporter_type:
+          type: string
+          description: 上报人类型。
+          enum:
+            - staff
+            - merchant
+            - system
+        project_id:
+          type: string
+          description: 综合体 id。
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 商户 id。
+          maxLength: 64
+    FacilityWorkOrderAssignRequest:
+      type: object
+      description: 工单派单请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - assignee_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        assignee_id:
+          type: string
+          description: 处理人 user_id。
+          maxLength: 64
+    FacilityWorkOrderActionRequest:
+      type: object
+      description: 工单开始/完成/验收/回访/挂起/恢复动作请求。完成动作必须填写 resolution；验收/回访 satisfaction 为 1-5。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        resolution:
+          type: string
+          description: 处理结果。
+          maxLength: 2000
+        satisfaction:
+          type: integer
+          description: 满意度 1-5。
+          minimum: 1
+          maximum: 5
+        note:
+          type: string
+          description: 动作备注。
+          maxLength: 1000
+    FacilityWorkOrderPolicyRequest:
+      type: object
+      description: 工单 SLA/验收策略请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - work_order_type
+        - priority
+        - response_minutes
+        - handle_minutes
+        - acceptance_by
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        work_order_type:
+          type: string
+          description: 工单类型。
+          enum:
+            - repair
+            - cleaning
+            - complaint
+            - rectification
+            - inspection
+            - other
+        priority:
+          type: string
+          description: 优先级。
+          enum:
+            - urgent
+            - high
+            - normal
+        response_minutes:
+          type: integer
+          description: 响应时限分钟。
+          minimum: 1
+        handle_minutes:
+          type: integer
+          description: 处理时限分钟。
+          minimum: 1
+        requires_acceptance:
+          type: boolean
+          description: 是否需要验收。
+        acceptance_by:
+          type: string
+          description: 验收方。
+          enum:
+            - handler
+            - supervisor
+            - reporter
+        active:
+          type: boolean
+          description: 是否启用。
+    FacilityInspectionTemplateRequest:
+      type: object
+      description: 巡检模板请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - name
+        - inspection_type
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        name:
+          type: string
+          description: 模板名称。
+          maxLength: 120
+        inspection_type:
+          type: string
+          description: 巡检类型。
+          enum:
+            - security
+            - fire
+            - facility
+            - environment
+        cycle_days:
+          type: integer
+          description: 周期天数。
+          minimum: 1
+        abnormal_mode:
+          type: string
+          description: 异常处理方式，默认 light。
+          enum:
+            - light
+            - to_work_order
+        checklist:
+          type: array
+          description: 检查项配置。
+          items:
+            type: object
+            additionalProperties: true
+          maxItems: 200
+        scope_note:
+          type: string
+          description: 巡检范围说明。
+          maxLength: 1000
+        active:
+          type: boolean
+          description: 是否启用。
+        project_id:
+          type: string
+          description: 综合体 id。
+          maxLength: 64
+    FacilityInspectionTaskRequest:
+      type: object
+      description: 巡检任务请求。template 模式需 template_id；route 模式需 route_points。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        template_id:
+          type: string
+          description: 巡检模板 id。
+          maxLength: 64
+        inspection_type:
+          type: string
+          description: 巡检类型；无模板时必填。
+          enum:
+            - security
+            - fire
+            - facility
+            - environment
+        title:
+          type: string
+          description: 任务标题；无模板时必填。
+          maxLength: 160
+        schedule_mode:
+          type: string
+          description: 排程方式，默认 manual。
+          enum:
+            - template
+            - manual
+            - route
+        route_points:
+          type: array
+          description: 路线点位。
+          items:
+            type: object
+            additionalProperties: true
+          maxItems: 200
+        assignee_id:
+          type: string
+          description: 执行人 user_id。
+          maxLength: 64
+        scheduled_date:
+          type: string
+          format: date
+          description: 计划日期。
+        due_date:
+          type: string
+          format: date
+          description: 到期日期。
+        project_id:
+          type: string
+          description: 综合体 id。
+          maxLength: 64
+        space_id:
+          type: string
+          description: 空间 id。
+          maxLength: 64
+    FacilityInspectionActionRequest:
+      type: object
+      description: 巡检任务开始/复查/主管确认请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        note:
+          type: string
+          description: 动作备注。
+          maxLength: 1000
+    FacilityInspectionRecordSubmitRequest:
+      type: object
+      description: 巡检记录提交请求。abnormal 结果必须填写 abnormal_note。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - result
+        - inspector_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        result:
+          type: string
+          description: 巡检结果。
+          enum:
+            - normal
+            - abnormal
+        photos:
+          type: array
+          description: 照片附件 id 或 URL。
+          items:
+            type: string
+            description: 照片附件 id 或 URL。
+            maxLength: 2048
+          maxItems: 50
+        qr_code:
+          type: string
+          description: 点位二维码。
+          maxLength: 255
+        gps_lat:
+          type: number
+          description: 纬度。
+          minimum: -90
+          maximum: 90
+        gps_lng:
+          type: number
+          description: 经度。
+          minimum: -180
+          maximum: 180
+        checklist_result:
+          type: array
+          description: 检查项结果。
+          items:
+            type: object
+            additionalProperties: true
+          maxItems: 200
+        note:
+          type: string
+          description: 记录备注。
+          maxLength: 1000
+        abnormal_note:
+          type: string
+          description: 异常说明。
+          maxLength: 1000
+        inspector_id:
+          type: string
+          description: 巡检人 user_id。
+          maxLength: 64
+    EnergyMeterRequest:
+      type: object
+      description: 能源表计新建/更新请求。
+      additionalProperties: false
+      required:
+        - name
+        - meter_type
+        - gather_object
+      properties:
+        id:
+          type: string
+          description: 外部指定表计 id。
+          maxLength: 64
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        name:
+          type: string
+          description: 表计名称。
+          maxLength: 120
+        meter_type:
+          type: string
+          description: 表计类型。
+          enum:
+            - electricity
+            - water
+            - gas
+            - heat_cold
+        parent_meter_id:
+          type: string
+          description: 父级总表 id。
+          maxLength: 64
+        gather_object:
+          type: string
+          description: 采集对象。
+          enum:
+            - public_area
+            - merchant
+            - equipment_circuit
+        space_id:
+          type: string
+          description: 空间 id。
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 商户 id。
+          maxLength: 64
+        project_id:
+          type: string
+          description: 综合体 id。
+          maxLength: 64
+        read_mode:
+          type: string
+          description: 抄表方式，默认 remote。
+          enum:
+            - remote
+            - manual
+        active:
+          type: boolean
+          description: 是否启用。
+    EnergyReadingRecordRequest:
+      type: object
+      description: 抄表读数录入请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - meter_id
+        - period
+        - reading_value
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        meter_id:
+          type: string
+          description: 表计 id。
+          maxLength: 64
+        period:
+          type: string
+          description: 账期 YYYY-MM。
+          pattern: ^\d{4}-\d{2}$
+        reading_value:
+          type: number
+          description: 本期读数。
+        prev_reading_value:
+          type: number
+          description: 上期读数；后端按历史读数重算，可为空。
+        read_mode:
+          type: string
+          description: 抄表方式。
+          enum:
+            - remote
+            - manual
+        reader_id:
+          type: string
+          description: 抄表人 user_id。
+          maxLength: 64
+        read_at:
+          type: string
+          format: date-time
+          description: 抄表时间。
+    EnergyReadingReviewRequest:
+      type: object
+      description: 异常抄表复核请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - reviewed_by
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        reviewed_by:
+          type: string
+          description: 复核人 user_id。
+          maxLength: 64
+    EnergySettleRequest:
+      type: object
+      description: 能源费结算请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - period
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        period:
+          type: string
+          description: 账期 YYYY-MM。
+          pattern: ^\d{4}-\d{2}$
+    RoleAssignmentRequest:
+      type: object
+      description: 用户角色分配/取消请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - user_id
+        - role_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        user_id:
+          type: string
+          description: 目标用户 id。
+          maxLength: 64
+        role_id:
+          type: string
+          description: 角色 id。
+          maxLength: 64
+    PositionRoleTemplateRequest:
+      type: object
+      description: 岗位角色模板请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - position_code
+        - staff_level_id
+        - role_id
+        - template_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        position_code:
+          type: string
+          description: 岗位编码。
+          maxLength: 120
+        staff_level_id:
+          type: string
+          description: 职级 id。
+          maxLength: 64
+        role_id:
+          type: string
+          description: 角色 id。
+          maxLength: 64
+        template_id:
+          type: string
+          description: 权限模板 id。
+          maxLength: 64
+        status:
+          type: string
+          description: 模板状态，默认 active。
+          enum:
+            - active
+            - inactive
+    UserPositionAssignmentRequest:
+      type: object
+      description: 用户岗位分配请求；user_id 由路径参数提供，不在请求体中重复提交。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - position_code
+        - staff_level_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        position_code:
+          type: string
+          description: 岗位编码。
+          maxLength: 120
+        staff_level_id:
+          type: string
+          description: 职级 id。
+          maxLength: 64
+        base_salary_amount_cent:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 具体薪资，整数分。
+        salary_currency:
+          type: string
+          description: 薪资币种；P0 仅 CNY。
+          enum:
+            - CNY
+        salary_detail:
+          type: string
+          description: 薪资说明。
+          maxLength: 1000
+    AccessGrantApplyRequest:
+      type: object
+      description: 需主管复核的授权申请请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - request_type
+        - target_user_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 id。
+          items:
+            type: string
+            description: 附件 id。
+            maxLength: 64
+          maxItems: 50
+        request_type:
+          type: string
+          description: 申请类型。
+          enum:
+            - user_role
+            - user_position
+            - temporary_permission
+        target_user_id:
+          type: string
+          description: 目标用户 id。
+          maxLength: 64
+        role_id:
+          type: string
+          description: 角色 id；user_role 类型必填。
+          maxLength: 64
+        position_code:
+          type: string
+          description: 岗位编码；user_position 类型必填。
+          maxLength: 120
+        staff_level_id:
+          type: string
+          description: 职级 id；user_position 类型必填。
+          maxLength: 64
+        base_salary_amount_cent:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 具体薪资，整数分。
+        salary_currency:
+          type: string
+          description: 薪资币种；P0 仅 CNY。
+          enum:
+            - CNY
+        salary_detail:
+          type: string
+          description: 薪资说明。
+          maxLength: 1000
+        permission_codes:
+          type: array
+          description: 临时权限码；temporary_permission 类型必填。
+          items:
+            type: string
+            description: 权限码。
+            maxLength: 120
+          maxItems: 200
+        valid_from:
+          type: string
+          format: date-time
+          description: 临时授权生效时间。
+        expires_at:
+          type: string
+          format: date-time
+          description: 临时授权失效时间。
+        single_use:
+          type: boolean
+          description: 是否单次使用。
+        reason:
+          type: string
+          description: 申请原因。
+          maxLength: 1000
+    AccessGrantReviewRequest:
+      type: object
+      description: 授权申请复核请求。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - decision
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 id。
+          items:
+            type: string
+            description: 附件 id。
+            maxLength: 64
+          maxItems: 50
+        decision:
+          type: string
+          description: 复核决策。
+          enum:
+            - approve
+            - reject
+        comment:
+          type: string
+          description: 复核意见。
+          maxLength: 1000
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"
   requestBodyRule: 所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入
   idempotencyRule: x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕
-  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码；设备能力写入
-    x-device-capability，服务端/监控调用写入 x-invocation-channel。
-  authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为
-    public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或
-    x-data-scope 代替认证上下文。
+  terminalAllowedRule: x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码；设备能力写入 x-device-capability，服务端/监控调用写入 x-invocation-channel。
+  authContextRule: 每个 operation 必须显式声明 x-auth-context，允许值为 public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或 x-data-scope 代替认证上下文。
 x-contract-hardening:
   date: 2026-06-12
   scope: P0 OpenAPI 字段级可编码补强
@@ -23144,8 +27472,7 @@ x-contract-hardening:
     - 金额字段单位统一为分，比例字段范围为 0-100，数量字段必须非负。
     - 路径、方法、operationId、权限、认证上下文和业务枚举不在本次机械补强中改变。
 x-p0-example-coverage:
-  strategy: P0 first covers high-risk write flows and external integration flows; full operation examples are P1
-    documentation hardening.
+  strategy: P0 first covers high-risk write flows and external integration flows; full operation examples are P1 documentation hardening.
   request_bodies:
     - Webhook
     - CustomerTicketOrderRequest
