@@ -32,6 +32,7 @@
 | local_ai_llm | 160 本地 AI 大模型 | on | no |  |  | 关闭后只使用 Java 内置规则处理器。 | 开启后使用 160 本地大模型作为辅助分析，不调用外部云 AI，不允许 AI 直接做付款、核销、处罚、退款或员工绩效最终决策。 |
 | nas_smb_backup | NAS SMB 备份恢复 | on | yes | PRD-CRED-NAS-001, PRD-NAS-AUTOMOUNT-001, PRD-NAS-SCHEDULE-001, PRD-NAS-ALERT-001, PRD-NAS-DRILL-CADENCE-001 | SEC-P0-OPS-RECOVERY-001 | 不建议关闭。若关闭，必须先指定等效备份恢复目标；否则不能宣称生产可恢复。 | 开启后必须固化 //192.168.88.113/bn 到 160 本地挂载点、定时备份、容量/失败告警和周期性恢复演练。 |
 | sms_notification | 短信通知 | off | no | PRD-CRED-3P-001 |  | 关闭后不调用真实短信供应商；登录验证码走 mock OTP loopback（非生产固定码 000000），生产无供应商时 fail-closed 拒绝登录；催缴、告警等短信能力降级为人工或站内留痕。 | 开启后必须补齐短信供应商签名/模板报备、API/SDK、credential_ref、发送回执、限频与失败补偿和生产证据。 |
+| invoice_tax | 开票/电子发票（税务机关 / 电子发票平台对接） | off | no | PRD-CRED-3P-001 |  | 关闭后不对接税务机关/电子发票平台、不自研开票引擎、不生成发票号；开票降级为人工或不启用，财务仅维护「可开票额=已收−已退−已开」口径、不伪造开票结果（finance-settlement PRD §6A）。 | 开启后必须补齐税务/电子发票平台对接接口、开票数据口径（关联订单/抬头/税号/税目/可开票金额）、开票结果与状态回传、credential_ref 和生产证据；本系统不自建 invoice 表/发票号生成，实际开票由税务/电子发票平台完成。 |
 
 ## 4. 后台手动工作人员录入需求
 
@@ -44,9 +45,7 @@
 3. Given 某能力开关为开启，When 进入生产准入检查，Then 必须要求真实 SDK/API、credential_ref、Webhook/轮询、对账/补偿、失败样例和生产证据。
 4. Given 企业微信关闭，When 创建工作人员，Then 后台手动录入、角色或权限模板分配、审计留痕必须可完成。
 5. Given 工作手机/平板/一体机 MDM 关闭，When 执行高风险核销、出酒或支付动作，Then 移动终端不得放行，必须转后台或人工流程。
-6. Given 全场入场刷脸闸关闭，When 客人入场，Then 系统只能记录人工证件核验结果，不能展示自动人脸核验已通过；售酒环节继承入场核验，不逐单验年龄。
-
-<!-- 2026-06-24 对齐：原 capability_id `bar_face_age`、口径"酒吧人脸/酒吧入场"与业务系统地图 #bar/#thirdparty「门口统一刷脸、全场 18+、售酒继承入场核验」及代码真实键 `face.verification.enabled`（V146，global scope，默认关）冲突，按业务 HTML 最终解释权回归"全场入场刷脸闸"口径并改用真实能力键。注意：`integration-capability-switches-latest.json` 内同名 `bar_face_age` 项需一并对齐（若为生成产物则重生成）。 -->
+6. Given 全场入场刷脸闸关闭，When 客人入场，Then 系统只能记录人工证件核验结果，不能展示自动人脸核验已通过。
 
 ## 6. 餐饮 POS 和零售 POS 解释
 

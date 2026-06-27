@@ -77,8 +77,8 @@
       "production_interface_required": false
     },
     {
-      "capability_id": "bar_face_age",
-      "label": "酒吧人脸/年龄核验",
+      "capability_id": "face.verification.enabled",
+      "label": "全场入场刷脸闸（满 18 岁核验）",
       "default_enabled": false,
       "category": "face_age",
       "evidence_item_ids": [
@@ -94,7 +94,7 @@
         "REQ-17",
         "REQ-23b"
       ],
-      "disabled_behavior": "关闭后不调用第三方人脸/年龄接口；酒吧入场必须走人工证件核验、人工复核和审计留痕，不能宣称已完成自动人脸核验。",
+      "disabled_behavior": "关闭后不调用第三方人脸/年龄接口；全场入场按制度兜底（人工证件核验/人工复核/审计留痕），售酒环节继承入场核验、不逐单验年龄，不能宣称已完成自动人脸核验。",
       "enabled_requirements": "开启后必须补齐供应商 SDK/API、成功/失败样例、错误码、合规材料、测试账号和 credential_ref。",
       "enabled": false,
       "production_interface_required": false
@@ -326,6 +326,22 @@
       "requirement_ids": [],
       "disabled_behavior": "关闭后不调用真实短信供应商；登录验证码走 mock OTP loopback（非生产固定码 000000），生产无供应商时 fail-closed 拒绝登录；催缴、告警等短信能力降级为人工或站内留痕。",
       "enabled_requirements": "开启后必须补齐短信供应商签名/模板报备、API/SDK、credential_ref、发送回执、限频与失败补偿和生产证据。",
+      "enabled": false,
+      "production_interface_required": false
+    },
+    {
+      "capability_id": "invoice_tax",
+      "label": "开票/电子发票（税务机关 / 电子发票平台对接）",
+      "default_enabled": false,
+      "category": "finance",
+      "evidence_item_ids": [],
+      "credential_item_ids": [
+        "PRD-CRED-3P-001"
+      ],
+      "security_finding_ids": [],
+      "requirement_ids": [],
+      "disabled_behavior": "关闭后不对接税务机关/电子发票平台、不自研开票引擎、不生成发票号；开票降级为人工或不启用，财务仅维护「可开票额=已收−已退−已开」口径、不伪造开票结果（finance-settlement PRD §6A）。",
+      "enabled_requirements": "开启后必须补齐税务/电子发票平台对接接口、开票数据口径（关联订单/抬头/税号/税目/可开票金额）、开票结果与状态回传、credential_ref 和生产证据；本系统不自建 invoice 表/发票号生成，实际开票由税务/电子发票平台完成。",
       "enabled": false,
       "production_interface_required": false
     }
