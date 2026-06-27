@@ -21,6 +21,9 @@
 |---|---|---|
 | `product-requirements-v0.1.md` | 产品总纲与业务边界 | 现行 |
 | `ticketing-entitlement-checkin-product-prd-v0.1.md` | 票务-权益-核销 PRD | 现行 |
+| `member-loyalty-and-stored-value-product-prd-v0.1.md` | 会员忠诚度（两本账/签到/生日）与储值/付费会员 PRD（2026-06-26 审计回填需求源） | 现行 |
+| `customer-app-miniapp-product-prd-v0.1.md` | 客人端（App/小程序）PRD：两端一套口径/订台定金/订卡邀请函/隐私同意（2026-06-26 审计回填） | 现行 |
+| `business-dashboard-metrics-product-prd-v0.1.md` | 经营看板指标 PRD：8 类指标 + 下钻 + 角色可见范围（2026-06-26 审计回填，裁决#7） | 现行 |
 | `bar-business-operations-product-prd-v0.1.md` | 酒吧业务运营 PRD | 现行 |
 | `amusement-business-operations-product-prd-v0.1.md` | 游乐业务运营 PRD | 现行 |
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
@@ -210,8 +213,9 @@
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
-| `business-system-map-for-operations-v0.1.html` | 运营视角业务系统地图 | 现行 |
-| `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图 | 现行 |
+| `business-system-map-for-operations-v0.1.html` | 运营视角业务系统地图（最终解释权之一） | 现行 |
+| `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图（最终解释权之一） | 现行 |
+| `business-enum-quick-reference-v0.1.html` | 业务枚举速查表（最终解释权之一，配套两份地图使用） | 现行 |
 
 ## 17. 归档目录
 

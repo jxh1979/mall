@@ -127,8 +127,8 @@
 ### D14.1 综合体计费术语（turnover rent / deposit / CAM）
 - **turnover rent（营业额抽成）**：按商户营业额比例计提的租金，落账方向为应收（`direction=receivable`）；计费引擎产出计费台账行 `sourceType='turnover_rent'`。
 - **deposit（保证金四动作）**：保证金台账动作集 = **collect（收取）/ refund（退还）/ deduct（抵扣）/ forfeit（没收）**，单行记一个 action；金额按 D1 整数分。
-- **CAM（公摊费）**：公共区域分摊费用，按商户份额分摊计入应收。
-- **CAM true-up（年度多退少补）**：年度对预收 CAM 与实际成本做差额清算；**少收 → 补应收（receivable top-up）**，**多收 → 退应付（payable refund）**，无差额不产生台账行；份额权重必须合计为全额，否则拒绝。
+- **CAM（公摊费）**：~~公共区域分摊费用，按商户份额分摊计入应收。~~ **已废止（2026-06-22 F-OPS-08，V150）**：改为物业费「每平米固定单价 × 商户面积」按期计费、不退不补；`cam_allocations` 旧表只读历史、`allocateCam` 抛 `CAM_ALLOCATION_ABOLISHED`。本术语仅作旧口径历史参考，现行术语见「物业费固定计费」。
+- **CAM true-up（年度多退少补）**：~~年度对预收 CAM 与实际成本做差额清算；少收 → 补应收、多收 → 退应付。~~ **已废止（同 F-OPS-08）**：物业费不退不补、无年度 true-up 对账；`cam_trueup_*` 旧表只读、`trueUpCam` 抛 `CAM_TRUEUP_ABOLISHED`。仅作历史口径。
 - **库存差异入账科目方向（统一口径）**：盘亏/报损（内部损益对手方）→ **receivable**；盘盈（冲成本）→ **payable**；供应商责任（向供应商挂 AP 应付索赔）→ **payable**。差异行 `reason∈{damage/shortage/overage/supplier_fault}`，`varianceQty/varianceAmountCent` 带符号（负=盘亏/报损，正=盘盈）。
 - 实证：`FinanceServiceTests`（turnover_rent / 保证金四动作 / CamTrueUp under/over/exact）、`DepositLedgerRecord`（action=collect|refund|deduct|forfeit）、`InventoryVarianceRecord` + `InventoryVariancePostRequest`（盘亏/报损→损益对手方、供应商责任→供应商 AP）。权威细化见 spec（P1#14 综合体计费 + P2#④ CAM true-up）。
 
