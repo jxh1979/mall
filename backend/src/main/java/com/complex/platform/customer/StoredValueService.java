@@ -134,6 +134,9 @@ public class StoredValueService {
     @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
     public CustomerStoredValueTransactionRecord consume(String customerId, String projectId,
                                                         long amountCent, String reason, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
+        }
         if (amountCent <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
         }
@@ -169,6 +172,9 @@ public class StoredValueService {
     public CustomerStoredValueTransactionRecord refund(String customerId, String projectId,
                                                        long amountCent, String reason, boolean closeAccount,
                                                        String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
+        }
         if (amountCent <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent must be positive");
         }
