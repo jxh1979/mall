@@ -70,7 +70,7 @@ public class AccessService {
             AuthorizationService authorizationService,
             ObjectProvider<AccessCredentialProvisioner> credentialProvisioner,
             ObjectProvider<SupervisorReviewService> supervisorReviewService,
-            @Value("${access.grant_approval.enabled:false}") boolean grantApprovalEnabled,
+            @Value("${access.grant_approval.enabled:true}") boolean grantApprovalEnabled,
             @Value("${access.grant_approval.summary.position_threshold:3}") int summaryPositionThreshold,
             @Value("${access.grant_approval.summary.user_threshold:3}") int summaryUserThreshold
     ) {
