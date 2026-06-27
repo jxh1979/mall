@@ -19298,7 +19298,22 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "project",
+                "entity"
+              ]
+            },
+            "description": "汇总维度：project(默认)按项目 / entity 按法律主体下钻。"
+          }
+        ]
       }
     },
     "/api/v1/ticketing/refunds/{refund_id}/lines": {
@@ -22562,6 +22577,2353 @@
           }
         }
       }
+    },
+    "/api/v1/facility/equipment": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityEquipment",
+        "summary": "设备台账列表",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.equipment.viewed",
+        "x-audit-event-failure": "facility.equipment.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "createFacilityEquipment",
+        "summary": "创建设备台账",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.equipment_created",
+        "x-audit-event-failure": "facility.equipment_create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityEquipmentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/equipment/maintenance-due": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityMaintenanceDueEquipment",
+        "summary": "查询维保到期设备",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.equipment.maintenance_due_viewed",
+        "x-audit-event-failure": "facility.equipment.maintenance_due_view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/equipment/{equipment_id}": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "updateFacilityEquipment",
+        "summary": "更新设备台账",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.equipment_updated",
+        "x-audit-event-failure": "facility.equipment_update_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "description": "设备 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityEquipmentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/equipment/{equipment_id}/status": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "changeFacilityEquipmentStatus",
+        "summary": "变更设备状态/上报告警",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.equipment_status_changed",
+        "x-audit-event-failure": "facility.equipment_status_change_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "description": "设备 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityEquipmentStatusRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/equipment/{equipment_id}/maintenance-done": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "recordFacilityEquipmentMaintenanceDone",
+        "summary": "记录设备维保完成",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.equipment_maintained",
+        "x-audit-event-failure": "facility.equipment_maintain_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "description": "设备 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "required": false,
+            "description": "操作幂等键。",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityWorkOrders",
+        "summary": "工单列表",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.work_order.viewed",
+        "x-audit-event-failure": "facility.work_order.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "createFacilityWorkOrder",
+        "summary": "创建维保/物业工单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_created",
+        "x-audit-event-failure": "facility.work_order_create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/overdue": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityOverdueWorkOrders",
+        "summary": "逾期工单列表",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.work_order.overdue_viewed",
+        "x-audit-event-failure": "facility.work_order.overdue_view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "getFacilityWorkOrder",
+        "summary": "工单详情",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.work_order.viewed",
+        "x-audit-event-failure": "facility.work_order.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/assign": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "assignFacilityWorkOrder",
+        "summary": "工单派单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_assigned",
+        "x-audit-event-failure": "facility.work_order_assign_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderAssignRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/start": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "startFacilityWorkOrder",
+        "summary": "开始处理工单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_started",
+        "x-audit-event-failure": "facility.work_order_start_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/complete": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "completeFacilityWorkOrder",
+        "summary": "完成工单处理",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_completed",
+        "x-audit-event-failure": "facility.work_order_complete_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/accept": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "acceptFacilityWorkOrder",
+        "summary": "主管验收工单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_accepted",
+        "x-audit-event-failure": "facility.work_order_accept_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/review": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "reviewFacilityWorkOrder",
+        "summary": "报修方回访工单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_reviewed",
+        "x-audit-event-failure": "facility.work_order_review_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/suspend": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "suspendFacilityWorkOrder",
+        "summary": "挂起工单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_suspended",
+        "x-audit-event-failure": "facility.work_order_suspend_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/resume": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "resumeFacilityWorkOrder",
+        "summary": "恢复工单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_resumed",
+        "x-audit-event-failure": "facility.work_order_resume_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/mark-overdue": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "markFacilityWorkOrdersOverdue",
+        "summary": "批量标记逾期工单",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_overdue_marked",
+        "x-audit-event-failure": "facility.work_order_overdue_mark_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "idempotency_key",
+            "in": "query",
+            "required": true,
+            "description": "操作幂等键。",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/policies": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "saveFacilityWorkOrderPolicy",
+        "summary": "保存工单 SLA/验收策略",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_policy_saved",
+        "x-audit-event-failure": "facility.work_order_policy_save_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderPolicyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspections/templates": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityInspectionTemplates",
+        "summary": "巡检模板列表",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.inspection_template.viewed",
+        "x-audit-event-failure": "facility.inspection_template.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "createFacilityInspectionTemplate",
+        "summary": "创建巡检模板",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection_template_created",
+        "x-audit-event-failure": "facility.inspection_template_create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionTemplateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspections/tasks": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityInspectionTasks",
+        "summary": "巡检任务列表",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.inspection_task.viewed",
+        "x-audit-event-failure": "facility.inspection_task.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "createFacilityInspectionTask",
+        "summary": "创建巡检任务",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection_task_created",
+        "x-audit-event-failure": "facility.inspection_task_create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionTaskRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspections/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "getFacilityInspectionTask",
+        "summary": "巡检任务详情",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.inspection_task.viewed",
+        "x-audit-event-failure": "facility.inspection_task.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "巡检任务 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspections/tasks/{task_id}/start": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "startFacilityInspectionTask",
+        "summary": "开始巡检任务",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection_task_started",
+        "x-audit-event-failure": "facility.inspection_task_start_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "巡检任务 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspections/tasks/{task_id}/records": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityInspectionRecords",
+        "summary": "巡检记录列表",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.inspection_record.viewed",
+        "x-audit-event-failure": "facility.inspection_record.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "巡检任务 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "submitFacilityInspectionRecord",
+        "summary": "提交巡检记录",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection_record_submitted",
+        "x-audit-event-failure": "facility.inspection_record_submit_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "巡检任务 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionRecordSubmitRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspections/tasks/{task_id}/recheck": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "recheckFacilityInspectionTask",
+        "summary": "复查整改后的巡检任务",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection_task_rechecked",
+        "x-audit-event-failure": "facility.inspection_task_recheck_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "巡检任务 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/inspections/tasks/{task_id}/supervisor-confirm": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "confirmFacilityInspectionSupervisor",
+        "summary": "主管确认巡检任务关闭",
+        "x-permission": "facility.inspection.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.inspection_task_closed",
+        "x-audit-event-failure": "facility.inspection_task_close_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "description": "巡检任务 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityInspectionActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/energy/meters": {
+      "get": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "listEnergyMeters",
+        "summary": "表计列表",
+        "x-permission": "energy.meter.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "energy.meter.viewed",
+        "x-audit-event-failure": "energy.meter.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "createEnergyMeter",
+        "summary": "创建能源表计",
+        "x-permission": "energy.meter.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "energy.meter_saved",
+        "x-audit-event-failure": "energy.meter_save_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EnergyMeterRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/energy/meters/{meter_id}": {
+      "post": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "updateEnergyMeter",
+        "summary": "更新能源表计",
+        "x-permission": "energy.meter.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "energy.meter_saved",
+        "x-audit-event-failure": "energy.meter_save_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "meter_id",
+            "in": "path",
+            "required": true,
+            "description": "表计 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EnergyMeterRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/energy/readings": {
+      "get": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "listEnergyReadings",
+        "summary": "抄表读数列表",
+        "x-permission": "energy.reading.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "energy.reading.viewed",
+        "x-audit-event-failure": "energy.reading.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "账期 YYYY-MM；空则查询全部。",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "recordEnergyReading",
+        "summary": "录入抄表读数",
+        "x-permission": "energy.reading.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "energy.reading_recorded",
+        "x-audit-event-failure": "energy.reading_record_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EnergyReadingRecordRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/energy/readings/{reading_id}/review": {
+      "post": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "reviewEnergyReading",
+        "summary": "复核异常抄表读数",
+        "x-permission": "energy.reading.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "energy.reading_reviewed",
+        "x-audit-event-failure": "energy.reading_review_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "reading_id",
+            "in": "path",
+            "required": true,
+            "description": "抄表读数 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EnergyReadingReviewRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/energy/meters/{meter_id}/difference": {
+      "get": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "getEnergyMeterDifference",
+        "summary": "查询总分表差异",
+        "x-permission": "energy.reading.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "energy.meter_difference.viewed",
+        "x-audit-event-failure": "energy.meter_difference.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "meter_id",
+            "in": "path",
+            "required": true,
+            "description": "总表 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": true,
+            "description": "账期 YYYY-MM。",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/energy/settlements/energy-fee": {
+      "post": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "settleEnergyFee",
+        "summary": "按账期结算能源费",
+        "x-permission": "energy.reading.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "energy.fee_settled",
+        "x-audit-event-failure": "energy.fee_settle_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EnergySettleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/energy/settle-energy-fee": {
+      "post": {
+        "tags": [
+          "energy"
+        ],
+        "operationId": "settleEnergyFeeShortcut",
+        "summary": "按账期结算能源费(兼容路径)",
+        "x-permission": "energy.reading.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "energy.fee_settled",
+        "x-audit-event-failure": "energy.fee_settle_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EnergySettleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/role-assignments": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "assignUserRole",
+        "summary": "为用户分配角色",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.role.assigned",
+        "x-audit-event-failure": "access.role.assign_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RoleAssignmentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/role-assignments/unassign": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "unassignUserRole",
+        "summary": "取消用户角色",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.role.unassigned",
+        "x-audit-event-failure": "access.role.unassign_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RoleAssignmentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/position-role-templates": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "listPositionRoleTemplates",
+        "summary": "岗位角色模板列表",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "access.position_role_template.viewed",
+        "x-audit-event-failure": "access.position_role_template.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "createPositionRoleTemplate",
+        "summary": "创建岗位角色模板",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.position_role_template.saved",
+        "x-audit-event-failure": "access.position_role_template.save_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PositionRoleTemplateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/position-role-templates/{id}": {
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "updatePositionRoleTemplate",
+        "summary": "更新岗位角色模板",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.position_role_template.saved",
+        "x-audit-event-failure": "access.position_role_template.save_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "岗位角色模板 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/PositionRoleTemplateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "deletePositionRoleTemplate",
+        "summary": "删除岗位角色模板",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "access.position_role_template.deleted",
+        "x-audit-event-failure": "access.position_role_template.delete_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "岗位角色模板 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/users/{id}/position": {
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "assignUserPosition",
+        "summary": "分配用户岗位并套用岗位权限",
+        "x-permission": "access.role.assign",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.user_position.assigned",
+        "x-audit-event-failure": "access.user_position.assign_failed",
+        "x-auth-context": "staff-token",
+        "description": "目标 user_id 由路径参数提供；后端按岗位+职级匹配岗位角色模板并分配角色/权限模板。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "目标用户 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/UserPositionAssignmentRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/grant-requests": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "listAccessGrantRequests",
+        "summary": "授权申请列表",
+        "x-permission": "access.grant_request.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "access.grant_request.viewed",
+        "x-audit-event-failure": "access.grant_request.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "window_days",
+            "in": "query",
+            "required": false,
+            "description": "只看最近 N 天；空则不限窗口。",
+            "schema": {
+              "type": "integer",
+              "description": "天数。",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "createAccessGrantRequest",
+        "summary": "创建需主管复核的授权申请",
+        "x-permission": "access.grant_request.apply",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.grant_request.applied",
+        "x-audit-event-failure": "access.grant_request.apply_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AccessGrantApplyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/grant-requests/{id}/review": {
+      "post": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "reviewAccessGrantRequest",
+        "summary": "复核授权申请",
+        "x-permission": "access.grant_request.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.grant_request.reviewed",
+        "x-audit-event-failure": "access.grant_request.review_failed",
+        "x-auth-context": "staff-token",
+        "description": "除 access.grant_request.review 外，还必须具备 governance.supervisor_review.approve。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "授权申请 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AccessGrantReviewRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/grant-requests/summary": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "getAccessGrantSummary",
+        "summary": "授权申请治理汇总",
+        "x-permission": "access.grant_request.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "access.grant_request.summary_viewed",
+        "x-audit-event-failure": "access.grant_request.summary_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "window_days",
+            "in": "query",
+            "required": false,
+            "description": "统计最近 N 天，默认 30。",
+            "schema": {
+              "type": "integer",
+              "description": "天数。",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "position_threshold",
+            "in": "query",
+            "required": false,
+            "description": "岗位维度推荐阈值。",
+            "schema": {
+              "type": "integer",
+              "description": "次数阈值。",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "user_threshold",
+            "in": "query",
+            "required": false,
+            "description": "用户异常阈值。",
+            "schema": {
+              "type": "integer",
+              "description": "次数阈值。",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -24781,6 +27143,196 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ContractAttachmentRequest"
+            }
+          }
+        }
+      },
+      "FacilityEquipmentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityEquipmentRequest"
+            }
+          }
+        }
+      },
+      "FacilityEquipmentStatusRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityEquipmentStatusRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderAssignRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderAssignRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderActionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderActionRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderPolicyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderPolicyRequest"
+            }
+          }
+        }
+      },
+      "FacilityInspectionTemplateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityInspectionTemplateRequest"
+            }
+          }
+        }
+      },
+      "FacilityInspectionTaskRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityInspectionTaskRequest"
+            }
+          }
+        }
+      },
+      "FacilityInspectionActionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityInspectionActionRequest"
+            }
+          }
+        }
+      },
+      "FacilityInspectionRecordSubmitRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityInspectionRecordSubmitRequest"
+            }
+          }
+        }
+      },
+      "EnergyMeterRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnergyMeterRequest"
+            }
+          }
+        }
+      },
+      "EnergyReadingRecordRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnergyReadingRecordRequest"
+            }
+          }
+        }
+      },
+      "EnergyReadingReviewRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnergyReadingReviewRequest"
+            }
+          }
+        }
+      },
+      "EnergySettleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/EnergySettleRequest"
+            }
+          }
+        }
+      },
+      "RoleAssignmentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RoleAssignmentRequest"
+            }
+          }
+        }
+      },
+      "PositionRoleTemplateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PositionRoleTemplateRequest"
+            }
+          }
+        }
+      },
+      "UserPositionAssignmentRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserPositionAssignmentRequest"
+            }
+          }
+        }
+      },
+      "AccessGrantApplyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AccessGrantApplyRequest"
+            }
+          }
+        }
+      },
+      "AccessGrantReviewRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AccessGrantReviewRequest"
             }
           }
         }
@@ -34057,6 +36609,1045 @@
               "type": "string",
               "maxLength": 64
             }
+          }
+        }
+      },
+      "FacilityEquipmentRequest": {
+        "type": "object",
+        "description": "设备台账新建/更新请求。创建时 name 必填；更新可沿用原名称。",
+        "additionalProperties": false,
+        "required": [
+          "equipment_type"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "外部指定设备 id。",
+            "maxLength": 64
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "description": "设备名称。",
+            "maxLength": 120
+          },
+          "equipment_type": {
+            "type": "string",
+            "description": "设备类型。",
+            "enum": [
+              "elevator",
+              "hvac",
+              "power",
+              "water_fire"
+            ]
+          },
+          "space_id": {
+            "type": "string",
+            "description": "空间 id。",
+            "maxLength": 64
+          },
+          "brand": {
+            "type": "string",
+            "description": "品牌。",
+            "maxLength": 120
+          },
+          "model": {
+            "type": "string",
+            "description": "型号。",
+            "maxLength": 120
+          },
+          "vendor": {
+            "type": "string",
+            "description": "供应商。",
+            "maxLength": 160
+          },
+          "responsible_user_id": {
+            "type": "string",
+            "description": "责任人 user_id。",
+            "maxLength": 64
+          },
+          "maintenance_cycle_days": {
+            "type": "integer",
+            "description": "维保周期天数。",
+            "minimum": 1
+          },
+          "install_date": {
+            "type": "string",
+            "format": "date",
+            "description": "安装日期。"
+          },
+          "warranty_until": {
+            "type": "string",
+            "format": "date",
+            "description": "质保到期日期。"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id。",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "商户 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "FacilityEquipmentStatusRequest": {
+        "type": "object",
+        "description": "设备状态变更/告警上报请求。",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "description": "目标状态。",
+            "enum": [
+              "normal",
+              "alarm",
+              "fault",
+              "maintenance",
+              "disabled",
+              "retired"
+            ]
+          },
+          "alarm_source": {
+            "type": "string",
+            "description": "告警来源；status=alarm 时必填。",
+            "enum": [
+              "manual",
+              "iot"
+            ]
+          },
+          "alarm_note": {
+            "type": "string",
+            "description": "告警说明。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "FacilityWorkOrderRequest": {
+        "type": "object",
+        "description": "维保/物业工单创建请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "work_order_type",
+          "title"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "work_order_type": {
+            "type": "string",
+            "description": "工单类型。",
+            "enum": [
+              "repair",
+              "cleaning",
+              "complaint",
+              "rectification",
+              "inspection",
+              "other"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "description": "优先级，默认 normal。",
+            "enum": [
+              "urgent",
+              "high",
+              "normal"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "工单标题。",
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "description": "工单描述。",
+            "maxLength": 2000
+          },
+          "source": {
+            "type": "string",
+            "description": "工单来源，默认 platform。",
+            "enum": [
+              "merchant_self",
+              "platform",
+              "equipment_alarm",
+              "inspection"
+            ]
+          },
+          "space_id": {
+            "type": "string",
+            "description": "空间 id。",
+            "maxLength": 64
+          },
+          "equipment_id": {
+            "type": "string",
+            "description": "设备 id。",
+            "maxLength": 64
+          },
+          "reporter_id": {
+            "type": "string",
+            "description": "报修人/上报人 id。",
+            "maxLength": 64
+          },
+          "reporter_type": {
+            "type": "string",
+            "description": "上报人类型。",
+            "enum": [
+              "staff",
+              "merchant",
+              "system"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id。",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "商户 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "FacilityWorkOrderAssignRequest": {
+        "type": "object",
+        "description": "工单派单请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "assignee_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "assignee_id": {
+            "type": "string",
+            "description": "处理人 user_id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "FacilityWorkOrderActionRequest": {
+        "type": "object",
+        "description": "工单开始/完成/验收/回访/挂起/恢复动作请求。完成动作必须填写 resolution；验收/回访 satisfaction 为 1-5。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "resolution": {
+            "type": "string",
+            "description": "处理结果。",
+            "maxLength": 2000
+          },
+          "satisfaction": {
+            "type": "integer",
+            "description": "满意度 1-5。",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "note": {
+            "type": "string",
+            "description": "动作备注。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "FacilityWorkOrderPolicyRequest": {
+        "type": "object",
+        "description": "工单 SLA/验收策略请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "work_order_type",
+          "priority",
+          "response_minutes",
+          "handle_minutes",
+          "acceptance_by"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "work_order_type": {
+            "type": "string",
+            "description": "工单类型。",
+            "enum": [
+              "repair",
+              "cleaning",
+              "complaint",
+              "rectification",
+              "inspection",
+              "other"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "description": "优先级。",
+            "enum": [
+              "urgent",
+              "high",
+              "normal"
+            ]
+          },
+          "response_minutes": {
+            "type": "integer",
+            "description": "响应时限分钟。",
+            "minimum": 1
+          },
+          "handle_minutes": {
+            "type": "integer",
+            "description": "处理时限分钟。",
+            "minimum": 1
+          },
+          "requires_acceptance": {
+            "type": "boolean",
+            "description": "是否需要验收。"
+          },
+          "acceptance_by": {
+            "type": "string",
+            "description": "验收方。",
+            "enum": [
+              "handler",
+              "supervisor",
+              "reporter"
+            ]
+          },
+          "active": {
+            "type": "boolean",
+            "description": "是否启用。"
+          }
+        }
+      },
+      "FacilityInspectionTemplateRequest": {
+        "type": "object",
+        "description": "巡检模板请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "name",
+          "inspection_type"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "description": "模板名称。",
+            "maxLength": 120
+          },
+          "inspection_type": {
+            "type": "string",
+            "description": "巡检类型。",
+            "enum": [
+              "security",
+              "fire",
+              "facility",
+              "environment"
+            ]
+          },
+          "cycle_days": {
+            "type": "integer",
+            "description": "周期天数。",
+            "minimum": 1
+          },
+          "abnormal_mode": {
+            "type": "string",
+            "description": "异常处理方式，默认 light。",
+            "enum": [
+              "light",
+              "to_work_order"
+            ]
+          },
+          "checklist": {
+            "type": "array",
+            "description": "检查项配置。",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "maxItems": 200
+          },
+          "scope_note": {
+            "type": "string",
+            "description": "巡检范围说明。",
+            "maxLength": 1000
+          },
+          "active": {
+            "type": "boolean",
+            "description": "是否启用。"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "FacilityInspectionTaskRequest": {
+        "type": "object",
+        "description": "巡检任务请求。template 模式需 template_id；route 模式需 route_points。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "template_id": {
+            "type": "string",
+            "description": "巡检模板 id。",
+            "maxLength": 64
+          },
+          "inspection_type": {
+            "type": "string",
+            "description": "巡检类型；无模板时必填。",
+            "enum": [
+              "security",
+              "fire",
+              "facility",
+              "environment"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "任务标题；无模板时必填。",
+            "maxLength": 160
+          },
+          "schedule_mode": {
+            "type": "string",
+            "description": "排程方式，默认 manual。",
+            "enum": [
+              "template",
+              "manual",
+              "route"
+            ]
+          },
+          "route_points": {
+            "type": "array",
+            "description": "路线点位。",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "maxItems": 200
+          },
+          "assignee_id": {
+            "type": "string",
+            "description": "执行人 user_id。",
+            "maxLength": 64
+          },
+          "scheduled_date": {
+            "type": "string",
+            "format": "date",
+            "description": "计划日期。"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "到期日期。"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id。",
+            "maxLength": 64
+          },
+          "space_id": {
+            "type": "string",
+            "description": "空间 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "FacilityInspectionActionRequest": {
+        "type": "object",
+        "description": "巡检任务开始/复查/主管确认请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "note": {
+            "type": "string",
+            "description": "动作备注。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "FacilityInspectionRecordSubmitRequest": {
+        "type": "object",
+        "description": "巡检记录提交请求。abnormal 结果必须填写 abnormal_note。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "result",
+          "inspector_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "result": {
+            "type": "string",
+            "description": "巡检结果。",
+            "enum": [
+              "normal",
+              "abnormal"
+            ]
+          },
+          "photos": {
+            "type": "array",
+            "description": "照片附件 id 或 URL。",
+            "items": {
+              "type": "string",
+              "description": "照片附件 id 或 URL。",
+              "maxLength": 2048
+            },
+            "maxItems": 50
+          },
+          "qr_code": {
+            "type": "string",
+            "description": "点位二维码。",
+            "maxLength": 255
+          },
+          "gps_lat": {
+            "type": "number",
+            "description": "纬度。",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "gps_lng": {
+            "type": "number",
+            "description": "经度。",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "checklist_result": {
+            "type": "array",
+            "description": "检查项结果。",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "maxItems": 200
+          },
+          "note": {
+            "type": "string",
+            "description": "记录备注。",
+            "maxLength": 1000
+          },
+          "abnormal_note": {
+            "type": "string",
+            "description": "异常说明。",
+            "maxLength": 1000
+          },
+          "inspector_id": {
+            "type": "string",
+            "description": "巡检人 user_id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "EnergyMeterRequest": {
+        "type": "object",
+        "description": "能源表计新建/更新请求。",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "meter_type",
+          "gather_object"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "外部指定表计 id。",
+            "maxLength": 64
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "description": "表计名称。",
+            "maxLength": 120
+          },
+          "meter_type": {
+            "type": "string",
+            "description": "表计类型。",
+            "enum": [
+              "electricity",
+              "water",
+              "gas",
+              "heat_cold"
+            ]
+          },
+          "parent_meter_id": {
+            "type": "string",
+            "description": "父级总表 id。",
+            "maxLength": 64
+          },
+          "gather_object": {
+            "type": "string",
+            "description": "采集对象。",
+            "enum": [
+              "public_area",
+              "merchant",
+              "equipment_circuit"
+            ]
+          },
+          "space_id": {
+            "type": "string",
+            "description": "空间 id。",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "商户 id。",
+            "maxLength": 64
+          },
+          "project_id": {
+            "type": "string",
+            "description": "综合体 id。",
+            "maxLength": 64
+          },
+          "read_mode": {
+            "type": "string",
+            "description": "抄表方式，默认 remote。",
+            "enum": [
+              "remote",
+              "manual"
+            ]
+          },
+          "active": {
+            "type": "boolean",
+            "description": "是否启用。"
+          }
+        }
+      },
+      "EnergyReadingRecordRequest": {
+        "type": "object",
+        "description": "抄表读数录入请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "meter_id",
+          "period",
+          "reading_value"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "meter_id": {
+            "type": "string",
+            "description": "表计 id。",
+            "maxLength": 64
+          },
+          "period": {
+            "type": "string",
+            "description": "账期 YYYY-MM。",
+            "pattern": "^\\d{4}-\\d{2}$"
+          },
+          "reading_value": {
+            "type": "number",
+            "description": "本期读数。"
+          },
+          "prev_reading_value": {
+            "type": "number",
+            "description": "上期读数；后端按历史读数重算，可为空。"
+          },
+          "read_mode": {
+            "type": "string",
+            "description": "抄表方式。",
+            "enum": [
+              "remote",
+              "manual"
+            ]
+          },
+          "reader_id": {
+            "type": "string",
+            "description": "抄表人 user_id。",
+            "maxLength": 64
+          },
+          "read_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "抄表时间。"
+          }
+        }
+      },
+      "EnergyReadingReviewRequest": {
+        "type": "object",
+        "description": "异常抄表复核请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "reviewed_by"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "reviewed_by": {
+            "type": "string",
+            "description": "复核人 user_id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "EnergySettleRequest": {
+        "type": "object",
+        "description": "能源费结算请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "period"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "period": {
+            "type": "string",
+            "description": "账期 YYYY-MM。",
+            "pattern": "^\\d{4}-\\d{2}$"
+          }
+        }
+      },
+      "RoleAssignmentRequest": {
+        "type": "object",
+        "description": "用户角色分配/取消请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "user_id",
+          "role_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "user_id": {
+            "type": "string",
+            "description": "目标用户 id。",
+            "maxLength": 64
+          },
+          "role_id": {
+            "type": "string",
+            "description": "角色 id。",
+            "maxLength": 64
+          }
+        }
+      },
+      "PositionRoleTemplateRequest": {
+        "type": "object",
+        "description": "岗位角色模板请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "position_code",
+          "staff_level_id",
+          "role_id",
+          "template_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "position_code": {
+            "type": "string",
+            "description": "岗位编码。",
+            "maxLength": 120
+          },
+          "staff_level_id": {
+            "type": "string",
+            "description": "职级 id。",
+            "maxLength": 64
+          },
+          "role_id": {
+            "type": "string",
+            "description": "角色 id。",
+            "maxLength": 64
+          },
+          "template_id": {
+            "type": "string",
+            "description": "权限模板 id。",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "description": "模板状态，默认 active。",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          }
+        }
+      },
+      "UserPositionAssignmentRequest": {
+        "type": "object",
+        "description": "用户岗位分配请求；user_id 由路径参数提供，不在请求体中重复提交。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "position_code",
+          "staff_level_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "position_code": {
+            "type": "string",
+            "description": "岗位编码。",
+            "maxLength": 120
+          },
+          "staff_level_id": {
+            "type": "string",
+            "description": "职级 id。",
+            "maxLength": 64
+          },
+          "base_salary_amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "具体薪资，整数分。"
+          },
+          "salary_currency": {
+            "type": "string",
+            "description": "薪资币种；P0 仅 CNY。",
+            "enum": [
+              "CNY"
+            ]
+          },
+          "salary_detail": {
+            "type": "string",
+            "description": "薪资说明。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "AccessGrantApplyRequest": {
+        "type": "object",
+        "description": "需主管复核的授权申请请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "request_type",
+          "target_user_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 id。",
+            "items": {
+              "type": "string",
+              "description": "附件 id。",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "request_type": {
+            "type": "string",
+            "description": "申请类型。",
+            "enum": [
+              "user_role",
+              "user_position",
+              "temporary_permission"
+            ]
+          },
+          "target_user_id": {
+            "type": "string",
+            "description": "目标用户 id。",
+            "maxLength": 64
+          },
+          "role_id": {
+            "type": "string",
+            "description": "角色 id；user_role 类型必填。",
+            "maxLength": 64
+          },
+          "position_code": {
+            "type": "string",
+            "description": "岗位编码；user_position 类型必填。",
+            "maxLength": 120
+          },
+          "staff_level_id": {
+            "type": "string",
+            "description": "职级 id；user_position 类型必填。",
+            "maxLength": 64
+          },
+          "base_salary_amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "具体薪资，整数分。"
+          },
+          "salary_currency": {
+            "type": "string",
+            "description": "薪资币种；P0 仅 CNY。",
+            "enum": [
+              "CNY"
+            ]
+          },
+          "salary_detail": {
+            "type": "string",
+            "description": "薪资说明。",
+            "maxLength": 1000
+          },
+          "permission_codes": {
+            "type": "array",
+            "description": "临时权限码；temporary_permission 类型必填。",
+            "items": {
+              "type": "string",
+              "description": "权限码。",
+              "maxLength": 120
+            },
+            "maxItems": 200
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "临时授权生效时间。"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "临时授权失效时间。"
+          },
+          "single_use": {
+            "type": "boolean",
+            "description": "是否单次使用。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "申请原因。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "AccessGrantReviewRequest": {
+        "type": "object",
+        "description": "授权申请复核请求。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "decision"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 id。",
+            "items": {
+              "type": "string",
+              "description": "附件 id。",
+              "maxLength": 64
+            },
+            "maxItems": 50
+          },
+          "decision": {
+            "type": "string",
+            "description": "复核决策。",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "description": "复核意见。",
+            "maxLength": 1000
           }
         }
       }
