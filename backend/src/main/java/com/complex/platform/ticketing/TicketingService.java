@@ -406,9 +406,13 @@ public class TicketingService {
 
     public PageResponse<TicketRefundLineRecord> listTicketRefundLines(String refundId) {
         String id = operations.requireText(refundId, "refund_id");
+        // B1d.3 跨租户读隔离：退款行无 merchant_id，按其 order 的受理商户过滤；
+        // 商户 scope 仅见自身订单的退款行，平台 scope（empty）见全部。
         return operations.readPage(
                 TicketingReadOperation.LIST_TICKET_REFUND_LINES,
-                () -> repository.listTicketRefundLines(id)
+                () -> filterByMerchantScope(repository.listTicketRefundLines(id),
+                        line -> repository.findTicketOrderById(line.orderId())
+                                .map(TicketOrderRecord::merchantId).orElse(null))
         );
     }
 

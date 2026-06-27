@@ -1374,6 +1374,28 @@ class TicketingServiceTests {
     }
 
     @Test
+    void listTicketRefundLinesFiltersByMerchantScopeSoMerchantCannotReadAnotherMerchants() {
+        // B1d.3 跨租户读隔离：退款行无 merchant_id 列，按其 order 的受理商户过滤。
+        Instant now = Instant.parse("2026-06-22T00:00:00Z");
+        ticketingRepository.ticketOrders.put("o_b1d3", new TicketOrderRecord(
+                "o_b1d3", "ON-B1D3", "c1", "tt1", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, null, 9900L, 0L, "CNY", "paid", "issued", "paid", now, now, "mch_a"));
+        ticketingRepository.saveTicketRefundLine(new TicketRefundLineRecord(
+                "rl_b1d3", "refund_b1d3", "o_b1d3", "e1", "entitlement", "entitlement",
+                9900L, 1, 0, "requested", now, now));
+
+        // 商户B 读不到商户A 订单的退款行。
+        TestSecurityActors.asMerchantUser("mch_b");
+        assertThat(service.listTicketRefundLines("refund_b1d3").items()).isEmpty();
+        // 商户A 看得到自己的。
+        TestSecurityActors.asMerchantUser("mch_a");
+        assertThat(service.listTicketRefundLines("refund_b1d3").items()).hasSize(1);
+        // 平台（无商户范围）见全部。
+        TestSecurityActors.asPlatformAdmin();
+        assertThat(service.listTicketRefundLines("refund_b1d3").items()).hasSize(1);
+    }
+
+    @Test
     void refundRequestCreatesEntitlementLevelLinesAndApprovalMarksLinesApproved() {
         TicketTypeRecord ticketType = createTicketType("refund-lines-ticket");
         EntitlementTemplateRecord template = createTemplate("refund-lines-template", 1, 9900L);
