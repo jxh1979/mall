@@ -248,6 +248,46 @@ class MemberWalletServiceTests {
         assertThat(repo.storedValue.get("c1").status()).isEqualTo("closed");
     }
 
+    // ============================================================
+    // 资金双花防护（B1b）：空幂等键必须拒，否则无幂等保护→可重复扣减/退款
+    // ============================================================
+
+    @Test
+    void consumeRejectsBlankIdempotencyKey() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-b1b-c");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, intent.id());
+
+        assertThatThrownBy(() -> service.consume("c1", null, 1_000L, "buy", null))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.consume("c1", null, 1_000L, "buy", "   "))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        // 余额未被扣减（空键被拒，未发生扣减）。
+        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(5_000L);
+    }
+
+    @Test
+    void refundRejectsBlankIdempotencyKey() {
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-b1b-r");
+        finance.markPaymentIntentSucceeded(intent.id());
+        service.settleTopup("c1", null, intent.id());
+
+        assertThatThrownBy(() -> service.refund("c1", null, 1_000L, "r", false, null))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.refund("c1", null, 1_000L, "r", false, ""))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        // 余额未被退减。
+        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(5_000L);
+    }
+
     // 积分转赠用例已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
     // InMemoryRepo 仍保留转赠 repo 桩方法以实现 CustomerRepository 接口（转赠 repo 方法留孤儿）。
 
