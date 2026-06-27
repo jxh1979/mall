@@ -56,9 +56,10 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V160**，发现 **105** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V171**，发现 **122** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
+| `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
 | `access_users` | `merchant_id` + `organization_id` | direct | V003 | `V003__p0_access_permission_authz_slice.sql` |
 | `amusement_capacity_config` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
 | `amusement_capacity_snapshot` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
@@ -106,9 +107,13 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `complex_operating_params` | `project_id` | direct | V160 | `V160__complex_operating_params.sql` |
 | `compliance_expiry_items` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
 | `compliance_reminders` | `merchant_id` | direct | V051 | `V051__compliance_security_fixes.sql` |
+| `contract_approval_flows` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
+| `contract_changes` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `contract_key_dates` | `merchant_id` | direct | V028 | `V028__p1_contract_compliance_expiry.sql` |
-| `contract_spaces` | `space_id` | inherited-or-location-scope | V080 | `V080__contract_scope_and_spaces.sql` |
-| `contracts` | `merchant_id` | direct | V010 | `V010__p0_foundation_residual_platform_terminal_evidence.sql` |
+| `contract_rent_bills` | `merchant_id` + `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
+| `contract_settlements` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
+| `contract_spaces` | `project_id` + `space_id` | direct | V080, V162 | `V080__contract_scope_and_spaces.sql`<br>`V162__contract_lifecycle.sql` |
+| `contracts` | `merchant_id` + `project_id` | direct | V010, V162 | `V010__p0_foundation_residual_platform_terminal_evidence.sql`<br>`V162__contract_lifecycle.sql` |
 | `customer_birthday_rules` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
 | `customer_check_in_tiers` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
 | `customer_member_levels` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
@@ -119,11 +124,16 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `customer_redemption_catalog_items` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
 | `customer_stored_value_accounts` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
 | `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
+| `energy_meters` | `merchant_id` + `project_id` + `space_id` | direct | V168 | `V168__energy_metering.sql` |
 | `entitlement_sessions` | `merchant_id` + `project_id` | direct | V129 | `V129__entitlement_sessions.sql` |
 | `entitlement_templates` | `merchant_id` + `venue_id` | direct | V075 | `V075__entitlement_merchant_and_ticket_validity.sql` |
 | `evidence_attachments` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `evidence_events` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `evidence_reviews` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
+| `facility_equipment` | `merchant_id` + `project_id` + `space_id` | direct | V165 | `V165__facility_equipment.sql` |
+| `facility_inspection_tasks` | `project_id` + `space_id` | direct | V167 | `V167__facility_inspection.sql` |
+| `facility_inspection_templates` | `project_id` | direct | V167 | `V167__facility_inspection.sql` |
+| `facility_work_orders` | `merchant_id` + `project_id` + `space_id` | direct | V166 | `V166__facility_work_orders.sql` |
 | `inventory_items` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_purchase_requests` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_risk_alerts` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
@@ -136,11 +146,16 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `inventory_trace_codes` | `merchant_id` | direct | V128 | `V128__inventory_trace_codes.sql` |
 | `inventory_trace_handovers` | `merchant_id` | direct | V139 | `V139__inventory_trace_handover_merchant_id.sql` |
 | `issued_entitlements` | `merchant_id` + `venue_id` | direct | V006 | `V006__p0_ticketing_verification.sql` |
+| `leasing_brands` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
+| `leasing_follow_ups` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
+| `leasing_intents` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
+| `leasing_leads` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `mall_floor_plans` | `merchant_id` + `project_id` | direct | V023, V052 | `V023__p1_floor_plan_polygons.sql`<br>`V052__floorplan_merchant_isolation.sql` |
 | `merchant_bill_disputes` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bill_dunning_records` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bills` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
+| `position_role_templates` | `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
 | `projects` | `merchant_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
 | `property_fee_bills` | `merchant_id` + `project_id` | direct | V150 | `V150__property_fee_fixed_billing.sql` |
 | `property_fee_rates` | `project_id` | direct | V150 | `V150__property_fee_fixed_billing.sql` |
@@ -150,6 +165,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `roles` | `organization_id` | direct | V048 | `V048__access_role_organization_isolation.sql` |
 | `saved_bottles` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `service_responsibility_records` | `merchant_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
+| `space_expiry_color_rules` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `spaces` | `merchant_id` + `project_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
 | `staff_level_assignments` | `merchant_id` + `organization_id` | direct | V055 | `V055__access_staff_levels_and_salary.sql` |
 | `staff_profiles` | `merchant_id` + `project_id` | direct | V086 | `V086__staff_tables.sql` |
@@ -161,6 +177,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `ticket_orders` | `merchant_id` | direct | V135 | `V135__ticket_orders_merchant_id.sql` |
 | `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |
 | `turnover_rent_rules` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
+| `user_position_assignments` | `merchant_id` + `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
 | `warehouses` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
 | `wecom_conversations` | `project_id` | direct | V087 | `V087__wecom_compliance.sql` |
 | `wecom_risk_hits` | `project_id` | direct | V106 | `V106__wecom_risk_hits_and_rules.sql` |

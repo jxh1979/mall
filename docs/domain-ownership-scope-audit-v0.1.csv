@@ -222,3 +222,26 @@ wecom_conversations,direct,project_id,project_id column on wecom_conversations,r
 wecom_messages,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 wecom_retention_policies,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 wecom_risk_hits,direct,project_id,project_id column on wecom_risk_hits,ready for project/merchant scoped query enforcement,covered
+access_grant_requests,single_complex_default,P0_SINGLE_COMPLEX,project_id/merchant_id columns present but list reads not yet project-scoped (single-complex),enforce scoped read before multi-complex rollout (D14.5),covered
+contract_approval_flows,direct,project_id,project_id column on contract_approval_flows,ready for project/merchant scoped query enforcement,covered
+contract_approval_flow_steps,inherited,flow_id,flow_id -> contract_approval_flows -> project_id,must join through flow before multi-complex rollout,covered
+contract_approvals,inherited,contract_id,contract_id -> contracts -> merchant_id,must join through contract before multi-complex rollout,covered
+contract_changes,direct,project_id,project_id column on contract_changes,ready for project/merchant scoped query enforcement,covered
+contract_rent_bills,direct,project_id,project_id/merchant_id columns on contract_rent_bills,ready for project/merchant scoped query enforcement,covered
+contract_settlements,direct,project_id,project_id column on contract_settlements,ready for project/merchant scoped query enforcement,covered
+energy_meters,direct,project_id,project_id/merchant_id/space_id columns on energy_meters,ready for project/merchant scoped query enforcement,covered
+energy_meter_readings,inherited,meter_id,meter_id -> energy_meters -> project/merchant scope,must join through meter before multi-complex rollout,covered
+energy_anomaly_thresholds,single_complex_default,P0_SINGLE_COMPLEX,meter-type threshold config; no direct scope column detected,before multi-complex rollout add project_id or document as platform config,covered
+facility_equipment,direct,project_id,project_id/merchant_id/space_id columns on facility_equipment,ready for project/merchant scoped query enforcement,covered
+facility_work_orders,direct,project_id,project_id/merchant_id/space_id columns on facility_work_orders,ready for project/merchant scoped query enforcement,covered
+facility_work_order_policy,single_complex_default,P0_SINGLE_COMPLEX,work-order SLA policy config; no direct scope column detected,before multi-complex rollout add project_id or document as project config,covered
+facility_inspection_templates,direct,project_id,project_id column on facility_inspection_templates,ready for project/merchant scoped query enforcement,covered
+facility_inspection_tasks,direct,project_id,project_id/space_id columns on facility_inspection_tasks,ready for project/merchant scoped query enforcement,covered
+facility_inspection_records,inherited,task_id,task_id -> facility_inspection_tasks -> project scope,must join through task before multi-complex rollout,covered
+leasing_leads,single_complex_default,P0_SINGLE_COMPLEX,project_id column present but list read not yet project-scoped (single-complex),enforce scoped read before multi-complex rollout (D14.5),covered
+leasing_intents,direct,project_id,project_id column on leasing_intents,ready for project/merchant scoped query enforcement,covered
+leasing_brands,single_complex_default,P0_SINGLE_COMPLEX,project_id column present but list read not yet project-scoped (single-complex),enforce scoped read before multi-complex rollout (D14.5),covered
+leasing_follow_ups,single_complex_default,P0_SINGLE_COMPLEX,project_id column present but reads scoped by ref not project (single-complex),enforce scoped read before multi-complex rollout (D14.5),covered
+position_role_templates,direct,organization_id,organization_id column on position_role_templates,ready for org scoped query enforcement,covered
+space_expiry_color_rules,direct,project_id,project_id column on space_expiry_color_rules,ready for project/merchant scoped query enforcement,covered
+user_position_assignments,direct,organization_id,organization_id/merchant_id columns on user_position_assignments,ready for org/merchant scoped query enforcement,covered
