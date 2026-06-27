@@ -13,6 +13,7 @@ import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, Effec
 const OverviewPage = React.lazy(() => import("./pages/OverviewPage").then((m) => ({ default: m.OverviewPage })));
 const AccessUsersPage = React.lazy(() => import("./pages/AccessUsersPage").then((m) => ({ default: m.AccessUsersPage })));
 const PermissionTemplatesPage = React.lazy(() => import("./pages/PermissionTemplatesPage").then((m) => ({ default: m.PermissionTemplatesPage })));
+const AccessGovernancePage = React.lazy(() => import("./pages/AccessGovernancePage").then((m) => ({ default: m.AccessGovernancePage })));
 const TicketingPoliciesPage = React.lazy(() => import("./pages/TicketingPoliciesPage").then((m) => ({ default: m.TicketingPoliciesPage })));
 const DynamicPricingPage = React.lazy(() => import("./pages/DynamicPricingPage").then((m) => ({ default: m.DynamicPricingPage })));
 const TicketOrdersPage = React.lazy(() => import("./pages/TicketOrdersPage").then((m) => ({ default: m.TicketOrdersPage })));
@@ -27,6 +28,8 @@ const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessions
 const AmusementGroupBookingsPage = React.lazy(() => import("./pages/AmusementGroupBookingsPage").then((m) => ({ default: m.AmusementGroupBookingsPage })));
 const SupervisorReviewPage = React.lazy(() => import("./pages/SupervisorReviewPage").then((m) => ({ default: m.SupervisorReviewPage })));
 const ContractWorkbenchPage = React.lazy(() => import("./pages/ContractWorkbenchPage").then((m) => ({ default: m.ContractWorkbenchPage })));
+const FacilityWorkbenchPage = React.lazy(() => import("./pages/FacilityWorkbenchPage").then((m) => ({ default: m.FacilityWorkbenchPage })));
+const EnergyWorkbenchPage = React.lazy(() => import("./pages/EnergyWorkbenchPage").then((m) => ({ default: m.EnergyWorkbenchPage })));
 const GovernanceTopologyPage = React.lazy(() => import("./pages/GovernanceTopologyPage").then((m) => ({ default: m.GovernanceTopologyPage })));
 const OrganizationMerchantPage = React.lazy(() => import("./pages/OrganizationMerchantPage").then((m) => ({ default: m.OrganizationMerchantPage })));
 const SubjectBindingsPage = React.lazy(() => import("./pages/SubjectBindingsPage").then((m) => ({ default: m.SubjectBindingsPage })));
@@ -108,6 +111,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AccessUsersPage {...props} />;
     case "ADM-ACC-002":
       return <PermissionTemplatesPage {...props} />;
+    case "ADM-ACC-003":
+      return <AccessGovernancePage {...props} />;
     case "ADM-TKT-001":
       return <TicketingPoliciesPage {...props} />;
     case "ADM-TKT-002":
@@ -148,6 +153,10 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <SubjectBindingsPage {...props} />;
     case "ADM-CONT-001":
       return <ContractWorkbenchPage {...props} />;
+    case "ADM-FAC-001":
+      return <FacilityWorkbenchPage {...props} />;
+    case "ADM-ENE-001":
+      return <EnergyWorkbenchPage {...props} />;
     case "ADM-GOV-005":
       return <AdmissionAuditsPage {...props} />;
     case "ADM-RISK-001":

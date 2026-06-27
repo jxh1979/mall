@@ -29,12 +29,18 @@ function metricNote(project: GroupProjectRollup, code: string): string | null {
   return metric.note ?? null;
 }
 
+function belowBenchmark(project: GroupProjectRollup, code: string): boolean {
+  const dimension = project.metrics?.[code]?.dimension;
+  return Boolean(project.belowBenchmarkMetrics?.includes(code) || dimension?.belowBenchmark || dimension?.below_benchmark);
+}
+
 export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
   const [data, setData] = React.useState<GroupOverviewPayload | null>(null);
+  const [groupBy, setGroupBy] = React.useState<"project" | "entity">("project");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      setData(await api.get<GroupOverviewPayload>("/api/v1/analytics/group-overview"));
+      setData(await api.get<GroupOverviewPayload>(`/api/v1/analytics/group-overview?groupBy=${groupBy}`));
     },
     { onError: setGlobalError, fallbackMessage: "集团总览读取失败", onStart: () => setGlobalError(null) },
   );
@@ -45,9 +51,17 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
     <section data-testid="admin-group-overview">
       <AdminPageHeader
         title="集团总览"
-        description="按项目（综合体）维度汇总收入、客流、核销、风险与商户数。当前为单综合体，跨项目汇总为 P2 预留口径。"
+        description="按项目或主体维度下钻汇总收入、客流、核销、风险与商户数；低于集团基准的指标用红点标识。"
       />
       <AdminDataState loading={loading} error={error} empty={projects.length === 0} onRetry={reload}>
+        <div className="admin-inline-form" data-testid="group-overview-groupby-form">
+          <select aria-label="集团总览维度" data-testid="group-overview-groupby" value={groupBy} onChange={(event) => setGroupBy(event.target.value as "project" | "entity")}>
+            <option value="project">按项目</option>
+            <option value="entity">按主体</option>
+          </select>
+          <button type="button" data-testid="group-overview-refresh" onClick={() => void reload()}>切换</button>
+          <span className="admin-muted-action" data-testid="group-overview-current-groupby">当前：{data?.groupBy ?? groupBy}</span>
+        </div>
         {data ? <p className="admin-muted-action" data-testid="group-overview-business-date">经营日：{data.businessDate}</p> : null}
         <table className="admin-table" data-testid="group-overview-table">
           <thead>
@@ -67,7 +81,10 @@ export function GroupOverviewPage({ api, setGlobalError }: AdminPageProps) {
                 {METRIC_COLUMNS.map((col) => {
                   const note = metricNote(project, col.code);
                   return (
-                    <td key={col.code} title={note ?? undefined}>{metricText(project, col.code)}</td>
+                    <td key={col.code} title={note ?? undefined}>
+                      {belowBenchmark(project, col.code) ? <span className="admin-badge is-danger" data-testid={`group-overview-below-${project.projectId}-${col.code}`}>●</span> : null}
+                      {metricText(project, col.code)}
+                    </td>
                   );
                 })}
               </tr>

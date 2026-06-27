@@ -73,6 +73,10 @@ export class AdminApi {
     return this.request<T>(path, "PATCH", body);
   }
 
+  delete<T>(path: string): Promise<T> {
+    return this.request<T>(path, "DELETE");
+  }
+
   private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
     const headers = new Headers();
     if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);

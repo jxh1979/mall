@@ -20,6 +20,7 @@ function makeApi(overrides: Partial<AdminApiClient> = {}): AdminApiClient {
     post: vi.fn().mockResolvedValue({}),
     put: vi.fn().mockResolvedValue({ id: "blocker-1", status: "verified" }),
     patch: vi.fn().mockResolvedValue({}),
+    delete: vi.fn().mockResolvedValue({}),
     ...overrides,
   };
 }

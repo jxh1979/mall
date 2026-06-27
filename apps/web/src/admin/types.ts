@@ -48,6 +48,7 @@ export type AdminApiClient = {
   post<T>(path: string, body?: Record<string, unknown>): Promise<T>;
   put<T>(path: string, body?: Record<string, unknown>): Promise<T>;
   patch<T>(path: string, body?: Record<string, unknown>): Promise<T>;
+  delete<T>(path: string): Promise<T>;
 };
 
 export type AdminPageProps = {
@@ -84,11 +85,14 @@ export type GroupProjectRollup = {
   projectName: string;
   merchantCount: number;
   metrics: Record<string, MetricValue>;
+  belowBenchmarkMetrics?: string[];
 };
 
 export type GroupOverviewPayload = {
   asOf: string;
   businessDate: string;
+  groupBy?: string;
+  groupAverages?: Record<string, MetricValue>;
   projects: GroupProjectRollup[];
 };
 
