@@ -236,6 +236,9 @@ public class FacilityWorkOrderService {
         return saved;
     }
 
+    // ponytail: 刻意同步 @EventListener，跑在发布者(changeStatus)事务内——告警与自动工单 either-both-or-neither，
+    // 避免孤儿工单/静默丢失，失败可见可重试。升级路径(若要求告警必须独立于工单创建留存)：
+    // 改 @TransactionalEventListener(AFTER_COMMIT) + @Transactional(REQUIRES_NEW) + 失败落 outbox 重试。
     @EventListener
     @Transactional
     public void onEquipmentAlarmed(FacilityEquipmentAlarmedEvent event) {
@@ -246,6 +249,8 @@ public class FacilityWorkOrderService {
         createInternal(request, null);
     }
 
+    // ponytail: 同上——刻意同步同事务原子(巡检异常与自动整改工单 either-both-or-neither)；
+    // 独立留存需求出现时按 onEquipmentAlarmed 注释的升级路径(AFTER_COMMIT + REQUIRES_NEW + outbox)。
     @EventListener
     @Transactional
     public void onInspectionAbnormal(FacilityInspectionAbnormalEvent event) {

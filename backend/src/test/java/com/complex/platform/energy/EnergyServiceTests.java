@@ -39,6 +39,20 @@ class EnergyServiceTests {
     }
 
     @Test
+    void recordReading_flagsSurgeWhenPreviousConsumptionWasZeroBaseline() {
+        repo.saveMeter(meter("mtr_zb", "electricity", null, "merchant", "mch_1", "remote"));
+        // 上一期 consumption=0(表没走)，本期跳到大于 0 → 0 基线无法算环比%，按可疑跳变进复核(surge)
+        repo.saveReading(reading("zb_prev", "mtr_zb", "2026-05", "100", "100", "0"));
+
+        EnergyMeterReadingRecord rec = service.recordReading(new EnergyReadingRecordRequest(
+                "k_zb", "mtr_zb", "2026-06", bd("4200"), null, "manual", "usr_reader", null));
+
+        assertThat(rec.status()).isEqualTo("abnormal");
+        assertThat(rec.abnormalReason()).isEqualTo("surge");
+        assertThat(rec.consumption()).isEqualByComparingTo("4100");
+    }
+
+    @Test
     void recordReading_flagsDropAgainstPreviousConsumption() {
         repo.saveMeter(meter("mtr_w", "water", null, "merchant", "mch_1", "manual"));
         repo.saveReading(reading("old", "mtr_w", "2026-05", "100", "0", "100"));

@@ -111,7 +111,7 @@ public class EnergyService {
         BigDecimal prevReadingValue = latestBefore == null ? BigDecimal.ZERO : latestBefore.readingValue();
         BigDecimal consumption = readingValue.subtract(prevReadingValue);
         Abnormal abnormal = classify(meter, readingValue, prevReadingValue, consumption,
-                latestBefore == null ? BigDecimal.ZERO : latestBefore.consumption());
+                latestBefore == null ? BigDecimal.ZERO : latestBefore.consumption(), latestBefore != null);
         String readMode = "remote".equals(meter.readMode())
                 ? "remote"
                 : requireReadMode(r.readMode() == null ? "manual" : r.readMode());
@@ -248,7 +248,7 @@ public class EnergyService {
     }
 
     private Abnormal classify(EnergyMeterRecord meter, BigDecimal readingValue, BigDecimal prevReadingValue,
-            BigDecimal consumption, BigDecimal previousConsumption) {
+            BigDecimal consumption, BigDecimal previousConsumption, boolean hasPrior) {
         if (readingValue.compareTo(prevReadingValue) < 0) {
             return new Abnormal("reverse");
         }
@@ -256,7 +256,9 @@ public class EnergyService {
             return new Abnormal("zero");
         }
         if (previousConsumption.signum() <= 0) {
-            return new Abnormal(null);
+            // ponytail: 0 基线无法算环比%。有上一期且其用量=0、本期>0 = 可疑跳变 → 进复核(surge)；
+            // 首期(无上一期)不误报。本期 consumption>0 已被上面 zero 档保证。
+            return new Abnormal(hasPrior ? "surge" : null);
         }
         EnergyAnomalyThresholdRecord threshold = repository.findThresholdByMeterType(meter.meterType())
                 .filter(EnergyAnomalyThresholdRecord::active)
