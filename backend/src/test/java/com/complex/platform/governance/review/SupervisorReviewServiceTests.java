@@ -49,10 +49,11 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(6);
+        assertThat(page.total()).isEqualTo(9);
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
-                .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation");
+                .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
+                        "permission_grant_l1", "permission_grant_l2", "permission_grant_l3");
         assertThat(page.items())
                 .filteredOn(policy -> "contract_violation".equals(policy.actionType()))
                 .first()
