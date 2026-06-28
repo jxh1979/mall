@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class IntegrationService {
@@ -435,11 +436,14 @@ public class IntegrationService {
      * 开关关 → 抛 TERMINAL_DISABLED；通过则落 open_api_events 信封（mapping 占位空，
      * processStatus=accepted，不伪造对账）。
      */
+    // B5 事务边界：信封落库 + 审计留痕为多写路径，在 Spring bean 入口包一个事务（内部骨架 new 出非 bean，注解须在此）。
+    @Transactional
     public WebhookAcceptedResponse receiveTypedWebhook(String type, String idempotencyKey, Map<String, Object> payload) {
         return thirdPartyService.receiveTypedWebhook(type, idempotencyKey, payload);
     }
 
     /** 机器人被动留痕：写 integration_robot_task_events，受 integration.robot.sync 开关门控。 */
+    @Transactional
     public RobotTaskEventRecord reportRobotTaskEvent(RobotTaskEventRequest request) {
         return thirdPartyService.reportRobotTaskEvent(request);
     }

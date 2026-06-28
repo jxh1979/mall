@@ -3,7 +3,10 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, ContractRow, MerchantAdmissionRow, SubjectBindingRow } from "../types";
+
+const EVIDENCE_CREATE = ["evidence.event.create"];
 
 const TEXT = {
   title: "商户准入审批流水",
@@ -30,7 +33,7 @@ function contractAttachments(row: ContractRow) {
   return row.attachmentIds?.length ? row.attachmentIds.join(" / ") : row.evidenceAttachmentIds?.join(" / ") ?? "-";
 }
 
-export function AdmissionAuditsPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [bindings, setBindings] = React.useState<SubjectBindingRow[]>([]);
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
@@ -117,7 +120,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError }: Ad
               <label>导出原因<input data-testid="admission-audits-export-reason" value={exportReason} onChange={(event) => setExportReason(event.target.value)} /></label>
             </div>
             <div className="admin-form-row">
-              <button type="button" data-testid="admission-audits-export" onClick={() => void exportAdmissionAudit()}>导出准入审计片段</button>
+              <PermissionButton permissionsState={effectivePermissions} permissions={EVIDENCE_CREATE} data-testid="admission-audits-export" onClick={() => void exportAdmissionAudit()}>导出准入审计片段</PermissionButton>
               <span className="admin-muted-action" data-testid="admission-audits-boundary">{TEXT.boundary}</span>
             </div>
 

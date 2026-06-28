@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 513 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 275 | 人工权限矩阵正文未覆盖 171 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1026 | 人工事件矩阵正文未覆盖 983 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 513 | 人工任务映射正文未逐项覆盖 507 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI operation 数 | 514 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 276 | 人工权限矩阵正文未覆盖 172 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1028 | 人工事件矩阵正文未覆盖 985 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 514 | 人工任务映射正文未逐项覆盖 508 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 320 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -284,6 +284,7 @@
 | `ticket.entitlement.manage` | staff-token | project | 1 | createEntitlementTemplate | 已在权限矩阵正文出现 |
 | `ticket.entitlement.view` | staff-token | project | 1 | listEntitlementTemplates | 已在权限矩阵正文出现 |
 | `ticket.order.create` | staff-token | platform, project, project-channel | 3 | createTicketOrder, issueTicketTypeDirectly, cancelTicketOrder | 已在权限矩阵正文出现 |
+| `ticket.order.read` | staff-token | project | 1 | listTicketOrders | OpenAPI 补充，以本附录为准 |
 | `ticket.price_variant.manage` | staff-token | project-channel | 1 | createTicketPriceRule | 已在权限矩阵正文出现 |
 | `ticket.price_variant.view` | staff-token | project-channel | 1 | listTicketPriceRules | 已在权限矩阵正文出现 |
 | `ticket.product.manage` | staff-token | project | 3 | createTicketType, bindTicketTypeEntitlement, publishTicketType | 已在权限矩阵正文出现 |
@@ -1294,6 +1295,8 @@
 | `ticket_order.issued_failed` | failure | `issueTicketTypeDirectly` | `POST` | `/api/v1/ticketing/ticket-types/{id}/issue` | TIC-票务权益 | `ticket.order.create` | 接口级事件，以本附录为准 |
 | `ticket_order.payment_confirm_failed` | failure | `confirmTicketOrderPayment` | `POST` | `/api/v1/ticketing/orders/{order_id}/confirm-payment` | TIC-票务权益 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `ticket_order.payment_confirmed` | success | `confirmTicketOrderPayment` | `POST` | `/api/v1/ticketing/orders/{order_id}/confirm-payment` | TIC-票务权益 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `ticket_order.viewed` | success | `listTicketOrders` | `GET` | `/api/v1/ticketing/orders` | TIC-票务权益 | `ticket.order.read` | 接口级事件，以本附录为准 |
+| `ticket_order.viewed_failed` | failure | `listTicketOrders` | `GET` | `/api/v1/ticketing/orders` | TIC-票务权益 | `ticket.order.read` | 接口级事件，以本附录为准 |
 | `ticket_price_variant.change_failed` | failure | `createTicketPriceRule` | `POST` | `/api/v1/ticketing/price-rules` | TIC-票务权益 | `ticket.price_variant.manage` | 接口级事件，以本附录为准 |
 | `ticket_price_variant.changed` | success | `createTicketPriceRule` | `POST` | `/api/v1/ticketing/price-rules` | TIC-票务权益 | `ticket.price_variant.manage` | 接口级事件，以本附录为准 |
 | `ticket_price_variant.view_failed` | failure | `listTicketPriceRules` | `GET` | `/api/v1/ticketing/price-rules` | TIC-票务权益 | `ticket.price_variant.view` | 接口级事件，以本附录为准 |
@@ -1844,6 +1847,7 @@
 | TIC-票务权益 | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | 查询权益模板 | `ticket.entitlement.view` | `ticket_entitlement_template.viewed` / `ticket_entitlement_template.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listIssuedEntitlements` | `GET` | `/api/v1/ticketing/issued-entitlements` | 查询已发放权益 | `ticket.verify.view` | `ticket_issued_entitlement.viewed` / `ticket_issued_entitlement.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketDynamicPricingRules` | `GET` | `/api/v1/ticketing/dynamic-pricing-rules` | List P2 ticket dynamic pricing rules | `ticket.dynamic_pricing.view` | `ticket_dynamic_pricing.viewed.success` / `ticket_dynamic_pricing.viewed.failure` | web | operation 级补充 |
+| TIC-票务权益 | `listTicketOrders` | `GET` | `/api/v1/ticketing/orders` | 查询票务订单 | `ticket.order.read` | `ticket_order.viewed` / `ticket_order.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketPriceRules` | `GET` | `/api/v1/ticketing/price-rules` | 查询平日、周末、节假日及派生价规则 | `ticket.price_variant.view` | `ticket_price_variant.viewed` / `ticket_price_variant.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketRefundLines` | `GET` | `/api/v1/ticketing/refunds/{refund_id}/lines` | 查询退票明细行 | `ticket.refund.view` | `ticket.refund_line.list` / `ticket.refund_line.list_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | 票种查询 | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |

@@ -7,6 +7,7 @@ import com.complex.platform.customer.dto.StoredValueConsumeRequest;
 import com.complex.platform.customer.dto.StoredValueSettleRequest;
 import com.complex.platform.customer.dto.StoredValueTopupRequest;
 import com.complex.platform.finance.PaymentIntentRecord;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,7 +48,7 @@ public class MemberWalletController {
     public ApiResponse<PaymentIntentRecord> topup(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestBody StoredValueTopupRequest request
+            @Valid @RequestBody StoredValueTopupRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
         return ApiResponse.ok(storedValueService.topup(customerId, request.projectId(),
@@ -58,7 +59,7 @@ public class MemberWalletController {
     public ApiResponse<CustomerStoredValueTransactionRecord> settle(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestBody StoredValueSettleRequest request
+            @Valid @RequestBody StoredValueSettleRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
         return ApiResponse.ok(storedValueService.settleTopup(customerId, request.projectId(), request.paymentIntentId()));
@@ -68,7 +69,7 @@ public class MemberWalletController {
     public ApiResponse<CustomerStoredValueTransactionRecord> consume(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestBody StoredValueConsumeRequest request
+            @Valid @RequestBody StoredValueConsumeRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
         return ApiResponse.ok(storedValueService.consume(customerId, request.projectId(),

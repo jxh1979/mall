@@ -4,7 +4,10 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
+import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
+
+const CALC_PERM = ["bar.table_commission.calculate"];
 
 const TEXT = {
   title: "销售提成",
@@ -56,7 +59,7 @@ function sellerLabel(order: BarOrderRow | undefined) {
   return order.sellerRole === "sales" || order.commissionRate === "15%" ? TEXT.sales : TEXT.nonSales;
 }
 
-export function BarCommissionsPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function BarCommissionsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
@@ -119,7 +122,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError }: Adm
         </div>
 
         <div className="admin-form-row">
-          <button type="button" data-testid="bar-commission-calculate" disabled={submitting} onClick={() => void calculateCommission()}>{TEXT.calculate}</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={CALC_PERM} data-testid="bar-commission-calculate" disabled={submitting} onClick={() => void calculateCommission()}>{TEXT.calculate}</PermissionButton>
           <span className="admin-muted-action" data-testid="bar-commissions-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="bar-commissions-error" className="admin-inline-error">{formError}</div> : null}

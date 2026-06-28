@@ -15,6 +15,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class IdempotencyService {
@@ -27,6 +29,10 @@ public class IdempotencyService {
     private final IdempotencyRepository repository;
     private final ObjectMapper objectMapper;
     private CallerScopeResolver callerScopeResolver = () -> "";
+    // B5 事务边界：可选事务模板。注入后把 action(多写) + complete(标记OK) 包成一个原子单元——
+    // reserve 仍在外先提交(保住"先占位再执行"并发护栏)，失败留痕(markRetryableFailure)在外照常落。
+    // 经 setter 可选注入(同 setCallerScopeResolver 范式)，单测 new 构造不传则保持原直跑行为，零破坏。
+    private TransactionTemplate transactionTemplate;
 
     public IdempotencyService(IdempotencyRepository repository, ObjectMapper objectMapper) {
         this.repository = repository;
@@ -38,6 +44,11 @@ public class IdempotencyService {
     @Autowired(required = false)
     public void setCallerScopeResolver(CallerScopeResolver callerScopeResolver) {
         this.callerScopeResolver = callerScopeResolver != null ? callerScopeResolver : () -> "";
+    }
+
+    @Autowired(required = false)
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionTemplate = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 
     public <T> T execute(
@@ -145,26 +156,40 @@ public class IdempotencyService {
             Function<T, T> storedResponseTransformer
     ) {
         try {
-            T response = action.get();
-            T storedResponse = storedResponseTransformer == null
-                    ? response
-                    : storedResponseTransformer.apply(response);
-            repository.complete(new IdempotencyRecord(
-                    reservation.id(),
-                    reservation.operationId(),
-                    reservation.idempotencyKey(),
-                    reservation.requestHash(),
-                    RESPONSE_CODE_OK,
-                    writeJson(storedResponse),
-                    200,
-                    reservation.createdAt(),
-                    reservation.expiresAt()
-            ));
+            // action(多写) + complete(标记OK) 须原子：注入了事务模板则在一个事务内执行（无外层事务时新建、
+            // 有则 REQUIRED 并入），否则保持原直跑（单测路径）。reserve 已在外提交、失败留痕在外，故并发护栏不变。
+            T response = transactionTemplate == null
+                    ? actionAndComplete(reservation, action, storedResponseTransformer)
+                    : transactionTemplate.execute(status ->
+                            actionAndComplete(reservation, action, storedResponseTransformer));
             return responseType.cast(response);
         } catch (RuntimeException | Error exception) {
             markRetryableFailure(reservation, exception);
             throw exception;
         }
+    }
+
+    private <T> T actionAndComplete(
+            IdempotencyRecord reservation,
+            Supplier<T> action,
+            Function<T, T> storedResponseTransformer
+    ) {
+        T response = action.get();
+        T storedResponse = storedResponseTransformer == null
+                ? response
+                : storedResponseTransformer.apply(response);
+        repository.complete(new IdempotencyRecord(
+                reservation.id(),
+                reservation.operationId(),
+                reservation.idempotencyKey(),
+                reservation.requestHash(),
+                RESPONSE_CODE_OK,
+                writeJson(storedResponse),
+                200,
+                reservation.createdAt(),
+                reservation.expiresAt()
+        ));
+        return response;
     }
 
     private void markRetryableFailure(IdempotencyRecord reservation, Throwable failure) {

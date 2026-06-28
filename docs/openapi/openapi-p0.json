@@ -9047,6 +9047,34 @@
       }
     },
     "/api/v1/ticketing/orders": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "listTicketOrders",
+        "summary": "查询票务订单",
+        "description": "用于查询票务订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "x-permission": "ticket.order.read",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "ticket_order.viewed",
+        "x-audit-event-failure": "ticket_order.viewed_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
       "post": {
         "tags": [
           "ticketing"

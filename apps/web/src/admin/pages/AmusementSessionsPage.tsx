@@ -3,7 +3,10 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, AmusementProjectRow, AmusementSessionRow } from "../types";
+
+const SESSION_MANAGE = ["amusement.session.manage"];
 
 const TEXT = {
   title: "项目与场次",
@@ -21,7 +24,7 @@ function display(value: unknown) {
   return JSON.stringify(value);
 }
 
-export function AmusementSessionsPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function AmusementSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   const [sessions, setSessions] = React.useState<AmusementSessionRow[]>([]);
   const [sessionName, setSessionName] = React.useState("验收场次");
@@ -92,7 +95,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError }: 
               <div className="admin-kpi-card"><span>已锁定</span><strong>{sessions.reduce((sum, row) => sum + Number(row.lockedCapacity ?? 0), 0)}</strong><small>locked</small></div>
             </div>
             <div className="admin-form-grid"><label>场次名称<input data-testid="amusement-session-name" value={sessionName} onChange={(event) => setSessionName(event.target.value)} /></label><label>容量<input data-testid="amusement-session-capacity" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label></div>
-            <div className="admin-form-row"><button type="button" data-testid="amusement-session-create" disabled={submitting} onClick={() => void createSession()}>新增验收场次</button><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
+            <div className="admin-form-row"><PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-session-create" disabled={submitting} onClick={() => void createSession()}>新增验收场次</PermissionButton><span className="admin-muted-action" data-testid="amusement-sessions-boundary">{TEXT.boundary}</span></div>
             <div className="admin-section-title">项目</div>
             <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{display(row.status)}</td></tr>)}</tbody></table></div>
             <div className="admin-section-title">场次</div>

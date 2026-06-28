@@ -7,6 +7,8 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, ReconciliationBatchRow, ReconciliationDifferenceRow } from "../types";
 
+const RESOLVE_PERM = ["finance.reconciliation.resolve"];
+
 const TEXT = {
   title: "对账差异",
   description: "查看对账批次和差异，执行本地人工复核留痕；当前 OpenAPI 未声明正式差异关闭写接口，因此不伪造关闭动作。",
@@ -39,7 +41,7 @@ function formatAmount(value: unknown) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amountValue(value) / 100);
 }
 
-export function ReconciliationPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function ReconciliationPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [batches, setBatches] = React.useState<ReconciliationBatchRow[]>([]);
   const [differences, setDifferences] = React.useState<ReconciliationDifferenceRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(differences);
@@ -120,6 +122,8 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError }: Adm
             impact="将对选中差异写入人工复核留痕，作为对账调账依据进入审计，无法撤销。"
             precheck={validateReview}
             onConfirm={submitReview}
+            permissionsState={effectivePermissions}
+            permissions={RESOLVE_PERM}
             data-testid="reconciliation-review-submit"
           />
           <span className="admin-muted-action" data-testid="reconciliation-boundary">{TEXT.boundary}</span>

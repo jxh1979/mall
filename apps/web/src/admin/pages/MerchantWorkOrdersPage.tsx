@@ -8,7 +8,13 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
+import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
+
+const WO_CREATE = ["merchant.service_work_order.create"];
+const WO_ASSIGN = ["merchant.service_work_order.assign"];
+const WO_PROCESS = ["merchant.service_work_order.process"];
+const WO_CLOSE = ["merchant.service_work_order.close"];
 
 const TEXT = {
   title: "商户服务工单",
@@ -62,7 +68,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds, result };
 }
 
-export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
+export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantWorkOrderRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [title, setTitle] = React.useState("空调漏水复查");
@@ -205,7 +211,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError }:
           <label>{TEXT.priority}<select data-testid="merchant-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="critical">critical</option></select></label>
         </div>
         <div className="admin-form-row">
-          <button type="button" data-testid="merchant-work-order-create" disabled={busyAction !== ""} onClick={() => void createWorkOrder()}>{TEXT.create}</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid="merchant-work-order-create" disabled={busyAction !== ""} onClick={() => void createWorkOrder()}>{TEXT.create}</PermissionButton>
           <span className="admin-muted-action" data-testid="merchant-work-orders-boundary">{TEXT.boundary}</span>
         </div>
 
@@ -218,9 +224,9 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError }:
           <label>{TEXT.satisfaction}<input data-testid="merchant-work-order-satisfaction" value={satisfactionScore} onChange={(event) => setSatisfactionScore(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="merchant-work-order-actions">
-          <button type="button" data-testid="merchant-work-order-assign" disabled={busyAction !== ""} onClick={() => void assignWorkOrder()}>{TEXT.assign}</button>
-          <button type="button" data-testid="merchant-work-order-process" disabled={busyAction !== ""} onClick={() => void processWorkOrder()}>{TEXT.process}</button>
-          <button type="button" data-testid="merchant-work-order-close" disabled={busyAction !== ""} onClick={() => void closeWorkOrder()}>{TEXT.close}</button>
+          <PermissionButton permissionsState={effectivePermissions} permissions={WO_ASSIGN} data-testid="merchant-work-order-assign" disabled={busyAction !== ""} onClick={() => void assignWorkOrder()}>{TEXT.assign}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={WO_PROCESS} data-testid="merchant-work-order-process" disabled={busyAction !== ""} onClick={() => void processWorkOrder()}>{TEXT.process}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={WO_CLOSE} data-testid="merchant-work-order-close" disabled={busyAction !== ""} onClick={() => void closeWorkOrder()}>{TEXT.close}</PermissionButton>
         </div>
         {formError ? <div data-testid="merchant-work-order-error" className="admin-inline-error">{formError}</div> : null}
 
