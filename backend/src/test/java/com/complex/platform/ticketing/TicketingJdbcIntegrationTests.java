@@ -196,6 +196,8 @@ class TicketingJdbcIntegrationTests {
                 3,
                 null
         ));
+        // V159 起 ticket_verifications.device_id 外键引用 terminal_devices，先建父设备避免 FK 违反。
+        seedTerminalDevice("dev_jdbc", now);
         repository.saveVerification(new VerificationRecord(
                 "ver_jdbc",
                 "V20260614000001",
@@ -303,6 +305,18 @@ class TicketingJdbcIntegrationTests {
                 "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
                 "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",
                 now, now.plusSeconds(86400), now, now, 4, null));
+        // V159 起 ticket_verifications.device_id 外键引用 terminal_devices，先建父设备避免 FK 违反。
+        seedTerminalDevice("dev_chk", now);
+    }
+
+    // V159：ticket_verifications.device_id → terminal_devices(id) 外键的父设备行（device_id/device_code 唯一）。
+    private void seedTerminalDevice(String id, Instant now) {
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        jdbcTemplate.update("""
+                INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
+                    status, created_at, updated_at)
+                VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?)
+                """, id, "dev-" + id, "DC-" + id, ts, ts);
     }
 
     private VerificationRecord verificationWithStatus(String id, String no, Instant now, String status) {

@@ -51,6 +51,14 @@ class GiftRedemptionEndToEndTests {
         // 生产中核销/冲正必有已认证主体；P0-2 后在线核销主链会按调用者商户范围校验归属。
         // E2E 默认以平台管理员上下文驱动（scope 为空=放行），契合真实调用形态；跨商户用例内部另行覆盖。
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        // V159 起 ticket_verifications.device_id 外键引用 terminal_devices；核销主链统一用 device_t15，先建父设备行。
+        Instant now = Instant.now();
+        java.sql.Timestamp ts = java.sql.Timestamp.from(now);
+        jdbcTemplate.update("""
+                INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
+                    status, created_at, updated_at)
+                VALUES ('device_t15', 'dev-device_t15', 'DC-device_t15', 'kiosk', 'venue', 'bound', ?, ?)
+                """, ts, ts);
     }
 
     @AfterEach
@@ -205,6 +213,10 @@ class GiftRedemptionEndToEndTests {
                     default_value_cent, status, bar_item_ref, created_at, updated_at)
                 VALUES (?, 'Gift Drink', 'gift_drink', 1, 0, 'active', NULL, ?, ?)
                 """, templateId, ts, ts);
+        // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "paid", now, now));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "gift_drink",
                 merchantId, null, barId, 1, 0, 0L, "active",
@@ -259,11 +271,15 @@ class GiftRedemptionEndToEndTests {
                     default_value_cent, status, bar_item_ref, created_at, updated_at)
                 VALUES (?, 'Gift Drink', 'gift_drink', ?, 0, 'active', ?, ?, ?)
                 """, templateId, totalTimes, barItemRef, ts, ts);
+        // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, "CNY", "paid", "issued", "paid", now, now));
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code,        // id
                 code,                 // entitlementCode
                 typeId,               // ticketTypeId
-                "order_" + code,      // orderId (no FK)
+                "order_" + code,      // orderId（V159 起有 FK → ticket_orders）
                 templateId,           // entitlementTemplateId
                 "gift_drink",         // entitlementType
                 null,                 // merchantId
