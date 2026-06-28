@@ -22,7 +22,7 @@
 - `docs/foundation-database-design.md`
 - `docs/ticketing-entitlement-settlement-breakdown.md`
 - `docs/ticketing-database-implementation-notes.md`
-- `database/migrations/002_ticketing_entitlement_settlement.sql`
+- `backend/src/main/resources/db/migration/`（票务正式 Flyway 迁移：V006/V009/V031 等）
 
 ## 1. 设计结论
 

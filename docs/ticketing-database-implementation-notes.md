@@ -1,10 +1,10 @@
 # 票务与权益数据库落地说明
 
-对应迁移文件：
+对应迁移文件（正式 Flyway，权威源）：
 
-[database/migrations/002_ticketing_entitlement_settlement.sql](../database/migrations/002_ticketing_entitlement_settlement.sql)
+`backend/src/main/resources/db/migration/` —— 票务/权益相关主迁移：`V006__p0_ticketing_verification.sql`、`V009__p0_ticketing_customer_orders_credentials.sql`、`V031__p1_ticket_refund_line_ledger.sql` 等。
 
-> 修订说明（2026-06-08 复核修复）：该迁移实体文件已随当前交付包存在；本轮已补入 `ticket_credentials`、`ticket_inventories.project_id/version`、`refund_orders.refund_direction/original_payment_channel/refunded_by/project_id`。下文"已落地表清单"按修复后的迁移实体文件为准，链接可作为已交付 SQL 的索引。依据 finding overclaim-6 的判后修复。
+> 修订说明（2026-06-28 收口）：早期原型 SQL `database/migrations/002_ticketing_entitlement_settlement.sql` **不在 Flyway 路径**（`backend/.../application.yml: locations=classpath:db/migration`）、非权威，**已删除**。票务/权益的表、字段一律以上述正式 Flyway 迁移为准；下文"已落地表清单"同样按正式 Flyway 迁移为准。
 
 ## 1. 落地策略
 
@@ -145,7 +145,7 @@ settlement_bill_items
 | 反模式 | 不得绕过正式 Flyway 迁移直接改库；不得把通票当作一张大票；不得直接核销订单；不得启用 P0 离线核销；不得把卡座权益、最低消费和票务权益混为一体 | `ticketing-pass-entitlement-development-design.md` §3/§5/§6/§7、`00-current-effective-document-entry-v0.1.md` |
 | 测试用例 | 必须覆盖出票拆权益、库存扣减、在线核销、退款冲正、结算明细、渠道回流、多人票同一时段全部核销和学生/新人资格留痕 | `p0-user-story-map-and-sprint-slices-v0.1.md`、`p0-end-to-end-acceptance-and-edge-cases-v0.1.md` |
 | 错误处理 | 必须覆盖库存不足、并发超卖、重复支付回调、重复核销、二维码过期/重放、退款状态冲突、第三方回传重复/漏发和结算差异 | `p0-api-contract-pack-v0.1.md`、`p0-action-event-evidence-matrix-v0.1.md`、`third-party-supplier-integration-kit-v0.1.md` |
-| 精确引用 | 表、字段和接口必须引用正式 Flyway 文件、OpenAPI exact path、operationId 或追溯附录条目；不得继续引用旧 TypeScript/SQLite/Prisma 原型结构 | `database/migrations/002_ticketing_entitlement_settlement.sql`、`docs/openapi/openapi-p0.yaml`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md` |
+| 精确引用 | 表、字段和接口必须引用正式 Flyway 文件、OpenAPI exact path、operationId 或追溯附录条目；不得继续引用旧 TypeScript/SQLite/Prisma 原型结构 | `backend/src/main/resources/db/migration/V009__p0_ticketing_customer_orders_credentials.sql`、`docs/openapi/openapi-p0.yaml`、`p0-openapi-contract-closure-appendix-v0.1.md`、`p0-task-api-permission-event-acceptance-map-v0.1.md` |
 
 ## 5. 后续开发顺序
 
