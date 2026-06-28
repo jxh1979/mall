@@ -45,7 +45,7 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
                     id, subject_type, subject_id, refund_domain, limit_amount_cent, project_id, status, created_at, updated_at
                 )
                 VALUES (:id, :st, :sid, :dom, :lim, :pid, :status, now(), now())
-                ON CONFLICT (subject_type, subject_id, refund_domain) DO UPDATE SET
+                ON CONFLICT (subject_type, subject_id, refund_domain, COALESCE(project_id, '__global__')) DO UPDATE SET
                     limit_amount_cent = EXCLUDED.limit_amount_cent,
                     project_id = EXCLUDED.project_id,
                     status = EXCLUDED.status,
@@ -58,13 +58,15 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
     }
 
     @Override
-    public List<RefundAuthorityLimitRecord> listLimits() {
+    public List<RefundAuthorityLimitRecord> listLimits(String projectId) {
+        // B1d② 按综合体隔离：pid 非空→该综合体行 + 全局(NULL)行；pid 为空→全部（平台口径）。
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, refund_domain, limit_amount_cent,
                        project_id, status, created_at, updated_at
                   FROM refund_authority_limits
+                 WHERE CAST(:pid AS VARCHAR) IS NULL OR project_id = :pid OR project_id IS NULL
                  ORDER BY subject_type, subject_id, refund_domain
-                """, this::mapLimit);
+                """, new MapSqlParameterSource().addValue("pid", projectId), this::mapLimit);
     }
 
     @Override
@@ -74,7 +76,7 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
                     id, refund_domain, rule_type, enabled, project_id, status, created_at, updated_at
                 )
                 VALUES (:id, :dom, :rt, :enabled, :pid, :status, now(), now())
-                ON CONFLICT (refund_domain, rule_type) DO UPDATE SET
+                ON CONFLICT (refund_domain, rule_type, COALESCE(project_id, '__global__')) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     project_id = EXCLUDED.project_id,
                     status = EXCLUDED.status,
@@ -82,18 +84,20 @@ class JdbcRefundAuthorizationRepository implements RefundAuthorizationRepository
                 """, new MapSqlParameterSource()
                 .addValue("id", rule.id()).addValue("dom", rule.refundDomain()).addValue("rt", rule.ruleType())
                 .addValue("enabled", rule.enabled()).addValue("pid", rule.projectId()).addValue("status", rule.status()));
-        return listRules().stream()
+        return listRules(null).stream()
                 .filter(r -> r.refundDomain().equals(rule.refundDomain()) && r.ruleType().equals(rule.ruleType()))
                 .findFirst().orElse(rule);
     }
 
     @Override
-    public List<RefundAutoRuleRecord> listRules() {
+    public List<RefundAutoRuleRecord> listRules(String projectId) {
+        // B1d② 按综合体隔离：pid 非空→该综合体行 + 全局(NULL)行；pid 为空→全部（平台口径）。
         return jdbcTemplate.query("""
                 SELECT id, refund_domain, rule_type, enabled, project_id, status, created_at, updated_at
                   FROM refund_auto_rules
+                 WHERE CAST(:pid AS VARCHAR) IS NULL OR project_id = :pid OR project_id IS NULL
                  ORDER BY refund_domain, rule_type
-                """, this::mapRule);
+                """, new MapSqlParameterSource().addValue("pid", projectId), this::mapRule);
     }
 
     private RefundAuthorityLimitRecord mapLimit(ResultSet rs, int rowNum) throws SQLException {

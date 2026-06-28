@@ -33,8 +33,8 @@ public class RefundAuthorizationConfigService {
         this.auditEventService = auditEventService;
     }
 
-    public PageResponse<RefundAuthorityLimitRecord> listLimits() {
-        List<RefundAuthorityLimitRecord> items = repository.listLimits();
+    public PageResponse<RefundAuthorityLimitRecord> listLimits(String projectId) {
+        List<RefundAuthorityLimitRecord> items = repository.listLimits(trimToNullProject(projectId));
         return new PageResponse<>(items, 1, 50, items.size());
     }
 
@@ -45,9 +45,12 @@ public class RefundAuthorizationConfigService {
         String refundDomain = requireText(actual.refundDomain(), "refund_domain");
         long limitAmountCent = requireNonNegative(actual.limitAmountCent(), "limit_amount_cent");
         String status = trimToDefault(actual.status(), "active");
+        // B1d② id 含 project 维度，使不同综合体（及全局）同 subject/domain 的额度互不覆盖。
+        String projectId = trimToNullProject(actual.projectId());
         RefundAuthorityLimitRecord saved = repository.saveLimit(new RefundAuthorityLimitRecord(
-                "refund_limit_" + slug(subjectType + "_" + subjectId + "_" + refundDomain),
-                subjectType, subjectId, refundDomain, limitAmountCent, actual.projectId(), status, null, null));
+                "refund_limit_" + slug(subjectType + "_" + subjectId + "_" + refundDomain
+                        + "_" + (projectId == null ? "global" : projectId)),
+                subjectType, subjectId, refundDomain, limitAmountCent, projectId, status, null, null));
         auditEventService.recordSuccess(
                 "refund_authority.changed", "refund.authority.manage", "refund_authority_limit", saved.id(),
                 null, actual.idempotencyKey(),
@@ -56,8 +59,8 @@ public class RefundAuthorizationConfigService {
         return saved;
     }
 
-    public PageResponse<RefundAutoRuleRecord> listRules() {
-        List<RefundAutoRuleRecord> items = repository.listRules();
+    public PageResponse<RefundAutoRuleRecord> listRules(String projectId) {
+        List<RefundAutoRuleRecord> items = repository.listRules(trimToNullProject(projectId));
         return new PageResponse<>(items, 1, 50, items.size());
     }
 
@@ -67,9 +70,12 @@ public class RefundAuthorizationConfigService {
         String ruleType = requireText(actual.ruleType(), "rule_type");
         boolean enabled = actual.enabled() != null && actual.enabled();
         String status = trimToDefault(actual.status(), "active");
+        // B1d② id 含 project 维度，使不同综合体（及全局）同 domain/rule_type 的规则互不覆盖。
+        String projectId = trimToNullProject(actual.projectId());
         RefundAutoRuleRecord saved = repository.saveRule(new RefundAutoRuleRecord(
-                "refund_rule_" + slug(refundDomain + "_" + ruleType),
-                refundDomain, ruleType, enabled, actual.projectId(), status, null, null));
+                "refund_rule_" + slug(refundDomain + "_" + ruleType
+                        + "_" + (projectId == null ? "global" : projectId)),
+                refundDomain, ruleType, enabled, projectId, status, null, null));
         auditEventService.recordSuccess(
                 "refund_authority.changed", "refund.authority.manage", "refund_auto_rule", saved.id(),
                 null, actual.idempotencyKey(),
@@ -106,6 +112,12 @@ public class RefundAuthorizationConfigService {
     private String trimToDefault(String value, String defaultValue) {
         String trimmed = value == null ? "" : value.trim();
         return trimmed.isEmpty() ? defaultValue : trimmed;
+    }
+
+    /** 空白 project_id 归一为 null（=全局/平台默认），与 DB NULL 语义对齐。 */
+    private String trimToNullProject(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String slug(String value) {

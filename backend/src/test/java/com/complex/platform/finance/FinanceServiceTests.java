@@ -615,9 +615,9 @@ class FinanceServiceTests {
             }
             @Override public boolean isAutoRuleEnabled(String dom, String type) { return false; }
             @Override public RefundAuthorityLimitRecord saveLimit(RefundAuthorityLimitRecord l) { return l; }
-            @Override public List<RefundAuthorityLimitRecord> listLimits() { return List.of(); }
+            @Override public List<RefundAuthorityLimitRecord> listLimits(String projectId) { return List.of(); }
             @Override public RefundAutoRuleRecord saveRule(RefundAutoRuleRecord r) { return r; }
-            @Override public List<RefundAutoRuleRecord> listRules() { return List.of(); }
+            @Override public List<RefundAutoRuleRecord> listRules(String projectId) { return List.of(); }
         };
         service.refundAuthorizationService = new RefundAuthorizationService(refundRepo);
         service.tieredRefundEnabled = true;

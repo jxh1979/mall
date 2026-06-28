@@ -1262,7 +1262,7 @@ class TicketingServiceTests {
                 return l;
             }
             @Override
-            public List<RefundAuthorityLimitRecord> listLimits() {
+            public List<RefundAuthorityLimitRecord> listLimits(String projectId) {
                 return List.of();
             }
             @Override
@@ -1270,7 +1270,7 @@ class TicketingServiceTests {
                 return r;
             }
             @Override
-            public List<RefundAutoRuleRecord> listRules() {
+            public List<RefundAutoRuleRecord> listRules(String projectId) {
                 return List.of();
             }
         };

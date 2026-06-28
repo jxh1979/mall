@@ -96,8 +96,10 @@ class RefundAuthorizationServiceTests {
         }
 
         @Override
-        public List<RefundAuthorityLimitRecord> listLimits() {
-            return new ArrayList<>(limits.values());
+        public List<RefundAuthorityLimitRecord> listLimits(String projectId) {
+            return limits.values().stream()
+                    .filter(l -> projectId == null || projectId.equals(l.projectId()) || l.projectId() == null)
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         }
 
         @Override
@@ -107,8 +109,10 @@ class RefundAuthorizationServiceTests {
         }
 
         @Override
-        public List<RefundAutoRuleRecord> listRules() {
-            return new ArrayList<>(rules.values());
+        public List<RefundAutoRuleRecord> listRules(String projectId) {
+            return rules.values().stream()
+                    .filter(r -> projectId == null || projectId.equals(r.projectId()) || r.projectId() == null)
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         }
     }
 }

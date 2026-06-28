@@ -61,7 +61,7 @@ class RefundAuthorizationControllerTests {
     @Test
     void listLimitsUsesViewPermissionAndPageShape() throws Exception {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
-        when(service.listLimits()).thenReturn(new PageResponse<>(
+        when(service.listLimits(org.mockito.ArgumentMatchers.any())).thenReturn(new PageResponse<>(
                 List.of(new RefundAuthorityLimitRecord(
                         "refund_limit_staff_op1_ticket", "staff", "op1", "ticket", 50000L, null, "active", now, now)),
                 1, 50, 1));
@@ -122,7 +122,7 @@ class RefundAuthorizationControllerTests {
 
     @Test
     void listRulesUsesViewPermission() throws Exception {
-        when(service.listRules()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        when(service.listRules(org.mockito.ArgumentMatchers.any())).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
 
         mockMvc.perform(get("/api/v1/finance/refund-authority/rules")
                         .with(user("admin").roles("P0_SMOKE")))

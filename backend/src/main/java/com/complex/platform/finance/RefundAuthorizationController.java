@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -34,9 +35,11 @@ public class RefundAuthorizationController {
     }
 
     @GetMapping("/limits")
-    public ApiResponse<PageResponse<RefundAuthorityLimitRecord>> listLimits() {
+    public ApiResponse<PageResponse<RefundAuthorityLimitRecord>> listLimits(
+            @RequestParam(name = "project_id", required = false) String projectId) {
         authorizationService.requirePermission(VIEW_PERMISSION);
-        return ApiResponse.ok(service.listLimits());
+        // B1d② 可按综合体过滤：传 project_id → 该综合体 + 全局；不传 → 全部（平台口径）。
+        return ApiResponse.ok(service.listLimits(projectId));
     }
 
     @PostMapping("/limits")
@@ -47,9 +50,10 @@ public class RefundAuthorizationController {
     }
 
     @GetMapping("/rules")
-    public ApiResponse<PageResponse<RefundAutoRuleRecord>> listRules() {
+    public ApiResponse<PageResponse<RefundAutoRuleRecord>> listRules(
+            @RequestParam(name = "project_id", required = false) String projectId) {
         authorizationService.requirePermission(VIEW_PERMISSION);
-        return ApiResponse.ok(service.listRules());
+        return ApiResponse.ok(service.listRules(projectId));
     }
 
     @PostMapping("/rules")

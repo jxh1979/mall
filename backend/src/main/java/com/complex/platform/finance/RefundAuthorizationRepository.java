@@ -15,13 +15,15 @@ public interface RefundAuthorizationRepository {
     /** 某域某规则类型是否启用（active）。 */
     boolean isAutoRuleEnabled(String refundDomain, String ruleType);
 
-    /** 配置：按 (subject_type, subject_id, refund_domain) 幂等 upsert 额度。 */
+    /** 配置：按 (subject_type, subject_id, refund_domain, project_id) 幂等 upsert 额度（B1d② 含 project 维度）。 */
     RefundAuthorityLimitRecord saveLimit(RefundAuthorityLimitRecord limit);
 
-    List<RefundAuthorityLimitRecord> listLimits();
+    /** B1d② 按综合体(project)隔离列额度：projectId 非空→该综合体 + 全局(NULL)；为空→全部（平台口径）。 */
+    List<RefundAuthorityLimitRecord> listLimits(String projectId);
 
-    /** 配置：按 (refund_domain, rule_type) 幂等 upsert 规则。 */
+    /** 配置：按 (refund_domain, rule_type, project_id) 幂等 upsert 规则（B1d② 含 project 维度）。 */
     RefundAutoRuleRecord saveRule(RefundAutoRuleRecord rule);
 
-    List<RefundAutoRuleRecord> listRules();
+    /** B1d② 按综合体(project)隔离列自动退规则：projectId 非空→该综合体 + 全局；为空→全部。 */
+    List<RefundAutoRuleRecord> listRules(String projectId);
 }
