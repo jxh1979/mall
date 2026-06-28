@@ -309,6 +309,41 @@ class BarServiceTests {
                 .isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
+    // B1d④：下单引用他商户资源（桌位/商品/预定）必须拒（裁决：所有资源都属某商户，无 null-merchant 合法下单）。
+    @Test
+    void createOrderRejectsTableOwnedByAnotherMerchant() {
+        TestSecurityActors.asMerchantUser("merchant_b");
+        BarTableRecord bTable = service.createTable(new BarTableRequest(
+                "table-cross-order", "create", List.of(), "bar_1", "VIP B2", "card_seat", 50000L, 2, "active"));
+
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarProductRecord aProduct = service.createProduct(new BarProductRequest(
+                "product-own-a", "create", List.of(), "bar_1", "Gin A", "spirit", 8800L,
+                null, null, "active", null, null, false));
+        assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
+                "order-cross-table", "create", List.of(), "bar_1", bTable.id(), null,
+                List.of(Map.of("product_id", aProduct.id(), "quantity", 1)), null, List.of(), "offline")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    @Test
+    void createOrderRejectsProductOwnedByAnotherMerchant() {
+        TestSecurityActors.asMerchantUser("merchant_b");
+        BarProductRecord bProduct = service.createProduct(new BarProductRequest(
+                "product-cross-order-b", "create", List.of(), "bar_1", "Rum B", "spirit", 7700L,
+                null, null, "active", null, null, false));
+
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarTableRecord aTable = service.createTable(new BarTableRequest(
+                "table-own-a", "create", List.of(), "bar_1", "VIP A2", "card_seat", 50000L, 2, "active"));
+        assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
+                "order-cross-product", "create", List.of(), "bar_1", aTable.id(), null,
+                List.of(Map.of("product_id", bProduct.id(), "quantity", 1)), null, List.of(), "offline")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // P1-3: audit attribution comes from auth token, not request body
     // ─────────────────────────────────────────────────────────────────────────

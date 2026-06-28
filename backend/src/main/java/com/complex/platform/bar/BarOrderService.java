@@ -117,6 +117,8 @@ public class BarOrderService {
         if (!barId.equals(table.barId())) {
             throw ApiException.conflict("BAR_SCOPE_MISMATCH", "order table is not in this bar");
         }
+        // B1d④ 跨商户下单防护：桌位/预定/商品须属订单商户（裁决：资源皆属某商户，平台直营亦为特殊商户）。
+        requireResourceInOrderMerchant(merchantId, table.merchantId(), "bar table");
         BarReservationRecord reservation = null;
         if (trimToNull(actual.reservationId()) != null) {
             reservation = repository.findReservationById(actual.reservationId())
@@ -124,6 +126,7 @@ public class BarOrderService {
             if (!barId.equals(reservation.barId())) {
                 throw ApiException.conflict("BAR_SCOPE_MISMATCH", "order reservation is not in this bar");
             }
+            requireResourceInOrderMerchant(merchantId, reservation.merchantId(), "bar reservation");
         }
         String orderId = "order_" + slug(actual.idempotencyKey());
         long total = 0L;
@@ -133,6 +136,7 @@ public class BarOrderService {
             String productId = requireItemText(item, "product_id", "sku_id", "skuId");
             BarProductRecord product = repository.findProductById(productId)
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+            requireResourceInOrderMerchant(merchantId, product.merchantId(), "bar product");
             requireProductSellable(product);
             int quantity = requirePositiveItemQuantity(item, "quantity");
             // F-TXN-05 赠菜：赠送项对客金额计 0（不计消费额/账单 subtotal），单价保留售价；
@@ -264,6 +268,7 @@ public class BarOrderService {
             String productId = requireItemText(item, "product_id", "sku_id", "skuId");
             BarProductRecord product = repository.findProductById(productId)
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "bar product not found"));
+            requireResourceInOrderMerchant(order.merchantId(), product.merchantId(), "bar product");
             requireProductSellable(product);
             int quantity = requirePositiveItemQuantity(item, "quantity");
             // F-TXN-05 赠菜：赠送项对客金额计 0（不计消费额/账单 subtotal），单价保留售价；
@@ -1062,6 +1067,18 @@ public class BarOrderService {
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "access to another merchant's resource is not allowed");
+        }
+    }
+
+    /**
+     * B1d④：下单/加项时校验所引用资源（桌位/预定/商品）属订单商户。
+     * 订单商户取自调用者 scope（员工常规下单）或开台会话（扫码点单，权威）；非空时资源 merchant 必须一致。
+     * 订单商户为空=平台域调用方（无商户 scope，跨商户合法）放行；裁决「资源皆属某商户」故资源 merchant 为空亦视为不一致而拒。
+     */
+    private void requireResourceInOrderMerchant(String orderMerchantId, String resourceMerchantId, String resourceLabel) {
+        if (orderMerchantId != null && !orderMerchantId.equals(resourceMerchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                    resourceLabel + " belongs to another merchant");
         }
     }
 
