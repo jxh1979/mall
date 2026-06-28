@@ -34,7 +34,8 @@ public class DashboardAggregationJob {
     static final String REVENUE_BAR = "revenue.bar";            // 收入
     static final String REVENUE_BAR_REFUND = "revenue.bar_refund"; // 收入·酒吧退款（冲减 net，待确认#2）
     static final String REVENUE_TICKET_REFUND = "revenue.ticket_refund"; // 收入·自营售票退款（冲减 net）
-    static final String REVENUE_NET = "revenue.net";            // 收入·平台净收入（派生：售票+酒吧−退款，第三方不计）
+    static final String REVENUE_CONTRACT_RENT = "revenue.contract_rent"; // 收入·合同租金应收（租金/物业/能源，并入 net）
+    static final String REVENUE_NET = "revenue.net";            // 收入·平台净收入（派生：售票+酒吧+合同租金−退款，第三方不计）
     static final String REVENUE_PER_SQM = "revenue.per_sqm";    // 收入·坪效（派生：净收入/可经营面积；面积未配置则不产出）
     // 待确认项#1：通票售票收入的业态拆分展示口径（不并入 net，仅展示）。
     static final String REVENUE_TICKET_BAR_SHARE = "revenue.ticket_bar_share";             // 收入·通票酒吧分摊
@@ -132,8 +133,12 @@ public class DashboardAggregationJob {
         Map<String, BigDecimal> barRefund = repository.sumBarRefundCentsByMerchant(businessDate);
         Map<String, BigDecimal> ticketAllocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate);
         Map<String, BigDecimal> ticketRefundByMerchant = repository.sumTicketRefundByMerchant(businessDate);
+        // P1-C 收入闭环：合同租金/物业/能源应收（ar_ap_items receivable）按 due_date 当日确认，
+        // 单列 revenue.contract_rent 展示行（平台+商户），并入商户行级 net 的租金分量。
+        Map<String, BigDecimal> contractRent = repository.sumContractRentReceivableByMerchant(businessDate);
+        upsertByMerchant(REVENUE_CONTRACT_RENT, "finance", businessDate, contractRent, now, platformTotals);
         upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund,
-                ticketAllocated, ticketRefundByMerchant, now, platformTotals);
+                ticketAllocated, ticketRefundByMerchant, contractRent, now, platformTotals);
 
         // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
@@ -318,24 +323,28 @@ public class DashboardAggregationJob {
             Map<String, BigDecimal> barRefundByMerchant,
             Map<String, BigDecimal> ticketAllocatedByMerchant,
             Map<String, BigDecimal> ticketRefundByMerchant,
+            Map<String, BigDecimal> contractRentByMerchant,
             Instant now,
             Map<String, BigDecimal> platformTotals
     ) {
-        // 商户行级 net：本商户售票分量 + 本商户酒吧实收 − 本商户售票退款分摊 − 本商户酒吧退款。
+        // 商户行级 net：本商户售票分量 + 本商户酒吧实收 + 本商户合同租金应收 − 本商户售票退款分摊 − 本商户酒吧退款。
         java.util.Set<String> merchantIds = new java.util.LinkedHashSet<>();
         merchantIds.addAll(barRevenueByMerchant.keySet());
         merchantIds.addAll(barRefundByMerchant.keySet());
         merchantIds.addAll(ticketAllocatedByMerchant.keySet());
         merchantIds.addAll(ticketRefundByMerchant.keySet());
+        merchantIds.addAll(contractRentByMerchant.keySet());
         BigDecimal platformNetFromMerchants = BigDecimal.ZERO;
         for (String merchantId : merchantIds) {
             BigDecimal revenue = nonNull(barRevenueByMerchant.get(merchantId));
             BigDecimal refund = nonNull(barRefundByMerchant.get(merchantId));
             BigDecimal ticketShare = nonNull(ticketAllocatedByMerchant.get(merchantId));
             BigDecimal ticketRefundShare = nonNull(ticketRefundByMerchant.get(merchantId));
+            BigDecimal rent = nonNull(contractRentByMerchant.get(merchantId));
             if (merchantId != null && !merchantId.isBlank()) {
                 BigDecimal merchantNet = ticketShare
                         .add(revenue)
+                        .add(rent)
                         .subtract(ticketRefundShare)
                         .subtract(refund);
                 repository.upsertMetricSnapshot(

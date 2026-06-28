@@ -1098,6 +1098,11 @@ class AnalyticsServiceTests {
         }
 
         @Override
+        public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate) {
+            return Map.of();
+        }
+
+        @Override
         public BigDecimal countAmusementVerificationSuccess(LocalDate businessDate) {
             return BigDecimal.ZERO;
         }

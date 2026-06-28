@@ -621,6 +621,24 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return distributeRefundsByMerchant(rows);
     }
 
+    @Override
+    public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate) {
+        // P1-C：合同租金/物业/能源应收按 due_date 当日（期首）逐期确认收入，并入商户行级 revenue.net 租金分量。
+        // 用 amount_cent（已挂账应收，权责发生制确认），与酒吧/售票的现金口径合并入 net（任务要求接 ar_ap receivable）。
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COALESCE(SUM(amount_cent), 0) AS total
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND source_type IN ('contract_rent', 'contract_property_fee', 'contract_energy_fee')
+                   AND due_date = :business_date
+                 GROUP BY merchant_id
+                """, new MapSqlParameterSource("business_date", businessDate),
+                (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total")));
+        return result;
+    }
+
     private record RefundMerchantShareRow(
             String refundId, long refundAmount, String merchantId, long merchantAllocated, long orderTotalAllocated) {
     }

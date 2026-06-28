@@ -113,6 +113,27 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void netIncludesContractRentReceivableAndEmitsRentComponentRow() {
+        // P1-C 收入闭环：合同租金/物业/能源应收并入 net，并单列 revenue.contract_rent 展示行。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.barRevenue = orderedMap("merchant_a", "80000");
+        // merchant_a 当日确认合同租金应收 30000；merchant_b 仅有租金 50000、无其他经营。
+        repository.contractRent = orderedMap("merchant_a", "30000", "merchant_b", "50000");
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        // 商户 net：A=酒吧 80000 + 租金 30000 = 110000；B=租金 50000。
+        assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("110000");
+        assertThat(repository.upserts.get(netKey("merchant_b"))).isEqualByComparingTo("50000");
+        // 平台 net = Σ商户 = 160000。
+        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("160000");
+        // 单列租金应收展示行：商户 + 平台合计 80000。
+        String rent = DashboardAggregationJob.REVENUE_CONTRACT_RENT;
+        assertThat(repository.upserts.get(rent + "|merchant_a")).isEqualByComparingTo("30000");
+        assertThat(repository.upserts.get(rent + "|platform")).isEqualByComparingTo("80000");
+    }
+
+    @Test
     void merchantNetTicketShareCanCoverMerchantWithoutBarActivity() {
         // 商户只有售票分量、无酒吧活动：net 仍应体现售票分量（行只来自 ticketAllocated 也能产出）。
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
@@ -263,6 +284,7 @@ class DashboardAggregationJobNetRevenueTests {
         private Map<String, BigDecimal> barRefund = Map.of();
         private Map<String, BigDecimal> ticketAllocated = Map.of();
         private Map<String, BigDecimal> ticketRefundByMerchant = Map.of();
+        private Map<String, BigDecimal> contractRent = Map.of();
         private Map<String, BigDecimal> verifyDone = Map.of();
         private Map<String, BigDecimal> ticketIssued = Map.of();
 
@@ -308,6 +330,11 @@ class DashboardAggregationJobNetRevenueTests {
         @Override
         public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate) {
             return ticketRefundByMerchant;
+        }
+
+        @Override
+        public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate) {
+            return contractRent;
         }
 
         // ── 其余聚合源：本测试不关心，返回中性值 ──

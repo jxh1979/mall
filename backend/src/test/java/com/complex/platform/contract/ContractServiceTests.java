@@ -181,13 +181,16 @@ class ContractServiceTests {
     }
 
     @Test
-    void rentBillUsesContractRentMathAndIsIdempotent() {
-        ContractRecord c = effectiveContract();   // rentTerms baseRentCent=100000, 生效 2026-07-01
-        ContractRentBillRecord bill = service.generateRentBill(c.id(), new ContractRentBillRequest("k_rb", "2026-08"));
-        assertThat(bill).isNotNull();
-        assertThat(bill.amountCent()).isEqualTo(100000);
-        assertThat(bill.arApItemId()).startsWith("arap_rent_");
-        // 同期重复 → 幂等冲突。
+    void activateSchedulesWholeTermRentBillsIdempotently() {
+        // P1-A：生效即按整租期(2026-07..2027-06=12期)幂等排租金AR（ContractRentMath base=100000，无免租/递增）。
+        ContractRecord c = effectiveContract();   // rentTerms baseRentCent=100000, 生效 2026-07-01 到期 2027-06-30
+        List<ContractRentBillRecord> rent = repo.rentBills.stream()
+                .filter(b -> b.contractId().equals(c.id()) && b.feeType().equals("rent")).toList();
+        assertThat(rent).hasSize(12);
+        assertThat(rent).allMatch(b -> b.amountCent() == 100000L);
+        assertThat(rent).extracting(ContractRentBillRecord::period)
+                .contains("2026-07", "2026-12", "2027-06");
+        // 整租期已预排 → 手工再排任一期幂等冲突。
         assertThatThrownBy(() -> service.generateRentBill(c.id(), new ContractRentBillRequest("k_rb2", "2026-08")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("CONTRACT_RENT_ALREADY_BILLED"));
@@ -206,7 +209,7 @@ class ContractServiceTests {
     }
 
     @Test
-    void periodBillsGeneratesRentPropertyEnergyAndSkipsZero() {
+    void activateBooksRentPropertyEnergyForEachPeriodAndSkipsZero() {
         ContractRecord d = service.createDraft(new ContractDraftRequest("k_pf", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of("baseRentCent", 100000, "propertyFeeCent", 20000, "energyFeeCent", 5000),
@@ -217,13 +220,18 @@ class ContractServiceTests {
         approve(d, "contract.approve.legal");
         approve(d, "contract.approve.gm");
         service.activate(d.id(), new ContractActivateRequest("k_act", List.of("sp_pf")));
-        List<ContractRentBillRecord> bills = service.generatePeriodBills(d.id(),
-                new ContractRentBillRequest("k_pb", "2026-08"));
-        assertThat(bills).hasSize(3);
-        assertThat(bills).extracting(ContractRentBillRecord::feeType)
+        // P1-A：生效自动按整租期排 rent+property+energy 三费目（12 期 × 3 = 36 条）。
+        List<ContractRentBillRecord> all = repo.rentBills.stream()
+                .filter(b -> b.contractId().equals(d.id())).toList();
+        assertThat(all).hasSize(36);
+        // 单期(2026-08)三费目金额。
+        List<ContractRentBillRecord> aug = all.stream().filter(b -> b.period().equals("2026-08")).toList();
+        assertThat(aug).extracting(ContractRentBillRecord::feeType)
                 .containsExactlyInAnyOrder("rent", "property_fee", "energy_fee");
-        assertThat(bills).extracting(ContractRentBillRecord::amountCent)
+        assertThat(aug).extracting(ContractRentBillRecord::amountCent)
                 .containsExactlyInAnyOrder(100000L, 20000L, 5000L);
+        // 整租期已排 → 手工再排同期幂等返回空（全已挂账跳过）。
+        assertThat(service.generatePeriodBills(d.id(), new ContractRentBillRequest("k_pb", "2026-08"))).isEmpty();
     }
 
     @Test

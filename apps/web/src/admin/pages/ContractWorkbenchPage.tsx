@@ -18,6 +18,7 @@ type SpaceRental = { spaceId: string; spaceName: string; rentalStatus: string; c
 
 const DRAFT = ["contract.draft.manage"];
 const ACTIVATE = ["contract.lifecycle.activate"];
+const RENT_AR = ["finance.ar_ap.manage"];
 const SETTLE = ["contract.settlement.manage"];
 const FLOW_CFG = ["contract.approval.flow.manage"];
 const COLOR_CFG = ["contract.space.color.manage"];
@@ -56,6 +57,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     baseRentYuan: "", commissionMode: "fixed_ratio", energyFeeBasis: "by_area",
   });
   const [spaceId, setSpaceId] = React.useState("");
+  const [billPeriod, setBillPeriod] = React.useState("");
   const [colorForm, setColorForm] = React.useState({ categoryName: "", color: "#F59E0B", thresholdDays: "30" });
   const [selectedId, setSelectedId] = React.useState("");
   const [changes, setChanges] = React.useState<ChangeRow[]>([]);
@@ -120,6 +122,17 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     }
     await api.post(`/api/v1/contracts/${row.id}/activate`, { spaceIds: [spaceId.trim()] });
     setActionResult({ action: "contract_activated", contractId: row.id });
+    reload();
+  }
+
+  // P1-B 收入闭环：手工补排某账期租金/物业/能源 AR（生效已自动排整租期，此处用于补排/重排，幂等已挂账则跳过）。
+  async function generatePeriodBills(row: ContractRow) {
+    if (!billPeriod) {
+      setGlobalError("排租金AR需先选账期（年-月）");
+      return;
+    }
+    const bills = await api.post<unknown[]>(`/api/v1/contracts/${row.id}/period-bills`, { period: billPeriod });
+    setActionResult({ action: "contract_period_bills_generated", contractId: row.id, period: billPeriod, count: (bills ?? []).length });
     reload();
   }
 
@@ -228,8 +241,12 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                         data-testid={`contract-activate-${row.id}`} onClick={() => void activate(row)}>生效(绑铺位)</PermissionButton>
                     )}
                     {row.lifecycleStatus === "effective" && (
-                      <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
-                        data-testid={`contract-settle-${row.id}`} onClick={() => void settle(row)}>退租开账</PermissionButton>
+                      <>
+                        <PermissionButton permissionsState={effectivePermissions} permissions={RENT_AR}
+                          data-testid={`contract-period-bills-${row.id}`} onClick={() => void generatePeriodBills(row)}>排租金AR</PermissionButton>
+                        <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE}
+                          data-testid={`contract-settle-${row.id}`} onClick={() => void settle(row)}>退租开账</PermissionButton>
+                      </>
                     )}
                     <button data-testid={`contract-detail-${row.id}`} onClick={() => void selectContract(row.id)}>明细</button>
                   </td>
@@ -262,6 +279,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         </div>
         <div className="admin-inline-form" data-testid="contract-activate-form">
           <input aria-label="生效绑定空间 id" placeholder="生效绑定空间 id" value={spaceId} onChange={(e) => setSpaceId(e.target.value)} />
+          <input aria-label="排租金AR账期" type="month" data-testid="contract-bill-period" value={billPeriod} onChange={(e) => setBillPeriod(e.target.value)} />
         </div>
 
         <h3>审批链（分组并行，按综合体可配）</h3>

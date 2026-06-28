@@ -166,6 +166,13 @@ public interface AnalyticsRepository {
      */
     Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate);
 
+    /**
+     * P1-C 收入闭环：合同租金/物业/能源应收（ar_ap_items receivable，source_type contract_rent/property_fee/energy_fee）
+     * 按 due_date = businessDate（期首逐期确认，不在生效日堆叠整租期）汇总到 merchant_id。
+     * 返回 merchantId -> 金额（合同账单 merchant_id 恒非空），并入商户行级 revenue.net 的租金分量。
+     */
+    Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate);
+
     /** count amusement_verifications(verification_result='success')——游乐核销人次；无 merchant_id，仅平台口径。 */
     BigDecimal countAmusementVerificationSuccess(LocalDate businessDate);
 

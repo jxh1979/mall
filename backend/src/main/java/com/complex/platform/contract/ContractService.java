@@ -17,6 +17,7 @@ import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -204,9 +205,24 @@ public class ContractService {
                 contract.settlementRules(), buildSnapshot(contract), contract.shareholderRatioForReport(),
                 contract.attachmentIds(), "effective", contract.projectId(), null, null,
                 contract.renewedFromContractId(), contract.createdAt(), Instant.now()));
+        // P1-A 收入闭环：生效即按整租期逐期幂等排租金/物业/能源 AR（base+递增−免租，免租/0 跳过）。
+        // ponytail: 整租期一次性预排 vs @Scheduled 逐期挂账——选预排：确定可测 + 幂等（genFeeBill 查重，重复生效不重挂），
+        //   且每期账单各带自身 due_date（期首），看板按 due_date 逐期确认收入，不在生效日堆叠整租期。
+        //   若改 @Scheduled 累积巨量空跑作业，反更重；catch-up 仍可手工调 period-bills 端点（P1-B 按钮）。
+        int billed = scheduleTermBills(effective);
         auditEventService.recordSuccess("contract.activated", "contract.lifecycle.activate", "contract", contractId,
-                null, actual.idempotencyKey(), Map.of("space_count", spaceIds.size()));
+                null, actual.idempotencyKey(), Map.of("space_count", spaceIds.size(), "rent_bills", billed));
         return effective;
+    }
+
+    /** 按整租期（生效月→到期月）逐期幂等挂账各费目；返回新挂账条数。生效自动调用，亦可手工补排。 */
+    private int scheduleTermBills(ContractRecord c) {
+        YearMonth end = YearMonth.from(c.expiryDate());
+        int count = 0;
+        for (YearMonth ym = YearMonth.from(c.effectiveDate()); !ym.isAfter(end); ym = ym.plusMonths(1)) {
+            count += billPeriodFees(c, ym.toString(), "activate:" + c.id() + ":" + ym).size();
+        }
+        return count;
     }
 
     // ============ 变更（6类） ============
@@ -505,21 +521,29 @@ public class ContractService {
         if (!"effective".equals(c.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "only effective contract bills");
         }
+        return billPeriodFees(c, period, actual.idempotencyKey());
+    }
+
+    /**
+     * 单期各费目幂等挂账核心（无权限校验，由调用方门控：generatePeriodBills 查 finance.ar_ap.manage，
+     * activate 已查 contract.lifecycle.activate）。租金 + 物业费 + 能源费(基非 none)；免租/0/已挂账跳过。
+     */
+    private List<ContractRentBillRecord> billPeriodFees(ContractRecord c, String period, String idemKey) {
         Map<String, Object> rt = c.rentTerms() == null ? Map.of() : c.rentTerms();
         LocalDate dueDate = dueDateOf(period);
         long rent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
         long property = numLong(rt.get("propertyFeeCent"));
         long energy = "none".equals(c.energyFeeBasis()) ? 0L : numLong(rt.get("energyFeeCent"));
         List<ContractRentBillRecord> out = new ArrayList<>();
-        ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent, dueDate, actual.idempotencyKey());
+        ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent, dueDate, idemKey);
         if (rb != null) {
             out.add(rb);
         }
-        ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, dueDate, actual.idempotencyKey());
+        ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, dueDate, idemKey);
         if (pb != null) {
             out.add(pb);
         }
-        ContractRentBillRecord eb = genFeeBill(c, period, "energy_fee", energy, dueDate, actual.idempotencyKey());
+        ContractRentBillRecord eb = genFeeBill(c, period, "energy_fee", energy, dueDate, idemKey);
         if (eb != null) {
             out.add(eb);
         }
