@@ -171,6 +171,10 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now
         ));
+        // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
+        repository.saveTicketOrder(new TicketOrderRecord(
+                "order_jdbc", "ON-JDBC", "cust_jdbc", "ticket_type_jdbc_issue", null, 2,
+                java.time.LocalDate.parse("2099-06-14"), "web", null, 9900L, "CNY", "paid", "issued", "paid", now, now));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_jdbc",
                 "P0-JDBC",
@@ -291,6 +295,10 @@ class TicketingJdbcIntegrationTests {
                 "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null,null, now, now));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null,null, now, now));
+        // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
+        repository.saveTicketOrder(new TicketOrderRecord(
+                "order_chk", "ON-CHK", "cust_chk", "ticket_type_chk", null, 4,
+                java.time.LocalDate.parse("2026-06-18"), "web", null, 9900L, "CNY", "paid", "issued", "paid", now, now));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_chk", "P0-CHK", "ticket_type_chk", "order_chk", "template_chk", "entry",
                 "mch_chk", "venue_chk", "gate_chk", 4, 0, 9900L, "active",

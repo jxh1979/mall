@@ -31,7 +31,9 @@ class TerminalDeviceJdbcIntegrationTests {
 
     @BeforeEach
     void resetTerminalDeviceTables() {
-        jdbcTemplate.execute("TRUNCATE terminal_device_credentials, terminal_device_status_events, terminal_devices");
+        // CASCADE：V159 后 ticket_verifications.device_id 外键引用 terminal_devices，
+        // 不级联则 TRUNCATE 报 "cannot truncate a table referenced in a foreign key constraint"。
+        jdbcTemplate.execute("TRUNCATE terminal_device_credentials, terminal_device_status_events, terminal_devices CASCADE");
     }
 
     @Test
