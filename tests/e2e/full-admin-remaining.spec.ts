@@ -12,6 +12,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-GOV-002", label: "组织与商户档案", route: "/admin/governance/organizations" },
   { pageId: "ADM-GOV-003", label: "四类主体绑定", route: "/admin/governance/subject-bindings" },
   { pageId: "ADM-GOV-004", label: "合同审批与附件归档", route: "/admin/contracts" },
+  { pageId: "ADM-LEASE-001", label: "招商工作台", route: "/admin/leasing/workbench" },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
   { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },

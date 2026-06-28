@@ -14,6 +14,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-GOV-002", label: "组织与商户档案", module: "治理", group: "governance", route: "/admin/governance/organizations", requiredPermissions: ["merchant.profile.view", "governance.project.view"] },
   { pageId: "ADM-GOV-003", label: "四类主体绑定", module: "治理", group: "governance", route: "/admin/governance/subject-bindings", requiredPermissions: ["entity.binding.view"] },
   { pageId: "ADM-CONT-001", label: "合同生命周期工作台", module: "合同", group: "governance", route: "/admin/contracts", requiredPermissions: ["contract.draft.manage"] },
+  { pageId: "ADM-LEASE-001", label: "招商工作台", module: "招商租赁", group: "governance", route: "/admin/leasing/workbench", requiredPermissions: ["leasing.lead.manage", "leasing.intent.manage", "leasing.brand.manage"] },
   { pageId: "ADM-FAC-001", label: "楼宇运营工作台", module: "物业/楼宇", group: "ops", route: "/admin/facility/workbench", requiredPermissions: ["facility.equipment.manage"] },
   { pageId: "ADM-ENE-001", label: "能源工作台", module: "物业/楼宇", group: "ops", route: "/admin/energy/workbench", requiredPermissions: ["energy.reading.manage"] },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", module: "治理", group: "governance", route: "/admin/governance/admission-audits", requiredPermissions: ["merchant.profile.view", "entity.binding.view", "contract.view"] },

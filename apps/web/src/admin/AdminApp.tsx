@@ -28,6 +28,7 @@ const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessions
 const AmusementGroupBookingsPage = React.lazy(() => import("./pages/AmusementGroupBookingsPage").then((m) => ({ default: m.AmusementGroupBookingsPage })));
 const SupervisorReviewPage = React.lazy(() => import("./pages/SupervisorReviewPage").then((m) => ({ default: m.SupervisorReviewPage })));
 const ContractWorkbenchPage = React.lazy(() => import("./pages/ContractWorkbenchPage").then((m) => ({ default: m.ContractWorkbenchPage })));
+const LeasingWorkbenchPage = React.lazy(() => import("./pages/LeasingWorkbenchPage").then((m) => ({ default: m.LeasingWorkbenchPage })));
 const FacilityWorkbenchPage = React.lazy(() => import("./pages/FacilityWorkbenchPage").then((m) => ({ default: m.FacilityWorkbenchPage })));
 const EnergyWorkbenchPage = React.lazy(() => import("./pages/EnergyWorkbenchPage").then((m) => ({ default: m.EnergyWorkbenchPage })));
 const GovernanceTopologyPage = React.lazy(() => import("./pages/GovernanceTopologyPage").then((m) => ({ default: m.GovernanceTopologyPage })));
@@ -153,6 +154,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <SubjectBindingsPage {...props} />;
     case "ADM-CONT-001":
       return <ContractWorkbenchPage {...props} />;
+    case "ADM-LEASE-001":
+      return <LeasingWorkbenchPage {...props} />;
     case "ADM-FAC-001":
       return <FacilityWorkbenchPage {...props} />;
     case "ADM-ENE-001":
