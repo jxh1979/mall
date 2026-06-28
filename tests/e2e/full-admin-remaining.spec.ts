@@ -11,7 +11,10 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-GOV-001", label: "集团/综合体拓扑", route: "/admin/governance/topology" },
   { pageId: "ADM-GOV-002", label: "组织与商户档案", route: "/admin/governance/organizations" },
   { pageId: "ADM-GOV-003", label: "四类主体绑定", route: "/admin/governance/subject-bindings" },
-  { pageId: "ADM-GOV-004", label: "合同审批与附件归档", route: "/admin/contracts" },
+  { pageId: "ADM-CONT-001", label: "合同生命周期工作台", route: "/admin/contracts" },
+  { pageId: "ADM-FAC-001", label: "楼宇运营工作台", route: "/admin/facility/workbench" },
+  { pageId: "ADM-ENE-001", label: "能源工作台", route: "/admin/energy/workbench" },
+  { pageId: "ADM-ACC-003", label: "访问治理工作台", route: "/admin/access/governance" },
   { pageId: "ADM-LEASE-001", label: "招商工作台", route: "/admin/leasing/workbench" },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
@@ -91,8 +94,14 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("amusement-inspection-tasks-page")).toBeVisible();
   } else if (spec.pageId === "ADM-GOV-006") {
     await expect(page.getByTestId("supervisor-review-page")).toBeVisible();
-  } else if (spec.pageId === "ADM-GOV-004") {
-    await expect(page.getByTestId("contract-approval-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-CONT-001") {
+    await expect(page.getByTestId("contract-workbench-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-FAC-001") {
+    await expect(page.getByTestId("facility-workbench-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-ENE-001") {
+    await expect(page.getByTestId("energy-workbench-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-ACC-003") {
+    await expect(page.getByTestId("access-governance-page")).toBeVisible();
   } else if (spec.pageId === "ADM-GOV-005") {
     await expect(page.getByTestId("admission-audits-page")).toBeVisible();
   } else if (spec.pageId === "ADM-RISK-001") {
@@ -243,13 +252,36 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("amusement-safety-boundary")).toContainText("事故工单深度闭环");
         continue;
       }
-      if (spec.pageId === "ADM-GOV-004") {
-        await expect(page.getByTestId("contract-approval-evidence")).toContainText("/api/v1/platform/contracts");
-        await expect(page.getByTestId("contract-approval-summary")).toContainText("附件归档");
-        await expect(page.getByTestId("contract-approval-table")).toContainText("contract-subject-1");
-        await expect(page.getByTestId("contract-approval-table")).toContainText("2027-05-31");
-        await expect(page.getByTestId("contract-approval-table")).toContainText("att-contract-1");
-        await expect(page.getByTestId("contract-approval-boundary")).toContainText("股东比例只用于利润报表");
+      if (spec.pageId === "ADM-CONT-001") {
+        // 合同生命周期工作台（V162 重建）：起草→并行会签→生效固化→变更/退租结算 + 审批链/到期着色配置。
+        await expect(page.getByTestId("contract-workbench-page")).toBeVisible();
+        await expect(page.getByTestId("contracts-table")).toBeVisible();
+        await expect(page.getByTestId("contract-flow-table")).toBeVisible();
+        await expect(page.getByTestId("contract-settlements-table")).toBeVisible();
+        await expect(page.getByTestId("contract-draft-form")).toBeVisible();
+        continue;
+      }
+      if (spec.pageId === "ADM-FAC-001") {
+        // 楼宇运营工作台（V165-167）：设备台账 + 维保工单 + 巡检任务闭环。
+        await expect(page.getByTestId("facility-workbench-page")).toBeVisible();
+        await expect(page.getByTestId("facility-equipment-table")).toBeVisible();
+        await expect(page.getByTestId("facility-work-orders-table")).toBeVisible();
+        await expect(page.getByTestId("facility-inspection-tasks-table")).toBeVisible();
+        continue;
+      }
+      if (spec.pageId === "ADM-ENE-001") {
+        // 能源工作台（V168）：表计台账 + 抄表异常复核 + 总分表抹差 + 能源费结算。
+        await expect(page.getByTestId("energy-workbench-page")).toBeVisible();
+        await expect(page.getByTestId("energy-meters-table")).toBeVisible();
+        await expect(page.getByTestId("energy-readings-table")).toBeVisible();
+        await expect(page.getByTestId("energy-settlements-table")).toBeVisible();
+        continue;
+      }
+      if (spec.pageId === "ADM-ACC-003") {
+        // 访问治理工作台（V169-170）：职位↔角色模板、装配、临时授权与高危授权审批。
+        await expect(page.getByTestId("access-governance-page")).toBeVisible();
+        await expect(page.getByTestId("access-position-role-templates-table")).toBeVisible();
+        await expect(page.getByTestId("access-grant-requests-table")).toBeVisible();
         continue;
       }
       if (spec.pageId === "ADM-GOV-005") {
@@ -376,15 +408,15 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("binding_changed");
     await expect(page.getByTestId("admin-action-result")).toContainText("evidence-full-admin");
 
-    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-004")!);
-    await page.getByTestId("contract-approval-draft-title").fill("主力店补充协议");
-    await page.getByTestId("contract-approval-create-draft").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("contract_draft_created");
-    await expect(page.getByTestId("admin-action-result")).toContainText("att-contract-draft");
-    await page.getByTestId("contract-approval-comment").fill("主体、附件和日期均已核验");
-    await page.getByTestId("contract-approval-approve").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("contract_approved");
-    await expect(page.getByTestId("admin-action-result")).toContainText("approved");
+    // 合同生命周期工作台（V162 重建）：起草合同为可审计写动作（商户/主体/起止日期必填，POST /api/v1/contracts）。
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-CONT-001")!);
+    await page.getByLabel("商户 id").fill("merchant-1");
+    await page.getByLabel("合同主体 id").fill("contract-subject-1");
+    await page.getByLabel("生效日期").fill("2026-07-01");
+    await page.getByLabel("到期日期").fill("2027-06-30");
+    await page.getByTestId("contract-draft-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("contract_drafted");
+    await expect(page.getByTestId("admin-action-result")).toContainText("merchant-1");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-005")!);
     await page.getByTestId("admission-audits-export-reason").fill("总控导出准入审计片段");
