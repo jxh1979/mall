@@ -78,6 +78,7 @@
 | H2 | 新端点前端接线：职级/薪资（`/access/staff-levels`、`/users/{id}/staff-level`）后台页 |
 | H3 | Android 工作手机/平板/一体机：扫码/核销/离线摘要按 OpenAPI 对齐（旧 `/api/mobile/*` 迁移） |
 | H4 | 客人 App/小程序/Web 积分/兑换页对齐 customer_points_* 真实表 |
+| H5 | **`verify:full-admin-matrix` 闸口待绿（2026-06-27 新增，剩 4 项）**：4 个工作台页缺 Playwright e2e —— `ADM-CONT-001`（合同生命周期工作台 `/admin/contracts`）、`ADM-FAC-001`（楼宇运营工作台 `/admin/facility/workbench`）、`ADM-ENE-001`（能源工作台 `/admin/energy/workbench`）、`ADM-ACC-003`（访问治理工作台 `/admin/access/governance`）。这 4 页前端已在 `apps/web/src/admin/adminRoutes.ts`、后端已落地（V162/V165-168/V169），CSV↔adminRoutes↔bespokePages 已对齐（`dcf2004`，闸口 12→4）；只需在 `tests/e2e/full-admin-mvp.spec.ts` 或 `tests/e2e/full-admin-remaining.spec.ts` 补这 4 个 pageId 的 e2e 用例，`verify:full-admin-matrix` 即 4→0 转绿。属真实前端 e2e 工作，需前端单独排期（区别于 H1 的泛化 30 页补测）。|
 
 ## I. 外部依赖/供应商联调（待外部资料，现只能 mock，不可宣称生产）
 
