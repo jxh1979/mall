@@ -85,6 +85,16 @@ class JdbcFacilityInspectionRepository implements FacilityInspectionRepository {
     }
 
     @Override
+    public List<FacilityInspectionTaskRecord> listTasksAssignedTo(String assigneeId, String projectId) {
+        return jdbcTemplate.query("SELECT " + TASK_COLS + """
+                 FROM facility_inspection_tasks
+                 WHERE assignee_id = :assignee_id AND project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, new MapSqlParameterSource("assignee_id", assigneeId).addValue("project_id", projectId),
+                this::mapTask);
+    }
+
+    @Override
     public Optional<FacilityInspectionTaskRecord> findTaskById(String id) {
         return jdbcTemplate.query("SELECT " + TASK_COLS + " FROM facility_inspection_tasks WHERE id = :id",
                 new MapSqlParameterSource("id", id), this::mapTask).stream().findFirst();

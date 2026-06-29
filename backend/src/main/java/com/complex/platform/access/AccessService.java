@@ -47,7 +47,8 @@ public class AccessService {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
-    private static final Set<String> ALLOWED_ACCOUNT_TYPES = Set.of("staff", "merchant", "merchant_admin", "supervisor", "sales");
+    private static final Set<String> ALLOWED_ACCOUNT_TYPES = Set.of(
+            "staff", "merchant", "merchant_admin", "supervisor", "sales", "outsourced_vendor");
     private static final String REQUEST_USER_ROLE = "user_role";
     private static final String REQUEST_USER_POSITION = "user_position";
     private static final String REQUEST_TEMPORARY_PERMISSION = "temporary_permission";

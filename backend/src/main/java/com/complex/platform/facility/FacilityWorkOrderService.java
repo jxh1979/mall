@@ -1,5 +1,6 @@
 package com.complex.platform.facility;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -59,8 +60,10 @@ public class FacilityWorkOrderService {
     }
 
     public PageResponse<FacilityWorkOrderRecord> list() {
-        authorizationService.requirePlatformScope();
-        List<FacilityWorkOrderRecord> items = repository.list();
+        AccessActor actor = requireScopeActor();
+        List<FacilityWorkOrderRecord> items = authorizationService.isOutsourcedVendor(actor)
+                ? repository.listAssignedTo(actor.id(), authorizationService.requireProjectScope(actor))
+                : repository.list();
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -71,8 +74,10 @@ public class FacilityWorkOrderService {
     }
 
     public FacilityWorkOrderRecord findById(String id) {
-        authorizationService.requirePlatformScope();
-        return load(id);
+        AccessActor actor = requireScopeActor();
+        FacilityWorkOrderRecord record = load(id);
+        enforceAssignedScope(actor, record);
+        return record;
     }
 
     @Transactional
@@ -104,9 +109,10 @@ public class FacilityWorkOrderService {
 
     @Transactional
     public FacilityWorkOrderRecord start(String id, FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePlatformScope();
+        AccessActor actor = requireScopeActor();
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = load(id);
+        enforceAssignedScope(actor, cur);
         requireStatus(cur, "assigned", "can only start an assigned work order");
         Instant now = Instant.now();
         FacilityWorkOrderRecord processing = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
@@ -122,9 +128,10 @@ public class FacilityWorkOrderService {
 
     @Transactional
     public FacilityWorkOrderRecord complete(String id, FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePlatformScope();
+        AccessActor actor = requireScopeActor();
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = load(id);
+        enforceAssignedScope(actor, cur);
         requireStatus(cur, "processing", "can only complete a processing work order");
         String acceptanceBy = policy(cur.workOrderType(), cur.priority()).acceptanceBy();
         String nextStatus = switch (acceptanceBy) {
@@ -148,10 +155,11 @@ public class FacilityWorkOrderService {
 
     @Transactional
     public FacilityWorkOrderRecord accept(String id, FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePlatformScope();
+        AccessActor actor = requireScopeActor();
         FacilityWorkOrderActionRequest r = requireAction(request);
         validateSatisfaction(r.satisfaction());
         FacilityWorkOrderRecord cur = load(id);
+        enforceAssignedScope(actor, cur);
         requireStatus(cur, "pending_acceptance", "can only accept a work order pending acceptance");
         FacilityWorkOrderRecord closed = verifyClosed(cur, r);
         repository.updateWorkOrder(closed);
@@ -326,6 +334,18 @@ public class FacilityWorkOrderService {
     private FacilityWorkOrderRecord load(String id) {
         return repository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "facility work order not found"));
+    }
+
+    private AccessActor requireScopeActor() {
+        AccessActor actor = authorizationService.currentActor();
+        if (!authorizationService.isOutsourcedVendor(actor)) {
+            authorizationService.requirePlatformScope();
+        }
+        return actor;
+    }
+
+    private void enforceAssignedScope(AccessActor actor, FacilityWorkOrderRecord record) {
+        authorizationService.enforceOutsourcedAssigneeScope(actor, record.assigneeId(), record.projectId());
     }
 
     private FacilityWorkOrderPolicyRecord policy(String type, String priority) {

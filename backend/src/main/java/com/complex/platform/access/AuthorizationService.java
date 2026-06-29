@@ -190,6 +190,30 @@ public class AuthorizationService implements CallerScopeResolver {
         return isPlatformAdminBridge(actor);
     }
 
+    public boolean isOutsourcedVendor(AccessActor actor) {
+        return actor != null
+                && "active".equals(actor.status())
+                && "outsourced_vendor".equals(normalize(actor.accountType()));
+    }
+
+    public String requireProjectScope(AccessActor actor) {
+        String projectId = actor == null ? null : actor.organizationId();
+        if (projectId == null || projectId.isBlank()) {
+            throw ApiException.forbidden("PROJECT_SCOPE_REQUIRED", "a project scope is required for this operation");
+        }
+        return projectId;
+    }
+
+    public void enforceOutsourcedAssigneeScope(AccessActor actor, String assigneeId, String projectId) {
+        if (!isOutsourcedVendor(actor)) {
+            return;
+        }
+        String scopeProjectId = requireProjectScope(actor);
+        if (!actor.id().equals(assigneeId) || !scopeProjectId.equals(projectId)) {
+            throw ApiException.forbidden("FORBIDDEN", "assigned resource is not in caller scope");
+        }
+    }
+
     /**
      * Returns the verified supervisor level of the current caller from their account type.
      * Platform admins always get level 3. Staff accounts with accountType "supervisor_lN" get level N.
@@ -338,6 +362,11 @@ public class AuthorizationService implements CallerScopeResolver {
         if (isPlatformAdminBridge(actor)) {
             return;
         }
+        if (isOutsourcedVendor(actor)) {
+            throw ApiException.forbidden(
+                    "PLATFORM_COMPLIANCE_SCOPE_REQUIRED",
+                    "platform compliance data is not accessible to an outsourced vendor");
+        }
         String merchantId = actor.merchantId();
         if (merchantId != null && !merchantId.isBlank()) {
             throw ApiException.forbidden(
@@ -355,6 +384,11 @@ public class AuthorizationService implements CallerScopeResolver {
         AccessActor actor = currentActor();
         if (isPlatformAdminBridge(actor)) {
             return;
+        }
+        if (isOutsourcedVendor(actor)) {
+            throw ApiException.forbidden(
+                    "PLATFORM_SCOPE_REQUIRED",
+                    "platform-level data is not accessible to an outsourced vendor");
         }
         String merchantId = actor.merchantId();
         if (merchantId != null && !merchantId.isBlank()) {

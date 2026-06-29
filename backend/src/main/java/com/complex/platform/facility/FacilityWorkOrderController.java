@@ -2,6 +2,7 @@ package com.complex.platform.facility;
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -34,7 +35,7 @@ public class FacilityWorkOrderController {
 
     @GetMapping
     public ApiResponse<PageResponse<FacilityWorkOrderRecord>> list() {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.work_order.view_assigned");
         return ApiResponse.ok(service.list());
     }
 
@@ -46,7 +47,7 @@ public class FacilityWorkOrderController {
 
     @GetMapping("/{work_order_id}")
     public ApiResponse<FacilityWorkOrderRecord> get(@PathVariable("work_order_id") String workOrderId) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.work_order.view_assigned");
         return ApiResponse.ok(service.findById(workOrderId));
     }
 
@@ -68,7 +69,7 @@ public class FacilityWorkOrderController {
     @PostMapping("/{work_order_id}/start")
     public ApiResponse<FacilityWorkOrderRecord> start(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.work_order.process_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.start(workOrderId, request));
     }
@@ -76,7 +77,7 @@ public class FacilityWorkOrderController {
     @PostMapping("/{work_order_id}/complete")
     public ApiResponse<FacilityWorkOrderRecord> complete(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.work_order.process_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.complete(workOrderId, request));
     }
@@ -84,7 +85,7 @@ public class FacilityWorkOrderController {
     @PostMapping("/{work_order_id}/accept")
     public ApiResponse<FacilityWorkOrderRecord> accept(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.work_order.accept_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.accept(workOrderId, request));
     }
@@ -126,5 +127,11 @@ public class FacilityWorkOrderController {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.savePolicy(request));
+    }
+
+    private void requirePermission(String outsourcedPermission) {
+        AccessActor actor = authorizationService.currentActor();
+        authorizationService.requirePermission(
+                authorizationService.isOutsourcedVendor(actor) ? outsourcedPermission : PERM);
     }
 }

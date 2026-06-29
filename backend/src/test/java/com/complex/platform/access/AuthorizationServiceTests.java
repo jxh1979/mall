@@ -28,6 +28,14 @@ class AuthorizationServiceTests {
         service = new AuthorizationService(repository);
         repository.addKnownPermission("ops.production_readiness.manage");
         repository.addKnownPermission("ops.production_readiness.view");
+        repository.addKnownPermission("merchant.service_work_order.view");
+        repository.addKnownPermission("facility.work_order.manage");
+        repository.addKnownPermission("facility.work_order.view_assigned");
+        repository.addKnownPermission("facility.work_order.process_assigned");
+        repository.addKnownPermission("facility.work_order.accept_assigned");
+        repository.addKnownPermission("facility.inspection.manage");
+        repository.addKnownPermission("facility.inspection.view_assigned");
+        repository.addKnownPermission("facility.inspection.record_assigned");
     }
 
     @AfterEach
@@ -147,6 +155,52 @@ class AuthorizationServiceTests {
     void isPlatformAdminReturnsFalseForStaffActor() {
         authenticate("usr_staff", "ordinary-staff", "staff");
         assertThat(service.isPlatformAdmin(service.currentActor())).isFalse();
+    }
+
+    @Test
+    void outsourcedVendorIsNotPlatformScopeAndRequiresProjectScope() {
+        authenticateActor(new AccessActor("usr_vendor_a", "vendor-a", "outsourced_vendor", "proj_1", null, "active"));
+
+        assertThat(service.isOutsourcedVendor(service.currentActor())).isTrue();
+        assertThat(service.requireProjectScope(service.currentActor())).isEqualTo("proj_1");
+        assertThatThrownBy(service::requirePlatformScope)
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+        assertThatThrownBy(service::requirePlatformComplianceScope)
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PLATFORM_COMPLIANCE_SCOPE_REQUIRED"));
+    }
+
+    @Test
+    void outsourcedFacilityRoleOnlyGrantsAssignedWorkOrderPermissions() {
+        authenticateActor(new AccessActor("usr_vendor_a", "vendor-a", "outsourced_vendor", "proj_1", null, "active"));
+        repository.addEffect(effect("usr_vendor_a", "facility.work_order.view_assigned", AccessRepository.Effect.GRANT));
+        repository.addEffect(effect("usr_vendor_a", "facility.work_order.process_assigned", AccessRepository.Effect.GRANT));
+        repository.addEffect(effect("usr_vendor_a", "facility.work_order.accept_assigned", AccessRepository.Effect.GRANT));
+
+        service.requirePermission("facility.work_order.view_assigned");
+        service.requirePermission("facility.work_order.process_assigned");
+        service.requirePermission("facility.work_order.accept_assigned");
+
+        assertPermissionDenied("facility.work_order.manage");
+        assertPermissionDenied("facility.inspection.record_assigned");
+        assertPermissionDenied("merchant.service_work_order.view");
+        assertPermissionDenied("ops.production_readiness.view");
+    }
+
+    @Test
+    void outsourcedSecurityCleaningRoleOnlyGrantsAssignedInspectionPermissions() {
+        authenticateActor(new AccessActor("usr_vendor_s", "vendor-s", "outsourced_vendor", "proj_1", null, "active"));
+        repository.addEffect(effect("usr_vendor_s", "facility.inspection.view_assigned", AccessRepository.Effect.GRANT));
+        repository.addEffect(effect("usr_vendor_s", "facility.inspection.record_assigned", AccessRepository.Effect.GRANT));
+
+        service.requirePermission("facility.inspection.view_assigned");
+        service.requirePermission("facility.inspection.record_assigned");
+
+        assertPermissionDenied("facility.inspection.manage");
+        assertPermissionDenied("facility.work_order.view_assigned");
+        assertPermissionDenied("merchant.service_work_order.view");
+        assertPermissionDenied("ops.production_readiness.view");
     }
 
     @Test
@@ -276,6 +330,20 @@ class AuthorizationServiceTests {
                 "token",
                 List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
         ));
+    }
+
+    private void authenticateActor(AccessActor actor) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actor,
+                "token",
+                List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
+        ));
+    }
+
+    private void assertPermissionDenied(String permissionCode) {
+        assertThatThrownBy(() -> service.requirePermission(permissionCode))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
     }
 
     private static final class InMemoryAccessRepository implements AccessRepository {

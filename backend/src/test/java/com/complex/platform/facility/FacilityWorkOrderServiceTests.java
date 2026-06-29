@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.facility.dto.FacilityWorkOrderActionRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
@@ -19,7 +21,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /** 楼宇维保工单 S2 unit 测试：SLA建单、流转、告警转单、超时、完工回写设备。 */
 class FacilityWorkOrderServiceTests {
@@ -37,6 +42,11 @@ class FacilityWorkOrderServiceTests {
         seedPolicy("complaint", "normal", 120, 1440, false, "reporter");
         service = new FacilityWorkOrderService(workOrders, facility, mock(AuditEventService.class),
                 mock(AuthorizationService.class));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -71,6 +81,44 @@ class FacilityWorkOrderServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
         assertThatThrownBy(() -> scoped.findById("fwo_any"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+    }
+
+    @Test
+    void outsourcedListAndDetailAreLimitedToOwnAssigneeAndProject() {
+        FacilityWorkOrderService scoped = outsourcedService("usr_vendor_a", "proj_1");
+        workOrders.insertWorkOrder(rawAssigned("wo_a", "assigned", "usr_vendor_a", "proj_1"));
+        workOrders.insertWorkOrder(rawAssigned("wo_b", "assigned", "usr_vendor_b", "proj_1"));
+        workOrders.insertWorkOrder(rawAssigned("wo_cross_project", "assigned", "usr_vendor_a", "proj_2"));
+
+        PageResponse<FacilityWorkOrderRecord> page = scoped.list();
+
+        assertThat(page.items()).extracting(FacilityWorkOrderRecord::id).containsExactly("wo_a");
+        assertThat(scoped.findById("wo_a").id()).isEqualTo("wo_a");
+        assertThatThrownBy(() -> scoped.findById("wo_b"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        assertThatThrownBy(() -> scoped.findById("wo_cross_project"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+    }
+
+    @Test
+    void outsourcedCanProcessOwnWorkOrderButCannotProcessOrAcceptOthers() {
+        FacilityWorkOrderService scoped = outsourcedService("usr_vendor_a", "proj_1");
+        workOrders.insertWorkOrder(rawAssigned("wo_own", "assigned", "usr_vendor_a", "proj_1"));
+        workOrders.insertWorkOrder(rawAssigned("wo_other", "assigned", "usr_vendor_b", "proj_1"));
+        workOrders.insertWorkOrder(rawAssigned("wo_accept_own", "pending_acceptance", "usr_vendor_a", "proj_1"));
+        workOrders.insertWorkOrder(rawAssigned("wo_accept_other", "pending_acceptance", "usr_vendor_b", "proj_1"));
+
+        assertThatThrownBy(() -> scoped.start("wo_other", action(null, null, "start", "k_start_other")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        FacilityWorkOrderRecord processing = scoped.start("wo_own", action(null, null, "start", "k_start_own"));
+        FacilityWorkOrderRecord completed = scoped.complete(processing.id(), action("fixed", null, "done", "k_done_own"));
+
+        assertThat(processing.status()).isEqualTo("processing");
+        assertThat(completed.status()).isEqualTo("pending_acceptance");
+        assertThatThrownBy(() -> scoped.accept("wo_accept_other", action(null, 5, "ok", "k_accept_other")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        assertThat(scoped.accept("wo_accept_own", action(null, 5, "ok", "k_accept_own")).status())
+                .isEqualTo("closed");
     }
 
     @Test
@@ -194,6 +242,25 @@ class FacilityWorkOrderServiceTests {
         return new FacilityWorkOrderRecord(id, "FWO-" + id, "repair", "high", status, "title", "desc",
                 "platform", null, null, null, null, null, now, handleDueAt, null, null, null, null, null, null,
                 overtime, null, null, null, now, now);
+    }
+
+    private FacilityWorkOrderRecord rawAssigned(String id, String status, String assigneeId, String projectId) {
+        Instant now = Instant.now();
+        return new FacilityWorkOrderRecord(id, "FWO-" + id, "repair", "high", status, "title", "desc",
+                "platform", "sp_1", null, "usr_reporter", "staff", assigneeId, now.plusSeconds(3600),
+                now.plusSeconds(7200), now, null, null, null, null, null, false, null, projectId, "mch_1", now, now);
+    }
+
+    private FacilityWorkOrderService outsourcedService(String userId, String projectId) {
+        authenticateOutsourced(userId, projectId);
+        return new FacilityWorkOrderService(workOrders, facility, mock(AuditEventService.class),
+                new AuthorizationService(null));
+    }
+
+    private void authenticateOutsourced(String userId, String projectId) {
+        AccessActor actor = new AccessActor(userId, userId, "outsourced_vendor", projectId, null, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
     }
 
     static class InMemoryWorkOrderRepository implements FacilityWorkOrderRepository {

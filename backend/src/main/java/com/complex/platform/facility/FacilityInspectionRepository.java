@@ -3,6 +3,7 @@ package com.complex.platform.facility;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 public interface FacilityInspectionRepository {
@@ -15,6 +16,13 @@ public interface FacilityInspectionRepository {
     void insertTemplate(FacilityInspectionTemplateRecord record);
 
     List<FacilityInspectionTaskRecord> listTasks();
+
+    default List<FacilityInspectionTaskRecord> listTasksAssignedTo(String assigneeId, String projectId) {
+        return listTasks().stream()
+                .filter(record -> Objects.equals(assigneeId, record.assigneeId()))
+                .filter(record -> Objects.equals(projectId, record.projectId()))
+                .toList();
+    }
 
     Optional<FacilityInspectionTaskRecord> findTaskById(String id);
 

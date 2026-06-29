@@ -46,6 +46,51 @@ class AccessJdbcIntegrationTests {
     }
 
     @Test
+    void v178SeedsOutsourcedVendorFacilityRolesWithoutManagePermissions() {
+        List<String> permissionCodes = repository.listPermissions().stream()
+                .map(PermissionDefinition::permissionCode)
+                .toList();
+
+        assertThat(permissionCodes).contains(
+                "facility.work_order.view_assigned",
+                "facility.work_order.process_assigned",
+                "facility.work_order.accept_assigned",
+                "facility.inspection.view_assigned",
+                "facility.inspection.record_assigned"
+        );
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM role_permissions
+                 WHERE role_id = 'role_outsourced_facility'
+                 ORDER BY permission_code
+                """, String.class)).containsExactly(
+                "facility.work_order.accept_assigned",
+                "facility.work_order.process_assigned",
+                "facility.work_order.view_assigned"
+        );
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM role_permissions
+                 WHERE role_id = 'role_outsourced_security_cleaning'
+                 ORDER BY permission_code
+                """, String.class)).containsExactly(
+                "facility.inspection.record_assigned",
+                "facility.inspection.view_assigned"
+        );
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM role_permissions
+                 WHERE role_id IN ('role_outsourced_facility', 'role_outsourced_security_cleaning')
+                   AND permission_code LIKE '%.manage'
+                """, Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT position_code
+                  FROM position_role_templates
+                 WHERE role_id IN ('role_outsourced_facility', 'role_outsourced_security_cleaning')
+                 ORDER BY position_code
+                """, String.class)).containsExactly("outsourced_facility", "outsourced_security_cleaning");
+    }
+
+    @Test
     void migrationCreatesStaffLevelTablesAndSeedsThirtyContiguousRanks() {
         assertThat(regclass("staff_levels")).isEqualTo("staff_levels");
         assertThat(regclass("staff_level_assignments")).isEqualTo("staff_level_assignments");

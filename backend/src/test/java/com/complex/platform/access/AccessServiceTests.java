@@ -204,7 +204,7 @@ class AccessServiceTests {
 
     @Test
     void createAccessUserWithAllowedAccountTypeSucceeds() {
-        for (String type : List.of("staff", "merchant", "supervisor", "sales", "merchant_admin")) {
+        for (String type : List.of("staff", "merchant", "supervisor", "sales", "merchant_admin", "outsourced_vendor")) {
             AccessUser user = service.createAccessUser(new AccessUserRequest(
                     "user-type-" + type,
                     null,

@@ -1,5 +1,6 @@
 package com.complex.platform.facility;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -54,15 +55,23 @@ public class FacilityInspectionService {
     }
 
     public PageResponse<FacilityInspectionTaskRecord> listTasks() {
-        List<FacilityInspectionTaskRecord> items = repository.listTasks();
+        AccessActor actor = requireScopeActor();
+        List<FacilityInspectionTaskRecord> items = authorizationService.isOutsourcedVendor(actor)
+                ? repository.listTasksAssignedTo(actor.id(), authorizationService.requireProjectScope(actor))
+                : repository.listTasks();
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
     public FacilityInspectionTaskRecord findTaskById(String id) {
-        return loadTask(id);
+        AccessActor actor = requireScopeActor();
+        FacilityInspectionTaskRecord task = loadTask(id);
+        enforceAssignedScope(actor, task);
+        return task;
     }
 
     public PageResponse<FacilityInspectionRecordRecord> listRecords(String taskId) {
+        AccessActor actor = requireScopeActor();
+        enforceAssignedScope(actor, loadTask(taskId));
         List<FacilityInspectionRecordRecord> items = repository.listRecords(taskId);
         return new PageResponse<>(items, 1, 500, items.size());
     }
@@ -98,9 +107,10 @@ public class FacilityInspectionService {
 
     @Transactional
     public FacilityInspectionTaskRecord start(String id, FacilityInspectionRecheckConfirmRequest request) {
-        authorizationService.requirePlatformScope();
+        AccessActor actor = requireScopeActor();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
         FacilityInspectionTaskRecord cur = loadTask(id);
+        enforceAssignedScope(actor, cur);
         requireStatus(cur, "pending", "can only start a pending inspection task");
         Instant now = Instant.now();
         FacilityInspectionTaskRecord started = withTaskState(cur, "in_progress", now, cur.completedAt(), now);
@@ -112,9 +122,10 @@ public class FacilityInspectionService {
 
     @Transactional
     public FacilityInspectionRecordRecord submitRecord(String taskId, FacilityInspectionRecordSubmitRequest request) {
-        authorizationService.requirePlatformScope();
+        AccessActor actor = requireScopeActor();
         FacilityInspectionRecordSubmitRequest r = requireRecord(request);
         FacilityInspectionTaskRecord cur = loadTask(taskId);
+        enforceAssignedScope(actor, cur);
         requireStatus(cur, "in_progress", "can only submit a started inspection task");
         String result = normalizeAllowed(r.result(), "result", RESULTS);
         String abnormalNote = trimToNull(r.abnormalNote());
@@ -269,6 +280,18 @@ public class FacilityInspectionService {
     private FacilityInspectionTaskRecord loadTask(String id) {
         return repository.findTaskById(id)
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "facility inspection task not found"));
+    }
+
+    private AccessActor requireScopeActor() {
+        AccessActor actor = authorizationService.currentActor();
+        if (!authorizationService.isOutsourcedVendor(actor)) {
+            authorizationService.requirePlatformScope();
+        }
+        return actor;
+    }
+
+    private void enforceAssignedScope(AccessActor actor, FacilityInspectionTaskRecord task) {
+        authorizationService.enforceOutsourcedAssigneeScope(actor, task.assigneeId(), task.projectId());
     }
 
     private FacilityInspectionTemplateRequest requireTemplate(FacilityInspectionTemplateRequest request) {

@@ -2,6 +2,7 @@ package com.complex.platform.facility;
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -47,13 +48,13 @@ public class FacilityInspectionController {
 
     @GetMapping("/tasks")
     public ApiResponse<PageResponse<FacilityInspectionTaskRecord>> listTasks() {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.inspection.view_assigned");
         return ApiResponse.ok(service.listTasks());
     }
 
     @GetMapping("/tasks/{task_id}")
     public ApiResponse<FacilityInspectionTaskRecord> getTask(@PathVariable("task_id") String taskId) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.inspection.view_assigned");
         return ApiResponse.ok(service.findTaskById(taskId));
     }
 
@@ -67,7 +68,7 @@ public class FacilityInspectionController {
     @PostMapping("/tasks/{task_id}/start")
     public ApiResponse<FacilityInspectionTaskRecord> start(
             @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecheckConfirmRequest request) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.inspection.record_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.start(taskId, request));
     }
@@ -75,14 +76,14 @@ public class FacilityInspectionController {
     @PostMapping("/tasks/{task_id}/records")
     public ApiResponse<FacilityInspectionRecordRecord> submitRecord(
             @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecordSubmitRequest request) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.inspection.record_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submitRecord(taskId, request));
     }
 
     @GetMapping("/tasks/{task_id}/records")
     public ApiResponse<PageResponse<FacilityInspectionRecordRecord>> listRecords(@PathVariable("task_id") String taskId) {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.inspection.view_assigned");
         return ApiResponse.ok(service.listRecords(taskId));
     }
 
@@ -100,5 +101,11 @@ public class FacilityInspectionController {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.supervisorConfirm(taskId, request));
+    }
+
+    private void requirePermission(String outsourcedPermission) {
+        AccessActor actor = authorizationService.currentActor();
+        authorizationService.requirePermission(
+                authorizationService.isOutsourcedVendor(actor) ? outsourcedPermission : PERM);
     }
 }

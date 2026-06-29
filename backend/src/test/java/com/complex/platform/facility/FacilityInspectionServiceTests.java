@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecordSubmitRequest;
@@ -20,8 +22,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /** Building inspection S3 unit tests: scheduling, state machine, records, abnormal event close loop. */
 class FacilityInspectionServiceTests {
@@ -36,6 +41,11 @@ class FacilityInspectionServiceTests {
         events = new ArrayList<>();
         service = new FacilityInspectionService(inspections, mock(AuditEventService.class),
                 mock(AuthorizationService.class), events::add);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -84,6 +94,48 @@ class FacilityInspectionServiceTests {
         assertThat(closed.status()).isEqualTo("closed");
         assertThat(closed.completedAt()).isNotNull();
         assertThat(events).isEmpty();
+    }
+
+    @Test
+    void outsourcedTaskListDetailAndRecordsAreLimitedToOwnAssigneeAndProject() {
+        FacilityInspectionService scoped = outsourcedService("usr_vendor_s", "proj_1");
+        inspections.insertTask(task("task_own", "pending", "usr_vendor_s", "proj_1"));
+        inspections.insertTask(task("task_other", "pending", "usr_vendor_b", "proj_1"));
+        inspections.insertTask(task("task_cross_project", "pending", "usr_vendor_s", "proj_2"));
+
+        PageResponse<FacilityInspectionTaskRecord> page = scoped.listTasks();
+
+        assertThat(page.items()).extracting(FacilityInspectionTaskRecord::id).containsExactly("task_own");
+        assertThat(scoped.findTaskById("task_own").id()).isEqualTo("task_own");
+        assertThatThrownBy(() -> scoped.findTaskById("task_other"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        assertThatThrownBy(() -> scoped.findTaskById("task_cross_project"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        assertThatThrownBy(() -> scoped.listRecords("task_other"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+    }
+
+    @Test
+    void outsourcedCanRecordOwnInspectionButCannotRecordOthersOrRecheck() {
+        FacilityInspectionService scoped = outsourcedService("usr_vendor_s", "proj_1");
+        inspections.insertTask(task("task_own", "pending", "usr_vendor_s", "proj_1"));
+        inspections.insertTask(task("task_other", "pending", "usr_vendor_b", "proj_1"));
+        inspections.insertTask(task("task_other_started", "in_progress", "usr_vendor_b", "proj_1"));
+        inspections.insertTask(task("task_rectifying", "rectifying", "usr_vendor_s", "proj_1"));
+
+        assertThatThrownBy(() -> scoped.start("task_other", action("k_start_other")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        FacilityInspectionTaskRecord started = scoped.start("task_own", action("k_start_own"));
+        FacilityInspectionRecordRecord record = scoped.submitRecord(started.id(), submit("normal", null, "k_submit_own"));
+
+        assertThat(started.status()).isEqualTo("in_progress");
+        assertThat(record.taskId()).isEqualTo("task_own");
+        assertThat(inspections.tasks.get("task_own").status()).isEqualTo("closed");
+        assertThatThrownBy(() -> scoped.submitRecord("task_other_started", submit("normal", null, "k_submit_other")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        assertThatThrownBy(() -> scoped.recheck("task_rectifying", action("k_recheck")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
     }
 
     @Test
@@ -169,6 +221,25 @@ class FacilityInspectionServiceTests {
         return new FacilityInspectionRecordSubmitRequest(result, List.of("https://cdn.example/inspection.jpg"),
                 "qr_1", new BigDecimal("31.2304"), new BigDecimal("121.4737"),
                 List.of(Map.of("item", "door", "result", result)), "note", abnormalNote, "usr_inspector", key);
+    }
+
+    private FacilityInspectionTaskRecord task(String id, String status, String assigneeId, String projectId) {
+        Instant now = Instant.now();
+        return new FacilityInspectionTaskRecord(id, null, "security", status, "task " + id, "manual",
+                List.of(), assigneeId, LocalDate.parse("2026-06-26"), LocalDate.parse("2026-06-26"),
+                "in_progress".equals(status) ? now : null, null, null, projectId, "sp_1", now, now);
+    }
+
+    private FacilityInspectionService outsourcedService(String userId, String projectId) {
+        authenticateOutsourced(userId, projectId);
+        return new FacilityInspectionService(inspections, mock(AuditEventService.class),
+                new AuthorizationService(null), events::add);
+    }
+
+    private void authenticateOutsourced(String userId, String projectId) {
+        AccessActor actor = new AccessActor(userId, userId, "outsourced_vendor", projectId, null, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
     }
 
     private void seedPolicy(FacilityWorkOrderServiceTests.InMemoryWorkOrderRepository workOrders,
