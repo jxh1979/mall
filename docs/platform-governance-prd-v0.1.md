@@ -124,6 +124,25 @@
 
 输出结果：形成“业务发生在哪里”的空间基础。
 
+### 6.2.1 空间业务名词与 space_type 枚举对照
+
+业务人员所说的楼栋/楼层/铺位/公区等，统一落在 `spaces` 一张自引用树（`parent_space_id` 表达层级）+ `space_type` 类型字段上。权威枚举取值见 OpenAPI `SpaceRequest.space_type`，对照如下：
+
+| 业务名词（HTML / 本 PRD） | spaces.space_type | 层级与关键字段 | 说明 |
+|---|---|---|---|
+| 综合体项目 | 非 spaces（`projects` 表） | `spaces.project_id` 指向 | 所有空间必须归属某综合体项目 |
+| 楼栋 / 商场本体 | `mall` | 树根，`parent_space_id` 为空 | 一个综合体下可有多栋，各为一条 mall |
+| 楼层 | `floor` | parent=楼栋；`floor_no` 记楼层号 | |
+| 商场区块 / 区域 / 公共区域 | `zone` | parent=楼层 | 区块与区域同用 zone，按 parent 层级区分；未绑定商户的 zone 即公区 |
+| 铺位（正式商铺） | `shop` | parent=区块/区域 | 铺位级 P0 后置、P1 落地（见 §5 区块/铺位裁剪决策） |
+| 摊位 / 快闪位 | `booth` | parent=区块/区域 | |
+| 酒吧桌台点位 | `bar_table` | parent=区域 | 物理点位口径，运营桌台见酒吧域 |
+| 设备 / 设施点位 | `facility` | parent=楼层/区域 | 供设备绑定 |
+| 其他点位 | `other` | — | 入口、摄像头点位等未归类点位 |
+
+字段补充：`polygon_points` 存平面图多边形，`area_square_meter` 存面积。
+合同绑定：合同经营范围与铺位绑定走 contract-space scope（迁移 `V080__contract_scope_and_spaces`、`V162`；空间出租状态见 `SpaceRentalStatusRecord`，用于防止同一铺位重复出租）。
+
 ### 6.3 建立业态与经营分类
 
 1. 平台运营维护基础业态。
