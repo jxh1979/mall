@@ -506,6 +506,16 @@ public class BarEntryService {
         if (!reservation.barId().equals(verificationBarId)) {
             throw ApiException.conflict("BAR_SCOPE_MISMATCH", "card-seat invitation entry is limited to the reserved bar");
         }
+        // B2⑥ 邀请函 HMAC 入场闸强制核验（此前只签不验、matches() 为死代码）：按权威预订字段重算规范串、常量时间比对
+        // 存储签名。失配=邀请函绑定（容量/卡座/令牌）被篡改（如绕过签发直改库提容量），拒绝入场、不放行免通票。
+        int signedCapacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
+        if (!invitationSigner.matches(
+                invitationSigner.canonical(reservation.id(), reservation.barId(), reservation.tableId(),
+                        signedCapacity, reservation.invitationToken()),
+                reservation.invitationSignature())) {
+            throw ApiException.forbidden("BAR_INVITATION_SIGNATURE_INVALID",
+                    "card-seat invitation signature is invalid (tampered binding)");
+        }
         String memberIdentifier = requireText(actual.credentialPayload(), "credential_payload");
         List<BarReservationInvitationMemberRecord> members = repository.listInvitationMembers(reservation.id());
         BarReservationInvitationMemberRecord member = members.stream()

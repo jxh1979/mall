@@ -788,6 +788,33 @@ class BarServiceTests {
     }
 
     @Test
+    void cardSeatInvitationEntryRejectsTamperedSignature() {
+        // B2⑥ 邀请函 HMAC 入场闸强制核验：绕过签发直改库篡改邀请函绑定（如签名被替换）→ 门口扫码必须拒。
+        BarReservationRecord reservation = createReservation("inv-sig", "bar_1", 2);
+        service.issueReservationInvitation(reservation.id(), new BarInvitationActionRequest("inv-issue-sig", null));
+        Instant now = Instant.parse("2026-06-20T21:30:00Z");
+        barRepository.saveInvitationMember(new BarReservationInvitationMemberRecord(
+                "invm-sig-friend", reservation.id(), "bar_1", "friend-sig", "cust-friend-sig",
+                false, "confirmed", now, null, null, now, now));
+        // 篡改：保留所有权威字段，仅把防伪签名替换为伪造串（模拟绕过签发改库）。
+        BarReservationRecord issued = barRepository.findReservationById(reservation.id()).orElseThrow();
+        barRepository.saveReservation(new BarReservationRecord(
+                issued.id(), issued.barId(), issued.merchantId(), issued.tableId(), issued.customerId(),
+                issued.reservedAt(), issued.guestCount(), issued.allowedPassFreeGuestCount(),
+                issued.depositAmountCent(), issued.depositStatus(), issued.orderSource(), issued.salesStaffId(),
+                issued.status(), issued.createdTerminal(), issued.deviceId(), issued.evidenceAttachmentIds(),
+                issued.createdAt(), issued.updatedAt(), issued.depositRule(), issued.depositIntentId(),
+                issued.depositPaidAt(), issued.depositSettlement(), issued.invitationToken(),
+                "forged-signature", issued.invitationCapacity(), issued.invitationStatus(),
+                issued.invitationIssuedAt()));
+
+        assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
+                verification("entry-tampered", "friend-sig", "bar_1")))
+                .isInstanceOf(ApiException.class)
+                .extracting("code").isEqualTo("BAR_INVITATION_SIGNATURE_INVALID");
+    }
+
+    @Test
     void deliveryRejectsStockManagedProductWhenInventoryIsInsufficientAndKeepsItemUndelivered() {
         BarReservationRecord reservation = createReservation("reservation-stock", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
