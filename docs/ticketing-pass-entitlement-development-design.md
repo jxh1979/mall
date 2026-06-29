@@ -163,11 +163,13 @@ erDiagram
 
 - 支付成功后才能出票。
 - 出票后退款必须检查权益使用情况（F-TXN-03 已强制：`TicketRefundService.requestRefund` 发起退款前核查本订单权益核销状态）。
-- 已核销即整票不可退（F-TXN-03 用户口径「多次/多人票一经购买即限时用完；核销一张则整票不可退、核销后不可退」）：本订单**任一**权益 `usedTimes>0`（被冲正回滚归零则视为未核销）→ 拒退 `TICKET_ORDER_VERIFIED_NO_REFUND`；仅**全未核销**可原渠道退（其 pending 积分从未 confirmed，天然不计分）。
+- 退款按**票实例**判断（业务 HTML `business-system-map` 退款行 / `business-enum` 退款规则，2026-06-29 用户裁决）：一张「票」= 一行 `issued_entitlements`（一人票 `total_times=1`；多人票/多次票 `total_times>1`）。可退性按**每张票**判定——该票 `used_times=0`（被冲正回滚归零视为未核销）可退，可一次退多张或只退一张；`used_times>0` 则该票整张不可退（多人/多次票任一权益或门票已核销同此）；**同一订单内其他完全未核销的票仍可退**，不再整单一刀切。已核销票拒退用票实例级错误码 `TICKET_ENTITLEMENT_VERIFIED_NO_REFUND`（不再用订单级 `TICKET_ORDER_VERIFIED_NO_REFUND`）；全未核销票的 pending 积分从未 confirmed，天然不计分。
+  - ⚠️ **代码待改（gap，F-TXN-03 收口前）**：当前 `TicketRefundService.requestRefund` 仍为**订单级**拒退（本订单任一权益 `usedTimes>0` 即整单拒退 `TICKET_ORDER_VERIFIED_NO_REFUND`），与上述票实例新口径冲突；需改为按 `issued_entitlements` 逐张判定可退性、支持退子集（请求体 `entitlement_ids`），积分冲减按被退票实例对应份额计算。
   - 注：积分「按核销次数精确计分」（多次/多人票按核销张数比例 confirm）**已完成（V151，F-TXN-03 收尾）**：`customer_points_ledger.confirmed_amount` 记已确认份额，`LoyaltyService.confirmPoints` 改 set-confirmed-to-target（`target=floor(总额×Σused/Σtotal)`），`TicketVerificationService` 核销与冲正两路均按订单 Σused/Σtotal 对齐确认份额（冲正一张按份回滚 1/Σtotal，取代原冲正全额 deduct）；单次票（1/1）口径与原「支付 pending → 核销 confirm」等价。
 - 门票到期生命周期（F-TXN-03，piece②）：系统定时任务 `TicketingService.processExpiredPaidEntitlements`（按权益 `valid_to < now` 实时判定，由 `TicketOrderExpiryJob` 触发、开关 `ticket.order.expiry.scheduled.enabled` 默认关）——
-  - **到期未用自动退款**：该单**全未核销**且已付（amount>0）→ 整单**原渠道自动退款**（系统直批 `autoRefundExpiredUnusedOrder`：建 approved 退款 + 冻结权益 active→refunded + 全额回补库存 + 发打款事件；跳过商户范围闸、系统动作；全未核销故无已确认积分可冲减、不发 points deduct）；已有退款在途/完成则交由退款链、跳过。
-  - **一张用后其余作废**：该单**已有核销**→ 其余到期未用权益置 `forfeited`（`forfeitEntitlement`，不退款，与「核销后不可退」一致）；0 元 / 非 paid 的到期未用权益亦作废以止反复扫描。`issued_entitlements.status` 无 DB CHECK，新增 `forfeited` 值无需迁移。
+  - **到期按票实例处理（2026-06-29 用户裁决，业务 HTML 到期处理行）**：到期未用的票按**每张** `issued_entitlements` 判定、不再看整单——`used_times=0` 的票逐张**原渠道自动退款**（`autoRefundExpiredUnusedOrder` 同款动作：建 approved 退款 + 权益 active→refunded + 回补库存 + 打款事件；系统动作跳过商户范围闸；未核销无已确认积分、不发 points deduct）；已有退款在途/完成则跳过。
+  - **已核销票作废、不连坐未核销票**：`used_times>0` 的到期票置 `forfeited`（`forfeitEntitlement`，不退款，与「核销后不可退」一致）；**同单其他完全未核销的票不受影响、仍按上一条逐张自动退款**（旧口径「同单有核销则其余未核销一律作废」已废止）。0 元 / 非 paid 的到期未用权益亦作废以止反复扫描。`issued_entitlements.status` 无 DB CHECK，新增 `forfeited` 值无需迁移。
+  - ⚠️ **代码待改（gap）**：当前 `processExpiredPaidEntitlements` / `autoRefundExpiredUnusedOrder` / `forfeitEntitlement` 仍按**整单**口径（全未核销才退、有核销则其余作废），需改为按票实例逐张退款 / 逐张作废。
 
 ### 4.3 票实例状态
 
@@ -429,13 +431,14 @@ sequenceDiagram
 7. 对已生成结算明细做冲正。
 8. 写入退款、冲正、权益状态变化事件。
 
-退款粒度口径（D9，P0 默认）：
+退款粒度口径（D9 + 2026-06-29 票实例裁决，P0 默认）：
 
-> 修订说明（2026-06-07）：补退款 P0 默认粒度。按《统一口径基准》D9，P0 客人侧按订单/票发起退款，系统内部按权益逐项冲正与金额拆分；复杂退款规则引擎列 P1。回填 PRD §12 待确认。依据 finding ticket-7。
+> 修订说明（2026-06-07）：补退款 P0 默认粒度。按《统一口径基准》D9，P0 客人侧按订单/票发起退款，系统内部按权益逐项冲正与金额拆分。
+> 修订说明（2026-06-29，用户裁决）：**票实例级可退判定升为 P0**（不再降级为 P1 复杂引擎）——退款申请必须能按 `issued_entitlements`（票）选择要退该订单下的哪几张：未核销票可退、可退子集，已核销票整张拒退，同单其他未核销票仍可退；仅「比例引擎、自定义可退规则」仍列 P1。依据业务 HTML `business-system-map` 退款/到期行、`business-enum` 退款规则。
 
-- 客人侧：P0 退款入口按**订单或票**发起（`POST /api/refunds` 传订单号或票号）。
-- 系统内部：按 `refund_entitlement_items` 对涉及权益**逐项冲正**并做金额拆分（单位：分）。
-- 复杂退款规则（比例引擎、自定义可退判定、按单项权益独立发起）列 P1（见 §14）。
+- 客人侧：P0 退款入口按**订单或票实例**发起（`POST /api/refunds` 传订单号，并可传 `entitlement_ids` 指定要退的票实例；不传则退该单全部可退票）。
+- 系统内部：按 `refund_entitlement_items` 对**被选中且未核销**的票实例逐项冲正并做金额拆分（单位：分）；已核销票实例按 `TICKET_ENTITLEMENT_VERIFIED_NO_REFUND` 拒退。
+- 复杂退款规则（比例引擎、自定义可退判定）列 P1（见 §14）。
 
 退款金额计算原则：
 

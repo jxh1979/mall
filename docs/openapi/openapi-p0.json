@@ -29794,6 +29794,15 @@
             "type": "string",
             "description": "金额字段，单位为分；必须为非负整数，所有展示层再转换为元。",
             "maxLength": 2048
+          },
+          "entitlement_ids": {
+            "type": "array",
+            "description": "票实例（issued_entitlements）ID 列表；按票实例选择要退该订单下的哪几张未核销票，可只退一张或退多张，不传则退该订单全部可退票；已核销的票实例不可退，传入将按票实例拒退 TICKET_ENTITLEMENT_VERIFIED_NO_REFUND。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 200
           }
         }
       },

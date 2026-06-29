@@ -44,6 +44,8 @@
 > 修订说明（2026-06-08 三轮收口）：`ticket_inventories`（票库存）为**票务库存唯一权威**（本迁移 002），foundation §6B.6 的 `ticket_inventory`(单数)仅作"指针：以本表为权威，不重复建表"。本表已补 `version`（乐观锁版本号）承载库存桶并发口径，完整字段以 settlement-breakdown §8.4 为准。依据 R1、finding newtable-fk-1。
 >
 > 修订说明（2026-06-08 三轮收口）：`refund_orders`（退款单）为**退款唯一权威**（p0-task-list DB-014 的 refund_records 统一改指本表）；已补退款资金流向字段 `refund_direction`/`refunded_by`/`original_payment_channel`，完整字段以 settlement-breakdown §8.12 为准。依据 R2、finding fix2-conflict-2。
+>
+> 修订说明（2026-06-29，票实例退款裁决）：退款可退性按**票实例**（`issued_entitlements` 每行，`used_times=0` 可退）判定，`refund_orders` / `refund_entitlement_items`（V031 退款明细行）须能表达「该订单下退哪几张票实例」——退款明细行绑定到具体 `issued_entitlements.id`，积分冲减按被退票实例对应份额（与 V151 `confirmed_amount` 份额一致）；已核销票实例拒退。依据业务 HTML 退款/到期行、`business-enum` 退款规则。
 
 ## 3. 关键设计说明
 
