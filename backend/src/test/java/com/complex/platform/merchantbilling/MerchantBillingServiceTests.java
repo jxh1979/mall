@@ -58,7 +58,9 @@ class MerchantBillingServiceTests {
                 financeRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                noScopeAuth()
+                noScopeAuth(),
+                null,
+                null
         );
     }
 
@@ -659,7 +661,9 @@ class MerchantBillingServiceTests {
                 financeRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                auth
+                auth,
+                null,
+                null
         );
     }
 
@@ -670,7 +674,9 @@ class MerchantBillingServiceTests {
                 financeRepository,
                 new IdempotencyService(sharedRepo, new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                auth
+                auth,
+                null,
+                null
         );
     }
 }

@@ -42,7 +42,7 @@ class ContractServiceTests {
     void setUp() {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
-        service = new ContractService(repo, mock(AuditEventService.class), authz);
+        service = new ContractService(repo, mock(AuditEventService.class), authz, null, null);
     }
 
     private ContractRecord newDraft() {
@@ -393,6 +393,17 @@ class ContractServiceTests {
         @Override
         public int markContractsExpired(LocalDate asOf) {
             return 0;
+        }
+
+        @Override
+        public List<ContractRecord> listEffectiveContractsExpiringBetween(
+                LocalDate fromExclusive,
+                LocalDate toInclusive
+        ) {
+            return contracts.values().stream()
+                    .filter(c -> "effective".equals(c.lifecycleStatus()))
+                    .filter(c -> c.expiryDate().isAfter(fromExclusive) && !c.expiryDate().isAfter(toInclusive))
+                    .toList();
         }
 
         @Override

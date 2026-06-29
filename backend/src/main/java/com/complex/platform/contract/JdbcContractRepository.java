@@ -361,6 +361,19 @@ class JdbcContractRepository implements ContractRepository {
     }
 
     @Override
+    public List<ContractRecord> listEffectiveContractsExpiringBetween(LocalDate fromExclusive, LocalDate toInclusive) {
+        return jdbcTemplate.query("SELECT " + CONTRACT_COLS + """
+                  FROM contracts
+                 WHERE lifecycle_status = 'effective'
+                   AND expiry_date > :from_exclusive
+                   AND expiry_date <= :to_inclusive
+                 ORDER BY expiry_date ASC, id
+                """, new MapSqlParameterSource()
+                .addValue("from_exclusive", fromExclusive)
+                .addValue("to_inclusive", toInclusive), this::mapContract);
+    }
+
+    @Override
     public List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf) {
         return jdbcTemplate.query("""
                 SELECT s.id AS space_id, s.space_name, COALESCE(s.status, '') AS space_status,

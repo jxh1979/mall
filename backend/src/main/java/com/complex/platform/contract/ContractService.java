@@ -15,17 +15,27 @@ import com.complex.platform.contract.dto.ContractResolveDisputeRequest;
 import com.complex.platform.contract.dto.ContractSettleRequest;
 import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.governance.PlatformRepository;
+import com.complex.platform.notification.NotificationService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 合同租赁全生命周期（V162 重建，据 contract-lifecycle-prd-v1.0 V1.1 + M1 §2 + 用户裁决）。
@@ -34,6 +44,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ContractService {
 
+    private static final Logger log = LoggerFactory.getLogger(ContractService.class);
+
+    private static final String MERCHANT_FEE_DOMAIN = "merchant_fee";
+    private static final String MERCHANT_FEE_RENEWAL_EVENT = "renewal";
+    private static final String MERCHANT_FEE_RENEWAL_TEMPLATE = "sms.merchant_fee.renewal";
     private static final Set<String> COMMISSION_MODES = Set.of(
             "guarantee_or_commission_higher", "fixed_ratio", "tiered_ratio", "guarantee_plus_commission");
     private static final Set<String> ENERGY_BASES = Set.of("none", "by_contract", "by_area", "by_usage");
@@ -45,12 +60,17 @@ public class ContractService {
     private final ContractRepository repository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final NotificationService notificationService;
+    private final PlatformRepository platformRepository;
 
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService, NotificationService notificationService,
+            PlatformRepository platformRepository) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.notificationService = notificationService;
+        this.platformRepository = platformRepository;
     }
 
     // ============ 起草 ============
@@ -412,6 +432,107 @@ public class ContractService {
                     "batch", null, null, Map.of("count", count, "as_of", asOf.toString()));
         }
         return count;
+    }
+
+    /**
+     * 商户费用续约短信提醒扫描入口。只追加通知 hook：不变更合同状态、不发起续约流程、不写业务表。
+     * 由 ContractRenewalNotificationJob 薄 @Scheduled 包装调用，亦供单测直调对拍通知日志。
+     */
+    public void processMerchantFeeRenewalNotifications(LocalDate asOf, int noticeDays) {
+        if (notificationService == null) {
+            return;
+        }
+        LocalDate baseDate = asOf == null ? LocalDate.now(ZoneOffset.UTC) : asOf;
+        LocalDate untilDate = baseDate.plusDays(Math.max(0, noticeDays));
+        List<ContractRecord> contracts;
+        try {
+            contracts = repository.listEffectiveContractsExpiringBetween(baseDate, untilDate);
+        } catch (RuntimeException exception) {
+            log.warn("failed to list contracts for merchant fee renewal notification", exception);
+            return;
+        }
+        for (ContractRecord contract : contracts) {
+            notifyMerchantFeeRenewalAfterCommit(contract, baseDate);
+        }
+    }
+
+    private void notifyMerchantFeeRenewalAfterCommit(ContractRecord contract, LocalDate asOf) {
+        try {
+            if (TransactionSynchronizationManager.isSynchronizationActive()
+                    && TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        notifyMerchantFeeRenewalSafely(contract, asOf);
+                    }
+                });
+                return;
+            }
+            notifyMerchantFeeRenewalSafely(contract, asOf);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "merchant fee renewal notification registration failed: contract_id={}",
+                    contract == null ? null : contract.id(),
+                    exception);
+        }
+    }
+
+    private void notifyMerchantFeeRenewalSafely(ContractRecord contract, LocalDate asOf) {
+        if (contract == null) {
+            return;
+        }
+        try {
+            notificationService.notify(
+                    MERCHANT_FEE_DOMAIN,
+                    MERCHANT_FEE_RENEWAL_EVENT,
+                    resolveMerchantPrimaryContactPhone(contract.merchantId()),
+                    MERCHANT_FEE_RENEWAL_TEMPLATE,
+                    merchantFeeRenewalParams(contract, asOf),
+                    "mfrenewal:" + contract.id() + ":" + contract.expiryDate());
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "merchant fee renewal notification failed: contract_id={}, idempotency_key={}",
+                    contract.id(),
+                    "mfrenewal:" + contract.id() + ":" + contract.expiryDate(),
+                    exception);
+        }
+    }
+
+    private Map<String, Object> merchantFeeRenewalParams(ContractRecord contract, LocalDate asOf) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        putIfNotNull(params, "contract_id", contract.id());
+        putIfNotNull(params, "merchant_id", contract.merchantId());
+        putIfNotNull(params, "project_id", contract.projectId());
+        putIfNotNull(params, "effective_date", contract.effectiveDate());
+        putIfNotNull(params, "expiry_date", contract.expiryDate());
+        if (contract.expiryDate() != null && asOf != null) {
+            params.put("days_to_expiry", ChronoUnit.DAYS.between(asOf, contract.expiryDate()));
+        }
+        return params;
+    }
+
+    private String resolveMerchantPrimaryContactPhone(String merchantId) {
+        String normalizedMerchantId = trimToNull(merchantId);
+        if (normalizedMerchantId == null || platformRepository == null) {
+            return null;
+        }
+        try {
+            return platformRepository.listMerchants().stream()
+                    .filter(merchant -> normalizedMerchantId.equals(merchant.id()))
+                    .findFirst()
+                    .map(MerchantRecord::contactPhone)
+                    .map(this::trimToNull)
+                    .orElse(null);
+        } catch (RuntimeException exception) {
+            log.warn("failed to resolve merchant primary contact phone: merchant_id={}", normalizedMerchantId, exception);
+            return null;
+        }
+    }
+
+    private void putIfNotNull(Map<String, Object> params, String key, Object value) {
+        if (value != null) {
+            params.put(key, value);
+        }
     }
 
     // ============ 配置：审批链 + 到期着色 ============

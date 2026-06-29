@@ -7,16 +7,20 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceRepository;
+import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.governance.PlatformRepository;
 import com.complex.platform.merchantbilling.dto.MerchantBillConfirmRequest;
 import com.complex.platform.merchantbilling.dto.MerchantBillCreateRequest;
 import com.complex.platform.merchantbilling.dto.MerchantBillDisputeRequest;
 import com.complex.platform.merchantbilling.dto.MerchantBillDunningRequest;
 import com.complex.platform.merchantbilling.dto.MerchantBillLineRequest;
+import com.complex.platform.notification.NotificationService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -25,14 +29,21 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class MerchantBillingService {
 
+    private static final Logger log = LoggerFactory.getLogger(MerchantBillingService.class);
+
     private static final String BUSINESS_TYPE = "merchant_bill";
     private static final String CURRENCY_CNY = "CNY";
+    private static final String MERCHANT_FEE_DOMAIN = "merchant_fee";
     private static final Set<String> FEE_TYPES = Set.of("rent", "property_fee", "energy_fee", "cam", "deposit", "other");
     private static final Set<String> SOURCE_TYPES = Set.of("ar_ap", "manual", "contract", "meter", "billing_batch");
     private static final Set<String> CONFIRMABLE_STATUSES = Set.of("issued", "viewed", "overdue");
@@ -45,19 +56,25 @@ public class MerchantBillingService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final NotificationService notificationService;
+    private final PlatformRepository platformRepository;
 
     public MerchantBillingService(
             MerchantBillingRepository repository,
             FinanceRepository financeRepository,
             IdempotencyService idempotencyService,
             AuditEventService auditEventService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            NotificationService notificationService,
+            PlatformRepository platformRepository
     ) {
         this.repository = repository;
         this.financeRepository = financeRepository;
         this.idempotencyService = idempotencyService;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.notificationService = notificationService;
+        this.platformRepository = platformRepository;
     }
 
     public PageResponse<MerchantBillRecord> listBills() {
@@ -186,6 +203,7 @@ public class MerchantBillingService {
                 request.idempotencyKey(),
                 Map.of("status", saved.status(), "ar_ap_item_id", saved.arApItemId())
         );
+        notifyMerchantFeeBillAfterCommit(saved);
         return saved;
     }
 
@@ -263,7 +281,198 @@ public class MerchantBillingService {
                 request.idempotencyKey(),
                 Map.of("dunning_channel", record.dunningChannel(), "status", record.status())
         );
+        notifyMerchantFeeDunningAfterCommit(existing, record);
         return record;
+    }
+
+    private void notifyMerchantFeeBillAfterCommit(MerchantBillRecord bill) {
+        if (notificationService == null) {
+            return;
+        }
+        registerNotificationAfterCommit(
+                () -> notifyMerchantFeeBillNow(bill),
+                "bill_id=" + (bill == null ? null : bill.id()));
+    }
+
+    private void notifyMerchantFeeDunningAfterCommit(
+            MerchantBillRecord bill,
+            MerchantBillDunningRecord dunning
+    ) {
+        if (notificationService == null) {
+            return;
+        }
+        registerNotificationAfterCommit(
+                () -> notifyMerchantFeeDunningNow(bill, dunning),
+                "dunning_id=" + (dunning == null ? null : dunning.id()));
+    }
+
+    private void registerNotificationAfterCommit(Runnable notification, String description) {
+        try {
+            if (TransactionSynchronizationManager.isSynchronizationActive()
+                    && TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        notification.run();
+                    }
+                });
+                return;
+            }
+            notification.run();
+        } catch (RuntimeException exception) {
+            log.warn("merchant fee notification registration failed: {}", description, exception);
+        }
+    }
+
+    private void notifyMerchantFeeBillNow(MerchantBillRecord bill) {
+        if (notificationService == null || bill == null) {
+            return;
+        }
+        String recipient = resolveMerchantPrimaryContactPhone(bill.merchantId());
+        for (String event : merchantFeeEvents(bill.lines())) {
+            notifyMerchantFeeSafely(
+                    event,
+                    recipient,
+                    "sms.merchant_fee." + event,
+                    merchantFeeBillParams(bill, event),
+                    "mfbill:" + bill.id() + ":" + event,
+                    bill.id());
+        }
+    }
+
+    private void notifyMerchantFeeDunningNow(MerchantBillRecord bill, MerchantBillDunningRecord dunning) {
+        if (notificationService == null || bill == null || dunning == null) {
+            return;
+        }
+        String recipient = resolveMerchantPrimaryContactPhone(bill.merchantId());
+        for (String event : merchantFeeEvents(bill.lines())) {
+            notifyMerchantFeeSafely(
+                    event,
+                    recipient,
+                    "sms.merchant_fee." + event,
+                    merchantFeeDunningParams(bill, dunning, event),
+                    "mfdun:" + dunning.id() + ":" + event,
+                    bill.id());
+        }
+    }
+
+    private void notifyMerchantFeeSafely(
+            String event,
+            String recipient,
+            String templateCode,
+            Map<String, Object> params,
+            String idempotencyKey,
+            String billId
+    ) {
+        try {
+            notificationService.notify(
+                    MERCHANT_FEE_DOMAIN,
+                    event,
+                    recipient,
+                    templateCode,
+                    params,
+                    idempotencyKey);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "merchant fee notification failed: event={}, bill_id={}, idempotency_key={}",
+                    event,
+                    billId,
+                    idempotencyKey,
+                    exception);
+        }
+    }
+
+    private Set<String> merchantFeeEvents(List<MerchantBillLineRecord> lines) {
+        LinkedHashSet<String> events = new LinkedHashSet<>();
+        if (lines == null) {
+            return events;
+        }
+        for (MerchantBillLineRecord line : lines) {
+            String event = merchantFeeEvent(line == null ? null : line.feeType());
+            if (event != null) {
+                events.add(event);
+            }
+        }
+        return events;
+    }
+
+    private String merchantFeeEvent(String feeType) {
+        String normalized = trimToNull(feeType);
+        if (normalized == null) {
+            return null;
+        }
+        return switch (normalized) {
+            case "rent" -> "rent";
+            case "energy_fee" -> "utilities";
+            case "property_fee" -> "property";
+            default -> null;
+        };
+    }
+
+    private Map<String, Object> merchantFeeBillParams(MerchantBillRecord bill, String event) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        putIfNotNull(params, "bill_id", bill.id());
+        putIfNotNull(params, "bill_no", bill.billNo());
+        putIfNotNull(params, "merchant_id", bill.merchantId());
+        putIfNotNull(params, "event", event);
+        putIfNotNull(params, "amount_cent", amountCentForEvent(bill, event));
+        putIfNotNull(params, "total_amount_cent", bill.totalAmountCent());
+        putIfNotNull(params, "currency", bill.currency());
+        putIfNotNull(params, "bill_period_start", bill.billPeriodStart());
+        putIfNotNull(params, "bill_period_end", bill.billPeriodEnd());
+        putIfNotNull(params, "due_date", bill.dueDate());
+        return params;
+    }
+
+    private Map<String, Object> merchantFeeDunningParams(
+            MerchantBillRecord bill,
+            MerchantBillDunningRecord dunning,
+            String event
+    ) {
+        Map<String, Object> params = merchantFeeBillParams(bill, event);
+        putIfNotNull(params, "dunning_id", dunning.id());
+        putIfNotNull(params, "dunning_channel", dunning.dunningChannel());
+        putIfNotNull(params, "dunning_status", dunning.status());
+        putIfNotNull(params, "message_template", dunning.messageTemplate());
+        putIfNotNull(params, "sent_at", dunning.sentAt());
+        return params;
+    }
+
+    private long amountCentForEvent(MerchantBillRecord bill, String event) {
+        if (bill.lines() == null) {
+            return 0L;
+        }
+        long sum = 0L;
+        for (MerchantBillLineRecord line : bill.lines()) {
+            if (line != null && event.equals(merchantFeeEvent(line.feeType()))) {
+                sum += line.amountCent();
+            }
+        }
+        return sum;
+    }
+
+    private String resolveMerchantPrimaryContactPhone(String merchantId) {
+        String normalizedMerchantId = trimToNull(merchantId);
+        if (normalizedMerchantId == null || platformRepository == null) {
+            return null;
+        }
+        try {
+            return platformRepository.listMerchants().stream()
+                    .filter(merchant -> normalizedMerchantId.equals(merchant.id()))
+                    .findFirst()
+                    .map(MerchantRecord::contactPhone)
+                    .map(this::trimToNull)
+                    .orElse(null);
+        } catch (RuntimeException exception) {
+            log.warn("failed to resolve merchant primary contact phone: merchant_id={}", normalizedMerchantId, exception);
+            return null;
+        }
+    }
+
+    private void putIfNotNull(Map<String, Object> params, String key, Object value) {
+        if (value != null) {
+            params.put(key, value);
+        }
     }
 
     private void validateCreateRequest(MerchantBillCreateRequest request) {

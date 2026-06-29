@@ -62,6 +62,9 @@ public interface ContractRepository {
     /** 到期转换：过 expiry_date 仍 effective 的合同 → expired，返回条数（替代旧 governance 到期 Job 路径）。 */
     int markContractsExpired(LocalDate asOf);
 
+    /** 续约提醒扫描：effective 且 expiry_date 落在 (fromExclusive, toInclusive] 的合同。 */
+    List<ContractRecord> listEffectiveContractsExpiringBetween(LocalDate fromExclusive, LocalDate toInclusive);
+
     /** 铺位租赁状态原始数据（每铺当前生效合同 + 距到期天数）；着色由 service 套用着色分类。 */
     List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf);
 
