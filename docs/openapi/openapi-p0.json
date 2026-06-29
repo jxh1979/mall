@@ -12244,6 +12244,15 @@
               "type": "string"
             },
             "description": "综合体项目隔离键"
+          },
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "商户级卡查询；空=综合体通用卡。"
           }
         ],
         "responses": {
@@ -25059,6 +25068,102 @@
           }
         }
       }
+    },
+    "/api/v1/loyalty/stored-value/merchant-refund-rules": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "configureStoredValueMerchantRefundRule",
+        "summary": "配置商户级储值卡退款规则（发卡商户自设可否退/比例）",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.merchant_refund_rule_configured",
+        "x-audit-event-failure": "stored_value.merchant_refund_rule_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueMerchantRefundRuleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getStoredValueMerchantRefundRule",
+        "summary": "查询商户级储值卡退款规则",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.merchant_refund_rule_viewed",
+        "x-audit-event-failure": "stored_value.merchant_refund_rule_view_failed",
+        "parameters": [
+          {
+            "name": "merchant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "发卡商户ID。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
@@ -27468,6 +27573,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/AccessGrantReviewRequest"
+            }
+          }
+        }
+      },
+      "StoredValueMerchantRefundRuleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueMerchantRefundRuleRequest"
             }
           }
         }
@@ -34643,6 +34758,11 @@
             "type": "string",
             "description": "支付渠道编码；必须使用后端枚举/配置字典取值。",
             "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "B1d⑤ 储值卡范围：非空=商户级卡（只能在该发卡商户消费、按商户隔离）；空=综合体通用卡。",
+            "maxLength": 64
           }
         }
       },
@@ -34659,6 +34779,11 @@
           "payment_intent_id": {
             "type": "string",
             "description": "充值绑定的 finance 支付意图 id。",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "B1d⑤ 储值卡范围：非空=商户级卡（只能在该发卡商户消费、按商户隔离）；空=综合体通用卡。",
             "maxLength": 64
           }
         }
@@ -34687,6 +34812,11 @@
             "type": "string",
             "description": "消费事由描述。",
             "maxLength": 255
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "B1d⑤ 储值卡范围：非空=商户级卡（只能在该发卡商户消费、按商户隔离）；空=综合体通用卡。",
+            "maxLength": 64
           }
         }
       },
@@ -34718,6 +34848,11 @@
           "close_account": {
             "type": "boolean",
             "description": "退款后余额为 0 时是否关闭账户。"
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "B1d⑤ 储值卡范围：非空=商户级卡（只能在该发卡商户消费、按商户隔离）；空=综合体通用卡。",
+            "maxLength": 64
           }
         }
       },
@@ -34735,6 +34870,11 @@
             "type": "string",
             "description": "冻结/解冻事由描述。",
             "maxLength": 255
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "B1d⑤ 储值卡范围：非空=商户级卡（只能在该发卡商户消费、按商户隔离）；空=综合体通用卡。",
+            "maxLength": 64
           }
         }
       },
@@ -37783,6 +37923,30 @@
             "type": "string",
             "description": "复核意见。",
             "maxLength": 1000
+          }
+        }
+      },
+      "StoredValueMerchantRefundRuleRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueMerchantRefundRuleRequest`；B1d⑤ phase3 商户级卡退款规则配置（发卡商户自设可否退/比例）。",
+        "additionalProperties": false,
+        "required": [
+          "merchant_id"
+        ],
+        "properties": {
+          "merchant_id": {
+            "type": "string",
+            "description": "发卡商户ID。",
+            "maxLength": 64
+          },
+          "refund_allowed": {
+            "type": "boolean",
+            "description": "是否允许退款；空=默认允许。"
+          },
+          "refund_ratio_bps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "退款比例（基点 0..10000，可退回客户的份额，余下商户留存）；空=默认 10000（全额）。"
           }
         }
       }

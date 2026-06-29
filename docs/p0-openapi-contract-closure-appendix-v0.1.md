@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 514 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 516 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 276 | 人工权限矩阵正文未覆盖 172 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1028 | 人工事件矩阵正文未覆盖 985 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 514 | 人工任务映射正文未逐项覆盖 508 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 320 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1032 | 人工事件矩阵正文未覆盖 989 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 516 | 人工任务映射正文未逐项覆盖 510 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 321 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -145,7 +145,7 @@
 | `customer.points.freeze` | staff-token | project | 2 | freezePointsAccount, unfreezePointsAccount | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.consume` | customer-token | customer | 1 | customerStoredValueConsume | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.freeze` | staff-token | project | 2 | freezeStoredValueAccount, unfreezeStoredValueAccount | OpenAPI 补充，以本附录为准 |
-| `customer.stored_value.refund` | staff-token | project | 1 | refundStoredValueAccount | OpenAPI 补充，以本附录为准 |
+| `customer.stored_value.refund` | staff-token | merchant, project | 3 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.topup` | customer-token | customer | 2 | customerStoredValueTopup, customerStoredValueSettle | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.view` | customer-token | customer | 1 | customerStoredValueAccount | OpenAPI 补充，以本附录为准 |
 | `energy.meter.manage` | staff-token | platform | 3 | listEnergyMeters, createEnergyMeter, updateEnergyMeter | OpenAPI 补充，以本附录为准 |
@@ -1229,6 +1229,10 @@
 | `staff.review_failed` | failure | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `stored_value.frozen` | success | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
 | `stored_value.frozen_failed` | failure | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
+| `stored_value.merchant_refund_rule_configured` | success | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.merchant_refund_rule_failed` | failure | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.merchant_refund_rule_view_failed` | failure | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.merchant_refund_rule_viewed` | success | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.refund` | success | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.refund_failed` | failure | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.unfrozen` | success | `unfreezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/unfreeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
@@ -1512,6 +1516,7 @@
 | BAR-酒吧经营 | `verifyBarReservationEntryAllowance` | `POST` | `/api/v1/bar/reservations/{id}/entry-allowance/verify` | 卡座免通票入场名额校验 | `bar.table.guest_checkin` | `bar.table_guest.entry_allowance_verified` / `bar.table_guest.entry_allowance_verify_failed` | staff_work_phone, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | tablet, web | operation 级补充 |
+| CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerMembershipBenefits` | `GET` | `/api/v1/customer/membership-benefits` | 客人当前生效会员权益 | `customer.membership.view` | `customer.membership_benefits_viewed` / `customer.membership_benefits_viewed_failed` | web, miniapp, app | operation 级补充 |
@@ -1526,6 +1531,7 @@
 | CUS-客人端 | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | 冻结会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.frozen` / `stored_value.frozen_failed` | web | operation 级补充 |
 | CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | web, miniapp, app | 已在任务映射正文出现 |
 | CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | 查询商户级储值卡退款规则 | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_viewed` / `stored_value.merchant_refund_rule_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | 付费会员档位列表（客人端公开展示） | `public` | `customer.membership_plans_viewed` / `customer.membership_plans_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | 客人付费会员列表 | `customer.membership.view` | `customer.memberships_viewed` / `customer.memberships_viewed_failed` | web, miniapp, app | operation 级补充 |
