@@ -182,6 +182,15 @@ public interface CustomerRepository {
         throw new UnsupportedOperationException("saveStoredValueTransaction not supported by this repository");
     }
 
+    // B1d⑤ phase3 商户级卡退款规则（发卡商户自设可否退/比例）。无配置=默认允许全额。
+    default Optional<StoredValueMerchantRefundRuleRecord> findStoredValueMerchantRefundRule(String merchantId) {
+        return Optional.empty();
+    }
+
+    default StoredValueMerchantRefundRuleRecord saveStoredValueMerchantRefundRule(StoredValueMerchantRefundRuleRecord rule) {
+        throw new UnsupportedOperationException("saveStoredValueMerchantRefundRule not supported by this repository");
+    }
+
     /** 幂等校验：按 idempotency_key 查已落库的储值流水。 */
     default Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdempotencyKey(String key) {
         return Optional.empty();

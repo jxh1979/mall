@@ -219,6 +219,19 @@ public class StoredValueService {
         if (account.balanceCent() < amountCent) {
             throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "refund exceeds remaining balance");
         }
+        // B1d⑤ phase3 商户级卡退款规则：仅对商户卡（merchantId 非空）应用发卡商户自设规则。
+        //   refund_allowed=false → 拒退；退款比例=实际退回客户的比例，余下为商户留存（手续费/违约金）。
+        //   综合体通用卡（merchantId 空）无规则=全额退（payout=amountCent），沿用既有行为。
+        long payoutCent = amountCent;
+        if (account.merchantId() != null) {
+            StoredValueMerchantRefundRuleRecord rule = repository.findStoredValueMerchantRefundRule(account.merchantId())
+                    .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(account.merchantId()));
+            if (!rule.refundAllowed()) {
+                throw ApiException.conflict("STORED_VALUE_REFUND_NOT_ALLOWED",
+                        "merchant card refund is not allowed by the issuing merchant");
+            }
+            payoutCent = amountCent * rule.refundRatioBps() / 10000L;
+        }
         long balanceAfter = account.balanceCent() - amountCent;
         String newStatus = closeAccount && balanceAfter == 0 ? "closed" : account.status();
         repository.saveStoredValueAccount(withBalanceAndStatus(account, balanceAfter, newStatus, now));
@@ -227,18 +240,43 @@ public class StoredValueService {
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
                         account.id(), customerId, "refund", -amountCent, balanceAfter,
                         null, reason, idempotencyKey, now));
-        // 退款打款：系统内余额已退回（上方）。实际打款路径由支付渠道开关决定——
+        // 退款打款：系统内余额已退回（上方）。实际打款金额=payoutCent（商户卡按比例）。打款路径由支付渠道开关决定——
         //   关（默认）→ 不调外部渠道，标 reserved（人工/内部确认打款，不阻塞）。
         //   开 → 路由到 PaymentGatewayPort.refund（无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
         com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.refund(
                 com.complex.platform.finance.gateway.PaymentGatewayRequest.of(
-                        "stored_value_refund", account.id(), amountCent, null));
+                        "stored_value_refund", account.id(), payoutCent, null));
         Map<String, Object> detail = consumeRefundDetail(account, amountCent, balanceAfter);
         detail.put("closed", newStatus.equals("closed"));
+        detail.put("payout_cent", payoutCent);
         detail.put("payout_gateway_status", gw.status().name());
         auditEventService.recordSuccess(EVENT_REFUND, "customer.stored_value.refund",
                 "customer_stored_value", account.id(), null, null, detail);
         return txn;
+    }
+
+    // ============================================================
+    // 商户级卡退款规则配置（B1d⑤ phase3，发卡商户自设可否退/比例）
+    // ============================================================
+
+    @Transactional
+    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
+    public StoredValueMerchantRefundRuleRecord configureMerchantRefundRule(String merchantId, boolean refundAllowed,
+                                                                           int refundRatioBps) {
+        if (merchantId == null || merchantId.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id is required");
+        }
+        if (refundRatioBps < 0 || refundRatioBps > 10000) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "refund_ratio_bps must be within [0,10000]");
+        }
+        Instant now = now();
+        return repository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
+                merchantId.trim(), refundAllowed, refundRatioBps, now, now));
+    }
+
+    public StoredValueMerchantRefundRuleRecord getMerchantRefundRule(String merchantId) {
+        return repository.findStoredValueMerchantRefundRule(merchantId)
+                .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchantId));
     }
 
     // ============================================================

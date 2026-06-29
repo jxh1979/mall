@@ -5,6 +5,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.LoyaltyFreezeRequest;
 import com.complex.platform.customer.dto.MembershipPlanRequest;
 import com.complex.platform.customer.dto.StoredValueFreezeRequest;
+import com.complex.platform.customer.dto.StoredValueMerchantRefundRuleRequest;
 import com.complex.platform.customer.dto.StoredValueRefundRequest;
 import java.time.Instant;
 import java.util.List;
@@ -121,6 +122,25 @@ public class LoyaltyController {
         return ApiResponse.ok(storedValueService.refund(customerId, request.projectId(), request.merchantId(),
                 request.amountCent() == null ? 0L : request.amountCent(), request.reason(),
                 Boolean.TRUE.equals(request.closeAccount()), request.idempotencyKey()));
+    }
+
+    // ---- B1d⑤ phase3：商户级卡退款规则配置（发卡商户自设可否退/比例）----
+
+    @PostMapping("/stored-value/merchant-refund-rules")
+    public ApiResponse<StoredValueMerchantRefundRuleRecord> configureMerchantRefundRule(
+            @RequestBody @jakarta.validation.Valid StoredValueMerchantRefundRuleRequest request
+    ) {
+        return ApiResponse.ok(storedValueService.configureMerchantRefundRule(
+                request.merchantId(),
+                request.refundAllowed() == null || request.refundAllowed(),
+                request.refundRatioBps() == null ? 10000 : request.refundRatioBps()));
+    }
+
+    @GetMapping("/stored-value/merchant-refund-rules/{merchant_id}")
+    public ApiResponse<StoredValueMerchantRefundRuleRecord> getMerchantRefundRule(
+            @PathVariable("merchant_id") String merchantId
+    ) {
+        return ApiResponse.ok(storedValueService.getMerchantRefundRule(merchantId));
     }
 
     // 积分转赠风控配置已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。

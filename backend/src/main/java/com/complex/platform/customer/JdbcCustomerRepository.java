@@ -1411,6 +1411,43 @@ class JdbcCustomerRepository implements CustomerRepository {
                 Map.of("now", timestampWithTimeZone(now)), this::mapMembership);
     }
 
+    // B1d⑤ phase3 商户级卡退款规则
+    @Override
+    public Optional<StoredValueMerchantRefundRuleRecord> findStoredValueMerchantRefundRule(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT merchant_id, refund_allowed, refund_ratio_bps, created_at, updated_at
+                  FROM stored_value_merchant_refund_rules WHERE merchant_id = :merchant_id
+                """, new MapSqlParameterSource().addValue("merchant_id", merchantId),
+                this::mapMerchantRefundRule).stream().findFirst();
+    }
+
+    @Override
+    public StoredValueMerchantRefundRuleRecord saveStoredValueMerchantRefundRule(StoredValueMerchantRefundRuleRecord rule) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_merchant_refund_rules (merchant_id, refund_allowed, refund_ratio_bps, created_at, updated_at)
+                VALUES (:merchant_id, :refund_allowed, :refund_ratio_bps, :created_at, :updated_at)
+                ON CONFLICT (merchant_id) DO UPDATE SET
+                    refund_allowed = EXCLUDED.refund_allowed,
+                    refund_ratio_bps = EXCLUDED.refund_ratio_bps,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", rule.merchantId())
+                .addValue("refund_allowed", rule.refundAllowed())
+                .addValue("refund_ratio_bps", rule.refundRatioBps())
+                .addValue("created_at", timestampWithTimeZone(rule.createdAt() == null ? java.time.Instant.now() : rule.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(rule.updatedAt() == null ? java.time.Instant.now() : rule.updatedAt())));
+        return rule;
+    }
+
+    private StoredValueMerchantRefundRuleRecord mapMerchantRefundRule(ResultSet rs, int rowNumber) throws SQLException {
+        return new StoredValueMerchantRefundRuleRecord(
+                rs.getString("merchant_id"),
+                rs.getBoolean("refund_allowed"),
+                rs.getInt("refund_ratio_bps"),
+                nullableInstant(rs, "created_at"),
+                nullableInstant(rs, "updated_at"));
+    }
+
     private CustomerStoredValueAccountRecord mapStoredValueAccount(ResultSet rs, int rowNumber) throws SQLException {
         return new CustomerStoredValueAccountRecord(
                 rs.getString("id"),

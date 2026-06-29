@@ -148,6 +148,38 @@ class MemberWalletServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_ACCOUNT_NOT_FOUND"));
     }
 
+    @Test
+    void merchantCardRefundRuleRejectsWhenNotAllowedAndConfigRoundTrips() {
+        // B1d⑤ phase3：商户配置「不可退」→ 该商户卡退款被拒；配置「可退+比例」→ 退款放行（按比例打款，余额全额扣减）。
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord m = service.topup("c1", null, "m1", 5_000L, "wechat", "tp-m1r");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "m1", m.id());
+
+        // 商户 m1 配「不可退」→ 退款被拒，余额不动。
+        service.configureMerchantRefundRule("m1", false, 10000);
+        assertThat(service.getMerchantRefundRule("m1").refundAllowed()).isFalse();
+        assertThatThrownBy(() -> service.refund("c1", null, "m1", 1_000L, "r", false, "rf-deny"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_REFUND_NOT_ALLOWED"));
+        assertThat(repo.storedValue.get("c1|null|m1").balanceCent()).isEqualTo(5_000L);
+
+        // 改配「可退、80%」→ 退款放行；余额按请求额全额扣减（差额为商户留存，打款按比例由渠道处理）。
+        service.configureMerchantRefundRule("m1", true, 8000);
+        service.refund("c1", null, "m1", 5_000L, "refund", true, "rf-ok");
+        assertThat(repo.storedValue.get("c1|null|m1").balanceCent()).isZero();
+        assertThat(repo.storedValue.get("c1|null|m1").status()).isEqualTo("closed");
+
+        // 通用卡不受商户退款规则约束（默认全额可退）。
+        PaymentIntentRecord p = service.topup("c1", null, null, 2_000L, "wechat", "tp-prjr");
+        finance.markPaymentIntentSucceeded(p.id());
+        service.settleTopup("c1", null, null, p.id());
+        service.refund("c1", null, null, 2_000L, "refund", true, "rf-prj");
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
+    }
+
     // ============================================================
     // 付费会员：开通→生效期、到期→expired、续费
     // ============================================================
@@ -436,6 +468,13 @@ class MemberWalletServiceTests {
         }
         @Override public CustomerStoredValueTransactionRecord saveStoredValueTransaction(CustomerStoredValueTransactionRecord t) {
             storedValueTxns.add(t); return t;
+        }
+        final Map<String, StoredValueMerchantRefundRuleRecord> refundRules = new java.util.LinkedHashMap<>();
+        @Override public Optional<StoredValueMerchantRefundRuleRecord> findStoredValueMerchantRefundRule(String mid) {
+            return Optional.ofNullable(refundRules.get(mid));
+        }
+        @Override public StoredValueMerchantRefundRuleRecord saveStoredValueMerchantRefundRule(StoredValueMerchantRefundRuleRecord r) {
+            refundRules.put(r.merchantId(), r); return r;
         }
         @Override public Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdempotencyKey(String k) {
             return storedValueTxns.stream().filter(t -> k != null && k.equals(t.idempotencyKey())).findFirst();
