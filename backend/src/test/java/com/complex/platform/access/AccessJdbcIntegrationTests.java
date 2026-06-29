@@ -1,13 +1,20 @@
 package com.complex.platform.access;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.auth.AuthService;
+import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -23,6 +30,14 @@ class AccessJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private AuthorizationService authorizationService;
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
     void migrationCreatesPermissionTablesAndSeedsAccessAndOpsPermissions() {
@@ -130,6 +145,138 @@ class AccessJdbcIntegrationTests {
                 "role_platform_admin:facility.site_entry.accept",
                 "role_platform_admin:facility.site_entry.review"
         );
+    }
+
+    @Test
+    void v180SeedsAuditorRolesTemplatesAsReadOnlyWithoutChangingApprovalFlags() {
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT data_scope FROM roles WHERE id = 'role_auditor_internal'
+                """, String.class)).isEqualTo("complex");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT data_scope FROM roles WHERE id = 'role_auditor_external'
+                """, String.class)).isEqualTo("project");
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM role_permissions
+                 WHERE role_id = 'role_auditor_internal'
+                 ORDER BY permission_code
+                """, String.class)).contains(
+                "finance.ar_ap.view",
+                "analytics.dashboard.view",
+                "amusement.maintenance.read",
+                "ticket.order.read"
+        );
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM role_permissions
+                 WHERE role_id = 'role_auditor_external'
+                 ORDER BY permission_code
+                """, String.class)).contains(
+                "finance.ar_ap.view",
+                "amusement.session.view",
+                "ticket.order.read"
+        );
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM role_permissions
+                 WHERE role_id IN ('role_auditor_internal', 'role_auditor_external')
+                   AND permission_code ~ '\\.(manage|approve|export|create|submit|review|accept|process|resolve|refund|adjust|assign)$'
+                """, Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM permission_template_items
+                 WHERE template_id IN ('tpl_auditor_internal', 'tpl_auditor_external')
+                   AND permission_code ~ '\\.(manage|approve|export|create|submit|review|accept|process|resolve|refund|adjust|assign)$'
+                """, Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_auditor_internal'
+                   AND data_scope <> 'complex'
+                """, Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_auditor_external'
+                   AND data_scope <> 'project'
+                """, Integer.class)).isZero();
+    }
+
+    @Test
+    void auditorReadOnlyAccessAndTemporaryGrantExpiryUseExistingAuthorizationEffects() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_auditor_internal",
+                "jdbc-auditor-internal",
+                "staff",
+                "complex_1",
+                null,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.assignUserRole("usr_jdbc_auditor_internal", "role_auditor_internal");
+        authenticate("usr_jdbc_auditor_internal", "jdbc-auditor-internal", "staff", "complex_1");
+
+        authorizationService.requirePermission("finance.ar_ap.view");
+        authorizationService.requirePermission("ticket.order.read");
+        assertPermissionDenied("finance.ar_ap.manage");
+
+        repository.createUser(new AccessUser(
+                "usr_jdbc_auditor_external",
+                "jdbc-auditor-external",
+                "staff",
+                "project_1",
+                null,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.createTemporaryGrant(new TemporaryGrant(
+                "22222222-2222-2222-2222-222222222222",
+                "usr_jdbc_auditor_external",
+                List.of("finance.ar_ap.view"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2099-01-01T00:00:00Z"),
+                false,
+                false,
+                "active",
+                "external audit window",
+                "seed-admin",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null,
+                null
+        ));
+        authenticate("usr_jdbc_auditor_external", "jdbc-auditor-external", "staff", "project_1");
+
+        authorizationService.requirePermission("finance.ar_ap.view");
+        assertPermissionDenied("finance.ar_ap.manage");
+
+        repository.createUser(new AccessUser(
+                "usr_jdbc_auditor_external_expired",
+                "jdbc-auditor-external-expired",
+                "staff",
+                "project_1",
+                null,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.createTemporaryGrant(new TemporaryGrant(
+                "33333333-3333-3333-3333-333333333333",
+                "usr_jdbc_auditor_external_expired",
+                List.of("finance.ar_ap.view"),
+                Instant.parse("2020-01-01T00:00:00Z"),
+                Instant.parse("2020-01-02T00:00:00Z"),
+                false,
+                false,
+                "active",
+                "expired external audit window",
+                "seed-admin",
+                Instant.parse("2020-01-01T00:00:00Z"),
+                null,
+                null
+        ));
+        authenticate("usr_jdbc_auditor_external_expired", "jdbc-auditor-external-expired", "staff", "project_1");
+        assertPermissionDenied("finance.ar_ap.view");
     }
 
     @Test
@@ -286,6 +433,30 @@ class AccessJdbcIntegrationTests {
 
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
+    }
+
+    private void authenticate(String id, String username, String accountType, String organizationId) {
+        AuthService.UserRecord user = new AuthService.UserRecord(
+                id,
+                username,
+                "hash",
+                accountType,
+                organizationId,
+                null,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                user,
+                "token",
+                List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
+        ));
+    }
+
+    private void assertPermissionDenied(String permissionCode) {
+        assertThatThrownBy(() -> authorizationService.requirePermission(permissionCode))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("PERMISSION_DENIED"));
     }
 
     private PermissionTemplate template(String id, String name, String sourceTemplateId) {

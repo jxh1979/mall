@@ -596,6 +596,52 @@ class AccessServiceTests {
     }
 
     @Test
+    void auditorOutsideTemplatePermissionNeedsApprovedTemporaryGrantBeforeUse() {
+        accessRepository.addPermission("finance.ar_ap.view", "medium", false);
+        accessRepository.markRequiresApproval("finance.ar_ap.manage", "high");
+        InMemorySupervisorReviewRepository reviewRepository = new InMemorySupervisorReviewRepository();
+        service = newAccessService(true, supervisorReviewService(reviewRepository));
+        accessRepository.users.put("usr_auditor_target", new AccessUser(
+                "usr_auditor_target", "auditor-target", "staff", "org_a", null, "active",
+                Instant.parse("2026-06-14T00:00:00Z")));
+        accessRepository.roles.put("role_auditor_internal", new RoleRecord(
+                "role_auditor_internal", "AUDITOR_INTERNAL", "Internal auditor", "complex", "active",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                List.of("finance.ar_ap.view"),
+                null));
+        accessRepository.assignUserRole("usr_auditor_target", "role_auditor_internal");
+        accessRepository.saveStaffLevelAssignment(new StaffLevelAssignment(
+                "usr_admin", "lvl_m10_upper", null, "CNY", null, "seed-org", null,
+                "test", Instant.parse("2026-06-14T00:00:00Z")));
+
+        authenticateAsOrgUser("usr_auditor_target", "auditor-target", "org_a");
+        authorizationService.requirePermission("finance.ar_ap.view");
+        assertThatThrownBy(() -> authorizationService.requirePermission("finance.ar_ap.manage"))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.status().value()).isEqualTo(403);
+                    assertThat(e.code()).isEqualTo("PERMISSION_DENIED");
+                });
+
+        authenticateAsOrgUser("usr_requester", "requester", "org_a");
+        AccessGrantRequestRecord pending = service.applyGrant(new AccessGrantApplyRequest(
+                "apply-auditor-temp-manage", "temporary access", List.of(), "temporary_permission",
+                "usr_auditor_target", null, null, null, null, null, null,
+                List.of("finance.ar_ap.manage"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2099-01-01T00:00:00Z"),
+                false,
+                "audit exception"));
+
+        authenticateAsPlatformAdmin("seed-org");
+        AccessGrantRequestRecord applied = service.reviewGrant(pending.id(), new AccessGrantReviewRequest(
+                "review-auditor-temp-manage", "approve", List.of(), "approve", "ok"));
+
+        assertThat(applied.status()).isEqualTo("applied");
+        authenticateAsOrgUser("usr_auditor_target", "auditor-target", "org_a");
+        authorizationService.requirePermission("finance.ar_ap.manage");
+    }
+
+    @Test
     void grantSummaryReportsFrequentTemporaryRequestsByPositionAndUser() {
         Instant now = Instant.now();
         accessRepository.users.put("usr_summary", new AccessUser(
