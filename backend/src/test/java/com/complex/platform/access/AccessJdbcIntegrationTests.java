@@ -91,6 +91,48 @@ class AccessJdbcIntegrationTests {
     }
 
     @Test
+    void v179SeedsConstructionSiteEntryPermissionsAndColumns() {
+        assertThat(regclass("site_entry_reports")).isEqualTo("site_entry_reports");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT column_name
+                  FROM information_schema.columns
+                 WHERE table_name = 'site_entry_reports'
+                   AND column_name IN ('planned_start_date', 'planned_end_date', 'vendor_user_id')
+                 ORDER BY column_name
+                """, String.class)).containsExactly("planned_end_date", "planned_start_date", "vendor_user_id");
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM role_permissions
+                 WHERE role_id = 'role_outsourced_construction'
+                 ORDER BY permission_code
+                """, String.class)).containsExactly(
+                "facility.site_entry.create_assigned",
+                "facility.site_entry.submit_assigned",
+                "facility.site_entry.view_assigned"
+        );
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM role_permissions
+                 WHERE role_id = 'role_outsourced_construction'
+                   AND permission_code IN ('facility.site_entry.review', 'facility.site_entry.accept')
+                """, Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT role_id || ':' || permission_code
+                  FROM role_permissions
+                 WHERE role_id IN ('role_platform_admin', 'role_ops_manager', 'role_facility_manager')
+                   AND permission_code IN ('facility.site_entry.review', 'facility.site_entry.accept')
+                 ORDER BY role_id, permission_code
+                """, String.class)).containsExactly(
+                "role_facility_manager:facility.site_entry.accept",
+                "role_facility_manager:facility.site_entry.review",
+                "role_ops_manager:facility.site_entry.accept",
+                "role_ops_manager:facility.site_entry.review",
+                "role_platform_admin:facility.site_entry.accept",
+                "role_platform_admin:facility.site_entry.review"
+        );
+    }
+
+    @Test
     void migrationCreatesStaffLevelTablesAndSeedsThirtyContiguousRanks() {
         assertThat(regclass("staff_levels")).isEqualTo("staff_levels");
         assertThat(regclass("staff_level_assignments")).isEqualTo("staff_level_assignments");
