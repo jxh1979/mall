@@ -288,7 +288,7 @@ public class StoredValueService {
     private CustomerStoredValueAccountRecord withBalanceAndStatus(CustomerStoredValueAccountRecord account,
                                                                   long balanceCent, String status, Instant now) {
         return new CustomerStoredValueAccountRecord(account.id(), account.customerId(), account.projectId(),
-                balanceCent, status, account.createdAt(), now);
+                account.merchantId(), balanceCent, status, account.createdAt(), now);
     }
 
     private CustomerRecord requireCustomer(String customerId) {

@@ -1168,33 +1168,54 @@ class JdbcCustomerRepository implements CustomerRepository {
     // ---- V090 会员忠诚度 第2部分：储值 / 付费会员 / 积分转赠 ----
 
     private static final String STORED_VALUE_ACCOUNT_SELECT = """
-            SELECT id, customer_id, project_id, balance_cent, status, created_at, updated_at
+            SELECT id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at
               FROM customer_stored_value_accounts
             """;
 
+    // B1d⑤：无 merchantId 的查找=综合体通用卡（merchant_id IS NULL），不得命中商户级卡。
     @Override
     public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String customerId, String projectId) {
-        return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
-                        + " WHERE customer_id = :customer_id AND project_id IS NOT DISTINCT FROM :project_id",
-                new MapSqlParameterSource().addValue("customer_id", customerId).addValue("project_id", projectId),
-                this::mapStoredValueAccount).stream().findFirst();
+        return findStoredValueAccount(customerId, projectId, null);
     }
 
     @Override
     public Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String customerId, String projectId) {
+        return findStoredValueAccountForUpdate(customerId, projectId, null);
+    }
+
+    // B1d⑤ 卡范围查找：merchantId 非空=商户级卡（按 merchant_id 精确匹配）；为空=综合体通用卡（merchant_id IS NULL）。
+    @Override
+    public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String customerId, String projectId, String merchantId) {
         return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
-                        + " WHERE customer_id = :customer_id AND project_id IS NOT DISTINCT FROM :project_id FOR UPDATE",
-                new MapSqlParameterSource().addValue("customer_id", customerId).addValue("project_id", projectId),
+                        + " WHERE customer_id = :customer_id AND project_id IS NOT DISTINCT FROM :project_id"
+                        + " AND merchant_id IS NOT DISTINCT FROM :merchant_id",
+                storedValueScopeParams(customerId, projectId, merchantId),
                 this::mapStoredValueAccount).stream().findFirst();
+    }
+
+    @Override
+    public Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String customerId, String projectId, String merchantId) {
+        return jdbcTemplate.query(STORED_VALUE_ACCOUNT_SELECT
+                        + " WHERE customer_id = :customer_id AND project_id IS NOT DISTINCT FROM :project_id"
+                        + " AND merchant_id IS NOT DISTINCT FROM :merchant_id FOR UPDATE",
+                storedValueScopeParams(customerId, projectId, merchantId),
+                this::mapStoredValueAccount).stream().findFirst();
+    }
+
+    private MapSqlParameterSource storedValueScopeParams(String customerId, String projectId, String merchantId) {
+        return new MapSqlParameterSource()
+                .addValue("customer_id", customerId)
+                .addValue("project_id", projectId)
+                .addValue("merchant_id", merchantId);
     }
 
     @Override
     public CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         jdbcTemplate.update("""
                 INSERT INTO customer_stored_value_accounts (
-                    id, customer_id, project_id, balance_cent, status, created_at, updated_at
+                    id, customer_id, project_id, merchant_id, balance_cent, status, created_at, updated_at
                 )
-                VALUES (:id, :customer_id, :project_id, :balance_cent, :status, :created_at, :updated_at)
+                VALUES (:id, :customer_id, :project_id, :merchant_id, :balance_cent, :status, :created_at, :updated_at)
                 ON CONFLICT (id) DO UPDATE SET
                     balance_cent = EXCLUDED.balance_cent,
                     status = EXCLUDED.status,
@@ -1203,6 +1224,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("id", account.id())
                 .addValue("customer_id", account.customerId())
                 .addValue("project_id", account.projectId())
+                .addValue("merchant_id", account.merchantId())
                 .addValue("balance_cent", account.balanceCent())
                 .addValue("status", account.status())
                 .addValue("created_at", timestampWithTimeZone(account.createdAt()))
@@ -1394,6 +1416,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("id"),
                 rs.getString("customer_id"),
                 rs.getString("project_id"),
+                rs.getString("merchant_id"),
                 rs.getLong("balance_cent"),
                 rs.getString("status"),
                 nullableInstant(rs, "created_at"),

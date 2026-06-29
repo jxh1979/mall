@@ -164,6 +164,16 @@ public interface CustomerRepository {
         return Optional.empty();
     }
 
+    // B1d⑤ 卡范围查找：merchantId 非空=商户级卡，为空=综合体通用卡。默认实现：通用卡委派 2 参版（保留既有假实现行为），
+    // 商户卡返回空（仅 Jdbc 真仓储承载）。
+    default Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String customerId, String projectId, String merchantId) {
+        return merchantId == null ? findStoredValueAccount(customerId, projectId) : Optional.empty();
+    }
+
+    default Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String customerId, String projectId, String merchantId) {
+        return merchantId == null ? findStoredValueAccountForUpdate(customerId, projectId) : Optional.empty();
+    }
+
     default CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         throw new UnsupportedOperationException("saveStoredValueAccount not supported by this repository");
     }

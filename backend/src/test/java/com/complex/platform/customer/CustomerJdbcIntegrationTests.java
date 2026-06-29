@@ -59,6 +59,32 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
+    void merchantScopedAndProjectStoredValueCardsCoexistForSameCustomer() {
+        // B1d⑤ 储值卡分级（V175）：同一会员可同时持有「综合体通用卡」(merchant_id NULL) 与「商户级卡」(merchant_id 非空)，
+        // 卡范围唯一键=(customer, project, merchant)；通用卡查找不得命中商户级卡，商户级卡按 merchant 精确命中。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveCustomer(new CustomerRecord(
+                "cust_sv_scope", "13900130001", "139****0001", "active", null, now, now, now));
+
+        repository.saveStoredValueAccount(new CustomerStoredValueAccountRecord(
+                "svacc_project", "cust_sv_scope", "prj_1", null, 5000L, "active", now, now));
+        repository.saveStoredValueAccount(new CustomerStoredValueAccountRecord(
+                "svacc_merchant", "cust_sv_scope", "prj_1", "merchant_x", 3000L, "active", now, now));
+
+        // 通用卡查找（无 merchant）只命中 merchant_id IS NULL 的卡。
+        assertThat(repository.findStoredValueAccount("cust_sv_scope", "prj_1")).get()
+                .extracting(CustomerStoredValueAccountRecord::id, CustomerStoredValueAccountRecord::merchantId,
+                        CustomerStoredValueAccountRecord::cardScope)
+                .containsExactly("svacc_project", null, "project");
+
+        // 商户级卡按 merchant 精确命中，与通用卡互不串。
+        assertThat(repository.findStoredValueAccount("cust_sv_scope", "prj_1", "merchant_x")).get()
+                .extracting(CustomerStoredValueAccountRecord::id, CustomerStoredValueAccountRecord::cardScope)
+                .containsExactly("svacc_merchant", "merchant");
+        assertThat(repository.findStoredValueAccount("cust_sv_scope", "prj_1", "merchant_other")).isEmpty();
+    }
+
+    @Test
     void customerPointsRulePersistsAndReadsBack() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.savePointsRule(new CustomerPointsRuleRecord(
