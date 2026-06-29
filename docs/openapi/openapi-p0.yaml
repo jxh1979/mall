@@ -14750,6 +14750,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: refund_authority_limit.viewed
       x-audit-event-failure: refund_authority_limit.view_failed
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 综合体项目隔离键（传则按该综合体+全局过滤，不传为平台全量）
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -14795,6 +14802,13 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: refund_auto_rule.viewed
       x-audit-event-failure: refund_auto_rule.view_failed
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 综合体项目隔离键（传则按该综合体+全局过滤，不传为平台全量）
       responses:
         "200":
           $ref: "#/components/responses/Page"
