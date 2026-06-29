@@ -37,7 +37,7 @@ public class EvidenceEventController {
     }
 
     @PostMapping("/events")
-    public ApiResponse<EventBatchResponse> createEvents(@RequestBody EventBatchRequest request) {
+    public ApiResponse<EventBatchResponse> createEvents(@RequestBody @jakarta.validation.Valid EventBatchRequest request) {
         authorizationService.requirePermission("evidence.event.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createEvents(request));
@@ -51,7 +51,7 @@ public class EvidenceEventController {
 
     @PostMapping("/attachments/upload-intents")
     public ApiResponse<EvidenceAttachmentRecord> createAttachmentUploadIntent(
-            @RequestBody EvidenceAttachmentUploadIntentRequest request
+            @RequestBody @jakarta.validation.Valid EvidenceAttachmentUploadIntentRequest request
     ) {
         authorizationService.requirePermission("evidence.attachment.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -61,7 +61,7 @@ public class EvidenceEventController {
     @PostMapping("/attachments/{attachment_id}/bind")
     public ApiResponse<EvidenceAttachmentRecord> bindAttachment(
             @PathVariable("attachment_id") String attachmentId,
-            @RequestBody EvidenceAttachmentBindRequest request
+            @RequestBody @jakarta.validation.Valid EvidenceAttachmentBindRequest request
     ) {
         authorizationService.requirePermission("evidence.attachment.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -71,7 +71,7 @@ public class EvidenceEventController {
     @PostMapping("/attachments/{attachment_id}/complete")
     public ApiResponse<EvidenceAttachmentRecord> completeAttachment(
             @PathVariable("attachment_id") String attachmentId,
-            @RequestBody EvidenceAttachmentCompleteRequest request
+            @RequestBody @jakarta.validation.Valid EvidenceAttachmentCompleteRequest request
     ) {
         authorizationService.requirePermission("evidence.attachment.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -79,7 +79,7 @@ public class EvidenceEventController {
     }
 
     @PostMapping("/reviews")
-    public ApiResponse<EvidenceReviewRecord> createEvidenceReview(@RequestBody EvidenceReviewRequest request) {
+    public ApiResponse<EvidenceReviewRecord> createEvidenceReview(@RequestBody @jakarta.validation.Valid EvidenceReviewRequest request) {
         authorizationService.requirePermission("evidence.review.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createEvidenceReview(request));

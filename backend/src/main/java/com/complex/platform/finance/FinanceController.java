@@ -55,7 +55,7 @@ public class FinanceController {
     }
 
     @PostMapping("/ar-ap-items")
-    public ApiResponse<ArApItemRecord> createArApItem(@RequestBody ArApItemRequest request) {
+    public ApiResponse<ArApItemRecord> createArApItem(@RequestBody @jakarta.validation.Valid ArApItemRequest request) {
         authorizationService.requirePermission("finance.ar_ap.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createArApItem(request));
@@ -64,7 +64,7 @@ public class FinanceController {
     @PostMapping("/ar-ap-items/{id}/payments")
     public ApiResponse<ArApPaymentResponse> registerArApPayment(
             @PathVariable String id,
-            @RequestBody ArApPaymentRequest request
+            @RequestBody @jakarta.validation.Valid ArApPaymentRequest request
     ) {
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -72,7 +72,7 @@ public class FinanceController {
     }
 
     @PostMapping("/daily-closes")
-    public ApiResponse<DailyCloseRecord> createDailyClose(@RequestBody DailyCloseRequest request) {
+    public ApiResponse<DailyCloseRecord> createDailyClose(@RequestBody @jakarta.validation.Valid DailyCloseRequest request) {
         authorizationService.requirePermission("finance.daily_close.lock");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createDailyClose(request));
@@ -85,7 +85,7 @@ public class FinanceController {
     }
 
     @PostMapping("/ar-ap-adjustments")
-    public ApiResponse<ArApAdjustmentRecord> requestArApAdjustment(@RequestBody ArApAdjustmentRequest request) {
+    public ApiResponse<ArApAdjustmentRecord> requestArApAdjustment(@RequestBody @jakarta.validation.Valid ArApAdjustmentRequest request) {
         authorizationService.requirePermission("finance.locked_backfill.request");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestAdjustment(request));
@@ -94,7 +94,7 @@ public class FinanceController {
     @PostMapping("/ar-ap-adjustments/{id}/approve")
     public ApiResponse<ArApAdjustmentRecord> approveArApAdjustment(
             @PathVariable String id,
-            @RequestBody ArApAdjustmentDecisionRequest request
+            @RequestBody @jakarta.validation.Valid ArApAdjustmentDecisionRequest request
     ) {
         authorizationService.requirePermission("finance.locked_backfill.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -111,7 +111,7 @@ public class FinanceController {
     @PostMapping("/payments/{payment_id}/confirm-offline")
     public ApiResponse<OfflinePaymentConfirmationRecord> confirmOfflinePayment(
             @PathVariable("payment_id") String paymentId,
-            @RequestBody OfflinePaymentConfirmRequest request
+            @RequestBody @jakarta.validation.Valid OfflinePaymentConfirmRequest request
     ) {
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -132,7 +132,7 @@ public class FinanceController {
 
     @PostMapping("/reconciliation/differences")
     public ApiResponse<ReconciliationDifferenceRecord> createReconciliationDifference(
-            @RequestBody ReconciliationDifferenceRequest request
+            @RequestBody @jakarta.validation.Valid ReconciliationDifferenceRequest request
     ) {
         authorizationService.requirePermission("finance.reconciliation.difference.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -149,7 +149,7 @@ public class FinanceController {
     // ── P1#13 库存差异 → AR/AP ──────────────────────────────────────────────────
 
     @PostMapping("/inventory-variances/post")
-    public ApiResponse<ArApItemRecord> postInventoryVariance(@RequestBody InventoryVariancePostRequest request) {
+    public ApiResponse<ArApItemRecord> postInventoryVariance(@RequestBody @jakarta.validation.Valid InventoryVariancePostRequest request) {
         authorizationService.requirePermission("finance.inventory_variance.post");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.postInventoryVariance(request));
@@ -158,14 +158,14 @@ public class FinanceController {
     // ── P1#14 综合体计费：营业额抽成 / 保证金 / CAM ─────────────────────────────
 
     @PostMapping("/turnover-rent/bills")
-    public ApiResponse<ArApItemRecord> billTurnoverRent(@RequestBody TurnoverRentBillRequest request) {
+    public ApiResponse<ArApItemRecord> billTurnoverRent(@RequestBody @jakarta.validation.Valid TurnoverRentBillRequest request) {
         authorizationService.requirePermission("finance.turnover_rent.bill");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.billTurnoverRent(request));
     }
 
     @PostMapping("/deposits/actions")
-    public ApiResponse<DepositLedgerRecord> recordDepositAction(@RequestBody DepositActionRequest request) {
+    public ApiResponse<DepositLedgerRecord> recordDepositAction(@RequestBody @jakarta.validation.Valid DepositActionRequest request) {
         authorizationService.requirePermission("finance.deposit.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.recordDepositAction(request));
@@ -175,14 +175,14 @@ public class FinanceController {
     // 两端点保留仅为对旧客户端返回明确弃用错误码（CAM_ALLOCATION_ABOLISHED / CAM_TRUEUP_ABOLISHED）；
     // 改用下方 /property-fee/* 端点。
     @PostMapping("/cam/allocations")
-    public ApiResponse<List<CamAllocationRecord>> allocateCam(@RequestBody CamAllocationRequest request) {
+    public ApiResponse<List<CamAllocationRecord>> allocateCam(@RequestBody @jakarta.validation.Valid CamAllocationRequest request) {
         authorizationService.requirePermission("finance.cam.allocate");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.allocateCam(request));
     }
 
     @PostMapping("/cam/trueups")
-    public ApiResponse<CamTrueUpRunRecord> runCamTrueUp(@RequestBody CamTrueUpRequest request) {
+    public ApiResponse<CamTrueUpRunRecord> runCamTrueUp(@RequestBody @jakarta.validation.Valid CamTrueUpRequest request) {
         authorizationService.requirePermission("finance.cam.trueup");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.runCamTrueUp(request));
@@ -191,7 +191,7 @@ public class FinanceController {
     // ── F-OPS-08 物业费固定计费（每平米固定单价 × 商户面积，按期不退不补）─────────────
 
     @PostMapping("/property-fee/rates")
-    public ApiResponse<PropertyFeeRateRecord> createPropertyFeeRate(@RequestBody PropertyFeeRateRequest request) {
+    public ApiResponse<PropertyFeeRateRecord> createPropertyFeeRate(@RequestBody @jakarta.validation.Valid PropertyFeeRateRequest request) {
         authorizationService.requirePermission("finance.property_fee.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createPropertyFeeRate(request));
@@ -204,7 +204,7 @@ public class FinanceController {
     }
 
     @PostMapping("/property-fee/bills")
-    public ApiResponse<List<PropertyFeeBillRecord>> billPropertyFee(@RequestBody PropertyFeeBillRequest request) {
+    public ApiResponse<List<PropertyFeeBillRecord>> billPropertyFee(@RequestBody @jakarta.validation.Valid PropertyFeeBillRequest request) {
         authorizationService.requirePermission("finance.property_fee.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.billPropertyFee(request));

@@ -1,4 +1,6 @@
 package com.complex.platform.finance.dto;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.util.List;
 
@@ -13,7 +15,7 @@ public record DepositActionRequest(
         List<String> evidenceAttachmentIds,
         String merchantId,
         String action,
-        Long amountCent,
+        @NotNull @Positive Long amountCent,
         String reason
 ) {
 }

@@ -49,7 +49,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/compensation-tasks")
-    public ApiResponse<IntegrationTaskRecord> createCompensationTask(@RequestBody IntegrationTaskRequest request) {
+    public ApiResponse<IntegrationTaskRecord> createCompensationTask(@RequestBody @jakarta.validation.Valid IntegrationTaskRequest request) {
         authorizationService.requirePermission(COMPENSATION_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createCompensationTask(request));
@@ -58,7 +58,7 @@ public class IntegrationController {
     @PostMapping("/compensation-tasks/{id}/resolve")
     public ApiResponse<IntegrationTaskRecord> resolveCompensationTask(
             @PathVariable String id,
-            @RequestBody IntegrationTaskResolveRequest request
+            @RequestBody @jakarta.validation.Valid IntegrationTaskResolveRequest request
     ) {
         authorizationService.requirePermission(COMPENSATION_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -87,7 +87,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/order-syncs")
-    public ApiResponse<IntegrationOrderSyncRecord> createOrderSync(@RequestBody IntegrationOrderSyncRequest request) {
+    public ApiResponse<IntegrationOrderSyncRecord> createOrderSync(@RequestBody @jakarta.validation.Valid IntegrationOrderSyncRequest request) {
         authorizationService.requirePermission(ORDER_SYNC_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createOrderSync(request));
@@ -100,7 +100,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/provider-adapters")
-    public ApiResponse<ProviderAdapterRecord> createProviderAdapter(@RequestBody ProviderAdapterRequest request) {
+    public ApiResponse<ProviderAdapterRecord> createProviderAdapter(@RequestBody @jakarta.validation.Valid ProviderAdapterRequest request) {
         authorizationService.requirePermission(CREATE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createProviderAdapter(request));
@@ -109,7 +109,7 @@ public class IntegrationController {
     @PutMapping("/provider-adapters/{id}")
     public ApiResponse<ProviderAdapterRecord> updateProviderAdapter(
             @PathVariable String id,
-            @RequestBody ProviderAdapterUpdateRequest request
+            @RequestBody @jakarta.validation.Valid ProviderAdapterUpdateRequest request
     ) {
         authorizationService.requirePermission(UPDATE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -119,7 +119,7 @@ public class IntegrationController {
     @PostMapping("/provider-adapters/{id}/mark-production-ready")
     public ApiResponse<ProviderAdapterRecord> markProductionReady(
             @PathVariable String id,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission(PRODUCTION_READY_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -129,7 +129,7 @@ public class IntegrationController {
     @PostMapping("/provider-adapters/{id}/test-mock")
     public ApiResponse<AdapterTestRecord> testMock(
             @PathVariable String id,
-            @RequestBody ProviderAdapterTestRequest request
+            @RequestBody @jakarta.validation.Valid ProviderAdapterTestRequest request
     ) {
         authorizationService.requirePermission(TEST_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -137,7 +137,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/polling-checks")
-    public ApiResponse<IntegrationPollingCheckRecord> recordPollingCheck(@RequestBody IntegrationPollingCheckRequest request) {
+    public ApiResponse<IntegrationPollingCheckRecord> recordPollingCheck(@RequestBody @jakarta.validation.Valid IntegrationPollingCheckRequest request) {
         authorizationService.requirePermission(POLLING_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.recordPollingCheck(request));
@@ -155,7 +155,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/retry-tasks")
-    public ApiResponse<IntegrationTaskRecord> createRetryTask(@RequestBody IntegrationTaskRequest request) {
+    public ApiResponse<IntegrationTaskRecord> createRetryTask(@RequestBody @jakarta.validation.Valid IntegrationTaskRequest request) {
         authorizationService.requirePermission(RETRY_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createRetryTask(request));
@@ -164,7 +164,7 @@ public class IntegrationController {
     @PostMapping("/retry-tasks/{id}/run-now")
     public ApiResponse<IntegrationTaskRecord> runRetryTaskNow(
             @PathVariable String id,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission(RETRY_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -178,7 +178,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/reconciliation/batches")
-    public ApiResponse<ReconciliationBatchRecord> createReconciliationBatch(@RequestBody ReconciliationBatchRequest request) {
+    public ApiResponse<ReconciliationBatchRecord> createReconciliationBatch(@RequestBody @jakarta.validation.Valid ReconciliationBatchRequest request) {
         authorizationService.requirePermission(RECONCILIATION_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createReconciliationBatch(request));
@@ -191,7 +191,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/reconciliation/differences")
-    public ApiResponse<ReconciliationDifferenceRecord> createReconciliationDifference(@RequestBody ReconciliationDifferenceRequest request) {
+    public ApiResponse<ReconciliationDifferenceRecord> createReconciliationDifference(@RequestBody @jakarta.validation.Valid ReconciliationDifferenceRequest request) {
         authorizationService.requirePermission(RECONCILIATION_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createReconciliationDifference(request));
@@ -200,7 +200,7 @@ public class IntegrationController {
     @PostMapping("/reconciliation/differences/{id}/resolve")
     public ApiResponse<ReconciliationDifferenceRecord> resolveReconciliationDifference(
             @PathVariable String id,
-            @RequestBody ReconciliationDifferenceResolveRequest request
+            @RequestBody @jakarta.validation.Valid ReconciliationDifferenceResolveRequest request
     ) {
         authorizationService.requirePermission(RECONCILIATION_RESOLVE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -208,7 +208,7 @@ public class IntegrationController {
     }
 
     @PostMapping("/reconciliation/channel-auto")
-    public ApiResponse<ChannelReconciliationResult> reconcileChannel(@RequestBody ChannelReconciliationRequest request) {
+    public ApiResponse<ChannelReconciliationResult> reconcileChannel(@RequestBody @jakarta.validation.Valid ChannelReconciliationRequest request) {
         authorizationService.requirePermission(RECONCILIATION_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reconcileChannel(request));
@@ -218,14 +218,14 @@ public class IntegrationController {
     public ApiResponse<WebhookAcceptedResponse> receiveTypedWebhook(
             @PathVariable String type,
             @org.springframework.web.bind.annotation.RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody(required = false) java.util.Map<String, Object> payload
+            @RequestBody(required = false) @jakarta.validation.Valid java.util.Map<String, Object> payload
     ) {
         // 鉴权上下文 = webhook-signature（供应商回调）；门控在 service 内编程式调用 TerminalSwitchGuard。
         return ApiResponse.ok(service.receiveTypedWebhook(type, idempotencyKey, payload));
     }
 
     @PostMapping("/robot/report")
-    public ApiResponse<RobotTaskEventRecord> reportRobotTaskEvent(@RequestBody RobotTaskEventRequest request) {
+    public ApiResponse<RobotTaskEventRecord> reportRobotTaskEvent(@RequestBody @jakarta.validation.Valid RobotTaskEventRequest request) {
         // 鉴权上下文 = webhook-signature（机器人回调）；门控在 service 内编程式调用 TerminalSwitchGuard。
         return ApiResponse.ok(service.reportRobotTaskEvent(request));
     }

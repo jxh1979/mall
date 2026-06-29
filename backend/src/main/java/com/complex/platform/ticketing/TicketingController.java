@@ -45,7 +45,7 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/ticket-types")
-    public ApiResponse<TicketTypeRecord> createTicketType(@RequestBody TicketTypeRequest request) {
+    public ApiResponse<TicketTypeRecord> createTicketType(@RequestBody @jakarta.validation.Valid TicketTypeRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTicketType(request));
@@ -54,7 +54,7 @@ public class TicketingController {
     @PostMapping("/ticketing/ticket-types/{id}/publish")
     public ApiResponse<TicketTypeRecord> publishTicketType(
             @PathVariable String id,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("ticket.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -68,7 +68,7 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/price-rules")
-    public ApiResponse<TicketPriceRuleRecord> createTicketPriceRule(@RequestBody TicketPriceRuleRequest request) {
+    public ApiResponse<TicketPriceRuleRecord> createTicketPriceRule(@RequestBody @jakarta.validation.Valid TicketPriceRuleRequest request) {
         authorizationService.requirePermission("ticket.price_variant.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTicketPriceRule(request));
@@ -83,7 +83,7 @@ public class TicketingController {
 
     @PostMapping("/ticketing/dynamic-pricing-rules")
     public ApiResponse<TicketDynamicPricingRuleRecord> createDynamicPricingRule(
-            @RequestBody TicketDynamicPricingRuleRequest request
+            @RequestBody @jakarta.validation.Valid TicketDynamicPricingRuleRequest request
     ) {
         authorizationService.requirePermission("ticket.dynamic_pricing.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -93,7 +93,7 @@ public class TicketingController {
     @PostMapping("/ticketing/dynamic-pricing-rules/{id}/publish")
     public ApiResponse<TicketDynamicPricingRuleRecord> publishDynamicPricingRule(
             @PathVariable String id,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("ticket.dynamic_pricing.publish");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -102,7 +102,7 @@ public class TicketingController {
 
     @PostMapping("/ticketing/dynamic-pricing/simulations")
     public ApiResponse<TicketDynamicPricingSimulationResponse> simulateDynamicPricing(
-            @RequestBody TicketDynamicPricingSimulationRequest request
+            @RequestBody @jakarta.validation.Valid TicketDynamicPricingSimulationRequest request
     ) {
         authorizationService.requirePermission("ticket.dynamic_pricing.simulate");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -116,7 +116,7 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/entitlement-templates")
-    public ApiResponse<EntitlementTemplateRecord> createEntitlementTemplate(@RequestBody EntitlementTemplateRequest request) {
+    public ApiResponse<EntitlementTemplateRecord> createEntitlementTemplate(@RequestBody @jakarta.validation.Valid EntitlementTemplateRequest request) {
         authorizationService.requirePermission("ticket.entitlement.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createEntitlementTemplate(request));
@@ -125,7 +125,7 @@ public class TicketingController {
     @PostMapping("/ticketing/ticket-types/{id}/entitlements")
     public ApiResponse<TicketTypeEntitlementRecord> bindTicketTypeEntitlement(
             @PathVariable String id,
-            @RequestBody TicketTypeEntitlementRequest request
+            @RequestBody @jakarta.validation.Valid TicketTypeEntitlementRequest request
     ) {
         authorizationService.requirePermission("ticket.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -135,7 +135,7 @@ public class TicketingController {
     @PostMapping("/ticketing/ticket-types/{id}/issue")
     public ApiResponse<IssuedTicketResponse> issueTicketTypeDirectly(
             @PathVariable String id,
-            @RequestBody TicketIssueRequest request
+            @RequestBody @jakarta.validation.Valid TicketIssueRequest request
     ) {
         authorizationService.requirePermission("ticket.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -155,7 +155,7 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/orders")
-    public ApiResponse<TicketOrderRecord> createTicketOrder(@RequestBody TicketOrderRequest request) {
+    public ApiResponse<TicketOrderRecord> createTicketOrder(@RequestBody @jakarta.validation.Valid TicketOrderRequest request) {
         authorizationService.requirePermission("ticket.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTicketOrder(request));
@@ -164,7 +164,7 @@ public class TicketingController {
     @PostMapping("/ticketing/orders/{order_id}/pay-intents")
     public ApiResponse<TicketPaymentIntentRecord> createTicketOrderPayIntent(
             @PathVariable("order_id") String orderId,
-            @RequestBody PaymentIntentRequest request
+            @RequestBody @jakarta.validation.Valid PaymentIntentRequest request
     ) {
         authorizationService.requirePermission("finance.payment_intent.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -174,7 +174,7 @@ public class TicketingController {
     @PostMapping("/ticketing/orders/{order_id}/confirm-payment")
     public ApiResponse<TicketOrderRecord> confirmTicketOrderPayment(
             @PathVariable("order_id") String orderId,
-            @RequestBody ConfirmTicketOrderPaymentRequest request
+            @RequestBody @jakarta.validation.Valid ConfirmTicketOrderPaymentRequest request
     ) {
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -184,7 +184,7 @@ public class TicketingController {
     @PostMapping("/ticketing/orders/{order_id}/cancel")
     public ApiResponse<TicketOrderRecord> cancelTicketOrder(
             @PathVariable("order_id") String orderId,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("ticket.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -194,7 +194,7 @@ public class TicketingController {
     @PostMapping("/ticketing/orders/{order_id}/issue")
     public ApiResponse<IssuedTicketResponse> issueTicketOrder(
             @PathVariable("order_id") String orderId,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("ticket.ticket.issue");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -208,7 +208,7 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/refunds")
-    public ApiResponse<TicketRefundRecord> requestTicketRefund(@RequestBody TicketRefundRequest request) {
+    public ApiResponse<TicketRefundRecord> requestTicketRefund(@RequestBody @jakarta.validation.Valid TicketRefundRequest request) {
         authorizationService.requirePermission("ticket.refund.request");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestTicketRefund(request));
@@ -217,7 +217,7 @@ public class TicketingController {
     @PostMapping("/ticketing/refunds/{refund_id}/approve")
     public ApiResponse<TicketRefundRecord> approveTicketRefund(
             @PathVariable("refund_id") String refundId,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("ticket.refund.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -249,14 +249,14 @@ public class TicketingController {
     }
 
     @PostMapping("/ticketing/verifications/preview")
-    public ApiResponse<VerificationPreviewResponse> previewVerification(@RequestBody VerificationRequest request) {
+    public ApiResponse<VerificationPreviewResponse> previewVerification(@RequestBody @jakarta.validation.Valid VerificationRequest request) {
         authorizationService.requirePermission("verification.execute");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.previewVerification(request));
     }
 
     @PostMapping("/ticketing/verifications")
-    public ApiResponse<VerificationResponse> createVerification(@RequestBody VerificationRequest request) {
+    public ApiResponse<VerificationResponse> createVerification(@RequestBody @jakarta.validation.Valid VerificationRequest request) {
         authorizationService.requirePermission("verification.execute");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createVerification(request));
@@ -271,7 +271,7 @@ public class TicketingController {
     @PostMapping("/ticketing/verifications/{id}/reverse")
     public ApiResponse<VerificationResponse> reverseVerification(
             @PathVariable String id,
-            @RequestBody VerificationReverseRequest request
+            @RequestBody @jakarta.validation.Valid VerificationReverseRequest request
     ) {
         authorizationService.requirePermission("ticket.verify.reverse");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -279,7 +279,7 @@ public class TicketingController {
     }
 
     @PostMapping("/terminals/sync-tasks")
-    public ApiResponse<SyncTasksResponse> syncTerminalTasks(@RequestBody TerminalSyncTasksRequest request) {
+    public ApiResponse<SyncTasksResponse> syncTerminalTasks(@RequestBody @jakarta.validation.Valid TerminalSyncTasksRequest request) {
         authorizationService.requirePermission("terminal.device.bind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.syncTerminalTasks(request));

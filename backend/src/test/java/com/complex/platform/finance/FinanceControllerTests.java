@@ -88,6 +88,28 @@ class FinanceControllerTests {
     }
 
     @Test
+    void createArApItemRejectsNonPositiveAmount() throws Exception {
+        // @Valid 全域广覆盖：要紧单据（应收应付）金额走 @NotNull @Positive 在控制器层拦下负数（不进 service）。
+        mockMvc.perform(post("/api/v1/finance/ar-ap-items")
+                        .with(user("finance").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "arap-neg",
+                                  "direction": "receivable",
+                                  "counterparty_id": "merchant_1",
+                                  "source_type": "order",
+                                  "source_id": "order_1",
+                                  "amount_cent": -100,
+                                  "due_date": "2026-06-30",
+                                  "accounting_period": "2026-06"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
     void createRefundRejectsNonPositiveAmount() throws Exception {
         // T1.3 边界防御纵深：@Valid + @Positive 在控制器层拦下负数退款金额（不进 service；服务层 requirePositive 仍是主闸）。
         mockMvc.perform(post("/api/v1/finance/refunds")

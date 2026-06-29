@@ -51,7 +51,7 @@ public class FacilityWorkOrderController {
     }
 
     @PostMapping
-    public ApiResponse<FacilityWorkOrderRecord> create(@RequestBody FacilityWorkOrderRequest request) {
+    public ApiResponse<FacilityWorkOrderRecord> create(@RequestBody @jakarta.validation.Valid FacilityWorkOrderRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.create(request));
@@ -59,7 +59,7 @@ public class FacilityWorkOrderController {
 
     @PostMapping("/{work_order_id}/assign")
     public ApiResponse<FacilityWorkOrderRecord> assign(
-            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderAssignRequest request) {
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderAssignRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.assign(workOrderId, request));
@@ -67,7 +67,7 @@ public class FacilityWorkOrderController {
 
     @PostMapping("/{work_order_id}/start")
     public ApiResponse<FacilityWorkOrderRecord> start(
-            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderActionRequest request) {
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.start(workOrderId, request));
@@ -75,7 +75,7 @@ public class FacilityWorkOrderController {
 
     @PostMapping("/{work_order_id}/complete")
     public ApiResponse<FacilityWorkOrderRecord> complete(
-            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderActionRequest request) {
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.complete(workOrderId, request));
@@ -83,7 +83,7 @@ public class FacilityWorkOrderController {
 
     @PostMapping("/{work_order_id}/accept")
     public ApiResponse<FacilityWorkOrderRecord> accept(
-            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderActionRequest request) {
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.accept(workOrderId, request));
@@ -91,7 +91,7 @@ public class FacilityWorkOrderController {
 
     @PostMapping("/{work_order_id}/review")
     public ApiResponse<FacilityWorkOrderRecord> review(
-            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderActionRequest request) {
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.review(workOrderId, request));
@@ -99,7 +99,7 @@ public class FacilityWorkOrderController {
 
     @PostMapping("/{work_order_id}/suspend")
     public ApiResponse<FacilityWorkOrderRecord> suspend(
-            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderActionRequest request) {
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.suspend(workOrderId, request));
@@ -107,7 +107,7 @@ public class FacilityWorkOrderController {
 
     @PostMapping("/{work_order_id}/resume")
     public ApiResponse<FacilityWorkOrderRecord> resume(
-            @PathVariable("work_order_id") String workOrderId, @RequestBody FacilityWorkOrderActionRequest request) {
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.resume(workOrderId, request));
@@ -122,7 +122,7 @@ public class FacilityWorkOrderController {
     }
 
     @PostMapping("/policies")
-    public ApiResponse<FacilityWorkOrderPolicyRecord> savePolicy(@RequestBody FacilityWorkOrderPolicyRequest request) {
+    public ApiResponse<FacilityWorkOrderPolicyRecord> savePolicy(@RequestBody @jakarta.validation.Valid FacilityWorkOrderPolicyRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.savePolicy(request));

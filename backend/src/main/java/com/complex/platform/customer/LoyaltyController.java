@@ -48,7 +48,7 @@ public class LoyaltyController {
     @PostMapping("/points-accounts/{customer_id}/freeze")
     public ApiResponse<CustomerPointsAccountRecord> freeze(
             @PathVariable("customer_id") String customerId,
-            @RequestBody(required = false) LoyaltyFreezeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid LoyaltyFreezeRequest request
     ) {
         return ApiResponse.ok(service.freeze(customerId, request == null ? null : request.reason()));
     }
@@ -56,7 +56,7 @@ public class LoyaltyController {
     @PostMapping("/points-accounts/{customer_id}/unfreeze")
     public ApiResponse<CustomerPointsAccountRecord> unfreeze(
             @PathVariable("customer_id") String customerId,
-            @RequestBody(required = false) LoyaltyFreezeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid LoyaltyFreezeRequest request
     ) {
         return ApiResponse.ok(service.unfreeze(customerId, request == null ? null : request.reason()));
     }
@@ -72,7 +72,7 @@ public class LoyaltyController {
 
     @PostMapping("/membership-plans")
     public ApiResponse<CustomerMembershipPlanRecord> saveMembershipPlan(
-            @RequestBody MembershipPlanRequest request
+            @RequestBody @jakarta.validation.Valid MembershipPlanRequest request
     ) {
         return ApiResponse.ok(membershipService.savePlan(
                 null, request.projectId(), request.planCode(), request.name(),
@@ -94,7 +94,7 @@ public class LoyaltyController {
     @PostMapping("/stored-value/{customer_id}/freeze")
     public ApiResponse<CustomerStoredValueAccountRecord> freezeStoredValue(
             @PathVariable("customer_id") String customerId,
-            @RequestBody(required = false) StoredValueFreezeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid StoredValueFreezeRequest request
     ) {
         return ApiResponse.ok(storedValueService.freeze(customerId,
                 request == null ? null : request.projectId(),
@@ -104,7 +104,7 @@ public class LoyaltyController {
     @PostMapping("/stored-value/{customer_id}/unfreeze")
     public ApiResponse<CustomerStoredValueAccountRecord> unfreezeStoredValue(
             @PathVariable("customer_id") String customerId,
-            @RequestBody(required = false) StoredValueFreezeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid StoredValueFreezeRequest request
     ) {
         return ApiResponse.ok(storedValueService.unfreeze(customerId,
                 request == null ? null : request.projectId(),
@@ -114,7 +114,7 @@ public class LoyaltyController {
     @PostMapping("/stored-value/{customer_id}/refund")
     public ApiResponse<CustomerStoredValueTransactionRecord> refundStoredValue(
             @PathVariable("customer_id") String customerId,
-            @RequestBody StoredValueRefundRequest request
+            @RequestBody @jakarta.validation.Valid StoredValueRefundRequest request
     ) {
         return ApiResponse.ok(storedValueService.refund(customerId, request.projectId(),
                 request.amountCent() == null ? 0L : request.amountCent(), request.reason(),

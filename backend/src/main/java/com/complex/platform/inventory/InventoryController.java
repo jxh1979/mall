@@ -78,7 +78,7 @@ public class InventoryController {
     }
 
     @PostMapping("/items")
-    public ApiResponse<InventoryItemRecord> createInventoryItem(@RequestBody InventoryItemRequest request) {
+    public ApiResponse<InventoryItemRecord> createInventoryItem(@RequestBody @jakarta.validation.Valid InventoryItemRequest request) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createInventoryItem(request));
@@ -91,7 +91,7 @@ public class InventoryController {
     }
 
     @PostMapping("/purchase-requests")
-    public ApiResponse<PurchaseRequestRecord> createPurchaseRequest(@RequestBody PurchaseRequestCreate request) {
+    public ApiResponse<PurchaseRequestRecord> createPurchaseRequest(@RequestBody @jakarta.validation.Valid PurchaseRequestCreate request) {
         authorizationService.requirePermission("inventory.purchase_request.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createPurchaseRequest(request));
@@ -101,7 +101,7 @@ public class InventoryController {
     @PostMapping("/purchase-requests/{id}/approve")
     public ApiResponse<PurchaseRequestRecord> approvePurchaseRequest(
             @PathVariable String id,
-            @RequestBody PurchaseRequestApproveRequest request
+            @RequestBody @jakarta.validation.Valid PurchaseRequestApproveRequest request
     ) {
         authorizationService.requirePermission("inventory.purchase.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -111,7 +111,7 @@ public class InventoryController {
     @PostMapping("/purchase-requests/{id}/order")
     public ApiResponse<PurchaseRequestRecord> orderPurchaseRequest(
             @PathVariable String id,
-            @RequestBody PurchaseRequestTransitionRequest request
+            @RequestBody @jakarta.validation.Valid PurchaseRequestTransitionRequest request
     ) {
         authorizationService.requirePermission("inventory.purchase.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -121,7 +121,7 @@ public class InventoryController {
     @PostMapping("/purchase-requests/{id}/arrive")
     public ApiResponse<PurchaseRequestRecord> arrivePurchaseRequest(
             @PathVariable String id,
-            @RequestBody PurchaseRequestTransitionRequest request
+            @RequestBody @jakarta.validation.Valid PurchaseRequestTransitionRequest request
     ) {
         authorizationService.requirePermission("inventory.purchase.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -131,7 +131,7 @@ public class InventoryController {
     @PostMapping("/purchase-requests/{id}/receive")
     public ApiResponse<PurchaseRequestRecord> receivePurchaseRequest(
             @PathVariable String id,
-            @RequestBody PurchaseRequestReceiveRequest request
+            @RequestBody @jakarta.validation.Valid PurchaseRequestReceiveRequest request
     ) {
         authorizationService.requirePermission("inventory.purchase.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -145,7 +145,7 @@ public class InventoryController {
     }
 
     @PostMapping("/saved-bottles")
-    public ApiResponse<SavedBottleRecord> createSavedBottle(@RequestBody SavedBottleRequest request) {
+    public ApiResponse<SavedBottleRecord> createSavedBottle(@RequestBody @jakarta.validation.Valid SavedBottleRequest request) {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createSavedBottle(request));
@@ -154,7 +154,7 @@ public class InventoryController {
     @PostMapping("/saved-bottles/{id}/claim")
     public ApiResponse<SavedBottleClaimRecord> claimSavedBottle(
             @PathVariable String id,
-            @RequestBody SavedBottleClaimRequest request
+            @RequestBody @jakarta.validation.Valid SavedBottleClaimRequest request
     ) {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -164,7 +164,7 @@ public class InventoryController {
     @PostMapping("/saved-bottles/{id}/cancel")
     public ApiResponse<SavedBottleRecord> cancelSavedBottle(
             @PathVariable String id,
-            @RequestBody SavedBottleCancelRequest request
+            @RequestBody @jakarta.validation.Valid SavedBottleCancelRequest request
     ) {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -175,7 +175,7 @@ public class InventoryController {
     @PostMapping("/saved-bottles/{id}/dispute")
     public ApiResponse<SavedBottleRecord> disputeSavedBottle(
             @PathVariable String id,
-            @RequestBody SavedBottleCancelRequest request
+            @RequestBody @jakarta.validation.Valid SavedBottleCancelRequest request
     ) {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -192,7 +192,7 @@ public class InventoryController {
     @PostMapping("/high-value-reviews/{id}/review")
     public ApiResponse<InventoryHighValueReviewRecord> reviewHighValue(
             @PathVariable String id,
-            @RequestBody HighValueReviewDecisionRequest request
+            @RequestBody @jakarta.validation.Valid HighValueReviewDecisionRequest request
     ) {
         authorizationService.requirePermission("inventory.high_value.review");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -213,7 +213,7 @@ public class InventoryController {
     }
 
     @PostMapping("/stocktakes")
-    public ApiResponse<StocktakeRecord> createStocktake(@RequestBody CreateStocktakeRequest request) {
+    public ApiResponse<StocktakeRecord> createStocktake(@RequestBody @jakarta.validation.Valid CreateStocktakeRequest request) {
         authorizationService.requirePermission("inventory.stocktake.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createStocktake(request));
@@ -222,7 +222,7 @@ public class InventoryController {
     @PostMapping("/stocktakes/{id}/variances")
     public ApiResponse<InventoryVarianceRecord> recordVariance(
             @PathVariable String id,
-            @RequestBody RecordVarianceRequest request
+            @RequestBody @jakarta.validation.Valid RecordVarianceRequest request
     ) {
         authorizationService.requirePermission("inventory.stocktake.variance_record");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -233,7 +233,7 @@ public class InventoryController {
     public ApiResponse<InventoryVarianceRecord> reviewVariance(
             @PathVariable String id,
             @PathVariable String vid,
-            @RequestBody ReviewVarianceRequest request
+            @RequestBody @jakarta.validation.Valid ReviewVarianceRequest request
     ) {
         authorizationService.requirePermission("inventory.stocktake.variance_review");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -241,7 +241,7 @@ public class InventoryController {
     }
 
     @PostMapping("/stock-adjustments")
-    public ApiResponse<StockAdjustmentRecord> createStockAdjustment(@RequestBody StockAdjustmentRequest request) {
+    public ApiResponse<StockAdjustmentRecord> createStockAdjustment(@RequestBody @jakarta.validation.Valid StockAdjustmentRequest request) {
         authorizationService.requirePermission("inventory.stock.adjust");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createStockAdjustment(request));
@@ -260,7 +260,7 @@ public class InventoryController {
     }
 
     @PostMapping("/stock-batches")
-    public ApiResponse<InventoryStockBatchRecord> createStockBatch(@RequestBody InventoryStockBatchRequest request) {
+    public ApiResponse<InventoryStockBatchRecord> createStockBatch(@RequestBody @jakarta.validation.Valid InventoryStockBatchRequest request) {
         authorizationService.requirePermission("inventory.stock.batch.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createStockBatch(request));
@@ -273,7 +273,7 @@ public class InventoryController {
     }
 
     @PostMapping("/risk-alerts/scan")
-    public ApiResponse<InventoryRiskScanResult> runInventoryRiskScan(@RequestBody InventoryRiskScanRequest request) {
+    public ApiResponse<InventoryRiskScanResult> runInventoryRiskScan(@RequestBody @jakarta.validation.Valid InventoryRiskScanRequest request) {
         authorizationService.requirePermission("inventory.risk.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.runInventoryRiskScan(request));
@@ -287,7 +287,7 @@ public class InventoryController {
 
     @PostMapping("/supplier-reconciliations")
     public ApiResponse<SupplierReconciliationRecord> createSupplierReconciliation(
-            @RequestBody SupplierReconciliationRequest request
+            @RequestBody @jakarta.validation.Valid SupplierReconciliationRequest request
     ) {
         authorizationService.requirePermission("inventory.supplier.reconcile");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -295,7 +295,7 @@ public class InventoryController {
     }
 
     @PostMapping("/stock-in")
-    public ApiResponse<StockMovementRecord> createStockIn(@RequestBody StockInRequest request) {
+    public ApiResponse<StockMovementRecord> createStockIn(@RequestBody @jakarta.validation.Valid StockInRequest request) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createStockIn(request));
@@ -308,14 +308,14 @@ public class InventoryController {
     }
 
     @PostMapping("/stock-movements")
-    public ApiResponse<StockMovementRecord> createStockMovement(@RequestBody StockMovementRequest request) {
+    public ApiResponse<StockMovementRecord> createStockMovement(@RequestBody @jakarta.validation.Valid StockMovementRequest request) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createStockMovement(request));
     }
 
     @PostMapping("/stock-movements/transfer")
-    public ApiResponse<StockMovementRecord> transferStockMovement(@RequestBody StockMovementRequest request) {
+    public ApiResponse<StockMovementRecord> transferStockMovement(@RequestBody @jakarta.validation.Valid StockMovementRequest request) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.transferStockMovement(request));
@@ -324,7 +324,7 @@ public class InventoryController {
     @PostMapping("/stock-movements/{movement_type}")
     public ApiResponse<StockMovementRecord> createTypedStockMovement(
             @PathVariable("movement_type") String movementType,
-            @RequestBody StockMovementRequest request
+            @RequestBody @jakarta.validation.Valid StockMovementRequest request
     ) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -338,7 +338,7 @@ public class InventoryController {
     }
 
     @PostMapping("/suppliers")
-    public ApiResponse<InventorySupplierRecord> createInventorySupplier(@RequestBody InventorySupplierRequest request) {
+    public ApiResponse<InventorySupplierRecord> createInventorySupplier(@RequestBody @jakarta.validation.Valid InventorySupplierRequest request) {
         authorizationService.requirePermission("inventory.supplier.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createInventorySupplier(request));
@@ -358,7 +358,7 @@ public class InventoryController {
     }
 
     @PostMapping("/trace-codes")
-    public ApiResponse<InventoryTraceCodeRecord> registerTraceCode(@RequestBody RegisterTraceCodeRequest request) {
+    public ApiResponse<InventoryTraceCodeRecord> registerTraceCode(@RequestBody @jakarta.validation.Valid RegisterTraceCodeRequest request) {
         authorizationService.requirePermission("inventory.trace_code.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.registerTraceCode(request));
@@ -367,7 +367,7 @@ public class InventoryController {
     @PostMapping("/trace-codes/{id}/print")
     public ApiResponse<InventoryTraceCodeRecord> printTraceCode(
             @PathVariable String id,
-            @RequestBody PrintTraceCodeRequest request
+            @RequestBody @jakarta.validation.Valid PrintTraceCodeRequest request
     ) {
         authorizationService.requirePermission("inventory.trace_code.print");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -375,14 +375,14 @@ public class InventoryController {
     }
 
     @PostMapping("/trace-codes/scan-handover")
-    public ApiResponse<TraceHandoverRecord> scanTraceCodeHandover(@RequestBody VerificationRequest request) {
+    public ApiResponse<TraceHandoverRecord> scanTraceCodeHandover(@RequestBody @jakarta.validation.Valid VerificationRequest request) {
         authorizationService.requirePermission("inventory.handover.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scanTraceCodeHandover(request));
     }
 
     @PostMapping("/trace-handovers")
-    public ApiResponse<TraceHandoverChainView> createTraceHandover(@RequestBody TraceHandoverCreateRequest request) {
+    public ApiResponse<TraceHandoverChainView> createTraceHandover(@RequestBody @jakarta.validation.Valid TraceHandoverCreateRequest request) {
         authorizationService.requirePermission("inventory.handover.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTraceHandover(request));
@@ -391,7 +391,7 @@ public class InventoryController {
     @PostMapping("/trace-handovers/{id}/scan-segment")
     public ApiResponse<TraceHandoverChainView> scanTraceSegment(
             @PathVariable String id,
-            @RequestBody TraceScanSegmentRequest request
+            @RequestBody @jakarta.validation.Valid TraceScanSegmentRequest request
     ) {
         authorizationService.requirePermission("inventory.handover.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -401,7 +401,7 @@ public class InventoryController {
     @PostMapping("/trace-handovers/{id}/robot-report")
     public ApiResponse<TraceHandoverChainView> reportRobotSegment(
             @PathVariable String id,
-            @RequestBody TraceRobotReportRequest request
+            @RequestBody @jakarta.validation.Valid TraceRobotReportRequest request
     ) {
         authorizationService.requirePermission("inventory.handover.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -411,7 +411,7 @@ public class InventoryController {
     @PostMapping("/trace-handovers/exceptions/{id}/review")
     public ApiResponse<TraceHandoverExceptionRecord> reviewException(
             @PathVariable String id,
-            @RequestBody TraceExceptionReviewRequest request
+            @RequestBody @jakarta.validation.Valid TraceExceptionReviewRequest request
     ) {
         authorizationService.requirePermission("inventory.handover.review");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -426,7 +426,7 @@ public class InventoryController {
     }
 
     @PostMapping("/supply-contracts")
-    public ApiResponse<SupplyContractRecord> createSupplyContract(@RequestBody SupplyContractCreateRequest request) {
+    public ApiResponse<SupplyContractRecord> createSupplyContract(@RequestBody @jakarta.validation.Valid SupplyContractCreateRequest request) {
         authorizationService.requirePermission("inventory.supply_contract.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(supplyContractService.createSupplyContract(request));
@@ -435,7 +435,7 @@ public class InventoryController {
     @PostMapping("/supply-contracts/{id}/approve")
     public ApiResponse<SupplyContractRecord> approveSupplyContract(
             @PathVariable String id,
-            @RequestBody SupplyContractApproveRequest request
+            @RequestBody @jakarta.validation.Valid SupplyContractApproveRequest request
     ) {
         authorizationService.requirePermission("inventory.purchase.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -450,7 +450,7 @@ public class InventoryController {
     }
 
     @PostMapping("/warehouses")
-    public ApiResponse<WarehouseRecord> createWarehouse(@RequestBody WarehouseCreateRequest request) {
+    public ApiResponse<WarehouseRecord> createWarehouse(@RequestBody @jakarta.validation.Valid WarehouseCreateRequest request) {
         authorizationService.requirePermission("inventory.warehouse.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(warehouseService.createWarehouse(request));
@@ -467,7 +467,7 @@ public class InventoryController {
 
     @PostMapping("/supplier-qualifications")
     public ApiResponse<SupplierQualificationRecord> createSupplierQualification(
-            @RequestBody SupplierQualificationRequest request
+            @RequestBody @jakarta.validation.Valid SupplierQualificationRequest request
     ) {
         authorizationService.requirePermission("inventory.supplier.qualification.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -485,7 +485,7 @@ public class InventoryController {
 
     @PostMapping("/supplier-settlement-methods")
     public ApiResponse<SupplierSettlementMethodRecord> createSupplierSettlementMethod(
-            @RequestBody SupplierSettlementMethodRequest request
+            @RequestBody @jakarta.validation.Valid SupplierSettlementMethodRequest request
     ) {
         authorizationService.requirePermission("inventory.supplier.settlement.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

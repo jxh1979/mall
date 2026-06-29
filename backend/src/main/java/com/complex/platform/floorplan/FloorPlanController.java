@@ -35,7 +35,7 @@ public class FloorPlanController {
     }
 
     @PostMapping
-    public ApiResponse<FloorPlanRecord> createFloorPlan(@RequestBody FloorPlanCreateRequest request) {
+    public ApiResponse<FloorPlanRecord> createFloorPlan(@RequestBody @jakarta.validation.Valid FloorPlanCreateRequest request) {
         authorizationService.requirePermission("floor_plan.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createFloorPlan(request));
@@ -50,7 +50,7 @@ public class FloorPlanController {
     @PostMapping("/{id}/shapes")
     public ApiResponse<FloorPlanShapeRecord> saveShape(
             @PathVariable String id,
-            @RequestBody FloorPlanShapeSaveRequest request
+            @RequestBody @jakarta.validation.Valid FloorPlanShapeSaveRequest request
     ) {
         authorizationService.requirePermission("floor_plan.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -66,7 +66,7 @@ public class FloorPlanController {
     @PostMapping("/{id}/imports")
     public ApiResponse<FloorPlanImportTaskRecord> createImport(
             @PathVariable String id,
-            @RequestBody FloorPlanImportCreateRequest request
+            @RequestBody @jakarta.validation.Valid FloorPlanImportCreateRequest request
     ) {
         authorizationService.requirePermission("floor_plan.import.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -86,7 +86,7 @@ public class FloorPlanController {
     public ApiResponse<FloorPlanImportTaskRecord> publishImport(
             @PathVariable String id,
             @PathVariable String importId,
-            @RequestBody FloorPlanImportPublishRequest request
+            @RequestBody @jakarta.validation.Valid FloorPlanImportPublishRequest request
     ) {
         authorizationService.requirePermission("floor_plan.import.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

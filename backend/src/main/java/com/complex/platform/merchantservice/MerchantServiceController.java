@@ -38,7 +38,7 @@ public class MerchantServiceController {
     }
 
     @PostMapping("/work-orders")
-    public ApiResponse<MerchantWorkOrderRecord> createWorkOrder(@RequestBody MerchantWorkOrderCreateRequest request) {
+    public ApiResponse<MerchantWorkOrderRecord> createWorkOrder(@RequestBody @jakarta.validation.Valid MerchantWorkOrderCreateRequest request) {
         authorizationService.requirePermission("merchant.service_work_order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createWorkOrder(request));
@@ -47,7 +47,7 @@ public class MerchantServiceController {
     @PostMapping("/work-orders/{id}/assign")
     public ApiResponse<MerchantWorkOrderRecord> assignWorkOrder(
             @PathVariable String id,
-            @RequestBody MerchantWorkOrderAssignRequest request
+            @RequestBody @jakarta.validation.Valid MerchantWorkOrderAssignRequest request
     ) {
         authorizationService.requirePermission("merchant.service_work_order.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -57,7 +57,7 @@ public class MerchantServiceController {
     @PostMapping("/work-orders/{id}/actions")
     public ApiResponse<MerchantWorkOrderRecord> addAction(
             @PathVariable String id,
-            @RequestBody MerchantWorkOrderActionRequest request
+            @RequestBody @jakarta.validation.Valid MerchantWorkOrderActionRequest request
     ) {
         authorizationService.requirePermission("merchant.service_work_order.process");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -67,7 +67,7 @@ public class MerchantServiceController {
     @PostMapping("/work-orders/{id}/close")
     public ApiResponse<MerchantWorkOrderRecord> closeWorkOrder(
             @PathVariable String id,
-            @RequestBody MerchantWorkOrderCloseRequest request
+            @RequestBody @jakarta.validation.Valid MerchantWorkOrderCloseRequest request
     ) {
         authorizationService.requirePermission("merchant.service_work_order.close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

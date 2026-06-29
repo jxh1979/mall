@@ -1,4 +1,6 @@
 package com.complex.platform.finance.dto;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -11,7 +13,7 @@ public record ArApItemRequest(
         String counterpartyId,
         String sourceType,
         String sourceId,
-        Long amountCent,
+        @NotNull @Positive Long amountCent,
         LocalDate dueDate,
         String accountingPeriod
 ) {

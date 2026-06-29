@@ -38,7 +38,7 @@ public class CustomerController {
     }
 
     @PostMapping("/auth/phone-login")
-    public ApiResponse<CustomerLoginResponse> phoneLogin(@RequestBody CustomerPhoneLoginRequest request) {
+    public ApiResponse<CustomerLoginResponse> phoneLogin(@RequestBody @jakarta.validation.Valid CustomerPhoneLoginRequest request) {
         return ApiResponse.ok(service.phoneLogin(request));
     }
 
@@ -52,7 +52,7 @@ public class CustomerController {
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody CustomerTicketOrderRequest request
+            @RequestBody @jakarta.validation.Valid CustomerTicketOrderRequest request
     ) {
         return ApiResponse.ok(service.createTicketOrder(
                 requireCustomerToken(customerToken, authorization),
@@ -83,7 +83,7 @@ public class CustomerController {
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody CustomerConsentRequest request
+            @RequestBody @jakarta.validation.Valid CustomerConsentRequest request
     ) {
         return ApiResponse.ok(service.recordConsent(
                 requireCustomerToken(customerToken, authorization),
@@ -112,7 +112,7 @@ public class CustomerController {
     public ApiResponse<CustomerCheckInRecord> checkIn(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestBody(required = false) CustomerCheckInRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid CustomerCheckInRequest request
     ) {
         return ApiResponse.ok(service.checkIn(requireCustomerToken(customerToken, authorization), request));
     }
@@ -138,7 +138,7 @@ public class CustomerController {
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody CustomerPointsRedemptionRequest request
+            @RequestBody @jakarta.validation.Valid CustomerPointsRedemptionRequest request
     ) {
         String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
         requireIdempotencyKey(key);
@@ -170,7 +170,7 @@ public class CustomerController {
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody CustomerBarReservationRequest request
+            @RequestBody @jakarta.validation.Valid CustomerBarReservationRequest request
     ) {
         String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
         requireIdempotencyKey(key);
@@ -197,7 +197,7 @@ public class CustomerController {
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @PathVariable("session_id") String sessionId,
-            @RequestBody CustomerBarScanOrderRequest request
+            @RequestBody @jakarta.validation.Valid CustomerBarScanOrderRequest request
     ) {
         String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
         requireIdempotencyKey(key);
@@ -210,7 +210,7 @@ public class CustomerController {
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody CustomerBarInvitationConfirmRequest request
+            @RequestBody @jakarta.validation.Valid CustomerBarInvitationConfirmRequest request
     ) {
         String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
         requireIdempotencyKey(key);

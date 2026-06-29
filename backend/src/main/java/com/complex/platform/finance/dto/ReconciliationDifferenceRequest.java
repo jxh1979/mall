@@ -1,4 +1,6 @@
 package com.complex.platform.finance.dto;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.util.List;
 
@@ -18,7 +20,7 @@ public record ReconciliationDifferenceRequest(
         String batchId,
         String differenceType,
         String businessRef,
-        Long actualAmountCent,
+        @NotNull @Positive Long actualAmountCent,
         String source
 ) {
 }

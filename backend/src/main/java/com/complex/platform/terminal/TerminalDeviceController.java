@@ -33,14 +33,14 @@ public class TerminalDeviceController {
     }
 
     @PostMapping("/devices/bind")
-    public ApiResponse<DeviceBindingResponse> bindDevice(@RequestBody DeviceBindRequest request) {
+    public ApiResponse<DeviceBindingResponse> bindDevice(@RequestBody @jakarta.validation.Valid DeviceBindRequest request) {
         authorizationService.requirePermission("terminal.device.bind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.bindDevice(request));
     }
 
     @PostMapping("/devices/return")
-    public ApiResponse<DeviceBindingResponse> returnDevice(@RequestBody DeviceReturnRequest request) {
+    public ApiResponse<DeviceBindingResponse> returnDevice(@RequestBody @jakarta.validation.Valid DeviceReturnRequest request) {
         authorizationService.requirePermission("terminal.device.bind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.returnDevice(request));
@@ -49,7 +49,7 @@ public class TerminalDeviceController {
     @PostMapping("/devices/{id}/unbind")
     public ApiResponse<DeviceBindingResponse> unbindDevice(
             @PathVariable String id,
-            @RequestBody DeviceUnbindRequest request
+            @RequestBody @jakarta.validation.Valid DeviceUnbindRequest request
     ) {
         authorizationService.requirePermission("terminal.device.unbind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -60,7 +60,7 @@ public class TerminalDeviceController {
     @PostMapping("/devices/{id}/repair")
     public ApiResponse<DeviceBindingResponse> repairDevice(
             @PathVariable String id,
-            @RequestBody DeviceLifecycleRequest request
+            @RequestBody @jakarta.validation.Valid DeviceLifecycleRequest request
     ) {
         authorizationService.requirePermission("terminal.device.lifecycle");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -70,7 +70,7 @@ public class TerminalDeviceController {
     @PostMapping("/devices/{id}/lost")
     public ApiResponse<DeviceBindingResponse> markDeviceLost(
             @PathVariable String id,
-            @RequestBody DeviceLifecycleRequest request
+            @RequestBody @jakarta.validation.Valid DeviceLifecycleRequest request
     ) {
         authorizationService.requirePermission("terminal.device.lifecycle");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -80,7 +80,7 @@ public class TerminalDeviceController {
     @PostMapping("/devices/{id}/found")
     public ApiResponse<DeviceBindingResponse> markDeviceFound(
             @PathVariable String id,
-            @RequestBody DeviceLifecycleRequest request
+            @RequestBody @jakarta.validation.Valid DeviceLifecycleRequest request
     ) {
         authorizationService.requirePermission("terminal.device.lifecycle");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -90,7 +90,7 @@ public class TerminalDeviceController {
     @PostMapping("/devices/{id}/scrap")
     public ApiResponse<DeviceBindingResponse> scrapDevice(
             @PathVariable String id,
-            @RequestBody DeviceLifecycleRequest request
+            @RequestBody @jakarta.validation.Valid DeviceLifecycleRequest request
     ) {
         authorizationService.requirePermission("terminal.device.lifecycle");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -106,7 +106,7 @@ public class TerminalDeviceController {
     @PutMapping("/capability-switches/{id}")
     public ApiResponse<TerminalCapabilitySwitchRecord> updateCapabilitySwitch(
             @PathVariable String id,
-            @RequestBody CapabilitySwitchRequest request
+            @RequestBody @jakarta.validation.Valid CapabilitySwitchRequest request
     ) {
         authorizationService.requirePermission("terminal.switch.manage");
         // F-CROSS-01 最小收口：终端能力开关是平台级能力（terminal_capability_switches 仅 global/device scope，
@@ -132,7 +132,7 @@ public class TerminalDeviceController {
     public ApiResponse<KioskHeartbeatRecord> recordKioskHeartbeat(
             @PathVariable("device_id") String deviceId,
             @RequestHeader(value = "X-Device-Token", required = false) String deviceToken,
-            @RequestBody KioskHeartbeatRequest request
+            @RequestBody @jakarta.validation.Valid KioskHeartbeatRequest request
     ) {
         return ApiResponse.ok(service.recordKioskHeartbeat(deviceId, deviceToken, request));
     }

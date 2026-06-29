@@ -1,4 +1,6 @@
 package com.complex.platform.inventory.dto;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -10,8 +12,8 @@ public record SupplierReconciliationRequest(
         String supplierId,
         LocalDate periodStart,
         LocalDate periodEnd,
-        Long expectedAmountCent,
-        Long actualAmountCent,
+        @NotNull @PositiveOrZero Long expectedAmountCent,
+        @NotNull @PositiveOrZero Long actualAmountCent,
         String status,
         String operatorUserId
 ) {

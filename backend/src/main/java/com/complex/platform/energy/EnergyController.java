@@ -41,7 +41,7 @@ public class EnergyController {
     }
 
     @PostMapping("/meters")
-    public ApiResponse<EnergyMeterRecord> createMeter(@RequestBody EnergyMeterRequest request) {
+    public ApiResponse<EnergyMeterRecord> createMeter(@RequestBody @jakarta.validation.Valid EnergyMeterRequest request) {
         authorizationService.requirePermission(METER_PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createMeter(request));
@@ -49,7 +49,7 @@ public class EnergyController {
 
     @PostMapping("/meters/{meter_id}")
     public ApiResponse<EnergyMeterRecord> updateMeter(
-            @PathVariable("meter_id") String meterId, @RequestBody EnergyMeterRequest request) {
+            @PathVariable("meter_id") String meterId, @RequestBody @jakarta.validation.Valid EnergyMeterRequest request) {
         authorizationService.requirePermission(METER_PERM);
         return ApiResponse.ok(service.updateMeter(meterId, request));
     }
@@ -62,7 +62,7 @@ public class EnergyController {
     }
 
     @PostMapping("/readings")
-    public ApiResponse<EnergyMeterReadingRecord> recordReading(@RequestBody EnergyReadingRecordRequest request) {
+    public ApiResponse<EnergyMeterReadingRecord> recordReading(@RequestBody @jakarta.validation.Valid EnergyReadingRecordRequest request) {
         authorizationService.requirePermission(READING_PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.recordReading(request));
@@ -70,7 +70,7 @@ public class EnergyController {
 
     @PostMapping("/readings/{reading_id}/review")
     public ApiResponse<EnergyMeterReadingRecord> reviewReading(
-            @PathVariable("reading_id") String readingId, @RequestBody EnergyReadingReviewRequest request) {
+            @PathVariable("reading_id") String readingId, @RequestBody @jakarta.validation.Valid EnergyReadingReviewRequest request) {
         authorizationService.requirePermission(READING_PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewReading(readingId, request));
@@ -84,7 +84,7 @@ public class EnergyController {
     }
 
     @PostMapping({"/settlements/energy-fee", "/settle-energy-fee"})
-    public ApiResponse<List<EnergyFeeSettlementRecord>> settleEnergyFee(@RequestBody EnergySettleRequest request) {
+    public ApiResponse<List<EnergyFeeSettlementRecord>> settleEnergyFee(@RequestBody @jakarta.validation.Valid EnergySettleRequest request) {
         authorizationService.requirePermission(READING_PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.settleEnergyFee(request.period(), request.idempotencyKey()));

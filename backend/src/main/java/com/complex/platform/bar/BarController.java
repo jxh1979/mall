@@ -42,7 +42,7 @@ public class BarController {
 
     @PostMapping("/entitlement-redemptions/drink")
     public ApiResponse<BarGiftRedemptionRecord> redeemDrinkEntitlement(
-            @RequestBody(required = false) BarEntitlementDrinkRedemptionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarEntitlementDrinkRedemptionRequest request
     ) {
         authorizationService.requirePermission("bar.entitlement.redeem");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -52,7 +52,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/commissions/calculate")
     public ApiResponse<BarCommissionCalculationRecord> calculateCommission(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) CommissionCalculateRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid CommissionCalculateRequest request
     ) {
         authorizationService.requirePermission("bar.table_commission.calculate");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -62,7 +62,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/pay-intents")
     public ApiResponse<PaymentIntentRecord> createBillPayIntent(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) PaymentIntentRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid PaymentIntentRequest request
     ) {
         authorizationService.requirePermission("finance.payment_intent.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -72,7 +72,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/settle")
     public ApiResponse<BarBillRecord> settleBill(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) BarBillSettleRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillSettleRequest request
     ) {
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -82,7 +82,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/adjustments")
     public ApiResponse<BarBillAdjustmentRecord> applyBillAdjustment(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) BarBillAdjustmentRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillAdjustmentRequest request
     ) {
         authorizationService.requirePermission("bar.bill.adjust");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -98,7 +98,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/split")
     public ApiResponse<BarBillOperationRecord> splitBill(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) BarBillSplitRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillSplitRequest request
     ) {
         authorizationService.requirePermission("bar.bill.split_merge");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -108,7 +108,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/merge")
     public ApiResponse<BarBillOperationRecord> mergeBills(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) BarBillMergeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillMergeRequest request
     ) {
         authorizationService.requirePermission("bar.bill.split_merge");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -122,7 +122,7 @@ public class BarController {
     }
 
     @PostMapping("/orders")
-    public ApiResponse<BarOrderRecord> createOrder(@RequestBody(required = false) BarOrderRequest request) {
+    public ApiResponse<BarOrderRecord> createOrder(@RequestBody(required = false) @jakarta.validation.Valid BarOrderRequest request) {
         authorizationService.requirePermission("bar.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createOrder(request));
@@ -131,7 +131,7 @@ public class BarController {
     @PostMapping("/table-sessions/{session_id}/scan-orders")
     public ApiResponse<BarOrderRecord> placeScanOrder(
             @PathVariable("session_id") String sessionId,
-            @RequestBody(required = false) BarOrderRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderRequest request
     ) {
         authorizationService.requirePermission("bar.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -141,7 +141,7 @@ public class BarController {
     @PostMapping("/orders/{order_id}/bill")
     public ApiResponse<BarBillRecord> createOrderBill(
             @PathVariable("order_id") String orderId,
-            @RequestBody(required = false) BarOrderBillCreateRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderBillCreateRequest request
     ) {
         authorizationService.requirePermission("bar.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -151,7 +151,7 @@ public class BarController {
     @PostMapping("/orders/{order_id}/deliver")
     public ApiResponse<BarOrderRecord> deliverOrder(
             @PathVariable("order_id") String orderId,
-            @RequestBody(required = false) BarOrderDeliveryRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderDeliveryRequest request
     ) {
         authorizationService.requirePermission("bar.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -161,7 +161,7 @@ public class BarController {
     @PostMapping("/orders/{order_id}/void-item")
     public ApiResponse<BarOrderItemVoidRecord> voidOrderItem(
             @PathVariable("order_id") String orderId,
-            @RequestBody(required = false) BarOrderItemVoidRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderItemVoidRequest request
     ) {
         authorizationService.requirePermission("bar.order_item.void");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -171,7 +171,7 @@ public class BarController {
     @PostMapping("/order-item-voids/{void_id}/decision")
     public ApiResponse<BarOrderItemVoidRecord> decideOrderItemVoid(
             @PathVariable("void_id") String voidId,
-            @RequestBody(required = false) BarOrderItemVoidDecisionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderItemVoidDecisionRequest request
     ) {
         // V125 P1-2：审批分离——决策端点用独立审批权限点，与申请权限 bar.order_item.void 区分，杜绝自审批。
         authorizationService.requirePermission("bar.order_item.void_decide");
@@ -182,7 +182,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/reopen")
     public ApiResponse<BarBillOperationRecord> reopenBill(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) BarBillReopenRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillReopenRequest request
     ) {
         authorizationService.requirePermission("bar.bill.reopen");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -192,7 +192,7 @@ public class BarController {
     @PostMapping("/bills/{bill_id}/tip")
     public ApiResponse<BarBillRecord> addBillTip(
             @PathVariable("bill_id") String billId,
-            @RequestBody(required = false) BarBillTipRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillTipRequest request
     ) {
         authorizationService.requirePermission("bar.bill.tip");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -206,7 +206,7 @@ public class BarController {
     }
 
     @PostMapping("/shifts/open")
-    public ApiResponse<BarShiftRecord> openShift(@RequestBody(required = false) BarShiftOpenRequest request) {
+    public ApiResponse<BarShiftRecord> openShift(@RequestBody(required = false) @jakarta.validation.Valid BarShiftOpenRequest request) {
         authorizationService.requirePermission("bar.shift.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.openShift(request));
@@ -215,7 +215,7 @@ public class BarController {
     @PostMapping("/shifts/{shift_id}/close")
     public ApiResponse<BarShiftRecord> closeShift(
             @PathVariable("shift_id") String shiftId,
-            @RequestBody(required = false) BarShiftCloseRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarShiftCloseRequest request
     ) {
         authorizationService.requirePermission("bar.shift.close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -225,7 +225,7 @@ public class BarController {
     @PostMapping("/products/{product_id}/sold-out")
     public ApiResponse<BarProductRecord> markProductSoldOut(
             @PathVariable("product_id") String productId,
-            @RequestBody(required = false) BarProductSoldOutRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarProductSoldOutRequest request
     ) {
         authorizationService.requirePermission("bar.product.sold_out");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -235,7 +235,7 @@ public class BarController {
     @PostMapping("/orders/{order_id}/items")
     public ApiResponse<BarOrderItemRecord> addOrderItem(
             @PathVariable("order_id") String orderId,
-            @RequestBody(required = false) BarOrderRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderRequest request
     ) {
         authorizationService.requirePermission("bar.order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -259,7 +259,7 @@ public class BarController {
     @PostMapping("/production-tickets/{ticket_id}/transition")
     public ApiResponse<BarProductionTicketRecord> transitionProductionTicket(
             @PathVariable("ticket_id") String ticketId,
-            @RequestBody(required = false) BarProductionTicketTransitionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarProductionTicketTransitionRequest request
     ) {
         authorizationService.requirePermission("bar.production_ticket.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -274,7 +274,7 @@ public class BarController {
     }
 
     @PostMapping("/products")
-    public ApiResponse<BarProductRecord> createProduct(@RequestBody(required = false) BarProductRequest request) {
+    public ApiResponse<BarProductRecord> createProduct(@RequestBody(required = false) @jakarta.validation.Valid BarProductRequest request) {
         // 录入/修改商品（含内部结算价）为高危动作，需专用高危权限。
         authorizationService.requirePermission("bar.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -288,7 +288,7 @@ public class BarController {
     }
 
     @PostMapping("/reservations")
-    public ApiResponse<BarReservationRecord> createReservation(@RequestBody(required = false) BarReservationRequest request) {
+    public ApiResponse<BarReservationRecord> createReservation(@RequestBody(required = false) @jakarta.validation.Valid BarReservationRequest request) {
         authorizationService.requirePermission("bar.reservation.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createReservation(request));
@@ -297,7 +297,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/pay-deposit")
     public ApiResponse<BarReservationRecord> payReservationDeposit(
             @PathVariable String id,
-            @RequestBody(required = false) BarReservationDepositActionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarReservationDepositActionRequest request
     ) {
         authorizationService.requirePermission("bar.reservation.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -307,7 +307,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/checkin")
     public ApiResponse<BarReservationRecord> checkInReservationDeposit(
             @PathVariable String id,
-            @RequestBody(required = false) BarReservationDepositActionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarReservationDepositActionRequest request
     ) {
         authorizationService.requirePermission("bar.reservation.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -317,7 +317,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/cancel")
     public ApiResponse<BarReservationRecord> cancelReservation(
             @PathVariable String id,
-            @RequestBody(required = false) BarReservationCancelRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarReservationCancelRequest request
     ) {
         authorizationService.requirePermission("bar.reservation.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -326,7 +326,7 @@ public class BarController {
 
     @PostMapping("/deposit-rules")
     public ApiResponse<BarDepositRuleRecord> createDepositRule(
-            @RequestBody(required = false) BarDepositRuleRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarDepositRuleRequest request
     ) {
         authorizationService.requirePermission("bar.deposit_rule.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -336,7 +336,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/check-in-guest")
     public ApiResponse<BarTableGuestCheckinRecord> checkInReservationGuest(
             @PathVariable String id,
-            @RequestBody(required = false) VerificationRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid VerificationRequest request
     ) {
         authorizationService.requirePermission("bar.table.guest_checkin");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -346,7 +346,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/entry-allowance/verify")
     public ApiResponse<BarReservationEntryAllowanceVerificationRecord> verifyReservationEntryAllowance(
             @PathVariable String id,
-            @RequestBody(required = false) VerificationRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid VerificationRequest request
     ) {
         authorizationService.requirePermission("bar.table.guest_checkin");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -356,7 +356,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/invitation")
     public ApiResponse<BarReservationInvitationRecord> issueReservationInvitation(
             @PathVariable String id,
-            @RequestBody(required = false) BarInvitationActionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarInvitationActionRequest request
     ) {
         authorizationService.requirePermission("bar.reservation.invitation.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -372,7 +372,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/invitation/revoke")
     public ApiResponse<BarReservationInvitationRecord> revokeReservationInvitation(
             @PathVariable String id,
-            @RequestBody(required = false) BarInvitationActionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarInvitationActionRequest request
     ) {
         authorizationService.requirePermission("bar.reservation.invitation.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -382,7 +382,7 @@ public class BarController {
     @PostMapping("/reservations/{id}/invitation/entry-verify")
     public ApiResponse<BarReservationInvitationMemberRecord> verifyReservationInvitationEntry(
             @PathVariable String id,
-            @RequestBody(required = false) VerificationRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid VerificationRequest request
     ) {
         authorizationService.requirePermission("bar.table.guest_checkin");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -396,7 +396,7 @@ public class BarController {
     }
 
     @PostMapping("/tables")
-    public ApiResponse<BarTableRecord> createTable(@RequestBody(required = false) BarTableRequest request) {
+    public ApiResponse<BarTableRecord> createTable(@RequestBody(required = false) @jakarta.validation.Valid BarTableRequest request) {
         authorizationService.requirePermission("bar.table.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTable(request));
@@ -411,7 +411,7 @@ public class BarController {
     @PutMapping("/tables/{table_id}/space")
     public ApiResponse<BarTableSpaceAssignmentRecord> assignTableSpace(
             @PathVariable("table_id") String tableId,
-            @RequestBody(required = false) BarTableSpaceAssignmentRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableSpaceAssignmentRequest request
     ) {
         authorizationService.requirePermission("bar.table.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -421,7 +421,7 @@ public class BarController {
     @PostMapping("/tables/{table_id}/open")
     public ApiResponse<BarTableRecord> openTable(
             @PathVariable("table_id") String tableId,
-            @RequestBody(required = false) OpenBarTableRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid OpenBarTableRequest request
     ) {
         authorizationService.requirePermission("bar.table.open_close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -435,7 +435,7 @@ public class BarController {
     }
 
     @PostMapping("/table-sessions")
-    public ApiResponse<BarTableSessionRecord> createTableSession(@RequestBody(required = false) BarTableSessionRequest request) {
+    public ApiResponse<BarTableSessionRecord> createTableSession(@RequestBody(required = false) @jakarta.validation.Valid BarTableSessionRequest request) {
         authorizationService.requirePermission("bar.table_session.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTableSession(request));
@@ -444,7 +444,7 @@ public class BarController {
     @PostMapping("/table-sessions/{session_id}/transfer")
     public ApiResponse<BarTableSessionAdjustmentRecord> transferTableSession(
             @PathVariable("session_id") String sessionId,
-            @RequestBody(required = false) BarTableTransferRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableTransferRequest request
     ) {
         authorizationService.requirePermission("bar.table_session.transfer");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -454,7 +454,7 @@ public class BarController {
     @PostMapping("/table-sessions/{session_id}/merge")
     public ApiResponse<BarTableSessionAdjustmentRecord> mergeTableSessions(
             @PathVariable("session_id") String sessionId,
-            @RequestBody(required = false) BarTableMergeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableMergeRequest request
     ) {
         authorizationService.requirePermission("bar.table_session.merge");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -464,7 +464,7 @@ public class BarController {
     @PostMapping("/table-sessions/{session_id}/renew")
     public ApiResponse<BarTableSessionAdjustmentRecord> renewTableSession(
             @PathVariable("session_id") String sessionId,
-            @RequestBody(required = false) BarTableRenewRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableRenewRequest request
     ) {
         authorizationService.requirePermission("bar.table_session.renew");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

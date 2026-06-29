@@ -38,7 +38,7 @@ public class MerchantBillingController {
     }
 
     @PostMapping("/bills")
-    public ApiResponse<MerchantBillRecord> createBill(@RequestBody MerchantBillCreateRequest request) {
+    public ApiResponse<MerchantBillRecord> createBill(@RequestBody @jakarta.validation.Valid MerchantBillCreateRequest request) {
         authorizationService.requirePermission("merchant.billing.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createBill(request));
@@ -47,7 +47,7 @@ public class MerchantBillingController {
     @PostMapping("/bills/{id}/confirm")
     public ApiResponse<MerchantBillRecord> confirmBill(
             @PathVariable String id,
-            @RequestBody MerchantBillConfirmRequest request
+            @RequestBody @jakarta.validation.Valid MerchantBillConfirmRequest request
     ) {
         authorizationService.requirePermission("merchant.billing.confirm");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -57,7 +57,7 @@ public class MerchantBillingController {
     @PostMapping("/bills/{id}/disputes")
     public ApiResponse<MerchantBillDisputeRecord> submitDispute(
             @PathVariable String id,
-            @RequestBody MerchantBillDisputeRequest request
+            @RequestBody @jakarta.validation.Valid MerchantBillDisputeRequest request
     ) {
         authorizationService.requirePermission("merchant.billing.dispute.submit");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -67,7 +67,7 @@ public class MerchantBillingController {
     @PostMapping("/bills/{id}/dunning-records")
     public ApiResponse<MerchantBillDunningRecord> recordDunning(
             @PathVariable String id,
-            @RequestBody MerchantBillDunningRequest request
+            @RequestBody @jakarta.validation.Valid MerchantBillDunningRequest request
     ) {
         authorizationService.requirePermission("merchant.billing.dunning.record");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

@@ -43,7 +43,7 @@ public class FacilityController {
     }
 
     @PostMapping
-    public ApiResponse<FacilityEquipmentRecord> create(@RequestBody FacilityEquipmentRequest request) {
+    public ApiResponse<FacilityEquipmentRecord> create(@RequestBody @jakarta.validation.Valid FacilityEquipmentRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.create(request));
@@ -51,14 +51,14 @@ public class FacilityController {
 
     @PostMapping("/{equipment_id}")
     public ApiResponse<FacilityEquipmentRecord> update(
-            @PathVariable("equipment_id") String equipmentId, @RequestBody FacilityEquipmentRequest request) {
+            @PathVariable("equipment_id") String equipmentId, @RequestBody @jakarta.validation.Valid FacilityEquipmentRequest request) {
         authorizationService.requirePermission(PERM);
         return ApiResponse.ok(service.update(equipmentId, request));
     }
 
     @PostMapping("/{equipment_id}/status")
     public ApiResponse<FacilityEquipmentRecord> changeStatus(
-            @PathVariable("equipment_id") String equipmentId, @RequestBody FacilityEquipmentStatusRequest request) {
+            @PathVariable("equipment_id") String equipmentId, @RequestBody @jakarta.validation.Valid FacilityEquipmentStatusRequest request) {
         authorizationService.requirePermission(PERM);
         return ApiResponse.ok(service.changeStatus(equipmentId, request));
     }

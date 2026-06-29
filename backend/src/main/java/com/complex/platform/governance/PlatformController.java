@@ -38,7 +38,7 @@ public class PlatformController {
     }
 
     @PostMapping("/business-entities")
-    public ApiResponse<BusinessEntityRecord> createBusinessEntity(@RequestBody BusinessEntityRequest request) {
+    public ApiResponse<BusinessEntityRecord> createBusinessEntity(@RequestBody @jakarta.validation.Valid BusinessEntityRequest request) {
         authorizationService.requirePermission("entity.binding.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createBusinessEntity(request));
@@ -51,7 +51,7 @@ public class PlatformController {
     }
 
     @PostMapping("/merchants")
-    public ApiResponse<MerchantRecord> createMerchant(@RequestBody MerchantProfileRequest request) {
+    public ApiResponse<MerchantRecord> createMerchant(@RequestBody @jakarta.validation.Valid MerchantProfileRequest request) {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createMerchant(request));
@@ -60,7 +60,7 @@ public class PlatformController {
     @PutMapping("/merchants/{merchant_id}")
     public ApiResponse<MerchantRecord> updateMerchant(
             @PathVariable("merchant_id") String merchantId,
-            @RequestBody MerchantProfileRequest request
+            @RequestBody @jakarta.validation.Valid MerchantProfileRequest request
     ) {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -74,7 +74,7 @@ public class PlatformController {
     }
 
     @PostMapping("/projects")
-    public ApiResponse<ProjectRecord> createProject(@RequestBody ProjectRequest request) {
+    public ApiResponse<ProjectRecord> createProject(@RequestBody @jakarta.validation.Valid ProjectRequest request) {
         authorizationService.requirePermission("governance.project.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createProject(request));
@@ -87,7 +87,7 @@ public class PlatformController {
     }
 
     @PostMapping("/spaces")
-    public ApiResponse<SpaceRecord> createSpace(@RequestBody SpaceRequest request) {
+    public ApiResponse<SpaceRecord> createSpace(@RequestBody @jakarta.validation.Valid SpaceRequest request) {
         authorizationService.requirePermission("governance.space.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createSpace(request));
@@ -101,7 +101,7 @@ public class PlatformController {
 
     @PostMapping("/business-entity-bindings")
     public ApiResponse<BusinessEntityBindingRecord> createBusinessEntityBinding(
-            @RequestBody BusinessEntityBindingRequest request
+            @RequestBody @jakarta.validation.Valid BusinessEntityBindingRequest request
     ) {
         authorizationService.requirePermission("entity.binding.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -111,7 +111,7 @@ public class PlatformController {
     @PostMapping("/business-entity-bindings/{id}/change")
     public ApiResponse<BusinessEntityBindingRecord> changeBusinessEntityBinding(
             @PathVariable String id,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("entity.binding.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

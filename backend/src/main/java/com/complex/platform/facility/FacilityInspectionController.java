@@ -39,7 +39,7 @@ public class FacilityInspectionController {
 
     @PostMapping("/templates")
     public ApiResponse<FacilityInspectionTemplateRecord> createTemplate(
-            @RequestBody FacilityInspectionTemplateRequest request) {
+            @RequestBody @jakarta.validation.Valid FacilityInspectionTemplateRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTemplate(request));
@@ -58,7 +58,7 @@ public class FacilityInspectionController {
     }
 
     @PostMapping("/tasks")
-    public ApiResponse<FacilityInspectionTaskRecord> createTask(@RequestBody FacilityInspectionTaskRequest request) {
+    public ApiResponse<FacilityInspectionTaskRecord> createTask(@RequestBody @jakarta.validation.Valid FacilityInspectionTaskRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTask(request));
@@ -66,7 +66,7 @@ public class FacilityInspectionController {
 
     @PostMapping("/tasks/{task_id}/start")
     public ApiResponse<FacilityInspectionTaskRecord> start(
-            @PathVariable("task_id") String taskId, @RequestBody FacilityInspectionRecheckConfirmRequest request) {
+            @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecheckConfirmRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.start(taskId, request));
@@ -74,7 +74,7 @@ public class FacilityInspectionController {
 
     @PostMapping("/tasks/{task_id}/records")
     public ApiResponse<FacilityInspectionRecordRecord> submitRecord(
-            @PathVariable("task_id") String taskId, @RequestBody FacilityInspectionRecordSubmitRequest request) {
+            @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecordSubmitRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submitRecord(taskId, request));
@@ -88,7 +88,7 @@ public class FacilityInspectionController {
 
     @PostMapping("/tasks/{task_id}/recheck")
     public ApiResponse<FacilityInspectionTaskRecord> recheck(
-            @PathVariable("task_id") String taskId, @RequestBody FacilityInspectionRecheckConfirmRequest request) {
+            @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecheckConfirmRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.recheck(taskId, request));
@@ -96,7 +96,7 @@ public class FacilityInspectionController {
 
     @PostMapping("/tasks/{task_id}/supervisor-confirm")
     public ApiResponse<FacilityInspectionTaskRecord> supervisorConfirm(
-            @PathVariable("task_id") String taskId, @RequestBody FacilityInspectionRecheckConfirmRequest request) {
+            @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecheckConfirmRequest request) {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.supervisorConfirm(taskId, request));

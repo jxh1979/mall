@@ -92,7 +92,7 @@ public class MemberWalletController {
     public ApiResponse<PaymentIntentRecord> subscribe(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestBody MembershipSubscribeRequest request
+            @RequestBody @jakarta.validation.Valid MembershipSubscribeRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
         return ApiResponse.ok(membershipService.subscribe(customerId, request.planId(),

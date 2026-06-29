@@ -1,4 +1,6 @@
 package com.complex.platform.finance.dto;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.time.Instant;
 import java.util.List;
@@ -7,7 +9,7 @@ public record ArApPaymentRequest(
         String idempotencyKey,
         String operatorNote,
         List<String> evidenceAttachmentIds,
-        Long amountCent,
+        @NotNull @Positive Long amountCent,
         String paymentMethod,
         Instant paymentTime,
         String bankFlowRef,

@@ -31,7 +31,7 @@ public class SupervisorReviewController {
     }
 
     @PostMapping("/supervisor-review/evaluate")
-    public ApiResponse<SupervisorReviewDecisionRecord> evaluate(@RequestBody SupervisorReviewEvaluateRequest request) {
+    public ApiResponse<SupervisorReviewDecisionRecord> evaluate(@RequestBody @jakarta.validation.Valid SupervisorReviewEvaluateRequest request) {
         authorizationService.requirePermission("governance.supervisor_review.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.evaluate(request));
@@ -40,7 +40,7 @@ public class SupervisorReviewController {
     @PostMapping("/supervisor-review/{review_id}/approve")
     public ApiResponse<SupervisorReviewDecisionRecord> approve(
             @PathVariable("review_id") String reviewId,
-            @RequestBody SupervisorReviewApprovalRequest request
+            @RequestBody @jakarta.validation.Valid SupervisorReviewApprovalRequest request
     ) {
         authorizationService.requirePermission("governance.supervisor_review.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

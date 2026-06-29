@@ -40,7 +40,7 @@ public class AmusementSafetyController {
 
     @PostMapping("/safety-notices")
     public ApiResponse<AmusementSafetyNoticeRecord> createSafetyNotice(
-            @RequestBody AmusementSafetyNoticeCreateRequest request
+            @RequestBody @jakarta.validation.Valid AmusementSafetyNoticeCreateRequest request
     ) {
         authorizationService.requirePermission("amusement.safety_notice.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -50,7 +50,7 @@ public class AmusementSafetyController {
     @PostMapping("/safety-notices/{noticeId}/acknowledgements")
     public ApiResponse<AmusementWaiverAcknowledgementRecord> acknowledgeWaiver(
             @PathVariable String noticeId,
-            @RequestBody AmusementWaiverAcknowledgementRequest request
+            @RequestBody @jakarta.validation.Valid AmusementWaiverAcknowledgementRequest request
     ) {
         authorizationService.requirePermission("amusement.waiver.acknowledge");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -65,7 +65,7 @@ public class AmusementSafetyController {
 
     @PostMapping("/incidents")
     public ApiResponse<AmusementIncidentRecord> createIncident(
-            @RequestBody AmusementIncidentCreateRequest request
+            @RequestBody @jakarta.validation.Valid AmusementIncidentCreateRequest request
     ) {
         authorizationService.requirePermission("amusement.incident.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -75,7 +75,7 @@ public class AmusementSafetyController {
     @PostMapping("/incidents/{incidentId}/actions")
     public ApiResponse<AmusementIncidentRecord> addIncidentAction(
             @PathVariable String incidentId,
-            @RequestBody AmusementIncidentActionRequest request
+            @RequestBody @jakarta.validation.Valid AmusementIncidentActionRequest request
     ) {
         authorizationService.requirePermission("amusement.incident.process");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -85,7 +85,7 @@ public class AmusementSafetyController {
     @PostMapping("/incidents/{incidentId}/close")
     public ApiResponse<AmusementIncidentRecord> closeIncident(
             @PathVariable String incidentId,
-            @RequestBody AmusementIncidentCloseRequest request
+            @RequestBody @jakarta.validation.Valid AmusementIncidentCloseRequest request
     ) {
         authorizationService.requirePermission("amusement.incident.close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

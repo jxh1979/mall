@@ -1,4 +1,6 @@
 package com.complex.platform.finance.dto;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.time.Instant;
 import java.util.List;
@@ -8,7 +10,7 @@ public record OfflinePaymentConfirmRequest(
         String operatorNote,
         List<String> evidenceAttachmentIds,
         String paymentId,
-        Long amountCent,
+        @NotNull @Positive Long amountCent,
         String paymentMethod,
         Instant confirmedAt,
         // F1 财务统一台账：可选——确认线下收款时显式指明所结算的应收应付台账项。

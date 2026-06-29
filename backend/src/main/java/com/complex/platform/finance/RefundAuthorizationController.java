@@ -43,7 +43,7 @@ public class RefundAuthorizationController {
     }
 
     @PostMapping("/limits")
-    public ApiResponse<RefundAuthorityLimitRecord> upsertLimit(@RequestBody RefundAuthorityLimitRequest request) {
+    public ApiResponse<RefundAuthorityLimitRecord> upsertLimit(@RequestBody @jakarta.validation.Valid RefundAuthorityLimitRequest request) {
         authorizationService.requirePermission(MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.upsertLimit(request));
@@ -57,7 +57,7 @@ public class RefundAuthorizationController {
     }
 
     @PostMapping("/rules")
-    public ApiResponse<RefundAutoRuleRecord> upsertRule(@RequestBody RefundAutoRuleRequest request) {
+    public ApiResponse<RefundAutoRuleRecord> upsertRule(@RequestBody @jakarta.validation.Valid RefundAutoRuleRequest request) {
         authorizationService.requirePermission(MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.upsertRule(request));

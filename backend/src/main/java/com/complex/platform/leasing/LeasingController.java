@@ -50,7 +50,7 @@ public class LeasingController {
     }
 
     @PostMapping("/leads")
-    public ApiResponse<LeasingLeadRecord> createLead(@RequestBody LeasingLeadRequest request) {
+    public ApiResponse<LeasingLeadRecord> createLead(@RequestBody @jakarta.validation.Valid LeasingLeadRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createLead(request));
@@ -58,7 +58,7 @@ public class LeasingController {
 
     @PostMapping("/leads/{lead_id}/assign")
     public ApiResponse<LeasingLeadRecord> assignLead(
-            @PathVariable("lead_id") String leadId, @RequestBody LeasingLeadAssignRequest request) {
+            @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadAssignRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.assignLead(leadId, request));
@@ -66,7 +66,7 @@ public class LeasingController {
 
     @PostMapping("/leads/{lead_id}/status")
     public ApiResponse<LeasingLeadRecord> updateLeadStatus(
-            @PathVariable("lead_id") String leadId, @RequestBody LeasingLeadStatusRequest request) {
+            @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadStatusRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updateLeadStatus(leadId, request));
@@ -80,7 +80,7 @@ public class LeasingController {
     }
 
     @PostMapping("/intents")
-    public ApiResponse<LeasingIntentRecord> createIntent(@RequestBody LeasingIntentRequest request) {
+    public ApiResponse<LeasingIntentRecord> createIntent(@RequestBody @jakarta.validation.Valid LeasingIntentRequest request) {
         authorizationService.requirePermission("leasing.intent.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createIntent(request));
@@ -88,7 +88,7 @@ public class LeasingController {
 
     @PostMapping("/intents/{intent_id}/advance")
     public ApiResponse<LeasingIntentRecord> advanceIntent(
-            @PathVariable("intent_id") String intentId, @RequestBody LeasingIntentAdvanceRequest request) {
+            @PathVariable("intent_id") String intentId, @RequestBody @jakarta.validation.Valid LeasingIntentAdvanceRequest request) {
         authorizationService.requirePermission("leasing.intent.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.advanceIntent(intentId, request));
@@ -96,7 +96,7 @@ public class LeasingController {
 
     @PostMapping("/intents/{intent_id}/sign")
     public ApiResponse<ContractRecord> signIntent(
-            @PathVariable("intent_id") String intentId, @RequestBody LeasingSignRequest request) {
+            @PathVariable("intent_id") String intentId, @RequestBody @jakarta.validation.Valid LeasingSignRequest request) {
         authorizationService.requirePermission("leasing.convert");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.signIntent(intentId, request));
@@ -110,7 +110,7 @@ public class LeasingController {
     }
 
     @PostMapping("/brands")
-    public ApiResponse<LeasingBrandRecord> createBrand(@RequestBody LeasingBrandRequest request) {
+    public ApiResponse<LeasingBrandRecord> createBrand(@RequestBody @jakarta.validation.Valid LeasingBrandRequest request) {
         authorizationService.requirePermission("leasing.brand.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createBrand(request));
@@ -118,7 +118,7 @@ public class LeasingController {
 
     @PostMapping("/brands/{brand_id}/blacklist")
     public ApiResponse<LeasingBrandRecord> blacklistBrand(
-            @PathVariable("brand_id") String brandId, @RequestBody LeasingBrandBlacklistRequest request) {
+            @PathVariable("brand_id") String brandId, @RequestBody @jakarta.validation.Valid LeasingBrandBlacklistRequest request) {
         authorizationService.requirePermission("leasing.brand.blacklist");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.blacklistBrand(brandId, request));
@@ -133,7 +133,7 @@ public class LeasingController {
     }
 
     @PostMapping("/follow-ups")
-    public ApiResponse<LeasingFollowUpRecord> createFollowUp(@RequestBody LeasingFollowUpRequest request) {
+    public ApiResponse<LeasingFollowUpRecord> createFollowUp(@RequestBody @jakarta.validation.Valid LeasingFollowUpRequest request) {
         authorizationService.requirePermission("leasing.lead.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createFollowUp(request));

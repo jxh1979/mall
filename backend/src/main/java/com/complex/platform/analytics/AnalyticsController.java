@@ -58,7 +58,7 @@ public class AnalyticsController {
 
     @PostMapping("/ai-quality/local-llm-suggestions")
     public ApiResponse<AiQualitySuggestionResponse> generateLocalLlmAiQualitySuggestion(
-            @RequestBody(required = false) AiQualitySuggestionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AiQualitySuggestionRequest request
     ) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -133,7 +133,7 @@ public class AnalyticsController {
 
     @PostMapping("/operating-params")
     public ApiResponse<OperatingParamsRecord> upsertOperatingParams(
-            @RequestBody(required = false) OperatingParamsRequest request) {
+            @RequestBody(required = false) @jakarta.validation.Valid OperatingParamsRequest request) {
         authorizationService.requirePermission("analytics.operating_params.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         authorizationService.requirePlatformScope();
@@ -181,7 +181,7 @@ public class AnalyticsController {
     }
 
     @PostMapping("/risk-alerts")
-    public ApiResponse<RiskAlertRecord> createRiskAlert(@RequestBody(required = false) RiskAlertRequest request) {
+    public ApiResponse<RiskAlertRecord> createRiskAlert(@RequestBody(required = false) @jakarta.validation.Valid RiskAlertRequest request) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         authorizationService.requirePlatformScope();
@@ -191,7 +191,7 @@ public class AnalyticsController {
     @PostMapping("/risk-alerts/{id}/resolve")
     public ApiResponse<RiskAlertRecord> resolveRiskAlert(
             @PathVariable String id,
-            @RequestBody(required = false) StatusChangeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("analytics.risk_alert.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

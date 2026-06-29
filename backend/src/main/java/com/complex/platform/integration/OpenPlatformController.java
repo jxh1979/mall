@@ -46,7 +46,7 @@ public class OpenPlatformController {
             @RequestHeader(value = "X-Open-Timestamp", required = false) Long timestamp,
             @RequestHeader(value = "X-Open-Nonce", required = false) String nonce,
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyHeader,
-            @RequestBody(required = false) Map<String, Object> payload
+            @RequestBody(required = false) @jakarta.validation.Valid Map<String, Object> payload
     ) {
         String idempotencyKey = idempotencyKey(idempotencyHeader, payload);
         return ApiResponse.ok(service.receiveWebhook(

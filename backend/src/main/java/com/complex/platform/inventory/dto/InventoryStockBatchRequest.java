@@ -1,4 +1,6 @@
 package com.complex.platform.inventory.dto;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 import java.time.Instant;
 import java.util.List;
@@ -11,7 +13,7 @@ public record InventoryStockBatchRequest(
         String locationId,
         String batchNo,
         String supplierId,
-        Integer quantity,
+        @NotNull @Positive Integer quantity,
         Instant expireAt,
         String status
 ) {

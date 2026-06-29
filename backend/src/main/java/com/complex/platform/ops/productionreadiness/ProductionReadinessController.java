@@ -41,7 +41,7 @@ public class ProductionReadinessController {
     @PutMapping("/items/{id}")
     public ApiResponse<ProductionReadinessItemResponse> updateItem(
             @PathVariable String id,
-            @RequestBody ProductionReadinessItemUpdateRequest request
+            @RequestBody @jakarta.validation.Valid ProductionReadinessItemUpdateRequest request
     ) {
         authorizationService.requirePermission("ops.production_readiness.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -50,7 +50,7 @@ public class ProductionReadinessController {
 
     @PostMapping("/checks")
     public ApiResponse<ProductionReadinessCheckResponse> createCheck(
-            @RequestBody ProductionReadinessCheckRequest request
+            @RequestBody @jakarta.validation.Valid ProductionReadinessCheckRequest request
     ) {
         authorizationService.requirePermission("ops.production_readiness.check");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

@@ -20,13 +20,13 @@ public class ProductionAuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<AuthService.LoginResponse> login(@RequestBody AuthService.LoginRequest request) {
+    public ApiResponse<AuthService.LoginResponse> login(@RequestBody @jakarta.validation.Valid AuthService.LoginRequest request) {
         return ApiResponse.ok(authService.login(request));
     }
 
     @PostMapping("/refresh")
     public ApiResponse<AuthService.LoginResponse> refresh(
-            @RequestBody AuthService.RefreshTokenRequest request,
+            @RequestBody @jakarta.validation.Valid AuthService.RefreshTokenRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader
     ) {
         return ApiResponse.ok(authService.refresh(request, bearerToken(authorizationHeader)));
@@ -34,7 +34,7 @@ public class ProductionAuthController {
 
     @PostMapping("/logout")
     public ApiResponse<AuthService.LogoutResponse> logout(
-            @RequestBody AuthService.LogoutRequest request,
+            @RequestBody @jakarta.validation.Valid AuthService.LogoutRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader
     ) {
         return ApiResponse.ok(authService.logout(request, bearerToken(authorizationHeader)));

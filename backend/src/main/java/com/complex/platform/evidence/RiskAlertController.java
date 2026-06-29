@@ -31,7 +31,7 @@ public class RiskAlertController {
     }
 
     @PostMapping
-    public ApiResponse<RiskAlertRecord> report(@RequestBody RiskAlertReportRequest request) {
+    public ApiResponse<RiskAlertRecord> report(@RequestBody @jakarta.validation.Valid RiskAlertReportRequest request) {
         authorizationService.requirePermission(RiskAlertService.REPORT_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.report(request));
@@ -40,7 +40,7 @@ public class RiskAlertController {
     @PostMapping("/{alert_id}/claim")
     public ApiResponse<RiskAlertRecord> claim(
             @PathVariable("alert_id") String alertId,
-            @RequestBody RiskAlertActionRequest request
+            @RequestBody @jakarta.validation.Valid RiskAlertActionRequest request
     ) {
         authorizationService.requirePermission(RiskAlertService.CLAIM_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -50,7 +50,7 @@ public class RiskAlertController {
     @PostMapping("/{alert_id}/transfer")
     public ApiResponse<RiskAlertRecord> transfer(
             @PathVariable("alert_id") String alertId,
-            @RequestBody RiskAlertActionRequest request
+            @RequestBody @jakarta.validation.Valid RiskAlertActionRequest request
     ) {
         authorizationService.requirePermission(RiskAlertService.TRANSFER_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -60,7 +60,7 @@ public class RiskAlertController {
     @PostMapping("/{alert_id}/escalate")
     public ApiResponse<RiskAlertRecord> escalate(
             @PathVariable("alert_id") String alertId,
-            @RequestBody RiskAlertActionRequest request
+            @RequestBody @jakarta.validation.Valid RiskAlertActionRequest request
     ) {
         authorizationService.requirePermission(RiskAlertService.ESCALATE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -70,7 +70,7 @@ public class RiskAlertController {
     @PostMapping("/{alert_id}/resolve")
     public ApiResponse<RiskAlertRecord> resolve(
             @PathVariable("alert_id") String alertId,
-            @RequestBody RiskAlertResolveRequest request
+            @RequestBody @jakarta.validation.Valid RiskAlertResolveRequest request
     ) {
         authorizationService.requirePermission(RiskAlertService.RESOLVE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -80,7 +80,7 @@ public class RiskAlertController {
     @PostMapping("/{alert_id}/dismiss")
     public ApiResponse<RiskAlertRecord> dismiss(
             @PathVariable("alert_id") String alertId,
-            @RequestBody RiskAlertActionRequest request
+            @RequestBody @jakarta.validation.Valid RiskAlertActionRequest request
     ) {
         authorizationService.requirePermission(RiskAlertService.DISMISS_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

@@ -41,7 +41,7 @@ public class AmusementController {
 
     @PostMapping("/manual-overrides")
     public ApiResponse<AmusementManualOverrideRecord> createManualOverride(
-            @RequestBody(required = false) AmusementManualOverrideRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementManualOverrideRequest request
     ) {
         authorizationService.requirePermission("amusement.verification.override");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -55,7 +55,7 @@ public class AmusementController {
     }
 
     @PostMapping("/projects")
-    public ApiResponse<AmusementProjectRecord> createProject(@RequestBody(required = false) AmusementProjectRequest request) {
+    public ApiResponse<AmusementProjectRecord> createProject(@RequestBody(required = false) @jakarta.validation.Valid AmusementProjectRequest request) {
         authorizationService.requirePermission("amusement.session.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createProject(request));
@@ -76,7 +76,7 @@ public class AmusementController {
     @PutMapping("/projects/{id}/space")
     public ApiResponse<AmusementProjectSpaceAssignmentRecord> assignProjectSpace(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementProjectSpaceAssignmentRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementProjectSpaceAssignmentRequest request
     ) {
         authorizationService.requirePermission("amusement.session.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -92,7 +92,7 @@ public class AmusementController {
     @PostMapping("/projects/{id}/rules")
     public ApiResponse<AmusementProjectRuleRecord> createProjectRule(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementProjectRuleRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementProjectRuleRequest request
     ) {
         authorizationService.requirePermission("amusement.project.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -108,7 +108,7 @@ public class AmusementController {
     @PostMapping("/projects/{id}/entitlements")
     public ApiResponse<AmusementProjectEntitlementRecord> createProjectEntitlement(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementProjectEntitlementRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementProjectEntitlementRequest request
     ) {
         authorizationService.requirePermission("amusement.project_entitlement.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -119,7 +119,7 @@ public class AmusementController {
     public ApiResponse<AmusementProjectEntitlementRecord> removeProjectEntitlement(
             @PathVariable String id,
             @PathVariable String entitlementType,
-            @RequestBody(required = false) com.complex.platform.ticketing.dto.StatusChangeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid com.complex.platform.ticketing.dto.StatusChangeRequest request
     ) {
         authorizationService.requirePermission("amusement.project_entitlement.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -136,7 +136,7 @@ public class AmusementController {
     @PostMapping("/projects/{id}/capacity-config")
     public ApiResponse<AmusementCapacityConfigRecord> createCapacityConfig(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementCapacityConfigRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementCapacityConfigRequest request
     ) {
         authorizationService.requirePermission("amusement.capacity_config.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -152,7 +152,7 @@ public class AmusementController {
     @PostMapping("/projects/{id}/devices")
     public ApiResponse<AmusementDeviceRecord> createDevice(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementDeviceRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementDeviceRequest request
     ) {
         authorizationService.requirePermission("amusement.device.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -162,7 +162,7 @@ public class AmusementController {
     @PostMapping("/capacity-config/{configId}/disable")
     public ApiResponse<AmusementCapacityConfigRecord> disableCapacityConfig(
             @PathVariable String configId,
-            @RequestBody(required = false) com.complex.platform.ticketing.dto.StatusChangeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid com.complex.platform.ticketing.dto.StatusChangeRequest request
     ) {
         authorizationService.requirePermission("amusement.capacity_config.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -179,7 +179,7 @@ public class AmusementController {
     @PutMapping("/projects/{projectId}/over-capacity-policy")
     public ApiResponse<AmusementOverCapacityPolicy> configureOverCapacityPolicy(
             @PathVariable String projectId,
-            @RequestBody(required = false) ConfigureOverCapacityPolicyRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid ConfigureOverCapacityPolicyRequest request
     ) {
         authorizationService.requirePermission("amusement.over_capacity_policy.configure");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -195,7 +195,7 @@ public class AmusementController {
 
     @PostMapping("/entitlement-sessions")
     public ApiResponse<EntitlementSessionRecord> initiateEntitlementSession(
-            @RequestBody(required = false) InitiateEntitlementSessionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid InitiateEntitlementSessionRequest request
     ) {
         authorizationService.requirePermission("amusement.entitlement_session.initiate");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -211,7 +211,7 @@ public class AmusementController {
     @PostMapping("/entitlement-sessions/{id}/claim")
     public ApiResponse<EntitlementSessionRecord> claimEntitlementSession(
             @PathVariable String id,
-            @RequestBody(required = false) ClaimEntitlementSessionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid ClaimEntitlementSessionRequest request
     ) {
         authorizationService.requirePermission("amusement.entitlement_session.claim");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -226,7 +226,7 @@ public class AmusementController {
 
     @PostMapping("/queue-entries")
     public ApiResponse<AmusementQueueEntryRecord> createQueueEntry(
-            @RequestBody(required = false) AmusementQueueEntryRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementQueueEntryRequest request
     ) {
         authorizationService.requirePermission("amusement.queue.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -236,7 +236,7 @@ public class AmusementController {
     @PostMapping("/queue-entries/{id}/status")
     public ApiResponse<AmusementQueueEntryRecord> changeQueueEntryStatus(
             @PathVariable String id,
-            @RequestBody(required = false) StatusChangeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("amusement.queue.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -251,7 +251,7 @@ public class AmusementController {
 
     @PostMapping("/reservations")
     public ApiResponse<AmusementReservationRecord> createReservation(
-            @RequestBody(required = false) AmusementReservationRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementReservationRequest request
     ) {
         authorizationService.requirePermission("amusement.reservation.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -261,7 +261,7 @@ public class AmusementController {
     @PostMapping("/reservations/{id}/status")
     public ApiResponse<AmusementReservationRecord> changeReservationStatus(
             @PathVariable String id,
-            @RequestBody(required = false) StatusChangeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("amusement.reservation.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -276,7 +276,7 @@ public class AmusementController {
 
     @PostMapping("/group-bookings")
     public ApiResponse<AmusementGroupBookingRecord> createGroupBooking(
-            @RequestBody(required = false) AmusementGroupBookingRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementGroupBookingRequest request
     ) {
         authorizationService.requirePermission("amusement.group_booking.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -286,7 +286,7 @@ public class AmusementController {
     @PostMapping("/group-bookings/{id}/approve")
     public ApiResponse<AmusementGroupBookingRecord> approveGroupBooking(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementGroupBookingApprovalRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementGroupBookingApprovalRequest request
     ) {
         authorizationService.requirePermission("amusement.group_booking.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -296,7 +296,7 @@ public class AmusementController {
     @PostMapping("/group-bookings/{id}/release")
     public ApiResponse<AmusementGroupBookingRecord> releaseGroupBooking(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementGroupBookingReleaseRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementGroupBookingReleaseRequest request
     ) {
         authorizationService.requirePermission("amusement.group_booking.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -317,7 +317,7 @@ public class AmusementController {
 
     @PostMapping("/safety-inspections")
     public ApiResponse<AmusementSafetyInspectionRecord> createSafetyInspection(
-            @RequestBody(required = false) AmusementSafetyInspectionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementSafetyInspectionRequest request
     ) {
         authorizationService.requirePermission("amusement.safety_inspection.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -327,7 +327,7 @@ public class AmusementController {
     @PostMapping("/safety-inspections/{id}/approve-reopen")
     public ApiResponse<AmusementSafetyInspectionRecord> approveReopen(
             @PathVariable String id,
-            @RequestBody(required = false) StatusChangeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("amusement.safety_inspection.approve_reopen");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -337,7 +337,7 @@ public class AmusementController {
     @PostMapping("/safety-inspections/{id}/recheck")
     public ApiResponse<AmusementSafetyInspectionRecord> recheckSafetyInspection(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementSafetyActionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementSafetyActionRequest request
     ) {
         authorizationService.requirePermission("amusement.safety_inspection.recheck");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -347,7 +347,7 @@ public class AmusementController {
     @PostMapping("/safety-inspections/{id}/rectify")
     public ApiResponse<AmusementSafetyInspectionRecord> rectifySafetyInspection(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementSafetyActionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementSafetyActionRequest request
     ) {
         authorizationService.requirePermission("amusement.safety_inspection.rectify");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -357,7 +357,7 @@ public class AmusementController {
     @PostMapping("/safety-inspections/{id}/submit")
     public ApiResponse<AmusementSafetyInspectionRecord> submitSafetyInspection(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementSafetyActionRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementSafetyActionRequest request
     ) {
         authorizationService.requirePermission("amusement.safety_inspection.submit");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -378,7 +378,7 @@ public class AmusementController {
 
     @PostMapping("/maintenance-records")
     public ApiResponse<AmusementMaintenanceRecord> createMaintenanceRecord(
-            @RequestBody(required = false) AmusementMaintenanceRecordRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementMaintenanceRecordRequest request
     ) {
         authorizationService.requirePermission("amusement.maintenance.submit");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -388,7 +388,7 @@ public class AmusementController {
     @PostMapping("/maintenance-records/{id}/confirm-resume")
     public ApiResponse<AmusementMaintenanceRecord> confirmMaintenanceResume(
             @PathVariable String id,
-            @RequestBody(required = false) AmusementMaintenanceResumeRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementMaintenanceResumeRequest request
     ) {
         authorizationService.requirePermission("amusement.maintenance.confirm");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -403,7 +403,7 @@ public class AmusementController {
 
     @PostMapping("/safety-templates")
     public ApiResponse<AmusementSafetyTemplateRecord> createSafetyTemplate(
-            @RequestBody(required = false) AmusementSafetyTemplateRequest request
+            @RequestBody(required = false) @jakarta.validation.Valid AmusementSafetyTemplateRequest request
     ) {
         authorizationService.requirePermission("amusement.safety_template.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -417,7 +417,7 @@ public class AmusementController {
     }
 
     @PostMapping("/sessions")
-    public ApiResponse<AmusementSessionRecord> createSession(@RequestBody(required = false) AmusementSessionRequest request) {
+    public ApiResponse<AmusementSessionRecord> createSession(@RequestBody(required = false) @jakarta.validation.Valid AmusementSessionRequest request) {
         authorizationService.requirePermission("amusement.session.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createSession(request));
@@ -430,7 +430,7 @@ public class AmusementController {
     }
 
     @PostMapping("/verifications")
-    public ApiResponse<AmusementVerificationRecord> createVerification(@RequestBody(required = false) VerificationRequest request) {
+    public ApiResponse<AmusementVerificationRecord> createVerification(@RequestBody(required = false) @jakarta.validation.Valid VerificationRequest request) {
         authorizationService.requirePermission("amusement.verification.execute");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createVerification(request));

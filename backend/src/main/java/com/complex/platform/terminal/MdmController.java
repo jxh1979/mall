@@ -45,7 +45,7 @@ public class MdmController {
     @PutMapping("/app-whitelist/{id}")
     public ApiResponse<MdmAppWhitelistRecord> upsertAppWhitelist(
             @PathVariable String id,
-            @RequestBody MdmAppWhitelistRequest request
+            @RequestBody @jakarta.validation.Valid MdmAppWhitelistRequest request
     ) {
         authorizationService.requirePermission("mdm.policy.manage");
         // F-CROSS-02 最小收口：白名单平台级，fail-closed 拒绝 merchant-scoped 主体写入，防跨商户篡改/覆盖。
@@ -65,7 +65,7 @@ public class MdmController {
     @PutMapping("/site-whitelist/{id}")
     public ApiResponse<MdmSiteWhitelistRecord> upsertSiteWhitelist(
             @PathVariable String id,
-            @RequestBody MdmSiteWhitelistRequest request
+            @RequestBody @jakarta.validation.Valid MdmSiteWhitelistRequest request
     ) {
         authorizationService.requirePermission("mdm.policy.manage");
         // F-CROSS-02 最小收口：白名单平台级，fail-closed 拒绝 merchant-scoped 主体写入，防跨商户篡改/覆盖。
@@ -75,14 +75,14 @@ public class MdmController {
     }
 
     @PostMapping("/devices/enroll")
-    public ApiResponse<MdmDeviceManagementRecord> enrollDevice(@RequestBody MdmDeviceEnrollRequest request) {
+    public ApiResponse<MdmDeviceManagementRecord> enrollDevice(@RequestBody @jakarta.validation.Valid MdmDeviceEnrollRequest request) {
         authorizationService.requirePermission("mdm.device.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.enrollDevice(request));
     }
 
     @PostMapping("/violations")
-    public ApiResponse<MdmPolicyViolationRecord> reportViolation(@RequestBody MdmPolicyViolationRequest request) {
+    public ApiResponse<MdmPolicyViolationRecord> reportViolation(@RequestBody @jakarta.validation.Valid MdmPolicyViolationRequest request) {
         authorizationService.requirePermission("mdm.device.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reportPolicyViolation(request));
@@ -90,7 +90,7 @@ public class MdmController {
 
     /** P0#9 服务端违规检测：上报 app/site，由服务端比对白名单判定并产生 violation。 */
     @PostMapping("/violations/detect")
-    public ApiResponse<MdmViolationDetectionResult> detectViolations(@RequestBody MdmViolationDetectRequest request) {
+    public ApiResponse<MdmViolationDetectionResult> detectViolations(@RequestBody @jakarta.validation.Valid MdmViolationDetectRequest request) {
         authorizationService.requirePermission("mdm.device.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.detectViolations(
@@ -104,7 +104,7 @@ public class MdmController {
     @PostMapping("/violations/{id}/handle")
     public ApiResponse<MdmPolicyViolationRecord> handleViolation(
             @PathVariable String id,
-            @RequestBody MdmViolationHandleRequest request
+            @RequestBody @jakarta.validation.Valid MdmViolationHandleRequest request
     ) {
         authorizationService.requirePermission("mdm.violation.handle");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

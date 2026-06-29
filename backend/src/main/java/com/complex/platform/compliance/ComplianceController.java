@@ -44,7 +44,7 @@ public class ComplianceController {
     }
 
     @PostMapping("/contract-key-dates")
-    public ApiResponse<ContractKeyDateRecord> createContractKeyDate(@RequestBody ContractKeyDateRequest request) {
+    public ApiResponse<ContractKeyDateRecord> createContractKeyDate(@RequestBody @jakarta.validation.Valid ContractKeyDateRequest request) {
         authorizationService.requirePermission("compliance.contract_key_date.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createContractKeyDate(request));
@@ -57,7 +57,7 @@ public class ComplianceController {
     }
 
     @PostMapping("/expiry-items")
-    public ApiResponse<ComplianceExpiryItemRecord> createExpiryItem(@RequestBody ComplianceExpiryItemRequest request) {
+    public ApiResponse<ComplianceExpiryItemRecord> createExpiryItem(@RequestBody @jakarta.validation.Valid ComplianceExpiryItemRequest request) {
         authorizationService.requirePermission("compliance.expiry_item.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createExpiryItem(request));
@@ -70,7 +70,7 @@ public class ComplianceController {
     }
 
     @PostMapping("/reminders/scan")
-    public ApiResponse<ComplianceReminderScanResult> scanReminders(@RequestBody ComplianceReminderScanRequest request) {
+    public ApiResponse<ComplianceReminderScanResult> scanReminders(@RequestBody @jakarta.validation.Valid ComplianceReminderScanRequest request) {
         authorizationService.requirePermission("compliance.reminder.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scanReminders(request));
@@ -79,7 +79,7 @@ public class ComplianceController {
     // ---------------------------------------------------------------- R5 T8 企微会话合规链
 
     @PostMapping("/wecom/conversations/sync")
-    public ApiResponse<WecomSyncResult> syncWecomConversation(@RequestBody WecomConversationSyncRequest request) {
+    public ApiResponse<WecomSyncResult> syncWecomConversation(@RequestBody @jakarta.validation.Valid WecomConversationSyncRequest request) {
         // 同步入站受 T2 开关 integration.wecom.sync 编程式门控（在 service 内 check，关→TERMINAL_DISABLED）。
         // 鉴权上下文 = webhook-signature（企微回调/拉取通道），不走 staff 权限闸。
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -116,7 +116,7 @@ public class ComplianceController {
     @PostMapping("/wecom/risk-hits/{id}/review")
     public ApiResponse<WecomRiskHitRecord> reviewWecomRiskHit(
             @PathVariable String id,
-            @RequestBody WecomRiskHitReviewRequest request
+            @RequestBody @jakarta.validation.Valid WecomRiskHitReviewRequest request
     ) {
         // 复核处置 reviewing/confirmed/dismissed：高敏操作，需 wecom.risk_hit.review。
         authorizationService.requirePermission("wecom.risk_hit.review");
@@ -138,7 +138,7 @@ public class ComplianceController {
 
     @PostMapping("/wecom/retention-policies")
     public ApiResponse<WecomRetentionPolicyRecord> upsertWecomRetentionPolicy(
-            @RequestBody WecomRetentionPolicyRequest request
+            @RequestBody @jakarta.validation.Valid WecomRetentionPolicyRequest request
     ) {
         authorizationService.requirePermission("wecom.retention.manage");
         authorizationService.requirePlatformComplianceScope();

@@ -47,7 +47,7 @@ public class ContractController {
     }
 
     @PostMapping
-    public ApiResponse<ContractRecord> createDraft(@RequestBody ContractDraftRequest request) {
+    public ApiResponse<ContractRecord> createDraft(@RequestBody @jakarta.validation.Valid ContractDraftRequest request) {
         authorizationService.requirePermission("contract.draft.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createDraft(request));
@@ -55,7 +55,7 @@ public class ContractController {
 
     @PostMapping("/{contract_id}/attachments")
     public ApiResponse<ContractRecord> addAttachments(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractAttachmentRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractAttachmentRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.addAttachments(contractId, request));
     }
@@ -63,7 +63,7 @@ public class ContractController {
     // ---- 审批 ----
     @PostMapping("/{contract_id}/submit")
     public ApiResponse<ContractRecord> submit(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractSubmitRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractSubmitRequest request) {
         authorizationService.requirePermission("contract.draft.manage");
         String key = request == null ? null : request.idempotencyKey();
         requireIdempotencyKey(key);
@@ -73,7 +73,7 @@ public class ContractController {
     /** 审批：权限按 body.approverPermissionCode 在 service 内动态校验（当前阶段并行槽）。 */
     @PostMapping("/{contract_id}/approve")
     public ApiResponse<ContractRecord> approve(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractApproveRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractApproveRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approve(contractId, request));
     }
@@ -88,7 +88,7 @@ public class ContractController {
     // ---- 生效 ----
     @PostMapping("/{contract_id}/activate")
     public ApiResponse<ContractRecord> activate(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractActivateRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractActivateRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.activate(contractId, request));
     }
@@ -103,14 +103,14 @@ public class ContractController {
 
     @PostMapping("/{contract_id}/changes")
     public ApiResponse<ContractChangeRecord> raiseChange(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractChangeRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractChangeRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.raiseChange(contractId, request));
     }
 
     @PostMapping("/changes/{change_id}/approve")
     public ApiResponse<ContractChangeRecord> approveChange(
-            @PathVariable("change_id") String changeId, @RequestBody ContractChangeApproveRequest request) {
+            @PathVariable("change_id") String changeId, @RequestBody @jakarta.validation.Valid ContractChangeApproveRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approveChange(changeId, request));
     }
@@ -118,7 +118,7 @@ public class ContractController {
     // ---- 退租结算 ----
     @PostMapping("/{contract_id}/settle")
     public ApiResponse<ContractSettlementRecord> settle(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractSettleRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractSettleRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.settle(contractId, request));
     }
@@ -132,14 +132,14 @@ public class ContractController {
 
     @PostMapping("/settlements/{settlement_id}/resolve-dispute")
     public ApiResponse<ContractSettlementRecord> resolveDispute(
-            @PathVariable("settlement_id") String settlementId, @RequestBody ContractResolveDisputeRequest request) {
+            @PathVariable("settlement_id") String settlementId, @RequestBody @jakarta.validation.Valid ContractResolveDisputeRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.resolveDispute(settlementId, request));
     }
 
     @PostMapping("/settlements/{settlement_id}/complete")
     public ApiResponse<ContractSettlementRecord> completeSettlement(
-            @PathVariable("settlement_id") String settlementId, @RequestBody ContractResolveDisputeRequest request) {
+            @PathVariable("settlement_id") String settlementId, @RequestBody @jakarta.validation.Valid ContractResolveDisputeRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.completeSettlement(settlementId, request));
     }
@@ -147,7 +147,7 @@ public class ContractController {
     /** 逐相推进退租结算（待结算→保证金抵扣中→欠费追缴中→已结清）。 */
     @PostMapping("/settlements/{settlement_id}/advance")
     public ApiResponse<ContractSettlementRecord> advanceSettlement(
-            @PathVariable("settlement_id") String settlementId, @RequestBody ContractResolveDisputeRequest request) {
+            @PathVariable("settlement_id") String settlementId, @RequestBody @jakarta.validation.Valid ContractResolveDisputeRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.advanceSettlement(settlementId, request));
     }
@@ -155,7 +155,7 @@ public class ContractController {
     // ---- 租金 AR 挂账 ----
     @PostMapping("/{contract_id}/rent-bills")
     public ApiResponse<ContractRentBillRecord> generateRentBill(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractRentBillRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractRentBillRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.generateRentBill(contractId, request));
     }
@@ -163,7 +163,7 @@ public class ContractController {
     /** 一期全费目挂账（租金+物业费+能源费）。 */
     @PostMapping("/{contract_id}/period-bills")
     public ApiResponse<List<ContractRentBillRecord>> generatePeriodBills(
-            @PathVariable("contract_id") String contractId, @RequestBody ContractRentBillRequest request) {
+            @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractRentBillRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.generatePeriodBills(contractId, request));
     }
@@ -178,7 +178,7 @@ public class ContractController {
 
     @PostMapping("/approval-flow")
     public ApiResponse<List<ContractApprovalFlowStepRecord>> saveApprovalFlow(
-            @RequestBody ContractApprovalFlowRequest request) {
+            @RequestBody @jakarta.validation.Valid ContractApprovalFlowRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.saveApprovalFlow(request));
     }
@@ -200,7 +200,7 @@ public class ContractController {
     }
 
     @PostMapping("/expiry-color-rules")
-    public ApiResponse<SpaceExpiryColorRuleRecord> saveColorRule(@RequestBody SpaceExpiryColorRuleRequest request) {
+    public ApiResponse<SpaceExpiryColorRuleRecord> saveColorRule(@RequestBody @jakarta.validation.Valid SpaceExpiryColorRuleRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.saveColorRule(request));
     }

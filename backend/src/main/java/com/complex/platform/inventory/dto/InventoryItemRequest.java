@@ -1,4 +1,5 @@
 package com.complex.platform.inventory.dto;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.util.List;
 
@@ -11,9 +12,9 @@ public record InventoryItemRequest(
         String itemName,
         String category,
         String unit,
-        Integer minQuantity,
+        @PositiveOrZero Integer minQuantity,
         String status,
         // R5 T6-4：物料高价值阈值（整数分，可空）。null = 不视为高价值/报损/盘点差异不触发复核（向后兼容）。
-        Long highValueThresholdCents
+        @PositiveOrZero Long highValueThresholdCents
 ) {
 }

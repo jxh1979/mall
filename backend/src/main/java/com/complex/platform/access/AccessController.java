@@ -45,7 +45,7 @@ public class AccessController {
     }
 
     @PostMapping("/permission-templates")
-    public ApiResponse<PermissionTemplate> createPermissionTemplate(@RequestBody PermissionTemplateRequest request) {
+    public ApiResponse<PermissionTemplate> createPermissionTemplate(@RequestBody @jakarta.validation.Valid PermissionTemplateRequest request) {
         authorizationService.requirePermission("access.permission_template.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createPermissionTemplate(request));
@@ -54,7 +54,7 @@ public class AccessController {
     @PutMapping("/permission-templates/{id}")
     public ApiResponse<PermissionTemplate> updatePermissionTemplate(
             @PathVariable String id,
-            @RequestBody PermissionTemplateRequest request
+            @RequestBody @jakarta.validation.Valid PermissionTemplateRequest request
     ) {
         authorizationService.requirePermission("access.permission_template.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -64,7 +64,7 @@ public class AccessController {
     @PostMapping("/permission-templates/{id}/apply")
     public ApiResponse<PermissionTemplateApplyResult> applyPermissionTemplate(
             @PathVariable String id,
-            @RequestBody PermissionTemplateApplyRequest request
+            @RequestBody @jakarta.validation.Valid PermissionTemplateApplyRequest request
     ) {
         authorizationService.requirePermission("access.permission_template.apply");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -74,7 +74,7 @@ public class AccessController {
     @PostMapping("/permission-templates/{id}/copy")
     public ApiResponse<PermissionTemplate> copyPermissionTemplate(
             @PathVariable String id,
-            @RequestBody PermissionTemplateRequest request
+            @RequestBody @jakarta.validation.Valid PermissionTemplateRequest request
     ) {
         authorizationService.requirePermission("access.permission_template.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -94,28 +94,28 @@ public class AccessController {
     }
 
     @PostMapping("/roles")
-    public ApiResponse<RoleRecord> createRole(@RequestBody RoleRequest request) {
+    public ApiResponse<RoleRecord> createRole(@RequestBody @jakarta.validation.Valid RoleRequest request) {
         authorizationService.requirePermission("access.role.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createRole(request));
     }
 
     @PostMapping("/role-assignments")
-    public ApiResponse<RoleAssignmentRecord> assignUserRole(@RequestBody RoleAssignmentRequest request) {
+    public ApiResponse<RoleAssignmentRecord> assignUserRole(@RequestBody @jakarta.validation.Valid RoleAssignmentRequest request) {
         authorizationService.requirePermission("access.role.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.assignUserRole(request));
     }
 
     @PostMapping("/role-assignments/unassign")
-    public ApiResponse<RoleAssignmentRecord> unassignUserRole(@RequestBody RoleAssignmentRequest request) {
+    public ApiResponse<RoleAssignmentRecord> unassignUserRole(@RequestBody @jakarta.validation.Valid RoleAssignmentRequest request) {
         authorizationService.requirePermission("access.role.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.unassignUserRole(request));
     }
 
     @PostMapping("/grant-requests")
-    public ApiResponse<AccessGrantRequestRecord> applyGrant(@RequestBody AccessGrantApplyRequest request) {
+    public ApiResponse<AccessGrantRequestRecord> applyGrant(@RequestBody @jakarta.validation.Valid AccessGrantApplyRequest request) {
         authorizationService.requirePermission("access.grant_request.apply");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.applyGrant(request));
@@ -132,7 +132,7 @@ public class AccessController {
     @PostMapping("/grant-requests/{id}/review")
     public ApiResponse<AccessGrantRequestRecord> reviewGrant(
             @PathVariable String id,
-            @RequestBody AccessGrantReviewRequest request
+            @RequestBody @jakarta.validation.Valid AccessGrantReviewRequest request
     ) {
         authorizationService.requirePermission("access.grant_request.review");
         authorizationService.requirePermission("governance.supervisor_review.approve");
@@ -157,7 +157,7 @@ public class AccessController {
     }
 
     @PostMapping("/position-role-templates")
-    public ApiResponse<PositionRoleTemplate> createPositionRoleTemplate(@RequestBody PositionRoleTemplateRequest request) {
+    public ApiResponse<PositionRoleTemplate> createPositionRoleTemplate(@RequestBody @jakarta.validation.Valid PositionRoleTemplateRequest request) {
         authorizationService.requirePermission("access.role.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createPositionRoleTemplate(request));
@@ -166,7 +166,7 @@ public class AccessController {
     @PutMapping("/position-role-templates/{id}")
     public ApiResponse<PositionRoleTemplate> updatePositionRoleTemplate(
             @PathVariable String id,
-            @RequestBody PositionRoleTemplateRequest request
+            @RequestBody @jakarta.validation.Valid PositionRoleTemplateRequest request
     ) {
         authorizationService.requirePermission("access.role.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -181,7 +181,7 @@ public class AccessController {
     }
 
     @PostMapping("/temporary-grants")
-    public ApiResponse<TemporaryGrant> createTemporaryGrant(@RequestBody TemporaryGrantRequest request) {
+    public ApiResponse<TemporaryGrant> createTemporaryGrant(@RequestBody @jakarta.validation.Valid TemporaryGrantRequest request) {
         authorizationService.requirePermission("access.temporary_grant.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         if (request.validUntil() == null) {
@@ -193,7 +193,7 @@ public class AccessController {
     @PostMapping("/temporary-grants/{id}/revoke")
     public ApiResponse<TemporaryGrant> revokeTemporaryGrant(
             @PathVariable String id,
-            @RequestBody StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("access.temporary_grant.revoke");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -207,7 +207,7 @@ public class AccessController {
     }
 
     @PostMapping("/users")
-    public ApiResponse<AccessUser> createAccessUser(@RequestBody AccessUserRequest request) {
+    public ApiResponse<AccessUser> createAccessUser(@RequestBody @jakarta.validation.Valid AccessUserRequest request) {
         authorizationService.requirePermission("access.user.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createAccessUser(request));
@@ -234,7 +234,7 @@ public class AccessController {
     @PutMapping("/users/{id}/staff-level")
     public ApiResponse<StaffLevelAssignment> assignStaffLevel(
             @PathVariable String id,
-            @RequestBody StaffLevelAssignmentRequest request
+            @RequestBody @jakarta.validation.Valid StaffLevelAssignmentRequest request
     ) {
         authorizationService.requirePermission("access.staff_level.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -253,7 +253,7 @@ public class AccessController {
     @PutMapping("/users/{id}/position")
     public ApiResponse<UserPositionAssignmentResult> assignUserPosition(
             @PathVariable String id,
-            @RequestBody UserPositionAssignmentRequest request
+            @RequestBody @jakarta.validation.Valid UserPositionAssignmentRequest request
     ) {
         authorizationService.requirePermission("access.role.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());

@@ -32,7 +32,7 @@ public class StaffController {
     }
 
     @PostMapping("/registrations")
-    public ApiResponse<StaffProfileRecord> submitRegistration(@RequestBody StaffRegistrationRequest request) {
+    public ApiResponse<StaffProfileRecord> submitRegistration(@RequestBody @jakarta.validation.Valid StaffRegistrationRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submitRegistration(request));
     }
@@ -40,7 +40,7 @@ public class StaffController {
     @PostMapping("/registrations/{id}/review")
     public ApiResponse<StaffProfileRecord> reviewRegistration(
             @PathVariable String id,
-            @RequestBody StaffRegistrationReviewRequest request
+            @RequestBody @jakarta.validation.Valid StaffRegistrationReviewRequest request
     ) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewRegistration(id, request));
@@ -52,7 +52,7 @@ public class StaffController {
     }
 
     @PostMapping("/device-credentials")
-    public ApiResponse<StaffDeviceCredentialRecord> bindCredential(@RequestBody StaffDeviceBindRequest request) {
+    public ApiResponse<StaffDeviceCredentialRecord> bindCredential(@RequestBody @jakarta.validation.Valid StaffDeviceBindRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.bindCredential(request));
     }
@@ -60,7 +60,7 @@ public class StaffController {
     @PostMapping("/device-credentials/{id}/approve-rebind")
     public ApiResponse<StaffDeviceCredentialRecord> approveRebind(
             @PathVariable String id,
-            @RequestBody StaffDeviceRebindDecisionRequest request
+            @RequestBody @jakarta.validation.Valid StaffDeviceRebindDecisionRequest request
     ) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approveRebind(id, request));
@@ -69,7 +69,7 @@ public class StaffController {
     @PostMapping("/device-credentials/{id}/report-integrity")
     public ApiResponse<StaffDeviceCredentialRecord> reportIntegrity(
             @PathVariable String id,
-            @RequestBody StaffDeviceIntegrityReportRequest request
+            @RequestBody @jakarta.validation.Valid StaffDeviceIntegrityReportRequest request
     ) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reportIntegrity(id, request));
@@ -78,7 +78,7 @@ public class StaffController {
     @PostMapping("/device-credentials/{id}/revoke")
     public ApiResponse<StaffDeviceCredentialRecord> revokeCredential(
             @PathVariable String id,
-            @RequestBody StaffDeviceRevokeRequest request
+            @RequestBody @jakarta.validation.Valid StaffDeviceRevokeRequest request
     ) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.revokeCredential(id, request));
@@ -92,7 +92,7 @@ public class StaffController {
     @PostMapping("/notices/{id}/acknowledge")
     public ApiResponse<EmployeeNoticeRecord> acknowledge(
             @PathVariable String id,
-            @RequestBody EmployeeNoticeAcknowledgeRequest request
+            @RequestBody @jakarta.validation.Valid EmployeeNoticeAcknowledgeRequest request
     ) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.acknowledge(id, request));
