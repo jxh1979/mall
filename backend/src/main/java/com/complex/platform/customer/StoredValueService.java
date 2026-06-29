@@ -42,6 +42,8 @@ public class StoredValueService {
     private final FinanceService financeService;
     private final AuditEventService auditEventService;
     private final com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway;
+    // B1d⑤ phase4 员工端卡范围隔离：商户范围员工只能操作本商户的商户卡。可为 null=旧构造/兼容测试（不强制）。
+    private final com.complex.platform.access.AuthorizationService authorizationService;
     private final Clock clock;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
@@ -51,25 +53,35 @@ public class StoredValueService {
     @org.springframework.beans.factory.annotation.Autowired
     public StoredValueService(CustomerRepository repository, FinanceService financeService,
                               AuditEventService auditEventService,
-                              com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway) {
-        this(repository, financeService, auditEventService, paymentGateway, Clock.systemUTC());
+                              com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
+                              com.complex.platform.access.AuthorizationService authorizationService) {
+        this(repository, financeService, auditEventService, paymentGateway, authorizationService, Clock.systemUTC());
     }
 
     StoredValueService(CustomerRepository repository, FinanceService financeService,
                        AuditEventService auditEventService,
-                       com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway, Clock clock) {
+                       com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
+                       com.complex.platform.access.AuthorizationService authorizationService, Clock clock) {
         this.repository = repository;
         this.financeService = financeService;
         this.auditEventService = auditEventService;
         this.paymentGateway = paymentGateway;
+        this.authorizationService = authorizationService;
         this.clock = clock;
+    }
+
+    /** 向后兼容构造（无 authorizationService=不强制卡范围隔离）：供既有单测构造（带 gateway）。 */
+    StoredValueService(CustomerRepository repository, FinanceService financeService,
+                       AuditEventService auditEventService,
+                       com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway, Clock clock) {
+        this(repository, financeService, auditEventService, paymentGateway, null, clock);
     }
 
     /** 向后兼容构造：未提供支付渠道路由时用"开关关"占位路由（不调外部渠道）。供既有单测构造。 */
     StoredValueService(CustomerRepository repository, FinanceService financeService,
                        AuditEventService auditEventService, Clock clock) {
         this(repository, financeService, auditEventService,
-                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), clock);
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), null, clock);
     }
 
     // ============================================================
@@ -213,6 +225,7 @@ public class StoredValueService {
             return existing;
         }
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
+        requireMerchantScopeForCard(account);
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "stored-value account is closed");
         }
@@ -269,6 +282,8 @@ public class StoredValueService {
         if (refundRatioBps < 0 || refundRatioBps > 10000) {
             throw ApiException.badRequest("VALIDATION_FAILED", "refund_ratio_bps must be within [0,10000]");
         }
+        // phase4 卡范围隔离：商户范围员工只能配置本商户的退款规则。
+        requireMerchantScopeForMerchant(merchantId.trim());
         Instant now = now();
         return repository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
                 merchantId.trim(), refundAllowed, refundRatioBps, now, now));
@@ -288,6 +303,7 @@ public class StoredValueService {
     public CustomerStoredValueAccountRecord freeze(String customerId, String projectId, String merchantId, String reason) {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
+        requireMerchantScopeForCard(account);
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "stored-value account is closed");
         }
@@ -306,6 +322,7 @@ public class StoredValueService {
     public CustomerStoredValueAccountRecord unfreeze(String customerId, String projectId, String merchantId, String reason) {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
+        requireMerchantScopeForCard(account);
         if (!"frozen".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_NOT_FROZEN", "stored-value account is not frozen");
         }
@@ -346,6 +363,32 @@ public class StoredValueService {
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "stored-value account is closed");
         }
+    }
+
+    // B1d⑤ phase4 员工端卡范围隔离：商户范围调用者（员工）只能操作本商户发行的商户卡；
+    // 通用卡（merchantId 空）属平台/综合体级，商户员工不得操作。平台管理员（scope 空）放行；authorizationService 为 null 不强制。
+    private void requireMerchantScopeForCard(CustomerStoredValueAccountRecord account) {
+        if (authorizationService == null) {
+            return;
+        }
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(account.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "stored-value card is out of the caller's merchant scope");
+            }
+        });
+    }
+
+    private void requireMerchantScopeForMerchant(String merchantId) {
+        if (authorizationService == null) {
+            return;
+        }
+        authorizationService.currentMerchantScope().ifPresent(scope -> {
+            if (!scope.equals(merchantId)) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
+                        "merchant refund rule is out of the caller's merchant scope");
+            }
+        });
     }
 
     private CustomerStoredValueAccountRecord requireAccountForUpdate(String customerId, String projectId, String merchantId) {

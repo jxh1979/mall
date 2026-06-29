@@ -180,6 +180,44 @@ class MemberWalletServiceTests {
         assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
     }
 
+    @Test
+    void merchantStaffCanOnlyOperateOwnMerchantCards() {
+        // B1d⑤ phase4 员工端卡范围隔离：商户 m1 范围的员工只能冻结本商户(m1)的商户卡；
+        // 操作他商户(m2)卡或综合体通用卡(merchant 空)均 CROSS_MERCHANT_FORBIDDEN；平台管理员(scope 空)放行。
+        InMemoryRepo repo = seeded();
+        repo.saveStoredValueAccount(new CustomerStoredValueAccountRecord("a_m1", "c1", null, "m1", 1_000L, "active", T0, T0));
+        repo.saveStoredValueAccount(new CustomerStoredValueAccountRecord("a_m2", "c1", null, "m2", 1_000L, "active", T0, T0));
+        repo.saveStoredValueAccount(new CustomerStoredValueAccountRecord("a_prj", "c1", null, null, 1_000L, "active", T0, T0));
+
+        com.complex.platform.access.AuthorizationService merchantAuth =
+                org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
+        org.mockito.Mockito.when(merchantAuth.currentMerchantScope()).thenReturn(Optional.of("m1"));
+        StoredValueService m1Staff = new StoredValueService(repo, new FakeFinance(), audit(),
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), merchantAuth,
+                Clock.fixed(T0, ZoneOffset.UTC));
+
+        // 本商户卡 → 放行。
+        assertThat(m1Staff.freeze("c1", null, "m1", "risk").status()).isEqualTo("frozen");
+        // 他商户卡 → 拒。
+        assertThatThrownBy(() -> m1Staff.freeze("c1", null, "m2", "x"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        // 综合体通用卡 → 拒（商户员工不得操作平台级卡）。
+        assertThatThrownBy(() -> m1Staff.freeze("c1", null, null, "x"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        // 配置他商户退款规则 → 拒。
+        assertThatThrownBy(() -> m1Staff.configureMerchantRefundRule("m2", true, 5000))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+
+        // 平台管理员（scope 空）→ 任意卡放行。
+        com.complex.platform.access.AuthorizationService platformAuth =
+                org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
+        org.mockito.Mockito.when(platformAuth.currentMerchantScope()).thenReturn(Optional.empty());
+        StoredValueService platform = new StoredValueService(repo, new FakeFinance(), audit(),
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(), platformAuth,
+                Clock.fixed(T0, ZoneOffset.UTC));
+        assertThat(platform.freeze("c1", null, "m2", "ok").status()).isEqualTo("frozen");
+    }
+
     // ============================================================
     // 付费会员：开通→生效期、到期→expired、续费
     // ============================================================
