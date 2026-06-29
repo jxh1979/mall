@@ -92,6 +92,7 @@ customer_redemption_catalog_items,direct,project_id,project_id column on custome
 customer_sessions,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,covered
 customer_stored_value_accounts,direct,project_id,project_id column on customer_stored_value_accounts,ready for project/merchant scoped query enforcement,covered
 customer_stored_value_transactions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
+stored_value_merchant_refund_rules,direct,merchant_id,merchant_id primary key on stored_value_merchant_refund_rules (B1d⑤ 商户级卡退款规则按发卡商户隔离),ready for project/merchant scoped query enforcement,covered
 customers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 deposit_ledger,direct,merchant_id,merchant_id column on deposit_ledger,ready for project/merchant scoped query enforcement,covered
 employee_notices,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
