@@ -369,8 +369,8 @@ public class TicketVerificationService {
         }
         // P0-3/X-01 二维码防伪签名校验：动态凭证若带签名（signer 已注入签发），核销端按相同规范串重算并常量时间比对。
         // 失配=离线截图重放/凭证字段篡改（如延长有效期）→ 不消费权益，落一条 failed/signature_invalid 核销记录（可追溯）。
-        // 非动态凭证（credential==null，直接凭权益码）/存量未签名凭证（signature_value 空、秒级窗口自然淘汰）/
-        // signer 未注入（兼容测试）→ signature_valid=null，不拒绝（向后兼容）。
+        // 非动态凭证（credential==null，直接凭权益码）/signer 未注入（兼容测试）→ signature_valid=null，不校验。
+        // B2⑦：signer 已注入（生产）下动态凭证无签名（存量未签名码/被剥离签名）→ signature_valid=false 强制拒绝。
         Boolean signatureValid = credentialSignatureValid(credential);
         if (Boolean.FALSE.equals(signatureValid)) {
             VerificationRecord invalid = repository.saveVerification(new VerificationRecord(
@@ -636,7 +636,9 @@ public class TicketVerificationService {
         }
         String signature = credential.signatureValue();
         if (signature == null || signature.isBlank()) {
-            return null;
+            // B2⑦ 门票 HMAC 对存量码强制：signer 已注入=生产签发一律带防伪签名；动态凭证却无签名
+            // =存量未签名码（早已过秒级窗口）或被剥离签名的伪造码 → 拒绝核销（不再放行向后兼容）。
+            return Boolean.FALSE;
         }
         String canonical = credentialSigner.canonical(
                 credential.credentialToken(),

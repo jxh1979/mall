@@ -177,4 +177,26 @@ class TicketCredentialSignatureTests {
         verify(repository).saveVerification(captor.capture());
         assertThat(captor.getValue().signatureValid()).isFalse();
     }
+
+    @Test
+    void unsignedDynamicCredentialIsRejectedWhenSignerActive() {
+        // B2⑦ 门票 HMAC 对存量码强制：signer 已注入（生产）时，动态凭证若无签名（存量未签名码/被剥离签名的伪造码）
+        // 必须按 signature_invalid 拒绝、不消费权益——此前 signature_valid=null 被放行（向后兼容）是漏洞。
+        Instant now = Instant.now();
+        TicketCredentialRecord unsigned = signedCredential(now, now.plusSeconds(60), null);
+
+        TicketingRepository repository = mock(TicketingRepository.class);
+        when(repository.findTicketCredentialByToken(TOKEN)).thenReturn(Optional.of(unsigned));
+        when(repository.findIssuedEntitlementById(ENTITLEMENT_ID)).thenReturn(Optional.of(activeEntitlement()));
+        when(repository.saveVerification(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        TicketVerificationService service = new TicketVerificationService(
+                repository, mock(ApplicationEventPublisher.class), null, null, signer);
+
+        VerificationResponse response = service.createVerification(verifyRequest(TOKEN));
+
+        assertThat(response.status()).isEqualTo("failed");
+        assertThat(response.resultReason()).isEqualTo("signature_invalid");
+        verify(repository, never()).atomicUseEntitlement(any(), any());
+    }
 }
