@@ -4,6 +4,7 @@ package com.complex.platform.customer.dto;
 public record StoredValueRefundRequest(
         String idempotencyKey,
         String projectId,
+        String merchantId,
         Long amountCent,
         String reason,
         Boolean closeAccount

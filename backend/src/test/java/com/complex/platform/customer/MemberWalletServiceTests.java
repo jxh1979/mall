@@ -45,25 +45,25 @@ class MemberWalletServiceTests {
                 Clock.fixed(T0, ZoneOffset.UTC));
 
         // 发起充值：仅建支付意图（created），余额不变。
-        PaymentIntentRecord intent = service.topup("c1", null, 10_000L, "wechat", "topup-1");
+        PaymentIntentRecord intent = service.topup("c1", null, null, 10_000L, "wechat", "topup-1");
         assertThat(intent.status()).isEqualTo("created");
-        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
 
         // 支付未成功时入账被拒（不凭空加余额）。
-        assertThatThrownBy(() -> service.settleTopup("c1", null, intent.id()))
+        assertThatThrownBy(() -> service.settleTopup("c1", null, null, intent.id()))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PAYMENT_NOT_SUCCEEDED"));
-        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
 
         // 支付成功后入账：余额 +10000。
         finance.markPaymentIntentSucceeded(intent.id());
-        CustomerStoredValueTransactionRecord txn = service.settleTopup("c1", null, intent.id());
+        CustomerStoredValueTransactionRecord txn = service.settleTopup("c1", null, null, intent.id());
         assertThat(txn.txnType()).isEqualTo("topup");
-        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(10_000L);
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(10_000L);
 
         // 重复入账同一支付意图：不重复加余额。
-        CustomerStoredValueTransactionRecord again = service.settleTopup("c1", null, intent.id());
+        CustomerStoredValueTransactionRecord again = service.settleTopup("c1", null, null, intent.id());
         assertThat(again.id()).isEqualTo(txn.id());
-        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(10_000L);
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(10_000L);
     }
 
     @Test
@@ -73,16 +73,16 @@ class MemberWalletServiceTests {
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 Clock.fixed(T0, ZoneOffset.UTC));
         // 充值 5000 入账
-        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-2");
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-2");
         finance.markPaymentIntentSucceeded(intent.id());
-        service.settleTopup("c1", null, intent.id());
+        service.settleTopup("c1", null, null, intent.id());
         // 消费 3000 OK
-        service.consume("c1", null, 3_000L, "buy", "consume-1");
-        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(2_000L);
+        service.consume("c1", null, null, 3_000L, "buy", "consume-1");
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(2_000L);
         // 消费 5000 不足拒
-        assertThatThrownBy(() -> service.consume("c1", null, 5_000L, "buy", "consume-2"))
+        assertThatThrownBy(() -> service.consume("c1", null, null, 5_000L, "buy", "consume-2"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_INSUFFICIENT"));
-        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(2_000L);
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(2_000L);
     }
 
     @Test
@@ -91,18 +91,18 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-3");
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-3");
         finance.markPaymentIntentSucceeded(intent.id());
-        service.settleTopup("c1", null, intent.id());
+        service.settleTopup("c1", null, null, intent.id());
 
-        service.freeze("c1", null, "risk");
-        assertThat(repo.storedValue.get("c1").status()).isEqualTo("frozen");
-        assertThatThrownBy(() -> service.consume("c1", null, 1_000L, "buy", "c-frozen"))
+        service.freeze("c1", null, null, "risk");
+        assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("frozen");
+        assertThatThrownBy(() -> service.consume("c1", null, null, 1_000L, "buy", "c-frozen"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_ACCOUNT_FROZEN"));
 
-        service.unfreeze("c1", null, "cleared");
-        assertThat(repo.storedValue.get("c1").status()).isEqualTo("active");
-        CustomerStoredValueTransactionRecord txn = service.consume("c1", null, 1_000L, "buy", "c-ok");
+        service.unfreeze("c1", null, null, "cleared");
+        assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("active");
+        CustomerStoredValueTransactionRecord txn = service.consume("c1", null, null, 1_000L, "buy", "c-ok");
         assertThat(txn.balanceAfterCent()).isEqualTo(4_000L);
     }
 
@@ -112,12 +112,40 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-4");
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-4");
         finance.markPaymentIntentSucceeded(intent.id());
-        service.settleTopup("c1", null, intent.id());
-        service.refund("c1", null, 5_000L, "refund all", true, "refund-1");
-        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
-        assertThat(repo.storedValue.get("c1").status()).isEqualTo("closed");
+        service.settleTopup("c1", null, null, intent.id());
+        service.refund("c1", null, null, 5_000L, "refund all", true, "refund-1");
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
+        assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("closed");
+    }
+
+    @Test
+    void merchantCardIsolatedFromProjectCardAndOnlyConsumableByItsMerchant() {
+        // B1d⑤ phase2：同一会员的「综合体通用卡」与「商户 m1 的商户级卡」互相独立；
+        // 指定 m1 消费只扣 m1 卡（只扣指定的那一张）；商户卡只能在该发卡商户消费（拿 m2 范围取不到 m1 卡，不误扣）。
+        InMemoryRepo repo = seeded();
+        FakeFinance finance = new FakeFinance();
+        StoredValueService service = new StoredValueService(repo, finance, audit(),
+                Clock.fixed(T0, ZoneOffset.UTC));
+        PaymentIntentRecord p = service.topup("c1", null, null, 8_000L, "wechat", "tp-prj");
+        finance.markPaymentIntentSucceeded(p.id());
+        service.settleTopup("c1", null, null, p.id());
+        PaymentIntentRecord m = service.topup("c1", null, "m1", 3_000L, "wechat", "tp-m1");
+        finance.markPaymentIntentSucceeded(m.id());
+        service.settleTopup("c1", null, "m1", m.id());
+
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(8_000L);
+        assertThat(repo.storedValue.get("c1|null|m1").balanceCent()).isEqualTo(3_000L);
+
+        // 指定 m1 消费只扣 m1 卡，通用卡不动。
+        service.consume("c1", null, "m1", 1_000L, "buy at m1", "cs-m1");
+        assertThat(repo.storedValue.get("c1|null|m1").balanceCent()).isEqualTo(2_000L);
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(8_000L);
+
+        // 商户卡只能在该商户消费：m2 范围取不到 m1 卡 → 账户不存在，不误扣 m1/通用卡。
+        assertThatThrownBy(() -> service.consume("c1", null, "m2", 500L, "buy at m2", "cs-m2"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("STORED_VALUE_ACCOUNT_NOT_FOUND"));
     }
 
     // ============================================================
@@ -239,13 +267,13 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 gatewayRouter(true), Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-gw");
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-gw");
         finance.markPaymentIntentSucceeded(intent.id());
-        service.settleTopup("c1", null, intent.id());
+        service.settleTopup("c1", null, null, intent.id());
         // 退款：系统内余额退回；渠道打款占位不崩。
-        service.refund("c1", null, 5_000L, "refund all", true, "refund-gw");
-        assertThat(repo.storedValue.get("c1").balanceCent()).isZero();
-        assertThat(repo.storedValue.get("c1").status()).isEqualTo("closed");
+        service.refund("c1", null, null, 5_000L, "refund all", true, "refund-gw");
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isZero();
+        assertThat(repo.storedValue.get("c1|null|null").status()).isEqualTo("closed");
     }
 
     // ============================================================
@@ -258,16 +286,16 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-b1b-c");
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-b1b-c");
         finance.markPaymentIntentSucceeded(intent.id());
-        service.settleTopup("c1", null, intent.id());
+        service.settleTopup("c1", null, null, intent.id());
 
-        assertThatThrownBy(() -> service.consume("c1", null, 1_000L, "buy", null))
+        assertThatThrownBy(() -> service.consume("c1", null, null, 1_000L, "buy", null))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
-        assertThatThrownBy(() -> service.consume("c1", null, 1_000L, "buy", "   "))
+        assertThatThrownBy(() -> service.consume("c1", null, null, 1_000L, "buy", "   "))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
         // 余额未被扣减（空键被拒，未发生扣减）。
-        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(5_000L);
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(5_000L);
     }
 
     @Test
@@ -276,16 +304,16 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(),
                 Clock.fixed(T0, ZoneOffset.UTC));
-        PaymentIntentRecord intent = service.topup("c1", null, 5_000L, "wechat", "topup-b1b-r");
+        PaymentIntentRecord intent = service.topup("c1", null, null, 5_000L, "wechat", "topup-b1b-r");
         finance.markPaymentIntentSucceeded(intent.id());
-        service.settleTopup("c1", null, intent.id());
+        service.settleTopup("c1", null, null, intent.id());
 
-        assertThatThrownBy(() -> service.refund("c1", null, 1_000L, "r", false, null))
+        assertThatThrownBy(() -> service.refund("c1", null, null, 1_000L, "r", false, null))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
-        assertThatThrownBy(() -> service.refund("c1", null, 1_000L, "r", false, ""))
+        assertThatThrownBy(() -> service.refund("c1", null, null, 1_000L, "r", false, ""))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
         // 余额未被退减。
-        assertThat(repo.storedValue.get("c1").balanceCent()).isEqualTo(5_000L);
+        assertThat(repo.storedValue.get("c1|null|null").balanceCent()).isEqualTo(5_000L);
     }
 
     // 积分转赠用例已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
@@ -388,16 +416,23 @@ class MemberWalletServiceTests {
         @Override public com.complex.platform.bar.BarReservationRecord saveCustomerBarReservation(com.complex.platform.bar.BarReservationRecord r) { return r; }
         @Override public java.util.List<com.complex.platform.bar.BarDepositRuleRecord> listDepositRules(String barId) { return java.util.List.of(); }
 
-        // V090 storedValue
+        // V090 storedValue（B1d⑤ 卡范围 (customer, project, merchant)）
         @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String cid, String pid) {
-            return storedValue.values().stream()
-                    .filter(a -> cid.equals(a.customerId()) && java.util.Objects.equals(pid, a.projectId())).findFirst();
+            return findStoredValueAccount(cid, pid, null);
         }
         @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String cid, String pid) {
-            return findStoredValueAccount(cid, pid);
+            return findStoredValueAccount(cid, pid, null);
+        }
+        @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccount(String cid, String pid, String mid) {
+            return storedValue.values().stream()
+                    .filter(a -> cid.equals(a.customerId()) && java.util.Objects.equals(pid, a.projectId())
+                            && java.util.Objects.equals(mid, a.merchantId())).findFirst();
+        }
+        @Override public Optional<CustomerStoredValueAccountRecord> findStoredValueAccountForUpdate(String cid, String pid, String mid) {
+            return findStoredValueAccount(cid, pid, mid);
         }
         @Override public CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord a) {
-            storedValue.put(a.customerId(), a); return a;
+            storedValue.put(a.customerId() + "|" + a.projectId() + "|" + a.merchantId(), a); return a;
         }
         @Override public CustomerStoredValueTransactionRecord saveStoredValueTransaction(CustomerStoredValueTransactionRecord t) {
             storedValueTxns.add(t); return t;

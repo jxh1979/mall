@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Positive;
 public record StoredValueTopupRequest(
         @NotBlank String idempotencyKey,
         String projectId,
+        String merchantId,
         @NotNull @Positive Long amountCent,
         String channel
 ) {

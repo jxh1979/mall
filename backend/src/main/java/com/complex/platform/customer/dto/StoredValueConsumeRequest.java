@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Positive;
 public record StoredValueConsumeRequest(
         @NotBlank String idempotencyKey,
         String projectId,
+        String merchantId,
         @NotNull @Positive Long amountCent,
         String reason
 ) {

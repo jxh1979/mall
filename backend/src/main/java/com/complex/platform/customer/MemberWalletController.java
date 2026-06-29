@@ -51,7 +51,7 @@ public class MemberWalletController {
             @Valid @RequestBody StoredValueTopupRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        return ApiResponse.ok(storedValueService.topup(customerId, request.projectId(),
+        return ApiResponse.ok(storedValueService.topup(customerId, request.projectId(), request.merchantId(),
                 request.amountCent() == null ? 0L : request.amountCent(), request.channel(), request.idempotencyKey()));
     }
 
@@ -62,7 +62,7 @@ public class MemberWalletController {
             @Valid @RequestBody StoredValueSettleRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        return ApiResponse.ok(storedValueService.settleTopup(customerId, request.projectId(), request.paymentIntentId()));
+        return ApiResponse.ok(storedValueService.settleTopup(customerId, request.projectId(), request.merchantId(), request.paymentIntentId()));
     }
 
     @PostMapping("/stored-value/consume")
@@ -72,7 +72,7 @@ public class MemberWalletController {
             @Valid @RequestBody StoredValueConsumeRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        return ApiResponse.ok(storedValueService.consume(customerId, request.projectId(),
+        return ApiResponse.ok(storedValueService.consume(customerId, request.projectId(), request.merchantId(),
                 request.amountCent() == null ? 0L : request.amountCent(), request.reason(), request.idempotencyKey()));
     }
 
@@ -80,10 +80,12 @@ public class MemberWalletController {
     public ApiResponse<CustomerStoredValueAccountRecord> getAccount(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestParam(name = "project_id", required = false) String projectId
+            @RequestParam(name = "project_id", required = false) String projectId,
+            @RequestParam(name = "merchant_id", required = false) String merchantId
     ) {
+        // B1d⑤：merchant_id 非空=查商户级卡；为空=查综合体通用卡。
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        return ApiResponse.ok(repository.findStoredValueAccount(customerId, projectId).orElse(null));
+        return ApiResponse.ok(repository.findStoredValueAccount(customerId, projectId, merchantId).orElse(null));
     }
 
     // ---- 付费会员 ----

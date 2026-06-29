@@ -98,6 +98,7 @@ public class LoyaltyController {
     ) {
         return ApiResponse.ok(storedValueService.freeze(customerId,
                 request == null ? null : request.projectId(),
+                request == null ? null : request.merchantId(),
                 request == null ? null : request.reason()));
     }
 
@@ -108,6 +109,7 @@ public class LoyaltyController {
     ) {
         return ApiResponse.ok(storedValueService.unfreeze(customerId,
                 request == null ? null : request.projectId(),
+                request == null ? null : request.merchantId(),
                 request == null ? null : request.reason()));
     }
 
@@ -116,7 +118,7 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId,
             @RequestBody @jakarta.validation.Valid StoredValueRefundRequest request
     ) {
-        return ApiResponse.ok(storedValueService.refund(customerId, request.projectId(),
+        return ApiResponse.ok(storedValueService.refund(customerId, request.projectId(), request.merchantId(),
                 request.amountCent() == null ? 0L : request.amountCent(), request.reason(),
                 Boolean.TRUE.equals(request.closeAccount()), request.idempotencyKey()));
     }
