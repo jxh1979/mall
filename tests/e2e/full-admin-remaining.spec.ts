@@ -33,6 +33,9 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-FIN-003", label: "退款分级授权", route: "/admin/finance/refund-authority" },
   { pageId: "ADM-MER-001", label: "商户服务工单", route: "/admin/merchant-service/tickets" },
   { pageId: "ADM-MER-002", label: "商户授权工作台", route: "/admin/merchant-portal/scope" },
+  { pageId: "ADM-VND-001", label: "外包维保工单", route: "/admin/vendor/work-orders" },
+  { pageId: "ADM-VND-002", label: "外包巡检任务", route: "/admin/vendor/inspections" },
+  { pageId: "ADM-VND-003", label: "外包进场报备", route: "/admin/vendor/site-entries" },
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", route: "/admin/integrations/events" },
   { pageId: "ADM-INT-003", label: "第三方开关", route: "/admin/integrations/switches" },
   { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },
@@ -84,6 +87,15 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("merchant-work-orders-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-002") {
     await expect(page.getByTestId("merchant-scope-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-VND-001") {
+    await expect(page.getByTestId("vendor-work-orders-page")).toBeVisible();
+    await expect(page.getByTestId("vendor-work-orders-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-VND-002") {
+    await expect(page.getByTestId("vendor-inspections-page")).toBeVisible();
+    await expect(page.getByTestId("vendor-inspections-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-VND-003") {
+    await expect(page.getByTestId("vendor-site-entries-page")).toBeVisible();
+    await expect(page.getByTestId("vendor-site-entries-table")).toBeVisible();
   } else if (spec.pageId === "ADM-AMU-001") {
     await expect(page.getByTestId("amusement-sessions-page")).toBeVisible();
   } else if (spec.pageId === "ADM-AMU-002") {
@@ -123,7 +135,7 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
 
 test.describe("full admin remaining pages acceptance", () => {
   test("ADM-REM-01 exposes all non-first admin pages with route, evidence and readable content", async ({ page }) => {
-    test.slow(); // visits all 22 remaining pages with detailed assertions; triple the timeout under parallel load
+    test.slow(); // visits all remaining pages with detailed assertions; triple the timeout under parallel load
     await installMockApi(page);
     await adminLogin(page, "/admin/governance/topology");
 
@@ -336,6 +348,21 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("audit://merchant-scope/bill-1");
         await expect(page.getByTestId("merchant-scope-boundary")).toContainText("不得访问平台治理");
+        continue;
+      }
+      if (spec.pageId === "ADM-VND-001") {
+        await expect(page.getByTestId("vendor-work-orders-table")).toContainText("VND-WO-1");
+        await expect(page.getByTestId("vendor-work-orders-table")).toContainText("vendor-user");
+        continue;
+      }
+      if (spec.pageId === "ADM-VND-002") {
+        await expect(page.getByTestId("vendor-inspections-table")).toContainText("夜间安保巡检");
+        await expect(page.getByTestId("vendor-inspections-table")).toContainText("vendor-user");
+        continue;
+      }
+      if (spec.pageId === "ADM-VND-003") {
+        await expect(page.getByTestId("vendor-site-entries-table")).toContainText("店铺装修围挡施工");
+        await expect(page.getByTestId("vendor-site-entries-table")).toContainText("vendor-user");
         continue;
       }
       if (spec.pageId === "ADM-EVD-001") {
@@ -590,6 +617,18 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("admin-logout").click();
     await adminLogin(page, "/admin/finance/ar-ap-ledger");
     await expect(page.getByTestId("admin-permission-denied")).toContainText("权限不足");
+  });
+
+  test("ADM-REM-05 outsourced vendor can use assigned workbench pages only", async ({ page }) => {
+    await installMockApi(page, { user: { id: "vendor-user", username: "vendor-user", accountType: "outsourced_vendor" } });
+    await adminLogin(page, "/admin/vendor/work-orders");
+
+    for (const spec of remainingRoutes.filter((item) => item.pageId.startsWith("ADM-VND-"))) {
+      await expect(page.getByTestId(`admin-nav-${spec.pageId}`)).toBeVisible();
+      await openAdminRoute(page, spec);
+    }
+
+    await expect(page.getByTestId("admin-nav-ADM-FAC-001")).toBeDisabled();
   });
 
 });

@@ -22,6 +22,9 @@ const FinanceArApLedgerPage = React.lazy(() => import("./pages/FinanceArApLedger
 const ReconciliationPage = React.lazy(() => import("./pages/ReconciliationPage").then((m) => ({ default: m.ReconciliationPage })));
 const MerchantWorkOrdersPage = React.lazy(() => import("./pages/MerchantWorkOrdersPage").then((m) => ({ default: m.MerchantWorkOrdersPage })));
 const MerchantScopePage = React.lazy(() => import("./pages/MerchantScopePage").then((m) => ({ default: m.MerchantScopePage })));
+const VendorWorkOrdersPage = React.lazy(() => import("./pages/VendorWorkOrdersPage").then((m) => ({ default: m.VendorWorkOrdersPage })));
+const VendorInspectionsPage = React.lazy(() => import("./pages/VendorInspectionsPage").then((m) => ({ default: m.VendorInspectionsPage })));
+const VendorSiteEntriesPage = React.lazy(() => import("./pages/VendorSiteEntriesPage").then((m) => ({ default: m.VendorSiteEntriesPage })));
 const AmusementSafetyPage = React.lazy(() => import("./pages/AmusementSafetyPage").then((m) => ({ default: m.AmusementSafetyPage })));
 const AmusementInspectionTasksPage = React.lazy(() => import("./pages/AmusementInspectionTasksPage").then((m) => ({ default: m.AmusementInspectionTasksPage })));
 const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessionsPage").then((m) => ({ default: m.AmusementSessionsPage })));
@@ -75,6 +78,7 @@ const GROUP_ICONS: Record<string, string> = {
   inventory: "box",
   amusement: "ferris",
   finance: "coin",
+  vendor: "user",
   governance: "shield",
   integration: "link",
   access: "user",
@@ -140,6 +144,12 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <MerchantWorkOrdersPage {...props} />;
     case "ADM-MER-002":
       return <MerchantScopePage {...props} />;
+    case "ADM-VND-001":
+      return <VendorWorkOrdersPage {...props} />;
+    case "ADM-VND-002":
+      return <VendorInspectionsPage {...props} />;
+    case "ADM-VND-003":
+      return <VendorSiteEntriesPage {...props} />;
     case "ADM-AMU-001":
       return <AmusementSessionsPage {...props} />;
     case "ADM-AMU-002":

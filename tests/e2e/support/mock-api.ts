@@ -112,6 +112,19 @@ function createState(empty = false) {
   ];
   const merchantWorkOrders = empty ? [] : [{ id: "mswo-1", merchantId: "merchant-1", spaceId: "area-1", contractId: "contract-1", workOrderType: "repair", priority: "high", status: "created", title: "\u7a7a调漏水", description: "\u5546户报修空调漏水", reportedByUserId: "staff_reporter", reportedChannel: "web", ownerDepartment: "", ownerUserId: "", dueAt: "2026-06-16T10:00:00.000Z", evidenceAttachmentIds: ["att-photo-1"], authorizedScope: "merchant-1:work-orders", auditEvidenceRef: "audit://merchant-scope/work-order-1", createdAt: now, updatedAt: now }];
   const merchantBills = empty ? [] : [{ id: "merchant-bill-1", merchantId: "merchant-1", billNo: "MBILL-1", title: "物业费账单", totalAmount: 12000, status: "pending_confirm", authorizedScope: "merchant-1:billing", auditEvidenceRef: "audit://merchant-scope/bill-1", createdAt: now, updatedAt: now }];
+  const facilityWorkOrders = empty ? [] : [
+    { id: "fwo-1", code: "VND-WO-1", workOrderType: "repair", priority: "high", status: "assigned", title: "空调主机维保", description: "外包维保待处理", source: "platform", spaceId: "area-1", equipmentId: "eq-hvac-1", reporterId: "staff-ops", reporterType: "staff", assigneeId: "vendor-user", responseDueAt: now, handleDueAt: "2026-06-16T18:00:00.000Z", assignedAt: now, respondedAt: null, completedAt: null, verifiedAt: null, verifierId: null, satisfaction: null, overtime: false, resolution: null, projectId: "venue-1", merchantId: null, createdAt: now, updatedAt: now },
+    { id: "fwo-2", code: "OTHER-WO-1", workOrderType: "cleaning", priority: "normal", status: "assigned", title: "公共区保洁", description: "其他外包账号任务", source: "platform", spaceId: "area-2", equipmentId: null, reporterId: "staff-ops", reporterType: "staff", assigneeId: "other-vendor", responseDueAt: now, handleDueAt: "2026-06-17T18:00:00.000Z", assignedAt: now, respondedAt: null, completedAt: null, verifiedAt: null, verifierId: null, satisfaction: null, overtime: false, resolution: null, projectId: "venue-1", merchantId: null, createdAt: now, updatedAt: now },
+  ];
+  const facilityInspectionTasks = empty ? [] : [
+    { id: "fit-1", templateId: "template-security-1", inspectionType: "security", status: "scheduled", title: "夜间安保巡检", scheduleMode: "manual", routePoints: [], assigneeId: "vendor-user", scheduledDate: "2026-06-15", dueDate: "2026-06-15", startedAt: null, completedAt: null, workOrderId: null, projectId: "venue-1", spaceId: "area-1", createdAt: now, updatedAt: now },
+    { id: "fit-2", templateId: "template-cleaning-1", inspectionType: "cleaning", status: "scheduled", title: "其他保洁巡检", scheduleMode: "manual", routePoints: [], assigneeId: "other-vendor", scheduledDate: "2026-06-15", dueDate: "2026-06-15", startedAt: null, completedAt: null, workOrderId: null, projectId: "venue-1", spaceId: "area-2", createdAt: now, updatedAt: now },
+  ];
+  const facilityInspectionRecords = empty ? [] : [{ id: "fir-1", taskId: "fit-1", result: "normal", photos: ["att-vendor-inspection"], qrCode: "QR-1", gpsLat: null, gpsLng: null, checklistResult: [], note: "mock record", abnormalNote: null, inspectorId: "vendor-user", recordedAt: now, createdAt: now }];
+  const siteEntryReports = empty ? [] : [
+    { id: "ser-1", projectId: "venue-1", spaceId: "area-1", workScope: "店铺装修围挡施工", plannedStartDate: "2026-06-20", plannedEndDate: "2026-06-22", crewCount: 4, contactName: "王工", contactPhone: "13800000000", vendorUserId: "vendor-user", status: "approved", reviewComment: "同意进场", acceptanceComment: null, createdBy: "vendor-user", createdAt: now, updatedAt: now, deletedAt: null },
+    { id: "ser-2", projectId: "venue-1", spaceId: "area-2", workScope: "其他队伍施工", plannedStartDate: "2026-06-21", plannedEndDate: "2026-06-23", crewCount: 3, contactName: "李工", contactPhone: "13900000000", vendorUserId: "other-vendor", status: "approved", reviewComment: "同意进场", acceptanceComment: null, createdBy: "other-vendor", createdAt: now, updatedAt: now, deletedAt: null },
+  ];
   const supervisorReviewPolicies = empty ? [] : [{ id: "policy-1", policyCode: "contract_violation_l3", actionType: "contract_violation", minAmountCent: 0, requiredLevel: 3, blocksByDefault: true, requiredEvidenceTypes: ["violation_summary", "contract_snapshot"], status: "active" }, { id: "policy-2", policyCode: "base_definition_violation_l3", actionType: "base_definition_violation", minAmountCent: 0, requiredLevel: 3, blocksByDefault: true, requiredEvidenceTypes: ["violation_summary", "definition_snapshot"], status: "active" }];
   return {
     tickets,
@@ -135,6 +148,10 @@ function createState(empty = false) {
     evidenceEvents,
     merchantWorkOrders,
     merchantBills,
+    facilityWorkOrders,
+    facilityInspectionTasks,
+    facilityInspectionRecords,
+    siteEntryReports,
     supervisorReviewPolicies,
     issuedEntitlements: empty ? [] : [{ id: "ent-1", entitlementCode: "ENT-0001", entitlementType: "entry", totalTimes: 1, usedTimes: 0, valueAmount: 9900, status: "active", createdAt: now }],
     verifications: empty ? [] : [{ id: "ver-1", verificationNo: "VER-0001", status: "success", source: "mock", createdAt: now }],
@@ -150,7 +167,17 @@ function createState(empty = false) {
 
 type MockState = ReturnType<typeof createState>;
 
-function fixedRows(pathname: string, state: MockState): ApiData {
+function isOutsourcedVendor(options: MockOptions) {
+  return options.user?.accountType === "outsourced_vendor";
+}
+
+function assignedRows<T extends Record<string, unknown>>(rows: T[], options: MockOptions, key: keyof T): T[] {
+  if (!isOutsourcedVendor(options)) return rows;
+  const actorId = options.user?.id ?? "vendor-user";
+  return rows.filter((row) => row[key] === actorId);
+}
+
+function fixedRows(pathname: string, state: MockState, options: MockOptions = {}): ApiData {
   const empty: Record<string, unknown>[] = [];
   const routes: Record<string, ApiData> = {
     "/api/v1/system/health": { ok: true, service: "mock-api", time: now },
@@ -231,6 +258,13 @@ function fixedRows(pathname: string, state: MockState): ApiData {
     "/api/v1/analytics/merchant-health": empty,
     "/api/v1/merchant-service/work-orders": state.merchantWorkOrders,
     "/api/v1/merchant-billing/bills": state.merchantBills,
+    "/api/v1/facility/equipment": empty,
+    "/api/v1/facility/equipment/maintenance-due": empty,
+    "/api/v1/facility/work-orders": assignedRows(state.facilityWorkOrders, options, "assigneeId"),
+    "/api/v1/facility/work-orders/overdue": state.facilityWorkOrders.filter((row) => row.overtime),
+    "/api/v1/facility/inspections/templates": empty,
+    "/api/v1/facility/inspections/tasks": assignedRows(state.facilityInspectionTasks, options, "assigneeId"),
+    "/api/v1/facility/site-entry-reports": assignedRows(state.siteEntryReports, options, "vendorUserId"),
     "/api/v1/analytics/metric-anomalies": state.metricAnomalies,
     "/api/v1/analytics/business-metric-snapshots": state.metricSnapshots,
     "/api/v1/analytics/group-overview": { asOf: "2026-06-19T00:00:00Z", businessDate: "2026-06-19", projects: [{ projectId: "project_1", projectName: "综合体一号", merchantCount: 3, metrics: {} }] },
@@ -262,6 +296,23 @@ function effectivePermissionsFor(options: MockOptions) {
     // 对齐页面-权限矩阵 ADM-MER-002（MERCHANT_OPERATOR 可用商户授权工作台，需工单+账单两项读权限）。
     return {
       grants: ["merchant.service_work_order.view", "merchant.billing.view"],
+      denies: [],
+      wildcard: false,
+      computedAt: now,
+    };
+  }
+  if (accountType === "outsourced_vendor") {
+    return {
+      grants: [
+        "facility.work_order.view_assigned",
+        "facility.work_order.process_assigned",
+        "facility.work_order.accept_assigned",
+        "facility.inspection.view_assigned",
+        "facility.inspection.record_assigned",
+        "facility.site_entry.view_assigned",
+        "facility.site_entry.create_assigned",
+        "facility.site_entry.submit_assigned",
+      ],
       denies: [],
       wildcard: false,
       computedAt: now,
@@ -303,7 +354,7 @@ export async function installMockApi(page: Page, options: MockOptions = {}) {
       return json(route, effectivePermissionsFor(options));
     }
     if (isWrite) return handleWrite(route, url.pathname, state, options);
-    return json(route, fixedRows(url.pathname, state));
+    return json(route, fixedRows(url.pathname, state, options));
   });
 }
 
@@ -646,6 +697,50 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
   }
   if (/^\/api\/v1\/integration\/provider-adapters\/[^/]+\/mark-production-ready$/.test(pathname)) return json(route, { id: pathname.split("/").at(-2), productionReady: true, status: "ready" });
   if (/^\/api\/v1\/integration\/provider-adapters\/[^/]+\/test-mock$/.test(pathname)) return json(route, { id: "mock-test-1", status: "mock_passed", latencyMs: 32 });
+  const facilityWorkOrderAction = pathname.match(/^\/api\/v1\/facility\/work-orders\/([^/]+)\/(start|complete|accept)$/);
+  if (facilityWorkOrderAction) {
+    const [, id, action] = facilityWorkOrderAction;
+    const workOrder = state.facilityWorkOrders.find((item) => item.id === id) ?? state.facilityWorkOrders[0];
+    if (workOrder) {
+      workOrder.status = action === "start" ? "processing" : action === "complete" ? "completed" : "accepted";
+      workOrder.updatedAt = now;
+    }
+    return json(route, { ...(workOrder ?? { id }), action, resolution: bodyValue(body, "resolution"), satisfaction: bodyValue(body, "satisfaction"), note: bodyValue(body, "note") });
+  }
+  const facilityInspectionStart = pathname.match(/^\/api\/v1\/facility\/inspections\/tasks\/([^/]+)\/start$/);
+  if (facilityInspectionStart) {
+    const id = facilityInspectionStart[1];
+    const task = state.facilityInspectionTasks.find((item) => item.id === id) ?? state.facilityInspectionTasks[0];
+    if (task) {
+      task.status = "in_progress";
+      task.updatedAt = now;
+    }
+    return json(route, { ...(task ?? { id }), note: bodyValue(body, "note") });
+  }
+  const facilityInspectionRecord = pathname.match(/^\/api\/v1\/facility\/inspections\/tasks\/([^/]+)\/records$/);
+  if (facilityInspectionRecord) {
+    const taskId = facilityInspectionRecord[1];
+    const task = state.facilityInspectionTasks.find((item) => item.id === taskId) ?? state.facilityInspectionTasks[0];
+    if (task) {
+      task.status = "completed";
+      task.updatedAt = now;
+    }
+    return json(route, { id: `fir-${state.facilityInspectionRecords.length + 1}`, taskId, result: String(bodyValue(body, "result") ?? "normal"), photos: bodyValue(body, "photos") ?? [], checklistResult: bodyValue(body, "checklistResult", "checklist_result") ?? [], note: bodyValue(body, "note"), abnormalNote: bodyValue(body, "abnormalNote", "abnormal_note"), inspectorId: String(bodyValue(body, "inspectorId", "inspector_id") ?? "vendor-user"), recordedAt: now, createdAt: now });
+  }
+  if (pathname === "/api/v1/facility/site-entry-reports") {
+    const report = { id: `ser-${state.siteEntryReports.length + 1}`, projectId: String(bodyValue(body, "projectId", "project_id") ?? "venue-1"), spaceId: String(bodyValue(body, "spaceId", "space_id") ?? "area-1"), workScope: String(bodyValue(body, "workScope", "work_scope") ?? "店铺装修围挡施工"), plannedStartDate: String(bodyValue(body, "plannedStartDate", "planned_start_date") ?? "2026-06-20"), plannedEndDate: String(bodyValue(body, "plannedEndDate", "planned_end_date") ?? "2026-06-22"), crewCount: Number(bodyValue(body, "crewCount", "crew_count") ?? 1), contactName: String(bodyValue(body, "contactName", "contact_name") ?? "王工"), contactPhone: String(bodyValue(body, "contactPhone", "contact_phone") ?? "13800000000"), vendorUserId: options.user?.id ?? "vendor-user", status: "submitted", reviewComment: "", acceptanceComment: null, createdBy: options.user?.id ?? "vendor-user", createdAt: now, updatedAt: now, deletedAt: null };
+    state.siteEntryReports.push(report);
+    return json(route, report);
+  }
+  if (/^\/api\/v1\/facility\/site-entry-reports\/[^/]+\/submit$/.test(pathname)) {
+    const id = pathname.split("/").at(-2);
+    const report = state.siteEntryReports.find((item) => item.id === id) ?? state.siteEntryReports[0];
+    if (report) {
+      report.status = "in_progress";
+      report.updatedAt = now;
+    }
+    return json(route, { ...(report ?? { id }), note: bodyValue(body, "note") });
+  }
   if (pathname === "/api/v1/merchant-service/work-orders") {
     const workOrder = { id: `mswo-${state.merchantWorkOrders.length + 1}`, merchantId: String(bodyValue(body, "merchantId", "merchant_id") ?? "merchant-1"), spaceId: String(bodyValue(body, "spaceId", "space_id") ?? "area-1"), contractId: String(bodyValue(body, "contractId", "contract_id") ?? "contract-1"), workOrderType: String(bodyValue(body, "workOrderType", "work_order_type") ?? "repair"), priority: String(bodyValue(body, "priority") ?? "normal"), status: "created", title: String(bodyValue(body, "title") ?? "???"), description: String(bodyValue(body, "description") ?? "mock merchant service work order"), reportedByUserId: String(bodyValue(body, "reportedByUserId", "reported_by_user_id") ?? "staff_reporter"), reportedChannel: String(bodyValue(body, "reportedChannel", "reported_channel") ?? "web"), ownerDepartment: "", ownerUserId: "", dueAt: String(bodyValue(body, "dueAt", "due_at") ?? now), evidenceAttachmentIds: [], createdAt: now, updatedAt: now };
     state.merchantWorkOrders.push(workOrder);
