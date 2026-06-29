@@ -523,6 +523,32 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
+    public List<SavedBottleRecord> listStoredSavedBottlesExpiring(Instant now, Instant windowEnd) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM saved_bottles
+                 WHERE status = 'stored'
+                   AND expire_at > :now
+                   AND expire_at <= :window_end
+                 ORDER BY expire_at ASC, id
+                """, new MapSqlParameterSource()
+                .addValue("now", offset(now))
+                .addValue("window_end", offset(windowEnd)), rowMapper::mapSavedBottle);
+    }
+
+    @Override
+    public List<SavedBottleRecord> listStoredSavedBottlesExpired(Instant now) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM saved_bottles
+                 WHERE status = 'stored'
+                   AND expire_at < :now
+                 ORDER BY expire_at ASC, id
+                """, new MapSqlParameterSource()
+                .addValue("now", offset(now)), rowMapper::mapSavedBottle);
+    }
+
+    @Override
     public SavedBottleClaimRecord saveSavedBottleClaim(SavedBottleClaimRecord claim) {
         jdbcTemplate.update("""
                 INSERT INTO saved_bottle_claims (

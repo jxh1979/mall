@@ -68,6 +68,22 @@ public interface InventoryRepository {
 
     List<SavedBottleRecord> listSavedBottles();
 
+    default List<SavedBottleRecord> listStoredSavedBottlesExpiring(Instant now, Instant windowEnd) {
+        return listSavedBottles().stream()
+                .filter(bottle -> "stored".equals(bottle.status()))
+                .filter(bottle -> bottle.expireAt() != null)
+                .filter(bottle -> bottle.expireAt().isAfter(now) && !bottle.expireAt().isAfter(windowEnd))
+                .toList();
+    }
+
+    default List<SavedBottleRecord> listStoredSavedBottlesExpired(Instant now) {
+        return listSavedBottles().stream()
+                .filter(bottle -> "stored".equals(bottle.status()))
+                .filter(bottle -> bottle.expireAt() != null)
+                .filter(bottle -> bottle.expireAt().isBefore(now))
+                .toList();
+    }
+
     SavedBottleClaimRecord saveSavedBottleClaim(SavedBottleClaimRecord claim);
 
     // P0#4 存酒转赠留痕。

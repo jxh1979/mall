@@ -4,6 +4,8 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.customer.CustomerRecord;
+import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.RiskAlertService;
 import com.complex.platform.evidence.TraceabilityProcessInstanceRecord;
@@ -28,26 +30,40 @@ import com.complex.platform.inventory.dto.TraceExceptionReviewRequest;
 import com.complex.platform.inventory.dto.TraceHandoverCreateRequest;
 import com.complex.platform.inventory.dto.TraceRobotReportRequest;
 import com.complex.platform.inventory.dto.TraceScanSegmentRequest;
+import com.complex.platform.notification.NotificationService;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class InventoryService {
 
+    private static final Logger log = LoggerFactory.getLogger(InventoryService.class);
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
+    private static final String STORED_WINE_DOMAIN = "stored_wine";
+    private static final String STORED_WINE_DEPOSIT_TEMPLATE = "sms.stored_wine.deposit";
+    private static final String STORED_WINE_CLAIM_TEMPLATE = "sms.stored_wine.claim";
+    private static final String STORED_WINE_EXPIRING_TEMPLATE = "sms.stored_wine.expiring";
+    private static final String STORED_WINE_EXPIRED_TEMPLATE = "sms.stored_wine.expired";
     private static final Set<String> STOCK_BATCH_STATUSES = Set.of("active", "consumed", "expired", "archived");
     private static final Set<String> SUPPLIER_RECONCILIATION_STATUSES = Set.of("pending", "matched", "difference_found");
 
@@ -69,6 +85,8 @@ public class InventoryService {
     // risk_alerts（source_domain='inventory'），让统一表真实承载本域风险数据。复刻 Wave 1 Wecom 先例。
     // 可为 null（向后兼容/旧 6 参构造器/单测无注入）；接入为 fail-safe，不阻塞主链。
     private final RiskAlertService riskAlertService;
+    private final NotificationService notificationService;
+    private final CustomerRepository customerRepository;
 
     // 本域风险级 → 统一表 RISK_LEVELS({normal,suspicious,high,critical}) 映射。
     // inventory 用的 medium 在统一表无对应枚举，必须映射为 suspicious，否则 report 抛 VALIDATION_FAILED。
@@ -86,7 +104,20 @@ public class InventoryService {
             TraceabilityService traceabilityService
     ) {
         this(repository, idempotencyService, auditEventService, authorizationService,
-                terminalSwitchGuard, traceabilityService, null);
+                terminalSwitchGuard, traceabilityService, null, null, null);
+    }
+
+    public InventoryService(
+            InventoryRepository repository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            TerminalSwitchGuard terminalSwitchGuard,
+            TraceabilityService traceabilityService,
+            RiskAlertService riskAlertService
+    ) {
+        this(repository, idempotencyService, auditEventService, authorizationService,
+                terminalSwitchGuard, traceabilityService, riskAlertService, null, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -97,7 +128,9 @@ public class InventoryService {
             AuthorizationService authorizationService,
             TerminalSwitchGuard terminalSwitchGuard,
             TraceabilityService traceabilityService,
-            RiskAlertService riskAlertService
+            RiskAlertService riskAlertService,
+            NotificationService notificationService,
+            CustomerRepository customerRepository
     ) {
         this.repository = repository;
         this.idempotencyService = idempotencyService;
@@ -106,6 +139,8 @@ public class InventoryService {
         this.terminalSwitchGuard = terminalSwitchGuard;
         this.traceabilityService = traceabilityService;
         this.riskAlertService = riskAlertService;
+        this.notificationService = notificationService;
+        this.customerRepository = customerRepository;
         this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService);
         this.stockMovementService = new InventoryStockMovementService(
@@ -264,7 +299,7 @@ public class InventoryService {
                     if (registrationPhotoRefs.isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "registration_photo_refs is required");
                     }
-                    return repository.saveSavedBottle(new SavedBottleRecord(
+                    SavedBottleRecord savedBottle = repository.saveSavedBottle(new SavedBottleRecord(
                             "saved_" + slug(actual.idempotencyKey()),
                             customerId,
                             requireText(actual.barId(), "bar_id"),
@@ -292,6 +327,13 @@ public class InventoryService {
                             null,
                             null
                     ));
+                    notifySavedBottleAfterCommit(
+                            savedBottle,
+                            "deposit",
+                            STORED_WINE_DEPOSIT_TEMPLATE,
+                            "swdeposit:" + savedBottle.id(),
+                            null);
+                    return savedBottle;
                 }
         );
     }
@@ -318,6 +360,160 @@ public class InventoryService {
                 b.bottleLabelValue(), b.customerNameOrNickname(), b.customerPhone(), b.customerPhoneHash(),
                 b.registrationPhotoRefs(), b.manualNote(),
                 b.transferredAt(), b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash());
+    }
+
+    public void processSavedBottleNotifications(Instant now, int expiringNoticeDays) {
+        Instant actualNow = now == null ? Instant.now() : now;
+        int noticeDays = Math.max(0, expiringNoticeDays);
+        processExpiringSavedBottleNotifications(actualNow, noticeDays);
+        processExpiredSavedBottleNotifications(actualNow);
+    }
+
+    private void processExpiringSavedBottleNotifications(Instant now, int noticeDays) {
+        Instant windowEnd = now.plus(Duration.ofDays(noticeDays));
+        List<SavedBottleRecord> bottles;
+        try {
+            bottles = repository.listStoredSavedBottlesExpiring(now, windowEnd);
+        } catch (RuntimeException exception) {
+            log.warn("failed to list expiring saved bottles for notification", exception);
+            return;
+        }
+        for (SavedBottleRecord bottle : bottles) {
+            notifySavedBottleNow(
+                    bottle,
+                    "expiring",
+                    STORED_WINE_EXPIRING_TEMPLATE,
+                    "swexpiring:" + bottle.id() + ":" + expireDateKey(bottle),
+                    null);
+        }
+    }
+
+    private void processExpiredSavedBottleNotifications(Instant now) {
+        List<SavedBottleRecord> bottles;
+        try {
+            bottles = repository.listStoredSavedBottlesExpired(now);
+        } catch (RuntimeException exception) {
+            log.warn("failed to list expired saved bottles for notification", exception);
+            return;
+        }
+        for (SavedBottleRecord bottle : bottles) {
+            notifySavedBottleNow(
+                    bottle,
+                    "expired",
+                    STORED_WINE_EXPIRED_TEMPLATE,
+                    "swexpired:" + bottle.id(),
+                    null);
+            try {
+                repository.saveSavedBottle(savedBottleWith(bottle, "expired", bottle.remainingQuantity(), now));
+            } catch (RuntimeException exception) {
+                log.warn("failed to mark saved bottle expired: bottle_id={}", bottle.id(), exception);
+            }
+        }
+    }
+
+    private void notifySavedBottleAfterCommit(
+            SavedBottleRecord bottle,
+            String event,
+            String templateCode,
+            String idempotencyKey,
+            SavedBottleClaimRecord claim
+    ) {
+        if (notificationService == null) {
+            return;
+        }
+        Runnable notify = () -> notifySavedBottleNow(bottle, event, templateCode, idempotencyKey, claim);
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    notify.run();
+                }
+            });
+            return;
+        }
+        notify.run();
+    }
+
+    private void notifySavedBottleNow(
+            SavedBottleRecord bottle,
+            String event,
+            String templateCode,
+            String idempotencyKey,
+            SavedBottleClaimRecord claim
+    ) {
+        if (notificationService == null) {
+            return;
+        }
+        try {
+            notificationService.notify(
+                    STORED_WINE_DOMAIN,
+                    event,
+                    resolveSavedBottleRecipient(bottle),
+                    templateCode,
+                    savedBottleNotificationParams(bottle, claim),
+                    idempotencyKey);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "saved bottle notification failed: event={}, bottle_id={}, idempotency_key={}",
+                    event,
+                    bottle == null ? null : bottle.id(),
+                    idempotencyKey,
+                    exception);
+        }
+    }
+
+    private String resolveSavedBottleRecipient(SavedBottleRecord bottle) {
+        if (bottle == null) {
+            return null;
+        }
+        String customerId = trimToNull(bottle.customerId());
+        if (customerId != null) {
+            if (customerRepository == null) {
+                return null;
+            }
+            try {
+                return customerRepository.findCustomerById(customerId)
+                        .map(CustomerRecord::phone)
+                        .map(this::trimToNull)
+                        .orElse(null);
+            } catch (RuntimeException exception) {
+                log.warn("failed to resolve saved bottle customer phone: customer_id={}", customerId, exception);
+                return null;
+            }
+        }
+        return trimToNull(bottle.customerPhone());
+    }
+
+    private Map<String, Object> savedBottleNotificationParams(SavedBottleRecord bottle, SavedBottleClaimRecord claim) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        if (bottle != null) {
+            putIfNotNull(params, "saved_bottle_id", bottle.id());
+            putIfNotNull(params, "bottle", bottle.bottleName());
+            putIfNotNull(params, "bottle_name", bottle.bottleName());
+            putIfNotNull(params, "item", bottle.itemId());
+            putIfNotNull(params, "item_id", bottle.itemId());
+            putIfNotNull(params, "expireAt", bottle.expireAt() == null ? null : bottle.expireAt().toString());
+            putIfNotNull(params, "remaining_quantity", bottle.remainingQuantity());
+        }
+        if (claim != null) {
+            putIfNotNull(params, "claim_id", claim.id());
+            putIfNotNull(params, "claim_quantity", claim.claimQuantity());
+        }
+        return params;
+    }
+
+    private void putIfNotNull(Map<String, Object> params, String key, Object value) {
+        if (value != null) {
+            params.put(key, value);
+        }
+    }
+
+    private String expireDateKey(SavedBottleRecord bottle) {
+        if (bottle == null || bottle.expireAt() == null) {
+            return "none";
+        }
+        return bottle.expireAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_claim", objectType = "saved_bottle")
@@ -388,9 +584,9 @@ public class InventoryService {
                     }
                     int remaining = savedBottle.remainingQuantity() - quantity;
                     Instant now = Instant.now();
-                    repository.saveSavedBottle(savedBottleWith(
+                    SavedBottleRecord updatedBottle = repository.saveSavedBottle(savedBottleWith(
                             savedBottle, remaining == 0 ? "claimed" : "stored", remaining, now));
-                    return repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
+                    SavedBottleClaimRecord claim = repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
                             "claim_" + slug(actual.idempotencyKey()),
                             savedBottle.id(),
                             quantity,
@@ -401,6 +597,13 @@ public class InventoryService {
                             safeList(actual.evidenceAttachmentIds()),
                             now
                     ));
+                    notifySavedBottleAfterCommit(
+                            updatedBottle,
+                            "claim",
+                            STORED_WINE_CLAIM_TEMPLATE,
+                            "swclaim:" + claim.id(),
+                            claim);
+                    return claim;
                 }
         );
     }
