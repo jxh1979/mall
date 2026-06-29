@@ -6,14 +6,19 @@ import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.gate.GuardedAction;
+import com.complex.platform.notification.NotificationService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 储值（预付卡 / 余额账户，gap-analysis §7A P1）。
@@ -31,9 +36,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class StoredValueService {
 
+    private static final Logger log = LoggerFactory.getLogger(StoredValueService.class);
     private static final String EVENT_TOPUP = "stored_value.topup";
     private static final String EVENT_CONSUME = "stored_value.consume";
     private static final String EVENT_REFUND = "stored_value.refund";
+    private static final String NOTIFICATION_DOMAIN = "stored_value";
+    private static final String NOTIFICATION_EVENT_TOPUP = "topup";
+    private static final String NOTIFICATION_EVENT_CONSUME = "consume";
+    private static final String STORED_VALUE_TOPUP_TEMPLATE = "sms.stored_value.topup";
+    private static final String STORED_VALUE_CONSUME_TEMPLATE = "sms.stored_value.consume";
 
     /** 商户卡充值资金归属：merchant_prepaid=发卡商户预收（默认）；platform_collect=平台代收、消费时结算给商户。 */
     static final String FUND_MERCHANT_PREPAID = "merchant_prepaid";
@@ -44,29 +55,49 @@ public class StoredValueService {
     private final com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway;
     // B1d⑤ phase4 员工端卡范围隔离：商户范围员工只能操作本商户的商户卡。可为 null=旧构造/兼容测试（不强制）。
     private final com.complex.platform.access.AuthorizationService authorizationService;
+    private final NotificationService notificationService;
     private final Clock clock;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
     private String fundOwnershipDefault = FUND_MERCHANT_PREPAID;
 
-    @org.springframework.beans.factory.annotation.Autowired
     public StoredValueService(CustomerRepository repository, FinanceService financeService,
                               AuditEventService auditEventService,
                               com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
                               com.complex.platform.access.AuthorizationService authorizationService) {
-        this(repository, financeService, auditEventService, paymentGateway, authorizationService, Clock.systemUTC());
+        this(repository, financeService, auditEventService, paymentGateway, authorizationService, null, Clock.systemUTC());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public StoredValueService(CustomerRepository repository, FinanceService financeService,
+                              AuditEventService auditEventService,
+                              com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
+                              com.complex.platform.access.AuthorizationService authorizationService,
+                              NotificationService notificationService) {
+        this(repository, financeService, auditEventService, paymentGateway, authorizationService,
+                notificationService, Clock.systemUTC());
     }
 
     StoredValueService(CustomerRepository repository, FinanceService financeService,
                        AuditEventService auditEventService,
                        com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
                        com.complex.platform.access.AuthorizationService authorizationService, Clock clock) {
+        this(repository, financeService, auditEventService, paymentGateway, authorizationService, null, clock);
+    }
+
+    private StoredValueService(CustomerRepository repository, FinanceService financeService,
+                               AuditEventService auditEventService,
+                               com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
+                               com.complex.platform.access.AuthorizationService authorizationService,
+                               NotificationService notificationService,
+                               Clock clock) {
         this.repository = repository;
         this.financeService = financeService;
         this.auditEventService = auditEventService;
         this.paymentGateway = paymentGateway;
         this.authorizationService = authorizationService;
+        this.notificationService = notificationService;
         this.clock = clock;
     }
 
@@ -162,6 +193,8 @@ public class StoredValueService {
         }
         auditEventService.recordSuccess(EVENT_TOPUP, "customer.stored_value.topup",
                 "customer_stored_value", account.id(), null, null, detail);
+        notifyStoredValueAfterCommit(txn, account, NOTIFICATION_EVENT_TOPUP, STORED_VALUE_TOPUP_TEMPLATE,
+                "svtopup:" + txn.id(), intent.amountCent(), balanceAfter);
         return txn;
     }
 
@@ -201,6 +234,8 @@ public class StoredValueService {
         auditEventService.recordSuccess(EVENT_CONSUME, "customer.stored_value.consume",
                 "customer_stored_value", account.id(), null, null,
                 consumeRefundDetail(account, amountCent, balanceAfter));
+        notifyStoredValueAfterCommit(txn, account, NOTIFICATION_EVENT_CONSUME, STORED_VALUE_CONSUME_TEMPLATE,
+                "svconsume:" + txn.id(), amountCent, balanceAfter);
         return txn;
     }
 
@@ -349,6 +384,98 @@ public class StoredValueService {
         return detail;
     }
 
+    private void notifyStoredValueAfterCommit(CustomerStoredValueTransactionRecord txn,
+                                              CustomerStoredValueAccountRecord account,
+                                              String event,
+                                              String templateCode,
+                                              String idempotencyKey,
+                                              long amountCent,
+                                              long balanceAfterCent) {
+        if (notificationService == null) {
+            return;
+        }
+        Runnable notify = () -> notifyStoredValueNow(txn, account, event, templateCode,
+                idempotencyKey, amountCent, balanceAfterCent);
+        try {
+            if (TransactionSynchronizationManager.isSynchronizationActive()
+                    && TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        notify.run();
+                    }
+                });
+                return;
+            }
+        } catch (RuntimeException exception) {
+            log.warn("stored value notification registration failed: event={}, idempotency_key={}",
+                    event, idempotencyKey, exception);
+            return;
+        }
+        notify.run();
+    }
+
+    private void notifyStoredValueNow(CustomerStoredValueTransactionRecord txn,
+                                      CustomerStoredValueAccountRecord account,
+                                      String event,
+                                      String templateCode,
+                                      String idempotencyKey,
+                                      long amountCent,
+                                      long balanceAfterCent) {
+        if (notificationService == null) {
+            return;
+        }
+        try {
+            notificationService.notify(
+                    NOTIFICATION_DOMAIN,
+                    event,
+                    resolveStoredValueRecipient(txn == null ? null : txn.customerId()),
+                    templateCode,
+                    storedValueNotificationParams(account, amountCent, balanceAfterCent),
+                    idempotencyKey);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "stored value notification failed: event={}, txn_id={}, idempotency_key={}",
+                    event,
+                    txn == null ? null : txn.id(),
+                    idempotencyKey,
+                    exception);
+        }
+    }
+
+    private String resolveStoredValueRecipient(String customerId) {
+        String normalizedCustomerId = trimToNull(customerId);
+        if (normalizedCustomerId == null) {
+            return null;
+        }
+        try {
+            return repository.findCustomerById(normalizedCustomerId)
+                    .map(CustomerRecord::phone)
+                    .map(this::trimToNull)
+                    .orElse(null);
+        } catch (RuntimeException exception) {
+            log.warn("failed to resolve stored value customer phone: customer_id={}",
+                    normalizedCustomerId, exception);
+            return null;
+        }
+    }
+
+    private Map<String, Object> storedValueNotificationParams(CustomerStoredValueAccountRecord account,
+                                                              long amountCent,
+                                                              long balanceAfterCent) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("amount_cent", amountCent);
+        params.put("balance_after_cent", balanceAfterCent);
+        if (account != null) {
+            params.put("card_type", account.cardScope());
+            params.put("card_scope", account.cardScope());
+            if (account.merchantId() != null) {
+                params.put("merchant_id", account.merchantId());
+            }
+        }
+        return params;
+    }
+
     private CustomerStoredValueTransactionRecord idempotentTxn(String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return null;
@@ -416,6 +543,11 @@ public class StoredValueService {
     private CustomerRecord requireCustomer(String customerId) {
         return repository.findCustomerById(customerId)
                 .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
+    }
+
+    private String trimToNull(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private Instant now() {
