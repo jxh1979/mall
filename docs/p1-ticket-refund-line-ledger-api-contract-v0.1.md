@@ -40,7 +40,8 @@
 
 ## 3. 生成规则
 
-- 退款申请目标必须是票务订单。
+- 退款申请目标为票务订单；选退该订单下哪几张票实例由退款申请 `RefundRequest.entitlement_ids` 决定（见 `openapi-p0` / `ticketing-pass-entitlement-development-design.md` §5.6），本接口只读已生成的明细行、不做选择。
+- 可退性按票实例判定（`issued_entitlements`，`used_times=0` 可退；已核销票实例拒退 `TICKET_ENTITLEMENT_VERIFIED_NO_REFUND`）。
 - 若订单已有已发权益，则按权益生成 `line_type=entitlement` 明细。
 - 若订单尚未发权益，则生成 `line_type=order` 明细。
 - 明细行金额总和必须等于退款申请金额。
