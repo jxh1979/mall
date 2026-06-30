@@ -248,7 +248,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="energy-settlements-table">
             <thead><tr><th>结算</th><th>合同/商户</th><th>期间</th><th>分摊口径</th><th>金额(元)</th><th>应收</th><th>状态</th></tr></thead>
-            <tbody>{settlements.map((row) => <tr key={row.id} data-testid={`energy-settlement-${row.id}`}><td>{row.id}</td><td>{row.contractId ?? "-"} / {row.merchantId ?? "-"}</td><td>{row.period}</td><td>{row.energyFeeBasis ?? "-"}</td><td>{yuanFromCent(row.amountCent)}</td><td>{row.arApItemId ?? "-"}</td><td>{row.status ?? "-"}</td></tr>)}</tbody>
+            <tbody>{settlements.map((row) => <tr key={row.id} data-testid={`energy-settlement-${row.id}`}><td>{row.id}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-CONT-001" objectId={row.contractId}>{row.contractId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink></td><td>{row.period}</td><td>{row.energyFeeBasis ?? "-"}</td><td>{yuanFromCent(row.amountCent)}</td><td>{row.arApItemId ?? "-"}</td><td>{row.status ?? "-"}</td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>
