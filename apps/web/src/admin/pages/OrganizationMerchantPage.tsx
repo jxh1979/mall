@@ -27,7 +27,7 @@ function display(value: unknown) {
   return JSON.stringify(value);
 }
 
-export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
@@ -91,6 +91,9 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   return (
     <section data-testid="organization-merchant-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      {focusObjectId && (
+        <div className="admin-state" data-testid="organization-merchant-focus">已从下钻定位到商户：{focusObjectId}（在下表中查看其档案与归属）</div>
+      )}
       <div className="admin-generic-evidence" data-testid="organization-merchant-evidence">{TEXT.evidence}</div>
       <AuditTrailHint event="organization.viewed / merchant_profile.created" />
       {formError ? <div className="admin-inline-error" data-testid="organization-merchant-form-error">{formError}</div> : null}

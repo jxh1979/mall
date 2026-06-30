@@ -62,6 +62,10 @@ export type AdminPageProps = {
    * HighRiskConfirm 的 permissionsState）。AdminApp 注入；缺省视为 loading（fail-safe）。
    */
   effectivePermissions: EffectivePermissionsState;
+  /** 全链下钻：跳到承载某对象的后台页并定位（TraceLink 用）。AdminApp 注入。 */
+  navigateTo?: (pageId: string, objectId?: string) => void;
+  /** 下钻进入本页时携带的对象 id（URL ?focus=），供本页定位/高亮/过滤。 */
+  focusObjectId?: string;
 };
 
 // T12 经营看板：以 metric_code 为权威键的指标 map（与后端 OverviewResponse 对齐）。

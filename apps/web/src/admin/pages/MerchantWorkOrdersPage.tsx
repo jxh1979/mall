@@ -10,6 +10,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
+import { TraceLink } from "../components/TraceLink";
 
 const WO_CREATE = ["merchant.service_work_order.create"];
 const WO_ASSIGN = ["merchant.service_work_order.assign"];
@@ -68,7 +69,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, evidenceAttachmentIds: request.evidenceAttachmentIds, result };
 }
 
-export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantWorkOrderRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [title, setTitle] = React.useState("空调漏水复查");
@@ -244,7 +245,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
               {paged.pageRows.map((row) => (
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
-                  <td>{row.title ?? row.id}</td>
+                  <td>{row.title ?? row.id}<br /><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></td>
                   <td>{row.workOrderType ?? "-"}</td>
                   <td>{row.priority ?? "-"}</td>
                   <td>{row.status ?? "-"}</td>

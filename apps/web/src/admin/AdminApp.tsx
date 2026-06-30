@@ -2,7 +2,7 @@ import React from "react";
 import { ConfigProvider, theme } from "antd";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
-import { findAdminRoute, groupedAdminRoutes } from "./adminRoutes";
+import { adminRoutes, findAdminRoute, groupedAdminRoutes } from "./adminRoutes";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
 
@@ -213,6 +213,9 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
 
 export default function AdminApp() {
   const [route, setRoute] = React.useState<AdminRoute>(activeRouteFromLocation);
+  const [focusObjectId, setFocusObjectId] = React.useState<string | undefined>(
+    () => new URLSearchParams(window.location.search).get("focus") ?? undefined,
+  );
   const [token, setToken] = React.useState("");
   const [user, setUser] = React.useState<AdminUser | null>(null);
   const [effectivePermissions, setEffectivePermissions] = React.useState<EffectivePermissionsState>({ status: "loading" });
@@ -225,7 +228,10 @@ export default function AdminApp() {
   const api = React.useMemo(() => new AdminApi(token), [token]);
 
   React.useEffect(() => {
-    const onPopState = () => setRoute(activeRouteFromLocation());
+    const onPopState = () => {
+      setRoute(activeRouteFromLocation());
+      setFocusObjectId(new URLSearchParams(window.location.search).get("focus") ?? undefined);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -264,6 +270,7 @@ export default function AdminApp() {
       return;
     }
     setRoute(nextRoute);
+    setFocusObjectId(undefined);
     setActionResult(null);
     setGlobalError(null);
     // 固定高度布局下内容滚动发生在 .admin-content 内；切换页面后复位到顶部，
@@ -272,6 +279,21 @@ export default function AdminApp() {
     if (window.location.pathname !== nextRoute.route) {
       window.history.pushState({ pageId: nextRoute.pageId }, "", nextRoute.route);
     }
+  }
+
+  // 全链下钻：按 pageId 找目标页，校验权限后带对象 id 跳转并定位（URL ?focus=）。
+  function navigateTo(pageId: string, objectId?: string) {
+    const target = adminRoutes.find((item) => item.pageId === pageId);
+    if (!target || !hasPermissions(effectivePermissions, target.requiredPermissions)) {
+      return;
+    }
+    setFocusObjectId(objectId);
+    setRoute(target);
+    setActionResult(null);
+    setGlobalError(null);
+    document.querySelector(".admin-content")?.scrollTo({ top: 0 });
+    const url = objectId ? `${target.route}?focus=${encodeURIComponent(objectId)}` : target.route;
+    window.history.pushState({ pageId: target.pageId }, "", url);
   }
 
   async function login(event: React.FormEvent<HTMLFormElement>) {
@@ -395,7 +417,7 @@ export default function AdminApp() {
                 不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
                 chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}
             <React.Suspense fallback={null}>
-              {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions })}
+              {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId })}
             </React.Suspense>
           </PermissionGate>
           {actionResult ? <pre className="admin-result" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}

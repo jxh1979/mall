@@ -2002,3 +2002,6 @@ body {
     animation-duration: 0.01ms !important;
   }
 }
+
+.admin-trace-link { background: none; border: none; padding: 0; margin: 0; color: #2563eb; text-decoration: underline; cursor: pointer; font: inherit; }
+.admin-trace-link:hover { color: #1d4ed8; }
