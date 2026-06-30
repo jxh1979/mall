@@ -278,7 +278,7 @@
 | waive_reason | 豁免/放行原因 nullable |
 | status | valid、expiring、expired、revoked、pending_review |
 
-> 业态必填规则：merchant_type=bar/catering（或经营含酒水/餐饮）时，alcohol_license（酒类）、food_license（食品）为必填资质，缺失或 status∈{expired,revoked} 时对应业务（点单/售酒/出餐）应阻断或进入升级审批（写入 admission_audits）。`status=expiring` 由 valid_to 与 expiry_warning_days 派生，用于到期预警；`expiry_action=block` 且已 expired 时触发阻断。
+> 业态必填规则：merchant_type=bar/catering（或经营含酒水/餐饮）时，alcohol_license（酒类）、food_license（食品）为必填资质，缺失或 status∈{expired,revoked} 时对应业务（点单/售酒/出餐）应阻断或进入升级审批（留痕写入 supervisor_review_decisions；admission_audits 已废止，见附录 Z）。`status=expiring` 由 valid_to 与 expiry_warning_days 派生，用于到期预警；`expiry_action=block` 且已 expired 时触发阻断。
 
 ### 2.10.1 contract_key_dates 合同关键日期表
 
@@ -413,7 +413,7 @@
 - 跨组织时先在触发人所属 organization_id 内解析目标 level_rank；本组织无更高职级则上溯父组织，仍无则回退 top_authority。
 - 无更高级（触发人已是 level_rank=30 或组织内最高）时一律回退 top_authority，避免审批链断裂。
 
-**4) 落点：** `staff_levels.approval_level`、`contract_admission_rules.required_approval_level`、`contracts.high_approval_required`（语义为是否命中后需更高审批）三处统一引用上表枚举；`admission_audits` 建议补 `approval_level` 字段记录本次实际上提到的相对档位（见 2.9.2 修订说明）。
+**4) 落点：** `staff_levels.approval_level`、`contract_admission_rules.required_approval_level`、`contracts.high_approval_required`（语义为是否命中后需更高审批）三处统一引用上表枚举；（历史）`admission_audits` 曾建议补 `approval_level` 字段；该表已废止，相对审批层级现统一由 `supervisor_review_decisions` 承载（见附录 Z）。
 
 ### 3.2.2 staff_registration_approvals 员工注册审批表
 
