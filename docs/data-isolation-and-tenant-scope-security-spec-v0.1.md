@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V173**，发现 **122** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V183**，发现 **126** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -122,7 +122,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `customer_points_rules` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
 | `customer_points_transfer_limits` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
 | `customer_redemption_catalog_items` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
-| `customer_stored_value_accounts` | `project_id` | direct | V090 | `V090__member_stored_value_paid_membership_transfer.sql` |
+| `customer_stored_value_accounts` | `merchant_id` + `project_id` | direct | V090, V175 | `V090__member_stored_value_paid_membership_transfer.sql`<br>`V175__stored_value_merchant_scoped_cards.sql` |
 | `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
 | `energy_meters` | `merchant_id` + `project_id` + `space_id` | direct | V168 | `V168__energy_metering.sql` |
 | `entitlement_sessions` | `merchant_id` + `project_id` | direct | V129 | `V129__entitlement_sessions.sql` |
@@ -130,6 +130,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `evidence_attachments` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `evidence_events` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `evidence_reviews` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
+| `external_partner_orgs` | `project_id` | direct | V183 | `V183__external_partner_org_self_service.sql` |
 | `facility_equipment` | `merchant_id` + `project_id` + `space_id` | direct | V165 | `V165__facility_equipment.sql` |
 | `facility_inspection_tasks` | `project_id` + `space_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_inspection_templates` | `project_id` | direct | V167 | `V167__facility_inspection.sql` |
@@ -154,6 +155,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_bill_disputes` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bill_dunning_records` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bills` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
+| `merchant_fee_notification_recipient` | `merchant_id` | direct | V182 | `V182__merchant_fee_notification_recipient.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
 | `position_role_templates` | `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |
 | `projects` | `merchant_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
@@ -165,11 +167,13 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `roles` | `organization_id` | direct | V048 | `V048__access_role_organization_isolation.sql` |
 | `saved_bottles` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `service_responsibility_records` | `merchant_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |
+| `site_entry_reports` | `project_id` + `space_id` | direct | V179 | `V179__site_entry_reports.sql` |
 | `space_expiry_color_rules` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `spaces` | `merchant_id` + `project_id` | direct | V005 | `V005__p0_platform_master_data.sql` |
 | `staff_level_assignments` | `merchant_id` + `organization_id` | direct | V055 | `V055__access_staff_levels_and_salary.sql` |
 | `staff_profiles` | `merchant_id` + `project_id` | direct | V086 | `V086__staff_tables.sql` |
 | `stocktake` | `merchant_id` | direct | V108 | `V108__inventory_variance_to_ap.sql` |
+| `stored_value_merchant_refund_rules` | `merchant_id` | direct | V176 | `V176__stored_value_merchant_refund_rules.sql` |
 | `supplier_qualifications` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
 | `supplier_settlement_methods` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
 | `supply_contracts` | `merchant_id` + `project_id` | direct | V085 | `V085__supply_chain_t6.sql` |
