@@ -431,7 +431,7 @@
 
 > 修订说明（2026-06-07）：依据 finding staff-5、staff-2、govern-2 补「职级与审批层级模型」。
 > **职级序列（staff-5）：** 职级为二维结构「主级 M1-M10 × 子级 上/中/下」，派生有序 `level_rank`(1..30) 作为职级序列主键（M1上=1 … M10下=30，rank 越大越高），由系统派生不人工独立录入。结构化字段见 foundation-database-design §3.2.1。
-> **审批层级（staff-2/govern-2）：** 「上一级/上两级/最高权限」是相对层级，统一以 `level_rank` 为基准序列计算：one_level_up=路由给 rank 最小且 > 触发人的职级、two_levels_up=第二个更高职级（不足回退最高权限）、specified_level=指定职级、top_authority=组织/项目内 rank 最大者。同主级不同子级也算一级；跨组织上溯解析；无更高级回退最高权限。字段落点：`staff_levels.approval_level`、`contract_admission_rules.required_approval_level`、`contracts.high_approval_required`，规则见 foundation-database-design §3.2.1.1。
+> **审批层级（staff-2/govern-2）：** 「上一级/上两级/最高权限」是相对层级，统一以 `level_rank` 为基准序列计算：one_level_up=路由给 rank 最小且 > 触发人的职级、two_levels_up=第二个更高职级（不足回退最高权限）、specified_level=指定职级、top_authority=组织/项目内 rank 最大者。同主级不同子级也算一级；跨组织上溯解析；无更高级回退最高权限。字段落点：`staff_levels.approval_level`、`contracts.high_approval_required`，规则见 foundation-database-design §3.2.1.1。（注：`contract_admission_rules` 已废止，合同准入相关审批层级与放行留痕现统一落 `supervisor_review_decisions`。）
 
 ### 2.6 关键流程
 

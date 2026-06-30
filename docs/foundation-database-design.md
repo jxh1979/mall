@@ -1663,6 +1663,8 @@ erDiagram
 
 建议按依赖顺序建表：
 
+> ⚠️ **历史建表顺序（原始设计，已被 2026-06-18 裁决部分作废，仅存顺序参考、勿据此建表）**：空间四级模型 `complex_projects`/`venues`/`areas`/`location_points` 已废止，改扁平 `spaces`（`space_type`+`parent_space_id`）；准入两表 `contract_admission_rules`(11)/`admission_audits`(12) 已废止，改 `supervisor_review_decisions`（见 §2.9.1/2.9.2 指针与附录 Z）；`service_providers` 未建。实际表以 Flyway 迁移为唯一权威。
+
 1. complex_projects
 2. organizations
 3. merchants
