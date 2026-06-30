@@ -218,6 +218,7 @@
 | `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图（最终解释权之一） | 现行 |
 | `business-enum-quick-reference-v0.1.html` | 业务枚举速查表（最终解释权之一，配套两份地图使用） | 现行 |
 | `business-html-source-of-truth-acceptance-spec-v0.1.md` | 三份业务 HTML 到下游文档和验收资料的最小映射索引；不替代 HTML | 现行 |
+| `pending-development-backlog-v0.1.md` | 待开发/未完成项登记（带 P1/P2/P3 优先级 + 设计性gating + 已完成消项），全仓盘点结果 | 现行 |
 
 ## 17. 归档目录
 
