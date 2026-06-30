@@ -3,7 +3,7 @@
 > **⚠️ R5 业务HTML缺口审计修正标注（2026-06-18，只读审计后回填，未改代码）**
 > 本设计多处表/字段为"有设计无迁移"，以真实 Flyway V001–V148 为准收口（V099–V124 新增表/列见 §11 `文档goalP1(2026-06-20)`；V143–V148 见 §11.23–§11.28 `文档goalP1(2026-06-22)`）：
 > - **准入两表**：`contract_admission_rules`(§238)、`admission_audits`(§259) 迁移**零命中**；审批层级实际落 `supervisor_review_decisions`(V057)。§449"admission_audits.approval_level"为过期落点。
-> - **空间四级模型**：设计的 `complex_projects/venues/areas/location_points` 四级表代码零落地，真实迁移是扁平单表 `spaces`(V005，`space_type` 自由文本无枚举)。该四级模型已过期，需作废或重写。
+> - **空间四级模型**：设计的 `complex_projects/venues/areas/location_points` 四级表代码零落地，真实迁移是扁平单表 `spaces`(V005，`space_type` 自由文本无枚举)。该四级模型已过期，需作废或重写。楼栋/楼层/区块/铺位/公共区域 均由扁平 `spaces` 的 `space_type`（自由文本）+ `parent_space_id`（自套层级）承载，非四级固定表；推荐标准 `space_type` 字典：building/floor/zone/shop/public_area/parking/booth/other，录入校验为小落地项（待落地）。
 > - **员工三表**：`staff_profiles`/`staff_device_credentials`/`employee_notices` **零落地**；`staff_device_credentials`（员工 Keystore 公钥/不可逆指纹）与 `terminal_device_credentials`(V011，kiosk 随机 token) 是**两套不同实体**，不可混用；`employee_notices` 无写入方，合规同意凭据未落地。
 > - **综合体归属**：仅 `spaces` 有 `project_id`；`projects` 表含 `merchant_id`（project 归属 merchant），与"综合体顶级、商户归属综合体"方向相反。
 > - **业务裁决（2026-06-18）**：准入统一走 supervisor_review，**不建 admission_audits/contract_admission_rules**；员工三表 staff_profiles/staff_device_credentials/employee_notices 本期 P0 建表。**二轮裁决（2026-06-18）**：空间=保留扁平 spaces（**四级模型作废**），P0 全部核心对象补 project_id + 查询隔离并修正 projects 归属方向（综合体顶级、商户/对象归属综合体）。
@@ -243,54 +243,13 @@
 | status | draft、pending_approval、active、expiring、expired、terminated |
 | attachment_url | 合同附件 |
 
-### 2.9.1 contract_admission_rules 合同准入规则表
+### 2.9.1 / 2.9.2 合同准入规则 / 准入检查审计（已废止）
 
-用于把合同摘要转成后续业务可执行的阻断、预警或升级审批规则。
-
-| 字段 | 说明 |
-|---|---|
-| id | 准入规则ID |
-| project_id | 综合体项目ID |
-| contract_id | 合同ID |
-| merchant_id | 商户ID |
-| rule_code | 规则编码 |
-| rule_name | 规则名称 |
-| business_domain | ticketing、bar、amusement、settlement、third_party、all |
-| allowed_business_scope | 允许业务范围JSON |
-| allowed_space_scope | 允许空间范围JSON |
-| effective_from | 生效开始时间 |
-| effective_to | 生效结束时间 |
-| violation_action | block、escalate、warn |
-| required_approval_level | 需要审批级别 nullable |
-| status | draft、active、paused、expired |
-
-### 2.9.2 admission_audits 准入检查审计表
-
-用于记录业务流程是否因合同或基础定义被阻断、预警或升级审批。
-
-| 字段 | 说明 |
-|---|---|
-| id | 审计ID |
-| project_id | 综合体项目ID |
-| contract_id | 合同ID nullable |
-| rule_id | 准入规则ID nullable |
-| merchant_id | 商户ID nullable |
-| business_domain | 触发业务域 |
-| business_object_type | ticket_product、bar_order、amusement_schedule、settlement_batch、open_app 等 |
-| business_object_id | 业务对象ID |
-| check_result | passed、blocked、escalated、warned |
-| violation_reason | 违反原因 |
-| requested_by | 触发人或系统 |
-| approval_status | none、pending、approved、rejected |
-| approval_level | 本次实际上提到的相对档位（引用 §3.2.1.1 审批层级模型：上一级/上两级/最高权限等相对枚举）nullable |
-| approved_by | 审批人 nullable |
-| checked_at | 检查时间 |
-
-> 修订说明（2026-06-07 收口）：补 `approval_level` 字段。依据 finding annotation-5——§3.2.1.1 审批层级模型已声明「admission_audits 建议补 approval_level 字段记录本次实际上提到的相对档位」，但本表此前无该列，导致声称的落点未在表结构落地；现正式建列承载相对审批层级。
+> ⚠️ `contract_admission_rules`（合同准入规则）与 `admission_audits`（准入检查审计）已废止——2026-06-18 裁决统一走 `supervisor_review_decisions`(V050)，准入留痕与升级放行字段均由其承载（见 §7 注 / data-isolation §7）。迁移零命中、本期不建表，**不得据此建表或写迁移**。完整历史字段设计见文末《附录 Z 已废止表设计（历史留存）》。
 
 ### 2.10 merchant_credentials 商户资质表
 
-> 修订说明（2026-06-07）：依据 C9，补有效期到期预警/阻断字段，并明确酒类/食品业态资质必填校验。原因：资质过期是合同准入拦截（admission_audits）的重要触发源，需要可计算的到期预警与阻断标志；餐饮/酒吧业态若缺 food_license/alcohol_license 应阻断相关业务。
+> 修订说明（2026-06-07）：依据 C9，补有效期到期预警/阻断字段，并明确酒类/食品业态资质必填校验。原因：资质过期是合同准入拦截（留痕落 supervisor_review_decisions，admission_audits 已废止）的重要触发源，需要可计算的到期预警与阻断标志；餐饮/酒吧业态若缺 food_license/alcohol_license 应阻断相关业务。
 
 | 字段 | 说明 |
 |---|---|
@@ -2232,3 +2191,54 @@ V144 不新建表，仅为 §11.23 设备主数据管理 seed 两个权限码到
 | 2026-06-22 `文档goalP1` | 增/改 | §11.31 / 变更日志 | 新增 §11.31（V151）积分按核销张数精确计分：`customer_points_ledger` 增 `confirmed_amount`（历史 confirmed earn 行回填=points_delta），`confirmPoints` 改 set-confirmed-to-target（target=floor(总额×Σused/Σtotal)）、冲正改走带计数确认事件、退款按已确认份额冲减；单次票口径不变 | F-TXN-03（积分按核销张数；用户 2026-06 拍板）；逐脚本核对 V151 迁移回填 |
 | 2026-06-23 `文档goalP1` | 增/改 | §11.32 / 变更日志 | 新增 §11.32（V154）酒吧商品管理权限：`permissions` seed `bar.product.view`(medium)/`bar.product.manage`(high) 并授予 role_platform_admin，`GET/POST /bar/products` 由 `bar.order.create` 收紧为 view/manage（OpenAPI x-permission 与 BarControllerTests 同步），后台新增 ADM-BAR-005 商品管理页录入售价/内部结算价；注明 V152/V153 bar 列物理设计在 bar 文档 §6.6/§6.8 不在本 §11 | F-TXN-05 配套 + 敏感内部结算价独立授权（业主 2026-06-23 拍板）；逐脚本核对 V154 迁移回填 |
 | 2026-06-23 `文档goalP1` | 增/改 | §11.33 / 变更日志 | 新增 §11.33（V155）订卡邀请函：`bar_reservations` 增 invitation_token（唯一）/signature(HMAC)/capacity（卡座快照）/status/issued_at + 新子表 `bar_reservation_invitation_members`（持函人+确认朋友，UNIQUE(reservation,identifier)，confirmed→entered）+ seed `bar.reservation.invitation.manage`(high)；权威建模在 bar-operations §6.3a；两步=客人端确认占名额→门口扫码入场，总人数≤卡座 capacity，持函免通票 | 订卡邀请函（业主 2026-06-22 口述 + 2026-06-23 拍板两步+全链）；逐脚本核对 V155 迁移回填 |
+
+
+## 附录 Z 已废止表设计（历史留存）
+
+> 以下两表已于 2026-06-18 裁决废止，统一走 `supervisor_review_decisions`(V050)；迁移零命中、不建表。完整历史字段设计仅作沿革留存，**不得据此建表或写迁移**。
+
+### 2.9.1 contract_admission_rules 合同准入规则表
+
+用于把合同摘要转成后续业务可执行的阻断、预警或升级审批规则。
+
+| 字段 | 说明 |
+|---|---|
+| id | 准入规则ID |
+| project_id | 综合体项目ID |
+| contract_id | 合同ID |
+| merchant_id | 商户ID |
+| rule_code | 规则编码 |
+| rule_name | 规则名称 |
+| business_domain | ticketing、bar、amusement、settlement、third_party、all |
+| allowed_business_scope | 允许业务范围JSON |
+| allowed_space_scope | 允许空间范围JSON |
+| effective_from | 生效开始时间 |
+| effective_to | 生效结束时间 |
+| violation_action | block、escalate、warn |
+| required_approval_level | 需要审批级别 nullable |
+| status | draft、active、paused、expired |
+
+### 2.9.2 admission_audits 准入检查审计表
+
+用于记录业务流程是否因合同或基础定义被阻断、预警或升级审批。
+
+| 字段 | 说明 |
+|---|---|
+| id | 审计ID |
+| project_id | 综合体项目ID |
+| contract_id | 合同ID nullable |
+| rule_id | 准入规则ID nullable |
+| merchant_id | 商户ID nullable |
+| business_domain | 触发业务域 |
+| business_object_type | ticket_product、bar_order、amusement_schedule、settlement_batch、open_app 等 |
+| business_object_id | 业务对象ID |
+| check_result | passed、blocked、escalated、warned |
+| violation_reason | 违反原因 |
+| requested_by | 触发人或系统 |
+| approval_status | none、pending、approved、rejected |
+| approval_level | 本次实际上提到的相对档位（引用 §3.2.1.1 审批层级模型：上一级/上两级/最高权限等相对枚举）nullable |
+| approved_by | 审批人 nullable |
+| checked_at | 检查时间 |
+
+> 修订说明（2026-06-07 收口）：补 `approval_level` 字段。依据 finding annotation-5——§3.2.1.1 审批层级模型已声明「admission_audits 建议补 approval_level 字段记录本次实际上提到的相对档位」，但本表此前无该列，导致声称的落点未在表结构落地；现正式建列承载相对审批层级。
+

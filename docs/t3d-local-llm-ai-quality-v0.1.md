@@ -1,5 +1,7 @@
 # T3-D1 Local LLM AI Quality Slice V0.1
 
+> 定位（2026-06-30）：本文档是业务 HTML『经营分析/服务质检』的技术实现选项（本地 LLM），非 HTML 新增业务能力；属可选增强、非 P0 核心。
+
 Machine marker: T3D_LOCAL_LLM_AI_QUALITY_READY
 Machine marker: LOOPBACK_ONLY_LLM
 Machine marker: AI_OUTPUT_NO_AUTO_DECISION
