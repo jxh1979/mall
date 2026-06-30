@@ -24,6 +24,9 @@ class MerchantBillingJdbcIntegrationTests {
     private JdbcMerchantBillingRepository repository;
 
     @Autowired
+    private JdbcMerchantFeeNotificationRecipientRepository recipientRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Test
@@ -32,6 +35,8 @@ class MerchantBillingJdbcIntegrationTests {
         assertThat(regclass("merchant_bill_lines")).isEqualTo("merchant_bill_lines");
         assertThat(regclass("merchant_bill_disputes")).isEqualTo("merchant_bill_disputes");
         assertThat(regclass("merchant_bill_dunning_records")).isEqualTo("merchant_bill_dunning_records");
+        assertThat(regclass("merchant_fee_notification_recipient"))
+                .isEqualTo("merchant_fee_notification_recipient");
         assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
 
         assertThat(permissionCodes()).contains(
@@ -41,6 +46,7 @@ class MerchantBillingJdbcIntegrationTests {
                 "merchant.billing.dispute.submit",
                 "merchant.billing.dunning.record"
         );
+        assertThat(permissionRequiresApproval("merchant.billing.manage")).isTrue();
         assertThat(platformAdminPermissionCodes()).contains(
                 "merchant.billing.manage",
                 "merchant.billing.confirm",
@@ -115,6 +121,71 @@ class MerchantBillingJdbcIntegrationTests {
                 .contains(tuple("wecom", "sent"));
     }
 
+    @Test
+    void upsertFindAndDeactivateMerchantFeeNotificationRecipients() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        MerchantFeeNotificationRecipientRecord rent = recipientRepository.upsertFeeNotificationRecipient(
+                new MerchantFeeNotificationRecipientRecord(
+                        "mfnr_jdbc_rent",
+                        "merchant_jdbc",
+                        "rent",
+                        "Rent Owner",
+                        "15577000001",
+                        "active",
+                        "staff_finance",
+                        now,
+                        now,
+                        null
+                ));
+        MerchantFeeNotificationRecipientRecord all = recipientRepository.upsertFeeNotificationRecipient(
+                new MerchantFeeNotificationRecipientRecord(
+                        "mfnr_jdbc_all",
+                        "merchant_jdbc",
+                        null,
+                        "Default Owner",
+                        "15577000002",
+                        "active",
+                        "staff_finance",
+                        now,
+                        now,
+                        null
+                ));
+
+        assertThat(recipientRepository.listFeeNotificationRecipients("merchant_jdbc"))
+                .extracting(MerchantFeeNotificationRecipientRecord::id)
+                .containsExactly(all.id(), rent.id());
+        assertThat(recipientRepository.findActiveFeeNotificationRecipient("merchant_jdbc", "rent"))
+                .get()
+                .extracting(MerchantFeeNotificationRecipientRecord::recipientPhone)
+                .isEqualTo("15577000001");
+        assertThat(recipientRepository.findActiveFeeNotificationRecipient("merchant_jdbc", null))
+                .get()
+                .extracting(MerchantFeeNotificationRecipientRecord::recipientPhone)
+                .isEqualTo("15577000002");
+
+        MerchantFeeNotificationRecipientRecord updatedRent = recipientRepository.upsertFeeNotificationRecipient(
+                new MerchantFeeNotificationRecipientRecord(
+                        "mfnr_jdbc_rent_new_id_ignored",
+                        "merchant_jdbc",
+                        "rent",
+                        "Rent Owner Updated",
+                        "15577000003",
+                        "active",
+                        "staff_finance",
+                        now,
+                        now.plusSeconds(60),
+                        null
+                ));
+        assertThat(updatedRent.id()).isEqualTo(rent.id());
+        assertThat(updatedRent.recipientPhone()).isEqualTo("15577000003");
+
+        MerchantFeeNotificationRecipientRecord inactive =
+                recipientRepository.deactivateFeeNotificationRecipient(rent.id()).orElseThrow();
+        assertThat(inactive.status()).isEqualTo("inactive");
+        assertThat(inactive.deletedAt()).isNotNull();
+        assertThat(recipientRepository.findActiveFeeNotificationRecipient("merchant_jdbc", "rent")).isEmpty();
+    }
+
     private String regclass(String tableName) {
         return jdbcTemplate.queryForObject("SELECT to_regclass('public." + tableName + "')::text", String.class);
     }
@@ -135,6 +206,15 @@ class MerchantBillingJdbcIntegrationTests {
                   FROM permissions
                  ORDER BY permission_code
                 """, String.class);
+    }
+
+    private boolean permissionRequiresApproval(String permissionCode) {
+        Boolean value = jdbcTemplate.queryForObject("""
+                SELECT requires_approval
+                  FROM permissions
+                 WHERE permission_code = ?
+                """, Boolean.class, permissionCode);
+        return Boolean.TRUE.equals(value);
     }
 
     private List<String> platformAdminPermissionCodes() {

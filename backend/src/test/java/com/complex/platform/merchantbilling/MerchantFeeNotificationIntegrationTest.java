@@ -3,6 +3,7 @@ package com.complex.platform.merchantbilling;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.contract.ContractRenewalNotificationJob;
+import com.complex.platform.merchantbilling.dto.MerchantFeeNotificationRecipientRequest;
 import com.complex.platform.merchantbilling.dto.MerchantBillCreateRequest;
 import com.complex.platform.merchantbilling.dto.MerchantBillDunningRequest;
 import com.complex.platform.merchantbilling.dto.MerchantBillLineRequest;
@@ -30,6 +31,9 @@ class MerchantFeeNotificationIntegrationTest {
 
     @Autowired
     private MerchantBillingService merchantBillingService;
+
+    @Autowired
+    private MerchantFeeNotificationRecipientService recipientService;
 
     @Autowired
     private ContractRenewalNotificationJob contractRenewalNotificationJob;
@@ -186,6 +190,97 @@ class MerchantFeeNotificationIntegrationTest {
         assertThat(logValue("rent", phone, "reason")).isEqualTo("switch_off:sms_notification");
     }
 
+    @Test
+    void billNotificationUsesExactConfiguredRecipient() {
+        String prefix = unique("exact");
+        String merchantId = prefix + "_merchant";
+        String arApItemId = prefix + "_arap";
+        String primaryPhone = uniquePhone();
+        String exactPhone = uniquePhone();
+        insertMerchant(merchantId, primaryPhone);
+        insertArApItem(arApItemId, merchantId, 128_800L);
+        recipientService.upsert(new MerchantFeeNotificationRecipientRequest(
+                merchantId, "rent", "Fee Owner", exactPhone, "staff_finance"));
+
+        MerchantBillRecord bill = merchantBillingService.createBill(createBillRequest(
+                prefix + "_create",
+                merchantId,
+                arApItemId,
+                128_800L,
+                List.of(new MerchantBillLineRequest("rent", "June rent", 128_800L))
+        ));
+
+        String requestId = "mfbill:" + bill.id() + ":rent";
+        assertThat(logValueByRequestId(requestId, "recipient")).isEqualTo(exactPhone);
+        assertThat(logCount("rent", primaryPhone)).isZero();
+    }
+
+    @Test
+    void merchantDefaultRecipientCoversAllBillFeeEventsAndRenewal() {
+        LocalDate asOf = LocalDate.parse("2026-06-29");
+        LocalDate expiryDate = asOf.plusDays(10);
+        String prefix = unique("default");
+        String merchantId = prefix + "_merchant";
+        String arApItemId = prefix + "_arap";
+        String contractId = prefix + "_contract";
+        String primaryPhone = uniquePhone();
+        String defaultPhone = uniquePhone();
+        insertMerchant(merchantId, primaryPhone);
+        insertArApItem(arApItemId, merchantId, 600L);
+        insertEffectiveContract(contractId, merchantId, LocalDate.parse("2026-01-01"), expiryDate);
+        recipientService.upsert(new MerchantFeeNotificationRecipientRequest(
+                merchantId, null, "Fee Owner", defaultPhone, "staff_finance"));
+
+        merchantBillingService.createBill(createBillRequest(
+                prefix + "_create",
+                merchantId,
+                arApItemId,
+                600L,
+                List.of(
+                        new MerchantBillLineRequest("rent", "June rent", 100L),
+                        new MerchantBillLineRequest("energy_fee", "June utilities", 200L),
+                        new MerchantBillLineRequest("property_fee", "June property", 300L)
+                )
+        ));
+        contractRenewalNotificationJob.runOnce(asOf);
+
+        assertThat(logCount("rent", defaultPhone)).isEqualTo(1);
+        assertThat(logCount("utilities", defaultPhone)).isEqualTo(1);
+        assertThat(logCount("property", defaultPhone)).isEqualTo(1);
+        assertThat(logValueByRequestId("mfrenewal:" + contractId + ":" + expiryDate, "recipient"))
+                .isEqualTo(defaultPhone);
+        assertThat(logCount("rent", primaryPhone)).isZero();
+        assertThat(logCount("utilities", primaryPhone)).isZero();
+        assertThat(logCount("property", primaryPhone)).isZero();
+    }
+
+    @Test
+    void deactivatedRecipientFallsBackToMerchantPrimaryContact() {
+        String prefix = unique("inactive");
+        String merchantId = prefix + "_merchant";
+        String arApItemId = prefix + "_arap";
+        String primaryPhone = uniquePhone();
+        String configuredPhone = uniquePhone();
+        insertMerchant(merchantId, primaryPhone);
+        insertArApItem(arApItemId, merchantId, 128_800L);
+        MerchantFeeNotificationRecipientRecord recipient = recipientService.upsert(
+                new MerchantFeeNotificationRecipientRequest(
+                        merchantId, "rent", "Fee Owner", configuredPhone, "staff_finance"));
+        recipientService.deactivate(recipient.id());
+
+        MerchantBillRecord bill = merchantBillingService.createBill(createBillRequest(
+                prefix + "_create",
+                merchantId,
+                arApItemId,
+                128_800L,
+                List.of(new MerchantBillLineRequest("rent", "June rent", 128_800L))
+        ));
+
+        String requestId = "mfbill:" + bill.id() + ":rent";
+        assertThat(logValueByRequestId(requestId, "recipient")).isEqualTo(primaryPhone);
+        assertThat(logCount("rent", configuredPhone)).isZero();
+    }
+
     private MerchantBillCreateRequest createBillRequest(
             String idempotencyKey,
             String merchantId,
@@ -337,6 +432,11 @@ class MerchantFeeNotificationIntegrationTest {
                 DELETE FROM contract_settlements
                  WHERE contract_id IN (SELECT id FROM contracts WHERE merchant_id LIKE 'mf_notif_%')
                 """);
+        jdbcTemplate.update("""
+                DELETE FROM merchant_fee_notification_recipient
+                 WHERE merchant_id LIKE 'mf_notif_%'
+                    OR recipient_phone LIKE ?
+                """, PHONE_PREFIX + "%");
         jdbcTemplate.update("""
                 DELETE FROM contract_rent_bills
                  WHERE contract_id IN (SELECT id FROM contracts WHERE merchant_id LIKE 'mf_notif_%')

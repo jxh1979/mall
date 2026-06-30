@@ -17,6 +17,7 @@ import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.governance.PlatformRepository;
+import com.complex.platform.merchantbilling.MerchantFeeNotificationRecipientResolver;
 import com.complex.platform.notification.NotificationService;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -32,6 +33,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -62,15 +64,25 @@ public class ContractService {
     private final AuthorizationService authorizationService;
     private final NotificationService notificationService;
     private final PlatformRepository platformRepository;
+    private final MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver;
 
+    @Autowired
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
-            PlatformRepository platformRepository) {
+            PlatformRepository platformRepository,
+            MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.notificationService = notificationService;
         this.platformRepository = platformRepository;
+        this.merchantFeeRecipientResolver = merchantFeeRecipientResolver;
+    }
+
+    public ContractService(ContractRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, NotificationService notificationService,
+            PlatformRepository platformRepository) {
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null);
     }
 
     // ============ 起草 ============
@@ -485,7 +497,7 @@ public class ContractService {
             notificationService.notify(
                     MERCHANT_FEE_DOMAIN,
                     MERCHANT_FEE_RENEWAL_EVENT,
-                    resolveMerchantPrimaryContactPhone(contract.merchantId()),
+                    resolveMerchantFeeRecipientPhone(contract.merchantId(), MERCHANT_FEE_RENEWAL_EVENT),
                     MERCHANT_FEE_RENEWAL_TEMPLATE,
                     merchantFeeRenewalParams(contract, asOf),
                     "mfrenewal:" + contract.id() + ":" + contract.expiryDate());
@@ -509,6 +521,24 @@ public class ContractService {
             params.put("days_to_expiry", ChronoUnit.DAYS.between(asOf, contract.expiryDate()));
         }
         return params;
+    }
+
+    private String resolveMerchantFeeRecipientPhone(String merchantId, String event) {
+        if (merchantFeeRecipientResolver != null) {
+            try {
+                String resolved = trimToNull(merchantFeeRecipientResolver.resolvePhone(merchantId, event));
+                if (resolved != null) {
+                    return resolved;
+                }
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "failed to resolve merchant fee recipient: merchant_id={}, event={}",
+                        merchantId,
+                        event,
+                        exception);
+            }
+        }
+        return resolveMerchantPrimaryContactPhone(merchantId);
     }
 
     private String resolveMerchantPrimaryContactPhone(String merchantId) {

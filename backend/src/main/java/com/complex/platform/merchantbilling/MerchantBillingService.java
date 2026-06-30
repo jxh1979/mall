@@ -31,6 +31,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -58,6 +59,28 @@ public class MerchantBillingService {
     private final AuthorizationService authorizationService;
     private final NotificationService notificationService;
     private final PlatformRepository platformRepository;
+    private final MerchantFeeNotificationRecipientResolver recipientResolver;
+
+    @Autowired
+    public MerchantBillingService(
+            MerchantBillingRepository repository,
+            FinanceRepository financeRepository,
+            IdempotencyService idempotencyService,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            NotificationService notificationService,
+            PlatformRepository platformRepository,
+            MerchantFeeNotificationRecipientResolver recipientResolver
+    ) {
+        this.repository = repository;
+        this.financeRepository = financeRepository;
+        this.idempotencyService = idempotencyService;
+        this.auditEventService = auditEventService;
+        this.authorizationService = authorizationService;
+        this.notificationService = notificationService;
+        this.platformRepository = platformRepository;
+        this.recipientResolver = recipientResolver;
+    }
 
     public MerchantBillingService(
             MerchantBillingRepository repository,
@@ -68,13 +91,8 @@ public class MerchantBillingService {
             NotificationService notificationService,
             PlatformRepository platformRepository
     ) {
-        this.repository = repository;
-        this.financeRepository = financeRepository;
-        this.idempotencyService = idempotencyService;
-        this.auditEventService = auditEventService;
-        this.authorizationService = authorizationService;
-        this.notificationService = notificationService;
-        this.platformRepository = platformRepository;
+        this(repository, financeRepository, idempotencyService, auditEventService,
+                authorizationService, notificationService, platformRepository, null);
     }
 
     public PageResponse<MerchantBillRecord> listBills() {
@@ -328,11 +346,10 @@ public class MerchantBillingService {
         if (notificationService == null || bill == null) {
             return;
         }
-        String recipient = resolveMerchantPrimaryContactPhone(bill.merchantId());
         for (String event : merchantFeeEvents(bill.lines())) {
             notifyMerchantFeeSafely(
                     event,
-                    recipient,
+                    resolveMerchantFeeRecipientPhone(bill.merchantId(), event),
                     "sms.merchant_fee." + event,
                     merchantFeeBillParams(bill, event),
                     "mfbill:" + bill.id() + ":" + event,
@@ -344,11 +361,10 @@ public class MerchantBillingService {
         if (notificationService == null || bill == null || dunning == null) {
             return;
         }
-        String recipient = resolveMerchantPrimaryContactPhone(bill.merchantId());
         for (String event : merchantFeeEvents(bill.lines())) {
             notifyMerchantFeeSafely(
                     event,
-                    recipient,
+                    resolveMerchantFeeRecipientPhone(bill.merchantId(), event),
                     "sms.merchant_fee." + event,
                     merchantFeeDunningParams(bill, dunning, event),
                     "mfdun:" + dunning.id() + ":" + event,
@@ -449,6 +465,24 @@ public class MerchantBillingService {
             }
         }
         return sum;
+    }
+
+    private String resolveMerchantFeeRecipientPhone(String merchantId, String event) {
+        if (recipientResolver != null) {
+            try {
+                String resolved = trimToNull(recipientResolver.resolvePhone(merchantId, event));
+                if (resolved != null) {
+                    return resolved;
+                }
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "failed to resolve merchant fee recipient: merchant_id={}, event={}",
+                        merchantId,
+                        event,
+                        exception);
+            }
+        }
+        return resolveMerchantPrimaryContactPhone(merchantId);
     }
 
     private String resolveMerchantPrimaryContactPhone(String merchantId) {
