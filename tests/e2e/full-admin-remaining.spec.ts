@@ -353,16 +353,31 @@ test.describe("full admin remaining pages acceptance", () => {
       if (spec.pageId === "ADM-VND-001") {
         await expect(page.getByTestId("vendor-work-orders-table")).toContainText("VND-WO-1");
         await expect(page.getByTestId("vendor-work-orders-table")).toContainText("vendor-user");
+        await expect(page.getByTestId("vendor-work-order-accept")).toHaveCount(0);
+        await expect(page.getByTestId("vendor-work-orders-evidence")).toContainText("/api/v1/facility/equipment");
+        await expect(page.getByTestId("vendor-work-order-equipment-table")).toBeVisible();
+        await expect(page.getByTestId("vendor-work-order-equipment-table")).toContainText("空调主机");
         continue;
       }
       if (spec.pageId === "ADM-VND-002") {
         await expect(page.getByTestId("vendor-inspections-table")).toContainText("夜间安保巡检");
         await expect(page.getByTestId("vendor-inspections-table")).toContainText("vendor-user");
+        await expect(page.getByTestId("vendor-inspection-templates-table")).toBeVisible();
+        await expect(page.getByTestId("vendor-inspection-templates-table")).toContainText("夜间安保模板");
+        await expect(page.getByTestId("vendor-inspection-report-exception")).toBeVisible();
+        await page.getByTestId("vendor-inspection-report-exception").click();
+        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_inspection_exception_reported");
         continue;
       }
       if (spec.pageId === "ADM-VND-003") {
         await expect(page.getByTestId("vendor-site-entries-table")).toContainText("店铺装修围挡施工");
         await expect(page.getByTestId("vendor-site-entries-table")).toContainText("vendor-user");
+        await expect(page.getByTestId("vendor-site-entry-completion-upload")).toBeVisible();
+        await expect(page.getByTestId("vendor-site-entry-completion-upload")).toBeEnabled();
+        await page.getByTestId("vendor-site-entry-completion-note").fill("完工材料已上传");
+        await page.getByTestId("vendor-site-entry-completion-attachments").fill("att-completion-1");
+        await page.getByTestId("vendor-site-entry-completion-upload").click();
+        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_site_entry_completion_uploaded");
         continue;
       }
       if (spec.pageId === "ADM-EVD-001") {

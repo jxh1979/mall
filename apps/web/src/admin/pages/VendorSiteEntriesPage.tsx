@@ -20,10 +20,13 @@ type VendorSiteEntryRow = {
   status?: string;
   reviewComment?: string | null;
   acceptanceComment?: string | null;
+  completionAttachmentIds?: string[];
+  completionNote?: string | null;
 };
 
 const CREATE = ["facility.site_entry.create_assigned"];
 const SUBMIT = ["facility.site_entry.submit_assigned"];
+const UPLOAD_COMPLETION = ["facility.site_entry.upload_completion_assigned"];
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -31,6 +34,10 @@ function nextKey(prefix: string) {
 
 function makeResult(action: string, request: Record<string, unknown>, result: unknown) {
   return { action, idempotencyKey: request.idempotencyKey, result };
+}
+
+function splitAttachmentIds(value: string) {
+  return value.split(/[\n,，;；]+/).map((item) => item.trim()).filter(Boolean);
 }
 
 export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
@@ -47,8 +54,11 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
     contactPhone: "13800000000",
   });
   const [submitNote, setSubmitNote] = React.useState("进场施工");
+  const [completionNote, setCompletionNote] = React.useState("施工已完工，材料已上传");
+  const [completionAttachments, setCompletionAttachments] = React.useState("att-site-completion");
 
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
+  const canUploadCompletion = selected?.status === "in_progress" && (user.accountType !== "outsourced_vendor" || selected.vendorUserId === user.id);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -98,10 +108,32 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
     await runAction("vendor_site_entry_submitted", request, () => api.post(`/api/v1/facility/site-entry-reports/${encodeURIComponent(selected.id)}/submit`, request));
   }
 
+  async function uploadCompletion() {
+    if (!selected) {
+      setFormError("请选择一条进场报备");
+      return;
+    }
+    if (!canUploadCompletion) {
+      setFormError("仅 in_progress 且归属当前外包账号的报备可上传完工材料");
+      return;
+    }
+    const attachmentIds = splitAttachmentIds(completionAttachments);
+    if (!completionNote.trim() || attachmentIds.length === 0) {
+      setFormError("完工说明和附件引用不能为空");
+      return;
+    }
+    const request = {
+      idempotencyKey: nextKey("vendor-site-entry-completion"),
+      note: completionNote.trim(),
+      attachmentIds,
+    };
+    await runAction("vendor_site_entry_completion_uploaded", request, () => api.post(`/api/v1/facility/site-entry-reports/${encodeURIComponent(selected.id)}/completion`, request));
+  }
+
   return (
     <section data-testid="vendor-site-entries-page">
-      <AdminPageHeader title="外包进场报备" description="施工/装修队只能查看、创建和提交自己的进场报备，后续审核验收由平台角色处理。" />
-      <div className="admin-generic-evidence" data-testid="vendor-site-entries-evidence">接口证据：GET/POST /api/v1/facility/site-entry-reports；POST /api/v1/facility/site-entry-reports/{"{report_id}"}/submit。</div>
+      <AdminPageHeader title="外包进场报备" description="施工/装修队只能查看、创建、提交自己的进场报备，并在施工中报备上传完工材料；审核验收由平台角色处理。" />
+      <div className="admin-generic-evidence" data-testid="vendor-site-entries-evidence">接口证据：GET/POST /api/v1/facility/site-entry-reports；POST /api/v1/facility/site-entry-reports/{"{report_id}"}/submit；POST /api/v1/facility/site-entry-reports/{"{report_id}"}/completion。</div>
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="vendor-site-entries-summary">
           <div className="admin-kpi-card"><span>我的报备</span><strong>{rows.length}</strong><small>{user.username}</small></div>
@@ -119,16 +151,19 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
           <label>联系人<input data-testid="vendor-site-entry-contact" value={form.contactName} onChange={(event) => setField("contactName", event.target.value)} /></label>
           <label>电话<input data-testid="vendor-site-entry-phone" value={form.contactPhone} onChange={(event) => setField("contactPhone", event.target.value)} /></label>
           <label>提交备注<input data-testid="vendor-site-entry-submit-note" value={submitNote} onChange={(event) => setSubmitNote(event.target.value)} /></label>
+          <label>完工说明<input data-testid="vendor-site-entry-completion-note" value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} /></label>
+          <label>完工附件引用<input data-testid="vendor-site-entry-completion-attachments" value={completionAttachments} onChange={(event) => setCompletionAttachments(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="vendor-site-entry-actions">
           <PermissionButton permissionsState={effectivePermissions} permissions={CREATE} data-testid="vendor-site-entry-create" disabled={busyAction !== ""} onClick={() => void createEntry()}>创建</PermissionButton>
           <PermissionButton permissionsState={effectivePermissions} permissions={SUBMIT} data-testid="vendor-site-entry-submit" disabled={busyAction !== ""} onClick={() => void submitEntry()}>提交</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={UPLOAD_COMPLETION} data-testid="vendor-site-entry-completion-upload" disabled={busyAction !== "" || !canUploadCompletion} onClick={() => void uploadCompletion()}>完工材料上传</PermissionButton>
         </div>
         {formError ? <div data-testid="vendor-site-entry-error" className="admin-inline-error">{formError}</div> : null}
 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="vendor-site-entries-table">
-            <thead><tr><th>选择</th><th>施工范围</th><th>项目/空间</th><th>计划日期</th><th>人数</th><th>联系人</th><th>外包账号</th><th>状态</th><th>审核/验收</th></tr></thead>
+            <thead><tr><th>选择</th><th>施工范围</th><th>项目/空间</th><th>计划日期</th><th>人数</th><th>联系人</th><th>外包账号</th><th>状态</th><th>审核/验收</th><th>完工材料</th></tr></thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id}>
@@ -141,6 +176,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
                   <td>{row.vendorUserId ?? "-"}</td>
                   <td>{row.status ?? "-"}</td>
                   <td>{row.reviewComment ?? "-"} / {row.acceptanceComment ?? "-"}</td>
+                  <td>{row.completionNote ?? "-"} / {(row.completionAttachmentIds ?? []).join("、") || "-"}</td>
                 </tr>
               ))}
             </tbody>

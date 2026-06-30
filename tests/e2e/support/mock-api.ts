@@ -112,18 +112,26 @@ function createState(empty = false) {
   ];
   const merchantWorkOrders = empty ? [] : [{ id: "mswo-1", merchantId: "merchant-1", spaceId: "area-1", contractId: "contract-1", workOrderType: "repair", priority: "high", status: "created", title: "\u7a7a调漏水", description: "\u5546户报修空调漏水", reportedByUserId: "staff_reporter", reportedChannel: "web", ownerDepartment: "", ownerUserId: "", dueAt: "2026-06-16T10:00:00.000Z", evidenceAttachmentIds: ["att-photo-1"], authorizedScope: "merchant-1:work-orders", auditEvidenceRef: "audit://merchant-scope/work-order-1", createdAt: now, updatedAt: now }];
   const merchantBills = empty ? [] : [{ id: "merchant-bill-1", merchantId: "merchant-1", billNo: "MBILL-1", title: "物业费账单", totalAmount: 12000, status: "pending_confirm", authorizedScope: "merchant-1:billing", auditEvidenceRef: "audit://merchant-scope/bill-1", createdAt: now, updatedAt: now }];
+  const facilityEquipment = empty ? [] : [
+    { id: "eq-hvac-1", name: "空调主机", equipmentType: "hvac", status: "normal", spaceId: "area-1", projectId: "venue-1", brand: "MockAir", responsibleUserId: "facility-owner", maintenanceCycleDays: 90, nextMaintenanceDue: "2026-07-15", alarmSource: null, alarmNote: null },
+    { id: "eq-power-1", name: "配电柜", equipmentType: "power", status: "maintenance", spaceId: "area-2", projectId: "venue-1", brand: "MockPower", responsibleUserId: "facility-owner", maintenanceCycleDays: 180, nextMaintenanceDue: "2026-08-01", alarmSource: null, alarmNote: null },
+  ];
   const facilityWorkOrders = empty ? [] : [
     { id: "fwo-1", code: "VND-WO-1", workOrderType: "repair", priority: "high", status: "assigned", title: "空调主机维保", description: "外包维保待处理", source: "platform", spaceId: "area-1", equipmentId: "eq-hvac-1", reporterId: "staff-ops", reporterType: "staff", assigneeId: "vendor-user", responseDueAt: now, handleDueAt: "2026-06-16T18:00:00.000Z", assignedAt: now, respondedAt: null, completedAt: null, verifiedAt: null, verifierId: null, satisfaction: null, overtime: false, resolution: null, projectId: "venue-1", merchantId: null, createdAt: now, updatedAt: now },
     { id: "fwo-2", code: "OTHER-WO-1", workOrderType: "cleaning", priority: "normal", status: "assigned", title: "公共区保洁", description: "其他外包账号任务", source: "platform", spaceId: "area-2", equipmentId: null, reporterId: "staff-ops", reporterType: "staff", assigneeId: "other-vendor", responseDueAt: now, handleDueAt: "2026-06-17T18:00:00.000Z", assignedAt: now, respondedAt: null, completedAt: null, verifiedAt: null, verifierId: null, satisfaction: null, overtime: false, resolution: null, projectId: "venue-1", merchantId: null, createdAt: now, updatedAt: now },
   ];
-  const facilityInspectionTasks = empty ? [] : [
-    { id: "fit-1", templateId: "template-security-1", inspectionType: "security", status: "scheduled", title: "夜间安保巡检", scheduleMode: "manual", routePoints: [], assigneeId: "vendor-user", scheduledDate: "2026-06-15", dueDate: "2026-06-15", startedAt: null, completedAt: null, workOrderId: null, projectId: "venue-1", spaceId: "area-1", createdAt: now, updatedAt: now },
-    { id: "fit-2", templateId: "template-cleaning-1", inspectionType: "cleaning", status: "scheduled", title: "其他保洁巡检", scheduleMode: "manual", routePoints: [], assigneeId: "other-vendor", scheduledDate: "2026-06-15", dueDate: "2026-06-15", startedAt: null, completedAt: null, workOrderId: null, projectId: "venue-1", spaceId: "area-2", createdAt: now, updatedAt: now },
+  const facilityInspectionTemplates = empty ? [] : [
+    { id: "template-security-1", name: "夜间安保模板", inspectionType: "security", cycleDays: 1, abnormalMode: "to_work_order", active: true, checklist: [{ label: "门禁状态" }, { label: "消防通道" }], scopeNote: "夜间重点区域巡查" },
+    { id: "template-cleaning-1", name: "公共区保洁模板", inspectionType: "cleaning", cycleDays: 1, abnormalMode: "light", active: true, checklist: [{ label: "地面清洁" }, { label: "垃圾桶清运" }], scopeNote: "公共区清洁要求" },
   ];
-  const facilityInspectionRecords = empty ? [] : [{ id: "fir-1", taskId: "fit-1", result: "normal", photos: ["att-vendor-inspection"], qrCode: "QR-1", gpsLat: null, gpsLng: null, checklistResult: [], note: "mock record", abnormalNote: null, inspectorId: "vendor-user", recordedAt: now, createdAt: now }];
+  const facilityInspectionTasks = empty ? [] : [
+    { id: "fit-1", templateId: "template-security-1", inspectionType: "security", status: "scheduled", title: "夜间安保巡检", scheduleMode: "manual", routePoints: [] as unknown[], assigneeId: "vendor-user", scheduledDate: "2026-06-15", dueDate: "2026-06-15", startedAt: null, completedAt: null, workOrderId: null as string | null, projectId: "venue-1", spaceId: "area-1", createdAt: now, updatedAt: now },
+    { id: "fit-2", templateId: "template-cleaning-1", inspectionType: "cleaning", status: "scheduled", title: "其他保洁巡检", scheduleMode: "manual", routePoints: [] as unknown[], assigneeId: "other-vendor", scheduledDate: "2026-06-15", dueDate: "2026-06-15", startedAt: null, completedAt: null, workOrderId: null as string | null, projectId: "venue-1", spaceId: "area-2", createdAt: now, updatedAt: now },
+  ];
+  const facilityInspectionRecords = empty ? [] : [{ id: "fir-1", taskId: "fit-1", result: "normal", photos: ["att-vendor-inspection"], qrCode: "QR-1", gpsLat: null, gpsLng: null, checklistResult: [] as unknown[], note: "mock record", abnormalNote: null as string | null, inspectorId: "vendor-user", recordedAt: now, createdAt: now }];
   const siteEntryReports = empty ? [] : [
-    { id: "ser-1", projectId: "venue-1", spaceId: "area-1", workScope: "店铺装修围挡施工", plannedStartDate: "2026-06-20", plannedEndDate: "2026-06-22", crewCount: 4, contactName: "王工", contactPhone: "13800000000", vendorUserId: "vendor-user", status: "approved", reviewComment: "同意进场", acceptanceComment: null, createdBy: "vendor-user", createdAt: now, updatedAt: now, deletedAt: null },
-    { id: "ser-2", projectId: "venue-1", spaceId: "area-2", workScope: "其他队伍施工", plannedStartDate: "2026-06-21", plannedEndDate: "2026-06-23", crewCount: 3, contactName: "李工", contactPhone: "13900000000", vendorUserId: "other-vendor", status: "approved", reviewComment: "同意进场", acceptanceComment: null, createdBy: "other-vendor", createdAt: now, updatedAt: now, deletedAt: null },
+    { id: "ser-1", projectId: "venue-1", spaceId: "area-1", workScope: "店铺装修围挡施工", plannedStartDate: "2026-06-20", plannedEndDate: "2026-06-22", crewCount: 4, contactName: "王工", contactPhone: "13800000000", vendorUserId: "vendor-user", status: "in_progress", reviewComment: "同意进场", acceptanceComment: null, completionAttachmentIds: [] as string[], completionNote: null as string | null, completionUploadedAt: null as string | null, createdBy: "vendor-user", createdAt: now, updatedAt: now, deletedAt: null },
+    { id: "ser-2", projectId: "venue-1", spaceId: "area-2", workScope: "其他队伍施工", plannedStartDate: "2026-06-21", plannedEndDate: "2026-06-23", crewCount: 3, contactName: "李工", contactPhone: "13900000000", vendorUserId: "other-vendor", status: "approved", reviewComment: "同意进场", acceptanceComment: null, completionAttachmentIds: [] as string[], completionNote: null as string | null, completionUploadedAt: null as string | null, createdBy: "other-vendor", createdAt: now, updatedAt: now, deletedAt: null },
   ];
   const supervisorReviewPolicies = empty ? [] : [{ id: "policy-1", policyCode: "contract_violation_l3", actionType: "contract_violation", minAmountCent: 0, requiredLevel: 3, blocksByDefault: true, requiredEvidenceTypes: ["violation_summary", "contract_snapshot"], status: "active" }, { id: "policy-2", policyCode: "base_definition_violation_l3", actionType: "base_definition_violation", minAmountCent: 0, requiredLevel: 3, blocksByDefault: true, requiredEvidenceTypes: ["violation_summary", "definition_snapshot"], status: "active" }];
   return {
@@ -148,7 +156,9 @@ function createState(empty = false) {
     evidenceEvents,
     merchantWorkOrders,
     merchantBills,
+    facilityEquipment,
     facilityWorkOrders,
+    facilityInspectionTemplates,
     facilityInspectionTasks,
     facilityInspectionRecords,
     siteEntryReports,
@@ -258,11 +268,11 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/merchant-health": empty,
     "/api/v1/merchant-service/work-orders": state.merchantWorkOrders,
     "/api/v1/merchant-billing/bills": state.merchantBills,
-    "/api/v1/facility/equipment": empty,
+    "/api/v1/facility/equipment": state.facilityEquipment,
     "/api/v1/facility/equipment/maintenance-due": empty,
     "/api/v1/facility/work-orders": assignedRows(state.facilityWorkOrders, options, "assigneeId"),
     "/api/v1/facility/work-orders/overdue": state.facilityWorkOrders.filter((row) => row.overtime),
-    "/api/v1/facility/inspections/templates": empty,
+    "/api/v1/facility/inspections/templates": state.facilityInspectionTemplates,
     "/api/v1/facility/inspections/tasks": assignedRows(state.facilityInspectionTasks, options, "assigneeId"),
     "/api/v1/facility/site-entry-reports": assignedRows(state.siteEntryReports, options, "vendorUserId"),
     "/api/v1/analytics/metric-anomalies": state.metricAnomalies,
@@ -306,12 +316,15 @@ function effectivePermissionsFor(options: MockOptions) {
       grants: [
         "facility.work_order.view_assigned",
         "facility.work_order.process_assigned",
-        "facility.work_order.accept_assigned",
+        "facility.equipment.view",
         "facility.inspection.view_assigned",
         "facility.inspection.record_assigned",
+        "facility.inspection.template.view",
+        "facility.inspection.report_exception_assigned",
         "facility.site_entry.view_assigned",
         "facility.site_entry.create_assigned",
         "facility.site_entry.submit_assigned",
+        "facility.site_entry.upload_completion_assigned",
       ],
       denies: [],
       wildcard: false,
@@ -727,8 +740,35 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
     }
     return json(route, { id: `fir-${state.facilityInspectionRecords.length + 1}`, taskId, result: String(bodyValue(body, "result") ?? "normal"), photos: bodyValue(body, "photos") ?? [], checklistResult: bodyValue(body, "checklistResult", "checklist_result") ?? [], note: bodyValue(body, "note"), abnormalNote: bodyValue(body, "abnormalNote", "abnormal_note"), inspectorId: String(bodyValue(body, "inspectorId", "inspector_id") ?? "vendor-user"), recordedAt: now, createdAt: now });
   }
+  const facilityInspectionException = pathname.match(/^\/api\/v1\/facility\/inspections\/tasks\/([^/]+)\/report-exception$/);
+  if (facilityInspectionException) {
+    const taskId = facilityInspectionException[1];
+    const task = state.facilityInspectionTasks.find((item) => item.id === taskId) ?? state.facilityInspectionTasks[0];
+    if (task) {
+      task.status = "abnormal";
+      task.updatedAt = now;
+      task.workOrderId = task.workOrderId ?? "fwo-exception-1";
+    }
+    const record = {
+      id: `fir-${state.facilityInspectionRecords.length + 1}`,
+      taskId,
+      result: "abnormal",
+      photos: bodyValue(body, "photos") ?? [],
+      qrCode: bodyValue(body, "qrCode", "qr_code") ?? "QR-EXCEPTION",
+      gpsLat: bodyValue(body, "gpsLat", "gps_lat") ?? null,
+      gpsLng: bodyValue(body, "gpsLng", "gps_lng") ?? null,
+      checklistResult: bodyValue(body, "checklistResult", "checklist_result") ?? [],
+      note: bodyValue(body, "note"),
+      abnormalNote: bodyValue(body, "abnormalNote", "abnormal_note"),
+      inspectorId: String(bodyValue(body, "inspectorId", "inspector_id") ?? "vendor-user"),
+      recordedAt: now,
+      createdAt: now,
+    };
+    state.facilityInspectionRecords.push(record as (typeof state.facilityInspectionRecords)[number]);
+    return json(route, record);
+  }
   if (pathname === "/api/v1/facility/site-entry-reports") {
-    const report = { id: `ser-${state.siteEntryReports.length + 1}`, projectId: String(bodyValue(body, "projectId", "project_id") ?? "venue-1"), spaceId: String(bodyValue(body, "spaceId", "space_id") ?? "area-1"), workScope: String(bodyValue(body, "workScope", "work_scope") ?? "店铺装修围挡施工"), plannedStartDate: String(bodyValue(body, "plannedStartDate", "planned_start_date") ?? "2026-06-20"), plannedEndDate: String(bodyValue(body, "plannedEndDate", "planned_end_date") ?? "2026-06-22"), crewCount: Number(bodyValue(body, "crewCount", "crew_count") ?? 1), contactName: String(bodyValue(body, "contactName", "contact_name") ?? "王工"), contactPhone: String(bodyValue(body, "contactPhone", "contact_phone") ?? "13800000000"), vendorUserId: options.user?.id ?? "vendor-user", status: "submitted", reviewComment: "", acceptanceComment: null, createdBy: options.user?.id ?? "vendor-user", createdAt: now, updatedAt: now, deletedAt: null };
+    const report = { id: `ser-${state.siteEntryReports.length + 1}`, projectId: String(bodyValue(body, "projectId", "project_id") ?? "venue-1"), spaceId: String(bodyValue(body, "spaceId", "space_id") ?? "area-1"), workScope: String(bodyValue(body, "workScope", "work_scope") ?? "店铺装修围挡施工"), plannedStartDate: String(bodyValue(body, "plannedStartDate", "planned_start_date") ?? "2026-06-20"), plannedEndDate: String(bodyValue(body, "plannedEndDate", "planned_end_date") ?? "2026-06-22"), crewCount: Number(bodyValue(body, "crewCount", "crew_count") ?? 1), contactName: String(bodyValue(body, "contactName", "contact_name") ?? "王工"), contactPhone: String(bodyValue(body, "contactPhone", "contact_phone") ?? "13800000000"), vendorUserId: options.user?.id ?? "vendor-user", status: "submitted", reviewComment: "", acceptanceComment: null, completionAttachmentIds: [] as string[], completionNote: null as string | null, completionUploadedAt: null as string | null, createdBy: options.user?.id ?? "vendor-user", createdAt: now, updatedAt: now, deletedAt: null };
     state.siteEntryReports.push(report);
     return json(route, report);
   }
@@ -740,6 +780,18 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
       report.updatedAt = now;
     }
     return json(route, { ...(report ?? { id }), note: bodyValue(body, "note") });
+  }
+  if (/^\/api\/v1\/facility\/site-entry-reports\/[^/]+\/completion$/.test(pathname)) {
+    const id = pathname.split("/").at(-2);
+    const report = state.siteEntryReports.find((item) => item.id === id) ?? state.siteEntryReports[0];
+    const attachmentIds = bodyValue(body, "attachmentIds", "attachment_ids") ?? bodyValue(body, "completionAttachmentIds", "completion_attachment_ids") ?? [];
+    if (report) {
+      report.completionAttachmentIds = Array.isArray(attachmentIds) ? attachmentIds.map(String) : [String(attachmentIds)];
+      report.completionNote = String(bodyValue(body, "note") ?? bodyValue(body, "completionNote", "completion_note") ?? "完工材料已上传");
+      report.completionUploadedAt = now;
+      report.updatedAt = now;
+    }
+    return json(route, report ?? { id, completionAttachmentIds: attachmentIds, completionUploadedAt: now });
   }
   if (pathname === "/api/v1/merchant-service/work-orders") {
     const workOrder = { id: `mswo-${state.merchantWorkOrders.length + 1}`, merchantId: String(bodyValue(body, "merchantId", "merchant_id") ?? "merchant-1"), spaceId: String(bodyValue(body, "spaceId", "space_id") ?? "area-1"), contractId: String(bodyValue(body, "contractId", "contract_id") ?? "contract-1"), workOrderType: String(bodyValue(body, "workOrderType", "work_order_type") ?? "repair"), priority: String(bodyValue(body, "priority") ?? "normal"), status: "created", title: String(bodyValue(body, "title") ?? "???"), description: String(bodyValue(body, "description") ?? "mock merchant service work order"), reportedByUserId: String(bodyValue(body, "reportedByUserId", "reported_by_user_id") ?? "staff_reporter"), reportedChannel: String(bodyValue(body, "reportedChannel", "reported_channel") ?? "web"), ownerDepartment: "", ownerUserId: "", dueAt: String(bodyValue(body, "dueAt", "due_at") ?? now), evidenceAttachmentIds: [], createdAt: now, updatedAt: now };

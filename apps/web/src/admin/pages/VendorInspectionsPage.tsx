@@ -20,7 +20,19 @@ type VendorInspectionTaskRow = {
   workOrderId?: string | null;
 };
 
+type VendorInspectionTemplateRow = {
+  id: string;
+  name?: string;
+  inspectionType?: string;
+  cycleDays?: number | null;
+  abnormalMode?: string;
+  active?: boolean;
+  checklist?: Array<string | { label?: string; item?: string }>;
+  scopeNote?: string | null;
+};
+
 const RECORD = ["facility.inspection.record_assigned"];
+const REPORT_EXCEPTION = ["facility.inspection.report_exception_assigned"];
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -30,20 +42,32 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
+function checklistText(checklist?: VendorInspectionTemplateRow["checklist"]) {
+  if (!Array.isArray(checklist) || checklist.length === 0) return "-";
+  return checklist.map((item) => (typeof item === "string" ? item : item.label ?? item.item ?? "-")).join("、");
+}
+
 export function VendorInspectionsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorInspectionTaskRow[]>([]);
+  const [templates, setTemplates] = React.useState<VendorInspectionTemplateRow[]>([]);
   const [selectedId, setSelectedId] = React.useState("");
   const [result, setResult] = React.useState("normal");
   const [note, setNote] = React.useState("现场巡检记录正常");
   const [abnormalNote, setAbnormalNote] = React.useState("");
+  const [exceptionNote, setExceptionNote] = React.useState("巡检发现异常，待物业跟进");
   const [inspectorId, setInspectorId] = React.useState("vendor-user");
 
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
+  const visibleTemplates = templates.filter((row) => row.id === selected?.templateId);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const tasks = await api.get<VendorInspectionTaskRow[]>("/api/v1/facility/inspections/tasks");
+      const [tasks, templateRows] = await Promise.all([
+        api.get<VendorInspectionTaskRow[]>("/api/v1/facility/inspections/tasks"),
+        api.get<VendorInspectionTemplateRow[]>("/api/v1/facility/inspections/templates"),
+      ]);
       setRows(tasks ?? []);
+      setTemplates(templateRows ?? []);
     },
     { onError: setGlobalError, fallbackMessage: "外包巡检任务读取失败", onStart: () => setGlobalError(null) },
   );
@@ -86,10 +110,33 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
     await runAction("vendor_inspection_recorded", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/records`, request));
   }
 
+  async function reportException() {
+    if (!selected) {
+      setFormError("请选择一条巡检任务");
+      return;
+    }
+    if (!inspectorId.trim() || !exceptionNote.trim()) {
+      setFormError("巡检人和异常说明不能为空");
+      return;
+    }
+    const request = {
+      idempotencyKey: nextKey("vendor-inspection-exception"),
+      photos: ["att-vendor-inspection-exception"],
+      qrCode: "QR-EXCEPTION",
+      gpsLat: null,
+      gpsLng: null,
+      checklistResult: [{ item: selected.title ?? selected.id, result: "abnormal" }],
+      note,
+      abnormalNote: exceptionNote.trim(),
+      inspectorId: inspectorId.trim(),
+    };
+    await runAction("vendor_inspection_exception_reported", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/report-exception`, request));
+  }
+
   return (
     <section data-testid="vendor-inspections-page">
-      <AdminPageHeader title="外包巡检任务" description="安保/保洁外包人员只能查看派给自己的巡检任务，并提交现场开始与记录。" />
-      <div className="admin-generic-evidence" data-testid="vendor-inspections-evidence">接口证据：GET /api/v1/facility/inspections/tasks；POST /api/v1/facility/inspections/tasks/{"{task_id}"}/start；POST /records。</div>
+      <AdminPageHeader title="外包巡检任务" description="安保/保洁外包人员只能查看派给自己的巡检任务、模板要求，并提交现场开始、记录与异常上报。" />
+      <div className="admin-generic-evidence" data-testid="vendor-inspections-evidence">接口证据：GET /api/v1/facility/inspections/tasks；GET /api/v1/facility/inspections/templates；POST /api/v1/facility/inspections/tasks/{"{task_id}"}/start；POST /records；POST /report-exception。</div>
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="vendor-inspections-summary">
           <div className="admin-kpi-card"><span>已指派任务</span><strong>{rows.length}</strong><small>assignee</small></div>
@@ -102,12 +149,34 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
           <label>结果<select data-testid="vendor-inspection-result" value={result} onChange={(event) => setResult(event.target.value)}><option value="normal">normal</option><option value="abnormal">abnormal</option></select></label>
           <label>记录说明<input data-testid="vendor-inspection-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
           <label>异常说明<input data-testid="vendor-inspection-abnormal-note" value={abnormalNote} onChange={(event) => setAbnormalNote(event.target.value)} /></label>
+          <label>异常上报说明<input data-testid="vendor-inspection-exception-note" value={exceptionNote} onChange={(event) => setExceptionNote(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="vendor-inspection-actions">
           <PermissionButton permissionsState={effectivePermissions} permissions={RECORD} data-testid="vendor-inspection-start" disabled={busyAction !== ""} onClick={() => void startTask()}>开始</PermissionButton>
           <PermissionButton permissionsState={effectivePermissions} permissions={RECORD} data-testid="vendor-inspection-record" disabled={busyAction !== ""} onClick={() => void submitRecord()}>记录</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={REPORT_EXCEPTION} data-testid="vendor-inspection-report-exception" disabled={busyAction !== ""} onClick={() => void reportException()}>上报异常</PermissionButton>
         </div>
         {formError ? <div data-testid="vendor-inspection-error" className="admin-inline-error">{formError}</div> : null}
+
+        <h3>巡检模板/要求（只读）</h3>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="vendor-inspection-templates-table">
+            <thead><tr><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>检查要求</th><th>状态</th></tr></thead>
+            <tbody>
+              {(visibleTemplates.length > 0 ? visibleTemplates : templates).map((row) => (
+                <tr key={row.id}>
+                  <td>{row.name ?? row.id}</td>
+                  <td>{row.inspectionType ?? "-"}</td>
+                  <td>{row.cycleDays ?? "-"}</td>
+                  <td>{row.abnormalMode ?? "-"}</td>
+                  <td>{checklistText(row.checklist)} {row.scopeNote ?? ""}</td>
+                  <td>{row.active === false ? "inactive" : "active"}</td>
+                </tr>
+              ))}
+              {templates.length === 0 ? <tr><td colSpan={6}>暂无巡检模板</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="vendor-inspections-table">
