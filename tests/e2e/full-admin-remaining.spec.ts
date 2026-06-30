@@ -18,6 +18,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-LEASE-001", label: "招商工作台", route: "/admin/leasing/workbench" },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
+  { pageId: "ADM-GOV-007", label: "空间类型字典", route: "/admin/governance/space-types" },
   { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", route: "/admin/ticketing/orders" },
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", route: "/admin/bar/orders" },

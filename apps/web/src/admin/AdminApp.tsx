@@ -52,6 +52,7 @@ const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdap
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
 const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
 const OperatingParamsPage = React.lazy(() => import("./pages/OperatingParamsPage").then((m) => ({ default: m.OperatingParamsPage })));
+const SpaceTypesPage = React.lazy(() => import("./pages/SpaceTypesPage").then((m) => ({ default: m.SpaceTypesPage })));
 const OpsReadinessPage = React.lazy(() => import("./pages/OpsReadinessPage").then((m) => ({ default: m.OpsReadinessPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
@@ -184,6 +185,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <GroupOverviewPage {...props} />;
     case "ADM-ANA-003":
       return <OperatingParamsPage {...props} />;
+    case "ADM-GOV-007":
+      return <SpaceTypesPage {...props} />;
     case "ADM-FIN-001":
       return <FinanceArApLedgerPage {...props} />;
     case "ADM-INT-001":
