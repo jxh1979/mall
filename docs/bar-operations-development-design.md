@@ -9,7 +9,7 @@
 > - **订台定金闭环已落地（V073）**：新建 `bar_deposit_rules`（固定额 `fixed` / 按最低消费比例 `min_consumption_ratio`，scope=bar/table_type/time_slot，取消免没收时限 `cancel_free_before_minutes` 后台可配）+ `bar_reservations` 定金结算字段，定金按规则计算入库、到店抵扣、取消按时限退/没收，不再硬编码 `deposit=0/not_required`。下方 R5-D11 小节的"现状空转"描述已被本次实现取代，仅"目标/验收"口径仍有效。
 > - **赠饮核销→扣库存已落地（V072）**：链路 ticketing 核销 `entitlement_type='gift_drink'` 成功 → 发 Spring 事件 `ticket.gift_verified` → `BarGiftConsumer` 监听 → 生成 0 元 `bar_order(order_type='gift')` + 出品 ticket → `deliver` 调 `atomicDecreaseStock(redeem_consume)` 扣库存 → 回填 `inventory_movement_id` 到出品事件与桥表 `bar_gift_redemptions`（`verification_id` 唯一键保证幂等，冲正联动 `status=reversed` + 回补库存）。赠饮→吧台 SKU 映射来源 `entitlement_templates.bar_item_ref`(V076)；0 元赠饮单不计商户收入但进账单/留痕。**通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b，2026-06-22）**：核销发放免费酒水后，平台按该酒水**内部结算价**（`bar_products.internal_settlement_price_cent`，V152；经 itemRef[库存物料]→bar_product 桥接 `findProductByInventoryItem`）向酒吧(merchant)挂应付（`ar_ap_items` direction=`payable`、source_type=`pass_drink_settlement`、source_id/幂等=verificationId）；赠饮冲正 → 对冲 `receivable`（同 source_id、净额归零）。仅商户吧(merchantId 非空) + 内部价>0 时结算；平台自营吧 / 无内部价跳过（向后兼容）。`BarGiftConsumer` 经 `BarReceivableLedgerService.createPayableForGiftSettlement`/`reverseGiftSettlementPayable` 实现，与核销主链同事务。
 > - **酒吧账单免单/退款已落地（V079）**：`chk_bar_bill_adjustment_type` 扩 `{waiver, refund}`，`refunded_at` 仅 refund 落值用于经营日聚合冲减当日 net（与 finance/analytics 退款口径联动）。
-> - **仍开放（P2 未做）**：退菜/退酒、反结、沽清 86、小费；存酒转赠(transfer) 无方法、争议仅枚举无入口；按杯损耗仍依赖请求传 `actual_pour_volume`（不传则 loss=0），无强制采集；存酒侧高价值作废主管复核见供应链域 `inventory_high_value_reviews`。
+> - **仍开放（P2 未做）**：退菜/退酒、反结、沽清 86、小费；存酒转赠(transfer) 无方法、争议仅枚举无入口；按杯损耗 pour cost **强制采集已落地（2026-06-30 回写，原标注过期）**：BarOrderService.resolvePourCost——strict 模式缺量抛 POUR_VOLUME_REQUIRED，兜底模式按 standard_pour_volume 计且落 inventory.loss_exception 标 needs_review（绝不静默 loss=0）；退菜退酒(voidOrderItem)/反结(reopenBill)均已实现且有验收测试；存酒侧高价值作废主管复核见供应链域 `inventory_high_value_reviews`。
 > - **验收口径（已正式）**：订台付定金可回查、到店抵扣、取消按规则退/没收；赠饮权益核销后吧台库存相应减少且可对账。
 
 #### R5-D11 订台定金现状与收口（2026-06-18 回填，未改代码）
@@ -1459,6 +1459,8 @@ P0 完成时必须能演示：
 - **验收**：商品标记沽清→下单端禁选/隐藏（下单被 `PRODUCT_SOLD_OUT` 拒）→恢复可解除；标记/解除留痕。
 
 ### 17.4 pour cost 强制采集（消除"不传则 loss=0"）`R6-D14`
+
+> ✅ **已落地（2026-06-30 回写）**：`BarOrderService.resolvePourCost` 已实现——按杯出品缺 `actual_pour_volume` 时：strict 模式（功能标志）抛 `POUR_VOLUME_REQUIRED`；默认兜底模式按 `standard_pour_volume` 计、`loss=0` 但落 `inventory.loss_exception`（`reason=pour_volume_fallback`、`needs_review=true`）进异常核查，**绝不静默**。下方"真实开放缺口"措辞已失效。
 
 > **真实开放缺口**：`bar_products.standard_pour_volume`、`bar_order_items.actual_pour_volume`/`loss_volume` 字段均已存在（V091/§6.6/§6.16），但按杯出品当前**依赖请求传入 `actual_pour_volume`，不传则 `loss_volume=0`**（见本文 R7 横幅"仍开放"项与 `JdbcBarOrderRepository`），等于按杯损耗可被静默绕过。R6-D14 要求按杯 pour cost **强制采集**。
 
