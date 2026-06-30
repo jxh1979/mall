@@ -40,6 +40,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-VND-004", label: "外包下属账号", route: "/admin/vendor/subordinates" },
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", route: "/admin/integrations/events" },
   { pageId: "ADM-INT-003", label: "第三方开关", route: "/admin/integrations/switches" },
+  { pageId: "ADM-INT-004", label: "短信通知开关", route: "/admin/integrations/sms-switches" },
   { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },
   { pageId: "ADM-EVD-001", label: "审计事件", route: "/admin/audit/events" },
   { pageId: "ADM-ANA-001", label: "经营分析", route: "/admin/analytics/business" },

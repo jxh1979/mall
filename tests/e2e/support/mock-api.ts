@@ -256,6 +256,9 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/integration/devices/events": empty,
     "/api/v1/integration/devices/offline-sync-batches": empty,
     "/api/v1/terminals/capability-switches": [
+      { id: "tcs_sms_master", terminalType: "*", capabilityCode: "sms.notify", scopeType: "global", scopeId: "global", enabled: false, reason: "短信通知总开关，默认关" },
+      { id: "tcs_sms_stored_wine", terminalType: "*", capabilityCode: "sms.notify.stored_wine", scopeType: "global", scopeId: "global", enabled: true, reason: "存酒域开关" },
+      { id: "tcs_sms_wine_deposit", terminalType: "*", capabilityCode: "sms.notify.stored_wine.deposit", scopeType: "global", scopeId: "global", enabled: true, reason: "存酒成功" },
       { id: "tcs_face_verification_off", terminalType: "*", capabilityCode: "face.verification.enabled", scopeType: "global", scopeId: "global", enabled: false, reason: "默认关，待供应商接入" },
       { id: "tcs_int_payment_off", terminalType: "*", capabilityCode: "integration.payment.sync", scopeType: "global", scopeId: "global", enabled: false, reason: "默认关" },
     ],
