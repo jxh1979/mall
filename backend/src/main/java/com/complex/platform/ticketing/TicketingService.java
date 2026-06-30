@@ -273,7 +273,7 @@ public class TicketingService {
     /**
      * 系统定时任务入口（F-TXN-03 门票生命周期）：处理已过期、全未核销的权益——
      * <ul>
-     *   <li>该单**全未核销** → 已付订单整单**原渠道自动退款**（系统直批，{@code autoRefundExpiredUnusedOrder}）；
+     *   <li>到期**未核销票逐张**原渠道自动退款（系统直批，{@code autoRefundExpiredUnusedTickets}），**不因同单有核销而连坐作废**；
      *       0 元 / 非 paid / 已有退款在途 → 作废或交由退款链；</li>
      *   <li>该单**已有核销** → 其余到期未用权益**作废**（forfeited、不退款，与"核销后不可退"一致）。</li>
      * </ul>
@@ -293,21 +293,14 @@ public class TicketingService {
         }
         for (var entry : byOrder.entrySet()) {
             String orderId = entry.getKey();
-            List<IssuedEntitlementRecord> all = repository.listIssuedEntitlementsByOrderId(orderId);
-            if (all.stream().anyMatch(e -> e.usedTimes() > 0)) {
-                // 一张用后其余作废：该单到期未用权益置 forfeited、不退款。
-                for (IssuedEntitlementRecord e : entry.getValue()) {
-                    processed += repository.forfeitEntitlement(e.id(), now);
-                }
-                continue;
-            }
-            // 全未核销 → 已付订单整单原渠道自动退款；已有退款在途/完成则交由退款链、跳过。
+            // F-TXN-03 按票实例（2026-06-29 裁决）：到期未核销票逐张原渠道自动退款，**不再因同单有核销而连坐作废**；
+            // 已有退款在途/完成则交由退款链、跳过。
             TicketOrderRecord order = repository.findTicketOrderById(orderId).orElse(null);
             if (order != null && (repository.sumApprovedRefundAmountByOrderId(orderId) > 0
                     || repository.sumPendingRefundAmountByOrderId(orderId) > 0)) {
                 continue;
             }
-            TicketRefundRecord refund = refundService.autoRefundExpiredUnusedOrder(order, all, now);
+            TicketRefundRecord refund = refundService.autoRefundExpiredUnusedTickets(order, entry.getValue(), now);
             if (refund != null) {
                 processed += entry.getValue().size();
             } else {

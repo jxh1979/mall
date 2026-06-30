@@ -1058,13 +1058,14 @@ class TicketingServiceTests {
     }
 
     @Test
-    void expiredRemainderForfeitedWhenOrderHasAnyVerification() {
+    void expiredUnusedTicketAutoRefundedPerTicketEvenWhenSiblingVerified() {
+        // F-TXN-03 按票实例（2026-06-29 裁决）：同单一张已核销、一张到期未核销 → 未核销那张逐张原渠道自动退款，
+        // 不再因同单有核销而连坐作废；已核销票不受影响。
         java.time.Instant past = java.time.Instant.parse("2020-01-01T00:00:00Z");
         java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
         ticketingRepository.ticketOrders.put("o_fft", new TicketOrderRecord(
                 "o_fft", "ON-FFT", "c1", "tt_fft", null, 2, LocalDate.parse("2026-06-20"),
                 "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", past, past));
-        // A：已核销(usedTimes=1)；B：到期、active、未核销。
         ticketingRepository.issuedEntitlements.put("e_used",
                 seedEntitlement("e_used", "o_fft", "tt_fft", 1, 1, "active", past));
         ticketingRepository.issuedEntitlements.put("e_unused",
@@ -1073,10 +1074,48 @@ class TicketingServiceTests {
         int processed = service.processExpiredPaidEntitlements(now);
 
         assertThat(processed).isEqualTo(1);
-        // 该单已有核销 → 其余到期未用权益作废(forfeited)、不退款；已核销的不动。
-        assertThat(ticketingRepository.issuedEntitlements.get("e_unused").status()).isEqualTo("forfeited");
+        // 未核销那张 → 按票实例自动退款（份额 9900）、冻结 refunded；已核销那张 active 不动。
+        assertThat(ticketingRepository.issuedEntitlements.get("e_unused").status()).isEqualTo("refunded");
         assertThat(ticketingRepository.issuedEntitlements.get("e_used").status()).isEqualTo("active");
-        assertThat(ticketingRepository.refunds).isEmpty();
+        assertThat(ticketingRepository.refunds.values()).anyMatch(r ->
+                "o_fft".equals(r.targetId()) && "approved".equals(r.status()) && r.refundAmountCent() == 9900L);
+    }
+
+    @Test
+    void perTicketRefundSkipsVerifiedSiblingWhenNoEntitlementIds() {
+        // 手动退款不传 entitlement_ids → 只退未核销票，已核销票不连坐、不报错。
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        ticketingRepository.ticketOrders.put("o_pt", new TicketOrderRecord(
+                "o_pt", "ON-PT", "c1", "tt_pt", null, 2, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", now, now));
+        ticketingRepository.issuedEntitlements.put("e_pt_used",
+                seedEntitlement("e_pt_used", "o_pt", "tt_pt", 1, 1, "active", now));
+        ticketingRepository.issuedEntitlements.put("e_pt_free",
+                seedEntitlement("e_pt_free", "o_pt", "tt_pt", 1, 0, "active", now));
+
+        TicketRefundRecord refund = service.requestTicketRefund(new TicketRefundRequest(
+                "pt-refund", "refund", List.of(), "o_pt", 9900L, "customer request", "original"));
+
+        assertThat(refund.refundAmountCent()).isEqualTo(9900L);
+        assertThat(ticketingRepository.listTicketRefundLines(refund.id()))
+                .extracting(TicketRefundLineRecord::entitlementId).containsExactly("e_pt_free");
+    }
+
+    @Test
+    void perTicketRefundRejectsSelectedVerifiedEntitlement() {
+        // 显式 entitlement_ids 选中已核销票 → 按票实例拒退 TICKET_ENTITLEMENT_VERIFIED_NO_REFUND。
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        ticketingRepository.ticketOrders.put("o_pt2", new TicketOrderRecord(
+                "o_pt2", "ON-PT2", "c1", "tt_pt2", null, 1, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 9900L, "CNY", "paid", "issued", "paid", now, now));
+        ticketingRepository.issuedEntitlements.put("e_pt2_used",
+                seedEntitlement("e_pt2_used", "o_pt2", "tt_pt2", 1, 1, "active", now));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
+                        "pt2-refund", "refund", List.of(), "o_pt2", 9900L, "customer request", "original",
+                        List.of("e_pt2_used"))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("TICKET_ENTITLEMENT_VERIFIED_NO_REFUND"));
     }
 
     @Test
@@ -1137,7 +1176,8 @@ class TicketingServiceTests {
                         "original"
                 )))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, exception ->
-                        assertThat(exception.code()).isEqualTo("TICKET_ORDER_VERIFIED_NO_REFUND"));
+                        // F-TXN-03 按票实例（2026-06-29 裁决）：该单仅一张票且已核销 → 无可退，按票实例拒退。
+                        assertThat(exception.code()).isEqualTo("TICKET_ENTITLEMENT_VERIFIED_NO_REFUND"));
     }
 
     @Test

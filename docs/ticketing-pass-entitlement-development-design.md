@@ -164,12 +164,12 @@ erDiagram
 - 支付成功后才能出票。
 - 出票后退款必须检查权益使用情况（F-TXN-03 已强制：`TicketRefundService.requestRefund` 发起退款前核查本订单权益核销状态）。
 - 退款按**票实例**判断（业务 HTML `business-system-map` 退款行 / `business-enum` 退款规则，2026-06-29 用户裁决）：一张「票」= 一行 `issued_entitlements`（一人票 `total_times=1`；多人票/多次票 `total_times>1`）。可退性按**每张票**判定——该票 `used_times=0`（被冲正回滚归零视为未核销）可退，可一次退多张或只退一张；`used_times>0` 则该票整张不可退（多人/多次票任一权益或门票已核销同此）；**同一订单内其他完全未核销的票仍可退**，不再整单一刀切。已核销票拒退用票实例级错误码 `TICKET_ENTITLEMENT_VERIFIED_NO_REFUND`（不再用订单级 `TICKET_ORDER_VERIFIED_NO_REFUND`）；全未核销票的 pending 积分从未 confirmed，天然不计分。
-  - ⚠️ **代码待改（gap，F-TXN-03 收口前）**：当前 `TicketRefundService.requestRefund` 仍为**订单级**拒退（本订单任一权益 `usedTimes>0` 即整单拒退 `TICKET_ORDER_VERIFIED_NO_REFUND`），与上述票实例新口径冲突；需改为按 `issued_entitlements` 逐张判定可退性、支持退子集（请求体 `entitlement_ids`），积分冲减按被退票实例对应份额计算。
+  - ✅ **已落地（2026-06-30）**：`TicketRefundService.requestRefund` 已改为**按票实例**判退——`resolveRefundTargets` 解析 `entitlement_ids`（不传=退订单全部未核销票、已核销不连坐；传入已核销票按票实例拒退 `TICKET_ENTITLEMENT_VERIFIED_NO_REFUND`），退款行只覆盖所选未核销票，积分冲减按退款额/原单额比例（=被退票实例份额）。
   - 注：积分「按核销次数精确计分」（多次/多人票按核销张数比例 confirm）**已完成（V151，F-TXN-03 收尾）**：`customer_points_ledger.confirmed_amount` 记已确认份额，`LoyaltyService.confirmPoints` 改 set-confirmed-to-target（`target=floor(总额×Σused/Σtotal)`），`TicketVerificationService` 核销与冲正两路均按订单 Σused/Σtotal 对齐确认份额（冲正一张按份回滚 1/Σtotal，取代原冲正全额 deduct）；单次票（1/1）口径与原「支付 pending → 核销 confirm」等价。
 - 门票到期生命周期（F-TXN-03，piece②）：系统定时任务 `TicketingService.processExpiredPaidEntitlements`（按权益 `valid_to < now` 实时判定，由 `TicketOrderExpiryJob` 触发、开关 `ticket.order.expiry.scheduled.enabled` 默认关）——
   - **到期按票实例处理（2026-06-29 用户裁决，业务 HTML 到期处理行）**：到期未用的票按**每张** `issued_entitlements` 判定、不再看整单——`used_times=0` 的票逐张**原渠道自动退款**（`autoRefundExpiredUnusedOrder` 同款动作：建 approved 退款 + 权益 active→refunded + 回补库存 + 打款事件；系统动作跳过商户范围闸；未核销无已确认积分、不发 points deduct）；已有退款在途/完成则跳过。
   - **已核销票作废、不连坐未核销票**：`used_times>0` 的到期票置 `forfeited`（`forfeitEntitlement`，不退款，与「核销后不可退」一致）；**同单其他完全未核销的票不受影响、仍按上一条逐张自动退款**（旧口径「同单有核销则其余未核销一律作废」已废止）。0 元 / 非 paid 的到期未用权益亦作废以止反复扫描。`issued_entitlements.status` 无 DB CHECK，新增 `forfeited` 值无需迁移。
-  - ⚠️ **代码待改（gap）**：当前 `processExpiredPaidEntitlements` / `autoRefundExpiredUnusedOrder` / `forfeitEntitlement` 仍按**整单**口径（全未核销才退、有核销则其余作废），需改为按票实例逐张退款 / 逐张作废。
+  - ✅ **已落地（2026-06-30）**：`processExpiredPaidEntitlements` 不再因同单有核销而连坐作废；到期未核销票经 `autoRefundExpiredUnusedTickets` **逐张原渠道自动退款**（份额合计、全覆盖则整单额、库存累计达全额回补一次），已核销票不受影响。69+142 测试绿。
 
 ### 4.3 票实例状态
 
