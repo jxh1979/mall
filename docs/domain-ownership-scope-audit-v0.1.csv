@@ -209,6 +209,7 @@ saved_bottles,direct,merchant_id,merchant_id column on saved_bottles,ready for p
 service_responsibility_records,direct,merchant_id,merchant_id column on service_responsibility_records,ready for project/merchant scoped query enforcement,covered
 site_entry_reports,direct,project_id,project_id column on site_entry_reports,ready for project/merchant scoped query enforcement,covered
 space_expiry_color_rules,direct,project_id,project_id column on space_expiry_color_rules,ready for project/merchant scoped query enforcement,covered
+space_type_dictionary,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 spaces,direct,project_id,project_id column on spaces,ready for project/merchant scoped query enforcement,covered
 staff_device_credentials,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",covered
 staff_level_assignments,direct,merchant_id,merchant_id column on staff_level_assignments,ready for project/merchant scoped query enforcement,covered

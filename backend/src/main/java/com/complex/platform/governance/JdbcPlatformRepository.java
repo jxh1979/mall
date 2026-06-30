@@ -206,6 +206,13 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public List<String> listActiveSpaceTypeCodes() {
+        return jdbcTemplate.queryForList(
+                "SELECT type_code FROM space_type_dictionary WHERE status = 'active' ORDER BY sort_order, type_code",
+                java.util.Map.of(), String.class);
+    }
+
+    @Override
     public BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding) {
         jdbcTemplate.update("""
                 INSERT INTO business_entity_bindings (

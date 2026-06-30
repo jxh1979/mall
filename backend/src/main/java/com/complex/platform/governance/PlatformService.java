@@ -197,6 +197,11 @@ public class PlatformService {
                 () -> {
                     String spaceName = requireText(request == null ? null : request.spaceName(), "space_name");
                     String spaceType = requireText(request == null ? null : request.spaceType(), "space_type");
+                    // 条目3 硬校验：space_type 必须是空间类型字典中处于 active 的取值（前端走下拉、后台可维护字典）。
+                    if (!repository.listActiveSpaceTypeCodes().contains(spaceType)) {
+                        throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED",
+                                "space_type must be an active value in the space type dictionary");
+                    }
                     Instant now = Instant.now();
                     return repository.saveSpace(new SpaceRecord(
                             "sp_" + UUID.randomUUID(),

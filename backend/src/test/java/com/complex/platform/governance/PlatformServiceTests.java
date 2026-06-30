@@ -331,6 +331,22 @@ class PlatformServiceTests {
     }
 
 
+    @Test
+    void createSpaceRejectsUnknownSpaceType() {
+        // 条目3 硬校验：不在字典内的 space_type → VALIDATION_FAILED。
+        assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                        "sp-bad", "create", List.of(), "prj1", "mch1", null, "Bad", "no_such_type", null, null, null, "active")))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void createSpaceAcceptsDictionarySpaceType() {
+        SpaceRecord saved = service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-ok", "create", List.of(), "prj1", "mch1", null, "Shop A", "shop", "1", null, null, "active"));
+        assertThat(saved.spaceType()).isEqualTo("shop");
+    }
+
     private static final class InMemoryPlatformRepository implements PlatformRepository {
         private final Map<String, BusinessEntityRecord> businessEntities = new LinkedHashMap<>();
         private final Map<String, MerchantRecord> merchants = new LinkedHashMap<>();
@@ -383,6 +399,11 @@ class PlatformServiceTests {
         @Override
         public List<SpaceRecord> listSpaces() {
             return new ArrayList<>(spaces.values());
+        }
+
+        @Override
+        public List<String> listActiveSpaceTypeCodes() {
+            return List.of("building", "floor", "zone", "shop", "public_area", "parking", "booth", "other");
         }
 
         @Override

@@ -33,6 +33,9 @@ public interface PlatformRepository {
 
     List<SpaceRecord> listSpaces();
 
+    /** 条目3：空间类型字典中处于 active 的 type_code 列表，供 createSpace 硬校验与前端下拉。 */
+    List<String> listActiveSpaceTypeCodes();
+
     BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding);
 
     List<BusinessEntityBindingRecord> listBusinessEntityBindings();
