@@ -42,6 +42,7 @@ describe("TicketQrView refresh", () => {
     });
     expect(getTicketQr).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("qr-token").textContent).toBe("token-0");
+    expect(screen.getByTestId("qr-code").querySelector("svg")).not.toBeNull();
 
     // 30 秒短窗 -> 推进 30 秒触发自动在线刷新。
     await act(async () => {

@@ -63,6 +63,17 @@ function listRoutes(pathname: string, state: CustomerMockState, options: Custome
       return options.emptyReservationOptions ? [] : state.reservationOptions;
     case "/api/v1/customer/orders":
       return state.orders;
+    case "/api/v1/customer/tickets/ent-1/qr":
+      return {
+        id: "cred-1",
+        ticket_id: "ent-1",
+        order_id: "order-1",
+        credential_token: "cred-customer-1",
+        credential_type: "dynamic_qr",
+        issued_at: now,
+        expires_at: "2026-06-15T12:00:30.000Z",
+        refreshed_count: 1,
+      };
     case "/api/v1/customer/points":
       return { customer_id: "cust-1", balance: 1280, level: "黄金会员", recent_summary: null };
     case "/api/v1/customer/check-ins":

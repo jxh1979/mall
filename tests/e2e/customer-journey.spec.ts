@@ -112,6 +112,12 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await page.getByRole("menuitem", { name: "我的订单 / 票 / 二维码" }).click();
     await expect(page.getByTestId("my-orders-page")).toBeVisible();
     await expect(page.getByTestId("order-item").first()).toContainText("TO-CUST-1");
+
+    await page.getByTestId("qr-ticket-input").fill("ent-1");
+    await page.getByTestId("qr-open").click();
+    await expect(page.getByTestId("ticket-qr-view")).toBeVisible();
+    await expect(page.getByTestId("qr-code").locator("svg")).toBeVisible();
+    await expect(page.getByTestId("qr-token")).toContainText("cred-customer-1");
   });
 
   test("CUST-07 buy ticket surfaces backend rejection as a visible error", async ({ page }) => {

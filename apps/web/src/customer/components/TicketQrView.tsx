@@ -1,4 +1,5 @@
 import { Alert, Button, Card, Descriptions, Space, Tag, Typography } from "antd";
+import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { deriveRefreshIntervalSeconds } from "../client/customerClient";
@@ -69,6 +70,16 @@ export function TicketQrView({ service, ticketId }: TicketQrViewProps): React.Re
       </Paragraph>
       {credential ? (
         <Space direction="vertical" style={{ width: "100%" }}>
+          <div data-testid="qr-code" style={{ display: "flex", justifyContent: "center", padding: 12 }}>
+            <QRCodeSVG
+              value={credential.credentialToken}
+              size={220}
+              level="M"
+              marginSize={4}
+              title="动态验票二维码"
+              role="img"
+            />
+          </div>
           <div
             data-testid="qr-token"
             style={{
