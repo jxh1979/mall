@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 516 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 276 | 人工权限矩阵正文未覆盖 172 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1032 | 人工事件矩阵正文未覆盖 989 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 516 | 人工任务映射正文未逐项覆盖 510 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI operation 数 | 518 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 278 | 人工权限矩阵正文未覆盖 174 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1036 | 人工事件矩阵正文未覆盖 993 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 518 | 人工任务映射正文未逐项覆盖 512 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 321 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -88,6 +88,8 @@
 | `analytics.operating_params.manage` | staff-token | project | 1 | upsertOperatingParams | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 7 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
+| `audit.operation_log.export` | staff-token | platform | 1 | exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
+| `audit.operation_log.view` | staff-token | platform | 1 | queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `authenticated` | staff-token | current-session, self | 3 | logout, refreshToken, getEffectivePermissions | 已在权限矩阵正文出现 |
 | `bar.bill.adjust` | staff-token | project-bar-table | 1 | adjustBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.reopen` | staff-token | project-bar-table | 1 | reopenBarBill | OpenAPI 补充，以本附录为准 |
@@ -499,6 +501,10 @@
 | `api_call.logged` | success | `receiveOpenWebhook` | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `api_call.rejected` | failure | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `api_call.rejected` | failure | `receiveOpenWebhook` | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `audit.operation_log.export_failed` | failure | `exportAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events/export` | P0-待归类 | `audit.operation_log.export` | 接口级事件，以本附录为准 |
+| `audit.operation_log.exported` | success | `exportAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events/export` | P0-待归类 | `audit.operation_log.export` | 接口级事件，以本附录为准 |
+| `audit.operation_log.view_failed` | failure | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | P0-待归类 | `audit.operation_log.view` | 接口级事件，以本附录为准 |
+| `audit.operation_log.viewed` | success | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | P0-待归类 | `audit.operation_log.view` | 接口级事件，以本附录为准 |
 | `auth.login.failed` | failure | `login` | `POST` | `/api/v1/auth/login` | AUTH-登录会话 | `public` | 接口级事件，以本附录为准 |
 | `auth.login.succeeded` | success | `login` | `POST` | `/api/v1/auth/login` | AUTH-登录会话 | `public` | 接口级事件，以本附录为准 |
 | `auth.logout` | success | `logout` | `POST` | `/api/v1/auth/logout` | AUTH-登录会话 | `authenticated` | 接口级事件，以本附录为准 |
@@ -1742,6 +1748,7 @@
 | P0-待归类 | `createLeasingLead` | `POST` | `/api/v1/leasing/leads` | 新建招商线索 | `leasing.lead.manage` | `leasing.lead.created` / `leasing.lead.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | 创建商户账单 | `merchant.billing.manage` | `merchant.billing.create` / `merchant.billing.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | Create merchant service work order | `merchant.service_work_order.create` | `merchant_service.createMerchantServiceWorkOrder.succeeded` / `merchant_service.createMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `exportAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events/export` | 导出操作留痕（敏感） | `audit.operation_log.export` | `audit.operation_log.exported` / `audit.operation_log.export_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractPeriodBills` | `POST` | `/api/v1/contracts/{contract_id}/period-bills` | 某期全费目挂账(租金+物业费+能源费) | `finance.ar_ap.manage` | `contract.fee_billed` / `contract.period_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractRentBill` | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | 生成某期合同租金应收(base+递增−免租) | `finance.ar_ap.manage` | `contract.rent_billed` / `contract.rent_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `getEnergyMeterDifference` | `GET` | `/api/v1/energy/meters/{meter_id}/difference` | 查询总分表差异 | `energy.reading.manage` | `energy.meter_difference.viewed` / `energy.meter_difference.view_failed` | web | operation 级补充 |
@@ -1781,6 +1788,7 @@
 | P0-待归类 | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | 查询企微会话违规命中列表 | `wecom.risk_hit.view` | `wecom.risk_hit.list` / `wecom.risk_hit.list_failed` | web | operation 级补充 |
 | P0-待归类 | `markFacilityWorkOrdersOverdue` | `POST` | `/api/v1/facility/work-orders/mark-overdue` | 批量标记逾期工单 | `facility.work_order.manage` | `facility.work_order_overdue_marked` / `facility.work_order_overdue_mark_failed` | web | operation 级补充 |
 | P0-待归类 | `publishFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | 发布平面图导入候选 | `floor_plan.import.manage` | `floor_plan.import_published` / `floor_plan.import_publish_failed` | web | operation 级补充 |
+| P0-待归类 | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | 跨对象查询操作留痕 | `audit.operation_log.view` | `audit.operation_log.viewed` / `audit.operation_log.view_failed` | web | operation 级补充 |
 | P0-待归类 | `raiseContractChange` | `POST` | `/api/v1/contracts/{contract_id}/changes` | 发起合同变更(6 类) | `contract.change.manage` | `contract.change_raised` / `contract.change_raise_failed` | web | operation 级补充 |
 | P0-待归类 | `recheckFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/recheck` | 复查整改后的巡检任务 | `facility.inspection.manage` | `facility.inspection_task_rechecked` / `facility.inspection_task_recheck_failed` | web | operation 级补充 |
 | P0-待归类 | `recordEnergyReading` | `POST` | `/api/v1/energy/readings` | 录入抄表读数 | `energy.reading.manage` | `energy.reading_recorded` / `energy.reading_record_failed` | web | operation 级补充 |

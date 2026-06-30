@@ -25164,6 +25164,218 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/audit/operation-events": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "x-permission": "audit.operation_log.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "audit.operation_log.viewed",
+        "x-audit-event-failure": "audit.operation_log.view_failed",
+        "x-auth-context": "staff-token",
+        "operationId": "queryAuditOperationEvents",
+        "summary": "跨对象查询操作留痕",
+        "description": "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。",
+        "parameters": [
+          {
+            "name": "business_type",
+            "in": "query",
+            "required": false,
+            "description": "按业务对象类型过滤（如 ticket_order、contract）",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "business_id",
+            "in": "query",
+            "required": false,
+            "description": "按具体业务对象 ID 过滤",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "required": false,
+            "description": "按操作人过滤",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "event_name",
+            "in": "query",
+            "required": false,
+            "description": "按事件名过滤（如 ticket_refund.approved）",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "起始时间（含），ISO-8601 date-time",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "结束时间（含），ISO-8601 date-time",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "最多返回条数（上限 1000）",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/audit/operation-events/export": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "x-permission": "audit.operation_log.export",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "audit.operation_log.exported",
+        "x-audit-event-failure": "audit.operation_log.export_failed",
+        "x-auth-context": "staff-token",
+        "operationId": "exportAuditOperationEvents",
+        "summary": "导出操作留痕（敏感）",
+        "description": "导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。",
+        "parameters": [
+          {
+            "name": "business_type",
+            "in": "query",
+            "required": false,
+            "description": "按业务对象类型过滤（如 ticket_order、contract）",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "business_id",
+            "in": "query",
+            "required": false,
+            "description": "按具体业务对象 ID 过滤",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "required": false,
+            "description": "按操作人过滤",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "event_name",
+            "in": "query",
+            "required": false,
+            "description": "按事件名过滤（如 ticket_refund.approved）",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "起始时间（含），ISO-8601 date-time",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "结束时间（含），ISO-8601 date-time",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "最多返回条数（上限 1000）",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
