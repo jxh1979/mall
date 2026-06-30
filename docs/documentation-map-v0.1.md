@@ -10,6 +10,7 @@
 |---|---|---|
 | `00-current-effective-document-entry-v0.1.md` | 唯一正式口径、废止内容、角色阅读顺序、P0 准入条件 | 现行 |
 | `unified-standards-baseline-v0.1.md` | 跨文档唯一标准基线 | 现行 |
+| `business-html-source-of-truth-acceptance-spec-v0.1.md` | 三份业务 HTML 到 PRD/开发/OpenAPI/数据库/UI/测试的最小验收映射索引 | 现行 |
 | `../README.md` | 仓库第一入口（定位/技术栈/启动/基线/读者路径） | 现行 |
 | `product-documentation-index-v0.1.md` | 产品文档索引 | 现行 |
 | `system-capability-layers-product-index-v0.1.md` | 六大能力层产品索引 | 现行 |
@@ -76,7 +77,7 @@
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
-| `openapi/openapi-p0.yaml` / `openapi/openapi-p0.json` | P0 机器可读 OpenAPI 契约（386 operations） | 现行 |
+| `openapi/openapi-p0.yaml` / `openapi/openapi-p0.json` | P0 机器可读 OpenAPI 契约；operation 数以 `verify:operation-matrix` / `verify:openapi-closure` 为准，本轮核验 516 operations | 现行 |
 | `p0-api-contract-pack-v0.1.md` | P0 接口契约基线 | 现行 |
 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | operation 级开发完成定义/验收矩阵 | 现行 |
 | `p0-openapi-contract-closure-appendix-v0.1.md` | OpenAPI 反向生成权限/事件/任务追溯附录 | 现行 |
@@ -89,7 +90,7 @@
 |---|---|---|
 | `foundation-database-design.md` | PostgreSQL/Flyway 数据库总设计 | 现行 |
 | `ticketing-database-implementation-notes.md` | 票务数据库实现笔记 | 现行 |
-| （权威）`../backend/src/main/resources/db/migration/` | 实际 Flyway 迁移（V001…V124），表名/落地以此为准 | 现行 |
+| （权威）`../backend/src/main/resources/db/migration/` | 实际 Flyway 迁移；版本与数量以迁移目录为准，本轮核验最新 V182、179 个迁移 | 现行 |
 
 ## 6. 页面权限矩阵 / 后台 SRS
 
@@ -216,6 +217,7 @@
 | `business-system-map-for-operations-v0.1.html` | 运营视角业务系统地图（最终解释权之一） | 现行 |
 | `platform-governance-map-for-operations-v0.1.html` | 运营视角平台治理地图（最终解释权之一） | 现行 |
 | `business-enum-quick-reference-v0.1.html` | 业务枚举速查表（最终解释权之一，配套两份地图使用） | 现行 |
+| `business-html-source-of-truth-acceptance-spec-v0.1.md` | 三份业务 HTML 到下游文档和验收资料的最小映射索引；不替代 HTML | 现行 |
 
 ## 17. 归档目录
 

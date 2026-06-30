@@ -31,7 +31,7 @@ complex-management/
 ├── backend/                # 正式 Java 21 + Spring Boot 4 后端（Maven 工程，含 Flyway 迁移）
 │   ├── pom.xml
 │   ├── README.md           # 后端本地启动说明
-│   └── src/main/resources/db/migration/   # Flyway 迁移（V001…V124）
+│   └── src/main/resources/db/migration/   # Flyway 迁移（版本以目录为准）
 ├── apps/
 │   ├── web/                # React + Vite + antd 管理端（含 ticketing/bar/amusement 模块）
 │   └── android-terminal/   # Android 终端（android-app/，Gradle）
@@ -93,16 +93,16 @@ npm run verify:ui:real-backend:seeded   # 真实后端 E2E（带种子数据）
 npm run verify:closed-loop-runtime      # 闭环运行态总验收（后端测试 + 前端 typecheck/build + 常规与真实后端 UI）
 ```
 
-## 5. 当前基线（2026-06-20 实证）
+## 5. 当前基线（2026-06-30 本轮取证/现有报告）
 
 | 指标 | 当前值 | 取证方式 |
 |---|---|---|
-| Flyway 最新迁移 | **V124**（`V124__bar_void_reject_reversal_adjustment.sql`） | `ls backend/src/main/resources/db/migration`（121 个 `.sql` 文件，含跳号） |
-| OpenAPI operation 数 | **386** | 统计 `docs/openapi/openapi-p0.yaml` 全部 HTTP 方法 |
-| 后端测试 | **1251** 通过 | `backend/target/surefire-reports/*.txt`（Tests run 合计，2026-06-20 运行） |
-| 前端 E2E | **42**（6 个 spec 文件） | `npx playwright test --list` |
+| Flyway 最新迁移 | **V182**（179 个迁移） | `backend/src/main/resources/db/migration` 本轮取证 |
+| OpenAPI operation 数 | **516** | `npm run verify:operation-matrix` / `npm run verify:openapi-closure` 当前口径 |
+| 后端测试 | **1606** tests（现有 surefire 报告） | `backend/target/surefire-reports/*.txt` 合计；不声明本轮刚完成全量测试 |
+| 前端 E2E | **31 tests in 5 files** | `npx playwright test --list` 默认列表；不声明本轮刚执行全量 E2E |
 
-> 历史快照（如 207 ops / 52 迁移 / 579~673 测试 / V060）见各文档变更记录，均为旧基线，**以上为当前实时值**。各项数字以 OpenAPI 文件、Flyway 迁移目录、Surefire 报告与 `npm run verify:*` 实时输出为最终权威。
+> 历史快照（如 207/386/419 ops、52 迁移、579~1436 测试、V060/V124/V155）见各文档变更记录，均为旧基线。以上为本轮取证/现有报告口径；各项数字以 OpenAPI 文件、Flyway 迁移目录、Surefire 报告与 `npm run verify:*` 实时输出为最终权威。
 
 ## 6. 五类读者阅读路径
 
@@ -131,7 +131,7 @@ graph LR
   STAFF["员工 Staff"] --> ANDROID["Android 终端"]
   WEB --> API["后端 API<br/>Java 21 + Spring Boot 4"]
   ANDROID --> API
-  API --> DB[("PostgreSQL<br/>Flyway V001..V124")]
+  API --> DB[("PostgreSQL<br/>Flyway migrations")]
   API -. "开关化 + mock" .-> EXT["第三方/支付/企微/机器人/视频/MDM/NAS"]
 ```
 
