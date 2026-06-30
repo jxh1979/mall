@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
+import { TraceLink } from "../components/TraceLink";
 
 type EnergyMeterRow = {
   id: string; name: string; meterType: string; parentMeterId?: string | null; gatherObject: string;
@@ -54,7 +55,7 @@ function statusBadge(status?: string | null) {
   return <span className={`admin-badge ${kind}`}>{value}</span>;
 }
 
-export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [meters, setMeters] = React.useState<EnergyMeterRow[]>([]);
   const [readings, setReadings] = React.useState<EnergyReadingRow[]>([]);
   const [difference, setDifference] = React.useState<EnergyDifferenceRow | null>(null);
@@ -179,7 +180,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
             <tbody>{meters.map((row) => (
               <tr key={row.id} data-testid={`energy-meter-${row.id}`}>
                 <td>{row.id}</td><td>{row.name}</td><td>{row.meterType}</td><td>{row.gatherObject}</td><td>{row.parentMeterId ?? "-"}</td>
-                <td>{row.spaceId ?? "-"} / {row.merchantId ?? "-"} / {row.projectId ?? "-"}</td><td>{row.readMode ?? "-"}</td><td>{row.active === false ? "inactive" : "active"}</td>
+                <td><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.spaceId}>{row.spaceId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> / <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{row.projectId ?? "-"}</TraceLink></td><td>{row.readMode ?? "-"}</td><td>{row.active === false ? "inactive" : "active"}</td>
                 <td><button type="button" data-testid={`energy-meter-select-${row.id}`} onClick={() => selectMeter(row)}>选中</button></td>
               </tr>
             ))}</tbody>
