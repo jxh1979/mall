@@ -9,6 +9,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.facility.dto.SiteEntryCompletionUploadRequest;
 import com.complex.platform.facility.dto.SiteEntryReportAcceptanceRequest;
 import com.complex.platform.facility.dto.SiteEntryReportRequest;
 import com.complex.platform.facility.dto.SiteEntryReportReviewRequest;
@@ -96,6 +97,23 @@ class SiteEntryReportServiceTests {
     }
 
     @Test
+    void outsourcedCanUploadCompletionForOwnInProgressReportOnly() {
+        SiteEntryReportService scoped = outsourcedService("usr_vendor_a", "proj_1");
+        reports.insert(raw("ser_own_progress", "in_progress", "usr_vendor_a", "proj_1"));
+        reports.insert(raw("ser_other_progress", "in_progress", "usr_vendor_b", "proj_1"));
+
+        SiteEntryReportRecord uploaded = scoped.uploadCompletion(
+                "ser_own_progress", new SiteEntryCompletionUploadRequest(List.of("att_1", "att_2"), "完工照片", "k_upload"));
+
+        assertThat(uploaded.completionAttachmentIds()).containsExactly("att_1", "att_2");
+        assertThat(uploaded.completionNote()).isEqualTo("完工照片");
+        assertThat(uploaded.completionUploadedAt()).isNotNull();
+        assertThatThrownBy(() -> scoped.uploadCompletion(
+                "ser_other_progress", new SiteEntryCompletionUploadRequest(List.of("att_3"), "cross", "k_upload_other")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+    }
+
+    @Test
     void propertyReadsOnlyOwnProjectAndMerchantScopeIsRejected() {
         SiteEntryReportService property = propertyService("usr_ops", "proj_1");
         reports.insert(raw("ser_project", "submitted", "usr_vendor_a", "proj_1"));
@@ -153,7 +171,7 @@ class SiteEntryReportServiceTests {
         Instant now = Instant.now();
         return new SiteEntryReportRecord(id, projectId, "sp_1", "work", LocalDate.parse("2026-07-01"),
                 LocalDate.parse("2026-07-05"), 3, "contact", "13800000000", assigneeId, status,
-                null, null, assigneeId, now, now, null);
+                null, null, assigneeId, now, now, List.of(), null, null, null);
     }
 
     private SiteEntryReportService outsourcedService(String userId, String projectId) {

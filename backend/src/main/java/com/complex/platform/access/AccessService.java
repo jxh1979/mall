@@ -1122,6 +1122,9 @@ public class AccessService {
     private TemporaryGrant createTemporaryGrantDirect(TemporaryGrantRequest request, boolean enforceApproval) {
         AccessActor actor = authorizationService.currentActor();
         requireKnownPermissions(request.permissionCodes());
+        if (request.validUntil() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "valid_until is required");
+        }
         // P0 A-01：临时授权必须校验目标用户租户归属，禁止跨组织/向平台用户越权授权
         // （与 applyPermissionTemplate 同范式，fail-closed）。
         if (!authorizationService.isPlatformAdmin(actor)) {

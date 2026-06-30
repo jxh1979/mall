@@ -35,6 +35,15 @@ class JdbcFacilityRepository implements FacilityRepository {
     }
 
     @Override
+    public List<FacilityEquipmentRecord> listEquipmentByProject(String projectId) {
+        return jdbcTemplate.query("SELECT " + EQUIP_COLS + """
+                 FROM facility_equipment
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, new MapSqlParameterSource("project_id", projectId), this::mapEquipment);
+    }
+
+    @Override
     public Optional<FacilityEquipmentRecord> findEquipmentById(String id) {
         return jdbcTemplate.query("SELECT " + EQUIP_COLS + " FROM facility_equipment WHERE id = :id",
                 new MapSqlParameterSource("id", id), this::mapEquipment).stream().findFirst();
@@ -73,6 +82,17 @@ class JdbcFacilityRepository implements FacilityRepository {
                    AND status NOT IN ('retired','disabled')
                  ORDER BY next_maintenance_due, id
                 """, new MapSqlParameterSource("as_of", asOf), this::mapEquipment);
+    }
+
+    @Override
+    public List<FacilityEquipmentRecord> listMaintenanceDueByProject(LocalDate asOf, String projectId) {
+        return jdbcTemplate.query("SELECT " + EQUIP_COLS + """
+                 FROM facility_equipment
+                 WHERE next_maintenance_due IS NOT NULL AND next_maintenance_due <= :as_of
+                   AND status NOT IN ('retired','disabled')
+                   AND project_id = :project_id
+                 ORDER BY next_maintenance_due, id
+                """, new MapSqlParameterSource("as_of", asOf).addValue("project_id", projectId), this::mapEquipment);
     }
 
     private MapSqlParameterSource params(FacilityEquipmentRecord r) {

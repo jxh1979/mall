@@ -101,12 +101,11 @@ class FacilityWorkOrderServiceTests {
     }
 
     @Test
-    void outsourcedCanProcessOwnWorkOrderButCannotProcessOrAcceptOthers() {
+    void outsourcedCanProcessOwnWorkOrderButCannotAcceptClosure() {
         FacilityWorkOrderService scoped = outsourcedService("usr_vendor_a", "proj_1");
         workOrders.insertWorkOrder(rawAssigned("wo_own", "assigned", "usr_vendor_a", "proj_1"));
         workOrders.insertWorkOrder(rawAssigned("wo_other", "assigned", "usr_vendor_b", "proj_1"));
         workOrders.insertWorkOrder(rawAssigned("wo_accept_own", "pending_acceptance", "usr_vendor_a", "proj_1"));
-        workOrders.insertWorkOrder(rawAssigned("wo_accept_other", "pending_acceptance", "usr_vendor_b", "proj_1"));
 
         assertThatThrownBy(() -> scoped.start("wo_other", action(null, null, "start", "k_start_other")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
@@ -115,10 +114,9 @@ class FacilityWorkOrderServiceTests {
 
         assertThat(processing.status()).isEqualTo("processing");
         assertThat(completed.status()).isEqualTo("pending_acceptance");
-        assertThatThrownBy(() -> scoped.accept("wo_accept_other", action(null, 5, "ok", "k_accept_other")))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
-        assertThat(scoped.accept("wo_accept_own", action(null, 5, "ok", "k_accept_own")).status())
-                .isEqualTo("closed");
+        assertThatThrownBy(() -> scoped.accept("wo_accept_own", action(null, 5, "ok", "k_accept_own")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
     }
 
     @Test

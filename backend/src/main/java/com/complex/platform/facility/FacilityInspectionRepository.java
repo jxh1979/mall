@@ -9,6 +9,12 @@ import java.util.Optional;
 public interface FacilityInspectionRepository {
     List<FacilityInspectionTemplateRecord> listTemplates();
 
+    default List<FacilityInspectionTemplateRecord> listTemplatesByProject(String projectId) {
+        return listTemplates().stream()
+                .filter(record -> Objects.equals(projectId, record.projectId()))
+                .toList();
+    }
+
     List<FacilityInspectionTemplateRecord> listSchedulableTemplates();
 
     Optional<FacilityInspectionTemplateRecord> findTemplateById(String id);

@@ -85,7 +85,7 @@ public class FacilityWorkOrderController {
     @PostMapping("/{work_order_id}/accept")
     public ApiResponse<FacilityWorkOrderRecord> accept(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        requirePermission("facility.work_order.accept_assigned");
+        authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.accept(workOrderId, request));
     }

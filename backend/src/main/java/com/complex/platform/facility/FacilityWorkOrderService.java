@@ -155,11 +155,10 @@ public class FacilityWorkOrderService {
 
     @Transactional
     public FacilityWorkOrderRecord accept(String id, FacilityWorkOrderActionRequest request) {
-        AccessActor actor = requireScopeActor();
+        authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
         validateSatisfaction(r.satisfaction());
         FacilityWorkOrderRecord cur = load(id);
-        enforceAssignedScope(actor, cur);
         requireStatus(cur, "pending_acceptance", "can only accept a work order pending acceptance");
         FacilityWorkOrderRecord closed = verifyClosed(cur, r);
         repository.updateWorkOrder(closed);

@@ -61,7 +61,7 @@ class AccessJdbcIntegrationTests {
     }
 
     @Test
-    void v178SeedsOutsourcedVendorFacilityRolesWithoutManagePermissions() {
+    void v181MovesOutsourcedFacilityPermissionsToTimeBoxTemplatesWithoutRuntimeRolePermissions() {
         List<String> permissionCodes = repository.listPermissions().stream()
                 .map(PermissionDefinition::permissionCode)
                 .toList();
@@ -70,32 +70,70 @@ class AccessJdbcIntegrationTests {
                 "facility.work_order.view_assigned",
                 "facility.work_order.process_assigned",
                 "facility.work_order.accept_assigned",
+                "facility.equipment.view",
                 "facility.inspection.view_assigned",
-                "facility.inspection.record_assigned"
+                "facility.inspection.record_assigned",
+                "facility.inspection.template.view",
+                "facility.inspection.report_exception_assigned"
         );
         assertThat(jdbcTemplate.queryForList("""
                 SELECT permission_code
                   FROM role_permissions
                  WHERE role_id = 'role_outsourced_facility'
                  ORDER BY permission_code
-                """, String.class)).containsExactly(
-                "facility.work_order.accept_assigned",
-                "facility.work_order.process_assigned",
-                "facility.work_order.view_assigned"
-        );
+                """, String.class)).isEmpty();
         assertThat(jdbcTemplate.queryForList("""
                 SELECT permission_code
                   FROM role_permissions
                  WHERE role_id = 'role_outsourced_security_cleaning'
                  ORDER BY permission_code
+                """, String.class)).isEmpty();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_outsourced_facility'
+                 ORDER BY permission_code
                 """, String.class)).containsExactly(
+                "facility.equipment.view",
+                "facility.work_order.process_assigned",
+                "facility.work_order.view_assigned"
+        );
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_outsourced_security_cleaning'
+                 ORDER BY permission_code
+                """, String.class)).containsExactly(
+                "facility.inspection.record_assigned",
+                "facility.inspection.report_exception_assigned",
+                "facility.inspection.template.view",
+                "facility.inspection.view_assigned"
+        );
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_outsourced_facility'
+                   AND permission_code = 'facility.work_order.accept_assigned'
+                """, String.class)).isEmpty();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_outsourced_security_cleaning'
+                   AND permission_code LIKE '%.manage'
+                """, String.class)).isEmpty();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_outsourced_security_cleaning'
+                 ORDER BY permission_code
+                """, String.class)).contains(
                 "facility.inspection.record_assigned",
                 "facility.inspection.view_assigned"
         );
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM role_permissions
                  WHERE role_id IN ('role_outsourced_facility', 'role_outsourced_security_cleaning')
-                   AND permission_code LIKE '%.manage'
+                   AND permission_code IS NOT NULL
                 """, Integer.class)).isZero();
         assertThat(jdbcTemplate.queryForList("""
                 SELECT position_code
@@ -106,24 +144,45 @@ class AccessJdbcIntegrationTests {
     }
 
     @Test
-    void v179SeedsConstructionSiteEntryPermissionsAndColumns() {
+    void v181SeedsConstructionCompletionUploadAndKeepsRuntimeRoleTimeBoxed() {
         assertThat(regclass("site_entry_reports")).isEqualTo("site_entry_reports");
         assertThat(jdbcTemplate.queryForList("""
                 SELECT column_name
                   FROM information_schema.columns
                  WHERE table_name = 'site_entry_reports'
-                   AND column_name IN ('planned_start_date', 'planned_end_date', 'vendor_user_id')
+                   AND column_name IN (
+                        'planned_start_date',
+                        'planned_end_date',
+                        'vendor_user_id',
+                        'completion_attachment_ids',
+                        'completion_note',
+                        'completion_uploaded_at'
+                   )
                  ORDER BY column_name
-                """, String.class)).containsExactly("planned_end_date", "planned_start_date", "vendor_user_id");
+                """, String.class)).containsExactly(
+                "completion_attachment_ids",
+                "completion_note",
+                "completion_uploaded_at",
+                "planned_end_date",
+                "planned_start_date",
+                "vendor_user_id"
+        );
 
         assertThat(jdbcTemplate.queryForList("""
                 SELECT permission_code
                   FROM role_permissions
                  WHERE role_id = 'role_outsourced_construction'
                  ORDER BY permission_code
+                """, String.class)).isEmpty();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT permission_code
+                  FROM permission_template_items
+                 WHERE template_id = 'tpl_outsourced_construction'
+                 ORDER BY permission_code
                 """, String.class)).containsExactly(
                 "facility.site_entry.create_assigned",
                 "facility.site_entry.submit_assigned",
+                "facility.site_entry.upload_completion_assigned",
                 "facility.site_entry.view_assigned"
         );
         assertThat(jdbcTemplate.queryForObject("""
@@ -172,11 +231,7 @@ class AccessJdbcIntegrationTests {
                   FROM role_permissions
                  WHERE role_id = 'role_auditor_external'
                  ORDER BY permission_code
-                """, String.class)).contains(
-                "finance.ar_ap.view",
-                "amusement.session.view",
-                "ticket.order.read"
-        );
+                """, String.class)).isEmpty();
 
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -231,6 +286,10 @@ class AccessJdbcIntegrationTests {
                 "active",
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
+        repository.assignUserRole("usr_jdbc_auditor_external", "role_auditor_external");
+        authenticate("usr_jdbc_auditor_external", "jdbc-auditor-external", "staff", "project_1");
+        assertPermissionDenied("finance.ar_ap.view");
+
         repository.createTemporaryGrant(new TemporaryGrant(
                 "22222222-2222-2222-2222-222222222222",
                 "usr_jdbc_auditor_external",
@@ -246,7 +305,6 @@ class AccessJdbcIntegrationTests {
                 null,
                 null
         ));
-        authenticate("usr_jdbc_auditor_external", "jdbc-auditor-external", "staff", "project_1");
 
         authorizationService.requirePermission("finance.ar_ap.view");
         assertPermissionDenied("finance.ar_ap.manage");
@@ -277,6 +335,67 @@ class AccessJdbcIntegrationTests {
         ));
         authenticate("usr_jdbc_auditor_external_expired", "jdbc-auditor-external-expired", "staff", "project_1");
         assertPermissionDenied("finance.ar_ap.view");
+    }
+
+    @Test
+    void outsourcedTemporaryGrantExpiryUsesExistingAuthorizationEffects() {
+        repository.createUser(new AccessUser(
+                "usr_jdbc_outsourced_active",
+                "jdbc-outsourced-active",
+                "outsourced_vendor",
+                "project_1",
+                null,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.createTemporaryGrant(new TemporaryGrant(
+                "44444444-4444-4444-4444-444444444444",
+                "usr_jdbc_outsourced_active",
+                List.of("facility.work_order.view_assigned", "facility.equipment.view"),
+                Instant.parse("2026-06-14T00:00:00Z"),
+                Instant.parse("2099-01-01T00:00:00Z"),
+                false,
+                false,
+                "active",
+                "outsourced maintenance window",
+                "seed-admin",
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null,
+                null
+        ));
+        authenticate("usr_jdbc_outsourced_active", "jdbc-outsourced-active", "outsourced_vendor", "project_1");
+
+        authorizationService.requirePermission("facility.work_order.view_assigned");
+        authorizationService.requirePermission("facility.equipment.view");
+        assertPermissionDenied("facility.work_order.accept_assigned");
+        assertPermissionDenied("facility.work_order.manage");
+
+        repository.createUser(new AccessUser(
+                "usr_jdbc_outsourced_expired",
+                "jdbc-outsourced-expired",
+                "outsourced_vendor",
+                "project_1",
+                null,
+                "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        ));
+        repository.createTemporaryGrant(new TemporaryGrant(
+                "55555555-5555-5555-5555-555555555555",
+                "usr_jdbc_outsourced_expired",
+                List.of("facility.work_order.view_assigned"),
+                Instant.parse("2020-01-01T00:00:00Z"),
+                Instant.parse("2020-01-02T00:00:00Z"),
+                false,
+                false,
+                "active",
+                "expired outsourced window",
+                "seed-admin",
+                Instant.parse("2020-01-01T00:00:00Z"),
+                null,
+                null
+        ));
+        authenticate("usr_jdbc_outsourced_expired", "jdbc-outsourced-expired", "outsourced_vendor", "project_1");
+        assertPermissionDenied("facility.work_order.view_assigned");
     }
 
     @Test

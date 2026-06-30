@@ -6,6 +6,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.facility.dto.SiteEntryCompletionUploadRequest;
 import com.complex.platform.facility.dto.SiteEntryReportAcceptanceRequest;
 import com.complex.platform.facility.dto.SiteEntryReportRequest;
 import com.complex.platform.facility.dto.SiteEntryReportReviewRequest;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SiteEntryReportController {
 
     private static final String VIEW_ASSIGNED = "facility.site_entry.view_assigned";
+    private static final String UPLOAD_COMPLETION_ASSIGNED = "facility.site_entry.upload_completion_assigned";
     private static final String REVIEW = "facility.site_entry.review";
     private static final String ACCEPT = "facility.site_entry.accept";
 
@@ -58,6 +60,14 @@ public class SiteEntryReportController {
         authorizationService.requirePermission("facility.site_entry.submit_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submit(reportId, request));
+    }
+
+    @PostMapping("/{report_id}/completion")
+    public ApiResponse<SiteEntryReportRecord> uploadCompletion(
+            @PathVariable("report_id") String reportId, @RequestBody @jakarta.validation.Valid SiteEntryCompletionUploadRequest request) {
+        authorizationService.requirePermission(UPLOAD_COMPLETION_ASSIGNED);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.uploadCompletion(reportId, request));
     }
 
     @PostMapping("/{report_id}/review")

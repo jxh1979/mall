@@ -3,6 +3,9 @@ package com.complex.platform.facility;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -15,16 +18,21 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
 
+    private static final TypeReference<List<String>> LIST_STRING_TYPE = new TypeReference<>() {
+    };
     private static final String COLS = """
             id, project_id, space_id, work_scope, planned_start_date, planned_end_date, crew_count, contact_name,
             contact_phone, vendor_user_id, status, review_comment, acceptance_comment, created_by, created_at,
-            updated_at, deleted_at
+            updated_at, completion_attachment_ids::text AS completion_attachment_ids, completion_note,
+            completion_uploaded_at, deleted_at
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    JdbcSiteEntryReportRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    JdbcSiteEntryReportRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper.copy().findAndRegisterModules();
     }
 
     @Override
@@ -32,10 +40,12 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
         jdbcTemplate.update("""
                 INSERT INTO site_entry_reports (id, project_id, space_id, work_scope, planned_start_date, planned_end_date,
                     crew_count, contact_name, contact_phone, vendor_user_id, status, review_comment, acceptance_comment,
-                    created_by, created_at, updated_at, deleted_at)
+                    created_by, created_at, updated_at, completion_attachment_ids, completion_note,
+                    completion_uploaded_at, deleted_at)
                 VALUES (:id, :project_id, :space_id, :work_scope, :planned_start_date, :planned_end_date,
                     :crew_count, :contact_name, :contact_phone, :vendor_user_id, :status, :review_comment,
-                    :acceptance_comment, :created_by, :created_at, :updated_at, :deleted_at)
+                    :acceptance_comment, :created_by, :created_at, :updated_at,
+                    CAST(:completion_attachment_ids AS jsonb), :completion_note, :completion_uploaded_at, :deleted_at)
                 """, params(r));
     }
 
@@ -46,6 +56,8 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
                     planned_start_date=:planned_start_date, planned_end_date=:planned_end_date, crew_count=:crew_count,
                     contact_name=:contact_name, contact_phone=:contact_phone, vendor_user_id=:vendor_user_id,
                     status=:status, review_comment=:review_comment, acceptance_comment=:acceptance_comment,
+                    completion_attachment_ids=CAST(:completion_attachment_ids AS jsonb),
+                    completion_note=:completion_note, completion_uploaded_at=:completion_uploaded_at,
                     updated_at=:updated_at, deleted_at=:deleted_at
                  WHERE id=:id
                 """, params(r));
@@ -98,6 +110,9 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
                 .addValue("acceptance_comment", r.acceptanceComment()).addValue("created_by", r.createdBy())
                 .addValue("created_at", timestampWithTimeZone(r.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(r.updatedAt()))
+                .addValue("completion_attachment_ids", writeJson(r.completionAttachmentIds()))
+                .addValue("completion_note", r.completionNote())
+                .addValue("completion_uploaded_at", timestampWithTimeZone(r.completionUploadedAt()))
                 .addValue("deleted_at", timestampWithTimeZone(r.deletedAt()));
     }
 
@@ -108,10 +123,31 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
                 rs.getInt("crew_count"), rs.getString("contact_name"), rs.getString("contact_phone"),
                 rs.getString("vendor_user_id"), rs.getString("status"), rs.getString("review_comment"),
                 rs.getString("acceptance_comment"), rs.getString("created_by"), nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"), nullableInstant(rs, "deleted_at"));
+                nullableInstant(rs, "updated_at"), readListString(rs.getString("completion_attachment_ids")),
+                rs.getString("completion_note"), nullableInstant(rs, "completion_uploaded_at"),
+                nullableInstant(rs, "deleted_at"));
     }
 
     private LocalDate localDate(ResultSet rs, String column) throws SQLException {
         return rs.getObject(column, LocalDate.class);
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value == null ? List.of() : value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("failed to serialize json", exception);
+        }
+    }
+
+    private List<String> readListString(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, LIST_STRING_TYPE);
+        } catch (JsonProcessingException exception) {
+            return List.of();
+        }
     }
 }

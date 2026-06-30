@@ -33,9 +33,13 @@ class AuthorizationServiceTests {
         repository.addKnownPermission("facility.work_order.view_assigned");
         repository.addKnownPermission("facility.work_order.process_assigned");
         repository.addKnownPermission("facility.work_order.accept_assigned");
+        repository.addKnownPermission("facility.equipment.view");
         repository.addKnownPermission("facility.inspection.manage");
         repository.addKnownPermission("facility.inspection.view_assigned");
         repository.addKnownPermission("facility.inspection.record_assigned");
+        repository.addKnownPermission("facility.inspection.template.view");
+        repository.addKnownPermission("facility.inspection.report_exception_assigned");
+        repository.addKnownPermission("facility.site_entry.upload_completion_assigned");
     }
 
     @AfterEach
@@ -172,16 +176,17 @@ class AuthorizationServiceTests {
     }
 
     @Test
-    void outsourcedFacilityRoleOnlyGrantsAssignedWorkOrderPermissions() {
+    void outsourcedFacilityTemporaryGrantAllowsAssignedWorkAndEquipmentReadButNotAccept() {
         authenticateActor(new AccessActor("usr_vendor_a", "vendor-a", "outsourced_vendor", "proj_1", null, "active"));
-        repository.addEffect(effect("usr_vendor_a", "facility.work_order.view_assigned", AccessRepository.Effect.GRANT));
-        repository.addEffect(effect("usr_vendor_a", "facility.work_order.process_assigned", AccessRepository.Effect.GRANT));
-        repository.addEffect(effect("usr_vendor_a", "facility.work_order.accept_assigned", AccessRepository.Effect.GRANT));
+        repository.addEffect(temporaryGrant("usr_vendor_a", "facility.work_order.view_assigned", "2099-01-01T00:00:00Z"));
+        repository.addEffect(temporaryGrant("usr_vendor_a", "facility.work_order.process_assigned", "2099-01-01T00:00:00Z"));
+        repository.addEffect(temporaryGrant("usr_vendor_a", "facility.equipment.view", "2099-01-01T00:00:00Z"));
 
         service.requirePermission("facility.work_order.view_assigned");
         service.requirePermission("facility.work_order.process_assigned");
-        service.requirePermission("facility.work_order.accept_assigned");
+        service.requirePermission("facility.equipment.view");
 
+        assertPermissionDenied("facility.work_order.accept_assigned");
         assertPermissionDenied("facility.work_order.manage");
         assertPermissionDenied("facility.inspection.record_assigned");
         assertPermissionDenied("merchant.service_work_order.view");
@@ -189,13 +194,25 @@ class AuthorizationServiceTests {
     }
 
     @Test
-    void outsourcedSecurityCleaningRoleOnlyGrantsAssignedInspectionPermissions() {
+    void outsourcedTemporaryGrantExpiresAndNoLongerAuthorizes() {
+        authenticateActor(new AccessActor("usr_vendor_expired", "vendor-expired", "outsourced_vendor", "proj_1", null, "active"));
+        repository.addEffect(temporaryGrant("usr_vendor_expired", "facility.work_order.view_assigned", "2020-01-01T00:00:00Z"));
+
+        assertPermissionDenied("facility.work_order.view_assigned");
+    }
+
+    @Test
+    void outsourcedSecurityCleaningTemporaryGrantOnlyGrantsAssignedInspectionAndExceptionPermissions() {
         authenticateActor(new AccessActor("usr_vendor_s", "vendor-s", "outsourced_vendor", "proj_1", null, "active"));
-        repository.addEffect(effect("usr_vendor_s", "facility.inspection.view_assigned", AccessRepository.Effect.GRANT));
-        repository.addEffect(effect("usr_vendor_s", "facility.inspection.record_assigned", AccessRepository.Effect.GRANT));
+        repository.addEffect(temporaryGrant("usr_vendor_s", "facility.inspection.view_assigned", "2099-01-01T00:00:00Z"));
+        repository.addEffect(temporaryGrant("usr_vendor_s", "facility.inspection.record_assigned", "2099-01-01T00:00:00Z"));
+        repository.addEffect(temporaryGrant("usr_vendor_s", "facility.inspection.template.view", "2099-01-01T00:00:00Z"));
+        repository.addEffect(temporaryGrant("usr_vendor_s", "facility.inspection.report_exception_assigned", "2099-01-01T00:00:00Z"));
 
         service.requirePermission("facility.inspection.view_assigned");
         service.requirePermission("facility.inspection.record_assigned");
+        service.requirePermission("facility.inspection.template.view");
+        service.requirePermission("facility.inspection.report_exception_assigned");
 
         assertPermissionDenied("facility.inspection.manage");
         assertPermissionDenied("facility.work_order.view_assigned");
@@ -309,6 +326,20 @@ class AuthorizationServiceTests {
                 "role_p0",
                 null,
                 null,
+                false,
+                false
+        );
+    }
+
+    private AccessRepository.PermissionEffect temporaryGrant(String userId, String permissionCode, String validUntil) {
+        return new AccessRepository.PermissionEffect(
+                userId,
+                permissionCode,
+                AccessRepository.Effect.GRANT,
+                AccessRepository.Source.TEMPORARY_GRANT,
+                "temp_" + permissionCode,
+                Instant.parse("2020-01-01T00:00:00Z"),
+                Instant.parse(validUntil),
                 false,
                 false
         );

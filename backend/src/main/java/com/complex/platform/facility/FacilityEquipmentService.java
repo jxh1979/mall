@@ -1,5 +1,6 @@
 package com.complex.platform.facility;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -44,12 +45,19 @@ public class FacilityEquipmentService {
     }
 
     public PageResponse<FacilityEquipmentRecord> listEquipment() {
-        List<FacilityEquipmentRecord> items = repository.listEquipment();
+        AccessActor actor = authorizationService.currentActor();
+        List<FacilityEquipmentRecord> items = authorizationService.isOutsourcedVendor(actor)
+                ? repository.listEquipmentByProject(authorizationService.requireProjectScope(actor))
+                : repository.listEquipment();
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
     public PageResponse<FacilityEquipmentRecord> listMaintenanceDue() {
-        List<FacilityEquipmentRecord> items = repository.listMaintenanceDue(LocalDate.now());
+        AccessActor actor = authorizationService.currentActor();
+        LocalDate today = LocalDate.now();
+        List<FacilityEquipmentRecord> items = authorizationService.isOutsourcedVendor(actor)
+                ? repository.listMaintenanceDueByProject(today, authorizationService.requireProjectScope(actor))
+                : repository.listMaintenanceDue(today);
         return new PageResponse<>(items, 1, 500, items.size());
     }
 

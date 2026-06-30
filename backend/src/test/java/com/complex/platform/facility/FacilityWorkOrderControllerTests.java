@@ -53,16 +53,31 @@ class FacilityWorkOrderControllerTests {
     }
 
     @Test
-    void outsourcedProcessAndAcceptUseAssignedFinePermissions() {
+    void outsourcedProcessUsesAssignedPermissionButAcceptRequiresPropertyPermission() {
         FacilityWorkOrderActionRequest process = new FacilityWorkOrderActionRequest("done", null, "note", "k_process");
         FacilityWorkOrderActionRequest accept = new FacilityWorkOrderActionRequest(null, 5, "ok", "k_accept");
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied: facility.work_order.manage"))
+                .when(authorizationService).requirePermission("facility.work_order.manage");
 
         controller.start("wo_1", process);
         controller.complete("wo_1", process);
-        controller.accept("wo_1", accept);
 
         verify(authorizationService, times(2)).requirePermission("facility.work_order.process_assigned");
-        verify(authorizationService).requirePermission("facility.work_order.accept_assigned");
+        assertThatThrownBy(() -> controller.accept("wo_1", accept))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+        verify(authorizationService).requirePermission("facility.work_order.manage");
+    }
+
+    @Test
+    void propertySideCanAcceptWithManagePermission() {
+        AccessActor staff = new AccessActor("usr_ops", "ops", "staff", "org_1", null, "active");
+        when(authorizationService.currentActor()).thenReturn(staff);
+        when(authorizationService.isOutsourcedVendor(staff)).thenReturn(false);
+
+        controller.accept("wo_1", new FacilityWorkOrderActionRequest(null, 5, "ok", "k_accept"));
+
+        verify(authorizationService).requirePermission("facility.work_order.manage");
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.facility.dto.FacilityInspectionExceptionReportRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecordSubmitRequest;
 import com.complex.platform.facility.dto.FacilityInspectionTaskRequest;
@@ -34,7 +35,7 @@ public class FacilityInspectionController {
 
     @GetMapping("/templates")
     public ApiResponse<PageResponse<FacilityInspectionTemplateRecord>> listTemplates() {
-        authorizationService.requirePermission(PERM);
+        requirePermission("facility.inspection.template.view");
         return ApiResponse.ok(service.listTemplates());
     }
 
@@ -79,6 +80,14 @@ public class FacilityInspectionController {
         requirePermission("facility.inspection.record_assigned");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submitRecord(taskId, request));
+    }
+
+    @PostMapping("/tasks/{task_id}/report-exception")
+    public ApiResponse<FacilityInspectionRecordRecord> reportException(
+            @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionExceptionReportRequest request) {
+        requirePermission("facility.inspection.report_exception_assigned");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reportException(taskId, request));
     }
 
     @GetMapping("/tasks/{task_id}/records")

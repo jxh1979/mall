@@ -5,6 +5,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.facility.dto.FacilityInspectionExceptionReportRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecordSubmitRequest;
 import com.complex.platform.facility.dto.FacilityInspectionTaskRequest;
@@ -35,6 +36,7 @@ public class FacilityInspectionService {
     private static final String TEMPLATE_BUSINESS_TYPE = "facility_inspection_template";
     private static final String TASK_BUSINESS_TYPE = "facility_inspection_task";
     private static final String RECORD_BUSINESS_TYPE = "facility_inspection_record";
+    private static final String REPORT_EXCEPTION_PERM = "facility.inspection.report_exception_assigned";
 
     private final FacilityInspectionRepository repository;
     private final AuditEventService auditEventService;
@@ -50,7 +52,10 @@ public class FacilityInspectionService {
     }
 
     public PageResponse<FacilityInspectionTemplateRecord> listTemplates() {
-        List<FacilityInspectionTemplateRecord> items = repository.listTemplates();
+        AccessActor actor = authorizationService.currentActor();
+        List<FacilityInspectionTemplateRecord> items = authorizationService.isOutsourcedVendor(actor)
+                ? repository.listTemplatesByProject(authorizationService.requireProjectScope(actor))
+                : repository.listTemplates();
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -144,6 +149,35 @@ public class FacilityInspectionService {
         String finalStatus = applySubmitTransition(cur, rec, now);
         audit("facility.inspection_record_submitted", RECORD_BUSINESS_TYPE, rec.id(), r.idempotencyKey(),
                 Map.of("task_id", cur.id(), "result", result, "task_status", finalStatus));
+        return rec;
+    }
+
+    @Transactional
+    public FacilityInspectionRecordRecord reportException(String taskId, FacilityInspectionExceptionReportRequest request) {
+        AccessActor actor = requireScopeActor();
+        FacilityInspectionExceptionReportRequest r = requireException(request);
+        FacilityInspectionTaskRecord cur = loadTask(taskId);
+        enforceAssignedScope(actor, cur);
+        if (!Set.of("pending", "in_progress").contains(cur.status())) {
+            throw ApiException.badRequest("INVALID_STATE", "can only report exception on a pending or started inspection task");
+        }
+        validateGps(r.gpsLat(), r.gpsLng());
+        String abnormalNote = requireText(r.abnormalNote(), "abnormal_note");
+        Instant now = Instant.now();
+        FacilityInspectionTaskRecord started = cur;
+        if ("pending".equals(cur.status())) {
+            started = withTaskState(cur, "in_progress", now, cur.completedAt(), now);
+            repository.updateTask(started);
+        }
+        FacilityInspectionRecordRecord rec = new FacilityInspectionRecordRecord(
+                "firec_" + UUID.randomUUID(), started.id(), "abnormal", stringsOrEmpty(r.photos()),
+                trimToNull(r.qrCode()), r.gpsLat(), r.gpsLng(), listOrEmpty(r.checklistResult()),
+                trimToNull(r.note()), abnormalNote, actor.id(), now, now);
+        repository.insertRecord(rec);
+
+        String finalStatus = applySubmitTransition(started, rec, now);
+        audit("facility.inspection_exception_reported", REPORT_EXCEPTION_PERM, RECORD_BUSINESS_TYPE,
+                rec.id(), r.idempotencyKey(), Map.of("task_id", started.id(), "task_status", finalStatus));
         return rec;
     }
 
@@ -315,6 +349,13 @@ public class FacilityInspectionService {
         return request;
     }
 
+    private FacilityInspectionExceptionReportRequest requireException(FacilityInspectionExceptionReportRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        return request;
+    }
+
     private FacilityInspectionRecheckConfirmRequest requireAction(FacilityInspectionRecheckConfirmRequest request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
@@ -387,6 +428,12 @@ public class FacilityInspectionService {
     }
 
     private void audit(String event, String businessType, String id, String idempotencyKey, Map<String, Object> metadata) {
-        auditEventService.recordSuccess(event, PERM, businessType, id, null, idempotencyKey, metadata);
+        audit(event, PERM, businessType, id, idempotencyKey, metadata);
+    }
+
+    private void audit(
+            String event, String permission, String businessType, String id, String idempotencyKey,
+            Map<String, Object> metadata) {
+        auditEventService.recordSuccess(event, permission, businessType, id, null, idempotencyKey, metadata);
     }
 }

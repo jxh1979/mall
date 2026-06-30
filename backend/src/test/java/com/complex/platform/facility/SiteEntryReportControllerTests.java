@@ -12,6 +12,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.facility.dto.SiteEntryCompletionUploadRequest;
 import com.complex.platform.facility.dto.SiteEntryReportAcceptanceRequest;
 import com.complex.platform.facility.dto.SiteEntryReportRequest;
 import com.complex.platform.facility.dto.SiteEntryReportReviewRequest;
@@ -46,10 +47,12 @@ class SiteEntryReportControllerTests {
         controller.get("ser_1");
         controller.create(createReq("k_create"));
         controller.submit("ser_1", submit("k_submit"));
+        controller.uploadCompletion("ser_1", upload("k_upload"));
 
         verify(authorizationService, times(2)).requirePermission("facility.site_entry.view_assigned");
         verify(authorizationService).requirePermission("facility.site_entry.create_assigned");
         verify(authorizationService).requirePermission("facility.site_entry.submit_assigned");
+        verify(authorizationService).requirePermission("facility.site_entry.upload_completion_assigned");
     }
 
     @Test
@@ -87,6 +90,10 @@ class SiteEntryReportControllerTests {
 
     private SiteEntryReportSubmitRequest submit(String key) {
         return new SiteEntryReportSubmitRequest("进场", key);
+    }
+
+    private SiteEntryCompletionUploadRequest upload(String key) {
+        return new SiteEntryCompletionUploadRequest(List.of("att_1"), "完工材料", key);
     }
 
     private SiteEntryReportReviewRequest review(String decision, String key) {

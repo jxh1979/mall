@@ -9,6 +9,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.facility.dto.FacilityInspectionExceptionReportRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecordSubmitRequest;
 import com.complex.platform.facility.dto.FacilityInspectionTaskRequest;
@@ -139,6 +140,26 @@ class FacilityInspectionServiceTests {
     }
 
     @Test
+    void outsourcedCanReportExceptionForOwnTaskAndTriggersWorkOrderPath() {
+        FacilityInspectionTemplateRecord template =
+                service.createTemplate(templateReq("fire", 1, "to_work_order", true));
+        FacilityInspectionService scoped = outsourcedService("usr_vendor_s", "proj_1");
+        inspections.insertTask(task("task_own", "pending", "usr_vendor_s", "proj_1", template.id()));
+        inspections.insertTask(task("task_other", "pending", "usr_vendor_b", "proj_1", template.id()));
+
+        FacilityInspectionRecordRecord record = scoped.reportException("task_own", exceptionReq("k_exception"));
+
+        assertThat(record.result()).isEqualTo("abnormal");
+        assertThat(record.inspectorId()).isEqualTo("usr_vendor_s");
+        assertThat(inspections.tasks.get("task_own").status()).isEqualTo("rectifying");
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0)).isInstanceOfSatisfying(FacilityInspectionAbnormalEvent.class,
+                event -> assertThat(event.taskId()).isEqualTo("task_own"));
+        assertThatThrownBy(() -> scoped.reportException("task_other", exceptionReq("k_exception_other")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+    }
+
+    @Test
     void abnormalLightModeRecordsAndClosesWithoutWorkOrderEvent() {
         FacilityInspectionTemplateRecord template = service.createTemplate(templateReq("facility", 3, "light", true));
         FacilityInspectionTaskRecord task = service.createTask(taskReq(template.id(), null, "manual", null));
@@ -223,9 +244,21 @@ class FacilityInspectionServiceTests {
                 List.of(Map.of("item", "door", "result", result)), "note", abnormalNote, "usr_inspector", key);
     }
 
+    private FacilityInspectionExceptionReportRequest exceptionReq(String key) {
+        return new FacilityInspectionExceptionReportRequest(List.of("https://cdn.example/inspection.jpg"),
+                "qr_1", new BigDecimal("31.2304"), new BigDecimal("121.4737"),
+                List.of(Map.of("item", "door", "result", "abnormal")), "note",
+                "door is broken", "ignored_inspector", key);
+    }
+
     private FacilityInspectionTaskRecord task(String id, String status, String assigneeId, String projectId) {
+        return task(id, status, assigneeId, projectId, null);
+    }
+
+    private FacilityInspectionTaskRecord task(
+            String id, String status, String assigneeId, String projectId, String templateId) {
         Instant now = Instant.now();
-        return new FacilityInspectionTaskRecord(id, null, "security", status, "task " + id, "manual",
+        return new FacilityInspectionTaskRecord(id, templateId, "security", status, "task " + id, "manual",
                 List.of(), assigneeId, LocalDate.parse("2026-06-26"), LocalDate.parse("2026-06-26"),
                 "in_progress".equals(status) ? now : null, null, null, projectId, "sp_1", now, now);
     }

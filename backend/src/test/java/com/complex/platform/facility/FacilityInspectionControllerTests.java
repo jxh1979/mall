@@ -12,6 +12,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.facility.dto.FacilityInspectionExceptionReportRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecordSubmitRequest;
 import com.complex.platform.facility.dto.FacilityInspectionTaskRequest;
@@ -49,6 +50,15 @@ class FacilityInspectionControllerTests {
     }
 
     @Test
+    void outsourcedCanReadTemplatesWithTemplateViewPermission() {
+        when(service.listTemplates()).thenReturn(new PageResponse<>(List.of(), 1, 500, 0));
+
+        controller.listTemplates();
+
+        verify(authorizationService).requirePermission("facility.inspection.template.view");
+    }
+
+    @Test
     void outsourcedDetailAndRecordsUseAssignedViewPermission() {
         controller.getTask("task_1");
         controller.listRecords("task_1");
@@ -65,6 +75,16 @@ class FacilityInspectionControllerTests {
                 "note", null, "usr_vendor_a", "k_record"));
 
         verify(authorizationService, times(2)).requirePermission("facility.inspection.record_assigned");
+    }
+
+    @Test
+    void outsourcedReportExceptionUsesExceptionPermission() {
+        controller.reportException("task_1", new FacilityInspectionExceptionReportRequest(
+                List.of("https://cdn.example/abnormal.jpg"), "qr_1",
+                BigDecimal.ONE, BigDecimal.TEN, List.of(Map.of("item", "door", "result", "abnormal")),
+                "note", "door broken", "usr_vendor_a", "k_exception"));
+
+        verify(authorizationService).requirePermission("facility.inspection.report_exception_assigned");
     }
 
     @Test

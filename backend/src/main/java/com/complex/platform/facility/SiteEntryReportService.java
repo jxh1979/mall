@@ -5,6 +5,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.facility.dto.SiteEntryCompletionUploadRequest;
 import com.complex.platform.facility.dto.SiteEntryReportAcceptanceRequest;
 import com.complex.platform.facility.dto.SiteEntryReportRequest;
 import com.complex.platform.facility.dto.SiteEntryReportReviewRequest;
@@ -26,6 +27,7 @@ public class SiteEntryReportService {
     private static final String BUSINESS_TYPE = "facility_site_entry_report";
     private static final String CREATE_PERM = "facility.site_entry.create_assigned";
     private static final String SUBMIT_PERM = "facility.site_entry.submit_assigned";
+    private static final String UPLOAD_COMPLETION_PERM = "facility.site_entry.upload_completion_assigned";
     private static final String REVIEW_PERM = "facility.site_entry.review";
     private static final String ACCEPT_PERM = "facility.site_entry.accept";
 
@@ -76,7 +78,7 @@ public class SiteEntryReportService {
         SiteEntryReportRecord rec = new SiteEntryReportRecord("ser_" + UUID.randomUUID(), projectId,
                 trimToNull(r.spaceId()), requireText(r.workScope(), "work_scope"), plannedStart, plannedEnd,
                 crewCount, requireText(r.contactName(), "contact_name"), requireText(r.contactPhone(), "contact_phone"),
-                actor.id(), "submitted", null, null, actor.id(), now, now, null);
+                actor.id(), "submitted", null, null, actor.id(), now, now, List.of(), null, null, null);
         repository.insert(rec);
         audit("facility.site_entry_report_created", CREATE_PERM, rec.id(), r.idempotencyKey(),
                 Map.of("status", rec.status(), "project_id", rec.projectId()));
@@ -98,6 +100,30 @@ public class SiteEntryReportService {
         audit("facility.site_entry_report_submitted", SUBMIT_PERM, inProgress.id(), r.idempotencyKey(),
                 metadata(inProgress, r.note()));
         return inProgress;
+    }
+
+    @Transactional
+    public SiteEntryReportRecord uploadCompletion(String id, SiteEntryCompletionUploadRequest request) {
+        SiteEntryCompletionUploadRequest r = requireUpload(request);
+        AccessActor actor = authorizationService.currentActor();
+        if (!authorizationService.isOutsourcedVendor(actor)) {
+            throw ApiException.forbidden("FORBIDDEN", "only outsourced vendors can upload completion materials");
+        }
+        SiteEntryReportRecord cur = load(id);
+        enforceRecordScope(actor, cur);
+        if (!Set.of("in_progress", "rectifying").contains(cur.status())) {
+            throw ApiException.badRequest("INVALID_STATE", "can only upload completion materials before acceptance");
+        }
+        List<String> attachmentIds = strings(r.attachmentIds(), "attachment_ids");
+        SiteEntryReportRecord uploaded = new SiteEntryReportRecord(cur.id(), cur.projectId(), cur.spaceId(),
+                cur.workScope(), cur.plannedStartDate(), cur.plannedEndDate(), cur.crewCount(), cur.contactName(),
+                cur.contactPhone(), cur.vendorUserId(), cur.status(), cur.reviewComment(), cur.acceptanceComment(),
+                cur.createdBy(), cur.createdAt(), Instant.now(), attachmentIds, trimToNull(r.note()),
+                Instant.now(), cur.deletedAt());
+        repository.update(uploaded);
+        audit("facility.site_entry_completion_uploaded", UPLOAD_COMPLETION_PERM, uploaded.id(), r.idempotencyKey(),
+                Map.of("status", uploaded.status(), "attachment_count", attachmentIds.size()));
+        return uploaded;
     }
 
     @Transactional
@@ -169,7 +195,8 @@ public class SiteEntryReportService {
         return new SiteEntryReportRecord(cur.id(), cur.projectId(), cur.spaceId(), cur.workScope(),
                 cur.plannedStartDate(), cur.plannedEndDate(), cur.crewCount(), cur.contactName(), cur.contactPhone(),
                 cur.vendorUserId(), status, reviewComment, acceptanceComment, cur.createdBy(), cur.createdAt(),
-                updatedAt, cur.deletedAt());
+                updatedAt, cur.completionAttachmentIds(), cur.completionNote(), cur.completionUploadedAt(),
+                cur.deletedAt());
     }
 
     private SiteEntryReportRequest requireCreate(SiteEntryReportRequest request) {
@@ -180,6 +207,13 @@ public class SiteEntryReportService {
     }
 
     private SiteEntryReportSubmitRequest requireSubmit(SiteEntryReportSubmitRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
+        }
+        return request;
+    }
+
+    private SiteEntryCompletionUploadRequest requireUpload(SiteEntryCompletionUploadRequest request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");
         }
@@ -226,6 +260,20 @@ public class SiteEntryReportService {
             throw ApiException.badRequest("VALIDATION_FAILED", field + " must be positive");
         }
         return value;
+    }
+
+    private List<String> strings(List<String> values, String field) {
+        if (values == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        List<String> cleaned = values.stream()
+                .map(this::trimToNull)
+                .filter(value -> value != null)
+                .toList();
+        if (cleaned.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", field + " is required");
+        }
+        return cleaned;
     }
 
     private String requireText(String value, String field) {

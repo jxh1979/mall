@@ -2,6 +2,7 @@ package com.complex.platform.facility;
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -32,13 +33,13 @@ public class FacilityController {
 
     @GetMapping
     public ApiResponse<PageResponse<FacilityEquipmentRecord>> list() {
-        authorizationService.requirePermission(PERM);
+        requireReadPermission();
         return ApiResponse.ok(service.listEquipment());
     }
 
     @GetMapping("/maintenance-due")
     public ApiResponse<PageResponse<FacilityEquipmentRecord>> maintenanceDue() {
-        authorizationService.requirePermission(PERM);
+        requireReadPermission();
         return ApiResponse.ok(service.listMaintenanceDue());
     }
 
@@ -69,5 +70,11 @@ public class FacilityController {
             @RequestParam(value = "idempotency_key", required = false) String idempotencyKey) {
         authorizationService.requirePermission(PERM);
         return ApiResponse.ok(service.recordMaintenanceDone(equipmentId, idempotencyKey));
+    }
+
+    private void requireReadPermission() {
+        AccessActor actor = authorizationService.currentActor();
+        authorizationService.requirePermission(
+                authorizationService.isOutsourcedVendor(actor) ? "facility.equipment.view" : PERM);
     }
 }

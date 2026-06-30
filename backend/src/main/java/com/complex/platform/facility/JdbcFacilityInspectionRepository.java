@@ -54,6 +54,15 @@ class JdbcFacilityInspectionRepository implements FacilityInspectionRepository {
     }
 
     @Override
+    public List<FacilityInspectionTemplateRecord> listTemplatesByProject(String projectId) {
+        return jdbcTemplate.query("SELECT " + TEMPLATE_COLS + """
+                 FROM facility_inspection_templates
+                 WHERE project_id = :project_id
+                 ORDER BY created_at DESC, id
+                """, new MapSqlParameterSource("project_id", projectId), this::mapTemplate);
+    }
+
+    @Override
     public List<FacilityInspectionTemplateRecord> listSchedulableTemplates() {
         return jdbcTemplate.query("SELECT " + TEMPLATE_COLS + """
                  FROM facility_inspection_templates
