@@ -1,5 +1,26 @@
 {
   "note": "verify:tenant-isolation 已知缺口 baseline（棘轮底座）。闸口对此清单之外的新增 finding 硬失败；每条须在 security-scans/findings-register-v1.md tenant-isolation 小节有对应 SEC-*-TENANT-ISOLATION-* 证据；修复后从本清单与台账移除以收紧闸口。重建：node tools/verify-tenant-isolation.mjs --write-baseline。",
   "generated_at_source": "static scan of Jdbc*Repository.java vs domain-ownership-scope-audit-v0.1.csv",
-  "known_findings": []
+  "known_findings": [
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:access_grant_requests",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'access_grant_requests'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/access/JdbcAccessRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:external_partner_orgs",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'external_partner_orgs'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/partner/JdbcPartnerRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:leasing_brands",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'leasing_brands'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/leasing/JdbcLeasingRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:leasing_follow_ups",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'leasing_follow_ups'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/leasing/JdbcLeasingRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:leasing_leads",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 表 'leasing_leads'（direct, scope=project_id）在 backend/src/main/java/com/complex/platform/leasing/JdbcLeasingRepository.java 中有 SELECT 读，但找不到任何带 'project_id = :' 的 scoped 查询 —— 服务端无法按 token scope 过滤该表，存在跨租户读越权风险（AC-ISO-1，§4）。"
+    }
+  ]
 }
