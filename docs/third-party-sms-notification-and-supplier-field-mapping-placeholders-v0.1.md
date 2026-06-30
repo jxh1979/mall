@@ -132,3 +132,42 @@
 - 域数据触点：存酒 = `saved_bottles`；储值 = 储值账户/流水（不含积分）；商户费用 = `merchant_bills` / 合同续约（`contract_key_dates`）。
 - ⚠️ 业务 HTML 为最终解释权，此为新增业务能力；是否写进业务 HTML 待用户定，勿擅改 HTML。
 
+## 7. 【2026-06-30】各事件短信模板文案草稿(供运营商报备拿模板ID)
+
+> 用户拍板:暂不接真供应商(适配器留占位、按第三方接口规则),先由本文起草各事件中文文案。
+> 国内短信为"模板报备制":下表文案拿到阿里云/腾讯云短信后台报备审核,通过后得到模板ID,
+> 回填到对应 templateCode 的映射(真供应商接入时用,替换 ScaffoldSmsSender)。
+> 签名 `【综合体】` 为占位,报备时替换为实际签名;`${变量}` 为模板变量,由通知发送参数填充。
+
+### 7.1 存酒(收件人=客人)
+
+| templateCode | 事件 | 文案草稿 | 变量 |
+|---|---|---|---|
+| sms.stored_wine.deposit | 存酒成功 | 【综合体】您的${wine}已成功存入,到期日${expireDate},请在到期前取用。 | wine、expireDate |
+| sms.stored_wine.claim | 取酒成功 | 【综合体】您已成功取出${wine},如非本人操作请联系门店。 | wine |
+| sms.stored_wine.expiring | 即将到期 | 【综合体】您寄存的${wine}将于${expireDate}到期,请尽快取用,逾期视为放弃。 | wine、expireDate |
+| sms.stored_wine.expired | 已过期 | 【综合体】您寄存的${wine}已于${expireDate}到期,如有疑问请联系门店。 | wine、expireDate |
+
+### 7.2 储值(收件人=客人,不含积分)
+
+| templateCode | 事件 | 文案草稿 | 变量 |
+|---|---|---|---|
+| sms.stored_value.topup | 充值到账 | 【综合体】您已成功充值${amount}元,当前余额${balance}元。 | amount、balance |
+| sms.stored_value.consume | 消费扣款 | 【综合体】您本次消费${amount}元,储值余额${balance}元。 | amount、balance |
+
+### 7.3 商户费用(收件人=商户主联系人或后台配置接收人)
+
+| templateCode | 事件 | 文案草稿 | 变量 |
+|---|---|---|---|
+| sms.merchant_fee.rent | 房租账单/催缴 | 【综合体】您${period}房租账单${amount}元,请于${dueDate}前缴纳。 | period、amount、dueDate |
+| sms.merchant_fee.utilities | 水电费账单/催缴 | 【综合体】您${period}水电费账单${amount}元,请于${dueDate}前缴纳。 | period、amount、dueDate |
+| sms.merchant_fee.property | 物业费账单/催缴 | 【综合体】您${period}物业费账单${amount}元,请于${dueDate}前缴纳。 | period、amount、dueDate |
+| sms.merchant_fee.renewal | 合同续约提醒 | 【综合体】您的租赁合同将于${expireDate}到期,请及时办理续约。 | expireDate |
+
+### 7.4 备注
+
+- 催缴(dunning)与账单生成(bill)当前共用同一费用事件模板;若运营希望催缴语气更强(如"逾期将影响经营"),可单独报备一套催缴模板并在映射区分,本期先共用。
+- 变量名以业务可读为准,真供应商接入时按其模板变量命名(${vendor.params})做一次映射,见 §1.2 字段映射占位。
+- 凭证(AccessKey/Secret/签名)按第三方接口规则注入(环境变量/配置占位),不得硬编码,见 supplier kit。
+- 模板ID回填位置:真供应商适配器替换 ScaffoldSmsSender 时,templateCode → 运营商模板ID 的映射表(待建)。
+
