@@ -37,6 +37,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-VND-001", label: "外包维保工单", route: "/admin/vendor/work-orders" },
   { pageId: "ADM-VND-002", label: "外包巡检任务", route: "/admin/vendor/inspections" },
   { pageId: "ADM-VND-003", label: "外包进场报备", route: "/admin/vendor/site-entries" },
+  { pageId: "ADM-VND-004", label: "外包下属账号", route: "/admin/vendor/subordinates" },
   { pageId: "ADM-INT-002", label: "回调/轮询/补偿", route: "/admin/integrations/events" },
   { pageId: "ADM-INT-003", label: "第三方开关", route: "/admin/integrations/switches" },
   { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },

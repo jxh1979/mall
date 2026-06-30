@@ -18237,6 +18237,148 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/partner/orgs:
+    get:
+      tags:
+        - partner
+      x-permission: partner.org.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: partner_org.viewed
+      x-audit-event-failure: partner_org.view_failed
+      x-auth-context: staff-token
+      operationId: listPartnerOrgs
+      summary: 外部协作机构列表
+      description: 平台管理员查看外部协作机构（含下属上限/时效）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - partner
+      x-permission: partner.org.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: partner_org.updated
+      x-audit-event-failure: partner_org.update_failed
+      x-auth-context: staff-token
+      operationId: createPartnerOrg
+      summary: 录入/修改外部协作机构
+      description: 平台管理员录入或修改外部协作机构、设下属上限与账号时效。
+      requestBody:
+        $ref: "#/components/requestBodies/ExternalPartnerOrgRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/partner/subordinates:
+    get:
+      tags:
+        - partner
+      x-permission: partner.subordinate.view
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: partner_subordinate.viewed
+      x-audit-event-failure: partner_subordinate.view_failed
+      x-auth-context: staff-token
+      operationId: listPartnerSubordinates
+      summary: 本机构下属账号列表
+      description: 机构管理员查看本机构下属账号及状态。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - partner
+      x-permission: partner.subordinate.manage
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: partner_subordinate.created
+      x-audit-event-failure: partner_subordinate.create_failed
+      x-auth-context: staff-token
+      operationId: createPartnerSubordinate
+      summary: 自助开通下属账号
+      description: 机构管理员在下属上限内自助开通下属账号；超上限/机构停用或过期则拒。
+      requestBody:
+        $ref: "#/components/requestBodies/PartnerSubordinateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/partner/subordinates/{user_id}/disable:
+    post:
+      tags:
+        - partner
+      x-permission: partner.subordinate.manage
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: partner_subordinate.disabled
+      x-audit-event-failure: partner_subordinate.disable_failed
+      x-auth-context: staff-token
+      operationId: disablePartnerSubordinate
+      summary: 停用下属账号
+      description: 机构管理员停用本机构下属账号；仅限本机构。
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: 下属账号 ID。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     BearerAuth:
@@ -19795,6 +19937,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/SpaceTypeRequest"
+    ExternalPartnerOrgRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ExternalPartnerOrgRequest"
+    PartnerSubordinateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PartnerSubordinateRequest"
   responses:
     Success:
       description: 统一成功响应
@@ -27997,6 +28151,63 @@ components:
           type: string
           description: 状态：active 启用 / disabled 停用。
           maxLength: 32
+    ExternalPartnerOrgRequest:
+      type: object
+      additionalProperties: false
+      description: 平台管理员录入/修改外部协作机构（含下属上限与账号时效）。
+      required:
+        - idempotency_key
+        - org_name
+        - org_category
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 操作幂等键。
+        project_id:
+          type: string
+          maxLength: 64
+          description: 综合体归属。
+        org_name:
+          type: string
+          maxLength: 120
+          description: 机构名称。
+        org_category:
+          type: string
+          maxLength: 32
+          description: facility_maintenance/security_cleaning/construction/external_audit/other。
+        linked_supplier_id:
+          type: string
+          maxLength: 64
+          description: 可选：指向供货供应商记录。
+        max_subordinates:
+          type: integer
+          minimum: 0
+          description: 下属账号数上限。
+        valid_until:
+          type: string
+          format: date-time
+          description: 账号有效期（随合同；空=长期）。
+        status:
+          type: string
+          maxLength: 32
+          description: active/suspended/expired。
+    PartnerSubordinateRequest:
+      type: object
+      additionalProperties: false
+      description: 机构管理员自助开通下属账号。
+      required:
+        - idempotency_key
+        - username
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          description: 操作幂等键。
+        username:
+          type: string
+          maxLength: 64
+          description: 下属账号登录名。
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

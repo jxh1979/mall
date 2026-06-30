@@ -1,0 +1,75 @@
+import React from "react";
+import { AdminDataState } from "../components/AdminDataState";
+import { AdminPageHeader } from "../components/AdminPageHeader";
+import { useAdminResource } from "../hooks/useAdminResource";
+import type { AdminPageProps } from "../types";
+import { PermissionButton } from "../security/Can";
+
+type SubordinateRow = { id: string; username: string; partnerOrgId: string; accountType: string; status: string };
+
+const MANAGE = ["partner.subordinate.manage"];
+
+/**
+ * 外包下属账号自助门户（ADM-VND-004，条目2）：机构管理员在平台设定的下属上限内自助开通/停用本机构下属账号。
+ * 下属继承机构被授权范围；机构停用/过期或超上限时开通被拒（后端 PartnerService 强制）。
+ */
+export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+  const [rows, setRows] = React.useState<SubordinateRow[]>([]);
+  const [username, setUsername] = React.useState("");
+
+  const { loading, error, reload } = useAdminResource(
+    async () => {
+      const items = await api.get<SubordinateRow[]>("/api/v1/partner/subordinates");
+      setRows(items ?? []);
+    },
+    { onError: setGlobalError, fallbackMessage: "下属账号读取失败" },
+  );
+
+  async function addSubordinate() {
+    const name = username.trim();
+    if (!name) { setGlobalError("请填写下属账号登录名"); return; }
+    await api.post("/api/v1/partner/subordinates", { idempotencyKey: `partner-sub-${name}`, username: name });
+    setActionResult({ action: "partner_subordinate_created", username: name });
+    setUsername("");
+    reload();
+  }
+
+  async function disableSubordinate(id: string) {
+    await api.post(`/api/v1/partner/subordinates/${id}/disable`, {});
+    setActionResult({ action: "partner_subordinate_disabled", userId: id });
+    reload();
+  }
+
+  return (
+    <section data-testid="vendor-subordinates-page">
+      <AdminPageHeader
+        title="外包下属账号"
+        description="机构管理员在平台设定的下属上限内自助开通/停用本机构下属账号、查看其状态。下属继承机构被授权范围；机构停用或过期、超上限时开通被拒。仅 partner.subordinate.manage 可改。"
+      />
+      <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="vendor-subordinates-table">
+            <thead><tr><th>账号</th><th>登录名</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} data-testid={`vendor-subordinate-${row.id}`}>
+                  <td>{row.id}</td><td>{row.username}</td><td>{row.status}</td>
+                  <td>{row.status === "active" && (
+                    <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
+                      data-testid={`vendor-subordinate-disable-${row.id}`} onClick={() => void disableSubordinate(row.id)}>停用</PermissionButton>
+                  )}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-inline-form" data-testid="vendor-subordinates-form">
+          <input aria-label="下属登录名" placeholder="下属登录名" value={username}
+            onChange={(event) => setUsername(event.target.value)} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
+            data-testid="vendor-subordinate-add" onClick={() => void addSubordinate()}>开通下属</PermissionButton>
+        </div>
+      </AdminDataState>
+    </section>
+  );
+}
