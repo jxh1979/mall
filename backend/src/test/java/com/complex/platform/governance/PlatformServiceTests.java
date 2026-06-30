@@ -332,6 +332,18 @@ class PlatformServiceTests {
 
 
     @Test
+    void createSpaceTypeUpsertsDictionaryAndEnablesItForSpaceValidation() {
+        SpaceTypeRecord created = service.createSpaceType(new com.complex.platform.governance.dto.SpaceTypeRequest(
+                "st-1", "add", List.of(), "kiosk", "一体机位", 80, "active"));
+        assertThat(created.typeCode()).isEqualTo("kiosk");
+        assertThat(service.listSpaceTypes().items()).extracting(SpaceTypeRecord::typeCode).contains("kiosk", "shop");
+        // 新录入类型立即可用于 createSpace 硬校验。
+        SpaceRecord space = service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
+                "sp-kiosk", "create", List.of(), "prj1", "mch1", null, "K1", "kiosk", null, null, null, "active"));
+        assertThat(space.spaceType()).isEqualTo("kiosk");
+    }
+
+    @Test
     void createSpaceRejectsUnknownSpaceType() {
         // 条目3 硬校验：不在字典内的 space_type → VALIDATION_FAILED。
         assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
@@ -401,9 +413,34 @@ class PlatformServiceTests {
             return new ArrayList<>(spaces.values());
         }
 
+        private final Map<String, SpaceTypeRecord> spaceTypes = seedSpaceTypes();
+
+        private static Map<String, SpaceTypeRecord> seedSpaceTypes() {
+            Map<String, SpaceTypeRecord> m = new LinkedHashMap<>();
+            int sort = 10;
+            for (String code : List.of("building", "floor", "zone", "shop", "public_area", "parking", "booth", "other")) {
+                m.put(code, new SpaceTypeRecord("sptype_" + code, code, code, sort, "active",
+                        java.time.Instant.EPOCH, java.time.Instant.EPOCH));
+                sort += 10;
+            }
+            return m;
+        }
+
         @Override
         public List<String> listActiveSpaceTypeCodes() {
-            return List.of("building", "floor", "zone", "shop", "public_area", "parking", "booth", "other");
+            return spaceTypes.values().stream().filter(t -> "active".equals(t.status()))
+                    .map(SpaceTypeRecord::typeCode).toList();
+        }
+
+        @Override
+        public List<SpaceTypeRecord> listSpaceTypes() {
+            return new ArrayList<>(spaceTypes.values());
+        }
+
+        @Override
+        public SpaceTypeRecord saveSpaceType(SpaceTypeRecord t) {
+            spaceTypes.put(t.typeCode(), t);
+            return t;
         }
 
         @Override

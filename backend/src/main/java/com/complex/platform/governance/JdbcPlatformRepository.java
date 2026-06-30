@@ -213,6 +213,34 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public List<SpaceTypeRecord> listSpaceTypes() {
+        return jdbcTemplate.query("""
+                SELECT id, type_code, type_name, sort_order, status, created_at, updated_at
+                  FROM space_type_dictionary
+                 ORDER BY sort_order, type_code
+                """, (rs, n) -> new SpaceTypeRecord(
+                rs.getString("id"), rs.getString("type_code"), rs.getString("type_name"),
+                rs.getInt("sort_order"), rs.getString("status"),
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()));
+    }
+
+    @Override
+    public SpaceTypeRecord saveSpaceType(SpaceTypeRecord t) {
+        jdbcTemplate.update("""
+                INSERT INTO space_type_dictionary (id, type_code, type_name, sort_order, status, created_at, updated_at)
+                VALUES (:id, :type_code, :type_name, :sort_order, :status, :created_at, :updated_at)
+                ON CONFLICT (type_code) DO UPDATE SET
+                    type_name = EXCLUDED.type_name, sort_order = EXCLUDED.sort_order,
+                    status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", t.id()).addValue("type_code", t.typeCode()).addValue("type_name", t.typeName())
+                .addValue("sort_order", t.sortOrder()).addValue("status", t.status())
+                .addValue("created_at", timestampWithTimeZone(t.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(t.updatedAt())));
+        return t;
+    }
+
+    @Override
     public BusinessEntityBindingRecord saveBusinessEntityBinding(BusinessEntityBindingRecord binding) {
         jdbcTemplate.update("""
                 INSERT INTO business_entity_bindings (

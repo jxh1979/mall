@@ -183,6 +183,36 @@ public class PlatformService {
         return page(records);
     }
 
+    public PageResponse<SpaceTypeRecord> listSpaceTypes() {
+        List<SpaceTypeRecord> records = repository.listSpaceTypes();
+        auditEventService.recordSuccess(
+                "space_type.viewed", "governance.space.view", "space_type", "all", null, null,
+                Map.of("count", records.size()));
+        return page(records);
+    }
+
+    public SpaceTypeRecord createSpaceType(com.complex.platform.governance.dto.SpaceTypeRequest request) {
+        authorizationService.requirePlatformScope();
+        return executeWrite(
+                "createSpaceType",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SpaceTypeRecord.class,
+                "space_type.updated",
+                "space_type.update_failed",
+                "governance.space.manage",
+                "space_type",
+                () -> {
+                    String typeCode = requireText(request == null ? null : request.typeCode(), "type_code");
+                    String typeName = requireText(request == null ? null : request.typeName(), "type_name");
+                    Instant now = Instant.now();
+                    return repository.saveSpaceType(new SpaceTypeRecord(
+                            "sptype_" + typeCode, typeCode, typeName,
+                            request.sortOrder() == null ? 100 : request.sortOrder(),
+                            trimToDefault(request.status(), "active"), now, now));
+                });
+    }
+
     public SpaceRecord createSpace(SpaceRequest request) {
         authorizationService.requirePlatformScope();
         return executeWrite(

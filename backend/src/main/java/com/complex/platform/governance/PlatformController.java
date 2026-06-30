@@ -86,6 +86,19 @@ public class PlatformController {
         return ApiResponse.ok(service.listSpaces());
     }
 
+    @GetMapping("/space-types")
+    public ApiResponse<PageResponse<SpaceTypeRecord>> listSpaceTypes() {
+        authorizationService.requirePermission("governance.space.view");
+        return ApiResponse.ok(service.listSpaceTypes());
+    }
+
+    @PostMapping("/space-types")
+    public ApiResponse<SpaceTypeRecord> createSpaceType(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.SpaceTypeRequest request) {
+        authorizationService.requirePermission("governance.space.manage");
+        return ApiResponse.ok(service.createSpaceType(request));
+    }
+
     @PostMapping("/spaces")
     public ApiResponse<SpaceRecord> createSpace(@RequestBody @jakarta.validation.Valid SpaceRequest request) {
         authorizationService.requirePermission("governance.space.manage");
