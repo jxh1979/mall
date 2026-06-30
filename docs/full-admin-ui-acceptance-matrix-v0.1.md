@@ -71,12 +71,13 @@
 | 范围 | 验收权威文档 | 覆盖 |
 |---|---|---|
 | 客人端（App/小程序） | `customer-app-miniapp-development-design-v0.1.md` §8 验收标准、**§9A 两端一致性/订台定金异常/第三方渠道查询 E2E（G/W/T）**；`v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` | 购票/订台定金/我的订单票权益/积分摘要/验票二维码；储值/付费订阅/签到生日/订卡邀请函见 `member-loyalty-and-stored-value-development-design-v0.1.md` + v099-v124 |
-| 触摸屏一体机（kiosk） | `terminal-page-product-prd-v0.1.md` §4 终端能力矩阵 + 本节一体机专项 G/W/T | 售票型自助购票/取票；非售票型权益领取/订台/吧台买酒/游乐状态/检修记录 |
+| 触摸屏一体机（kiosk） | `terminal-page-product-prd-v0.1.md` §4 终端能力矩阵 + 本节一体机专项 G/W/T | 售票型授权服务人员辅助购票/取票；非售票型权益领取/订台/吧台买酒/游乐状态/检修记录 |
 
 **一体机（kiosk）专项 Given/When/Then（补统一口径）：**
 - Given 非售票型一体机扫客人码，When 展示可领权益，Then 只展示该客人当前可领的赠饮/礼物/积分兑换并回写领取状态，不暴露他人数据。
 - Given 一体机订台/吧台买酒，When 现金或 POS 支付，Then 必须由授权员工记录到订单/账单/日结/对账（一体机不脱离财务闭环）。
-- Given 售票型一体机，When 工作人员尝试代客购票，Then 拒绝（门票仅客人本人自助，见 terminal-prd §98）。
+- Given 售票型一体机，When 未授权工作人员尝试售票，Then 拒绝并留痕。
+- Given 绑定某酒吧门口/前台的售票型一体机，When 授权服务人员辅助购票，Then 只展示并售卖该酒吧单店门票，不展示综合体通票。
 - Given 一体机断网/开关拉取失败，When 资金/核销/库存类写操作，Then 后端 fail-closed 拒绝并留痕（见 operation-traceability §5.6 一体机协调）。
 
 ## 3. 通用 Given/When/Then 验收

@@ -168,7 +168,7 @@
 
 | 需求编号 | 原始口径摘要 | 承接文档 + 章节 | 覆盖状态 | 备注 |
 |---|---|---|---|---|
-| REQ-49 | 一体机触摸屏，可下单；并区分售票型与非售票型，售票型承担官方自助购票/取票/订单查询，非售票型承担订台/吧台买酒/权益领取/游乐状态/检修记录 | unified-standards-baseline D5；terminal-page PRD；android-device-terminal-development-design；ticketing-pass-entitlement-development-design；p0-end-to-end-acceptance-and-edge-cases §2 | 已覆盖 | 终端开关枚举仍为 `kiosk`，用 `kiosk_mode=ticketing/service` 或模块开关区分，不新增第 11 端；售票型必须复用票务价格、库存锁定、聚合支付、出票和防伪二维码 |
+| REQ-49 | 一体机触摸屏，可下单；并区分售票型与非售票型，售票型承担授权服务人员辅助到店购票/取票/订单查询，非售票型承担订台/吧台买酒/权益领取/游乐状态/检修记录 | unified-standards-baseline D5；terminal-page PRD；android-device-terminal-development-design；ticketing-pass-entitlement-development-design；p0-end-to-end-acceptance-and-edge-cases §2 | 已覆盖 | 终端开关枚举仍为 `kiosk`，用 `kiosk_mode=ticketing/service` 或模块开关区分，不新增第 11 端；售票型必须复用票务价格、库存锁定、聚合支付、出票和防伪二维码；绑定酒吧门口/前台时只能售卖本酒吧单店门票 |
 | REQ-50 | 一体机订台也需定金 | business-decision-log §5；bar dev-design §6.3/§13.1 | 已裁决并覆盖（P0） | 同 REQ-25：bar-operations §6.3/§13.1 已裁决订台+定金为 P0，定金优先级冲突已消除 |
 | REQ-51 | 一体机动作记录设备/点位/时间/结果 | operation-traceability PRD §3.3/6.5 | 已覆盖 | — |
 
@@ -308,7 +308,7 @@
 | 2026-06-07 收口 | 改 | REQ-22 | "部分覆盖·缺字段"更新为"已覆盖"，指向 bar dev-design §6.6/§6.16 已落地的按杯字段 | bar 已新增 standard_pour_volume 等字段，矩阵结论过时。依据 finding broken-ref-6 |
 | 2026-06-07 收口 | 改 | REQ-25、REQ-50 | 订台定金覆盖状态由"有待对齐"更新为"已裁决（P0）"，指向 bar-operations §6.3/§13.1 | 本轮 bar 已裁决订台+定金为 P0，矩阵注解滞后。依据 finding newdocs-2 |
 | 2026-06-08 Product Design 复核 | 改 | REQ-05/06/11/25/43/50/55/56/57b/62/64/66/79/82/83/84/92 | 将已修复但状态滞后的需求行更新为已覆盖、已裁决并覆盖或 P1/P2 预留；补 ticketing PRD §6.1 和 product-requirements §12 规则 30 | documentation-product-flow-audit-and-fix-report-20260608：旧审查状态未同步会误导外部智能体 |
-| 2026-06-10 产品审计 V0.6 | 改 | REQ-49 | 补“一体机分售票型/非售票型，售票型承担官方自助购票/取票/查单”的追溯锚点 | 用户确认一体机有售票和不售票两种，售票型需承担售票职责 |
+| 2026-06-10 产品审计 V0.6 | 改 | REQ-49 | 补“一体机分售票型/非售票型，售票型承担授权服务人员辅助购票/取票/查单”的追溯锚点 | 用户确认一体机有售票和不售票两种，售票型需承担售票职责 |
 | 2026-06-10 卡座销售提成 | 增 | REQ-26b | 新增销售人员岗位和卡座提成追溯锚点 | 用户新增卡座销售提成规则 |
 | 2026-06-18 D1 矩阵自洽收口 | 改 | 顶部口径声明；REQ-12/14/35/39/42/46/48/53/55/65/69 及 REQ-06/23/27/28/38/54/56/75/81 状态措辞 | 与 matrix-migration-claims.json 标 absent/DRIFT 矛盾仍写"已覆盖"的行下修为"部分覆盖（设计层覆盖，代码/迁移未落地）"，证据列追加 migration-claims 指针；REQ-12/14 更正为真实表名 customer_points_rules/customer_redemption_catalog_items；统一原"部分覆盖（R5）/未落地（R5）/已覆盖（字段名漂移）"为标准措辞 | 消除主表"已覆盖"与漂移区/claims.json/真实迁移的自相矛盾；承接状态以 claims.json + 真实迁移为准 |
 | 2026-06-18 D3 团购回流三处统一 | 改 | REQ-03、REQ-73；R5 裁决回填第 2 条 | 第三方团购回流优先级与口径统一：凡第三方一律预留接口+后台开关（默认 off）+不阻塞；P0=预留接口/开关/不伪造对账；真实渠道语义解析、external_order_no、双对账实做归 P1（r5-spec-T14） | 与 business-decision-log §2、business-module-mature-system-gap-analysis 三处统一（口径来自 ticketing 设计 R5 业务裁决 verified） |

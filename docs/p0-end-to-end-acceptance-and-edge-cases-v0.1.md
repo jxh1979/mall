@@ -33,15 +33,16 @@ When 员工工作手机或授权核销设备扫码核销
 Then 系统必须在线校验签名、有效期、随机串、票种资格和权益状态  
 And 成功后写入 `verification.succeeded`，失败写入 `verification.failed`。
 
-### AC-TKT-02A 售票型一体机自助购票
+### AC-TKT-02A 售票型一体机授权服务人员辅助购票
 
 Given 售票型一体机已绑定点位、设备编号、`kiosk_mode=ticketing` 且票务模块开关打开  
-When 客人选择票种并完成聚合支付  
+When 授权服务人员为到店客人选择票种并完成支付引导  
 Then 系统必须按平日/周末/节假日基础价及其派生价校验价格  
-And 必须先锁定库存再创建订单和支付二维码  
+And 必须先按一体机绑定点位过滤可售票种，再锁定库存、创建订单和支付二维码  
 And 支付成功后生成票实例、权益实例和防伪二维码  
 And 写入 `kiosk.ticket.order_created`、`payment.gateway_notified`、`ticket.issued`  
-And 非售票型一体机不得出现购票入口。
+And 非售票型一体机不得出现购票入口
+And 绑定某酒吧门口或前台的售票一体机只能售卖该酒吧单店门票，不得售卖综合体通票。
 
 ### AC-TKT-03 退款与冲正
 
@@ -452,7 +453,7 @@ And 租金、物业费和能源费账单必须进入应收应付台账；争议�
 | 验收项 | 高风险闭环 | 必须覆盖的 OpenAPI 路径 / operationId | 验收底线 |
 |---|---|---|---|
 | AC-TKT-02 | 动态二维码核销 | `POST /api/v1/ticketing/verifications/preview` / `previewTicketVerification`；`POST /api/v1/ticketing/verifications` / `createTicketVerification` | 预览和正式核销均校验票、权益、签名、有效期、终端和幂等；失败必须有 `verification.failed` |
-| AC-TKT-02A | 售票型一体机购票 | `GET /api/v1/terminals/kiosks/{device_id}/config` / `getKioskConfig`；`POST /api/v1/ticketing/orders` / `createTicketOrder`；`POST /api/v1/ticketing/orders/{order_id}/pay-intents` / `createTicketOrderPayIntent`；`POST /api/v1/ticketing/orders/{order_id}/issue` / `issueTicket` | 只有 `kiosk_mode=ticketing` 可售票；支付成功后才出票和发权益 |
+| AC-TKT-02A | 售票型一体机辅助购票 | `GET /api/v1/terminals/kiosks/{device_id}/config` / `getKioskConfig`；`POST /api/v1/ticketing/orders` / `createTicketOrder`；`POST /api/v1/ticketing/orders/{order_id}/pay-intents` / `createTicketOrderPayIntent`；`POST /api/v1/ticketing/orders/{order_id}/issue` / `issueTicket` | 只有 `kiosk_mode=ticketing` 且授权服务人员登录后可售票；酒吧门口/前台只售卖本酒吧单店门票；支付成功后才出票和发权益 |
 | AC-TKT-03 | 退款与权益冲正 | `POST /api/v1/ticketing/refunds` / `requestTicketRefund`；`POST /api/v1/ticketing/refunds/{refund_id}/approve` / `approveTicketRefund`；`POST /api/v1/finance/refunds` / `createFinanceRefund` | 已核销权益不得删除，只能退款、撤销、冲正并留痕 |
 | AC-BAR-02 | 卡座免通票入场名额 | `POST /api/v1/bar/reservations/{id}/check-in-guest` / `checkInBarReservationGuest` | 只能进入预定卡座所在酒吧；不得超过人数额度；不得抵扣最低消费 |
 | AC-BAR-04 | 酒吧年龄/人脸核验 | `POST /api/v1/bar/age-verifications` / `createBarAgeVerification` | 第三方或等效设备未通过时不得生产放行；人工复核只能走异常留痕 |

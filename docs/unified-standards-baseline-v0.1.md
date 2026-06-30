@@ -52,7 +52,7 @@
 | `mobile_admin` | 移动管理端 |
 
 - 不得用"员工端"笼统合并工作手机/私人手机；不得漏"移动管理端"。`platform-governance` 验收/页面/字段字典、`java-backend`、`terminal-display-layer` 全部对齐本表。
-- 触摸屏一体机只有一个终端码 `kiosk`，不得新增 `ticket_kiosk` 等第 11 端；售票型/非售票型用 `kiosk_mode=ticketing/service` 或模块开关表达。售票型承担官方自助购票/取票/订单查询，非售票型不显示购票入口。
+- 触摸屏一体机只有一个终端码 `kiosk`，不得新增 `ticket_kiosk` 等第 11 端；售票型/非售票型用 `kiosk_mode=ticketing/service` 或模块开关表达。售票型承担授权服务人员辅助到店购票/取票/订单查询，绑定酒吧门口/前台时只能售卖本酒吧单店门票；非售票型不显示购票入口。
 - OpenAPI、权限矩阵、终端开关、前端路由、Android/一体机客户端必须使用本表 code，不得使用 `admin-web`、`work-phone`、`merchant-web`、`customer-web` 等历史别名。
 - 依据：switch-1/2、govfam-3。
 

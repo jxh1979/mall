@@ -54,7 +54,7 @@
 | 票务订单查看 | `ticket.order.view` | 票务、财务、客服 | 低 | 否 | `ticket_order.viewed` | 隐私字段按权限脱敏 |
 | 退款发起 | `ticket.refund.request` | 客服、票务主管 | 高 | 是 | `ticket_refund.requested` | 不直接改金额 |
 | 退款审批 | `ticket.refund.approve` | 财务主管、运营主管 | 高 | 是 | `ticket_refund.approved` | 与支付通道/财务台账联动 |
-| 票/券/权益核销 | `verification.execute` | 工作手机、授权闸机/核销点设备、票务/酒吧/游乐员工 | 中 | 否 | `verification.succeeded` / `verification.failed` | 必须在线核验动态码；平板不作为门票核销设备；售票型一体机只售票/取票/查单，默认不做核销 |
+| 票/券/权益核销 | `verification.execute` | 工作手机、授权闸机/核销点设备、票务/酒吧/游乐员工 | 中 | 否 | `verification.succeeded` / `verification.failed` | 必须在线核验动态码；平板不作为门票核销设备；售票型一体机只允许授权服务人员辅助售票/取票/查单，默认不做核销 |
 | 核销撤销 | `verification.reverse` | 现场主管 | 高 | 是 | `verification.reversed` | 必须填写原因 |
 | 人工放行 | `verification.manual_override` | 现场主管、总控授权人 | 高 | 是 | `verification.manual_overridden` | 需证据附件 |
 | 酒吧入场年龄核验 | `bar.entry.age_verify` | 酒吧门口员工、现场主管 | 高 | 否 | `bar.age_verification.requested` / `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 酒吧售酒/入场合规前置 |
@@ -114,7 +114,7 @@
 | 一体机心跳 | `terminal.kiosk.heartbeat` | 已绑定一体机 | 中 | 系统准入 | `terminal.kiosk_heartbeat` | 仅设备凭证可调用 |
 | 票务产品查看 | `ticket.product.view` | 票务、运营、财务、客服 | 低 | 否 | `ticket_product.viewed` | 只读 |
 | 票务价格派生规则查看 | `ticket.price_variant.view` | 票务、运营、财务 | 低 | 否 | `ticket_price_variant.viewed` | 只读 |
-| 票务订单创建 | `ticket.order.create` | 客人端、售票型一体机、授权员工 | 中 | 否 | `ticket_order.created` | 必须走价格、库存和支付校验 |
+| 票务订单创建 | `ticket.order.create` | 客人端、售票型一体机授权服务人员、授权员工 | 中 | 否 | `ticket_order.created` | 必须走价格、库存和支付校验；售票一体机必须绑定设备点位并过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票 |
 | 出票 | `ticket.ticket.issue` | 系统、票务主管、售票型一体机 | 高 | 系统准入 | `ticket.issued` | 必须绑定订单和支付状态 |
 | 票码凭证查看 | `ticket.credential.view` | 客人本人、票务/客服授权人 | 中 | 否 | `ticket_credential.refreshed` | 动态码不得长期缓存 |
 | 酒吧桌台/卡座查看 | `bar.table.view` | 酒吧员工、运营主管、平台管理员 | 低 | 否 | `bar.table.viewed` | 按酒吧数据范围过滤 |
@@ -184,7 +184,7 @@
 | 商户门户/商户 App | 授权范围内查看经营、核销、订单、对账 | 不能查看其他商户数据 |
 | 工作手机 | 扫码核销、NFC 外部介质读取、现场证据采集 | 不能维护全局价格、合同、财务规则 |
 | 平板端 | 酒吧点单、开台、出酒、最低消费校验、支付引导 | 不能购票、核销门票、游乐核销或导出敏感数据 |
-| 一体机 | 售票型：游客自助购票/取票/订单查询；非售票型：权益展示/领取、订台、吧台买酒、游乐状态查看和授权状态检查 | 不能访问员工后台；非售票型不得出现购票入口；售票型不得绕过票务价格/库存/支付审批 |
+| 一体机 | 售票型：授权服务人员辅助到店客人购票/取票/订单查询；非售票型：权益展示/领取、订台、吧台买酒、游乐状态查看和授权状态检查 | 不能访问员工后台；非售票型不得出现购票入口；售票型不得绕过票务价格/库存/支付审批，绑定酒吧门口/前台时不得售卖综合体通票 |
 | 小程序/App/Web 游客端 | 购票、会员、订单、二维码展示 | 不能人工修改权益 |
 
 ## 5. 验收标准

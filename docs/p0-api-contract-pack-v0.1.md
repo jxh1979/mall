@@ -507,7 +507,7 @@ P0 不要求在尚未进入编码的 operation 上一次性补满全部业务样
 |---|---|---|
 | 开放平台鉴权 | `OpenAuthTokenRequest` | 第三方能按 app_key、timestamp、nonce、signature 生成最小取 token 请求 |
 | 第三方 Webhook | `Webhook`、`WebhookAccepted` | 供应商回调具备事件号、幂等键、原始摘要、平台接收回执样例 |
-| 客人购票 | `CustomerTicketOrderRequest` | App/小程序/Web/售票型一体机可按同一字段创建票务订单 |
+| 客人购票 | `CustomerTicketOrderRequest` | App/小程序/Web 用于客人自助购票；售票型一体机通过票务侧 staff-token 路径由授权服务人员辅助到店购票 |
 | 核销类动作 | `Verification` | 票务核销、卡座入场、年龄核验、库存追踪扫码复用统一核销请求信封 |
 | 客人订台 | `CustomerBarReservationRequest` | 订台资源、人数、定金和联系方式进入同一请求形态 |
 | 酒吧点单 | `BarOrderRequest` | 卡座、商品、销售归属、服务责任和支付模式可生成 DTO/mock |

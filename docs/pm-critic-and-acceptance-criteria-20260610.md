@@ -365,14 +365,14 @@ recommended_action: use_new_p0_matrices_and_supplier_kit_as_execution_gate
 |---|---|---|---|
 | V6-01 | 部分执行文档残留旧事件名，如 `ticket.verification.*`、`verification.success`、`bar.saved_bottle.picked_up`、`amusement.verification.success` | 开发埋点、测试查询、数据分析和事件中心会按不同名字写入，导致报表空跑或审计漏查 | 已对齐为权威事件：`verification.succeeded/failed/manual_overridden`、`bar.saved_bottle_picked_up`、`amusement.verification_succeeded/failed/overridden` |
 | V6-02 | 后端文档中“原始第三方 payload 脱敏或加密策略待定”仍是开放措辞 | 开发无法判断敏感报文落库策略，生产环境有个人信息和密钥泄露风险 | 已改为确定口径：默认只保存摘要、签名校验、状态码和必要业务键；必要原文字段级脱敏后加密保存，密钥引用走台账、到期提醒和 Runbook |
-| V6-03 | 需求追溯矩阵的一体机条目只写通用自助服务，未把售票型一体机售票职责作为独立锚点 | 外部实施方可能仍误以为一体机不售票或把售票做成第 11 种终端 | 已更新 REQ-49：一体机仍为 `kiosk`，通过 `kiosk_mode=ticketing/service` 区分，售票型承担官方自助购票/取票/查单并复用票务闭环 |
+| V6-03 | 需求追溯矩阵的一体机条目只写通用自助服务，未把售票型一体机售票职责作为独立锚点 | 外部实施方可能仍误以为一体机不售票或把售票做成第 11 种终端 | 已更新 REQ-49：一体机仍为 `kiosk`，通过 `kiosk_mode=ticketing/service` 区分，售票型承担授权服务人员辅助购票/取票/查单并复用票务闭环 |
 
 ### V0.6 Given/When/Then 补充
 
 1. Given 测试人员按事件中心查询票务核销，When 使用标准事件名检索，Then 成功核销必须落在 `verification.succeeded`，失败必须落在 `verification.failed`，不得只写 `ticket.verification.*` 旧名。
 2. Given 酒吧存酒领取完成，When 事件中心记录取酒动作，Then 必须写入 `bar.saved_bottle_picked_up`，并能关联存酒编号、取用量、剩余量和员工。
 3. Given 第三方回调报文含手机号、证件、人脸、Token 或 Secret，When 写入事件或原始报文表，Then 事件 payload 只能保存脱敏摘要和哈希；必要原文必须字段级脱敏后加密保存，并记录密钥引用。
-4. Given 售票型一体机已启用，When 客人自助购票，Then 系统必须复用官方票务价格、库存锁定、聚合支付、出票和防伪二维码能力，不得新增脱离票务主模型的售票链路。
+4. Given 售票型一体机已启用，When 授权服务人员辅助到店客人购票，Then 系统必须复用官方票务价格、库存锁定、聚合支付、出票和防伪二维码能力，并按设备点位过滤可售票种，不得新增脱离票务主模型的售票链路。
 5. Given 供应商尚未提供 SDK/API 文档，When 开发 P0 第三方能力，Then 只能完成统一接口、mock adapter、字段映射占位、Webhook+轮询校验和补偿框架，不得把供应商私有字段写入业务主模型。
 
 ### V0.6 Status

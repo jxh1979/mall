@@ -3660,14 +3660,13 @@
           "customer"
         ],
         "operationId": "createCustomerTicketOrder",
-        "summary": "客人购票下单",
+        "summary": "客人自助购票下单",
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
           "web",
           "miniapp",
-          "app",
-          "kiosk"
+          "app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "customer.ticket_order.created",
@@ -3689,7 +3688,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。"
       }
     },
     "/api/v1/customer/ticket-products": {
@@ -9080,7 +9080,7 @@
           "ticketing"
         ],
         "operationId": "createTicketOrder",
-        "summary": "创建票务订单",
+        "summary": "创建票务订单（含一体机辅助售票）",
         "x-permission": "ticket.order.create",
         "x-data-scope": "project-channel",
         "x-terminal-allowed": [
@@ -9110,7 +9110,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation."
+        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。"
       }
     },
     "/api/v1/ticketing/orders/{order_id}/issue": {
@@ -9119,7 +9119,7 @@
           "ticketing"
         ],
         "operationId": "issueTicket",
-        "summary": "出票",
+        "summary": "出票（含一体机辅助售票）",
         "x-permission": "ticket.ticket.issue",
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
@@ -9163,7 +9163,7 @@
           "ticketing"
         ],
         "operationId": "createTicketOrderPayIntent",
-        "summary": "创建票务支付意图",
+        "summary": "创建票务支付意图（含一体机辅助售票）",
         "x-permission": "finance.payment_intent.create",
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
@@ -29613,7 +29613,7 @@
       },
       "TicketOrderRequest": {
         "type": "object",
-        "description": "Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount; draft rules remain simulation-only.",
+        "description": "Ticket order create request. Published matching dynamic pricing rules may adjust the formal order amount; draft rules remain simulation-only. sales_channel=kiosk 仅表示授权服务人员在售票一体机上辅助到店购票。",
         "additionalProperties": false,
         "required": [
           "ticket_type_id",
@@ -29663,7 +29663,7 @@
           },
           "sales_channel": {
             "type": "string",
-            "description": "销售渠道；用于区分后台、客人端、一体机、渠道或第三方来源。",
+            "description": "销售渠道；用于区分后台、客人端、一体机、渠道或第三方来源。sales_channel=kiosk 时必须绑定售票一体机设备点位并过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票。",
             "enum": [
               "admin",
               "kiosk",
