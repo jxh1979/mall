@@ -84,6 +84,9 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
+  const [paymentChannel, setPaymentChannel] = React.useState("aggregate_pay");
+  const [cashierStaffId, setCashierStaffId] = React.useState("");
+  const [posTransactionNo, setPosTransactionNo] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -141,6 +144,14 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       setFormError(TEXT.billRequired);
       return false;
     }
+    if (paymentChannel === "cash" && !cashierStaffId.trim()) {
+      setFormError("现金结算需填现金收款人，供对账留痕。");
+      return false;
+    }
+    if (paymentChannel === "pos" && !posTransactionNo.trim()) {
+      setFormError("POS 结算需填 POS 流水号，供对账留痕。");
+      return false;
+    }
     return true;
   }
 
@@ -153,6 +164,9 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
     await runOrderAction("bar_bill_settled", () => api.post(`/api/v1/bar/bills/${billId}/settle`, {
       paymentId: "payment-admin-web",
       settlementAmountCent: selectedOrder?.totalAmount ?? 0,
+      paymentChannel,
+      cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
+      posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
       operatorNote: TEXT.settleNote,
     }));
   }
@@ -172,6 +186,21 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong>{selectedOrder?.orderNo ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
         </div>
 
+        <div className="admin-form-grid" data-testid="bar-settle-payment-form">
+          <label>结算方式<select data-testid="bar-settle-channel" value={paymentChannel} onChange={(e) => setPaymentChannel(e.target.value)}>
+            <option value="aggregate_pay">聚合支付</option>
+            <option value="cash">现金</option>
+            <option value="pos">POS 刷卡</option>
+            <option value="bank_transfer">银行转账</option>
+            <option value="other">其他</option>
+          </select></label>
+          {paymentChannel === "cash" ? (
+            <label>现金收款人<input data-testid="bar-settle-cashier" value={cashierStaffId} onChange={(e) => setCashierStaffId(e.target.value)} placeholder="收款员工 ID" /></label>
+          ) : null}
+          {paymentChannel === "pos" ? (
+            <label>POS 流水号<input data-testid="bar-settle-pos-no" value={posTransactionNo} onChange={(e) => setPosTransactionNo(e.target.value)} placeholder="POS 交易流水号" /></label>
+          ) : null}
+        </div>
         <div className="admin-form-row" data-testid="bar-order-actions">
           <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order.create"]} data-testid="bar-order-create-bill" disabled={busyAction !== ""} onClick={() => void createBill()}>{TEXT.createBill}</PermissionButton>
           <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order.create"]} data-testid="bar-order-deliver" disabled={busyAction !== ""} onClick={() => void markDelivered()}>{TEXT.deliver}</PermissionButton>
