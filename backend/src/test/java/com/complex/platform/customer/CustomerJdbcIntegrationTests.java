@@ -141,16 +141,18 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
-    void customersStatusCheckAllowsActiveFrozenClosedAndRejectsOthers() {
-        // 3.5（用户改选 active+frozen+closed）：三态放行、未知状态被库层拒。
+    void customersStatusCheckAllowsFourLifecycleStatesAndRejectsOthers() {
+        // 3.5（用户最终拍板四态）：active/suspended/blacklisted/deregistered 放行、未知状态被库层拒。
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveCustomer(new CustomerRecord(
                 "customer_status_active", "13611110000", "136****0000", "active", null, now, now, now));
         repository.saveCustomer(new CustomerRecord(
-                "customer_status_frozen", "13611110002", "136****0002", "frozen", null, now, now, now));
+                "customer_status_suspended", "13611110002", "136****0002", "suspended", null, now, now, now));
         repository.saveCustomer(new CustomerRecord(
-                "customer_status_closed", "13611110003", "136****0003", "closed", null, now, now, now));
-        // 未知状态仍被 CHECK 拒（放最后：约束违反会中止本 @Transactional 事务，其后不可再查库）。
+                "customer_status_blacklisted", "13611110003", "136****0003", "blacklisted", null, now, now, now));
+        repository.saveCustomer(new CustomerRecord(
+                "customer_status_deregistered", "13611110004", "136****0004", "deregistered", null, now, now, now));
+        // 未知/已废弃状态仍被 CHECK 拒（放最后：约束违反会中止本 @Transactional 事务，其后不可再查库）。
         assertThatThrownBy(() -> repository.saveCustomer(new CustomerRecord(
                 "customer_status_bad", "13611110001", "136****0001", "banned", null, now, now, now)))
                 .isInstanceOf(org.springframework.dao.DataAccessException.class);

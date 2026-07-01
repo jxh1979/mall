@@ -64,6 +64,7 @@ public class CustomerService {
 
     private final java.time.Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public CustomerService(
             CustomerRepository repository,
             CustomerOtpVerifier otpVerifier,
