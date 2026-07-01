@@ -8,11 +8,8 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.GuardedAction;
 import com.complex.platform.inventory.dto.SupplyContractApproveRequest;
 import com.complex.platform.inventory.dto.SupplyContractCreateRequest;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -319,16 +316,7 @@ public class SupplyContractService {
     }
 
     private String slug(String seed) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(
-                            requireText(seed, "idempotency_key").getBytes(StandardCharsets.UTF_8)))
-                    .substring(0, 16);
-        } catch (ApiException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalStateException("slug generation unavailable", exception);
-        }
+        return com.complex.platform.common.Hashing.idempotencyCode(requireText(seed, "idempotency_key"));
     }
 
     private String codeOf(RuntimeException exception) {

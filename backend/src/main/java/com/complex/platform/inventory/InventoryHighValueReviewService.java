@@ -7,10 +7,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.GuardedAction;
 import com.complex.platform.inventory.dto.HighValueReviewDecisionRequest;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -382,16 +379,7 @@ public class InventoryHighValueReviewService {
     }
 
     private String slug(String seed) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(
-                            requireText(seed, "seed").getBytes(StandardCharsets.UTF_8)))
-                    .substring(0, 16);
-        } catch (ApiException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalStateException("slug generation unavailable", exception);
-        }
+        return com.complex.platform.common.Hashing.idempotencyCode(requireText(seed, "seed"));
     }
 
     private String codeOf(RuntimeException exception) {

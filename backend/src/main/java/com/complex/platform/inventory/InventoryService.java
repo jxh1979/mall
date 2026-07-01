@@ -2202,15 +2202,7 @@ public class InventoryService {
     }
 
     private String slug(String seed) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(requireText(seed, "idempotency_key").getBytes(StandardCharsets.UTF_8)))
-                    .substring(0, 16);
-        } catch (ApiException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalStateException("slug generation unavailable", exception);
-        }
+        return com.complex.platform.common.Hashing.idempotencyCode(requireText(seed, "idempotency_key"));
     }
 
     private String codeOf(RuntimeException exception) {

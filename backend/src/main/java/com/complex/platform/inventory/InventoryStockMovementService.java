@@ -8,10 +8,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -670,15 +667,7 @@ final class InventoryStockMovementService {
     }
 
     private String slug(String seed) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(requireText(seed, "idempotency_key").getBytes(StandardCharsets.UTF_8)))
-                    .substring(0, 16);
-        } catch (ApiException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new IllegalStateException("slug generation unavailable", exception);
-        }
+        return com.complex.platform.common.Hashing.idempotencyCode(requireText(seed, "idempotency_key"));
     }
 
     private String codeOf(RuntimeException exception) {
