@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import com.complex.platform.bar.BarReservationRecord;
+import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
 import com.complex.platform.bar.BarTableRecord;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -30,6 +31,23 @@ class CustomerJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private CustomerService customerService;
+
+    @Test
+    void phoneLoginPersistsNonLeakingCustomerIdToRealPostgres() {
+        // 真实后端活证据：新客人经真实 CustomerService.phoneLogin 落真实 Postgres，主键不得内嵌明文手机号。
+        String phone = "13655667788";
+        CustomerLoginResponse response = customerService.phoneLogin(
+                new CustomerPhoneLoginRequest(phone, "000000", "miniapp"));
+
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM customers WHERE id = ?", Integer.class, response.customerId());
+        assertThat(rows).isEqualTo(1);                                      // 确已落真实库
+        assertThat(response.customerId()).doesNotContain(phone);           // 主键不含明文手机号
+        assertThat(response.customerId()).isNotEqualTo("customer_" + phone); // 非旧的可反推方案
+    }
 
     @Test
     void migrationCreatesCustomerTables() {

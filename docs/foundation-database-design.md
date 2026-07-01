@@ -1330,7 +1330,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| id | 游客/会员ID（customer_id 外键指向此） |
+| id | 游客/会员ID（customer_id 外键指向此）。**随机不可反推标识**（如 `customer_`+UUID），严禁由手机号派生，否则从主键即可反推手机号、架空 phone 加密 |
 | project_id | 综合体项目ID（综合体归属，原始需求） |
 | phone | 手机号（**唯一**，脱敏展示，D9 注册必登并短信验证） |
 | phone_hash | 手机号不可逆哈希（用于唯一性校验/查重，不暴露明文） |
@@ -1351,7 +1351,7 @@
 | 已冻结 | frozen |
 | 已注销 | deactivated |
 
-> 隐私口径：`phone` 脱敏展示，唯一性与查重走 `phone_hash`（不可逆）；实名敏感信息不在本表存明文，按合规分类留存（见 6B.4 pii_retention_policies）。
+> 隐私口径：`phone` 脱敏展示，唯一性与查重走 `phone_hash`（不可逆）；实名敏感信息不在本表存明文，按合规分类留存（见 6B.4 pii_retention_policies）。**主键 `id` 与手机号解耦**：新客人 id 用随机不可反推标识生成，绝不内嵌手机号；否则 phone 列的加密+盲索引形同虚设（可从 id 反推明文）。
 
 ### 6B.2 consent_records 同意记录表（critic-1 / compliance-land-1 / C2）
 

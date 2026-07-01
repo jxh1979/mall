@@ -145,6 +145,17 @@ class CustomerServiceTests {
     }
 
     @Test
+    void phoneLoginCustomerIdDoesNotLeakPhone() {
+        String phone = "13800138000";
+        CustomerLoginResponse response = service.phoneLogin(new CustomerPhoneLoginRequest(phone, "000000", "miniapp"));
+
+        // 主键内嵌明文手机号会架空 phone 列的 AES-GCM 加密; id 必须与手机号无关且不可反推.
+        assertThat(response.customerId()).startsWith("customer_");
+        assertThat(response.customerId()).doesNotContain(phone);
+        assertThat(response.customerId()).isNotEqualTo("customer_" + phone);
+    }
+
+    @Test
     void phoneLoginRejectsInvalidSmsCodeWithoutCreatingSession() {
         assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest(
                 "13800138000",

@@ -104,7 +104,8 @@ public class CustomerService {
                             now
                     )))
                     .orElseGet(() -> repository.saveCustomer(new CustomerRecord(
-                            "customer_" + slug(phone),
+                            // PII: 主键不得由手机号派生, 否则从 id 即可反推手机号, 架空 phone 列的 AES-GCM 加密. 用随机不可反推 id.
+                            "customer_" + UUID.randomUUID().toString().replace("-", ""),
                             phone,
                             maskPhone(phone),
                             "active",
