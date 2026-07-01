@@ -62,6 +62,8 @@ public class CustomerService {
     // 扫码点单跨域调入：客人自助下单复用 bar 下单逻辑（merchant/customer 取自会话），见 placeBarScanOrder。
     private final BarOrderService barOrderService;
 
+    private final java.time.Clock clock;
+
     public CustomerService(
             CustomerRepository repository,
             CustomerOtpVerifier otpVerifier,
@@ -73,6 +75,24 @@ public class CustomerService {
             BarRepository barRepository,
             BarOrderService barOrderService
     ) {
+        this(repository, otpVerifier, ticketingService, operations, auditEventService,
+                inventoryService, loyaltyService, barRepository, barOrderService, java.time.Clock.systemUTC());
+    }
+
+    /** 4.3 clock 化：注入 Clock 使可用期等时间比较可测（供单测传 fixed clock）。 */
+    CustomerService(
+            CustomerRepository repository,
+            CustomerOtpVerifier otpVerifier,
+            TicketingService ticketingService,
+            AuditedOperationExecutor operations,
+            AuditEventService auditEventService,
+            InventoryService inventoryService,
+            LoyaltyService loyaltyService,
+            BarRepository barRepository,
+            BarOrderService barOrderService,
+            java.time.Clock clock
+    ) {
+        this.clock = clock;
         this.repository = repository;
         this.otpVerifier = otpVerifier;
         this.ticketingService = ticketingService;
@@ -338,7 +358,7 @@ public class CustomerService {
                 "customer.points_redemption_items_view_failed",
                 "not_applicable",
                 "customer_points_redemption_item",
-                () -> repository.listActiveRedemptionCatalogItems(Instant.now())
+                () -> repository.listActiveRedemptionCatalogItems(clock.instant())
         );
     }
 
