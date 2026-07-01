@@ -14,6 +14,9 @@ spring:
   # 运维须先 ALTER ROLE complex_app PASSWORD '...' 并下发 COMPLEX_DATABASE_APP_PASSWORD。
   # 默认回退到 owner 凭证（未配置 app 专用 env 时行为不变，向后兼容）；
   # 运维配置 COMPLEX_DATABASE_APP_USERNAME/PASSWORD 后即启用受限运行时连接。
+  # 3.4 生产 fail-closed：ProductionDatabaseCredentialGuard（prod profile）强制 app≠owner 且不得为 dev 默认
+  #   （complex/complex_dev_pwd），违反即启动失败；确需以共享 dev 角色跑 prod-profile 测试时用
+  #   complex.database.credential-separation.enforced=false 显式豁免。
   datasource:
     username: ${COMPLEX_DATABASE_APP_USERNAME:${COMPLEX_DATABASE_USERNAME:complex}}
     password: ${COMPLEX_DATABASE_APP_PASSWORD:${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}}

@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex",
         "spring.datasource.username=complex",
         "spring.datasource.password=complex_dev_pwd",
+        "complex.database.credential-separation.enforced=false",
         "complex.auth.production.seed-admin.username=p0_prod_test_admin",
         "complex.auth.production.seed-admin.password=p0_prod_test_password",
         "complex.auth.failed-login.max-attempts=3",
