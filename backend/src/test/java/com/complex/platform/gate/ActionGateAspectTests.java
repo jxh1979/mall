@@ -135,6 +135,28 @@ class ActionGateAspectTests {
         assertThat(target.executed).isFalse();
     }
 
+    @Test
+    void objectIdParamPicksDesignatedArgNotFirstString() {
+        // 4.10：显式 objectIdParam=1 → 用第 2 个 String(billId) 作 objectId，而非首个 String(idempotencyKey)。
+        ExplicitObjectIdTarget target = new ExplicitObjectIdTarget();
+        AdmissionGuard admissionGuard = mock(AdmissionGuard.class);
+        ActionGateAspect aspect = new ActionGateAspect(
+                mock(TerminalSwitchGuard.class), admissionGuard, mock(AuthorizationService.class));
+        AspectJProxyFactory factory = new AspectJProxyFactory(target);
+        factory.addAspect(aspect);
+        ExplicitObjectIdTarget guarded = factory.getProxy();
+
+        guarded.act("idem-key-123", "bill-999");
+        verify(admissionGuard, times(1)).check(eq("bar.bill_waiver"), eq("bar_bill"), eq("bill-999"));
+    }
+
+    static class ExplicitObjectIdTarget {
+        @GuardedAction(admissionAction = "bar.bill_waiver", objectType = "bar_bill", objectIdParam = 1)
+        public String act(String idempotencyKey, String billId) {
+            return billId;
+        }
+    }
+
     static class AdmissionTarget {
         boolean executed = false;
 

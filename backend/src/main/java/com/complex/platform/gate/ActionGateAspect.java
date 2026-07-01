@@ -43,16 +43,24 @@ public class ActionGateAspect {
             terminalSwitchGuard.check(guarded.capability());
         }
         if (!guarded.admissionAction().isEmpty()) {
-            admissionGuard.check(guarded.admissionAction(), guarded.objectType(), resolveObjectId(joinPoint));
+            admissionGuard.check(guarded.admissionAction(), guarded.objectType(), resolveObjectId(joinPoint, guarded));
         }
         if (!guarded.permission().isEmpty()) {
             authorizationService.requirePermission(guarded.permission());
         }
     }
 
-    /** 约定：取第一个 String 入参作为 objectId（多数写接口首参为业务对象 id）；无 String 参 → null。 */
-    private String resolveObjectId(JoinPoint joinPoint) {
-        for (Object arg : joinPoint.getArgs()) {
+    /**
+     * objectId 解析：4.10 起优先用 @GuardedAction.objectIdParam 显式指名的参数下标；
+     * 未指定(-1)则沿用旧启发式（取第一个非空 String 参）；无 String 参 → null。
+     */
+    private String resolveObjectId(JoinPoint joinPoint, GuardedAction guarded) {
+        Object[] args = joinPoint.getArgs();
+        int idx = guarded.objectIdParam();
+        if (idx >= 0) {
+            return idx < args.length && args[idx] instanceof String str && !str.isBlank() ? str : null;
+        }
+        for (Object arg : args) {
             if (arg instanceof String str && !str.isBlank()) {
                 return str;
             }

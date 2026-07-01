@@ -29,4 +29,11 @@ public @interface GuardedAction {
 
     /** T3：准入对象类型（与 supervisor_review_policies.object_type 对应）。 */
     String objectType() default "";
+
+    /**
+     * 4.10：objectId 显式指名——业务对象 id 所在方法参数下标（从 0 起）。
+     * 默认 -1 = 沿用旧启发式（取第一个非空 String 参），保持既有注解零改动兼容；
+     * 首个 String 参非业务对象 id（如 idempotencyKey/note 在前）的方法应显式指定，避免取错。
+     */
+    int objectIdParam() default -1;
 }
