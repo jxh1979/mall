@@ -18,6 +18,12 @@ while read -r k; do
     fi
 done < <(kv_keys_list)
 
+# 破窗总钥匙公钥为「第一次设置必生成/必配置」项：缺失即视为安装未完成（非可选）。
+master_pub="$(grep -E '^COMPLEX_MASTER_AUTHORITY_PUBKEY=' "$TARGET" | head -1 | cut -d= -f2-)"
+if [ -z "$master_pub" ]; then
+    echo "[keyvault] 缺失: COMPLEX_MASTER_AUTHORITY_PUBKEY（破窗总钥匙未生成/未配置——第一次设置必须生成）"; fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "[keyvault] PASS：全部必需密钥齐全且非弱"
 else

@@ -40,6 +40,7 @@ U 盘=母本；备份=离线 U 盘副本（两地）。运行态 `secrets.env` �
 
 ## U 盘破窗登录（slice C：最终验证器）
 一把独立的 Ed25519「总钥匙」，用途=急救/兜底登录：系统刚装好无账号、或管理员被误删/锁死时，凭 U 盘登入并拿最高权限（不依赖 access_users 任何账号）。与 DB/普通管理员密码彻底分离。
+**默认必生成（非可选）**：`generate-keystore.sh` 首装时**无条件生成**总钥匙；`verify-provisioned.sh` 要求运行态存在 `COMPLEX_MASTER_AUTHORITY_PUBKEY`，缺失即判「安装未完成」FAIL——确保第一次设置系统时总钥匙一定被生成并 provision。
 - 私钥 `master_authority.key.enc`（口令加密）只在 U 盘（允许密封离线备份，丢光→只能重装）；公钥 provision 到服务器 env `COMPLEX_MASTER_AUTHORITY_PUBKEY`。
 - 后端默认关（无公钥即禁用）；配公钥后 `POST /api/v1/auth/master/challenge` 发一次性短时效挑战 → `sign-challenge.sh <usb> <challenge>` 用 U 盘私钥签 → `POST /api/v1/auth/master/login {challenge, signature}` 换最高权限会话。
 - 每次破窗登录（成功/失败）全留痕；挑战一次性 + 短时效；错签/过期/重放/未配置全 fail-closed。
