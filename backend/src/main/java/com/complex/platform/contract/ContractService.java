@@ -95,6 +95,17 @@ public class ContractService {
     public ContractRecord createDraft(ContractDraftRequest request) {
         authorizationService.requirePlatformScope();
         ContractDraftRequest actual = requireRequest(request);
+        // 1.5 幂等：带 idempotencyKey 时合同 id 由其确定性派生；重复提交/招商重签命中既有草稿直接返回，不重复建。
+        String idempotencyKey = trimToNull(actual.idempotencyKey());
+        String contractId = idempotencyKey != null
+                ? "ctr_" + deterministicSuffix(idempotencyKey)
+                : "ctr_" + UUID.randomUUID();
+        if (idempotencyKey != null) {
+            ContractRecord existing = repository.findContractById(contractId).orElse(null);
+            if (existing != null) {
+                return existing;
+            }
+        }
         String commissionMode = trimToNull(actual.commissionMode());
         if (commissionMode != null && !COMMISSION_MODES.contains(commissionMode)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "commission_mode is invalid");
@@ -109,7 +120,7 @@ public class ContractService {
             rentTerms.put("businessScope", actual.businessScope().trim());   // 经营范围存 rent_terms；越界 enforcement 属下游(bar/票务查合同范围)
         }
         ContractRecord saved = repository.saveContract(new ContractRecord(
-                "ctr_" + UUID.randomUUID(),
+                contractId,
                 requireText(actual.merchantId(), "merchant_id"),
                 requireText(actual.contractSubjectId(), "contract_subject_id"),
                 trimToNull(actual.operationSubjectId()),
@@ -126,6 +137,17 @@ public class ContractService {
         auditEventService.recordSuccess("contract.drafted", "contract.draft.manage", "contract", saved.id(),
                 null, actual.idempotencyKey(), Map.of("merchant_id", saved.merchantId()));
         return saved;
+    }
+
+    /** 幂等键 → 稳定 id 后缀（sha256 前 48 位 hex，避免长键截断碰撞）。 */
+    private String deterministicSuffix(String idempotencyKey) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(idempotencyKey.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest).substring(0, 48);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     /** 追加合同附件（电子签章扫描件归档），去重合并。 */

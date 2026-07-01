@@ -57,6 +57,26 @@ class ContractServiceTests {
     }
 
     @Test
+    void createDraftIsIdempotentBySameKey() {
+        // 1.5 幂等：同 idempotencyKey 重复提交返回同一草稿、不重复建。
+        ContractRecord first = newDraft();
+        ContractRecord second = newDraft();
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(repo.listContracts()).extracting(ContractRecord::id).containsExactly(first.id());
+    }
+
+    @Test
+    void createDraftDistinctKeysCreateDistinctContracts() {
+        ContractRecord a = newDraft();
+        ContractRecord b = service.createDraft(new ContractDraftRequest("k_draft_2", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
+                "fixed_ratio", "by_area", 500000L, Map.of("breach", "2x"),
+                List.of(Map.of("item", "deposit_offset")), List.of(), null, "餐饮"));
+        assertThat(b.id()).isNotEqualTo(a.id());
+        assertThat(repo.listContracts()).hasSize(2);
+    }
+
+    @Test
     void parallelStages_advanceOnlyWhenStageFullyApprovedThenGmThenPendingEffective() {
         ContractRecord c = newDraft();
         assertThat(c.lifecycleStatus()).isEqualTo("drafting");
