@@ -82,3 +82,5 @@ keyvault:
     # 运行态只读本地、不依赖 U 盘（模型①）。生产必须由 env COMPLEX_KEYVAULT_PII_KEY 注入强随机密钥
     # （>=32 且不含 change-me，否则 prod 启动即 fail-closed）；下方 dev 默认仅供本地/测试，切勿用于生产。
     pii: ${COMPLEX_KEYVAULT_PII_KEY:complex-dev-pii-encryption-key-change-me}
+    # PII 盲索引密钥（HMAC-SHA256，与 pii 加密密钥分离）。生产由 env 注入强随机（>=32 且不含 change-me）。
+    pii-index: ${COMPLEX_KEYVAULT_PII_INDEX_KEY:complex-dev-pii-blind-index-key-change-me}

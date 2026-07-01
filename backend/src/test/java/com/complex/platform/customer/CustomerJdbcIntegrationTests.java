@@ -47,6 +47,33 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
+    void customerPhonePersistedAsCiphertextWithBlindIndexAndPlaintextLookupWorks() {
+        // 1.2 真实后端活证据：手机号密文落库（enc:v1:）、盲索引 64 hex、明文仍可定位、同号唯一冲突落 hash 列。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveCustomer(new CustomerRecord(
+                "customer_pii_live", "13712340001", "137****0001", "active", null, now, now, now));
+
+        // DB 层：phone 是密文信封、不含明文；phone_hash 是 64 位十六进制。
+        String storedPhone = jdbcTemplate.queryForObject(
+                "SELECT phone FROM customers WHERE id = 'customer_pii_live'", String.class);
+        assertThat(storedPhone).startsWith("enc:v1:");
+        assertThat(storedPhone).doesNotContain("13712340001");
+        String storedHash = jdbcTemplate.queryForObject(
+                "SELECT phone_hash FROM customers WHERE id = 'customer_pii_live'", String.class);
+        assertThat(storedHash).matches("[0-9a-f]{64}");
+
+        // 应用层：按明文手机号仍能定位，读回解密为明文。
+        assertThat(repository.findCustomerByPhone("13712340001"))
+                .get().extracting(CustomerRecord::id, CustomerRecord::phone)
+                .containsExactly("customer_pii_live", "13712340001");
+
+        // 唯一性：同号不同 id → 盲索引唯一约束拒（钱/账不会因手机号明文改造而重复建号）。
+        assertThatThrownBy(() -> repository.saveCustomer(new CustomerRecord(
+                "customer_pii_dup", "13712340001", "137****0001", "active", null, now, now, now)))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    }
+
+    @Test
     void pointsAccountBalanceCannotGoNegativeAtDatabaseLevel() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveCustomer(new CustomerRecord(

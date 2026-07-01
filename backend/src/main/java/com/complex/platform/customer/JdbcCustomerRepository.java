@@ -29,10 +29,16 @@ class JdbcCustomerRepository implements CustomerRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final com.complex.platform.common.crypto.PiiCipher piiCipher;
+    private final com.complex.platform.common.crypto.BlindIndex blindIndex;
 
-    JdbcCustomerRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcCustomerRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+            com.complex.platform.common.crypto.PiiCipher piiCipher,
+            com.complex.platform.common.crypto.BlindIndex blindIndex) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.piiCipher = piiCipher;
+        this.blindIndex = blindIndex;
     }
 
     @Override
@@ -40,8 +46,8 @@ class JdbcCustomerRepository implements CustomerRepository {
         return jdbcTemplate.query("""
                 SELECT id, phone, masked_phone, status, birth_date, last_login_at, created_at, updated_at
                   FROM customers
-                 WHERE phone = :phone
-                """, Map.of("phone", phone), this::mapCustomer).stream().findFirst();
+                 WHERE phone_hash = :phone_hash
+                """, Map.of("phone_hash", blindIndex.hash(phone)), this::mapCustomer).stream().findFirst();
     }
 
     @Override
@@ -56,10 +62,11 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public CustomerRecord saveCustomer(CustomerRecord customer) {
         jdbcTemplate.update("""
-                INSERT INTO customers (id, phone, masked_phone, status, birth_date, last_login_at, created_at, updated_at)
-                VALUES (:id, :phone, :masked_phone, :status, :birth_date, :last_login_at, :created_at, :updated_at)
+                INSERT INTO customers (id, phone, phone_hash, masked_phone, status, birth_date, last_login_at, created_at, updated_at)
+                VALUES (:id, :phone, :phone_hash, :masked_phone, :status, :birth_date, :last_login_at, :created_at, :updated_at)
                 ON CONFLICT (id) DO UPDATE SET
                     phone = EXCLUDED.phone,
+                    phone_hash = EXCLUDED.phone_hash,
                     masked_phone = EXCLUDED.masked_phone,
                     status = EXCLUDED.status,
                     birth_date = EXCLUDED.birth_date,
@@ -584,7 +591,8 @@ class JdbcCustomerRepository implements CustomerRepository {
     private MapSqlParameterSource customerParameters(CustomerRecord customer) {
         return new MapSqlParameterSource()
                 .addValue("id", customer.id())
-                .addValue("phone", customer.phone())
+                .addValue("phone", piiCipher.encrypt(customer.phone()))
+                .addValue("phone_hash", blindIndex.hash(customer.phone()))
                 .addValue("masked_phone", customer.maskedPhone())
                 .addValue("status", customer.status())
                 .addValue("birth_date", sqlDate(customer.birthDate()))
@@ -715,7 +723,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     private CustomerRecord mapCustomer(ResultSet resultSet, int rowNumber) throws SQLException {
         return new CustomerRecord(
                 resultSet.getString("id"),
-                resultSet.getString("phone"),
+                piiCipher.decrypt(resultSet.getString("phone")),
                 resultSet.getString("masked_phone"),
                 resultSet.getString("status"),
                 localDate(resultSet, "birth_date"),

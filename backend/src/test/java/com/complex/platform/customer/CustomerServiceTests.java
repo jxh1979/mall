@@ -460,7 +460,7 @@ class CustomerServiceTests {
                 1,
                 "active",
                 Instant.parse("2026-06-01T00:00:00Z"),
-                Instant.parse("2026-07-01T00:00:00Z"),
+                Instant.parse("2027-07-01T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
