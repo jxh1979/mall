@@ -71,6 +71,17 @@ class JdbcLeasingRepository implements LeasingRepository {
     }
 
     @Override
+    public List<LeasingLeadRecord> listLeadsNeedingFollowUp(java.time.Instant cutoff) {
+        return jdbcTemplate.query("""
+                SELECT * FROM leasing_leads
+                 WHERE status NOT IN ('signed', 'lost')
+                   AND COALESCE(last_follow_up_at, created_at) < :cutoff
+                 ORDER BY COALESCE(last_follow_up_at, created_at), id
+                 LIMIT 500
+                """, new MapSqlParameterSource("cutoff", timestampWithTimeZone(cutoff)), this::mapLead);
+    }
+
+    @Override
     public Optional<LeasingLeadRecord> findLeadById(String id) {
         return jdbcTemplate.query("SELECT * FROM leasing_leads WHERE id = :id", Map.of("id", id), this::mapLead)
                 .stream().findFirst();

@@ -10,6 +10,21 @@ public interface LeasingRepository {
 
     List<LeasingLeadRecord> listLeads();
 
+    /**
+     * 3.6 三天未跟进提醒下沉仓储：直接查 due 线索（status 非 signed/lost 且
+     * COALESCE(last_follow_up_at, created_at) < cutoff），避免拉全表内存过滤。
+     * 默认实现内存过滤（供 InMemory 测试双子），Jdbc 覆盖为 SQL WHERE。
+     */
+    default List<LeasingLeadRecord> listLeadsNeedingFollowUp(java.time.Instant cutoff) {
+        return listLeads().stream()
+                .filter(l -> !"signed".equals(l.status()) && !"lost".equals(l.status()))
+                .filter(l -> {
+                    java.time.Instant ref = l.lastFollowUpAt() != null ? l.lastFollowUpAt() : l.createdAt();
+                    return ref != null && ref.isBefore(cutoff);
+                })
+                .toList();
+    }
+
     Optional<LeasingLeadRecord> findLeadById(String id);
 
     LeasingIntentRecord saveIntent(LeasingIntentRecord intent);

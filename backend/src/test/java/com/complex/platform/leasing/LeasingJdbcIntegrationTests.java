@@ -44,6 +44,23 @@ class LeasingJdbcIntegrationTests {
     }
 
     @Test
+    void listLeadsNeedingFollowUpFiltersDueAndExcludesSignedLost() {
+        // 3.6 真实库活证据：SQL WHERE 只返回 due（COALESCE(last_follow_up,created)<cutoff）且非 signed/lost。
+        Instant cutoff = Instant.parse("2026-06-25T00:00:00Z");
+        Instant old = cutoff.minusSeconds(86400);
+        Instant fresh = cutoff.plusSeconds(86400);
+        repository.saveLead(new LeasingLeadRecord("lead_due", "逾期", null, "referral", null, null, null, null, "u",
+                "following_up", null, null, null, old, old));
+        repository.saveLead(new LeasingLeadRecord("lead_signed", "已签", null, "referral", null, null, null, null, "u",
+                "signed", null, null, null, old, old));
+        repository.saveLead(new LeasingLeadRecord("lead_fresh", "刚跟进", null, "referral", null, null, null, null, "u",
+                "following_up", null, fresh, null, old, old));
+        assertThat(repository.listLeadsNeedingFollowUp(cutoff))
+                .extracting(LeasingLeadRecord::id)
+                .contains("lead_due").doesNotContain("lead_signed", "lead_fresh");
+    }
+
+    @Test
     void repositoryPersistsFunnelRoundTripWithJsonb() {
         Instant now = Instant.parse("2026-06-25T00:00:00Z");
         repository.saveLead(new LeasingLeadRecord("lead_jdbc", "张三", "13800000000", "referral", "bar",

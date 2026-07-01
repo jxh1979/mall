@@ -74,10 +74,8 @@ public class LeasingService {
     public PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUp() {
         authorizationService.requirePlatformScope();
         Instant cutoff = Instant.now().minus(FOLLOW_UP_REMINDER_DAYS, ChronoUnit.DAYS);
-        List<LeasingLeadRecord> items = repository.listLeads().stream()
-                .filter(l -> !"signed".equals(l.status()) && !"lost".equals(l.status()))
-                .filter(l -> reference(l) != null && reference(l).isBefore(cutoff))
-                .toList();
+        // 3.6：下沉仓储层 WHERE due，不再拉全表内存过滤。
+        List<LeasingLeadRecord> items = repository.listLeadsNeedingFollowUp(cutoff);
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
