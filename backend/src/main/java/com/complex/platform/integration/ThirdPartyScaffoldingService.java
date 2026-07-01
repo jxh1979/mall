@@ -232,7 +232,27 @@ final class ThirdPartyScaffoldingService {
 
     PageResponse<VideoAnchorRecord> listVideoAnchors(String viewerUserId, String approvalRef) {
         try {
-            List<VideoAnchorRecord> items = repository.listVideoAnchors();
+            // 2.2：视频调阅强制复核——approval_ref 必填，且须对应 approved 主管审批、查看人/对象匹配、未过期，否则 403+失败审计。
+            if (approvalRef == null || approvalRef.isBlank()) {
+                throw ApiException.forbidden("VIDEO_ACCESS_APPROVAL_REQUIRED",
+                        "video access requires an approved approval_ref");
+            }
+            String ref = approvalRef.trim();
+            VideoAccessApprovalRecord approval = repository.findVideoAccessApproval(ref)
+                    .filter(a -> "approved".equals(a.status()))
+                    .orElseThrow(() -> ApiException.forbidden("VIDEO_ACCESS_NOT_APPROVED",
+                            "approval_ref is not an approved video access review"));
+            if (!approval.viewerUserId().equals(viewerUserId)) {
+                throw ApiException.forbidden("VIDEO_ACCESS_VIEWER_MISMATCH",
+                        "approval_ref is not granted to this viewer");
+            }
+            if (approval.validUntil() != null && clock.instant().isAfter(approval.validUntil())) {
+                throw ApiException.forbidden("VIDEO_ACCESS_APPROVAL_EXPIRED", "video access approval has expired");
+            }
+            List<VideoAnchorRecord> all = repository.listVideoAnchors();
+            // 对象匹配：审批限定点位则只返回该点位锚点（NULL=全部点位）。
+            List<VideoAnchorRecord> items = approval.pointId() == null ? all
+                    : all.stream().filter(a -> approval.pointId().equals(a.pointId())).toList();
             // 调阅敏感：逐条写调阅审计（viewer + approval_ref）。
             Instant now = clock.instant();
             for (VideoAnchorRecord anchor : items) {

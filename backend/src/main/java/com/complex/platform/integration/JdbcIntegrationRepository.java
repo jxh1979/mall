@@ -512,6 +512,45 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 .addValue("viewed_at", timestampWithTimeZone(viewedAt)));
     }
 
+    @Override
+    public Optional<VideoAccessApprovalRecord> findVideoAccessApproval(String approvalRef) {
+        return jdbcTemplate.query("""
+                SELECT id, viewer_user_id, point_id, status, approved_by, valid_until, created_at, updated_at
+                  FROM integration_video_access_approvals
+                 WHERE id = :id
+                """, Map.of("id", approvalRef), (rs, n) -> new VideoAccessApprovalRecord(
+                        rs.getString("id"), rs.getString("viewer_user_id"), rs.getString("point_id"),
+                        rs.getString("status"), rs.getString("approved_by"),
+                        com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "valid_until"),
+                        com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "created_at"),
+                        com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "updated_at")))
+                .stream().findFirst();
+    }
+
+    @Override
+    public VideoAccessApprovalRecord saveVideoAccessApproval(VideoAccessApprovalRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO integration_video_access_approvals (
+                    id, viewer_user_id, point_id, status, approved_by, valid_until, created_at, updated_at
+                ) VALUES (
+                    :id, :viewer_user_id, :point_id, :status, :approved_by, :valid_until, :created_at, :updated_at
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    viewer_user_id = EXCLUDED.viewer_user_id, point_id = EXCLUDED.point_id,
+                    status = EXCLUDED.status, approved_by = EXCLUDED.approved_by,
+                    valid_until = EXCLUDED.valid_until, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", record.id())
+                .addValue("viewer_user_id", record.viewerUserId())
+                .addValue("point_id", record.pointId())
+                .addValue("status", record.status())
+                .addValue("approved_by", record.approvedBy())
+                .addValue("valid_until", timestampWithTimeZone(record.validUntil()))
+                .addValue("created_at", timestampWithTimeZone(record.createdAt()))
+                .addValue("updated_at", timestampWithTimeZone(record.updatedAt())));
+        return record;
+    }
+
     private Optional<IntegrationTaskRecord> findTaskById(String tableName, String taskCategory, String id) {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, task_type, business_type, external_business_id,

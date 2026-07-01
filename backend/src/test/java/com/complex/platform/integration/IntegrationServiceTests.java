@@ -967,12 +967,35 @@ class IntegrationServiceTests {
     @Test
     void t14ListVideoAnchorsWritesAccessAudit() {
         service.recordVideoAnchor("point-9", Instant.parse("2026-06-18T11:00:00Z"), "handover-1");
+        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
+                "approval-555", "user-viewer-1", null, "approved", "supervisor-1", null, NOW, NOW));
         var page = service.listVideoAnchors("user-viewer-1", "approval-555");
         assertThat(page.items()).hasSize(1);
         assertThat(repository.videoAccessAudits)
                 .anyMatch(a -> a.contains("user-viewer-1") && a.contains("approval-555"));
         assertThat(auditEventRepository.events)
                 .anyMatch(e -> "integration.video_clip_viewed".equals(e.eventName()));
+    }
+
+    @Test
+    void t14VideoAccessRequiresApprovedApprovalMatchingViewer() {
+        // 2.2：approval_ref 必填→403；非 approved→403；查看人不匹配→403（全部落失败审计）。
+        service.recordVideoAnchor("point-1", Instant.parse("2026-06-18T11:00:00Z"), "h1");
+        assertThatThrownBy(() -> service.listVideoAnchors("viewer-x", null))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code()).isEqualTo("VIDEO_ACCESS_APPROVAL_REQUIRED");
+        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
+                "appr-pending", "viewer-x", null, "pending", null, null, NOW, NOW));
+        assertThatThrownBy(() -> service.listVideoAnchors("viewer-x", "appr-pending"))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code()).isEqualTo("VIDEO_ACCESS_NOT_APPROVED");
+        repository.saveVideoAccessApproval(new VideoAccessApprovalRecord(
+                "appr-other", "viewer-other", null, "approved", "sup", null, NOW, NOW));
+        assertThatThrownBy(() -> service.listVideoAnchors("viewer-x", "appr-other"))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code()).isEqualTo("VIDEO_ACCESS_VIEWER_MISMATCH");
+        assertThat(auditEventRepository.events)
+                .anyMatch(e -> "integration.video_clip_view_failed".equals(e.eventName()));
     }
 
     private static final class InMemoryIntegrationRepository implements IntegrationRepository {
@@ -1180,6 +1203,19 @@ class IntegrationServiceTests {
         @Override
         public void saveVideoAccessAudit(String id, String anchorId, String viewerUserId, String approvalRef, Instant viewedAt) {
             videoAccessAudits.add(id + ":" + anchorId + ":" + viewerUserId + ":" + approvalRef);
+        }
+
+        private final Map<String, VideoAccessApprovalRecord> videoApprovals = new LinkedHashMap<>();
+
+        @Override
+        public Optional<VideoAccessApprovalRecord> findVideoAccessApproval(String approvalRef) {
+            return Optional.ofNullable(videoApprovals.get(approvalRef));
+        }
+
+        @Override
+        public VideoAccessApprovalRecord saveVideoAccessApproval(VideoAccessApprovalRecord record) {
+            videoApprovals.put(record.id(), record);
+            return record;
         }
     }
 
