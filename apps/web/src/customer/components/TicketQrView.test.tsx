@@ -41,7 +41,10 @@ describe("TicketQrView refresh", () => {
       await Promise.resolve();
     });
     expect(getTicketQr).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("qr-token").textContent).toBe("token-0");
+    // 1.7: raw credential token must not be rendered as plaintext in the DOM (only inside the QR image).
+    expect(screen.queryByTestId("qr-token")).toBeNull();
+    expect(document.body.textContent).not.toContain("token-0");
+    expect(screen.getByTestId("qr-refresh-count").textContent).toBe("0");
     expect(screen.getByTestId("qr-code").querySelector("svg")).not.toBeNull();
 
     // 30 秒短窗 -> 推进 30 秒触发自动在线刷新。
@@ -49,6 +52,8 @@ describe("TicketQrView refresh", () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(getTicketQr).toHaveBeenCalledTimes(2);
-    expect(screen.getByTestId("qr-token").textContent).toBe("token-1");
+    expect(screen.queryByTestId("qr-token")).toBeNull();
+    expect(document.body.textContent).not.toContain("token-1");
+    expect(screen.getByTestId("qr-refresh-count").textContent).toBe("1");
   });
 });

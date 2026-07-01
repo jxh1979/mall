@@ -80,19 +80,6 @@ export function TicketQrView({ service, ticketId }: TicketQrViewProps): React.Re
               role="img"
             />
           </div>
-          <div
-            data-testid="qr-token"
-            style={{
-              fontFamily: "monospace",
-              wordBreak: "break-all",
-              background: "#0f172a",
-              color: "#a7f3d0",
-              padding: 16,
-              borderRadius: 8,
-            }}
-          >
-            {credential.credentialToken}
-          </div>
           <Descriptions size="small" column={1} bordered>
             <Descriptions.Item label="票 ID">{credential.ticketId}</Descriptions.Item>
             <Descriptions.Item label="凭证类型">{credential.credentialType}</Descriptions.Item>
