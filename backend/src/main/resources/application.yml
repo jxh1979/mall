@@ -53,6 +53,12 @@ complex:
     name: complex-api
     version: ${COMPLEX_API_VERSION:0.1.0}
     build-time: ${COMPLEX_API_BUILD_TIME:local}
+  auth:
+    master:
+      # U 盘破窗（最终验证器）登录公钥（Ed25519 SPKI base64）。默认空=功能关闭；
+      # 由 U 盘安装期 provision 写入 env COMPLEX_MASTER_AUTHORITY_PUBKEY 后启用。私钥永不落服务器，只在 U 盘。
+      public-key: ${COMPLEX_MASTER_AUTHORITY_PUBKEY:}
+      challenge-ttl: ${COMPLEX_MASTER_CHALLENGE_TTL:PT2M}
 
 finance:
   # 经营日切时点（小时, 0-23），凌晨该点切自然日。财务确认默认 04:00。

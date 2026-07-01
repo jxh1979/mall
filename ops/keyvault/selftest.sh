@@ -23,4 +23,19 @@ while read -r k; do
     grep -q "\"$k\": \"$fp_actual\"" "$TMP/usb/complex-keys/manifest.json" || { echo "FAIL: $k 指纹与 manifest 不一致"; exit 1; }
 done < <(grep -vE '^\s*(#|$)' "$HERE/keys.list")
 
-echo "[keyvault selftest] 生成→provision→校验 往返 OK，密文加密、指纹一致"
+# ── 总钥匙（破窗最终验证器）Ed25519 签验往返：sign-challenge 签名 → openssl 公钥验签。──
+CH="challenge-selftest-0001"
+SIG_B64="$(bash "$HERE/sign-challenge.sh" "$TMP/usb" "$CH")"
+base64 -d "$TMP/usb/complex-keys/master_authority.pub.b64" > "$TMP/pub.der"
+openssl pkey -pubin -inform DER -in "$TMP/pub.der" -out "$TMP/pub.pem" 2>/dev/null
+printf '%s' "$SIG_B64" | base64 -d > "$TMP/sig.bin"
+printf '%s' "$CH" > "$TMP/ch.txt"
+openssl pkeyutl -verify -pubin -inkey "$TMP/pub.pem" -rawin -in "$TMP/ch.txt" -sigfile "$TMP/sig.bin" >/dev/null \
+    || { echo "FAIL: 总钥匙 Ed25519 签验往返"; exit 1; }
+# 反例：改一个字节的挑战必须验签失败。
+printf '%s' "${CH}X" > "$TMP/ch2.txt"
+if openssl pkeyutl -verify -pubin -inkey "$TMP/pub.pem" -rawin -in "$TMP/ch2.txt" -sigfile "$TMP/sig.bin" >/dev/null 2>&1; then
+    echo "FAIL: 篡改挑战竟通过验签"; exit 1
+fi
+
+echo "[keyvault selftest] 生成→provision→校验 往返 OK，密文加密、指纹一致，总钥匙 Ed25519 签验往返 OK"

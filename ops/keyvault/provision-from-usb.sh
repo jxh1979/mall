@@ -17,6 +17,14 @@ printf '%s' "$PASS" | openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass std
     -in "$SRC" -out "$TARGET"
 chmod 600 "$TARGET"
 
+# U 盘破窗公钥（公开信息）→ EnvironmentFile：后端配到公钥即启用破窗登录（默认关）。
+PUB="$USB_DIR/complex-keys/master_authority.pub.b64"
+if [ -f "$PUB" ]; then
+    sed -i '/^COMPLEX_MASTER_AUTHORITY_PUBKEY=/d' "$TARGET"
+    printf 'COMPLEX_MASTER_AUTHORITY_PUBKEY=%s\n' "$(cat "$PUB")" >> "$TARGET"
+    echo "[keyvault] 已写入 U 盘破窗公钥 COMPLEX_MASTER_AUTHORITY_PUBKEY（启用破窗登录）。"
+fi
+
 echo "[keyvault] 已写入 $TARGET (600)。"
 echo "[keyvault] DB 角色密码 / admin 等外部凭证请由 DBA/IT 按实际值追加到该文件（勿随机生成）。"
 echo "[keyvault] 后端 systemd 以 EnvironmentFile=$TARGET 引用后，可拔出 U 盘离线保管。"

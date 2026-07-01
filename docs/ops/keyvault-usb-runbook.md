@@ -38,6 +38,16 @@
 ## 灾备
 U 盘=母本；备份=离线 U 盘副本（两地）。运行态 `secrets.env` 丢失 → 重新 provision 即可。
 
+## U 盘破窗登录（slice C：最终验证器）
+一把独立的 Ed25519「总钥匙」，用途=急救/兜底登录：系统刚装好无账号、或管理员被误删/锁死时，凭 U 盘登入并拿最高权限（不依赖 access_users 任何账号）。与 DB/普通管理员密码彻底分离。
+- 私钥 `master_authority.key.enc`（口令加密）只在 U 盘（允许密封离线备份，丢光→只能重装）；公钥 provision 到服务器 env `COMPLEX_MASTER_AUTHORITY_PUBKEY`。
+- 后端默认关（无公钥即禁用）；配公钥后 `POST /api/v1/auth/master/challenge` 发一次性短时效挑战 → `sign-challenge.sh <usb> <challenge>` 用 U 盘私钥签 → `POST /api/v1/auth/master/login {challenge, signature}` 换最高权限会话。
+- 每次破窗登录（成功/失败）全留痕；挑战一次性 + 短时效；错签/过期/重放/未配置全 fail-closed。
+- 破窗登录步骤：
+  1. `curl -XPOST http://<host>/api/v1/auth/master/challenge` → 取 `challenge`。
+  2. `bash ops/keyvault/sign-challenge.sh /media/usb <challenge>` → 取 base64 签名。
+  3. `curl -XPOST http://<host>/api/v1/auth/master/login -d '{"challenge":"...","signature":"..."}'` → 得 access token（最高权限）。
+
 ## 边界（P0-A：agent 不装系统级配置）
 本目录脚本由 **OPS 人工执行**；仓库内 agent 只产出脚本 + 本 runbook，不自动写 `/etc`、不自动改 systemd。
 

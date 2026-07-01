@@ -13,7 +13,8 @@ mkdir -p "$DEST"
 umask 077
 
 PLAIN="$(mktemp)"
-trap 'rm -f "$PLAIN"' EXIT
+MASTER_PRIV="$(mktemp)"
+trap 'rm -f "$PLAIN" "$MASTER_PRIV"' EXIT
 
 # 每个密钥：32 字节随机 → base64（44 字符，>=32 满足强度），url-safe 替换 / +。
 while read -r k; do
@@ -40,5 +41,11 @@ printf '%s' "$PASS" | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass 
     printf '\n  }\n}\n'
 } > "$DEST/manifest.json"
 
-echo "[keyvault] 已写入 $DEST: keystore.env.enc + manifest.json"
-echo "[keyvault] 请核对后妥善保管 U 盘，并离线复制一份备份（两地保险柜）。"
+# ── U 盘总钥匙（破窗最终验证器）Ed25519 密钥对：私钥口令加密进 U 盘，公钥 SPKI DER base64 供 provision 到服务器。──
+openssl genpkey -algorithm ed25519 -out "$MASTER_PRIV" 2>/dev/null
+printf '%s' "$PASS" | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass stdin \
+    -in "$MASTER_PRIV" -out "$DEST/master_authority.key.enc"
+openssl pkey -in "$MASTER_PRIV" -pubout -outform DER | base64 -w0 > "$DEST/master_authority.pub.b64"
+
+echo "[keyvault] 已写入 $DEST: keystore.env.enc + manifest.json + master_authority.key.enc + master_authority.pub.b64"
+echo "[keyvault] 请核对后妥善保管 U 盘，并离线复制一份备份（两地保险柜）。破窗私钥永不落服务器，只在 U 盘。"
