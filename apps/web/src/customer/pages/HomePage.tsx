@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
 import type { TicketProduct } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -53,7 +54,7 @@ export function HomePage({ service }: { service: CustomerService }): React.React
                 <List.Item.Meta
                   title={
                     <span>
-                      {item.ticketName} <Tag color={item.status === "active" ? "green" : "default"}>{item.status}</Tag>
+                      {item.ticketName} <Tag color={item.status === "active" ? "green" : "default"}>{formatBusinessStatus(item.status)}</Tag>
                     </span>
                   }
                   description={

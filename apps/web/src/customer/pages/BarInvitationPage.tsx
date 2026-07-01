@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
 import type { BarInvitation, BarInvitationMember } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph, Text } = Typography;
 
@@ -121,7 +122,7 @@ export function BarInvitationPage({ service }: { service: CustomerService }): Re
             style={{ marginTop: 16 }}
             status="success"
             title="已确认接受邀请"
-            subTitle={`状态 ${confirmed.status} · 到店扫码即可入场`}
+            subTitle={`状态 ${formatBusinessStatus(confirmed.status)} · 到店扫码即可入场`}
             data-testid="invitation-confirm-result"
           />
         ) : null}

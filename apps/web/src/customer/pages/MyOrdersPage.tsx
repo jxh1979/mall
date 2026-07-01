@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TicketQrView } from "../components/TicketQrView";
 import type { CustomerService } from "../client/customerService";
 import type { TicketOrder } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Text } = Typography;
 
@@ -47,8 +48,8 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
                     <Space>
                       <span>订单 {order.orderNo}</span>
                       <Tag color="blue">{order.salesChannel}</Tag>
-                      <Tag color={order.payStatus === "paid" ? "green" : "orange"}>{order.payStatus}</Tag>
-                      <Tag color={order.issueStatus === "issued" ? "green" : "default"}>{order.issueStatus}</Tag>
+                      <Tag color={order.payStatus === "paid" ? "green" : "orange"}>{formatBusinessStatus(order.payStatus)}</Tag>
+                      <Tag color={order.issueStatus === "issued" ? "green" : "default"}>{formatBusinessStatus(order.issueStatus)}</Tag>
                     </Space>
                   }
                   description={

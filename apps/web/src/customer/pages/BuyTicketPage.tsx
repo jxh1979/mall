@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
 import type { PaymentIntent, TicketOrder, TicketProduct } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph, Text } = Typography;
 
@@ -83,7 +84,7 @@ export function BuyTicketPage({ service }: { service: CustomerService }): React.
             subTitle={`订单号 ${order.orderNo} · 金额 ¥${(order.amountCent / 100).toFixed(2)}`}
           >
             <Space direction="vertical">
-              <Text>支付状态：{order.payStatus}</Text>
+              <Text>支付状态：{formatBusinessStatus(order.payStatus)}</Text>
               {intent ? (
                 <Paragraph type="secondary">
                   已发起聚合支付意图（id={String(intent.id ?? "—")}，status={String(intent.status ?? "pending")}）。

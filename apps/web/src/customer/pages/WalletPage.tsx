@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
 import type { Membership, StoredValueAccount } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph } = Typography;
 
@@ -61,7 +62,7 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
               <Statistic value={account.balanceCent / 100} precision={2} prefix="¥" />
             </Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag color={account.status === "active" ? "green" : "default"}>{account.status}</Tag>
+              <Tag color={account.status === "active" ? "green" : "default"}>{formatBusinessStatus(account.status)}</Tag>
             </Descriptions.Item>
           </Descriptions>
         ) : (
@@ -81,7 +82,7 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
                 <List.Item.Meta
                   title={
                     <span>
-                      会员 {item.planId} <Tag color={item.status === "active" ? "green" : "default"}>{item.status}</Tag>
+                      会员 {item.planId} <Tag color={item.status === "active" ? "green" : "default"}>{formatBusinessStatus(item.status)}</Tag>
                     </span>
                   }
                   description={

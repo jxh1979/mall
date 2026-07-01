@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
 import type { BarReservation, BarReservationOption, PaymentIntent } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph, Text } = Typography;
 
@@ -113,7 +114,7 @@ export function BarReservationPage({ service }: { service: CustomerService }): R
             subTitle={`定金 ¥${(reservation.depositAmountCent / 100).toFixed(2)} · 状态 ${reservation.depositStatus}`}
           >
             <Space direction="vertical">
-              <Text>订台状态：{reservation.status}</Text>
+              <Text>订台状态：{formatBusinessStatus(reservation.status)}</Text>
               {intent ? (
                 <Paragraph type="secondary">
                   已发起定金支付意图（id={String(intent.id ?? "—")}）。真实支付渠道跳转为占位。

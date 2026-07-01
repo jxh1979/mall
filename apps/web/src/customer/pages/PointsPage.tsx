@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { CustomerService } from "../client/customerService";
 import type { CheckInRecord, PointsRedemption, PointsSummary, RedemptionItem } from "../types";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph, Text } = Typography;
 
@@ -146,7 +147,7 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
           renderItem={(record) => (
             <List.Item data-testid={`redemption-record-${record.id}`}>
               <Text>
-                {record.itemName} ×{record.quantity} · 扣 {record.totalPoints} 积分 · {record.status}
+                {record.itemName} ×{record.quantity} · 扣 {record.totalPoints} 积分 · {formatBusinessStatus(record.status)}
               </Text>
             </List.Item>
           )}
