@@ -15,6 +15,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +48,36 @@ class CustomerJdbcIntegrationTests {
         assertThat(rows).isEqualTo(1);                                      // 确已落真实库
         assertThat(response.customerId()).doesNotContain(phone);           // 主键不含明文手机号
         assertThat(response.customerId()).isNotEqualTo("customer_" + phone); // 非旧的可反推方案
+    }
+
+    @Test
+    void v191GuardRekeysLeakingCustomerIdAndCascadesReferences() throws Exception {
+        // 兜底自检活证据：历史遗留 customer_<手机号> 主键，V191 重键为随机不可反推 id 并级联子行。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        String leakingId = "customer_13900001111";
+        repository.saveCustomer(new CustomerRecord(
+                leakingId, "13900001111", "139****1111", "active", null, now, now, now));
+        repository.saveSession(new CustomerSessionRecord(
+                "session_leakguard", leakingId, "cust_leakguard", "miniapp", now, now.plusSeconds(86400), "active"));
+
+        // 执行 V191 迁移 SQL（守卫式，可安全重跑）
+        String sql = new String(new ClassPathResource(
+                "db/migration/V191__customer_id_phone_leak_guard.sql").getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8);
+        jdbcTemplate.execute(sql);
+
+        // 泄露主键已消失
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM customers WHERE id = ?", Integer.class, leakingId)).isZero();
+        // 同一手机号（盲索引）仍可定位，新主键与手机号无关且不可反推
+        String newId = repository.findCustomerByPhone("13900001111").orElseThrow().id();
+        assertThat(newId).startsWith("customer_");
+        assertThat(newId).isNotEqualTo(leakingId);
+        assertThat(newId).doesNotContain("13900001111");
+        // 外键子行（会话）已级联改指到新主键
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT customer_id FROM customer_sessions WHERE id = 'session_leakguard'", String.class))
+                .isEqualTo(newId);
     }
 
     @Test
