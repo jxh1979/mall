@@ -13,7 +13,13 @@ const CustomerApp = React.lazy(() => import("./customer/CustomerApp"));
 function RootApp(): React.ReactElement {
   const { pathname } = window.location;
 
-  if (pathname === "/" || pathname.startsWith("/customer")) {
+  if (
+    pathname === "/" ||
+    pathname.startsWith("/customer") ||
+    pathname.startsWith("/ticketing") ||
+    pathname.startsWith("/bar") ||
+    pathname.startsWith("/amusement")
+  ) {
     return (
       <React.Suspense fallback={<div className="loading-state">加载客人端...</div>}>
         <CustomerApp />

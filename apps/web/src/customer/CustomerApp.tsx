@@ -40,11 +40,19 @@ function loadSession(): CustomerSession | null {
   }
 }
 
+// 3.11 多页入口：/ticketing /bar /amusement 直达对应功能页，而非默认客人首页。
+function initialPageFromPath(): PageKey {
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  if (path.startsWith("/ticketing") || path.startsWith("/amusement")) return "buy";
+  if (path.startsWith("/bar")) return "scan";
+  return "home";
+}
+
 export default function CustomerApp(): React.ReactElement {
   const [session, setSession] = useState<CustomerSession | null>(() => loadSession());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState<PageKey>("home");
+  const [page, setPage] = useState<PageKey>(initialPageFromPath());
 
   const service = useMemo(
     () => (session ? new CustomerService(session.customerToken) : null),
