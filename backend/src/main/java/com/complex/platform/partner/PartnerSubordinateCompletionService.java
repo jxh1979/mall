@@ -42,17 +42,17 @@ public class PartnerSubordinateCompletionService {
                 .orElseThrow(() -> ApiException.notFound("PARTNER_ORG_NOT_FOUND", "partner org not found"));
         String projectId = org.projectId();
 
+        // 3.7：批量化 + 消除重复查询——2 次聚合查询取代此前每下属 3 次查询（含同一下属工单查两遍）。
+        List<PartnerSubordinateRecord> subs = repository.listSubordinates(orgId);
+        List<String> subIds = subs.stream().map(PartnerSubordinateRecord::id).toList();
+        java.util.Map<String, int[]> woCounts = workOrderRepository.countCompletionByAssignees(subIds, projectId);
+        java.util.Map<String, int[]> inspCounts = inspectionRepository.countCompletionByAssignees(subIds, projectId);
         List<PartnerSubordinateCompletionRecord> rows = new ArrayList<>();
-        for (PartnerSubordinateRecord sub : repository.listSubordinates(orgId)) {
-            List<?> workOrders = workOrderRepository.listAssignedTo(sub.id(), projectId);
-            int woTotal = workOrders.size();
-            int woDone = (int) workOrderRepository.listAssignedTo(sub.id(), projectId).stream()
-                    .filter(w -> w.completedAt() != null).count();
-            var inspections = inspectionRepository.listTasksAssignedTo(sub.id(), projectId);
-            int inspTotal = inspections.size();
-            int inspDone = (int) inspections.stream().filter(t -> t.completedAt() != null).count();
+        for (PartnerSubordinateRecord sub : subs) {
+            int[] wo = woCounts.getOrDefault(sub.id(), new int[] {0, 0});
+            int[] insp = inspCounts.getOrDefault(sub.id(), new int[] {0, 0});
             rows.add(new PartnerSubordinateCompletionRecord(
-                    sub.id(), sub.username(), sub.status(), woTotal, woDone, inspTotal, inspDone));
+                    sub.id(), sub.username(), sub.status(), wo[0], wo[1], insp[0], insp[1]));
         }
         return new PageResponse<>(rows, 1, rows.size(), rows.size());
     }

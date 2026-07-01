@@ -42,8 +42,12 @@ class PartnerSubordinateCompletionServiceTests {
                 "sub-1", "worker1", ORG, "outsourced_vendor", "active", Instant.parse("2026-06-30T00:00:00Z"));
         when(repository.listSubordinates(ORG)).thenReturn(List.of(sub));
         // 2 工单（1 完成），1 巡检（0 完成）。
-        when(workOrders.listAssignedTo("sub-1", PROJ)).thenReturn(List.of(wo(true), wo(false)));
-        when(inspections.listTasksAssignedTo("sub-1", PROJ)).thenReturn(List.of(insp(false)));
+        when(workOrders.countCompletionByAssignees(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(PROJ)))
+                .thenReturn(java.util.Map.of("sub-1", new int[] {2, 1}));
+        when(inspections.countCompletionByAssignees(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(PROJ)))
+                .thenReturn(java.util.Map.of("sub-1", new int[] {1, 0}));
 
         var page = service.listMySubordinateCompletion();
         assertThat(page.items()).hasSize(1);

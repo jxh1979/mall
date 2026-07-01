@@ -94,6 +94,24 @@ class JdbcFacilityInspectionRepository implements FacilityInspectionRepository {
     }
 
     @Override
+    public java.util.Map<String, int[]> countCompletionByAssignees(
+            java.util.Collection<String> assigneeIds, String projectId) {
+        java.util.Map<String, int[]> result = new java.util.LinkedHashMap<>();
+        if (assigneeIds == null || assigneeIds.isEmpty()) {
+            return result;
+        }
+        jdbcTemplate.query("""
+                SELECT assignee_id, COUNT(*) AS total, COUNT(completed_at) AS done
+                  FROM facility_inspection_tasks
+                 WHERE assignee_id IN (:ids) AND project_id = :project_id
+                 GROUP BY assignee_id
+                """, new MapSqlParameterSource("ids", assigneeIds).addValue("project_id", projectId),
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> result.put(rs.getString("assignee_id"),
+                        new int[] {rs.getInt("total"), rs.getInt("done")}));
+        return result;
+    }
+
+    @Override
     public List<FacilityInspectionTaskRecord> listTasksAssignedTo(String assigneeId, String projectId) {
         return jdbcTemplate.query("SELECT " + TASK_COLS + """
                  FROM facility_inspection_tasks

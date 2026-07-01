@@ -23,6 +23,24 @@ public interface FacilityInspectionRepository {
 
     List<FacilityInspectionTaskRecord> listTasks();
 
+    /**
+     * 3.7 批量：一组下属在项目下的巡检任务完成统计（assigneeId -> [total, done]）。
+     * 默认逐个查（供 InMemory 测试双子），Jdbc 覆盖为 GROUP BY 单查（消除 N+1）。
+     */
+    default java.util.Map<String, int[]> countCompletionByAssignees(
+            java.util.Collection<String> assigneeIds, String projectId) {
+        java.util.Map<String, int[]> result = new java.util.LinkedHashMap<>();
+        if (assigneeIds == null) {
+            return result;
+        }
+        for (String assigneeId : assigneeIds) {
+            java.util.List<FacilityInspectionTaskRecord> list = listTasksAssignedTo(assigneeId, projectId);
+            int done = (int) list.stream().filter(t -> t.completedAt() != null).count();
+            result.put(assigneeId, new int[] {list.size(), done});
+        }
+        return result;
+    }
+
     default List<FacilityInspectionTaskRecord> listTasksAssignedTo(String assigneeId, String projectId) {
         return listTasks().stream()
                 .filter(record -> Objects.equals(assigneeId, record.assigneeId()))
