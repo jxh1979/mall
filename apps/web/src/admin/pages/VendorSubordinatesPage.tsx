@@ -55,7 +55,9 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
           <table className="admin-table" data-testid="vendor-subordinates-table">
             <thead><tr><th>账号</th><th>登录名</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.length === 0 ? (
+                <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinates-empty">暂无下属账号</td></tr>
+              ) : rows.map((row) => (
                 <tr key={row.id} data-testid={`vendor-subordinate-${row.id}`}>
                   <td>{row.id}</td><td>{row.username}</td><td>{row.status}</td>
                   <td>{row.status === "active" && (
@@ -78,7 +80,9 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
           <table className="admin-table" data-testid="vendor-subordinate-completion-table">
             <thead><tr><th>登录名</th><th>状态</th><th>工单(完成/总)</th><th>巡检(完成/总)</th></tr></thead>
             <tbody>
-              {completion.map((row) => (
+              {completion.length === 0 ? (
+                <tr><td colSpan={4} className="admin-empty" data-testid="vendor-subordinate-completion-empty">暂无数据</td></tr>
+              ) : completion.map((row) => (
                 <tr key={row.subordinateId} data-testid={`vendor-subordinate-completion-${row.subordinateId}`}>
                   <td>{row.username}</td><td>{row.status}</td>
                   <td>{row.workOrderCompleted}/{row.workOrderTotal}</td>
