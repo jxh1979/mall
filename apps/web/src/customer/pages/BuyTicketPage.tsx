@@ -16,7 +16,10 @@ export function BuyTicketPage({ service }: { service: CustomerService }): React.
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    service.listTicketProducts().then((items) => setProducts(items ?? [])).catch(() => undefined);
+    // 3.17：票种加载失败上抛到 error 态，不再静默吞成空下拉。
+    service.listTicketProducts()
+      .then((items) => setProducts(items ?? []))
+      .catch((err) => setError(err instanceof Error ? err.message : "票种加载失败"));
   }, [service]);
 
   const onSubmit = async (values: { ticketTypeId: string; quantity: number; visitDate?: { format: (f: string) => string }; contactPhone?: string }) => {
