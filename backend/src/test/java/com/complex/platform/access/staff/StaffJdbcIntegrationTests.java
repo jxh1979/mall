@@ -111,6 +111,16 @@ class StaffJdbcIntegrationTests {
     }
 
     @Test
+    void bindCredentialRejectsPlaceholderKeystoreValues() {
+        // 1.9：占位设备凭证被拒——须为 Android Keystore 真实公钥/指纹。
+        StaffProfileRecord staff = approvedProfile(null);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.bindCredential(new StaffDeviceBindRequest(
+                        key(), null, staff.id(), "PLACEHOLDER_PUBLIC_KEY", "PLACEHOLDER_FINGERPRINT_HASH")))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.code()).isEqualTo("DEVICE_CREDENTIAL_PLACEHOLDER"));
+    }
+
+    @Test
     void deviceRebindUnbindsOldThenActivatesNewKeepingExactlyOneActive() {
         StaffProfileRecord staff = approvedProfile(null);
 

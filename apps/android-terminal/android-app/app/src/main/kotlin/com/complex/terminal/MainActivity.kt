@@ -29,7 +29,7 @@ import kotlin.concurrent.thread
  *
  * 占位说明：
  *   - 扫码：未接真机摄像头/扫码 SDK，现场以「文本输入 credential」代替（输入框）。
- *   - Keystore：设备公钥/指纹运行时取值未接，UI 层先用占位字符串（见员工设备凭证屏 TODO）。
+ *   - Keystore：设备公钥/指纹取自 AndroidKeyStore（EC P-256，私钥不可导出），见 DeviceKeystore。
  */
 class MainActivity : Activity() {
 
@@ -382,27 +382,25 @@ class MainActivity : Activity() {
   }
 
   // ---------------------------------------------------------------------------
-  // 员工设备凭证（占位）：devicePublicKey / deviceFingerprintHash 运行时应取自
-  // Android Keystore，当前 UI 层用占位字符串。TODO：接入 Keystore 取值。
+  // 员工设备凭证：devicePublicKey / deviceFingerprintHash 取自 AndroidKeyStore
+  // （EC P-256，私钥硬件保护不可导出），见 DeviceKeystore；后端拒 PLACEHOLDER_* 占位。
   // ---------------------------------------------------------------------------
   private fun showStaffDevice() {
     val profileId = editText("员工档案 staff_profile_id")
     val status = statusText(
-      "占位：devicePublicKey / deviceFingerprintHash 应取自 Android Keystore。\n" +
-        "当前用占位值演示绑定凭证调用。TODO：接 Keystore 运行时取值。",
+      "设备公钥/指纹哈希取自 Android Keystore（EC P-256，私钥不可导出），首次绑定自动生成。",
     )
 
-    val bindButton = primaryButton("绑定设备凭证（占位）") {
+    val bindButton = primaryButton("绑定设备凭证") {
       val pid = profileId.text.toString().trim()
       if (pid.isEmpty()) { status.text = "请输入 staff_profile_id"; return@primaryButton }
       status.text = "正在绑定凭证…"
       runBackground(
         action = {
-          // TODO(Keystore): 用 KeyStore 生成/读取真实公钥与指纹哈希替换占位值。
           workflow.bindStaffDeviceCredential(
             staffProfileId = pid,
-            devicePublicKey = "PLACEHOLDER_PUBLIC_KEY",
-            deviceFingerprintHash = "PLACEHOLDER_FINGERPRINT_HASH",
+            devicePublicKey = DeviceKeystore.devicePublicKeyBase64(),
+            deviceFingerprintHash = DeviceKeystore.deviceFingerprintHash(),
           )
         },
         onSuccess = { rec -> status.text = "凭证绑定：${rec.id}（状态 ${rec.bindStatus}）" },
@@ -411,7 +409,7 @@ class MainActivity : Activity() {
     }
 
     setContentView(
-      screen(title = "员工设备凭证（占位）", children = listOf(status, profileId, bindButton, backButton())),
+      screen(title = "员工设备凭证", children = listOf(status, profileId, bindButton, backButton())),
     )
   }
 

@@ -223,6 +223,11 @@ public class StaffService {
                             throw ApiException.badRequest("VALIDATION_FAILED",
                                     "staff_profile_id, device_public_key and device_fingerprint_hash are required");
                         }
+                        // 1.9：拒绝占位设备凭证——必须是 Android Keystore 真实公钥/指纹，不接受 PLACEHOLDER_*。
+                        if (publicKey.startsWith("PLACEHOLDER_") || fingerprint.startsWith("PLACEHOLDER_")) {
+                            throw ApiException.badRequest("DEVICE_CREDENTIAL_PLACEHOLDER",
+                                    "device_public_key/device_fingerprint_hash must be real Keystore values, not placeholders");
+                        }
                         requireProfileInScope(staffId);
                         // 换机识别：已有 active 且指纹不同 → 新凭证 pending_review + supersedes 指向旧 active。
                         Optional<StaffDeviceCredentialRecord> active = repository.findActiveCredential(staffId);
