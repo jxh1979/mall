@@ -123,6 +123,24 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
+    void listPointsAccountCustomerIdsAfterPaginatesByKeyset() {
+        // 3.14 真实库活证据：keyset 分页按 customer_id 游标有序返回下一批。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        String[] cids = {"cust_k_a", "cust_k_b", "cust_k_c"};
+        String[] phones = {"13600000021", "13600000022", "13600000023"};
+        for (int i = 0; i < cids.length; i++) {
+            repository.saveCustomer(new CustomerRecord(cids[i], phones[i], "mask", "active", null, now, now, now));
+            repository.savePoints(new CustomerPointsAccountRecord("pa_" + cids[i], cids[i], 0L, "base", Map.of(),
+                    0L, "active", now, 0L, null, null, 0, now, now));
+        }
+        assertThat(repository.listPointsAccountCustomerIdsAfter(null, 2)).hasSize(2);
+        assertThat(repository.listPointsAccountCustomerIdsAfter(null, 100))
+                .contains("cust_k_a", "cust_k_b", "cust_k_c");
+        assertThat(repository.listPointsAccountCustomerIdsAfter("cust_k_a", 100))
+                .contains("cust_k_b", "cust_k_c").doesNotContain("cust_k_a");
+    }
+
+    @Test
     void customersStatusCheckRejectsUnknownStatus() {
         // 3.5：customers.status CHECK 仅允许 active（用户拍板），未知状态被库层拒。
         Instant now = Instant.parse("2026-06-14T00:00:00Z");

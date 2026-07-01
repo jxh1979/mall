@@ -141,6 +141,18 @@ class JdbcCustomerRepository implements CustomerRepository {
         return jdbcTemplate.query(POINTS_SELECT + " ORDER BY customer_id", this::mapPoints);
     }
 
+    @Override
+    public List<String> listPointsAccountCustomerIdsAfter(String afterCustomerId, int limit) {
+        return jdbcTemplate.query("""
+                SELECT customer_id FROM customer_points_accounts
+                 WHERE (CAST(:after AS VARCHAR) IS NULL OR customer_id > :after)
+                 ORDER BY customer_id
+                 LIMIT :limit
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("after", afterCustomerId).addValue("limit", Math.max(1, limit)),
+                (rs, n) -> rs.getString("customer_id"));
+    }
+
     private static final String POINTS_SELECT = """
             SELECT id, customer_id, balance, level, recent_summary::text AS recent_summary,
                    frozen_points, account_status, level_period_start, keep_threshold_progress,

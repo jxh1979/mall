@@ -30,6 +30,11 @@ public class LoyaltyService {
 
     private static final long BASIS_POINTS_DENOMINATOR = 10_000L;
 
+    private static final int EXPIRE_BATCH_SIZE = 200;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.context.ApplicationContext applicationContext;
+
     private final CustomerRepository repository;
     private final AuditEventService auditEventService;
     private final Clock clock;
@@ -409,15 +414,21 @@ public class LoyaltyService {
         return expireAccount(account, now);
     }
 
-    /** 全量过期清零（定时作业逻辑本体，可单测直调；系统作业不过权限闸）。 */
-    @Transactional
+    /** 3.14 全量过期清零：keyset 分页逐账户小事务（每账户经代理走独立 @Transactional，
+     *  避免一次性大事务长时间持锁全表）。系统作业不过权限闸。可单测直调（无 Spring 上下文时退化为直调）。 */
     public long expirePoints(Instant now) {
+        LoyaltyService self = applicationContext != null
+                ? applicationContext.getBean(LoyaltyService.class) : this;
         long total = 0;
-        for (CustomerPointsAccountRecord account : repository.listAllPointsAccounts()) {
-            CustomerPointsAccountRecord locked = repository.findPointsByCustomerIdForUpdate(account.customerId())
-                    .orElse(account);
-            total += expireAccount(locked, now);
-        }
+        String cursor = null;
+        List<String> page;
+        do {
+            page = repository.listPointsAccountCustomerIdsAfter(cursor, EXPIRE_BATCH_SIZE);
+            for (String customerId : page) {
+                total += self.expirePointsForCustomer(customerId, now);
+                cursor = customerId;
+            }
+        } while (page.size() == EXPIRE_BATCH_SIZE);
         return total;
     }
 

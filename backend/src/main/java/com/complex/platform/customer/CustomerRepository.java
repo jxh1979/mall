@@ -69,6 +69,16 @@ public interface CustomerRepository {
         return List.of();
     }
 
+    /** 3.14 keyset 分页：customer_id > after 的下一批账户 id（过期清零逐批小事务用）。默认走内存过滤。 */
+    default List<String> listPointsAccountCustomerIdsAfter(String afterCustomerId, int limit) {
+        return listAllPointsAccounts().stream()
+                .map(CustomerPointsAccountRecord::customerId)
+                .filter(id -> afterCustomerId == null || id.compareTo(afterCustomerId) > 0)
+                .sorted()
+                .limit(Math.max(1, limit))
+                .toList();
+    }
+
     default CustomerMemberLevelRecord saveMemberLevel(CustomerMemberLevelRecord level) {
         throw new UnsupportedOperationException("saveMemberLevel not supported by this repository");
     }
