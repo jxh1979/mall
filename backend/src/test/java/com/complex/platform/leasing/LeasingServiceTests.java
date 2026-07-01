@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessActor;
@@ -11,6 +12,9 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.contract.ContractRecord;
 import com.complex.platform.contract.ContractService;
+import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.governance.PlatformService;
+import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
@@ -37,13 +41,14 @@ class LeasingServiceTests {
     private final InMemoryLeasingRepository repo = new InMemoryLeasingRepository();
     private final AuthorizationService authz = mock(AuthorizationService.class);
     private final ContractService contractService = mock(ContractService.class);
+    private final PlatformService platformService = mock(PlatformService.class);
     private LeasingService service;
 
     @BeforeEach
     void setUp() {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
-        service = new LeasingService(repo, mock(AuditEventService.class), authz, contractService);
+        service = new LeasingService(repo, mock(AuditEventService.class), authz, contractService, platformService);
     }
 
     @Test
@@ -137,6 +142,37 @@ class LeasingServiceTests {
                 "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k5"));
         assertThat(contract.id()).isEqualTo("ctr_new");
         assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo("signed");
+    }
+
+    @Test
+    void signIntentWithoutMerchantAutoCreatesFormalMerchant() {
+        // 1.4 决策A：merchant_id 空 → 签约自动建正式商户，带入线索联系人/业态、四类主体默认同一公司。
+        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+                "ctr_auto", "mch_auto", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
+                null, null, null, Instant.now(), Instant.now()));
+        when(platformService.createMerchant(any())).thenReturn(new MerchantRecord(
+                "mch_auto", "钱七", "retail", "cs", "cs", "cs", "钱七", null, "钱七", null, null, null,
+                null, null, null, "leasing_auto", "active", Instant.now(), Instant.now()));
+        LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                "钱七", "13800001111", "online_inquiry", "retail", "sp_1", null, null, "k1"));
+        LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), "sp_1", null, Map.of(), "k2"));
+        service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "k4"));
+
+        ContractRecord contract = service.signIntent(intent.id(), new LeasingSignRequest(
+                null, "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k5"));
+        assertThat(contract.id()).isEqualTo("ctr_auto");
+
+        org.mockito.ArgumentCaptor<MerchantProfileRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(MerchantProfileRequest.class);
+        verify(platformService).createMerchant(captor.capture());
+        MerchantProfileRequest req = captor.getValue();
+        assertThat(req.contactName()).isEqualTo("钱七");
+        assertThat(req.contactPhone()).isEqualTo("13800001111");
+        assertThat(req.merchantType()).isEqualTo("retail");
+        assertThat(req.contractEntityId()).isEqualTo("cs");
+        assertThat(req.businessEntityId()).isEqualTo("cs");
+        assertThat(req.settlementEntityId()).isEqualTo("cs");
     }
 
     @Test

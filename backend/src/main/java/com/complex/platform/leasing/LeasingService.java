@@ -7,6 +7,9 @@ import com.complex.platform.contract.ContractRecord;
 import com.complex.platform.contract.ContractService;
 import com.complex.platform.contract.dto.ContractDraftRequest;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.governance.PlatformService;
+import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
 import com.complex.platform.leasing.dto.LeasingFollowUpRequest;
@@ -46,13 +49,16 @@ public class LeasingService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final ContractService contractService;
+    private final PlatformService platformService;
 
     public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
-            AuthorizationService authorizationService, ContractService contractService) {
+            AuthorizationService authorizationService, ContractService contractService,
+            PlatformService platformService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.contractService = contractService;
+        this.platformService = platformService;
     }
 
     // ============ 线索 ============
@@ -194,9 +200,14 @@ public class LeasingService {
         String contractSubjectId = requireText(actual.contractSubjectId(), "contract_subject_id");
         String operationSubjectId = trimToNull(actual.operationSubjectId());
         String settlementSubjectId = trimToNull(actual.settlementSubjectId());
+        // 1.4 决策A：merchant_id 空 → 签约自动建正式商户档案（带入线索/意向信息，四类主体默认同一公司=contractSubjectId）。
+        String merchantId = trimToNull(actual.merchantId());
+        if (merchantId == null) {
+            merchantId = autoCreateMerchantForSign(intent, contractSubjectId);
+        }
         ContractRecord contract = contractService.createDraft(new ContractDraftRequest(
                 "lease-sign-" + intent.id(),
-                requireText(actual.merchantId(), "merchant_id"), contractSubjectId,
+                merchantId, contractSubjectId,
                 operationSubjectId != null ? operationSubjectId : contractSubjectId,
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
                 actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(),
@@ -208,6 +219,31 @@ public class LeasingService {
         auditEventService.recordSuccess("leasing.intent.signed", "leasing.convert", "leasing_intent", intent.id(),
                 null, actual.idempotencyKey(), Map.of("contract_id", contract.id()));
         return contract;
+    }
+
+    /**
+     * 1.4 决策A：签约无既有商户 → 自动建正式商户档案，带入线索联系人/业态/空间/面积（四类主体默认同一公司=contractSubjectId）。
+     * 稳定 idempotency key（按意向）→ 重签命中同一商户、不重复建；租金条款随合同 draft 带入，商户档案后续可完善。
+     */
+    private String autoCreateMerchantForSign(LeasingIntentRecord intent, String contractSubjectId) {
+        LeasingLeadRecord lead = repository.findLeadById(intent.leadId()).orElse(null);
+        String contactName = lead != null ? trimToNull(lead.contactName()) : null;
+        String contactPhone = lead != null ? trimToNull(lead.contactPhone()) : null;
+        String businessType = lead != null ? trimToNull(lead.intendedBusinessType()) : null;
+        String spaceCode = intent.intendedSpaceId() != null ? intent.intendedSpaceId()
+                : (lead != null ? lead.intendedSpaceId() : null);
+        java.math.BigDecimal area = intent.intendedAreaSqm() != null ? intent.intendedAreaSqm()
+                : (lead != null ? lead.intendedAreaSqm() : null);
+        MerchantRecord merchant = platformService.createMerchant(new MerchantProfileRequest(
+                "lease-sign-merchant-" + intent.id(),
+                "auto-created on leasing sign", List.of(),
+                contactName != null ? contactName : ("招商签约商户-" + intent.id()),
+                businessType != null ? businessType : "retail",
+                contractSubjectId, contractSubjectId, contractSubjectId,
+                contactName, contactPhone, contactName,
+                spaceCode, area, area,
+                null, null, null, "leasing_auto", "active"));
+        return merchant.id();
     }
 
     // ============ 品牌库 ============
