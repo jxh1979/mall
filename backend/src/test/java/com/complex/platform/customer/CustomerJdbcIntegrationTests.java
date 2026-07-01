@@ -123,6 +123,17 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
+    void customersStatusCheckRejectsUnknownStatus() {
+        // 3.5：customers.status CHECK 仅允许 active（用户拍板），未知状态被库层拒。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveCustomer(new CustomerRecord(
+                "customer_status_ok", "13611110000", "136****0000", "active", null, now, now, now));
+        assertThatThrownBy(() -> repository.saveCustomer(new CustomerRecord(
+                "customer_status_bad", "13611110001", "136****0001", "banned", null, now, now, now)))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    }
+
+    @Test
     void pointsAccountBalanceCannotGoNegativeAtDatabaseLevel() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveCustomer(new CustomerRecord(
