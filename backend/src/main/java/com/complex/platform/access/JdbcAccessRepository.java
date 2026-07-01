@@ -307,22 +307,55 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public List<RoleRecord> listRoles() {
-        return jdbcTemplate.query("""
+        return attachPermissionCodes(jdbcTemplate.query("""
                 SELECT id, role_name, description, data_scope, status, created_at, organization_id
                   FROM roles
                  ORDER BY role_name
-                """, this::mapRole);
+                """, this::mapRoleShallow));
     }
 
     @Override
     public List<RoleRecord> listRoles(String organizationId) {
         if (organizationId == null) return listRoles();
-        return jdbcTemplate.query("""
+        return attachPermissionCodes(jdbcTemplate.query("""
                 SELECT id, role_name, description, data_scope, status, created_at, organization_id
                   FROM roles
                  WHERE organization_id IS NULL OR organization_id = :organization_id
                  ORDER BY role_name
-                """, Map.of("organization_id", organizationId), this::mapRole);
+                """, Map.of("organization_id", organizationId), this::mapRoleShallow));
+    }
+
+    /** 4.4：列表路径不逐角色查权限（消除 1+N）——先取角色，再一次批量取全部 role_permissions 挂回。 */
+    private List<RoleRecord> attachPermissionCodes(List<RoleRecord> roles) {
+        if (roles.isEmpty()) {
+            return roles;
+        }
+        List<String> ids = roles.stream().map(RoleRecord::id).toList();
+        java.util.Map<String, List<String>> byRole = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT role_id, permission_code
+                  FROM role_permissions
+                 WHERE role_id IN (:ids)
+                 ORDER BY role_id, permission_code
+                """, new MapSqlParameterSource("ids", ids),
+                (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                        byRole.computeIfAbsent(rs.getString("role_id"), k -> new ArrayList<>())
+                                .add(rs.getString("permission_code")));
+        return roles.stream().map(r -> new RoleRecord(
+                r.id(), r.roleName(), r.description(), r.dataScope(), r.status(), r.createdAt(),
+                byRole.getOrDefault(r.id(), List.of()), r.organizationId())).toList();
+    }
+
+    private RoleRecord mapRoleShallow(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new RoleRecord(
+                resultSet.getString("id"),
+                resultSet.getString("role_name"),
+                resultSet.getString("description"),
+                resultSet.getString("data_scope"),
+                resultSet.getString("status"),
+                nullableInstant(resultSet, "created_at"),
+                List.of(),
+                resultSet.getString("organization_id"));
     }
 
     @Override
