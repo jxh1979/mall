@@ -34,6 +34,14 @@ class PartnerServiceTests {
         when(repository.findPartnerOrgIdForUser(ADMIN)).thenReturn(Optional.of(ORG));
     }
 
+    @Test
+    void listPartnerOrgsRejectsNonPlatformScopedCaller() {
+        // 棘轮 F1 external_partner_orgs：机构列表读=平台管理员口径，须过 platform-scope 闸拒绝商户/外包越权读。
+        org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "denied"))
+                .when(authz).requirePlatformScope();
+        assertThatThrownBy(service::listPartnerOrgs).isInstanceOf(ApiException.class);
+    }
+
     private ExternalPartnerOrgRecord org(int max, String status, Instant validUntil) {
         Instant now = Instant.parse("2026-06-30T00:00:00Z");
         return new ExternalPartnerOrgRecord(ORG, null, "维保甲", "facility_maintenance", null, max, validUntil, status, now, now);

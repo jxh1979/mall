@@ -33,6 +33,7 @@ public class PartnerService {
     // ---- 平台管理员：机构 CRUD ----
 
     public PageResponse<ExternalPartnerOrgRecord> listPartnerOrgs() {
+        authorizationService.requirePlatformScope();
         List<ExternalPartnerOrgRecord> rows = repository.listOrgs();
         auditEventService.recordSuccess("partner_org.viewed", "partner.org.view", "partner_org", "all",
                 null, null, Map.of("count", rows.size()));

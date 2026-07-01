@@ -57,6 +57,7 @@ public class LeasingService {
 
     // ============ 线索 ============
     public PageResponse<LeasingLeadRecord> listLeads() {
+        authorizationService.requirePlatformScope();
         List<LeasingLeadRecord> items = repository.listLeads();
         auditEventService.recordSuccess("leasing.lead.viewed", "leasing.lead.manage", "leasing_lead", "all",
                 null, null, Map.of("count", items.size()));
@@ -65,6 +66,7 @@ public class LeasingService {
 
     /** 3 天未跟进的活跃线索（负责人待办提醒）。 */
     public PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUp() {
+        authorizationService.requirePlatformScope();
         Instant cutoff = Instant.now().minus(FOLLOW_UP_REMINDER_DAYS, ChronoUnit.DAYS);
         List<LeasingLeadRecord> items = repository.listLeads().stream()
                 .filter(l -> !"signed".equals(l.status()) && !"lost".equals(l.status()))
@@ -128,6 +130,7 @@ public class LeasingService {
 
     // ============ 意向 ============
     public PageResponse<LeasingIntentRecord> listIntents() {
+        authorizationService.requirePlatformScope();
         List<LeasingIntentRecord> items = repository.listIntents();
         auditEventService.recordSuccess("leasing.intent.viewed", "leasing.intent.manage", "leasing_intent", "all",
                 null, null, Map.of("count", items.size()));
@@ -209,6 +212,7 @@ public class LeasingService {
 
     // ============ 品牌库 ============
     public PageResponse<LeasingBrandRecord> listBrands() {
+        authorizationService.requirePlatformScope();
         List<LeasingBrandRecord> items = repository.listBrands();
         auditEventService.recordSuccess("leasing.brand.viewed", "leasing.brand.manage", "leasing_brand", "all",
                 null, null, Map.of("count", items.size()));
@@ -252,6 +256,7 @@ public class LeasingService {
 
     // ============ 跟进 ============
     public PageResponse<LeasingFollowUpRecord> listFollowUps(String refType, String refId) {
+        authorizationService.requirePlatformScope();
         String type = requireEnum(refType, FOLLOW_UP_REF_TYPES, "ref_type");
         List<LeasingFollowUpRecord> items = repository.listFollowUpsByRef(type, requireText(refId, "ref_id"));
         return new PageResponse<>(items, 1, 500, items.size());

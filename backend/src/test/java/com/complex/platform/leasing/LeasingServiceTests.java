@@ -47,6 +47,19 @@ class LeasingServiceTests {
     }
 
     @Test
+    void listReadsRejectNonPlatformScopedCaller() {
+        // 5 表跨租户读越权防御（棘轮 F1 leasing_leads/brands/follow_ups）：招商读接口必须过 platform-scope 闸，
+        // 拒绝商户/外包越权读；平台管理员不受影响（见 leadFunnel 等既有测试）。
+        org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "denied"))
+                .when(authz).requirePlatformScope();
+        assertThatThrownBy(() -> service.listLeads()).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.listLeadsNeedingFollowUp()).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.listIntents()).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.listBrands()).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.listFollowUps("lead", "lead_x")).isInstanceOf(ApiException.class);
+    }
+
+    @Test
     void leadFunnel_defaultStatusSourceEnumAssignAndReason() {
         LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
                 "张三", "13800000000", "referral", "bar", "sp_1", null, null, "k1"));
