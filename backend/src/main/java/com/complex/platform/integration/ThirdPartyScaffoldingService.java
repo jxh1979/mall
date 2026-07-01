@@ -31,32 +31,45 @@ final class ThirdPartyScaffoldingService {
 
     private static final String VIDEO_VIEW_PERMISSION = "integration.video.view";
 
+    /** webhook/robot 回调签名时间戳容差（与 open 平台一致 5 分钟）。 */
+    private static final long SIGNATURE_TOLERANCE_MILLIS = 300_000;
+
     private final IntegrationRepository repository;
     private final Clock clock;
     private final AuditEventService auditEventService;
     private final TerminalSwitchGuard terminalSwitchGuard;
+    private final OpenPlatformCrypto crypto;
+    private final SecretResolver secretResolver;
 
     ThirdPartyScaffoldingService(
             IntegrationRepository repository,
             Clock clock,
             AuditEventService auditEventService,
-            TerminalSwitchGuard terminalSwitchGuard
+            TerminalSwitchGuard terminalSwitchGuard,
+            OpenPlatformCrypto crypto,
+            SecretResolver secretResolver
     ) {
         this.repository = repository;
         this.clock = clock;
         this.auditEventService = auditEventService;
         this.terminalSwitchGuard = terminalSwitchGuard;
+        this.crypto = crypto;
+        this.secretResolver = secretResolver;
     }
 
-    WebhookAcceptedResponse receiveTypedWebhook(String type, String idempotencyKey, Map<String, Object> payload) {
+    WebhookAcceptedResponse receiveTypedWebhook(String type, String provider, String signature, Long timestamp,
+            String nonce, String idempotencyKey, Map<String, Object> payload) {
         String resolvedType = normalizeType(type);
-        // 编程式门控：capability 随 {type} 动态，@GuardedAction 静态值不适用；开关关 → TERMINAL_DISABLED。
+        // 编程式门控：capability 随 {type} 动态，@GuardedAction 静态值不适用；开关关 → TERMINAL_DISABLED（无集成权限）。
         terminalSwitchGuard.check("integration." + resolvedType + ".sync");
 
         String resolvedIdempotencyKey = idempotencyKey(idempotencyKey, payload);
         requireText(resolvedIdempotencyKey, "idempotency_key");
         try {
             Map<String, Object> safePayload = payload == null ? Map.of() : Map.copyOf(payload);
+            // 2.1：验签+防重放——无签名/签名错→401；nonce 重放→401；未配签名密钥→403（未启用）。
+            verifyWebhookSignature(resolvedType, provider, "integration." + resolvedType + ".webhook",
+                    resolvedIdempotencyKey, safePayload, signature, timestamp, nonce);
             String eventId = eventId(safePayload);
             Instant now = clock.instant();
             // mapping 占位空；processStatus=accepted——只留信封，不伪造对账（厂商映射未配）。
@@ -72,7 +85,7 @@ final class ThirdPartyScaffoldingService {
                     resolvedType,
                     "integration." + resolvedType + ".webhook",
                     resolvedIdempotencyKey,
-                    false,
+                    true,
                     "accepted",
                     safePayload,
                     Map.copyOf(resultJson),
@@ -104,7 +117,8 @@ final class ThirdPartyScaffoldingService {
         }
     }
 
-    RobotTaskEventRecord reportRobotTaskEvent(RobotTaskEventRequest request) {
+    RobotTaskEventRecord reportRobotTaskEvent(RobotTaskEventRequest request, String provider, String signature,
+            Long timestamp, String nonce) {
         // 机器人上报亦受开关门控（被动留痕，但仍属第三方回流通道）。
         terminalSwitchGuard.check("integration.robot.sync");
         try {
@@ -115,6 +129,14 @@ final class ThirdPartyScaffoldingService {
                         "robot event_type must be one of " + ROBOT_EVENT_TYPES);
             }
             Map<String, Object> payload = request.payload() == null ? Map.of() : Map.copyOf(request.payload());
+            // 2.1：验签+防重放——签名覆盖任务引用/事件类型/交接/载荷。
+            Map<String, Object> signable = new LinkedHashMap<>();
+            signable.put("robot_task_ref", request.robotTaskRef());
+            signable.put("event_type", eventType);
+            signable.put("handover_id", request.handoverId());
+            signable.put("payload", payload);
+            verifyWebhookSignature("robot", provider, "integration.robot.report",
+                    request.idempotencyKey(), signable, signature, timestamp, nonce);
             RobotTaskEventRecord record = new RobotTaskEventRecord(
                     "robotevt_" + UUID.randomUUID(),
                     request.robotTaskRef(),
@@ -146,6 +168,42 @@ final class ThirdPartyScaffoldingService {
             );
             throw exception;
         }
+    }
+
+    /**
+     * 2.1 第三方 webhook/robot 回调验签+防重放：无签名/签名错→401；时间戳过期→401；nonce 重放→401；
+     * 未配置签名密钥（未启用该集成）→403。通过后以 type 为命名空间预留 nonce（同一传输再发即拒）。
+     */
+    private void verifyWebhookSignature(String type, String provider, String event, String idempotencyKey,
+            Map<String, Object> payload, String signature, Long timestamp, String nonce) {
+        if (signature == null || signature.isBlank()) {
+            throw ApiException.unauthorized("INTEGRATION_WEBHOOK_SIGNATURE_INVALID",
+                    "integration webhook signature is required");
+        }
+        requireText(provider, "provider");
+        requireText(nonce, "nonce");
+        String resolvedNonce = nonce.trim();
+        long ts = timestamp == null ? 0L : timestamp;
+        if (Math.abs(clock.millis() - ts) > SIGNATURE_TOLERANCE_MILLIS) {
+            throw ApiException.unauthorized("INTEGRATION_WEBHOOK_TIMESTAMP_STALE",
+                    "integration webhook timestamp is stale");
+        }
+        String secret = resolveWebhookSecret(type);
+        String payloadHash = crypto.payloadHash(payload);
+        crypto.verifySignature(signature,
+                crypto.webhookCanonical(type, provider, event, idempotencyKey, payloadHash, ts, resolvedNonce),
+                secret, "INTEGRATION_WEBHOOK_SIGNATURE_INVALID");
+        if (!repository.reserveOpenNonce(type, resolvedNonce, ts)) {
+            throw ApiException.unauthorized("INTEGRATION_WEBHOOK_NONCE_REPLAYED",
+                    "integration webhook nonce was already used");
+        }
+    }
+
+    private String resolveWebhookSecret(String type) {
+        return secretResolver.resolve("integration." + type + ".webhook")
+                .filter(s -> !s.isBlank())
+                .orElseThrow(() -> ApiException.forbidden("INTEGRATION_WEBHOOK_NOT_ENABLED",
+                        "integration webhook is not enabled: no signing secret configured for type " + type));
     }
 
     VideoAnchorRecord recordVideoAnchor(String pointId, Instant eventTime, String businessRef) {

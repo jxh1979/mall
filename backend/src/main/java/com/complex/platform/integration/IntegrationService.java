@@ -60,7 +60,7 @@ public class IntegrationService {
         this.orderSyncService = new IntegrationOrderSyncService(repository, clock, operationSupport);
         this.reconciliationService = new IntegrationReconciliationService(repository, clock, operationSupport);
         this.thirdPartyService = new ThirdPartyScaffoldingService(
-                repository, clock, auditEventService, terminalSwitchGuard);
+                repository, clock, auditEventService, terminalSwitchGuard, openPlatformCrypto, secretResolver);
     }
 
 
@@ -438,14 +438,16 @@ public class IntegrationService {
      */
     // B5 事务边界：信封落库 + 审计留痕为多写路径，在 Spring bean 入口包一个事务（内部骨架 new 出非 bean，注解须在此）。
     @Transactional
-    public WebhookAcceptedResponse receiveTypedWebhook(String type, String idempotencyKey, Map<String, Object> payload) {
-        return thirdPartyService.receiveTypedWebhook(type, idempotencyKey, payload);
+    public WebhookAcceptedResponse receiveTypedWebhook(String type, String provider, String signature,
+            Long timestamp, String nonce, String idempotencyKey, Map<String, Object> payload) {
+        return thirdPartyService.receiveTypedWebhook(type, provider, signature, timestamp, nonce, idempotencyKey, payload);
     }
 
     /** 机器人被动留痕：写 integration_robot_task_events，受 integration.robot.sync 开关门控。 */
     @Transactional
-    public RobotTaskEventRecord reportRobotTaskEvent(RobotTaskEventRequest request) {
-        return thirdPartyService.reportRobotTaskEvent(request);
+    public RobotTaskEventRecord reportRobotTaskEvent(RobotTaskEventRequest request, String provider,
+            String signature, Long timestamp, String nonce) {
+        return thirdPartyService.reportRobotTaskEvent(request, provider, signature, timestamp, nonce);
     }
 
     /** 视频锚点内部记录：业务侧关键动作（核销/交接/异常）调用，clip_index_ref 留空待厂商。 */

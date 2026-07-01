@@ -36,6 +36,7 @@ class IntegrationServiceTests {
     private static final String OPEN_WEBHOOK_SECRET_REF = "config:complex.open-platform.secrets.p0-webhook";
     private static final String OPEN_APP_TEST_SECRET = "test-open-app-secret-from-stub";
     private static final String OPEN_WEBHOOK_TEST_SECRET = "test-webhook-secret-from-stub";
+    private static final String INTEGRATION_WEBHOOK_TEST_SECRET = "test-integration-webhook-secret";
 
     private InMemoryIntegrationRepository repository;
     private InMemoryAuditEventRepository auditEventRepository;
@@ -50,6 +51,8 @@ class IntegrationServiceTests {
         secrets = new LinkedHashMap<>();
         secrets.put(OPEN_APP_SECRET_REF, OPEN_APP_TEST_SECRET);
         secrets.put(OPEN_WEBHOOK_SECRET_REF, OPEN_WEBHOOK_TEST_SECRET);
+        secrets.put("integration.retail_pos.webhook", INTEGRATION_WEBHOOK_TEST_SECRET);
+        secrets.put("integration.robot.webhook", INTEGRATION_WEBHOOK_TEST_SECRET);
         terminalDeviceRepository = org.mockito.Mockito.mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
         // 默认无显式开关行 → T2 语义"默认开启"，放行（第三方默认关闭由迁移种子在真实库表达）。
         org.mockito.Mockito.when(terminalDeviceRepository.resolveEffectiveSwitch(
@@ -814,6 +817,13 @@ class IntegrationServiceTests {
                 + "\nprovider=" + provider + "\ntimestamp=" + timestamp);
     }
 
+    private String integrationWebhookSignature(String type, String provider, String event, String idempotencyKey,
+            Map<String, Object> payload, long timestamp, String nonce) {
+        return hmac(INTEGRATION_WEBHOOK_TEST_SECRET, "endpoint_key=" + type + "\nevent=" + event
+                + "\nidempotency_key=" + idempotencyKey + "\nnonce=" + nonce + "\npayload_hash=" + payloadHash(payload)
+                + "\nprovider=" + provider + "\ntimestamp=" + timestamp);
+    }
+
     private String hmac(String key, String value) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
@@ -856,7 +866,7 @@ class IntegrationServiceTests {
                         "tcs_int_catering_pos_off", "*", "integration.catering_pos.sync", "global", "global",
                         false, "off", NOW, NOW)));
         assertThatThrownBy(() -> service.receiveTypedWebhook(
-                "catering_pos", "idem-catering-1", Map.of("event_id", "ev1")))
+                "catering_pos", null, null, null, null, "idem-catering-1", Map.of("event_id", "ev1")))
                 .isInstanceOf(ApiException.class)
                 .extracting(ex -> ((ApiException) ex).code())
                 .isEqualTo("TERMINAL_DISABLED");
@@ -864,12 +874,18 @@ class IntegrationServiceTests {
 
     @Test
     void t14TypedWebhookAcceptedDoesNotFakeReconciliation() {
+        long ts = NOW.toEpochMilli();
+        String nonce = "nonce-retail-1";
+        Map<String, Object> payload = Map.of("event_id", "evt-retail-1");
+        String sig = integrationWebhookSignature("retail_pos", "prov-retail", "integration.retail_pos.webhook",
+                "idem-retail-1", payload, ts, nonce);
         WebhookAcceptedResponse response = service.receiveTypedWebhook(
-                "retail_pos", "idem-retail-1", Map.of("event_id", "evt-retail-1"));
+                "retail_pos", "prov-retail", sig, ts, nonce, "idem-retail-1", payload);
         assertThat(response.eventId()).isEqualTo("evt-retail-1");
         OpenApiEventRecord stored = repository.events.stream()
                 .filter(e -> "evt-retail-1".equals(e.id())).findFirst().orElseThrow();
         assertThat(stored.eventStatus()).isEqualTo("accepted");
+        assertThat(stored.signatureValid()).isTrue();
         assertThat(stored.resultJson().get("mapped")).isEqualTo(false);
         assertThat(stored.resultJson().get("mapping")).isEqualTo(Map.of());
         assertThat(auditEventRepository.events)
@@ -878,7 +894,7 @@ class IntegrationServiceTests {
 
     @Test
     void t14TypedWebhookRejectsUnsupportedType() {
-        assertThatThrownBy(() -> service.receiveTypedWebhook("unknown_provider", "idem-x", Map.of()))
+        assertThatThrownBy(() -> service.receiveTypedWebhook("unknown_provider", null, null, null, null, "idem-x", Map.of()))
                 .isInstanceOf(ApiException.class)
                 .extracting(ex -> ((ApiException) ex).code())
                 .isEqualTo("THIRD_PARTY_TYPE_UNSUPPORTED");
@@ -886,18 +902,55 @@ class IntegrationServiceTests {
 
     @Test
     void t14RobotReportWritesPassiveTraceWithEventTypeCheck() {
+        long ts = NOW.toEpochMilli();
+        java.util.Map<String, Object> signable = new java.util.LinkedHashMap<>();
+        signable.put("robot_task_ref", "robot-task-1");
+        signable.put("event_type", "delivered");
+        signable.put("handover_id", "handover-9");
+        signable.put("payload", Map.of("floor", "3"));
+        String sig = integrationWebhookSignature("robot", "prov-robot", "integration.robot.report",
+                "idem-robot-1", signable, ts, "nonce-robot-1");
         RobotTaskEventRecord record = service.reportRobotTaskEvent(new RobotTaskEventRequest(
-                "robot-task-1", "delivered", "handover-9", Map.of("floor", "3"), "idem-robot-1"));
+                "robot-task-1", "delivered", "handover-9", Map.of("floor", "3"), "idem-robot-1"),
+                "prov-robot", sig, ts, "nonce-robot-1");
         assertThat(record.eventType()).isEqualTo("delivered");
         assertThat(record.handoverId()).isEqualTo("handover-9");
         assertThat(auditEventRepository.events)
                 .anyMatch(e -> "integration.robot_reported".equals(e.eventName()));
 
+        // 事件类型非法在验签前先拒（任意签名不影响）。
         assertThatThrownBy(() -> service.reportRobotTaskEvent(new RobotTaskEventRequest(
-                "robot-task-2", "exploded", null, Map.of(), "idem-robot-2")))
+                "robot-task-2", "exploded", null, Map.of(), "idem-robot-2"), "prov-robot", "anysig", ts, "nonce-robot-2"))
                 .isInstanceOf(ApiException.class)
                 .extracting(ex -> ((ApiException) ex).code())
                 .isEqualTo("ROBOT_EVENT_TYPE_INVALID");
+    }
+
+    @Test
+    void t14TypedWebhookRejectsMissingSignature() {
+        // 2.1：无签名 → 401（落库前拒，零写入）。
+        assertThatThrownBy(() -> service.receiveTypedWebhook(
+                "retail_pos", "prov", null, NOW.toEpochMilli(), "nonce-nosig", "idem-nosig", Map.of("event_id", "e")))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code())
+                .isEqualTo("INTEGRATION_WEBHOOK_SIGNATURE_INVALID");
+    }
+
+    @Test
+    void t14TypedWebhookRejectsReplayedNonce() {
+        // 2.1：同 nonce 原报文重放 → 401（换 idempotency_key 仍拒）。
+        long ts = NOW.toEpochMilli();
+        Map<String, Object> payload = Map.of("event_id", "evt-replay");
+        String sig = integrationWebhookSignature("retail_pos", "prov", "integration.retail_pos.webhook",
+                "idem-replay-1", payload, ts, "nonce-replay");
+        service.receiveTypedWebhook("retail_pos", "prov", sig, ts, "nonce-replay", "idem-replay-1", payload);
+        String sig2 = integrationWebhookSignature("retail_pos", "prov", "integration.retail_pos.webhook",
+                "idem-replay-2", payload, ts, "nonce-replay");
+        assertThatThrownBy(() -> service.receiveTypedWebhook(
+                "retail_pos", "prov", sig2, ts, "nonce-replay", "idem-replay-2", payload))
+                .isInstanceOf(ApiException.class)
+                .extracting(ex -> ((ApiException) ex).code())
+                .isEqualTo("INTEGRATION_WEBHOOK_NONCE_REPLAYED");
     }
 
     @Test

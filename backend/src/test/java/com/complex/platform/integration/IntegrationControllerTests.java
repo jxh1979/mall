@@ -123,9 +123,9 @@ class IntegrationControllerTests {
 
     @Test
     void t14TypedWebhookAndRobotReportDelegateToService() throws Exception {
-        when(service.receiveTypedWebhook(eq("catering_pos"), anyString(), any()))
+        when(service.receiveTypedWebhook(eq("catering_pos"), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new WebhookAcceptedResponse("evt-1", false));
-        when(service.reportRobotTaskEvent(any(RobotTaskEventRequest.class)))
+        when(service.reportRobotTaskEvent(any(RobotTaskEventRequest.class), any(), any(), any(), any()))
                 .thenReturn(new RobotTaskEventRecord("robotevt-1", "task-1", "delivered", "handover-1",
                         Map.of(), Instant.parse("2026-06-18T10:00:00Z")));
         mockMvc.perform(post("/api/v1/integration/catering_pos/webhook")
@@ -141,8 +141,8 @@ class IntegrationControllerTests {
                         .content("{\"robotTaskRef\":\"task-1\",\"eventType\":\"delivered\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("OK"));
-        verify(service).receiveTypedWebhook(eq("catering_pos"), anyString(), any());
-        verify(service).reportRobotTaskEvent(any(RobotTaskEventRequest.class));
+        verify(service).receiveTypedWebhook(eq("catering_pos"), any(), any(), any(), any(), any(), any());
+        verify(service).reportRobotTaskEvent(any(RobotTaskEventRequest.class), any(), any(), any(), any());
     }
 
     @Test

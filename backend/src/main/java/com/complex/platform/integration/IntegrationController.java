@@ -217,17 +217,27 @@ public class IntegrationController {
     @PostMapping("/{type}/webhook")
     public ApiResponse<WebhookAcceptedResponse> receiveTypedWebhook(
             @PathVariable String type,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Provider", required = false) String provider,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Signature", required = false) String signature,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Timestamp", required = false) Long timestamp,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Nonce", required = false) String nonce,
             @org.springframework.web.bind.annotation.RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody(required = false) @jakarta.validation.Valid java.util.Map<String, Object> payload
     ) {
-        // 鉴权上下文 = webhook-signature（供应商回调）；门控在 service 内编程式调用 TerminalSwitchGuard。
-        return ApiResponse.ok(service.receiveTypedWebhook(type, idempotencyKey, payload));
+        // 鉴权上下文 = webhook-signature（供应商回调，签名+nonce 防重放）；开关门控在 service 内。
+        return ApiResponse.ok(service.receiveTypedWebhook(type, provider, signature, timestamp, nonce, idempotencyKey, payload));
     }
 
     @PostMapping("/robot/report")
-    public ApiResponse<RobotTaskEventRecord> reportRobotTaskEvent(@RequestBody @jakarta.validation.Valid RobotTaskEventRequest request) {
-        // 鉴权上下文 = webhook-signature（机器人回调）；门控在 service 内编程式调用 TerminalSwitchGuard。
-        return ApiResponse.ok(service.reportRobotTaskEvent(request));
+    public ApiResponse<RobotTaskEventRecord> reportRobotTaskEvent(
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Provider", required = false) String provider,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Signature", required = false) String signature,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Timestamp", required = false) Long timestamp,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Nonce", required = false) String nonce,
+            @RequestBody @jakarta.validation.Valid RobotTaskEventRequest request
+    ) {
+        // 鉴权上下文 = webhook-signature（机器人回调，签名+nonce 防重放）；开关门控在 service 内。
+        return ApiResponse.ok(service.reportRobotTaskEvent(request, provider, signature, timestamp, nonce));
     }
 
     @GetMapping("/video-anchors")
