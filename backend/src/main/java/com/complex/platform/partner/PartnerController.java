@@ -19,10 +19,13 @@ public class PartnerController {
 
     private final PartnerService service;
     private final AuthorizationService authorizationService;
+    private final PartnerSubordinateCompletionService completionService;
 
-    public PartnerController(PartnerService service, AuthorizationService authorizationService) {
+    public PartnerController(PartnerService service, AuthorizationService authorizationService,
+            PartnerSubordinateCompletionService completionService) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.completionService = completionService;
     }
 
     @GetMapping("/orgs")
@@ -42,6 +45,13 @@ public class PartnerController {
     public ApiResponse<PageResponse<PartnerSubordinateRecord>> listSubordinates() {
         authorizationService.requirePermission("partner.subordinate.view");
         return ApiResponse.ok(service.listMySubordinates());
+    }
+
+    /** 机构查看本机构下属工作完成情况（治理 PRD §4，用户 2026-07 拍板要建）。 */
+    @GetMapping("/subordinates/completion")
+    public ApiResponse<PageResponse<PartnerSubordinateCompletionRecord>> listSubordinateCompletion() {
+        authorizationService.requirePermission("partner.subordinate.view");
+        return ApiResponse.ok(completionService.listMySubordinateCompletion());
     }
 
     @PostMapping("/subordinates")

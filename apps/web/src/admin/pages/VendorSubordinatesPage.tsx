@@ -6,6 +6,7 @@ import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 
 type SubordinateRow = { id: string; username: string; partnerOrgId: string; accountType: string; status: string };
+type CompletionRow = { subordinateId: string; username: string; status: string; workOrderTotal: number; workOrderCompleted: number; inspectionTotal: number; inspectionCompleted: number };
 
 const MANAGE = ["partner.subordinate.manage"];
 
@@ -15,12 +16,15 @@ const MANAGE = ["partner.subordinate.manage"];
  */
 export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<SubordinateRow[]>([]);
+  const [completion, setCompletion] = React.useState<CompletionRow[]>([]);
   const [username, setUsername] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
       const items = await api.get<SubordinateRow[]>("/api/v1/partner/subordinates");
       setRows(items ?? []);
+      const done = await api.get<CompletionRow[]>("/api/v1/partner/subordinates/completion");
+      setCompletion(done ?? []);
     },
     { onError: setGlobalError, fallbackMessage: "下属账号读取失败" },
   );
@@ -68,6 +72,21 @@ export function VendorSubordinatesPage({ api, setActionResult, setGlobalError, e
             onChange={(event) => setUsername(event.target.value)} />
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
             data-testid="vendor-subordinate-add" onClick={() => void addSubordinate()}>开通下属</PermissionButton>
+        </div>
+        <h3>下属工作完成情况</h3>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="vendor-subordinate-completion-table">
+            <thead><tr><th>登录名</th><th>状态</th><th>工单(完成/总)</th><th>巡检(完成/总)</th></tr></thead>
+            <tbody>
+              {completion.map((row) => (
+                <tr key={row.subordinateId} data-testid={`vendor-subordinate-completion-${row.subordinateId}`}>
+                  <td>{row.username}</td><td>{row.status}</td>
+                  <td>{row.workOrderCompleted}/{row.workOrderTotal}</td>
+                  <td>{row.inspectionCompleted}/{row.inspectionTotal}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </AdminDataState>
     </section>
