@@ -114,16 +114,20 @@ public class CustomerService {
             otpVerifier.verify(phone, smsCode, actual.scene());
             Instant now = Instant.now();
             CustomerRecord customer = repository.findCustomerByPhone(phone)
-                    .map(existing -> repository.saveCustomer(new CustomerRecord(
-                            existing.id(),
-                            existing.phone(),
-                            existing.maskedPhone(),
-                            "active",
-                            existing.birthDate(),
-                            now,
-                            existing.createdAt(),
-                            now
-                    )))
+                    .map(existing -> {
+                        // V194 需求：登录须先过账号状态闸——黑名单/注销/未到期封禁拒登录；封禁到期则自动恢复。
+                        CustomerRecord usable = enforceUsableAccount(existing, clock.instant());
+                        return repository.saveCustomer(new CustomerRecord(
+                                usable.id(),
+                                usable.phone(),
+                                usable.maskedPhone(),
+                                "active",
+                                usable.birthDate(),
+                                now,
+                                usable.createdAt(),
+                                now
+                        ));
+                    })
                     .orElseGet(() -> repository.saveCustomer(new CustomerRecord(
                             // PII: 主键不得由手机号派生, 否则从 id 即可反推手机号, 架空 phone 列的 AES-GCM 加密. 用随机不可反推 id.
                             "customer_" + UUID.randomUUID().toString().replace("-", ""),
@@ -793,8 +797,74 @@ public class CustomerService {
         if (!"active".equals(session.status()) || session.expiresAt().isBefore(Instant.now())) {
             throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "customer token is expired");
         }
-        return repository.findCustomerById(session.customerId())
+        CustomerRecord customer = repository.findCustomerById(session.customerId())
                 .orElseThrow(() -> ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "customer is unavailable"));
+        // V194 需求：所有客人动作前过账号状态闸（黑名单/注销/未到期封禁拒；封禁到期 lazy 恢复）。
+        return enforceUsableAccount(customer, clock.instant());
+    }
+
+    /**
+     * V194 需求 · 客人账号状态闸：
+     * blacklisted 永久拒、deregistered 已注销拒、suspended 未到期拒；suspended 已过 suspended_until → lazy 恢复 active 并落库。
+     */
+    private CustomerRecord enforceUsableAccount(CustomerRecord customer, Instant now) {
+        String status = customer.status();
+        if ("blacklisted".equals(status)) {
+            throw ApiException.forbidden("CUSTOMER_BLACKLISTED", "this account is permanently blocked");
+        }
+        if ("deregistered".equals(status)) {
+            throw ApiException.forbidden("CUSTOMER_DEREGISTERED", "this account has been deregistered");
+        }
+        if ("suspended".equals(status)) {
+            Instant until = customer.suspendedUntil();
+            if (until != null && !now.isBefore(until)) {
+                return repository.saveCustomer(new CustomerRecord(
+                        customer.id(), customer.phone(), customer.maskedPhone(), "active",
+                        customer.birthDate(), customer.lastLoginAt(), customer.createdAt(), now, null));
+            }
+            throw ApiException.forbidden("CUSTOMER_SUSPENDED",
+                    until == null ? "this account is suspended" : "this account is suspended until " + until);
+        }
+        return customer;
+    }
+
+    /** 平台封禁客人账号（临时，suspendedUntil 到期自动恢复）。需 customer.account.manage。 */
+    @Transactional
+    public CustomerRecord suspendCustomer(String customerId, Instant suspendedUntil, String reason) {
+        return changeAccountStatus(customerId, "suspended", suspendedUntil, reason, "customer.account.suspended");
+    }
+
+    /** 平台拉黑客人账号（永久）。需 customer.account.manage。 */
+    @Transactional
+    public CustomerRecord blacklistCustomer(String customerId, String reason) {
+        return changeAccountStatus(customerId, "blacklisted", null, reason, "customer.account.blacklisted");
+    }
+
+    /** 平台恢复客人账号为正常（解封/解黑/复活）。需 customer.account.manage。 */
+    @Transactional
+    public CustomerRecord reinstateCustomer(String customerId, String reason) {
+        return changeAccountStatus(customerId, "active", null, reason, "customer.account.reinstated");
+    }
+
+    /** 客人自助注销本人账号（凭本人 token，无需管理权限）。注销后动作/登录被拒、数据物理保留。 */
+    @Transactional
+    public CustomerRecord deregisterAccount(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return changeAccountStatus(customer.id(), "deregistered", null, "self-service deregistration",
+                "customer.account.deregistered");
+    }
+
+    private CustomerRecord changeAccountStatus(String customerId, String status, Instant suspendedUntil,
+            String reason, String event) {
+        CustomerRecord existing = repository.findCustomerById(requireText(customerId, "customer_id"))
+                .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
+        Instant now = clock.instant();
+        CustomerRecord saved = repository.saveCustomer(new CustomerRecord(
+                existing.id(), existing.phone(), existing.maskedPhone(), status, existing.birthDate(),
+                existing.lastLoginAt(), existing.createdAt(), now, suspendedUntil));
+        auditEventService.recordSuccess(event, "customer.account.manage", "customer", customerId,
+                null, null, Map.of("status", status, "reason", reason == null ? "" : reason));
+        return saved;
     }
 
     private CustomerTicketProductResponse toTicketProduct(TicketTypeRecord ticketType) {

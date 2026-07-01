@@ -51,6 +51,26 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
+    void v194SuspendedUntilRoundTripsThroughRealPostgresAndPermissionSeeded() {
+        // V194 活证据：suspended_until 真列往返真实 Postgres；V195 随迁移播种管理权限点 customer.account.manage。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        Instant until = Instant.parse("2026-06-20T00:00:00Z");
+        String id = "cust_v194_" + Long.toHexString(now.toEpochMilli());
+        repository.saveCustomer(new CustomerRecord(
+                id, "13900002222", "139****2222", "suspended", null, now, now, now, until));
+
+        CustomerRecord back = repository.findCustomerById(id).orElseThrow();
+        assertThat(back.status()).isEqualTo("suspended");
+        assertThat(back.suspendedUntil()).isEqualTo(until);                 // 经 repo 映射的真列往返
+        java.sql.Timestamp ts = jdbcTemplate.queryForObject(
+                "SELECT suspended_until FROM customers WHERE id = ?", java.sql.Timestamp.class, id);
+        assertThat(ts.toInstant()).isEqualTo(until);                        // 确以真列存储
+        Integer perm = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM permissions WHERE permission_code = 'customer.account.manage'", Integer.class);
+        assertThat(perm).isEqualTo(1);                                      // V195 权限点已播种
+    }
+
+    @Test
     void v191GuardRekeysLeakingCustomerIdAndCascadesReferences() throws Exception {
         // 兜底自检活证据：历史遗留 customer_<手机号> 主键，V191 重键为随机不可反推 id 并级联子行。
         Instant now = Instant.parse("2026-06-14T00:00:00Z");

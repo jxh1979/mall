@@ -157,6 +157,47 @@ class CustomerServiceTests {
     }
 
     @Test
+    void accountLifecycleSuspendBlacklistDeregisterEnforcedAtLoginAndActions() {
+        // V194：四态账号生命周期闸——封禁/黑名单/注销拦截登录与动作；数据保留。
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp"));
+        String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
+
+        // 封禁(未到期，fixed clock 2026-06-14 → until 2026-06-20) → 动作被拒、登录被拒。
+        service.suspendCustomer(customerId, java.time.Instant.parse("2026-06-20T00:00:00Z"), "risk");
+        assertThatThrownBy(() -> service.listOrders(login.customerToken()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_SUSPENDED"));
+        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_SUSPENDED"));
+
+        // 恢复 → 可用。
+        service.reinstateCustomer(customerId, "appeal ok");
+        assertThat(service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp")).customerToken()).isNotBlank();
+
+        // 拉黑(永久) → 登录被拒。
+        service.blacklistCustomer(customerId, "fraud");
+        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_BLACKLISTED"));
+        service.reinstateCustomer(customerId, "unblock");
+
+        // 客人自助注销 → 后续动作被拒；客人行仍在库(数据物理保留)。
+        CustomerLoginResponse s2 = service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp"));
+        service.deregisterAccount(s2.customerToken());
+        assertThatThrownBy(() -> service.listOrders(s2.customerToken()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_DEREGISTERED"));
+        assertThat(customerRepository.findCustomerById(customerId)).isPresent();
+    }
+
+    @Test
+    void suspensionAutoRestoresWhenExpiredOnNextLogin() {
+        // V194：封禁到期(until 早于 fixed clock 2026-06-14) → 下次登录 lazy 自动恢复 active。
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900005678", "000000", "miniapp"));
+        String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
+        service.suspendCustomer(customerId, java.time.Instant.parse("2026-06-10T00:00:00Z"), "temp");
+        assertThat(service.phoneLogin(new CustomerPhoneLoginRequest("13900005678", "000000", "miniapp")).customerToken()).isNotBlank();
+        assertThat(customerRepository.findCustomerById(customerId).orElseThrow().status()).isEqualTo("active");
+    }
+
+    @Test
     void phoneLoginRejectsInvalidSmsCodeWithoutCreatingSession() {
         assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest(
                 "13800138000",

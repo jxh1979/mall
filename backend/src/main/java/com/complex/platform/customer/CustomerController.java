@@ -42,6 +42,14 @@ public class CustomerController {
         return ApiResponse.ok(service.phoneLogin(request));
     }
 
+    /** 客人自助注销本人账号（V194）：凭本人 token；注销后动作/登录被拒、历史数据物理保留但客人不可见。 */
+    @PostMapping("/deregister")
+    public ApiResponse<CustomerRecord> deregister(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
+        return ApiResponse.ok(service.deregisterAccount(requireCustomerToken(customerToken, authorization)));
+    }
+
     @GetMapping("/ticket-products")
     public ApiResponse<PageResponse<CustomerTicketProductResponse>> listTicketProducts() {
         return ApiResponse.ok(service.listTicketProducts());

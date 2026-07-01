@@ -44,7 +44,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public Optional<CustomerRecord> findCustomerByPhone(String phone) {
         return jdbcTemplate.query("""
-                SELECT id, phone, masked_phone, status, birth_date, last_login_at, created_at, updated_at
+                SELECT id, phone, masked_phone, status, birth_date, last_login_at, created_at, updated_at, suspended_until
                   FROM customers
                  WHERE phone_hash = :phone_hash
                 """, Map.of("phone_hash", blindIndex.hash(phone)), this::mapCustomer).stream().findFirst();
@@ -53,7 +53,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public Optional<CustomerRecord> findCustomerById(String customerId) {
         return jdbcTemplate.query("""
-                SELECT id, phone, masked_phone, status, birth_date, last_login_at, created_at, updated_at
+                SELECT id, phone, masked_phone, status, birth_date, last_login_at, created_at, updated_at, suspended_until
                   FROM customers
                  WHERE id = :id
                 """, Map.of("id", customerId), this::mapCustomer).stream().findFirst();
@@ -62,13 +62,14 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public CustomerRecord saveCustomer(CustomerRecord customer) {
         jdbcTemplate.update("""
-                INSERT INTO customers (id, phone, phone_hash, masked_phone, status, birth_date, last_login_at, created_at, updated_at)
-                VALUES (:id, :phone, :phone_hash, :masked_phone, :status, :birth_date, :last_login_at, :created_at, :updated_at)
+                INSERT INTO customers (id, phone, phone_hash, masked_phone, status, birth_date, last_login_at, created_at, updated_at, suspended_until)
+                VALUES (:id, :phone, :phone_hash, :masked_phone, :status, :birth_date, :last_login_at, :created_at, :updated_at, :suspended_until)
                 ON CONFLICT (id) DO UPDATE SET
                     phone = EXCLUDED.phone,
                     phone_hash = EXCLUDED.phone_hash,
                     masked_phone = EXCLUDED.masked_phone,
                     status = EXCLUDED.status,
+                    suspended_until = EXCLUDED.suspended_until,
                     birth_date = EXCLUDED.birth_date,
                     last_login_at = EXCLUDED.last_login_at,
                     updated_at = EXCLUDED.updated_at
@@ -610,7 +611,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("birth_date", sqlDate(customer.birthDate()))
                 .addValue("last_login_at", timestampWithTimeZone(customer.lastLoginAt()))
                 .addValue("created_at", timestampWithTimeZone(customer.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(customer.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(customer.updatedAt()))
+                .addValue("suspended_until", timestampWithTimeZone(customer.suspendedUntil()));
     }
 
     private MapSqlParameterSource sessionParameters(CustomerSessionRecord session) {
@@ -741,7 +743,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 localDate(resultSet, "birth_date"),
                 nullableInstant(resultSet, "last_login_at"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                nullableInstant(resultSet, "suspended_until")
         );
     }
 
