@@ -64,7 +64,7 @@ class JdbcAuditEventRepository implements AuditEventRepository {
 
     @Override
     public java.util.List<AuditEvent> searchOperationEvents(String businessType, String businessId,
-            String actorId, String eventName, java.time.Instant from, java.time.Instant to, int limit) {
+            String actorId, String eventName, java.time.Instant from, java.time.Instant to, int limit, String merchantScope) {
         StringBuilder sql = new StringBuilder("""
                 SELECT id, occurred_at, event_name, event_result, actor_type, actor_id, auth_context,
                        terminal, permission_code, business_type, business_id, request_id, idempotency_key,
@@ -79,6 +79,8 @@ class JdbcAuditEventRepository implements AuditEventRepository {
         if (eventName != null) { sql.append(" AND event_name = :event_name"); params.addValue("event_name", eventName); }
         if (from != null) { sql.append(" AND occurred_at >= :from_ts"); params.addValue("from_ts", timestampWithTimeZone(from)); }
         if (to != null) { sql.append(" AND occurred_at <= :to_ts"); params.addValue("to_ts", timestampWithTimeZone(to)); }
+        // 3.1：非平台角色（有商户 scope）只看本商户审计；平台角色 merchantScope=null 不加谓词看全部。
+        if (merchantScope != null) { sql.append(" AND merchant_id = :merchant_scope"); params.addValue("merchant_scope", merchantScope); }
         sql.append(" ORDER BY occurred_at DESC, id LIMIT :limit");
         params.addValue("limit", Math.max(1, Math.min(limit, 1000)));
         return jdbcTemplate.query(sql.toString(), params, this::mapAuditRow);

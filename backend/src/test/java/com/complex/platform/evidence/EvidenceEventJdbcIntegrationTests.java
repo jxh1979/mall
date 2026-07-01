@@ -44,17 +44,37 @@ class EvidenceEventJdbcIntegrationTests {
         auditRepository.save(auditEvent("it_contract", "c_z", "alice", "contract.approved", t.plusSeconds(20)));
 
         // 跨对象按业务类型查询：两条 ticket_order，按时间倒序。
-        assertThat(auditRepository.searchOperationEvents("it_ticket_order", null, null, null, null, null, 100))
+        assertThat(auditRepository.searchOperationEvents("it_ticket_order", null, null, null, null, null, 100, null))
                 .extracting(AuditEvent::businessId).containsExactly("o_y", "o_x");
         // 按操作人 + 时间范围跨对象。
-        assertThat(auditRepository.searchOperationEvents(null, null, "alice", null, t, t.plusSeconds(25), 100))
+        assertThat(auditRepository.searchOperationEvents(null, null, "alice", null, t, t.plusSeconds(25), 100, null))
                 .extracting(AuditEvent::businessId).containsExactlyInAnyOrder("o_x", "c_z");
         // 按事件名。
-        assertThat(auditRepository.searchOperationEvents(null, null, null, "contract.approved", null, null, 100))
+        assertThat(auditRepository.searchOperationEvents(null, null, null, "contract.approved", null, null, 100, null))
                 .extracting(AuditEvent::businessId).containsExactly("c_z");
         // 按具体业务对象。
-        assertThat(auditRepository.searchOperationEvents(null, "o_x", null, null, null, null, 100))
+        assertThat(auditRepository.searchOperationEvents(null, "o_x", null, null, null, null, 100, null))
                 .extracting(AuditEvent::actorId).containsExactly("alice");
+    }
+
+    @Test
+    void searchOperationEventsScopedToMerchantForNonPlatformRole() {
+        // 3.1：非平台角色（merchantScope=mch_a）只看本商户审计；平台（null）看全部。
+        jdbcTemplate.execute("TRUNCATE audit_events");
+        Instant t = Instant.parse("2026-06-14T00:00:00Z");
+        auditRepository.save(auditEventWithMerchant("bar_order", "b_a", "alice", "bar.order.paid", t, "mch_a"));
+        auditRepository.save(auditEventWithMerchant("bar_order", "b_b", "bob", "bar.order.paid", t.plusSeconds(10), "mch_b"));
+        assertThat(auditRepository.searchOperationEvents(null, null, null, null, null, null, 100, "mch_a"))
+                .extracting(AuditEvent::businessId).containsExactly("b_a");
+        assertThat(auditRepository.searchOperationEvents(null, null, null, null, null, null, 100, null))
+                .extracting(AuditEvent::businessId).containsExactlyInAnyOrder("b_a", "b_b");
+    }
+
+    private static AuditEvent auditEventWithMerchant(String businessType, String businessId, String actorId,
+            String eventName, Instant at, String merchantId) {
+        return new AuditEvent(java.util.UUID.randomUUID(), at, eventName, "success", "staff", actorId, actorId,
+                "web", null, businessType, businessId, "req_" + businessId, "idem_" + businessId,
+                Map.of(), merchantId, null, null);
     }
 
     @Test

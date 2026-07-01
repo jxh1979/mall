@@ -22,17 +22,17 @@ class AuditControllerTests {
 
     @Test
     void queryRequiresViewPermissionAndPassesFilters() {
-        when(service.searchOperationEvents(any(), any(), any(), any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(service.searchOperationEvents(any(), any(), any(), any(), any(), any(), anyInt(), any())).thenReturn(List.of());
         controller.queryOperationEvents("ticket_order", "o_x", "alice", "ticket_refund.approved",
                 "2026-06-14T00:00:00Z", null, 50);
         verify(authz).requirePermission("audit.operation_log.view");
         verify(service).searchOperationEvents("ticket_order", "o_x", "alice", "ticket_refund.approved",
-                Instant.parse("2026-06-14T00:00:00Z"), null, 50);
+                Instant.parse("2026-06-14T00:00:00Z"), null, 50, null);
     }
 
     @Test
     void exportRequiresExportPermission() {
-        when(service.searchOperationEvents(any(), any(), any(), any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(service.searchOperationEvents(any(), any(), any(), any(), any(), any(), anyInt(), any())).thenReturn(List.of());
         controller.exportOperationEvents(null, null, null, null, null, null, 1000);
         verify(authz).requirePermission("audit.operation_log.export");
     }

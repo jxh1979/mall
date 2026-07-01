@@ -36,7 +36,8 @@ public class AuditController {
             @RequestParam(name = "limit", defaultValue = "100") int limit) {
         authorizationService.requirePermission("audit.operation_log.view");
         return ApiResponse.ok(service.searchOperationEvents(
-                businessType, businessId, actorId, eventName, parseInstant(from), parseInstant(to), limit));
+                businessType, businessId, actorId, eventName, parseInstant(from), parseInstant(to), limit,
+                authorizationService.currentMerchantScope().orElse(null)));
     }
 
     @GetMapping("/operation-events/export")
@@ -50,7 +51,8 @@ public class AuditController {
             @RequestParam(name = "limit", defaultValue = "1000") int limit) {
         authorizationService.requirePermission("audit.operation_log.export");
         return ApiResponse.ok(service.searchOperationEvents(
-                businessType, businessId, actorId, eventName, parseInstant(from), parseInstant(to), limit));
+                businessType, businessId, actorId, eventName, parseInstant(from), parseInstant(to), limit,
+                authorizationService.currentMerchantScope().orElse(null)));
     }
 
     private static Instant parseInstant(String value) {

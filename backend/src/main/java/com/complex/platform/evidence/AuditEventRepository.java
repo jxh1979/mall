@@ -12,7 +12,7 @@ public interface AuditEventRepository {
      * 按发生时间倒序，最多 limit 条（上限 1000）。供审计人员跨对象搜索/导出操作日志。
      */
     default List<AuditEvent> searchOperationEvents(String businessType, String businessId, String actorId,
-            String eventName, Instant from, Instant to, int limit) {
+            String eventName, Instant from, Instant to, int limit, String merchantScope) {
         return List.of();
     }
 }

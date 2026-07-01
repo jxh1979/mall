@@ -20,8 +20,8 @@ public class AuditEventService {
 
     /** 条目4：跨对象操作留痕查询（供审计只读角色搜索/导出）。 */
     public java.util.List<AuditEvent> searchOperationEvents(String businessType, String businessId,
-            String actorId, String eventName, java.time.Instant from, java.time.Instant to, int limit) {
-        return repository.searchOperationEvents(businessType, businessId, actorId, eventName, from, to, limit);
+            String actorId, String eventName, java.time.Instant from, java.time.Instant to, int limit, String merchantScope) {
+        return repository.searchOperationEvents(businessType, businessId, actorId, eventName, from, to, limit, merchantScope);
     }
 
     public AuditEvent recordSuccess(
