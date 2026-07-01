@@ -20,6 +20,7 @@ import com.complex.platform.finance.dto.InventoryVariancePostRequest;
 import com.complex.platform.finance.dto.TurnoverRentBillRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import java.time.Instant;
@@ -527,6 +528,39 @@ public class FinanceService {
                         "actual_amount_cent", actualAmountCent,
                         "status", status));
         return saved;
+    }
+
+    /** 正式关闭对账差异（1.6）：幂等（同 key/已关闭返回同结果），落 close_reason+审计。 */
+    @Transactional
+    public ReconciliationDifferenceRecord closeReconciliationDifference(
+            String differenceId, CloseReconciliationDifferenceRequest request) {
+        return executeWrite(
+                "closeFinanceReconciliationDifference",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ReconciliationDifferenceRecord.class,
+                "finance.reconciliation.difference_closed",
+                "finance.reconciliation.difference_close_failed",
+                "finance.reconciliation.resolve",
+                "finance_reconciliation_difference",
+                () -> closeDifference(differenceId, request));
+    }
+
+    private ReconciliationDifferenceRecord closeDifference(
+            String differenceId, CloseReconciliationDifferenceRequest request) {
+        requirePlatformReconciliationAccess();
+        CloseReconciliationDifferenceRequest actual = requireRequest(request);
+        String closeReason = requireText(actual.closeReason(), "close_reason");
+        ReconciliationDifferenceRecord difference = repository
+                .findReconciliationDifferenceById(requireText(differenceId, "difference_id"))
+                .orElseThrow(() -> ApiException.notFound(
+                        "RECONCILIATION_DIFFERENCE_NOT_FOUND", "reconciliation difference not found"));
+        // 幂等：已关闭直接返回（executeWrite 幂等键层亦兜底）。
+        if ("closed".equals(difference.status())) {
+            return difference;
+        }
+        String closedBy = authorizationService.currentActor().id();
+        return repository.closeReconciliationDifference(difference.id(), closeReason, closedBy, Instant.now());
     }
 
     // ── P1#13 库存差异 → AR/AP（R6-D08）─────────────────────────────────────────

@@ -383,6 +383,33 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, batch_id, difference_type, business_ref, amount_cent,
+                       expected_amount_cent, actual_amount_cent, source, status, created_at
+                  FROM finance_reconciliation_differences
+                 WHERE id = :id
+                """, Map.of("id", id), this::mapReconciliationDifference).stream().findFirst();
+    }
+
+    @Override
+    public ReconciliationDifferenceRecord closeReconciliationDifference(
+            String id, String closeReason, String closedBy, java.time.Instant closedAt) {
+        jdbcTemplate.update("""
+                UPDATE finance_reconciliation_differences
+                   SET status = 'closed', close_reason = :close_reason,
+                       closed_by = :closed_by, closed_at = :closed_at
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("close_reason", closeReason)
+                .addValue("closed_by", closedBy)
+                .addValue("closed_at", timestampWithTimeZone(closedAt)));
+        return findReconciliationDifferenceById(id)
+                .orElseThrow(() -> new IllegalStateException("reconciliation difference vanished after close: " + id));
+    }
+
+    @Override
     public Optional<ReconciliationBatchRecord> findReconciliationBatchById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, batch_no, scope_type, scope_id, business_date, status, created_at

@@ -187,6 +187,35 @@ class FinanceJdbcIntegrationTests {
     }
 
     @Test
+    void closeReconciliationDifferencePersistsClosedStatusAndReason() {
+        // 1.6 真实后端活证据：close 落 status=closed + close_reason/closed_by/closed_at；
+        // findById 回读为 closed；再 close 幂等仍 closed。走真实 Postgres。
+        repository.saveReconciliationBatch(new ReconciliationBatchRecord(
+                "recon_batch_close_jdbc", "RB-CLOSE-JDBC", "project", "project_jdbc",
+                LocalDate.parse("2026-06-14"), "created", Instant.parse("2026-06-14T00:00:00Z")));
+        repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
+                "recon_diff_close_jdbc", "recon_batch_close_jdbc", "amount", "payment_close_jdbc",
+                2000L, "open", Instant.parse("2026-06-14T00:00:00Z")));
+
+        ReconciliationDifferenceRecord closed = repository.closeReconciliationDifference(
+                "recon_diff_close_jdbc", "手工核对后正式关闭", "op_close", Instant.parse("2026-06-15T00:00:00Z"));
+        assertThat(closed.status()).isEqualTo("closed");
+
+        // DB 层活证据：状态与关闭原因落库。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM finance_reconciliation_differences WHERE id = 'recon_diff_close_jdbc'", String.class))
+                .isEqualTo("closed");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT close_reason FROM finance_reconciliation_differences WHERE id = 'recon_diff_close_jdbc'", String.class))
+                .isEqualTo("手工核对后正式关闭");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT closed_by FROM finance_reconciliation_differences WHERE id = 'recon_diff_close_jdbc'", String.class))
+                .isEqualTo("op_close");
+        assertThat(repository.findReconciliationDifferenceById("recon_diff_close_jdbc"))
+                .get().extracting(ReconciliationDifferenceRecord::status).isEqualTo("closed");
+    }
+
+    @Test
     void officialTicketRefundIsDeductedWithinBusinessDayCutoffWindow() {
         // 经营日 2026-06-18，日切 04:00 → 窗口 [2026-06-18T04:00Z, 2026-06-19T04:00Z)。
         LocalDate businessDate = LocalDate.parse("2026-06-18");

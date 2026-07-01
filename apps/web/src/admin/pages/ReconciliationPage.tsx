@@ -11,21 +11,21 @@ const RESOLVE_PERM = ["finance.reconciliation.resolve"];
 
 const TEXT = {
   title: "对账差异",
-  description: "查看对账批次和差异，执行本地人工复核留痕；当前 OpenAPI 未声明正式差异关闭写接口，因此不伪造关闭动作。",
-  evidence: "接口证据：读取 /api/v1/finance/reconciliation/batches、/api/v1/finance/reconciliation/differences；正式关闭接口未声明，当前仅本地人工复核留痕。",
+  description: "查看对账批次和差异；对选中差异填原因+附件后可正式关闭（调用后端 close 接口，落库+进审计）。",
+  evidence: "接口证据：读取 batches/differences；正式关闭调用 POST /api/v1/finance/reconciliation/differences/{id}/close。",
   loadFailed: "对账数据读取失败",
   noDiff: "当前没有可复核差异。",
-  reasonRequired: "差异复核必须填写原因。",
+  reasonRequired: "差异关闭必须填写原因。",
   attachmentRequired: "差异关闭/复核必须绑定附件证据。",
   batches: "对账批次",
   differences: "对账差异",
   unresolved: "未处理",
   amount: "差异金额",
-  apiGap: "正式关闭接口未声明",
+  closeApi: "正式关闭接口",
   reason: "复核原因",
   attachment: "附件证据",
-  submit: "记录人工复核",
-  boundary: "差异关闭必须有原因和附件；当前只写本地审计结果，正式关闭/忽略需要后续补 OpenAPI 写接口和后端权限。",
+  submit: "正式关闭差异",
+  boundary: "差异关闭必须有原因和附件；提交后调用后端正式关闭接口，落 close_reason 并进审计，无法撤销。",
   batchNo: "批次号",
   differenceNo: "差异号",
   status: "状态",
@@ -81,21 +81,32 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
     return true;
   }
 
-  function submitReview() {
+  async function submitReview() {
     if (!selected) {
       setFormError(TEXT.noDiff);
       return;
     }
     setFormError("");
     setGlobalError(null);
-    setActionResult({
-      action: "reconciliation_manual_reviewed",
-      differenceId: selected.id,
-      status: "manual_review_logged",
-      reason,
-      evidenceAttachmentIds: [attachmentRef],
-      apiGap: "formal_resolution_api_not_declared",
-    });
+    try {
+      await api.post(`/api/v1/finance/reconciliation/differences/${selected.id}/close`, {
+        idempotencyKey: `reconciliation-close-${selected.id}-${Date.now()}`,
+        closeReason: reason,
+        evidenceAttachmentIds: [attachmentRef],
+      });
+      setActionResult({
+        action: "reconciliation_difference_closed",
+        differenceId: selected.id,
+        status: "closed",
+        reason,
+        evidenceAttachmentIds: [attachmentRef],
+      });
+      setReason("");
+      setAttachmentRef("");
+      await reload();
+    } catch (submitError) {
+      setGlobalError(submitError instanceof Error ? submitError.message : String(submitError));
+    }
   }
 
   return (
@@ -108,7 +119,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
           <div className="admin-kpi-card"><span>{TEXT.batches}</span><strong>{batches.length}</strong><small>{TEXT.batchNo}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.differences}</span><strong>{differences.length}</strong><small>{TEXT.unresolved}: {unresolvedCount}</small></div>
           <div className="admin-kpi-card"><span>{TEXT.amount}</span><strong>{formatAmount(totalDifference)}</strong><small>{TEXT.status}</small></div>
-          <div className="admin-kpi-card"><span>{TEXT.apiGap}</span><strong>是</strong><small>formal_resolution_api_not_declared</small></div>
+          <div className="admin-kpi-card"><span>{TEXT.closeApi}</span><strong>已就绪</strong><small>POST .../differences/close</small></div>
           <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong>{selected?.differenceNo ?? selected?.id ?? "-"}</strong><small>{selected?.status ?? "-"}</small></div>
         </div>
 
@@ -119,7 +130,7 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
         <div className="admin-form-row">
           <HighRiskConfirm
             label={TEXT.submit}
-            impact="将对选中差异写入人工复核留痕，作为对账调账依据进入审计，无法撤销。"
+            impact="将对选中差异调用后端正式关闭接口，落 close_reason 并进审计，作为对账调账依据，无法撤销。"
             precheck={validateReview}
             onConfirm={submitReview}
             permissionsState={effectivePermissions}

@@ -20,6 +20,7 @@ import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
+import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -137,6 +138,16 @@ public class FinanceController {
         authorizationService.requirePermission("finance.reconciliation.difference.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createReconciliationDifference(request));
+    }
+
+    @PostMapping("/reconciliation/differences/{difference_id}/close")
+    public ApiResponse<ReconciliationDifferenceRecord> closeReconciliationDifference(
+            @org.springframework.web.bind.annotation.PathVariable("difference_id") String differenceId,
+            @RequestBody @jakarta.validation.Valid CloseReconciliationDifferenceRequest request
+    ) {
+        authorizationService.requirePermission("finance.reconciliation.resolve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.closeReconciliationDifference(differenceId, request));
     }
 
     @PostMapping("/refunds")

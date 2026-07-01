@@ -23,6 +23,7 @@ import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
+import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -436,6 +437,30 @@ class FinanceServiceTests {
         assertThat(diff.status()).isEqualTo("open");
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
                 .contains("finance_reconciliation.difference_created");
+    }
+
+    @Test
+    void closeReconciliationDifferenceMarksClosedIdempotentlyWithReason() {
+        // 1.6：对账差异正式关闭——落 closed + close_reason + 审计，重复 close 幂等。
+        seedReconciliationBatch("recon_batch_close");
+        when(authorizationService.currentActor()).thenReturn(
+                new AccessActor("op_close", "op_close", "staff", "org_1", null, "active"));
+        financeRepository.platformExpectedByRef.put("payment_close", 50000L);
+        ReconciliationDifferenceRecord diff = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
+                "diff-close", "note", List.of(),
+                "recon_batch_close", "amount", "payment_close", 48000L, "system"));
+        assertThat(diff.status()).isEqualTo("open");
+
+        ReconciliationDifferenceRecord closed = service.closeReconciliationDifference(diff.id(),
+                new CloseReconciliationDifferenceRequest("close-1", "手工核对后差异合理，正式关闭", List.of()));
+        assertThat(closed.status()).isEqualTo("closed");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("finance.reconciliation.difference_closed");
+
+        // 幂等：同 key 重复 close 仍 closed、不报错、不翻状态。
+        ReconciliationDifferenceRecord again = service.closeReconciliationDifference(diff.id(),
+                new CloseReconciliationDifferenceRequest("close-1", "手工核对后差异合理，正式关闭", List.of()));
+        assertThat(again.status()).isEqualTo("closed");
     }
 
     @Test
@@ -1712,6 +1737,22 @@ class FinanceServiceTests {
         public ReconciliationDifferenceRecord saveReconciliationDifference(ReconciliationDifferenceRecord difference) {
             reconciliationDifferences.put(difference.id(), difference);
             return difference;
+        }
+
+        @Override
+        public java.util.Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id) {
+            return java.util.Optional.ofNullable(reconciliationDifferences.get(id));
+        }
+
+        @Override
+        public ReconciliationDifferenceRecord closeReconciliationDifference(
+                String id, String closeReason, String closedBy, java.time.Instant closedAt) {
+            ReconciliationDifferenceRecord d = reconciliationDifferences.get(id);
+            ReconciliationDifferenceRecord closed = new ReconciliationDifferenceRecord(
+                    d.id(), d.batchId(), d.differenceType(), d.businessRef(), d.amountCent(),
+                    d.expectedAmountCent(), d.actualAmountCent(), d.source(), "closed", d.createdAt());
+            reconciliationDifferences.put(id, closed);
+            return closed;
         }
 
         // P0#7：平台侧 expected 系统取数桩——key=business_ref → expected 金额（分）。无键=0（无系统取数支撑）。

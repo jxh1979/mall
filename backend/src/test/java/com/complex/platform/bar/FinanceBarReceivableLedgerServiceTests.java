@@ -279,6 +279,21 @@ class FinanceBarReceivableLedgerServiceTests {
             return difference;
         }
 
+        @Override
+        public java.util.Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public ReconciliationDifferenceRecord closeReconciliationDifference(
+                String id, String closeReason, String closedBy, java.time.Instant closedAt) {
+            return difference(id);
+        }
+
+        private ReconciliationDifferenceRecord difference(String id) {
+            return new ReconciliationDifferenceRecord(id, null, null, null, 0L, null, null, "system", "closed", null);
+        }
+
         // ── R5 T7：日结锁定 + 补录审批 + 多源汇总（bar 域测试无需，提供空实现以满足接口）──
         @Override
         public Optional<DailyCloseRecord> findDailyCloseById(String id) {

@@ -188,6 +188,12 @@ public interface FinanceRepository {
 
     ReconciliationDifferenceRecord saveReconciliationDifference(ReconciliationDifferenceRecord difference);
 
+    Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id);
+
+    /** 正式关闭对账差异（1.6）：置 status=closed 并落 close_reason/closed_by/closed_at，返回更新后记录。 */
+    ReconciliationDifferenceRecord closeReconciliationDifference(
+            String id, String closeReason, String closedBy, java.time.Instant closedAt);
+
     /** 按 id 查对账批次（创建差异前校验所属批次存在）。default 空实现避免破坏既有测试双子。 */
     default Optional<ReconciliationBatchRecord> findReconciliationBatchById(String id) {
         return Optional.empty();
