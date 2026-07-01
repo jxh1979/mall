@@ -1119,6 +1119,50 @@ class TicketingServiceTests {
     }
 
     @Test
+    void perTicketRefundCannotExceedSelectedTicketShare() {
+        // 1.1 份额封顶：单张未核销票（份额 9900）不能退整单额（19800）。
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        ticketingRepository.ticketOrders.put("o_share", new TicketOrderRecord(
+                "o_share", "ON-SHARE", "c1", "tt_share", null, 2, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", now, now));
+        ticketingRepository.issuedEntitlements.put("e_share_a",
+                seedEntitlement("e_share_a", "o_share", "tt_share", 1, 0, "active", now));
+        ticketingRepository.issuedEntitlements.put("e_share_b",
+                seedEntitlement("e_share_b", "o_share", "tt_share", 1, 0, "active", now));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
+                        "share-refund", "refund", List.of(), "o_share", 19800L, "customer request", "original",
+                        List.of("e_share_a"))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.getMessage()).contains("refund amount exceeds refundable ticket value"));
+
+        // 份额内（9900）仍可退。
+        TicketRefundRecord ok = service.requestTicketRefund(new TicketRefundRequest(
+                "share-refund-ok", "refund", List.of(), "o_share", 9900L, "customer request", "original",
+                List.of("e_share_a")));
+        assertThat(ok.refundAmountCent()).isEqualTo(9900L);
+    }
+
+    @Test
+    void perTicketRefundRejectsDuplicateEntitlementId() {
+        // 1.1 重复 entitlement_id 拒：同 id 传两次会翻倍上限，必须拒绝。
+        java.time.Instant now = java.time.Instant.parse("2026-06-22T00:00:00Z");
+        ticketingRepository.ticketOrders.put("o_dup", new TicketOrderRecord(
+                "o_dup", "ON-DUP", "c1", "tt_dup", null, 2, LocalDate.parse("2026-06-20"),
+                "web", "13800138000", 19800L, "CNY", "paid", "issued", "paid", now, now));
+        ticketingRepository.issuedEntitlements.put("e_dup_a",
+                seedEntitlement("e_dup_a", "o_dup", "tt_dup", 1, 0, "active", now));
+        ticketingRepository.issuedEntitlements.put("e_dup_b",
+                seedEntitlement("e_dup_b", "o_dup", "tt_dup", 1, 0, "active", now));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.requestTicketRefund(new TicketRefundRequest(
+                        "dup-refund", "refund", List.of(), "o_dup", 19800L, "customer request", "original",
+                        List.of("e_dup_a", "e_dup_a"))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.getMessage().toLowerCase()).contains("duplicate"));
+    }
+
+    @Test
     void refundRequestAndApprovalDoNotDeleteIssuedHistory() {
         IssuedEntitlementRecord entitlement = issueOrderEntitlement("refund");
         TicketOrderRecord order = ticketingRepository.findTicketOrderById(entitlement.orderId()).orElseThrow();

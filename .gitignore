@@ -37,3 +37,6 @@ security-scans/semgrep-current/
 
 # 历史扫描目录归档时随迁的滚动 .log(沿用 logs 不入库口径)
 docs/_archive/**/*.log
+
+# loop 工具运行产物（非仓库内容）
+.loop-engineering/

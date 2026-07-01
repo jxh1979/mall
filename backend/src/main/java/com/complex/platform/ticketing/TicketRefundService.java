@@ -99,12 +99,25 @@ public class TicketRefundService {
         // F-TXN-03 按票实例判退（2026-06-29 裁决）：解析本次要退的票实例——
         //   传 entitlement_ids → 仅退所选票（已核销票按票实例拒退 TICKET_ENTITLEMENT_VERIFIED_NO_REFUND）；
         //   不传 → 退该订单全部未核销票（已核销票不连坐、自动跳过）；订单全核销则无可退（同码拒退）。
+        List<IssuedEntitlementRecord> allEntitlements = repository.listIssuedEntitlementsByOrderId(targetId);
         List<IssuedEntitlementRecord> refundTargets =
-                resolveRefundTargets(repository.listIssuedEntitlementsByOrderId(targetId), actual.entitlementIds());
+                resolveRefundTargets(allEntitlements, actual.entitlementIds());
         long amountCent = requirePositiveLong(actual.refundAmountCent(), "refund_amount_cent");
         long alreadyRequested = repository.sumPendingRefundAmountByOrderId(targetId);
         if (alreadyRequested + amountCent > order.amountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "refund amount exceeds order amount");
+        }
+        // 1.1 份额封顶（F-TXN-03）：只退部分未核销票时，退款额不得超过所选票的可退价值之和，
+        // 单张票不能退整单额（镜像 autoRefundExpiredUnusedTickets 的 perTicketShare 口径）；
+        // 恰退订单全部票 → 沿用上方整单封顶（规避按张均摊整除舍入）。
+        if (!refundTargets.isEmpty() && refundTargets.size() < allEntitlements.size()) {
+            long refundableCeiling = refundTargets.stream()
+                    .mapToLong(e -> perTicketShare(order, e, allEntitlements.size()))
+                    .sum();
+            if (amountCent > refundableCeiling) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "refund amount exceeds refundable ticket value");
+            }
         }
         Instant now = Instant.now();
         String requestedBy = currentActorId();
@@ -312,7 +325,12 @@ public class TicketRefundService {
             for (IssuedEntitlementRecord e : all) {
                 byId.put(e.id(), e);
             }
+            java.util.Set<String> seen = new java.util.HashSet<>();
             for (String id : entitlementIds) {
+                if (!seen.add(id)) {
+                    throw ApiException.badRequest("VALIDATION_FAILED",
+                            "entitlement_ids contains a duplicate id");
+                }
                 IssuedEntitlementRecord e = byId.get(id);
                 if (e == null) {
                     throw ApiException.badRequest("VALIDATION_FAILED",

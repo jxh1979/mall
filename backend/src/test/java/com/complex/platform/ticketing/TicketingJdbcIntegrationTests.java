@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -498,6 +499,50 @@ class TicketingJdbcIntegrationTests {
                 .contains(tuple("refund_line_jdbc", 7900L, "requested"));
         assertThat(flywayMigrationSucceeded("009")).isTrue();
         assertThat(flywayMigrationSucceeded("031")).isTrue();
+    }
+
+    @Test
+    void requestRefundRejectsOverRefundOfSingleTicketAndPersistsNothing() {
+        // 1.1 真实后端活证据：单张未核销票（份额 9900）不能退整单额（19800）；被拒时 DB 无退款行（钱没动），
+        // 份额内（9900）可退并落库。走真实 JdbcTicketingRepository + Postgres + Flyway。
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        repository.saveTicketType(new TicketTypeRecord(
+                "tt_share_live", "Share Pass", "weekday_weekend_holiday",
+                9900L, 11900L, 12900L, false, "published", null, null, now, now));
+        repository.saveTicketOrder(new TicketOrderRecord(
+                "o_share_live", "TO-SHARE-LIVE", "customer_share_live", "tt_share_live", null,
+                2, java.time.LocalDate.parse("2026-06-20"), "miniapp", "13800138000",
+                19800L, "CNY", "paid", "issued", "paid", now, now));
+        repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
+                "tpl_share_live", "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now));
+        repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_share_a", "SHARE-A", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
+                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null));
+        repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_share_b", "SHARE-B", "tt_share_live", "o_share_live", "tpl_share_live", "entry",
+                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, null));
+
+        TicketRefundService refundService = new TicketRefundService(repository, event -> { });
+
+        // 超退整单额（选一张票退 19800）→ 拒。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> refundService.requestRefund(new TicketRefundRequest(
+                        "share-live-over", "refund", List.of(), "o_share_live", 19800L, "customer request", "original",
+                        List.of("ent_share_a"))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
+                        assertThat(ex.getMessage()).contains("refund amount exceeds refundable ticket value"));
+        // 活证据：被拒后 DB 无该单退款行（钱没动）。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ticket_refunds WHERE target_id = ?", Long.class, "o_share_live"))
+                .isEqualTo(0L);
+
+        // 份额内（9900）可退并落库。
+        TicketRefundRecord ok = refundService.requestRefund(new TicketRefundRequest(
+                "share-live-ok", "refund", List.of(), "o_share_live", 9900L, "customer request", "original",
+                List.of("ent_share_a")));
+        assertThat(ok.refundAmountCent()).isEqualTo(9900L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ticket_refunds WHERE target_id = ?", Long.class, "o_share_live"))
+                .isEqualTo(1L);
     }
 
 
