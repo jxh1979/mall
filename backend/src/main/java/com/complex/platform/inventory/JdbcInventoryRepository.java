@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -18,11 +19,13 @@ class JdbcInventoryRepository implements InventoryRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final JdbcInventoryRowMapper rowMapper;
+    private final PiiCipher piiCipher;
 
-    JdbcInventoryRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcInventoryRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper, PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
-        this.rowMapper = new JdbcInventoryRowMapper(this.objectMapper);
+        this.piiCipher = piiCipher;
+        this.rowMapper = new JdbcInventoryRowMapper(this.objectMapper, piiCipher);
     }
 
     @Override
@@ -1021,13 +1024,13 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("high_value_threshold_cents", savedBottle.highValueThresholdCents())
                 .addValue("bottle_label_value", savedBottle.bottleLabelValue())
                 .addValue("customer_name_or_nickname", savedBottle.customerNameOrNickname())
-                .addValue("customer_phone", savedBottle.customerPhone())
+                .addValue("customer_phone", piiCipher.encrypt(savedBottle.customerPhone()))
                 .addValue("customer_phone_hash", savedBottle.customerPhoneHash())
                 .addValue("registration_photo_refs", writeList(savedBottle.registrationPhotoRefs()))
                 .addValue("manual_note", savedBottle.manualNote())
                 .addValue("transferred_at", offset(savedBottle.transferredAt()))
                 .addValue("transfer_to_name_or_nickname", savedBottle.transferToNameOrNickname())
-                .addValue("transfer_to_phone", savedBottle.transferToPhone())
+                .addValue("transfer_to_phone", piiCipher.encrypt(savedBottle.transferToPhone()))
                 .addValue("transfer_to_phone_hash", savedBottle.transferToPhoneHash());
     }
 
@@ -1061,7 +1064,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("from_customer_id", transfer.fromCustomerId())
                 .addValue("from_name_or_nickname", transfer.fromNameOrNickname())
                 .addValue("to_name_or_nickname", transfer.toNameOrNickname())
-                .addValue("to_phone", transfer.toPhone())
+                .addValue("to_phone", piiCipher.encrypt(transfer.toPhone()))
                 .addValue("to_phone_hash", transfer.toPhoneHash())
                 .addValue("transfer_quantity", transfer.transferQuantity())
                 .addValue("operator_id", transfer.operatorId())

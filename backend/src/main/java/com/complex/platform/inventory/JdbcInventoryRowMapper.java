@@ -1,5 +1,6 @@
 package com.complex.platform.inventory;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,9 +16,11 @@ final class JdbcInventoryRowMapper {
     };
 
     private final ObjectMapper objectMapper;
+    private final PiiCipher piiCipher;
 
-    JdbcInventoryRowMapper(ObjectMapper objectMapper) {
+    JdbcInventoryRowMapper(ObjectMapper objectMapper, PiiCipher piiCipher) {
         this.objectMapper = objectMapper;
+        this.piiCipher = piiCipher;
     }
 
     InventoryItemRecord mapInventoryItem(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -275,13 +278,13 @@ final class JdbcInventoryRowMapper {
                 resultSet.getObject("high_value_threshold_cents", Long.class),
                 resultSet.getString("bottle_label_value"),
                 resultSet.getString("customer_name_or_nickname"),
-                resultSet.getString("customer_phone"),
+                piiCipher.decrypt(resultSet.getString("customer_phone")),
                 resultSet.getString("customer_phone_hash"),
                 readList(resultSet.getString("registration_photo_refs")),
                 resultSet.getString("manual_note"),
                 instantOrNull(resultSet, "transferred_at"),
                 resultSet.getString("transfer_to_name_or_nickname"),
-                resultSet.getString("transfer_to_phone"),
+                piiCipher.decrypt(resultSet.getString("transfer_to_phone")),
                 resultSet.getString("transfer_to_phone_hash")
         );
     }
