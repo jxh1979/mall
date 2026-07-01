@@ -84,11 +84,13 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
   const [intendedBusinessType, setIntendedBusinessType] = React.useState("retail");
   const [intendedSpaceId, setIntendedSpaceId] = React.useState("space-1");
   const [ownerUserId, setOwnerUserId] = React.useState("staff_sales");
-  const [leadStatus, setLeadStatus] = React.useState("following");
+  const [leadStatus, setLeadStatus] = React.useState("following_up");
   // 意向表单
   const [intentSpaceId, setIntentSpaceId] = React.useState("space-1");
-  const [targetStage, setTargetStage] = React.useState("negotiating");
+  const [targetStage, setTargetStage] = React.useState("negotiation");
   const [signMerchantId, setSignMerchantId] = React.useState("merchant-1");
+  const [signEffectiveDate, setSignEffectiveDate] = React.useState("2026-07-01");
+  const [signExpiryDate, setSignExpiryDate] = React.useState("2027-06-30");
   // 品牌表单
   const [brandName, setBrandName] = React.useState("示例品牌");
   const [brandType, setBrandType] = React.useState("chain");
@@ -213,6 +215,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
       contractSubjectId: signMerchantId,
       operationSubjectId: signMerchantId,
       settlementSubjectId: signMerchantId,
+      effectiveDate: signEffectiveDate,
+      expiryDate: signExpiryDate,
     };
     await runAction("leasing_intent_signed", request, () => api.post(`/api/v1/leasing/intents/${intent.selected!.id}/sign`, request));
   }
@@ -248,7 +252,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
         <div className="admin-form-grid" data-testid="leasing-lead-create-form">
           <label>联系人<input data-testid="leasing-lead-contact-name" value={contactName} onChange={(e) => setContactName(e.target.value)} /></label>
           <label>联系电话<input data-testid="leasing-lead-contact-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></label>
-          <label>来源<select data-testid="leasing-lead-source" value={source} onChange={(e) => setSource(e.target.value)}><option value="exhibition">展会</option><option value="referral">转介绍</option><option value="walk_in">自访</option><option value="online">线上</option></select></label>
+          <label>来源<select data-testid="leasing-lead-source" value={source} onChange={(e) => setSource(e.target.value)}><option value="outbound">外拓</option><option value="online_inquiry">线上咨询</option><option value="referral">转介绍</option><option value="exhibition">展会</option></select></label>
           <label>意向业态<input data-testid="leasing-lead-business-type" value={intendedBusinessType} onChange={(e) => setIntendedBusinessType(e.target.value)} /></label>
           <label>意向空间<input data-testid="leasing-lead-space" value={intendedSpaceId} onChange={(e) => setIntendedSpaceId(e.target.value)} /></label>
         </div>
@@ -260,7 +264,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
         {/* 线索动作 */}
         <div className="admin-form-grid" data-testid="leasing-lead-action-form">
           <label>负责人<input data-testid="leasing-lead-owner" value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)} /></label>
-          <label>线索状态<select data-testid="leasing-lead-status" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}><option value="following">跟进中</option><option value="intent">已转意向</option><option value="lost">流失</option><option value="hold">暂缓</option></select></label>
+          <label>线索状态<select data-testid="leasing-lead-status" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}><option value="following_up">跟进中</option><option value="converted_to_intent">已转意向</option><option value="negotiating">谈判中</option><option value="lost">流失</option><option value="on_hold">暂缓</option></select></label>
           <label>跟进方式<select data-testid="leasing-follow-method" value={followMethod} onChange={(e) => setFollowMethod(e.target.value)}><option value="phone">电话</option><option value="visit">拜访</option><option value="wechat">微信</option></select></label>
           <label>跟进内容<input data-testid="leasing-follow-content" value={followContent} onChange={(e) => setFollowContent(e.target.value)} /></label>
         </div>
@@ -273,8 +277,10 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError }: A
         {/* 意向 + 签约 */}
         <div className="admin-form-grid" data-testid="leasing-intent-form">
           <label>意向空间<input data-testid="leasing-intent-space" value={intentSpaceId} onChange={(e) => setIntentSpaceId(e.target.value)} /></label>
-          <label>推进阶段<select data-testid="leasing-intent-stage" value={targetStage} onChange={(e) => setTargetStage(e.target.value)}><option value="negotiating">商务谈判</option><option value="terms_agreed">条款达成</option><option value="ready_to_sign">待签约</option></select></label>
+          <label>推进阶段<select data-testid="leasing-intent-stage" value={targetStage} onChange={(e) => setTargetStage(e.target.value)}><option value="requirement_confirmed">需求确认</option><option value="proposal_quoted">方案报价</option><option value="negotiation">商务谈判</option><option value="pending_signing">待签约</option></select></label>
           <label>签约商户<input data-testid="leasing-sign-merchant" value={signMerchantId} onChange={(e) => setSignMerchantId(e.target.value)} /></label>
+          <label>合同生效日<input type="date" data-testid="leasing-sign-effective-date" value={signEffectiveDate} onChange={(e) => setSignEffectiveDate(e.target.value)} /></label>
+          <label>合同到期日<input type="date" data-testid="leasing-sign-expiry-date" value={signExpiryDate} onChange={(e) => setSignExpiryDate(e.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="leasing-intent-actions">
           <button type="button" data-testid="leasing-intent-create" disabled={busyAction !== ""} onClick={() => void createIntent()}>从线索建意向</button>
