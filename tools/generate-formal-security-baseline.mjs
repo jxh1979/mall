@@ -292,6 +292,21 @@ const findings = [
       : "补跨租户越权 finding、CSV scope 登记、Repository 机审和回归测试后重新生成安全基线",
   },
   {
+    id: "SEC-P2-TENANT-ISOLATION-PROJECT-READ-001",
+    severity: "P2",
+    title: "招商/机构 5 表跨项目读残留（棘轮 F1）按 project_id 下沉仓储谓词",
+    status: "resolved",
+    blockingScope:
+      "已修复：leasing_leads/leasing_intents/leasing_brands/leasing_follow_ups/external_partner_orgs 读接口按调用方项目 scope（organizationId）过滤，平台管理员/全局平台员工全量；"
+      + "access_grant_requests 保留 baseline（AccessService.canViewGrantRequest 服务层按 actor 隔离更细，静态扫描器不识别服务层闸，非缺口）",
+    owner: "安全/后端",
+    evidence:
+      "`AuthorizationService.currentProjectScopeQuietly`、`JdbcLeasingRepository`/`JdbcPartnerRepository` scoped 查询、"
+      + "`LeasingServiceTests.projectScopedStaffOnlySeesOwnProjectRows`、`PartnerServiceTests.listPartnerOrgsPassesProjectScopeToRepository`、"
+      + "`PartnerJdbcIntegrationTests`/`LeasingJdbcIntegrationTests` 负例、tenant-isolation baseline 收紧至 1 条",
+    nextAction: "若扫描器将来识别服务层闸，可移除最后 1 条 baseline 条目",
+  },
+  {
     id: "SEC-P1-DOCS-EXPOSURE-001",
     severity: "P1",
     title: "OpenAPI/Swagger 文档在当前 SecurityConfig 中公开放行",
@@ -344,8 +359,8 @@ const findings = [
     status: sourceFindings.csrfDisabled ? "open_for_prod_review" : "resolved",
     blockingScope: "不阻塞 Bearer/API 调用 smoke；若后台 Web 采用 Cookie 会话则阻塞公开生产",
     owner: "后端/前端/安全",
-    evidence: "`SecurityConfig` 调用 `csrf.disable()`",
-    nextAction: "正式认证方案定稿时按 Bearer、SameSite Cookie 或双提交 Token 分支复核",
+    evidence: "`SecurityConfig` 调用 `csrf.disable()`；客人 web 端 httpOnly 会话 cookie（3.3 免登录）已自带防御——SameSite=Strict + `CustomerSessionCookieFilter` 对 cookie 鉴权写操作强制 X-Requested-With 自定义头（含单测）",
+    nextAction: "员工后台仍为 Bearer 头 token（无 cookie 环境凭证）；若后台改用 Cookie 会话再按 SameSite/双提交复核",
   },
   {
     id: "SEC-P3-BASELINE-AUTOMATION-001",

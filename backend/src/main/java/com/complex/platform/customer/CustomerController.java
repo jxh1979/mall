@@ -38,8 +38,45 @@ public class CustomerController {
     }
 
     @PostMapping("/auth/phone-login")
-    public ApiResponse<CustomerLoginResponse> phoneLogin(@RequestBody @jakarta.validation.Valid CustomerPhoneLoginRequest request) {
-        return ApiResponse.ok(service.phoneLogin(request));
+    public ApiResponse<CustomerLoginResponse> phoneLogin(
+            @RequestBody @jakarta.validation.Valid CustomerPhoneLoginRequest request,
+            jakarta.servlet.http.HttpServletRequest httpRequest,
+            jakarta.servlet.http.HttpServletResponse httpResponse) {
+        CustomerLoginResponse login = service.phoneLogin(request);
+        // 3.3 免登录：token 同时种 httpOnly+SameSite=Strict cookie（web 端刷新免登录，脚本不可读防 XSS 窃取）。
+        // body 仍返回 token 供头 token 调用方（小程序/App/Android）使用，两轨并行。
+        long maxAge = java.time.Duration.between(java.time.Instant.now(), login.expiresAt()).getSeconds();
+        httpResponse.addHeader("Set-Cookie",
+                sessionCookie(login.customerToken(), Math.max(0, maxAge), httpRequest.isSecure()));
+        return ApiResponse.ok(login);
+    }
+
+    /** 3.3 免登录：登出——清除会话 cookie（头 token 调用方丢弃本地 token 即可，端点幂等）。 */
+    @PostMapping("/auth/logout")
+    public ApiResponse<Void> logout(jakarta.servlet.http.HttpServletRequest httpRequest,
+            jakarta.servlet.http.HttpServletResponse httpResponse) {
+        httpResponse.addHeader("Set-Cookie", sessionCookie("", 0, httpRequest.isSecure()));
+        return ApiResponse.ok(null);
+    }
+
+    /** 3.3 免登录：会话恢复——凭 cookie/头 token 返回当前客人身份（不回传凭证本身）。 */
+    @GetMapping("/session")
+    public ApiResponse<CustomerSessionInfoResponse> session(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
+        return ApiResponse.ok(service.sessionInfo(requireCustomerToken(customerToken, authorization)));
+    }
+
+    private String sessionCookie(String value, long maxAgeSeconds, boolean secure) {
+        return org.springframework.http.ResponseCookie
+                .from(com.complex.platform.auth.CustomerSessionCookieFilter.COOKIE_NAME, value)
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite("Strict")
+                .path("/api/v1/customer")
+                .maxAge(maxAgeSeconds)
+                .build()
+                .toString();
     }
 
     /** 客人自助注销本人账号（V194）：凭本人 token；注销后动作/登录被拒、历史数据物理保留但客人不可见。 */

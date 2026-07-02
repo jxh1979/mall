@@ -3381,6 +3381,70 @@
         "x-auth-context": "public"
       }
     },
+    "/api/v1/customer/auth/logout": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "customerLogout",
+        "summary": "客人登出（清除免登录会话 cookie）",
+        "description": "3.3 免登录：清除 httpOnly 会话 cookie（Max-Age=0）；头 token 调用方丢弃本地 token 即可。端点幂等、无需鉴权。",
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app",
+          "kiosk"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.logged_out",
+        "x-audit-event-failure": "customer.logout_failed",
+        "x-auth-context": "public",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/session": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerSession",
+        "summary": "客人会话恢复（免登录）",
+        "description": "3.3 免登录：凭 httpOnly 会话 cookie（或显式头 token）返回当前客人身份与到期时间，不回传凭证本身；web 端刷新页面据此恢复登录态。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "web",
+          "miniapp",
+          "app",
+          "kiosk"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.session_viewed",
+        "x-audit-event-failure": "customer.session_view_failed",
+        "x-auth-context": "customer-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/customer/bar-reservation-options": {
       "get": {
         "tags": [
@@ -25617,10 +25681,10 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "suspendedUntil"
+                  "suspended_until"
                 ],
                 "properties": {
-                  "suspendedUntil": {
+                  "suspended_until": {
                     "type": "string",
                     "format": "date-time",
                     "description": "封禁到期时刻（ISO-8601）"

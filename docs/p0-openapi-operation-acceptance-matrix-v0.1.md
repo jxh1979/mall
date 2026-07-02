@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 537 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 539 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -108,6 +108,8 @@
 | bar | `POST` | `/api/v1/bar/tables` | `createBarTable` | 创建桌台或卡座 | `BarTableRequest` | `bar.table.manage` | `staff-token` | `project-bar` | web | 是 | `bar.table.changed` | `bar.table.change_failed` |
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/open` | `openBarTable` | 开台 | `OpenBarTableRequest` | `bar.table.open_close` | `staff-token` | `project-bar` | tablet, web | 是 | `bar.table.opened` | `bar.table.open_failed` |
 | customer | `POST` | `/api/v1/customer/auth/phone-login` | `customerPhoneLogin` | 客人手机号登录 | `CustomerPhoneLoginRequest` | `public` | `public` | `customer` | web, miniapp, app, kiosk | 否 | `customer.auth.login` | `customer.auth.login_failed` |
+| customer | `POST` | `/api/v1/customer/auth/logout` | `customerLogout` | 客人登出（清除免登录会话 cookie） | `-` | `public` | `public` | `customer` | web, miniapp, app, kiosk | 否 | `customer.logged_out` | `customer.logout_failed` |
+| customer | `GET` | `/api/v1/customer/session` | `getCustomerSession` | 客人会话恢复（免登录） | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app, kiosk | 否 | `customer.session_viewed` | `customer.session_view_failed` |
 | customer | `GET` | `/api/v1/customer/bar-reservation-options` | `listCustomerBarReservationOptions` | 客人可订台资源 | `-` | `not_applicable` | `customer-token` | `public-project-bar` | web, miniapp, app, kiosk | 否 | `customer.bar_reservation_options_viewed` | `customer.bar_reservation_options_view_failed` |
 | customer | `POST` | `/api/v1/customer/bar-reservations` | `createCustomerBarReservation` | 客人卡座预订 | `CustomerBarReservationRequest` | `not_applicable` | `customer-token` | `customer-project-bar` | web, miniapp, app, kiosk | 是 | `customer.bar_reservation.created` | `customer.bar_reservation.create_failed` |
 | customer | `POST` | `/api/v1/customer/bar-invitations/confirm` | `confirmCustomerBarInvitation` | 客人确认接受订卡邀请函 | `object` | `not_applicable` | `customer-token` | `customer-project-bar` | web, miniapp, app | 是 | `customer.bar_invitation.confirmed` | `customer.bar_invitation.confirm_failed` |
@@ -625,5 +627,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 537 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 539 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 537 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 539 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 289 | 人工权限矩阵正文未覆盖 187 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1074 | 人工事件矩阵正文未覆盖 1032 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 537 | 人工任务映射正文未逐项覆盖 531 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 333 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1078 | 人工事件矩阵正文未覆盖 1036 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 539 | 人工任务映射正文未逐项覆盖 533 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 334 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -257,7 +257,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 25 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 26 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -266,7 +266,7 @@
 | `partner.org.view` | staff-token | platform | 1 | listPartnerOrgs | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.manage` | staff-token | self | 2 | createPartnerSubordinate, disablePartnerSubordinate | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.view` | staff-token | self | 2 | listPartnerSubordinates, listSubordinateCompletion | OpenAPI 补充，以本附录为准 |
-| `public` | public | customer, none, project, public-project | 5 | login, customerPhoneLogin, listCustomerTicketProducts, getSystemHealth, listCustomerMembershipPlans | 已在权限矩阵正文出现 |
+| `public` | public | customer, none, project, public-project | 6 | login, customerPhoneLogin, customerLogout, listCustomerTicketProducts, getSystemHealth, listCustomerMembershipPlans | 已在权限矩阵正文出现 |
 | `refund.authority.manage` | staff-token | project | 2 | upsertRefundAuthorityLimit, upsertRefundAutoRule | OpenAPI 补充，以本附录为准 |
 | `refund.authority.view` | staff-token | project | 2 | listRefundAuthorityLimits, listRefundAutoRules | OpenAPI 补充，以本附录为准 |
 | `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
@@ -721,6 +721,8 @@
 | `customer.consent.create_failed` | failure | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.consent.created` | success | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.level_evaluate_failed` | failure | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
+| `customer.logged_out` | success | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `customer.logout_failed` | failure | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.member_levels_view_failed` | failure | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `customer.member_levels_viewed` | success | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `customer.membership_benefits_viewed` | success | `customerMembershipBenefits` | `GET` | `/api/v1/customer/membership-benefits` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
@@ -751,6 +753,8 @@
 | `customer.points.redemptions_viewed` | success | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points.unfreeze_failed` | failure | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
 | `customer.points.unfrozen` | success | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
+| `customer.session_view_failed` | failure | `getCustomerSession` | `GET` | `/api/v1/customer/session` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.session_viewed` | success | `getCustomerSession` | `GET` | `/api/v1/customer/session` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.stored_value_account_viewed` | success | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `customer.stored_value_account_viewed_failed` | failure | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `customer.stored_value.consume` | success | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | CUS-客人端 | `customer.stored_value.consume` | 接口级事件，以本附录为准 |
@@ -1575,6 +1579,7 @@
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | 客人登出（清除免登录会话 cookie） | `public` | `customer.logged_out` / `customer.logout_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerMembershipBenefits` | `GET` | `/api/v1/customer/membership-benefits` | 客人当前生效会员权益 | `customer.membership.view` | `customer.membership_benefits_viewed` / `customer.membership_benefits_viewed_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerMembershipSubscribe` | `POST` | `/api/v1/customer/memberships/subscribe` | 客人付费会员开通（绑支付意图） | `customer.membership.subscribe` | `customer.membership.subscribe` / `customer.membership.subscribe_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | 客人手机号登录 | `public` | `customer.auth.login` / `customer.auth.login_failed` | web, miniapp, app, kiosk | operation 级补充 |
@@ -1588,6 +1593,7 @@
 | CUS-客人端 | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | 冻结会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.frozen` / `stored_value.frozen_failed` | web | operation 级补充 |
 | CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | web, miniapp, app | 已在任务映射正文出现 |
 | CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `getCustomerSession` | `GET` | `/api/v1/customer/session` | 客人会话恢复（免登录） | `not_applicable` | `customer.session_viewed` / `customer.session_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | 查询商户级储值卡退款规则 | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_viewed` / `stored_value.merchant_refund_rule_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerMembershipPlans` | `GET` | `/api/v1/customer/membership-plans` | 付费会员档位列表（客人端公开展示） | `public` | `customer.membership_plans_viewed` / `customer.membership_plans_viewed_failed` | web, miniapp, app | operation 级补充 |

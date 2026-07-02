@@ -799,6 +799,15 @@ public class CustomerService {
                         customer.id()));
     }
 
+    /** 3.3 免登录：会话恢复——凭有效 token（cookie 桥接或显式头）返回客人身份与到期时间，不回凭证。 */
+    public CustomerSessionInfoResponse sessionInfo(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        Instant expiresAt = repository.findSessionByToken(customerToken.trim())
+                .map(CustomerSessionRecord::expiresAt)
+                .orElse(null);
+        return new CustomerSessionInfoResponse(customer.id(), customer.maskedPhone(), expiresAt);
+    }
+
     private CustomerRecord requireCustomer(String customerToken) {
         String token = trimToNull(customerToken);
         if (token == null) {

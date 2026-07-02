@@ -77,7 +77,9 @@ export class CustomerApi {
       headers.set("authorization", `Bearer ${this.customerToken}`);
       headers.set("x-customer-token", this.customerToken);
     }
-    const init: RequestInit = { method, headers };
+    // 3.3 免登录：token 为空时走 httpOnly cookie 鉴权；自定义头是后端 cookie 写操作的 CSRF 闸。
+    headers.set("x-requested-with", "XMLHttpRequest");
+    const init: RequestInit = { method, headers, credentials: "include" };
     if (body) {
       const idempotencyKey = nextIdempotencyKey();
       headers.set("content-type", "application/json");
@@ -107,6 +109,30 @@ export type CustomerLoginResponse = {
   customerToken: string;
   expiresAt: string;
 };
+
+export type CustomerSessionInfo = {
+  customerId: string;
+  maskedPhone: string;
+  expiresAt: string | null;
+};
+
+// 3.3 免登录：刷新后凭 httpOnly cookie 恢复会话；无有效 cookie 返回 null（回登录页）。
+export async function customerRestoreSession(): Promise<CustomerSessionInfo | null> {
+  try {
+    return await new CustomerApi("").get<CustomerSessionInfo>("/api/v1/customer/session");
+  } catch {
+    return null;
+  }
+}
+
+// 3.3 免登录：登出——后端清 httpOnly cookie（幂等，失败也不阻断本地清态）。
+export async function customerLogout(): Promise<void> {
+  try {
+    await new CustomerApi("").post<null>("/api/v1/customer/auth/logout");
+  } catch {
+    // cookie 清除失败不阻断登出（本地态已清，cookie 到期自灭）。
+  }
+}
 
 // 二维码刷新窗口：后端 TicketCredentialResponse 仅返回 issuedAt/expiresAt（不含 refresh_interval_seconds），
 // 客人端按 (expiresAt - issuedAt) 推导刷新间隔，落在票种级 {30,60} 秒口径，缺省 60 秒。

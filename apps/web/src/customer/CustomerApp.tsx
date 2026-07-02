@@ -7,11 +7,11 @@ import {
   WalletOutlined,
 } from "@ant-design/icons";
 import { Layout, Menu } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CustomerAuthShell } from "./components/CustomerAuthShell";
 import { CustomerService } from "./client/customerService";
-import { customerPhoneLogin } from "./client/customerClient";
+import { customerLogout, customerPhoneLogin, customerRestoreSession } from "./client/customerClient";
 import { BarInvitationPage } from "./pages/BarInvitationPage";
 import { BarReservationPage } from "./pages/BarReservationPage";
 import { BarScanOrderPage } from "./pages/BarScanOrderPage";
@@ -35,13 +35,32 @@ function initialPageFromPath(): PageKey {
 }
 
 export default function CustomerApp(): React.ReactElement {
-  // 3.3 安全：客人 token 只存内存（短会话），不落 localStorage/sessionStorage——
-  // 任何可脚本读取的存储都会把 token 暴露给 XSS。刷新页面需重新短信登录。
-  // ponytail: 内存短会话；若业务要求刷新免登录，升级为后端 httpOnly cookie + CSRF。
+  // 3.3 免登录（用户拍板终态）：token 不落任何可脚本读取的存储（防 XSS 窃取），
+  // 登录后凭证在后端种的 httpOnly+SameSite=Strict cookie 里；刷新页面凭 cookie 恢复会话免重登。
   const [session, setSession] = useState<CustomerSession | null>(null);
+  const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState<PageKey>(initialPageFromPath());
+
+  useEffect(() => {
+    let cancelled = false;
+    void customerRestoreSession().then((info) => {
+      if (cancelled) return;
+      if (info) {
+        setSession({
+          customerId: info.customerId,
+          maskedPhone: info.maskedPhone,
+          customerToken: "",
+          expiresAt: info.expiresAt ?? "",
+        });
+      }
+      setRestoring(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const service = useMemo(
     () => (session ? new CustomerService(session.customerToken) : null),
@@ -56,7 +75,8 @@ export default function CustomerApp(): React.ReactElement {
       const next: CustomerSession = {
         customerId: result.customerId,
         maskedPhone: result.maskedPhone,
-        customerToken: result.customerToken,
+        // 凭证走 httpOnly cookie，前端不留 token（内存也不留，XSS 面最小化）。
+        customerToken: "",
         expiresAt: result.expiresAt,
       };
       setSession(next);
@@ -68,10 +88,14 @@ export default function CustomerApp(): React.ReactElement {
   };
 
   const onLogout = () => {
+    void customerLogout();
     setSession(null);
     setPage("home");
   };
 
+  if (restoring) {
+    return <CustomerAuthShell error={null} loading onLogin={onLogin} />;
+  }
   if (!session || !service) {
     return <CustomerAuthShell error={error} loading={loading} onLogin={onLogin} />;
   }
