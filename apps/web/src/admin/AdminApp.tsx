@@ -50,6 +50,7 @@ const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage")
 const BarProductsPage = React.lazy(() => import("./pages/BarProductsPage").then((m) => ({ default: m.BarProductsPage })));
 const IntegrationAdaptersPage = React.lazy(() => import("./pages/IntegrationAdaptersPage").then((m) => ({ default: m.IntegrationAdaptersPage })));
 const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwitchesPage").then((m) => ({ default: m.IntegrationSwitchesPage })));
+const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
 const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
 const OperatingParamsPage = React.lazy(() => import("./pages/OperatingParamsPage").then((m) => ({ default: m.OperatingParamsPage })));
 const SpaceTypesPage = React.lazy(() => import("./pages/SpaceTypesPage").then((m) => ({ default: m.SpaceTypesPage })));
@@ -142,6 +143,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <InventoryLedgerPage {...props} />;
     case "ADM-FIN-002":
       return <ReconciliationPage {...props} />;
+    case "ADM-CUS-001":
+      return <CustomerAccountsPage {...props} />;
     case "ADM-FIN-003":
       return <RefundAuthorityPage {...props} />;
     case "ADM-MER-001":

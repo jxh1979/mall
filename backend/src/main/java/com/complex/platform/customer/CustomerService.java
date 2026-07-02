@@ -831,19 +831,19 @@ public class CustomerService {
     /** 平台封禁客人账号（临时，suspendedUntil 到期自动恢复）。需 customer.account.manage。 */
     @Transactional
     public CustomerRecord suspendCustomer(String customerId, Instant suspendedUntil, String reason) {
-        return changeAccountStatus(customerId, "suspended", suspendedUntil, reason, "customer.account.suspended");
+        return changeAccountStatus(customerId, "suspended", suspendedUntil, reason, "customer.account.suspended", "customer.account.suspend_failed");
     }
 
     /** 平台拉黑客人账号（永久）。需 customer.account.manage。 */
     @Transactional
     public CustomerRecord blacklistCustomer(String customerId, String reason) {
-        return changeAccountStatus(customerId, "blacklisted", null, reason, "customer.account.blacklisted");
+        return changeAccountStatus(customerId, "blacklisted", null, reason, "customer.account.blacklisted", "customer.account.blacklist_failed");
     }
 
     /** 平台恢复客人账号为正常（解封/解黑/复活）。需 customer.account.manage。 */
     @Transactional
     public CustomerRecord reinstateCustomer(String customerId, String reason) {
-        return changeAccountStatus(customerId, "active", null, reason, "customer.account.reinstated");
+        return changeAccountStatus(customerId, "active", null, reason, "customer.account.reinstated", "customer.account.reinstate_failed");
     }
 
     /** 客人自助注销本人账号（凭本人 token，无需管理权限）。注销后动作/登录被拒、数据物理保留。 */
@@ -851,20 +851,40 @@ public class CustomerService {
     public CustomerRecord deregisterAccount(String customerToken) {
         CustomerRecord customer = requireCustomer(customerToken);
         return changeAccountStatus(customer.id(), "deregistered", null, "self-service deregistration",
-                "customer.account.deregistered");
+                "customer.account.deregistered", "customer.account.deregister_failed");
+    }
+
+    /** 平台按手机号查客人账号（盲索引精确匹配；按手机号查人属敏感操作，成功与否均留审计）。 */
+    public java.util.Optional<CustomerRecord> findAccountByPhone(String phone) {
+        try {
+            java.util.Optional<CustomerRecord> found = repository.findCustomerByPhone(requireText(phone, "phone"));
+            auditEventService.recordSuccess("customer.account.viewed", "customer.account.manage", "customer",
+                    found.map(CustomerRecord::id).orElse("not_found"), null, null, Map.of("matched", found.isPresent()));
+            return found;
+        } catch (ApiException e) {
+            auditEventService.recordFailure("customer.account.view_failed", "customer.account.manage", "customer",
+                    "unknown", null, null, e.code());
+            throw e;
+        }
     }
 
     private CustomerRecord changeAccountStatus(String customerId, String status, Instant suspendedUntil,
-            String reason, String event) {
-        CustomerRecord existing = repository.findCustomerById(requireText(customerId, "customer_id"))
-                .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
-        Instant now = clock.instant();
-        CustomerRecord saved = repository.saveCustomer(new CustomerRecord(
-                existing.id(), existing.phone(), existing.maskedPhone(), status, existing.birthDate(),
-                existing.lastLoginAt(), existing.createdAt(), now, suspendedUntil));
-        auditEventService.recordSuccess(event, "customer.account.manage", "customer", customerId,
-                null, null, Map.of("status", status, "reason", reason == null ? "" : reason));
-        return saved;
+            String reason, String event, String failureEvent) {
+        try {
+            CustomerRecord existing = repository.findCustomerById(requireText(customerId, "customer_id"))
+                    .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "customer not found"));
+            Instant now = clock.instant();
+            CustomerRecord saved = repository.saveCustomer(new CustomerRecord(
+                    existing.id(), existing.phone(), existing.maskedPhone(), status, existing.birthDate(),
+                    existing.lastLoginAt(), existing.createdAt(), now, suspendedUntil));
+            auditEventService.recordSuccess(event, "customer.account.manage", "customer", customerId,
+                    null, null, Map.of("status", status, "reason", reason == null ? "" : reason));
+            return saved;
+        } catch (ApiException e) {
+            auditEventService.recordFailure(failureEvent, "customer.account.manage", "customer", customerId,
+                    null, null, e.code());
+            throw e;
+        }
     }
 
     private CustomerTicketProductResponse toTicketProduct(TicketTypeRecord ticketType) {

@@ -3,6 +3,8 @@ package com.complex.platform.customer;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import java.time.Instant;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,29 +29,38 @@ public class CustomerAccountAdminController {
         this.authorizationService = authorizationService;
     }
 
+
+    /** 按手机号精确查客人账号（盲索引查询，返回安全投影；查不到返回空列表）。 */
+    @GetMapping
+    public ApiResponse<java.util.List<CustomerAccountView>> lookup(@RequestParam("phone") String phone) {
+        authorizationService.requirePermission(MANAGE);
+        return ApiResponse.ok(service.findAccountByPhone(phone).map(CustomerAccountView::of)
+                .map(java.util.List::of).orElse(java.util.List.of()));
+    }
+
     @PostMapping("/{customer_id}/suspend")
-    public ApiResponse<CustomerRecord> suspend(
+    public ApiResponse<CustomerAccountView> suspend(
             @PathVariable("customer_id") String customerId,
             @RequestBody @jakarta.validation.Valid CustomerSuspendRequest request) {
         authorizationService.requirePermission(MANAGE);
         Instant until = request == null || request.suspendedUntil() == null || request.suspendedUntil().isBlank()
                 ? null : Instant.parse(request.suspendedUntil());
-        return ApiResponse.ok(service.suspendCustomer(customerId, until, request == null ? null : request.reason()));
+        return ApiResponse.ok(CustomerAccountView.of(service.suspendCustomer(customerId, until, request == null ? null : request.reason())));
     }
 
     @PostMapping("/{customer_id}/blacklist")
-    public ApiResponse<CustomerRecord> blacklist(
+    public ApiResponse<CustomerAccountView> blacklist(
             @PathVariable("customer_id") String customerId,
             @RequestBody(required = false) CustomerAccountReasonRequest request) {
         authorizationService.requirePermission(MANAGE);
-        return ApiResponse.ok(service.blacklistCustomer(customerId, request == null ? null : request.reason()));
+        return ApiResponse.ok(CustomerAccountView.of(service.blacklistCustomer(customerId, request == null ? null : request.reason())));
     }
 
     @PostMapping("/{customer_id}/reinstate")
-    public ApiResponse<CustomerRecord> reinstate(
+    public ApiResponse<CustomerAccountView> reinstate(
             @PathVariable("customer_id") String customerId,
             @RequestBody(required = false) CustomerAccountReasonRequest request) {
         authorizationService.requirePermission(MANAGE);
-        return ApiResponse.ok(service.reinstateCustomer(customerId, request == null ? null : request.reason()));
+        return ApiResponse.ok(CustomerAccountView.of(service.reinstateCustomer(customerId, request == null ? null : request.reason())));
     }
 }

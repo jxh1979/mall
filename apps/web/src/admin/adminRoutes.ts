@@ -37,6 +37,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-VND-001", label: "外包维保工单", module: "外包工作台", group: "vendor", route: "/admin/vendor/work-orders", requiredPermissions: ["facility.work_order.view_assigned"] },
   { pageId: "ADM-GOV-007", label: "空间类型字典", module: "治理", group: "governance", route: "/admin/governance/space-types", requiredPermissions: ["governance.space.view"] },
   { pageId: "ADM-VND-004", label: "外包下属账号", module: "外包工作台", group: "vendor", route: "/admin/vendor/subordinates", requiredPermissions: ["partner.subordinate.view"] },
+  { pageId: "ADM-CUS-001", label: "客人账号管理", module: "客人", group: "governance", route: "/admin/customers/accounts", requiredPermissions: ["customer.account.manage"] },
   { pageId: "ADM-INT-004", label: "短信通知开关", module: "第三方接入", group: "integration", route: "/admin/integrations/sms-switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", module: "招商租赁", group: "governance", route: "/admin/leasing/rental-status", requiredPermissions: ["contract.draft.manage"] },
   { pageId: "ADM-VND-002", label: "外包巡检任务", module: "外包工作台", group: "vendor", route: "/admin/vendor/inspections", requiredPermissions: ["facility.inspection.view_assigned"] },

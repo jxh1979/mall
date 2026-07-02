@@ -25640,6 +25640,276 @@
           }
         }
       }
+    },
+    "/api/v1/customer-accounts": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "lookupCustomerAccountByPhone",
+        "summary": "按手机号精确查客人账号（盲索引，返回安全投影，明文手机号不出网）",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.account.viewed",
+        "x-audit-event-failure": "customer.account.view_failed",
+        "parameters": [
+          {
+            "name": "phone",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "客人完整手机号（精确匹配，经盲索引查询，不支持模糊搜索）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-accounts/{customer_id}/suspend": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "suspendCustomerAccount",
+        "summary": "封禁客人账号（临时，到期客人再登录自动恢复正常；期内购买/使用被拒）",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.account.suspended",
+        "x-audit-event-failure": "customer.account.suspend_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "客人账号 id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "suspendedUntil"
+                ],
+                "properties": {
+                  "suspendedUntil": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "封禁到期时刻（ISO-8601）"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "封禁原因（留审计）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-accounts/{customer_id}/blacklist": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "blacklistCustomerAccount",
+        "summary": "拉黑客人账号（永久禁止使用服务，无到期）",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.account.blacklisted",
+        "x-audit-event-failure": "customer.account.blacklist_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "客人账号 id"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "操作原因（留审计）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-accounts/{customer_id}/reinstate": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "reinstateCustomerAccount",
+        "summary": "恢复客人账号为正常（解封/解黑）",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.account.reinstated",
+        "x-audit-event-failure": "customer.account.reinstate_failed",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "客人账号 id"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "操作原因（留审计）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer/deregister": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "deregisterCustomerAccount",
+        "summary": "客人自助注销本人账号（注销后登录/动作被拒，历史数据物理保留但客人不可见）",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "miniapp",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.account.deregistered",
+        "x-audit-event-failure": "customer.account.deregister_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
     }
   },
   "components": {

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 525 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 282 | 人工权限矩阵正文未覆盖 178 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1050 | 人工事件矩阵正文未覆盖 1007 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 525 | 人工任务映射正文未逐项覆盖 519 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 325 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 530 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 283 | 人工权限矩阵正文未覆盖 179 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1060 | 人工事件矩阵正文未覆盖 1017 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 530 | 人工任务映射正文未逐项覆盖 524 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 329 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -139,6 +139,7 @@
 | `contract.settlement.manage` | staff-token | platform | 4 | settleContract, listContractSettlements, completeContractSettlement, advanceContractSettlement | OpenAPI 补充，以本附录为准 |
 | `contract.space.color.manage` | staff-token | platform | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
 | `contract.view` | staff-token | project-merchant | 1 | listContracts | 已在权限矩阵正文出现 |
+| `customer.account.manage` | staff-token | platform | 4 | lookupCustomerAccountByPhone, suspendCustomerAccount, blacklistCustomerAccount, reinstateCustomerAccount | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.view` | staff-token | project | 1 | listMemberLevels | OpenAPI 补充，以本附录为准 |
 | `customer.membership.manage` | staff-token | project | 1 | saveMembershipPlan | OpenAPI 补充，以本附录为准 |
@@ -250,7 +251,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 23 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 24 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -689,6 +690,16 @@
 | `contract.view_failed` | failure | `listContracts` | `GET` | `/api/v1/contracts` | P0-待归类 | `contract.draft.manage` | 接口级事件，以本附录为准 |
 | `contract.viewed` | success | `listContracts` | `GET` | `/api/v1/platform/contracts` | GOV-平台治理 | `contract.view` | 接口级事件，以本附录为准 |
 | `contract.viewed` | success | `listContracts` | `GET` | `/api/v1/contracts` | P0-待归类 | `contract.draft.manage` | 接口级事件，以本附录为准 |
+| `customer.account.blacklist_failed` | failure | `blacklistCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.blacklisted` | success | `blacklistCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.deregister_failed` | failure | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.account.deregistered` | success | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.account.reinstate_failed` | failure | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.reinstated` | success | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.suspend_failed` | failure | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.suspended` | success | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.view_failed` | failure | `lookupCustomerAccountByPhone` | `GET` | `/api/v1/customer-accounts` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.account.viewed` | success | `lookupCustomerAccountByPhone` | `GET` | `/api/v1/customer-accounts` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `customer.auth.login` | success | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.auth.login_failed` | failure | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.bar_invitation.confirm_failed` | failure | `confirmCustomerBarInvitation` | `POST` | `/api/v1/customer/bar-invitations/confirm` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -1540,6 +1551,7 @@
 | BAR-酒吧经营 | `verifyBarReservationEntryAllowance` | `POST` | `/api/v1/bar/reservations/{id}/entry-allowance/verify` | 卡座免通票入场名额校验 | `bar.table.guest_checkin` | `bar.table_guest.entry_allowance_verified` / `bar.table_guest.entry_allowance_verify_failed` | staff_work_phone, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | tablet, web | operation 级补充 |
+| CUS-客人端 | `blacklistCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist` | 拉黑客人账号（永久禁止使用服务，无到期） | `customer.account.manage` | `customer.account.blacklisted` / `customer.account.blacklist_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
@@ -1550,6 +1562,7 @@
 | CUS-客人端 | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | 客人储值消费（余额扣减） | `customer.stored_value.consume` | `customer.stored_value.consume` / `customer.stored_value.consume_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | 客人储值充值入账（支付成功后） | `customer.stored_value.topup` | `customer.stored_value.settle` / `customer.stored_value.settle_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerStoredValueTopup` | `POST` | `/api/v1/customer/stored-value/topup` | 客人储值充值（绑支付意图） | `customer.stored_value.topup` | `customer.stored_value.topup` / `customer.stored_value.topup_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | 客人自助注销本人账号（注销后登录/动作被拒，历史数据物理保留但客人不可见） | `not_applicable` | `customer.account.deregistered` / `customer.account.deregister_failed` | miniapp, web | operation 级补充 |
 | CUS-客人端 | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | 手动触发会员等级评估 | `customer.loyalty.evaluate` | `member.level_changed` / `customer.level_evaluate_failed` | web | operation 级补充 |
 | CUS-客人端 | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | 冻结会员积分账户 | `customer.points.freeze` | `customer.points.frozen` / `customer.points.freeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | 冻结会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.frozen` / `stored_value.frozen_failed` | web | operation 级补充 |
@@ -1564,9 +1577,12 @@
 | CUS-客人端 | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | 查询我的积分兑换记录 | `not_applicable` | `customer.points.redemptions_viewed` / `customer.points.redemptions_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | 会员等级配置列表 | `customer.loyalty.view` | `customer.member_levels_viewed` / `customer.member_levels_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listMembershipPlans` | `GET` | `/api/v1/loyalty/membership-plans` | 付费会员档位列表（后台） | `customer.membership.view` | `customer.membership_plans_admin_viewed` / `customer.membership_plans_admin_viewed_failed` | web | operation 级补充 |
+| CUS-客人端 | `lookupCustomerAccountByPhone` | `GET` | `/api/v1/customer-accounts` | 按手机号精确查客人账号（盲索引，返回安全投影，明文手机号不出网） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
 | CUS-客人端 | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | 提交积分兑换 | `not_applicable` | `customer.points.redeem` / `customer.points.redeem_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | 会员储值退卡/退余额（后台） | `customer.stored_value.refund` | `stored_value.refund` / `stored_value.refund_failed` | web | operation 级补充 |
+| CUS-客人端 | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | 恢复客人账号为正常（解封/解黑） | `customer.account.manage` | `customer.account.reinstated` / `customer.account.reinstate_failed` | web | operation 级补充 |
 | CUS-客人端 | `saveMembershipPlan` | `POST` | `/api/v1/loyalty/membership-plans` | 保存付费会员档位（后台） | `customer.membership.manage` | `membership.plan_saved` / `membership.plan_saved_failed` | web | operation 级补充 |
+| CUS-客人端 | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | 封禁客人账号（临时，到期客人再登录自动恢复正常；期内购买/使用被拒） | `customer.account.manage` | `customer.account.suspended` / `customer.account.suspend_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | 解冻会员积分账户 | `customer.points.freeze` | `customer.points.unfrozen` / `customer.points.unfreeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/unfreeze` | 解冻会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.unfrozen` / `stored_value.unfrozen_failed` | web | operation 级补充 |
 | CUS/BAR-客人订台 | `confirmCustomerBarInvitation` | `POST` | `/api/v1/customer/bar-invitations/confirm` | 客人确认接受订卡邀请函 | `not_applicable` | `customer.bar_invitation.confirmed` / `customer.bar_invitation.confirm_failed` | web, miniapp, app | operation 级补充 |
