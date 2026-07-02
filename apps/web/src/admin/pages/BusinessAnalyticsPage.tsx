@@ -9,7 +9,7 @@ import type { AdminPageProps, BusinessMetricSnapshotRow, MetricAnomalyRow, Metri
 const TEXT = {
   title: "经营分析",
   description: "把收入、票务、酒吧、游乐、商户健康和风险指标沉淀成可复盘经营视图；当前以正式指标快照、指标定义和异常接口为准，不伪造预测或生产 BI。",
-  evidence: "接口证据：读取 /api/v1/analytics/business-metric-snapshots、/api/v1/analytics/traffic-hourly；指标定义/异常检测未启用（二期）。",
+  evidence: "接口证据：读取 /api/v1/analytics/business-metric-snapshots、/api/v1/analytics/traffic-hourly、/api/v1/analytics/metric-definitions、/api/v1/analytics/metric-anomalies（定义=代码目录每日同步，异常=日环比突变检测，阈值在经营参数页可调）。",
   loadFailed: "经营分析数据读取失败",
   totalMetrics: "指标快照",
   upward: "上升趋势",
@@ -62,6 +62,8 @@ function rowDomain(row: BusinessMetricSnapshotRow | MetricDefinitionRow | Metric
 
 export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: AdminPageProps) {
   const [snapshots, setSnapshots] = React.useState<BusinessMetricSnapshotRow[]>([]);
+  const [definitions, setDefinitions] = React.useState<MetricDefinitionRow[]>([]);
+  const [anomalies, setAnomalies] = React.useState<MetricAnomalyRow[]>([]);
   const [domainFilter, setDomainFilter] = React.useState("all");
   const [lockNote, setLockNote] = React.useState("总控周会复盘锁定");
   const [formError, setFormError] = React.useState("");
@@ -70,14 +72,18 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      // S1(2026-07-02 拍板):指标定义/指标异常为 V017 演示种子、无生产管道——下架不再拉取,
-      // 页面显式标「未启用」防误导决策;真实异常检测/口径治理管道排二期。
-      const [snapshotRows, hourlyResp] = await Promise.all([
+      // M3(2026-07-02 拍板):定义/异常两块接真管道——定义=代码指标目录每日同步(单一事实源投影),
+      // 异常=日环比突变检测(阈值经营参数页可调)。演示种子已随 V207 清除。
+      const [snapshotRows, hourlyResp, definitionRows, anomalyRows] = await Promise.all([
         api.get<BusinessMetricSnapshotRow[]>("/api/v1/analytics/business-metric-snapshots"),
         api.get<{ businessDate?: string; buckets?: Array<{ hour: number; count: number }> }>("/api/v1/analytics/traffic-hourly"),
+        api.get<MetricDefinitionRow[]>("/api/v1/analytics/metric-definitions"),
+        api.get<MetricAnomalyRow[]>("/api/v1/analytics/metric-anomalies"),
       ]);
       setSnapshots(snapshotRows);
       setHourly(hourlyResp?.buckets ?? []);
+      setDefinitions(definitionRows ?? []);
+      setAnomalies(anomalyRows ?? []);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -156,7 +162,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             <div className="admin-kpi-grid" data-testid="business-analytics-summary">
               <div className="admin-kpi-card"><span>{TEXT.totalMetrics}</span><strong>{filteredSnapshots.length}</strong><small>{domainFilter}</small></div>
               <div className="admin-kpi-card"><span>{TEXT.upward}</span><strong>{upwardCount}</strong><small>上升</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.anomalies}</span><strong>未启用</strong><small>二期</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.anomalies}</span><strong data-testid="business-analytics-anomaly-count">{anomalies.filter((row) => row.status === "open").length}</strong><small>待处置</small></div>
               <div className="admin-kpi-card"><span>{TEXT.avgVariance}</span><strong>{formatPercent(averageVariance)}</strong><small>{TEXT.varianceRate}</small></div>
             </div>
 
@@ -217,13 +223,37 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError }: 
             </div>
 
             <h3>{TEXT.definition}</h3>
-            <div className="admin-state admin-empty" data-testid="business-analytics-definitions-disabled">
-              功能未启用:指标口径治理(定义/负责人/单位)的真实管道在二期建设中;此前显示的是建系统时的演示数据,已下架防误导。
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="business-analytics-definitions-table">
+                <thead><tr><th>指标</th><th>业务域</th><th>单位</th><th>口径说明</th><th>状态</th></tr></thead>
+                <tbody>{definitions.map((row) => (
+                  <tr key={row.metricKey}>
+                    <td>{row.metricKey}</td>
+                    <td>{row.domain ?? "—"}</td>
+                    <td>{row.unit ?? "—"}</td>
+                    <td>{row.calculationNote ?? "—"}</td>
+                    <td>{row.status === "active" ? "启用" : "停用(数据源未就绪)"}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
             </div>
 
             <h3>{TEXT.anomalies}</h3>
-            <div className="admin-state admin-empty" data-testid="business-analytics-anomalies-disabled">
-              功能未启用:指标异常自动检测在二期建设中;此前显示的是演示数据,已下架防误导。
+            <div className="admin-table-scroll">
+              <table className="admin-table" data-testid="business-analytics-anomalies-table">
+                <thead><tr><th>指标</th><th>风险</th><th>观测值</th><th>基准值</th><th>说明</th><th>状态</th><th>发现时间</th></tr></thead>
+                <tbody>{anomalies.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.metricKey}</td>
+                    <td>{row.riskLevel === "high" ? "高" : row.riskLevel === "suspicious" ? "可疑" : row.riskLevel}</td>
+                    <td>{formatNumber(row.observedValue)}</td>
+                    <td>{formatNumber(row.expectedValue)}</td>
+                    <td>{row.summary ?? "—"}</td>
+                    <td>{row.status === "open" ? "待处置" : row.status}</td>
+                    <td>{row.detectedAt ? new Date(row.detectedAt).toLocaleString("zh-CN", { hour12: false }) : "—"}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
             </div>
           </>
         )}

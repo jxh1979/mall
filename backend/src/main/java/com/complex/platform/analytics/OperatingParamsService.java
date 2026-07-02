@@ -89,6 +89,30 @@ public class OperatingParamsService {
         return saved;
     }
 
+    /** M3:读异常检测阈值(经营参数页展示)。 */
+    public AnalyticsRecords.AnomalyConfig getAnomalyConfig() {
+        return repository.readAnomalyConfig();
+    }
+
+    /** M3(2026-07-02 拍板):环比突变阈值后台可调——可疑线/高风险线,0<可疑<=高;审计留痕。 */
+    public AnalyticsRecords.AnomalyConfig updateAnomalyConfig(AnomalyConfigRequest request) {
+        AnomalyConfigRequest actual = requireRequest(request);
+        java.math.BigDecimal surge = actual.surgePct();
+        java.math.BigDecimal high = actual.highPct();
+        if (surge == null || high == null || surge.signum() <= 0 || high.compareTo(surge) < 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "surge_pct must be > 0 and high_pct >= surge_pct");
+        }
+        boolean enabled = actual.enabled() == null || actual.enabled();
+        AnalyticsRecords.AnomalyConfig saved = repository.upsertAnomalyConfig(
+                surge, high, enabled, null, Instant.now(clock));
+        auditEventService.recordSuccess(
+                "analytics.anomaly_config.updated", "analytics.operating_params.manage",
+                "analytics_anomaly_config", "default", null, actual.idempotencyKey(),
+                java.util.Map.of("surge_pct", surge.toPlainString(), "high_pct", high.toPlainString(),
+                        "enabled", enabled));
+        return saved;
+    }
+
     private <T> T requireRequest(T request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");

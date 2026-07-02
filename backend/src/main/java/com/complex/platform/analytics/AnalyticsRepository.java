@@ -134,6 +134,20 @@ public interface AnalyticsRepository {
     /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。 */
     java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset);
 
+    /** M3:代码指标目录同步进 analytics_metric_definitions(单一事实源投影;异常表 FK 前置)。 */
+    void syncMetricDefinitions(java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> rows, java.time.Instant now);
+
+    /** M3:写入一条指标异常(id 幂等,同日同指标只记一次)。 */
+    void insertMetricAnomaly(String id, String metricKey, String domain, String riskLevel,
+            BigDecimal observedValue, BigDecimal expectedValue, String summary, java.time.Instant detectedAt);
+
+    /** M3:读异常检测阈值配置(default 行;无行返回 null=检测关闭)。 */
+    AnalyticsRecords.AnomalyConfig readAnomalyConfig();
+
+    /** M3:更新异常检测阈值配置(经营参数页后台可调)。 */
+    AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
+            boolean enabled, String updatedBy, java.time.Instant now);
+
     /** M1 月度滚动汇总:把当月 daily platform 行聚成 monthly 行(business_date=月首日)。
      * 混合口径(2026-07-02 拍板④):sumKeys=流量类月累计,lastKeys=存量/比率类期末时点;
      * 白名单外的键不做月度行(月度需重算窗口的比率如 P50/超时率不伪造)。幂等(V070 唯一索引)。 */

@@ -151,6 +151,7 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-EVD-001") {
     await expect(page.getByTestId("audit-events-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-001") {
+    // 深断言(异常计数/两表内容)在 ADM-REM-01 专区;此处仅保证可见,REM-03 空态复用不误伤。
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-002") {
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
@@ -185,6 +186,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("receivables-debtors-table")).toContainText("欠费示例商户");
   } else if (spec.pageId === "ADM-ANA-003") {
     await expect(page.getByTestId("operating-params-page")).toBeVisible();
+    await expect(page.getByTestId("anomaly-config-editor")).toBeVisible();
+    await expect(page.getByTestId("anomaly-surge-input")).toHaveValue("50");
     await expect(page.getByTestId("business-day-cutoffs-table")).toBeVisible();
     await expect(page.getByTestId("cutoff-hour-bar")).toContainText("6:00");
   }
@@ -498,11 +501,12 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-ANA-001") {
         await expect(page.getByTestId("business-analytics-evidence")).toContainText("/api/v1/analytics/business-metric-snapshots");
-        await expect(page.getByTestId("business-analytics-evidence")).toContainText("指标定义/异常检测未启用");
+        await expect(page.getByTestId("business-analytics-evidence")).toContainText("日环比突变检测");
         await expect(page.getByTestId("business-analytics-summary")).toContainText("上升");
         await expect(page.getByTestId("business-analytics-table")).toContainText("gmv_amount_cents");
-        await expect(page.getByTestId("business-analytics-definitions-disabled")).toContainText("功能未启用");
-        await expect(page.getByTestId("business-analytics-anomalies-disabled")).toContainText("功能未启用");
+        await expect(page.getByTestId("business-analytics-definitions-table")).toContainText("gmv_amount_cents");
+        await expect(page.getByTestId("business-analytics-anomalies-table")).toContainText("revenue.net");
+        await expect(page.getByTestId("business-analytics-anomaly-count")).toContainText("1");
         await page.getByTestId("business-analytics-domain-filter").selectOption("bar");
         await expect(page.getByTestId("business-analytics-table")).toContainText("bar_order_count");
         await page.getByTestId("business-analytics-domain-filter").selectOption("all");

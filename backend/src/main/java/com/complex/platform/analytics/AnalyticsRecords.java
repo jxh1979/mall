@@ -291,6 +291,26 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** M3 异常检测阈值配置(环比突变,2026-07-02 拍板:阈值后台可调)。 */
+    public record AnomalyConfig(
+            BigDecimal surgePct,
+            BigDecimal highPct,
+            boolean enabled,
+            String updatedBy,
+            Instant updatedAt
+    ) {
+    }
+
+    /** M3 指标定义同步行(代码目录=单一事实源,表=可查询投影)。 */
+    public record MetricDefinitionSyncRow(
+            String metricKey,
+            String domain,
+            String unit,
+            boolean ready,
+            String note
+    ) {
+    }
+
     /** M1 月度对比行(环比/同比;缺数据=null,前端标「积累中」,不伪造)。 */
     public record MonthlyComparisonRow(
             String metricKey,

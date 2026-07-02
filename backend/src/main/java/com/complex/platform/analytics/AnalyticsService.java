@@ -71,7 +71,7 @@ public class AnalyticsService {
      * T12 看板七类指标目录（与 r5-aggregation-metrics-draft §2 / DashboardAggregationJob 对齐）。
      * ready=false 的指标数据源未就绪，按"不伪造"返回 null + note（采购到货依赖 T6；补录依赖 P1 留痕；第三方回流依赖开关接线）。
      */
-    private static final List<MetricCatalogEntry> METRIC_CATALOG = List.of(
+    static final List<MetricCatalogEntry> METRIC_CATALOG = List.of(
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_TICKET, "finance", "cent", true,
                     "ticket_orders has no merchant_id; merchant-scoped value not available"),
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_BAR, "bar", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
@@ -1149,7 +1149,7 @@ public class AnalyticsService {
     }
 
 
-    private record MetricCatalogEntry(
+    record MetricCatalogEntry(
             String metricCode,
             String domain,
             String unit,

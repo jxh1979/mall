@@ -988,6 +988,81 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public void syncMetricDefinitions(java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> rows, java.time.Instant now) {
+        for (AnalyticsRecords.MetricDefinitionSyncRow row : rows) {
+            jdbcTemplate.update("""
+                    INSERT INTO analytics_metric_definitions (
+                        metric_key, name, domain, unit, calculation_note, owner_role, status, created_at, updated_at)
+                    VALUES (:metric_key, :metric_key, :domain, :unit, :note, 'platform', :status, :now, :now)
+                    ON CONFLICT (metric_key) DO UPDATE SET
+                        domain = EXCLUDED.domain,
+                        unit = EXCLUDED.unit,
+                        calculation_note = EXCLUDED.calculation_note,
+                        status = EXCLUDED.status,
+                        updated_at = EXCLUDED.updated_at
+                    """, new MapSqlParameterSource()
+                    .addValue("metric_key", row.metricKey())
+                    .addValue("domain", row.domain())
+                    .addValue("unit", row.unit())
+                    .addValue("note", row.note())
+                    .addValue("status", row.ready() ? "active" : "disabled")
+                    .addValue("now", timestampWithTimeZone(now)));
+        }
+    }
+
+    @Override
+    public void insertMetricAnomaly(String id, String metricKey, String domain, String riskLevel,
+            BigDecimal observedValue, BigDecimal expectedValue, String summary, java.time.Instant detectedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO analytics_metric_anomalies (
+                    id, metric_key, domain, risk_level, observed_value, expected_value, summary, status, detected_at)
+                VALUES (:id, :metric_key, :domain, :risk_level, :observed, :expected, :summary, 'open', :detected_at)
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("metric_key", metricKey)
+                .addValue("domain", domain)
+                .addValue("risk_level", riskLevel)
+                .addValue("observed", observedValue)
+                .addValue("expected", expectedValue)
+                .addValue("summary", summary)
+                .addValue("detected_at", timestampWithTimeZone(detectedAt)));
+    }
+
+    @Override
+    public AnalyticsRecords.AnomalyConfig readAnomalyConfig() {
+        return jdbcTemplate.query("""
+                SELECT surge_pct, high_pct, enabled, updated_by, updated_at
+                  FROM analytics_anomaly_config
+                 WHERE id = 'default'
+                """, new MapSqlParameterSource(), (rs, n) -> new AnalyticsRecords.AnomalyConfig(
+                rs.getBigDecimal("surge_pct"), rs.getBigDecimal("high_pct"), rs.getBoolean("enabled"),
+                rs.getString("updated_by"), rs.getTimestamp("updated_at").toInstant()))
+                .stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
+            boolean enabled, String updatedBy, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO analytics_anomaly_config (id, surge_pct, high_pct, enabled, updated_by, updated_at)
+                VALUES ('default', :surge, :high, :enabled, :updated_by, :now)
+                ON CONFLICT (id) DO UPDATE SET
+                    surge_pct = EXCLUDED.surge_pct,
+                    high_pct = EXCLUDED.high_pct,
+                    enabled = EXCLUDED.enabled,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("surge", surgePct)
+                .addValue("high", highPct)
+                .addValue("enabled", enabled)
+                .addValue("updated_by", updatedBy)
+                .addValue("now", timestampWithTimeZone(now)));
+        return readAnomalyConfig();
+    }
+
+    @Override
     public void rollupMonthlySnapshots(LocalDate monthFirst, LocalDate upTo,
             java.util.List<String> sumKeys, java.util.List<String> lastKeys, java.time.Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource()

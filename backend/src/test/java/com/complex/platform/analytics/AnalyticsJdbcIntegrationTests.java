@@ -235,6 +235,46 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void v207CleansDemoSeedsAndAnomalyPipelineIsIdempotent() {
+        // M3:V207 清定义/异常演示种子(V017 冒真);定义同步 upsert;异常按 id 幂等;阈值配置往返可调。
+        assertThat(countRows("SELECT COUNT(*) FROM analytics_metric_anomalies WHERE id='anomaly_p0'")).isZero();
+        assertThat(countRows("SELECT COUNT(*) FROM analytics_metric_definitions WHERE metric_key='gmv_amount_cents'")).isZero();
+
+        AnalyticsRecords.AnomalyConfig seeded = repository.readAnomalyConfig();
+        assertThat(seeded.surgePct()).isEqualByComparingTo("0.5");
+        assertThat(seeded.highPct()).isEqualByComparingTo("0.8");
+        assertThat(seeded.enabled()).isTrue();
+
+        java.time.Instant now = java.time.Instant.parse("2099-05-01T00:00:00Z");
+        repository.syncMetricDefinitions(java.util.List.of(
+                new AnalyticsRecords.MetricDefinitionSyncRow("m3.test_key", "finance", "cent", true, "note-1")), now);
+        repository.syncMetricDefinitions(java.util.List.of(
+                new AnalyticsRecords.MetricDefinitionSyncRow("m3.test_key", "finance", "cent", true, "note-2")), now);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT calculation_note FROM analytics_metric_definitions WHERE metric_key='m3.test_key'",
+                java.util.Map.of(), String.class)).isEqualTo("note-2");
+
+        repository.insertMetricAnomaly("ano_m3_test", "m3.test_key", "finance", "suspicious",
+                new java.math.BigDecimal("150"), new java.math.BigDecimal("100"), "s", now);
+        repository.insertMetricAnomaly("ano_m3_test", "m3.test_key", "finance", "high",
+                new java.math.BigDecimal("150"), new java.math.BigDecimal("100"), "s", now);
+        assertThat(countRows("SELECT COUNT(*) FROM analytics_metric_anomalies WHERE id='ano_m3_test'")).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT risk_level FROM analytics_metric_anomalies WHERE id='ano_m3_test'",
+                java.util.Map.of(), String.class)).isEqualTo("suspicious");
+
+        AnalyticsRecords.AnomalyConfig updated = repository.upsertAnomalyConfig(
+                new java.math.BigDecimal("0.6"), new java.math.BigDecimal("0.9"), true, "admin", now);
+        assertThat(updated.surgePct()).isEqualByComparingTo("0.6");
+        assertThat(repository.readAnomalyConfig().highPct()).isEqualByComparingTo("0.9");
+    }
+
+    private long countRows(String sql) {
+        Long value = jdbcTemplate.queryForObject(sql, java.util.Map.of(), Long.class);
+        return value == null ? 0 : value;
+    }
+
+    @Test
     void v206SeedsReportExportPermissionWithSeparationOfDuty() {
         // M2(V196 范式):报表导出与查看分权——独立高危权限点,平台管理员直授,审计角色不得直授。
         assertThat(jdbcTemplate.queryForObject(
@@ -356,7 +396,7 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(rowCount("analytics_business_metric_snapshots")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_merchant_summaries")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_merchant_health_scores")).isGreaterThanOrEqualTo(1);
-        assertThat(rowCount("analytics_metric_anomalies")).isGreaterThanOrEqualTo(1);
+        // M3(V207):异常演示种子已清,真实异常由日环比检测写入,不再断言演示行。
         assertThat(rowCount("analytics_risk_rules")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_risk_alerts")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_ai_quality_tasks")).isGreaterThanOrEqualTo(1);
@@ -368,9 +408,13 @@ class AnalyticsJdbcIntegrationTests {
 
     @Test
     void repositoryListsSeededAnalyticsReadModels() {
+        // M3(V207):gmv 演示种子已清;定义表由代码目录同步,这里验证同步行可被读端点读回。
+        repository.syncMetricDefinitions(java.util.List.of(
+                new AnalyticsRecords.MetricDefinitionSyncRow("revenue.net", "finance", "cent", true, "m3")),
+                java.time.Instant.parse("2099-05-01T00:00:00Z"));
         assertThat(repository.listMetricDefinitions())
                 .extracting(AnalyticsRecords.MetricDefinitionRecord::metricKey, AnalyticsRecords.MetricDefinitionRecord::unit)
-                .contains(tuple("gmv_amount_cents", "cent"));
+                .contains(tuple("revenue.net", "cent"));
         assertThat(repository.getP0OverviewDashboard().snapshotKey()).isEqualTo("p0_overview_today");
         assertThat(repository.listBusinessMetricSnapshots())
                 .extracting(AnalyticsRecords.BusinessMetricSnapshotRecord::metricKey, AnalyticsRecords.BusinessMetricSnapshotRecord::trendDirection)
@@ -381,9 +425,13 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(repository.listMerchantHealthScores())
                 .extracting(AnalyticsRecords.MerchantHealthScoreRecord::merchantId, AnalyticsRecords.MerchantHealthScoreRecord::scoreLevel)
                 .contains(tuple("merchant_p0", "healthy"));
+        // M3(V207):异常演示种子已清;这里验证真管道写入的异常行可被读端点读回。
+        repository.insertMetricAnomaly("ano_m3_read_test", "revenue.net", "finance", "suspicious",
+                new java.math.BigDecimal("150"), new java.math.BigDecimal("100"), "m3",
+                java.time.Instant.parse("2099-05-01T00:00:00Z"));
         assertThat(repository.listMetricAnomalies())
                 .extracting(AnalyticsRecords.MetricAnomalyRecord::metricKey, AnalyticsRecords.MetricAnomalyRecord::riskLevel)
-                .contains(tuple("gmv_amount_cents", "suspicious"));
+                .contains(tuple("revenue.net", "suspicious"));
         assertThat(repository.listRiskRules())
                 .extracting(AnalyticsRecords.RiskRuleRecord::ruleId, AnalyticsRecords.RiskRuleRecord::enabled)
                 .contains(tuple("rule_p0_gmv_drop", true));

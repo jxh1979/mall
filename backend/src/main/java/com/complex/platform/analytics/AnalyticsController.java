@@ -209,6 +209,22 @@ public class AnalyticsController {
         return ApiResponse.ok(operatingParamsService.upsertBusinessDayCutoff(request));
     }
 
+    @GetMapping("/anomaly-config")
+    public ApiResponse<AnalyticsRecords.AnomalyConfig> getAnomalyConfig() {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(operatingParamsService.getAnomalyConfig());
+    }
+
+    @PostMapping("/anomaly-config")
+    public ApiResponse<AnalyticsRecords.AnomalyConfig> updateAnomalyConfig(
+            @RequestBody @jakarta.validation.Valid AnomalyConfigRequest request) {
+        authorizationService.requirePermission("analytics.operating_params.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(operatingParamsService.updateAnomalyConfig(request));
+    }
+
     @GetMapping("/operating-params")
     public ApiResponse<PageResponse<OperatingParamsRecord>> listOperatingParams() {
         authorizationService.requirePermission("analytics.dashboard.view");

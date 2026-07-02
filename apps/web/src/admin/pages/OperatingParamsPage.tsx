@@ -41,17 +41,24 @@ const MANAGE = ["analytics.operating_params.manage"];
 export function OperatingParamsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<OperatingParamsRow[]>([]);
   const [cutoffs, setCutoffs] = React.useState<BusinessDayCutoffRow[]>([]);
+  const [anomalyConfig, setAnomalyConfig] = React.useState<{ surgePct?: number | string; highPct?: number | string; enabled?: boolean } | null>(null);
+  const [surgeEdit, setSurgeEdit] = React.useState("");
+  const [highEdit, setHighEdit] = React.useState("");
   const [cutoffEdits, setCutoffEdits] = React.useState<Record<string, string>>({});
   const [form, setForm] = React.useState({ projectId: "project_1", areaSqm: "" });
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [items, cutoffRows] = await Promise.all([
+      const [items, cutoffRows, anomalyCfg] = await Promise.all([
         api.get<OperatingParamsRow[]>("/api/v1/analytics/operating-params"),
         api.get<BusinessDayCutoffRow[]>("/api/v1/analytics/business-day-cutoffs"),
+        api.get<{ surgePct?: number | string; highPct?: number | string; enabled?: boolean }>("/api/v1/analytics/anomaly-config"),
       ]);
       setRows(items ?? []);
       setCutoffs(cutoffRows ?? []);
+      setAnomalyConfig(anomalyCfg ?? null);
+      setSurgeEdit(anomalyCfg?.surgePct === undefined ? "" : String(Number(anomalyCfg.surgePct) * 100));
+      setHighEdit(anomalyCfg?.highPct === undefined ? "" : String(Number(anomalyCfg.highPct) * 100));
     },
     { onError: setGlobalError, fallbackMessage: "综合体经营参数读取失败" },
   );
@@ -82,6 +89,18 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
     await api.post("/api/v1/analytics/business-day-cutoffs", { domain, cutoffHour: hour });
     setActionResult({ action: "business_day_cutoff_saved", domain, cutoffHour: hour });
     setCutoffEdits((edits) => ({ ...edits, [domain]: "" }));
+    reload();
+  }
+
+  async function saveAnomalyConfig() {
+    const surge = Number(surgeEdit) / 100;
+    const high = Number(highEdit) / 100;
+    if (!Number.isFinite(surge) || !Number.isFinite(high) || surge <= 0 || high < surge) {
+      setGlobalError("阈值需满足:可疑线>0 且 高风险线≥可疑线(按百分比填写,如 50 与 80)");
+      return;
+    }
+    await api.post("/api/v1/analytics/anomaly-config", { surgePct: surge, highPct: high, enabled: true });
+    setActionResult({ action: "anomaly_config_saved", surgePct: surge, highPct: high });
     reload();
   }
 
@@ -154,6 +173,13 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
               ))}
             </tbody>
           </table>
+        </div>
+        <h3>指标异常检测阈值(环比突变,后台可调)</h3>
+        <div className="admin-form-grid" data-testid="anomaly-config-editor">
+          <label>可疑线(%)<input data-testid="anomaly-surge-input" value={surgeEdit} onChange={(event) => setSurgeEdit(event.target.value)} /></label>
+          <label>高风险线(%)<input data-testid="anomaly-high-input" value={highEdit} onChange={(event) => setHighEdit(event.target.value)} /></label>
+          <button type="button" data-testid="anomaly-config-save" onClick={saveAnomalyConfig}>保存阈值</button>
+          <span className="admin-muted-action">当前:可疑 {anomalyConfig?.surgePct === undefined ? "—" : `${(Number(anomalyConfig.surgePct) * 100).toFixed(0)}%`} / 高风险 {anomalyConfig?.highPct === undefined ? "—" : `${(Number(anomalyConfig.highPct) * 100).toFixed(0)}%`};关键指标当日较前一经营日突变超线自动记异常,小基数日不报防误报。</span>
         </div>
       </AdminDataState>
     </section>

@@ -960,6 +960,23 @@ class AnalyticsServiceTests {
 
         java.util.Map<LocalDate, java.util.Map<String, java.math.BigDecimal>> monthlySnapshots = java.util.Map.of();
 
+        public void syncMetricDefinitions(java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> rows, java.time.Instant now) {
+        }
+
+        public void insertMetricAnomaly(String id, String metricKey, String domain, String riskLevel,
+                java.math.BigDecimal observedValue, java.math.BigDecimal expectedValue, String summary, java.time.Instant detectedAt) {
+        }
+
+        public AnalyticsRecords.AnomalyConfig readAnomalyConfig() {
+            return new AnalyticsRecords.AnomalyConfig(
+                    new java.math.BigDecimal("0.5"), new java.math.BigDecimal("0.8"), true, null, null);
+        }
+
+        public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(java.math.BigDecimal surgePct, java.math.BigDecimal highPct,
+                boolean enabled, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.AnomalyConfig(surgePct, highPct, enabled, updatedBy, now);
+        }
+
         public void rollupMonthlySnapshots(LocalDate monthFirst, LocalDate upTo,
                 java.util.List<String> sumKeys, java.util.List<String> lastKeys, java.time.Instant now) {
         }

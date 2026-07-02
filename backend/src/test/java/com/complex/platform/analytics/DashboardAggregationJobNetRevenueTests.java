@@ -59,6 +59,45 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void refreshSyncsDefinitionsAndDetectsDayOverDayAnomalies() {
+        // M3(2026-07-02 拍板):环比突变 ±50% 记可疑/±80% 记高;小基数不报(淡季防误报);
+        // mtd 类月初天然重置不检测;指标定义由代码目录同步进表(单一事实源投影,异常 FK 前置)。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.anomalyConfig = new AnalyticsRecords.AnomalyConfig(
+                new BigDecimal("0.5"), new BigDecimal("0.8"), true, null, null);
+        repository.snapshotsByDate = Map.of(
+                BUSINESS_DATE, Map.of(
+                        "revenue.net", new BigDecimal("1900000"),
+                        "member.new", new BigDecimal("26"),
+                        "occupancy.rate", new BigDecimal("0.8"),
+                        "ar.collected_mtd", new BigDecimal("5"),
+                        "wo.backlog", new BigDecimal("1")),
+                BUSINESS_DATE.minusDays(1), Map.of(
+                        "revenue.net", new BigDecimal("1000000"),
+                        "member.new", new BigDecimal("20"),
+                        "occupancy.rate", new BigDecimal("0.5"),
+                        "ar.collected_mtd", new BigDecimal("999999"),
+                        "wo.backlog", new BigDecimal("4")));
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.syncedDefinitions).extracting(AnalyticsRecords.MetricDefinitionSyncRow::metricKey)
+                .contains("revenue.net", "occupancy.rate", "wo.backlog");
+        assertThat(repository.insertedAnomalies).containsEntry("revenue.net", "high");          // +90%
+        assertThat(repository.insertedAnomalies).containsEntry("occupancy.rate", "suspicious"); // +60%
+        assertThat(repository.insertedAnomalies).doesNotContainKey("member.new");               // +30% 不到阈值
+        assertThat(repository.insertedAnomalies).doesNotContainKey("ar.collected_mtd");         // mtd 排除
+        assertThat(repository.insertedAnomalies).doesNotContainKey("wo.backlog");               // 双侧小基数(<10)不报
+
+        CapturingAnalyticsRepository disabled = new CapturingAnalyticsRepository();
+        disabled.anomalyConfig = new AnalyticsRecords.AnomalyConfig(
+                new BigDecimal("0.5"), new BigDecimal("0.8"), false, null, null);
+        disabled.snapshotsByDate = repository.snapshotsByDate;
+        new DashboardAggregationJob(disabled).refreshSnapshots(BUSINESS_DATE);
+        assertThat(disabled.insertedAnomalies).isEmpty();
+    }
+
+    @Test
     void refreshTriggersMonthlyRollupWithMixedAggregationWhitelists() {
         // M1:每次日刷后滚动更新当月 monthly 行;流量类 SUM/存量比率类期末 LAST 两白名单,名单外不做(不伪造)。
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
@@ -615,9 +654,32 @@ class DashboardAggregationJobNetRevenueTests {
             return 0L;
         }
 
+        Map<LocalDate, Map<String, BigDecimal>> snapshotsByDate = Map.of();
+        AnalyticsRecords.AnomalyConfig anomalyConfig;
+        final java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> syncedDefinitions = new java.util.ArrayList<>();
+        final Map<String, String> insertedAnomalies = new LinkedHashMap<>();
+
         @Override
         public Map<String, BigDecimal> readMetricSnapshots(LocalDate businessDate, String scope) {
-            return Map.of();
+            return snapshotsByDate.getOrDefault(businessDate, Map.of());
+        }
+
+        public void syncMetricDefinitions(java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> rows, java.time.Instant now) {
+            syncedDefinitions.addAll(rows);
+        }
+
+        public void insertMetricAnomaly(String id, String metricKey, String domain, String riskLevel,
+                BigDecimal observedValue, BigDecimal expectedValue, String summary, java.time.Instant detectedAt) {
+            insertedAnomalies.put(metricKey, riskLevel);
+        }
+
+        public AnalyticsRecords.AnomalyConfig readAnomalyConfig() {
+            return anomalyConfig;
+        }
+
+        public AnalyticsRecords.AnomalyConfig upsertAnomalyConfig(BigDecimal surgePct, BigDecimal highPct,
+                boolean enabled, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.AnomalyConfig(surgePct, highPct, enabled, updatedBy, now);
         }
 
         @Override

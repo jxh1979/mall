@@ -27074,6 +27074,106 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/analytics/anomaly-config": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "getAnomalyConfig",
+        "summary": "读指标异常检测阈值",
+        "description": "BI M3(2026-07-02 拍板):日环比突变检测阈值——可疑线/高风险线,经营参数页后台可调。",
+        "x-permission": "analytics.dashboard.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.anomaly_config.viewed",
+        "x-audit-event-failure": "analytics.anomaly_config.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "updateAnomalyConfig",
+        "summary": "改指标异常检测阈值",
+        "description": "校验 0<可疑线<=高风险线;审计留痕;ETL 下一轮检测即用新阈值。",
+        "x-permission": "analytics.operating_params.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "analytics.anomaly_config.updated",
+        "x-audit-event-failure": "analytics.anomaly_config.update_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "surge_pct",
+                  "high_pct"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "surge_pct": {
+                    "type": "number",
+                    "description": "可疑线(小数,0.5=±50%)。",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "high_pct": {
+                    "type": "number",
+                    "description": "高风险线(小数,须≥可疑线)。",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "是否启用日环比突变检测。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {

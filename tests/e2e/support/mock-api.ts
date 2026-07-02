@@ -99,7 +99,7 @@ function createState(empty = false) {
     { metricKey: "bar_order_count", name: "Bar Order Count", domain: "bar", unit: "count", calculationNote: "paid bar orders", ownerRole: "BAR_MANAGER", status: "active", createdAt: now, updatedAt: now },
   ];
   const metricAnomalies = empty ? [] : [
-    { id: "anomaly-1", metricKey: "gmv_amount_cents", domain: "complex", riskLevel: "high", observedValue: 650000, expectedValue: 880000, summary: "Revenue dropped below threshold", status: "open", detectedAt: now, resolvedAt: null },
+    { id: "ano_revenue_net_2026-07-01", metricKey: "revenue.net", domain: "finance", riskLevel: "high", observedValue: 1900000, expectedValue: 1000000, summary: "revenue.net 当日 1900000 较前一经营日 1000000 变动 90%", status: "open", detectedAt: now, resolvedAt: null },
   ];
   const riskAlerts = empty ? [] : [
     { id: "risk-1", ruleId: "risk-rule-1", alertType: "staff_behavior", riskLevel: "high", objectType: "bar_order", objectId: "order-1", summary: "Mock risk", ownerUserId: "ops-1", status: "open", evidenceAttachmentIds: ["att-risk-1"], createdAt: now, updatedAt: now, resolvedAt: null as string | null },
@@ -281,6 +281,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/ops/production-readiness/checks": [{ id: "check-1", status: "open", message: "NAS 恢复演练待回填" }],
     "/api/v1/analytics/robot": empty,
     "/api/v1/analytics/metric-definitions": state.metricDefinitions,
+    "/api/v1/analytics/anomaly-config": { surge_pct: 0.5, high_pct: 0.8, enabled: true },
     "/api/v1/analytics/ai-quality/tasks": empty,
     "/api/v1/analytics/ai-quality/results": empty,
     "/api/v1/analytics/customer-intents": empty,

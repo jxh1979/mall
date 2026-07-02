@@ -132,6 +132,13 @@ public class DashboardAggregationJob {
     // 注：scheduledRefresh 同类自调用时 @Transactional 不生效（Spring AOP self-invocation 限制），对外部触发生效。
     @Transactional
     public void refreshSnapshots(LocalDate businessDate) {
+        // M3:代码指标目录同步进 analytics_metric_definitions(单一事实源投影;异常表 FK 前置)。
+        Instant syncNow = Instant.now(clock);
+        repository.syncMetricDefinitions(AnalyticsService.METRIC_CATALOG.stream()
+                .map(entry -> new AnalyticsRecords.MetricDefinitionSyncRow(
+                        entry.metricCode(), entry.domain(), entry.unit(), entry.ready(), entry.note()))
+                .toList(), syncNow);
+
         Instant now = Instant.now(clock);
 
         // ⑤ 集团多项目 ETL：累积各 metric 的平台口径合计，末尾按 project_id 维度 upsert segment_type='project' 行。
@@ -298,6 +305,59 @@ public class DashboardAggregationJob {
         // M1:每次日刷后滚动更新当月 monthly 行(月末最后一刷自然定格,环比/同比随数据积累自然可比)。
         repository.rollupMonthlySnapshots(businessDate.withDayOfMonth(1), businessDate,
                 MONTHLY_SUM_KEYS, MONTHLY_LAST_KEYS, now);
+
+        // M3:日环比突变检测(2026-07-02 拍板:±surge 记可疑/±high 记高,阈值后台可调)。
+        detectAnomalies(businessDate, now);
+    }
+
+    /** M3:mtd 类月初天然重置会跳变,不做环比检测。 */
+    private static final java.util.Set<String> ANOMALY_EXCLUDED_KEYS = java.util.Set.of(
+            AR_COLLECTED_MTD, AR_RECEIVABLE_MTD, AR_COLLECTION_RATE_MTD);
+
+    /** M3:检测与快照同源(读回今日/昨日 platform daily 行);小基数双侧不达门槛不报(淡季防误报)。 */
+    private void detectAnomalies(LocalDate businessDate, Instant now) {
+        AnalyticsRecords.AnomalyConfig config = repository.readAnomalyConfig();
+        if (config == null || !config.enabled()) {
+            return;
+        }
+        Map<String, BigDecimal> today = repository.readMetricSnapshots(businessDate, null);
+        Map<String, BigDecimal> previous = repository.readMetricSnapshots(businessDate.minusDays(1), null);
+        for (AnalyticsService.MetricCatalogEntry entry : AnalyticsService.METRIC_CATALOG) {
+            String key = entry.metricCode();
+            if (!entry.ready() || ANOMALY_EXCLUDED_KEYS.contains(key)) {
+                continue;
+            }
+            BigDecimal current = today.get(key);
+            BigDecimal base = previous.get(key);
+            if (current == null || base == null || base.signum() == 0) {
+                continue;
+            }
+            BigDecimal minBase = minBaseFor(entry.unit());
+            if (current.abs().compareTo(minBase) < 0 && base.abs().compareTo(minBase) < 0) {
+                continue;
+            }
+            BigDecimal change = current.subtract(base).abs()
+                    .divide(base.abs(), 4, java.math.RoundingMode.HALF_UP);
+            String risk = change.compareTo(config.highPct()) >= 0 ? "high"
+                    : change.compareTo(config.surgePct()) >= 0 ? "suspicious" : null;
+            if (risk == null) {
+                continue;
+            }
+            String summary = key + " 当日 " + current.stripTrailingZeros().toPlainString()
+                    + " 较前一经营日 " + base.stripTrailingZeros().toPlainString()
+                    + " 变动 " + change.multiply(BigDecimal.valueOf(100)).stripTrailingZeros().toPlainString() + "%";
+            repository.insertMetricAnomaly(
+                    "ano_" + key.replace('.', '_') + "_" + businessDate,
+                    key, entry.domain(), risk, current, base, summary, now);
+        }
+    }
+
+    private BigDecimal minBaseFor(String unit) {
+        return switch (unit) {
+            case "cent" -> BigDecimal.valueOf(10000);   // 双侧不足 100 元的日子不比环比
+            case "rate" -> new BigDecimal("0.05");
+            default -> BigDecimal.TEN;
+        };
     }
 
     /** S2:单个账龄桶 upsert(平台+商户),并累计进欠费总额 map。 */
