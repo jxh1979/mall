@@ -852,7 +852,8 @@ public class AccessService {
                                     "cannot create a user in another organization: " + organizationId);
                         }
                         String merchantId = trimToNull(request.merchantId());
-                        if (!isBlank(actor.merchantId())) {
+                        // 与上方组织校验对称:平台管理员不受自身 merchant 归属限制(dev/local seed 带 seed-merchant)。
+                        if (!authorizationService.isPlatformAdmin(actor) && !isBlank(actor.merchantId())) {
                             if (merchantId == null) {
                                 merchantId = actor.merchantId();
                             } else if (!actor.merchantId().equals(merchantId)) {

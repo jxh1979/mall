@@ -222,6 +222,32 @@ class AccessServiceTests {
     }
 
     @Test
+    void platformAdminWithMerchantAffiliationCanCreateUserForAnyMerchant() {
+        // dev/local seed 管理员带 merchantId=seed-merchant;商户越权校验应与组织校验对称地豁免平台管理员,
+        // 否则平台管理员无法为任何商户开商户账号(商户专区一期活证据实测被拦)。
+        AuthService.UserRecord user = new AuthService.UserRecord(
+                "usr_admin_m", "seed-admin-m", "hash", "platform_admin", "seed-org", "seed-merchant", "active",
+                Instant.parse("2026-06-14T00:00:00Z")
+        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                user, "token", List.of(new SimpleGrantedAuthority("ROLE_P0_SMOKE"))
+        ));
+        AccessUser created = service.createAccessUser(new AccessUserRequest(
+                "user-cross-merchant-by-admin",
+                null,
+                List.of(),
+                "cross_merchant_by_admin",
+                null,
+                null,
+                "merchant",
+                "seed-org",
+                "merchant-other",
+                "active"
+        ));
+        assertThat(created.merchantId()).isEqualTo("merchant-other");
+    }
+
+    @Test
     void createAccessUserRequiresOrganizationScope() {
         assertThatThrownBy(() -> service.createAccessUser(new AccessUserRequest(
                 "user-missing-org",
