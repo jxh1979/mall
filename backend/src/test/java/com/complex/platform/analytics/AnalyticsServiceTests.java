@@ -892,6 +892,26 @@ class AnalyticsServiceTests {
     }
 
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
+        Map<String, Map<String, BigDecimal>> arAging = Map.of();
+        BigDecimal arCollected = BigDecimal.ZERO;
+        BigDecimal arReceivableMtd = BigDecimal.ZERO;
+
+        public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf) {
+            return arAging;
+        }
+
+        public BigDecimal arCollectedCentsBetween(java.time.Instant start, java.time.Instant end) {
+            return arCollected;
+        }
+
+        public BigDecimal arReceivableDueCentsBetween(LocalDate monthStart, LocalDate endExclusive) {
+            return arReceivableMtd;
+        }
+
+        public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset) {
+            return java.util.List.of();
+        }
+
         public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
             return java.util.List.of();
         }

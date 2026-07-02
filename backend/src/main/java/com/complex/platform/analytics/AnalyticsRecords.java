@@ -11,6 +11,16 @@ public final class AnalyticsRecords {
     private AnalyticsRecords() {
     }
 
+    public record ArDebtorRow(
+            String merchantId,
+            String merchantName,
+            java.math.BigDecimal outstandingCent,
+            LocalDate oldestDueDate,
+            long overdueDays,
+            String bucket
+    ) {
+    }
+
     public record BusinessDayCutoffRecord(
             String domain,
             int cutoffHour,

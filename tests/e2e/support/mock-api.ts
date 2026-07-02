@@ -286,6 +286,20 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/analytics/dashboards/finance": { businessDate: "2026-07-01", metrics: {
+      "ar.balance": { value: 4200000, unit: "cent" },
+      "ar.aging_0_30": { value: 1200000, unit: "cent" },
+      "ar.aging_31_60": { value: 900000, unit: "cent" },
+      "ar.aging_61_90": { value: 600000, unit: "cent" },
+      "ar.aging_90p": { value: 1500000, unit: "cent" },
+      "ar.collected_mtd": { value: 6000000, unit: "cent" },
+      "ar.receivable_mtd": { value: 8000000, unit: "cent" },
+      "ar.collection_rate_mtd": { value: 0.75, unit: "rate" },
+    } },
+    "/api/v1/analytics/finance-receivables/debtors": [
+      { merchantId: "merchant-1", merchantName: "欠费示例商户", outstandingCent: 1500000, oldestDueDate: "2026-03-20", overdueDays: 103, bucket: "a90p" },
+      { merchantId: "merchant-2", merchantName: "轻微逾期商户", outstandingCent: 300000, oldestDueDate: "2026-06-15", overdueDays: 16, bucket: "a0_30" },
+    ],
     "/api/v1/analytics/business-day-cutoffs": [
       { domain: "platform", cutoffHour: 4 }, { domain: "finance", cutoffHour: 4 },
       { domain: "ticketing", cutoffHour: 4 }, { domain: "amusement", cutoffHour: 4 },

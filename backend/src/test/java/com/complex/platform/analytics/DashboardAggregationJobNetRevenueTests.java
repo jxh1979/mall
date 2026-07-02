@@ -37,6 +37,30 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void arAgingBucketsSumToBalanceAndCollectionRateDerives() {
+        // S2 口径断言:Σ四桶 == 欠费总额(平台+商户);回款率=月实收/月应收;分母0不产出。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.arAging = Map.of(
+                "a0_30", orderedMap("merchant_a", "10000"),
+                "a90p", orderedMap("merchant_a", "3000", "merchant_b", "7000"));
+        repository.arCollected = new BigDecimal("60000");
+        repository.arReceivableMtd = new BigDecimal("80000");
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.upserts.get(DashboardAggregationJob.AR_AGING_0_30 + "|merchant_a")).isEqualByComparingTo("10000");
+        assertThat(repository.upserts.get(DashboardAggregationJob.AR_AGING_90P + "|merchant_b")).isEqualByComparingTo("7000");
+        assertThat(repository.upserts.get(DashboardAggregationJob.AR_BALANCE + "|merchant_a")).isEqualByComparingTo("13000");
+        assertThat(repository.upserts.get(DashboardAggregationJob.AR_BALANCE + "|platform")).isEqualByComparingTo("20000");
+        assertThat(repository.upserts.get(DashboardAggregationJob.AR_COLLECTION_RATE_MTD + "|platform")).isEqualByComparingTo("0.7500");
+
+        // 分母 0:不产出回款率(不伪造)。
+        CapturingAnalyticsRepository empty = new CapturingAnalyticsRepository();
+        new DashboardAggregationJob(empty).refreshSnapshots(BUSINESS_DATE);
+        assertThat(empty.upserts).doesNotContainKey(DashboardAggregationJob.AR_COLLECTION_RATE_MTD + "|platform");
+    }
+
+    @Test
     void barBusinessDayWindowSplitsBarKeyFromPlatformNetComponent() {
         // S0(2026-07-02 拍板):酒吧经营日 06:00 切、平台汇总基准 04:00——凌晨 04:00–06:00 的酒吧流水
         // 归酒吧域「前一经营日」(revenue.bar 键按 bar 窗),但平台对账归当日(net 分量按 platform 窗)。
@@ -295,6 +319,26 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     private static final class CapturingAnalyticsRepository implements AnalyticsRepository {
+        Map<String, Map<String, BigDecimal>> arAging = Map.of();
+        BigDecimal arCollected = BigDecimal.ZERO;
+        BigDecimal arReceivableMtd = BigDecimal.ZERO;
+
+        public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf) {
+            return arAging;
+        }
+
+        public BigDecimal arCollectedCentsBetween(java.time.Instant start, java.time.Instant end) {
+            return arCollected;
+        }
+
+        public BigDecimal arReceivableDueCentsBetween(LocalDate monthStart, LocalDate endExclusive) {
+            return arReceivableMtd;
+        }
+
+        public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset) {
+            return java.util.List.of();
+        }
+
         public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
             return java.util.List.of();
         }

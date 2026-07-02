@@ -123,6 +123,17 @@ public class AnalyticsController {
         return ApiResponse.ok(service.groupOverview(groupBy));
     }
 
+    @GetMapping("/finance-receivables/debtors")
+    public ApiResponse<PageResponse<AnalyticsRecords.ArDebtorRow>> listOverdueDebtors(
+            @org.springframework.web.bind.annotation.RequestParam(value = "bucket", required = false) String bucket,
+            @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,
+            @org.springframework.web.bind.annotation.RequestParam(value = "offset", required = false, defaultValue = "0") int offset) {
+        authorizationService.requirePermission("finance.ar_ap.view");
+        authorizationService.requirePlatformScope();
+        java.util.List<AnalyticsRecords.ArDebtorRow> items = service.listOverdueDebtors(bucket, limit, offset);
+        return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
+    }
+
     @GetMapping("/business-day-cutoffs")
     public ApiResponse<PageResponse<AnalyticsRecords.BusinessDayCutoffRecord>> listBusinessDayCutoffs() {
         authorizationService.requirePermission("analytics.dashboard.view");

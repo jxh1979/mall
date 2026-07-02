@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 545 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 546 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 292 | 人工权限矩阵正文未覆盖 189 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1090 | 人工事件矩阵正文未覆盖 1048 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 545 | 人工任务映射正文未逐项覆盖 539 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1092 | 人工事件矩阵正文未覆盖 1050 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 546 | 人工任务映射正文未逐项覆盖 540 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 336 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -171,7 +171,7 @@
 | `facility.work_order.manage` | staff-token | platform | 13 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, suspendFacilityWorkOrder, resumeFacilityWorkOrder, markFacilityWorkOrdersOverdue ... | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project-entity | 3 | createArApItem, generateContractRentBill, generateContractPeriodBills | 已在权限矩阵正文出现 |
-| `finance.ar_ap.view` | staff-token | project-entity | 1 | listArApItems | 已在权限矩阵正文出现 |
+| `finance.ar_ap.view` | staff-token | platform, project-entity | 2 | listArApItems, listArOverdueDebtors | 已在权限矩阵正文出现 |
 | `finance.cam.allocate` | staff-token | platform | 1 | allocateCam | OpenAPI 补充，以本附录为准 |
 | `finance.cam.trueup` | staff-token | platform | 1 | trueUpCam | OpenAPI 补充，以本附录为准 |
 | `finance.daily_close.lock` | staff-token | project-entity | 1 | createDailyClose | 已在权限矩阵正文出现 |
@@ -483,6 +483,8 @@
 | `analytics.ai_quality_task.viewed_failed` | failure | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality.local_llm_suggestion.created` | success | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality.local_llm_suggestion.failed` | failure | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
+| `analytics.ar_debtors.view_failed` | failure | `listArOverdueDebtors` | `GET` | `/api/v1/analytics/finance-receivables/debtors` | ANA-风控分析 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `analytics.ar_debtors.viewed` | success | `listArOverdueDebtors` | `GET` | `/api/v1/analytics/finance-receivables/debtors` | ANA-风控分析 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `analytics.business_day_cutoff.update_failed` | failure | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
 | `analytics.business_day_cutoff.updated` | success | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
 | `analytics.business_day_cutoff.view_failed` | failure | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -1490,6 +1492,7 @@
 | ANA-风控分析 | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | 查询ai质检结果 | `analytics.risk_alert.view` | `analytics.ai_quality_result.viewed` / `analytics.ai_quality_result.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | 查询ai质检任务 | `analytics.risk_alert.view` | `analytics.ai_quality_task.viewed` / `analytics.ai_quality_task.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAnalyticsMerchants` | `GET` | `/api/v1/analytics/merchants` | 查询经营分析商户 | `analytics.dashboard.view` | `analytics.merchant_summary.viewed` / `analytics.merchant_summary.viewed_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listArOverdueDebtors` | `GET` | `/api/v1/analytics/finance-receivables/debtors` | 欠费商户明细排行(账龄钻取) | `finance.ar_ap.view` | `analytics.ar_debtors.viewed` / `analytics.ar_debtors.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | 查询经营日切分配置(按业务域) | `analytics.dashboard.view` | `analytics.business_day_cutoff.viewed` / `analytics.business_day_cutoff.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | List P2 business metric snapshots for operational analytics | `analytics.dashboard.view` | `analytics_business_metric_snapshot.viewed.success` / `analytics_business_metric_snapshot.viewed.failure` | web | operation 级补充 |
 | ANA-风控分析 | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | 查询客户意向 | `analytics.risk_alert.view` | `analytics.customer_intent.viewed` / `analytics.customer_intent.viewed_failed` | web | operation 级补充 |

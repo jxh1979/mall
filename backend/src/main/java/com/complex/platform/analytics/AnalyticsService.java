@@ -94,6 +94,21 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.SUPPLY_LOW_STOCK, "inventory", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.RISK_PENDING_REVIEW, "governance", "count", true,
                     "supervisor_review_decisions has no merchant_id; merchant-scoped value not available"),
+            // S2 财务应收(地产 BI MVP,期末时点/月累计口径,2026-07-02 拍板):
+            new MetricCatalogEntry(DashboardAggregationJob.AR_BALANCE, "finance", "cent", true,
+                    "no ar snapshot for merchant on business date"),
+            new MetricCatalogEntry(DashboardAggregationJob.AR_AGING_0_30, "finance", "cent", true,
+                    "no ar snapshot for merchant on business date"),
+            new MetricCatalogEntry(DashboardAggregationJob.AR_AGING_31_60, "finance", "cent", true,
+                    "no ar snapshot for merchant on business date"),
+            new MetricCatalogEntry(DashboardAggregationJob.AR_AGING_61_90, "finance", "cent", true,
+                    "no ar snapshot for merchant on business date"),
+            new MetricCatalogEntry(DashboardAggregationJob.AR_AGING_90P, "finance", "cent", true,
+                    "no ar snapshot for merchant on business date"),
+            new MetricCatalogEntry(DashboardAggregationJob.AR_COLLECTED_MTD, "finance", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.AR_RECEIVABLE_MTD, "finance", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.AR_COLLECTION_RATE_MTD, "finance", "rate", true,
+                    "collection rate is platform-scope only (no snapshot when month receivable is zero)"),
             // 数据源未就绪（不伪造）：
             new MetricCatalogEntry("revenue.thirdparty", "finance", "cent", false,
                     "third-party reflow depends on integration capability switch wiring (not yet aggregated)"),
@@ -252,6 +267,27 @@ public class AnalyticsService {
                 "analytics.dashboard.view",
                 "analytics_dashboard_snapshot",
                 () -> buildOverview(scope, null, businessDate)
+        );
+    }
+
+    private static final java.util.Set<String> AR_BUCKETS =
+            java.util.Set.of("a0_30", "a31_60", "a61_90", "a90p");
+
+    /** S2 钻取:欠费商户明细排行(实时,与账龄快照同过滤同口径;bucket 可空=全部)。 */
+    public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(String bucket, int limit, int offset) {
+        String normalized = bucket == null || bucket.isBlank() ? null : bucket;
+        if (normalized != null && !AR_BUCKETS.contains(normalized)) {
+            throw com.complex.platform.common.api.ApiException.badRequest(
+                    "VALIDATION_FAILED", "bucket must be one of " + AR_BUCKETS);
+        }
+        String finalBucket = normalized;
+        return readSingle(
+                "analytics.ar_debtors.viewed",
+                "analytics.ar_debtors.view_failed",
+                "finance.ar_ap.view",
+                "ar_ap_items",
+                () -> repository.listOverdueDebtors(
+                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), finalBucket, limit, offset)
         );
     }
 

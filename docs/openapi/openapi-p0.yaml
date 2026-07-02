@@ -15214,6 +15214,49 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/analytics/finance-receivables/debtors:
+    get:
+      tags:
+        - analytics
+      operationId: listArOverdueDebtors
+      summary: 欠费商户明细排行(账龄钻取)
+      description: BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径
+        (direction=receivable、未结清、已过应收日);bucket 过滤 a0_30/a31_60/a61_90/a90p。
+      x-permission: finance.ar_ap.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.ar_debtors.viewed
+      x-audit-event-failure: analytics.ar_debtors.view_failed
+      parameters:
+        - name: bucket
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [a0_30, a31_60, a61_90, a90p]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/analytics/business-day-cutoffs:
     get:
       tags:

@@ -121,6 +121,21 @@ public interface AnalyticsRepository {
     // ETL 聚合源（从真实业务表读取，按 segment 维度返回 segmentId -> 聚合值；segmentId=null 行表示平台口径）。
 
     /** Σ ticket_orders.amount_cent（pay_status='paid'）——售票收入；ticket_orders 无 merchant_id，仅平台口径。 */
+    /**
+     * S2:应收账龄桶(as-of 时点存量,direction=receivable、未结清、已过应收日)。
+     * 返回 bucket -> (merchantId(可空=未挂商户) -> 未清金额);bucket in a0_30/a31_60/a61_90/a90p。
+     */
+    Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf);
+
+    /** S2:月窗实收(ar_ap_payments.payment_time 落窗,仅 receivable 项)。 */
+    BigDecimal arCollectedCentsBetween(java.time.Instant start, java.time.Instant end);
+
+    /** S2:月窗应收(due_date 落 [monthStart, endExclusive),receivable 全额,不含未来月)。 */
+    BigDecimal arReceivableDueCentsBetween(LocalDate monthStart, LocalDate endExclusive);
+
+    /** S2 钻取:欠费商户明细排行(实时,按未清金额降序;bucket 可空=全部)。 */
+    java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset);
+
     /** S0:经营日切分配置(V201)——九域清单读取(经营参数页数据源)。 */
     java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs();
 

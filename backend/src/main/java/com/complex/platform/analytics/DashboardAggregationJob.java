@@ -47,6 +47,15 @@ public class DashboardAggregationJob {
     static final String SUPPLY_BALANCE = "supply.balance";      // 供应链
     static final String SUPPLY_LOW_STOCK = "supply.low_stock";  // 供应链·缺货预警
     static final String RISK_PENDING_REVIEW = "risk.pending_review"; // 风险
+    // S2 财务应收(2026-07-02 拍板,地产 BI MVP):欠费/账龄为 as-of 时点存量(期末口径),回款为月内累计。
+    static final String AR_BALANCE = "ar.balance";                   // 欠费总额(逾期未清)
+    static final String AR_AGING_0_30 = "ar.aging_0_30";
+    static final String AR_AGING_31_60 = "ar.aging_31_60";
+    static final String AR_AGING_61_90 = "ar.aging_61_90";
+    static final String AR_AGING_90P = "ar.aging_90p";               // 坏账预警区
+    static final String AR_COLLECTED_MTD = "ar.collected_mtd";       // 本月实收(月初至当日)
+    static final String AR_RECEIVABLE_MTD = "ar.receivable_mtd";     // 本月应收(不含未来月)
+    static final String AR_COLLECTION_RATE_MTD = "ar.collection_rate_mtd"; // 回款率(分母0不产出,不伪造)
 
     static final String SEGMENT_PLATFORM = "platform";
     static final String SEGMENT_MERCHANT = "merchant";
@@ -185,8 +194,46 @@ public class DashboardAggregationJob {
                 .ifPresent(area -> upsertPlatform(REVENUE_PER_SQM, "finance", businessDate,
                         netForPerSqm.divide(area, 2, java.math.RoundingMode.HALF_UP), now, platformTotals));
 
+        // S2 财务应收:账龄桶(as-of=businessDate 期末存量)+欠费总额+月内回款。
+        Map<String, Map<String, BigDecimal>> aging = repository.arOverdueAgingByMerchant(businessDate);
+        Map<String, BigDecimal> agingTotal = new java.util.LinkedHashMap<>();
+        upsertAgingBucket(AR_AGING_0_30, aging.get("a0_30"), agingTotal, businessDate, now, platformTotals);
+        upsertAgingBucket(AR_AGING_31_60, aging.get("a31_60"), agingTotal, businessDate, now, platformTotals);
+        upsertAgingBucket(AR_AGING_61_90, aging.get("a61_90"), agingTotal, businessDate, now, platformTotals);
+        upsertAgingBucket(AR_AGING_90P, aging.get("a90p"), agingTotal, businessDate, now, platformTotals);
+        // 口径硬约束:欠费总额 = Σ四桶(同一查询同一过滤,构造上桶和恒等于总额)。
+        upsertByMerchant(AR_BALANCE, "finance", businessDate, agingTotal, now, platformTotals);
+
+        LocalDate monthStart = businessDate.withDayOfMonth(1);
+        Instant mtdStart = businessDayResolver.startInstant(monthStart);
+        Instant mtdEnd = businessDayResolver.endInstant(businessDate);
+        BigDecimal collected = nonNull(repository.arCollectedCentsBetween(mtdStart, mtdEnd));
+        BigDecimal receivableMtd = nonNull(repository.arReceivableDueCentsBetween(monthStart, businessDate.plusDays(1)));
+        upsertPlatform(AR_COLLECTED_MTD, "finance", businessDate, collected, now, platformTotals);
+        upsertPlatform(AR_RECEIVABLE_MTD, "finance", businessDate, receivableMtd, now, platformTotals);
+        if (receivableMtd.signum() > 0) {
+            upsertPlatform(AR_COLLECTION_RATE_MTD, "finance", businessDate,
+                    collected.divide(receivableMtd, 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
+        }
+
         // ⑤ 集团多项目 ETL：按 project_id 维度 upsert segment_type='project' 行。
         upsertByProject(businessDate, platformTotals, now);
+    }
+
+    /** S2:单个账龄桶 upsert(平台+商户),并累计进欠费总额 map。 */
+    private void upsertAgingBucket(
+            String metricKey,
+            Map<String, BigDecimal> byMerchant,
+            Map<String, BigDecimal> agingTotal,
+            LocalDate businessDate,
+            Instant now,
+            Map<String, BigDecimal> platformTotals
+    ) {
+        Map<String, BigDecimal> rows = byMerchant == null ? Map.of() : byMerchant;
+        upsertByMerchant(metricKey, "finance", businessDate, rows, now, platformTotals);
+        for (Map.Entry<String, BigDecimal> entry : rows.entrySet()) {
+            agingTotal.merge(entry.getKey(), entry.getValue(), BigDecimal::add);
+        }
     }
 
     private void upsertPlatform(

@@ -903,6 +903,93 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf) {
+        Map<String, Map<String, BigDecimal>> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT CASE WHEN (:as_of - due_date) <= 30 THEN 'a0_30'
+                            WHEN (:as_of - due_date) <= 60 THEN 'a31_60'
+                            WHEN (:as_of - due_date) <= 90 THEN 'a61_90'
+                            ELSE 'a90p' END AS bucket,
+                       merchant_id, SUM(unpaid_amount_cent) AS total
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND status <> 'closed'
+                   AND unpaid_amount_cent > 0
+                   AND due_date < :as_of
+                 GROUP BY 1, merchant_id
+                """, new MapSqlParameterSource().addValue("as_of", asOf),
+                (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                        result.computeIfAbsent(rs.getString("bucket"), k -> new LinkedHashMap<>())
+                              .put(rs.getString("merchant_id"), rs.getBigDecimal("total")));
+        return result;
+    }
+
+    @Override
+    public BigDecimal arCollectedCentsBetween(Instant start, Instant end) {
+        BigDecimal value = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(p.amount_cent), 0)
+                  FROM ar_ap_payments p
+                  JOIN ar_ap_items i ON i.id = p.ar_ap_item_id
+                 WHERE i.direction = 'receivable'
+                   AND p.payment_time >= :start AND p.payment_time < :end
+                """, new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end)), BigDecimal.class);
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    @Override
+    public BigDecimal arReceivableDueCentsBetween(LocalDate monthStart, LocalDate endExclusive) {
+        BigDecimal value = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0)
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND due_date >= :from AND due_date < :to
+                """, new MapSqlParameterSource()
+                .addValue("from", monthStart).addValue("to", endExclusive), BigDecimal.class);
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("as_of", asOf)
+                .addValue("bucket", bucket, java.sql.Types.VARCHAR)
+                .addValue("limit", Math.min(Math.max(limit, 1), 200))
+                .addValue("offset", Math.max(offset, 0));
+        return jdbcTemplate.query("""
+                SELECT i.merchant_id, m.merchant_name,
+                       SUM(i.unpaid_amount_cent) AS outstanding,
+                       MIN(i.due_date) AS oldest_due,
+                       (:as_of - MIN(i.due_date)) AS overdue_days,
+                       CASE WHEN (:as_of - MIN(i.due_date)) <= 30 THEN 'a0_30'
+                            WHEN (:as_of - MIN(i.due_date)) <= 60 THEN 'a31_60'
+                            WHEN (:as_of - MIN(i.due_date)) <= 90 THEN 'a61_90'
+                            ELSE 'a90p' END AS bucket
+                  FROM ar_ap_items i
+                  LEFT JOIN merchants m ON m.id = i.merchant_id
+                 WHERE i.direction = 'receivable'
+                   AND i.status <> 'closed'
+                   AND i.unpaid_amount_cent > 0
+                   AND i.due_date < :as_of
+                 GROUP BY i.merchant_id, m.merchant_name
+                HAVING (:bucket IS NULL
+                        OR CASE WHEN (:as_of - MIN(i.due_date)) <= 30 THEN 'a0_30'
+                                WHEN (:as_of - MIN(i.due_date)) <= 60 THEN 'a31_60'
+                                WHEN (:as_of - MIN(i.due_date)) <= 90 THEN 'a61_90'
+                                ELSE 'a90p' END = :bucket)
+                 ORDER BY outstanding DESC, i.merchant_id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> new AnalyticsRecords.ArDebtorRow(
+                rs.getString("merchant_id"),
+                rs.getString("merchant_name"),
+                rs.getBigDecimal("outstanding"),
+                rs.getObject("oldest_due", LocalDate.class),
+                rs.getLong("overdue_days"),
+                rs.getString("bucket")));
+    }
+
+    @Override
     public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
         return jdbcTemplate.query("""
                 SELECT domain, cutoff_hour, updated_at, updated_by

@@ -32,6 +32,46 @@ class AnalyticsJdbcIntegrationTests {
     private com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     @Test
+    void arAgingBucketsAndDebtorsReflectRealLedgerRows() {
+        // S2 口径:桶按 as-of−due_date;未清=unpaid_amount_cent;Σ桶=欠费总额;明细与快照同过滤。
+        java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
+        insertArItem("ar_s2_a", "mch_s2_x", 10000L, 10000L, asOf.minusDays(10));
+        insertArItem("ar_s2_b", "mch_s2_x", 20000L, 5000L, asOf.minusDays(45));
+        insertArItem("ar_s2_c", "mch_s2_y", 30000L, 30000L, asOf.minusDays(100));
+        insertArItem("ar_s2_paidoff", "mch_s2_x", 9000L, 0L, asOf.minusDays(70));
+        insertArItem("ar_s2_future", "mch_s2_x", 8000L, 8000L, asOf.plusDays(5));
+
+        Map<String, Map<String, java.math.BigDecimal>> aging = repository.arOverdueAgingByMerchant(asOf);
+        assertThat(aging.get("a0_30").get("mch_s2_x")).isEqualByComparingTo("10000");
+        assertThat(aging.get("a31_60").get("mch_s2_x")).isEqualByComparingTo("5000");
+        assertThat(aging.get("a90p").get("mch_s2_y")).isEqualByComparingTo("30000");
+        assertThat(aging.getOrDefault("a61_90", java.util.Map.of())).doesNotContainKey("mch_s2_x");
+
+        // 共享 dev 库可能有其它会话残留欠费行:只对本用例造的两商户断言(排序=未清金额降序)。
+        java.util.List<AnalyticsRecords.ArDebtorRow> debtors = repository.listOverdueDebtors(asOf, null, 200, 0).stream()
+                .filter(row -> row.merchantId() != null && row.merchantId().startsWith("mch_s2_")).toList();
+        assertThat(debtors).extracting(AnalyticsRecords.ArDebtorRow::merchantId)
+                .containsExactly("mch_s2_y", "mch_s2_x");
+        assertThat(debtors.get(0).outstandingCent()).isEqualByComparingTo("30000");
+        assertThat(debtors.get(1).outstandingCent()).isEqualByComparingTo("15000");
+        assertThat(repository.listOverdueDebtors(asOf, "a90p", 200, 0).stream()
+                .filter(row -> row.merchantId() != null && row.merchantId().startsWith("mch_s2_")).toList())
+                .extracting(AnalyticsRecords.ArDebtorRow::merchantId).containsExactly("mch_s2_y");
+    }
+
+    private void insertArItem(String id, String merchantId, long amountCent, long unpaidCent, java.time.LocalDate dueDate) {
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, status, created_at, updated_at, merchant_id)
+                VALUES (:id, :id, 'receivable', :mid, :amount, :paid, :unpaid, 'CNY', :due,
+                        CASE WHEN :unpaid = 0 THEN 'closed' ELSE 'open' END, now(), now(), :mid)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("mid", merchantId)
+                .addValue("amount", amountCent).addValue("paid", amountCent - unpaidCent)
+                .addValue("unpaid", unpaidCent).addValue("due", dueDate));
+    }
+
+    @Test
     void v201SeedsDomainCutoffsAndResolverAppliesBarWindow() {
         // S0(2026-07-02 拍板):经营日按域切分——bar=06:00、merchant=10:00、platform=04:00 基准。
         assertThat(jdbcTemplate.queryForObject(
