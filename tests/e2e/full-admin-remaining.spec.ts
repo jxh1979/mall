@@ -464,11 +464,11 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-ANA-001") {
         await expect(page.getByTestId("business-analytics-evidence")).toContainText("/api/v1/analytics/business-metric-snapshots");
-        await expect(page.getByTestId("business-analytics-evidence")).toContainText("/api/v1/analytics/metric-definitions");
+        await expect(page.getByTestId("business-analytics-evidence")).toContainText("指标定义/异常检测未启用");
         await expect(page.getByTestId("business-analytics-summary")).toContainText("上升");
         await expect(page.getByTestId("business-analytics-table")).toContainText("gmv_amount_cents");
-        await expect(page.getByTestId("business-analytics-definitions-table")).toContainText("GMV");
-        await expect(page.getByTestId("business-analytics-anomalies-table")).toContainText("Revenue dropped");
+        await expect(page.getByTestId("business-analytics-definitions-disabled")).toContainText("功能未启用");
+        await expect(page.getByTestId("business-analytics-anomalies-disabled")).toContainText("功能未启用");
         await page.getByTestId("business-analytics-domain-filter").selectOption("bar");
         await expect(page.getByTestId("business-analytics-table")).toContainText("bar_order_count");
         await page.getByTestId("business-analytics-domain-filter").selectOption("all");
