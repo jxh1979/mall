@@ -201,7 +201,7 @@ test.describe("full admin remaining pages acceptance", () => {
         const ticketOrdersTable = page.getByTestId("ticket-orders-table");
         await expect(ticketOrdersTable).toBeVisible();
         await expect(ticketOrdersTable).toContainText("TO-MOCK-1");
-        await expect(ticketOrdersTable).toContainText("not_issued");
+        await expect(ticketOrdersTable).toContainText("未出票"); // 3.8 展示层中文业务口径（提交仍原码）
         await expect(page.getByTestId("ticket-orders-summary")).toContainText("ENT-0001");
         continue;
       }

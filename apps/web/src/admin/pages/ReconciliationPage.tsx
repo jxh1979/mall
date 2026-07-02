@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, ReconciliationBatchRow, ReconciliationDifferenceRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const RESOLVE_PERM = ["finance.reconciliation.resolve"];
 
@@ -146,14 +147,14 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="reconciliation-batches-table">
             <thead><tr><th>{TEXT.batchNo}</th><th>{TEXT.amount}</th><th>{TEXT.status}</th><th>{TEXT.provider}</th></tr></thead>
-            <tbody>{batches.map((batch) => <tr key={batch.id}><td>{batch.batchNo ?? batch.id}</td><td>{formatAmount(batch.amount ?? batch.totalAmount)}</td><td>{batch.status ?? "-"}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={batch.providerCode}>{batch.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
+            <tbody>{batches.map((batch) => <tr key={batch.id}><td>{batch.batchNo ?? batch.id}</td><td>{formatAmount(batch.amount ?? batch.totalAmount)}</td><td>{formatBusinessStatus(batch.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={batch.providerCode}>{batch.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
           </table>
         </div>
         <h3>{TEXT.differences}</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="reconciliation-differences-table">
             <thead><tr><th>{TEXT.selected}</th><th>{TEXT.differenceNo}</th><th>{TEXT.amount}</th><th>{TEXT.status}</th><th>{TEXT.provider}</th></tr></thead>
-            <tbody>{differences.map((item) => <tr key={item.id}><td><input type="radio" data-testid={`reconciliation-select-${item.id}`} checked={(selected?.id ?? "") === item.id} onChange={() => setSelectedId(item.id)} /></td><td>{item.differenceNo ?? item.id}</td><td>{formatAmount(item.amount ?? item.differenceAmount ?? item.diffAmount)}</td><td>{item.status ?? "-"}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={item.providerCode}>{item.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
+            <tbody>{differences.map((item) => <tr key={item.id}><td><input type="radio" data-testid={`reconciliation-select-${item.id}`} checked={(selected?.id ?? "") === item.id} onChange={() => setSelectedId(item.id)} /></td><td>{item.differenceNo ?? item.id}</td><td>{formatAmount(item.amount ?? item.differenceAmount ?? item.diffAmount)}</td><td>{formatBusinessStatus(item.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={item.providerCode}>{item.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>

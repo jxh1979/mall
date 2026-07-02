@@ -12,6 +12,7 @@ const TICKET_ISSUE_PERMISSION = "ticket.ticket.issue";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketVerificationRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
@@ -183,9 +184,9 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                   <td>{order.visitDate ?? "-"}</td>
                   <td>{order.salesChannel ?? "-"}</td>
                   <td>{formatAmount(order.amountCent)}</td>
-                  <td>{order.payStatus ?? "-"}</td>
-                  <td>{order.issueStatus ?? "-"}</td>
-                  <td>{order.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(order.payStatus)}</td>
+                  <td>{formatBusinessStatus(order.issueStatus)}</td>
+                  <td>{formatBusinessStatus(order.status)}</td>
                 </tr>
               ))}
             </tbody>
