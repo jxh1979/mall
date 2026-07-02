@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -168,7 +169,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="inventory-ledger-items-table">
             <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th></tr></thead>
-            <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedItemId(item.id)}><td>{item.itemCode ?? item.id}</td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{item.status ?? "-"}</td></tr>)}</tbody>
+            <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedItemId(item.id)}><td>{item.itemCode ?? item.id}</td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
           </table>
         </div>
         <h3>{TEXT.balances}</h3>
@@ -183,7 +184,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="inventory-ledger-movements-table">
             <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr></thead>
-            <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{row.status ?? "-"}</td><td>{row.createdAt ?? "-"}</td></tr>)}</tbody>
+            <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{formatBusinessStatus(row.status)}</td><td>{row.createdAt ?? "-"}</td></tr>)}</tbody>
           </table>
             <TablePager testid="inventory-movements-pager" page={pagedMovements.page} pageCount={pagedMovements.pageCount} total={pagedMovements.total} onPrev={pagedMovements.prev} onNext={pagedMovements.next} />
         </div>

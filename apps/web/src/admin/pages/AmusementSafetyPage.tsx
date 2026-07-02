@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
@@ -199,7 +200,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
                   <td>{displayNo(row)}</td>
                   <td>{row.projectName ?? row.projectId ?? "-"}</td>
                   <td>{row.overallResult ?? row.riskLevel ?? "-"}</td>
-                  <td>{row.inspectionStatus ?? row.status ?? "-"}</td>
+                  <td>{formatBusinessStatus(row.inspectionStatus ?? row.status)}</td>
                   <td>{row.rectificationStatus ?? "-"}</td>
                   <td>{row.reopenStatus ?? "-"}</td>
                   <td>{evidenceList(row)}</td>

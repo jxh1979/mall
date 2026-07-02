@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -220,7 +221,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                 <td>{row.id}</td>
                 <td>{row.tableId ?? "-"}</td>
                 <td>{row.guestCount ?? "-"}</td>
-                <td>{row.status ?? "-"}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
                 <td>{row.sessionVersion ?? "-"}</td>
               </tr>
             ))}</tbody>
@@ -240,7 +241,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                 <td>{row.tableId ?? "-"}</td>
                 <td>{row.guestCount ?? "-"}</td>
                 <td>{row.depositStatus ?? "-"}</td>
-                <td>{row.status ?? "-"}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
               </tr>
             ))}</tbody>
           </table>

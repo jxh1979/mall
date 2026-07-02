@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -236,7 +237,7 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
                 <td>{row.taskNo ?? row.orderNo ?? row.verificationNo ?? row.id ?? "-"}</td>
                 <td>{row.providerCode ?? row.channelCode ?? "-"}</td>
                 <td>{row.eventType ?? row.syncType ?? row.verificationType ?? "-"}</td>
-                <td>{row.status ?? "-"}</td>
+                <td>{formatBusinessStatus(row.status)}</td>
                 <td>{row.retryCount ?? "-"}</td>
                 <td>{row.updatedAt ?? row.createdAt ?? row.occurredAt ?? "-"}</td>
               </tr>

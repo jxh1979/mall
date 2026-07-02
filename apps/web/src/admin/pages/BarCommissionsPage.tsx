@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -144,7 +145,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
                     <td>{formatAmount(order.totalAmount)}</td>
                     <td>{sellerLabel(order)}</td>
                     <td>{commissionRate(order)}</td>
-                    <td>{rowBill?.status ?? order.status ?? "-"}</td>
+                    <td>{formatBusinessStatus(rowBill?.status ?? order.status)}</td>
                     <td>{order.createdAt ?? "-"}</td>
                   </tr>
                 );
