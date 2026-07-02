@@ -169,6 +169,11 @@ class MainActivity : Activity() {
       secondaryButton("同步待提交任务") { syncTasksAction(info) },
       secondaryButton("员工设备凭证（占位）") { showStaffDevice() },
       secondaryButton("票务核销冲正") { showReverse() },
+      statusText("—— 员工自有手机(BYOD 一期) ——"),
+      primaryButton("公司公告") { showStaffNotices() },
+      primaryButton("我的工单") { showMyWorkOrders() },
+      primaryButton("酒吧空位 / 帮客订位") { showBarAvailability() },
+      secondaryButton("员工注册申请(店长/HR 代提交)") { showStaffRegistration() },
       secondaryButton("重新登录") { logoutAndRestart() },
     )
 
@@ -529,6 +534,131 @@ class MainActivity : Activity() {
   // ---------- 视图工厂（纯 Android Views，无 AndroidX/Compose） ----------
 
   private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+  // ---------------------------------------------------------------------------
+  // BYOD 一期(2026-07-02 拍板):员工自有手机——公告 / 我的工单 / 酒吧空位代订 / 注册申请。
+  // 能力分级:公司设备全功能、自有手机只开轻功能,由后台按设备类型下发(能力开关)。
+  // ---------------------------------------------------------------------------
+  private fun showStaffNotices() {
+    val status = statusText("正在拉取公司公告…")
+    val list = statusText("")
+    val ackId = editText("要确认已读的公告 id")
+    val refresh = {
+      runBackground(
+        action = { api.listStaffNotices() },
+        onSuccess = { notices ->
+          status.text = "公告 ${notices.size} 条"
+          list.text = if (notices.isEmpty()) "暂无公告" else notices.joinToString("\n\n") { n ->
+            "[${n.consentStatus ?: "-"}] ${n.title ?: n.id}\n${n.body ?: ""}"
+          }
+        },
+        onError = { status.text = "拉取失败：${friendly(it)}" },
+      )
+    }
+    val ackButton = secondaryButton("确认已读") {
+      val id = ackId.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请输入公告 id"; return@secondaryButton }
+      runBackground(
+        action = { api.acknowledgeStaffNotice(id, NoticeAcknowledgeRequest("byod_ack_${System.currentTimeMillis()}")) },
+        onSuccess = { status.text = "已确认已读：${it.id ?: id}"; refresh() },
+        onError = { status.text = "确认失败：${friendly(it)}" },
+      )
+    }
+    refresh()
+    setContentView(screen(
+      title = "公司公告",
+      children = listOf(status, list, ackId, ackButton, secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showMyWorkOrders() {
+    val status = statusText("正在拉取流转到我的工单…")
+    val list = statusText("")
+    runBackground(
+      action = { api.listMyWorkOrders() },
+      onSuccess = { orders ->
+        status.text = "我的工单 ${orders.size} 条(只读,处理在公司设备)"
+        list.text = if (orders.isEmpty()) "暂无流转到你的工单" else orders.joinToString("\n\n") { o ->
+          "${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""}\n优先级 ${o.priority ?: "-"} / 处理时限 ${o.handleDueAt ?: "-"}"
+        }
+      },
+      onError = { status.text = "拉取失败：${friendly(it)}" },
+    )
+    setContentView(screen(
+      title = "我的工单",
+      children = listOf(status, list, secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showBarAvailability() {
+    val status = statusText("正在拉取酒吧桌位…")
+    val list = statusText("")
+    val barId = editText("酒吧 bar_id")
+    val tableId = editText("桌位 table_id(从上表选空位)")
+    val time = editText("到店时间(如 2026-07-02T20:00:00Z)")
+    val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
+    runBackground(
+      action = { api.listBarTableAvailability() },
+      onSuccess = { rows ->
+        status.text = "桌位 ${rows.size} 个(员工代订免定金,收款在公司设备/前台)"
+        list.text = if (rows.isEmpty()) "暂无桌位" else rows.joinToString("\n") { r ->
+          "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
+            "${r.tableType ?: ""} ${r.capacity ?: 0}人 低消 ${(r.minConsumptionCent ?: 0) / 100}元"
+        }
+      },
+      onError = { status.text = "拉取失败：${friendly(it)}" },
+    )
+    val reserveButton = primaryButton("帮客人订位(免定金)") {
+      val b = barId.text.toString().trim()
+      val t = tableId.text.toString().trim()
+      val at = time.text.toString().trim()
+      val g = guests.text.toString().trim().toIntOrNull()
+      if (b.isEmpty() || t.isEmpty() || at.isEmpty() || g == null || g <= 0) {
+        status.text = "请填全 酒吧/桌位/时间/人数"
+        return@primaryButton
+      }
+      runBackground(
+        action = {
+          api.createBarReservation(BarReservationCreateRequest(
+            idempotencyKey = "byod_resv_${System.currentTimeMillis()}",
+            barId = b, tableId = t, reservationTime = at, guestCount = g,
+            salespersonUserId = store.session?.staffId,
+          ))
+        },
+        onSuccess = { r -> status.text = "订位成功：${r.id ?: "-"}(定金 ${r.depositStatus ?: "not_required"})" },
+        onError = { status.text = "订位失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(
+      title = "酒吧空位 / 帮客订位",
+      children = listOf(status, list, barId, tableId, time, guests, reserveButton,
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showStaffRegistration() {
+    val name = editText("新员工姓名")
+    val projectId = editText("综合体 project_id")
+    val status = statusText("店长/HR 在自己手机上代新员工提交注册申请;后台审批通过后账号生效。")
+    val submitButton = primaryButton("提交注册申请") {
+      val n = name.text.toString().trim()
+      val pj = projectId.text.toString().trim()
+      if (n.isEmpty() || pj.isEmpty()) { status.text = "请填姓名与综合体"; return@primaryButton }
+      runBackground(
+        action = {
+          api.submitStaffRegistration(StaffRegistrationSubmitRequest(
+            idempotencyKey = "byod_reg_${System.currentTimeMillis()}",
+            projectId = pj, name = n, operatorNote = "BYOD 手机代提交"))
+        },
+        onSuccess = { p -> status.text = "已提交：${p.name ?: n}(状态 ${p.status ?: "待审批"})" },
+        onError = { status.text = "提交失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(
+      title = "员工注册申请",
+      children = listOf(status, name, projectId, submitButton, secondaryButton("返回首页") { showHome() }),
+    ))
+  }
 
   private fun screen(title: String, children: List<View>): View {
     val titleView = TextView(this).apply {

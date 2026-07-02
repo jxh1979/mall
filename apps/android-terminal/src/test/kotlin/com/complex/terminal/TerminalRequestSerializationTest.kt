@@ -12,6 +12,38 @@ class TerminalRequestSerializationTest {
   private val api = TerminalApiClient("http://127.0.0.1:1")
 
   @Test
+  fun byodRequestsUseOpenApiSnakeCaseFields() {
+    // BYOD 一期:注册/代订请求必须与 OpenAPI snake_case 契约一致(全局 SnakeCase 策略回归锚)。
+    val reg = api.json.parseToJsonElement(
+      api.json.encodeToString(
+        StaffRegistrationSubmitRequest(
+          idempotencyKey = "byod_reg_1",
+          projectId = "project_1",
+          name = "测试员工",
+        ),
+      ),
+    ).jsonObject
+    assertEquals("project_1", reg["project_id"]?.toString()?.trim('"'))
+    assertEquals("byod_reg_1", reg["idempotency_key"]?.toString()?.trim('"'))
+
+    val resv = api.json.parseToJsonElement(
+      api.json.encodeToString(
+        BarReservationCreateRequest(
+          idempotencyKey = "byod_resv_1",
+          barId = "bar_1",
+          tableId = "tbl_1",
+          reservationTime = "2026-07-02T20:00:00Z",
+          guestCount = 4,
+          salespersonUserId = "usr_staff_1",
+        ),
+      ),
+    ).jsonObject
+    assertEquals("tbl_1", resv["table_id"]?.toString()?.trim('"'))
+    assertEquals("2026-07-02T20:00:00Z", resv["reservation_time"]?.toString()?.trim('"'))
+    assertEquals("usr_staff_1", resv["salesperson_user_id"]?.toString()?.trim('"'))
+  }
+
+  @Test
   fun bindDeviceRequestUsesOpenApiSnakeCaseFields() {
     val body = api.json.parseToJsonElement(
       api.json.encodeToString(

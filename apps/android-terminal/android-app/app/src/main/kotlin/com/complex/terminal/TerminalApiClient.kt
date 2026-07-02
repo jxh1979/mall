@@ -89,6 +89,23 @@ class TerminalApiClient(
   fun returnDevice(request: DeviceReturnRequest): DeviceBinding =
     post("/api/v1/terminals/devices/return", request)
 
+  // ── BYOD 一期(2026-07-02):员工自有手机四功能(与 JVM 版签名一致) ──
+
+  fun submitStaffRegistration(request: StaffRegistrationSubmitRequest): StaffProfileRecord =
+    post("/api/v1/staff/registrations", request)
+
+  fun listStaffNotices(): List<EmployeeNoticeRecord> = get("/api/v1/staff/notices")
+
+  fun acknowledgeStaffNotice(id: String, request: NoticeAcknowledgeRequest): EmployeeNoticeRecord =
+    post("/api/v1/staff/notices/$id/acknowledge", request)
+
+  fun listMyWorkOrders(): List<MyWorkOrderRecord> = get("/api/v1/facility/work-orders/assigned-to-me")
+
+  fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get("/api/v1/bar/tables/availability")
+
+  fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
+    post("/api/v1/bar/reservations", request)
+
   fun events(limit: Int = 20): List<JsonObject> = get("/api/v1/evidence/events?limit=$limit")
 
   fun amusementVerify(request: VerificationRequest): AmusementVerificationRecord =

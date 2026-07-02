@@ -117,6 +117,29 @@ class TerminalApiClient(
   }
 
   // 员工设备凭证：绑定
+  // ── BYOD 一期(2026-07-02):员工自有手机四功能 ──
+
+  /** 手机自助提交员工注册申请(审批通过后才有账号;staff_private_phone 终端契约)。 */
+  fun submitStaffRegistration(request: StaffRegistrationSubmitRequest): StaffProfileRecord =
+    post("/api/v1/staff/registrations", request)
+
+  /** 公司内部公告(员工可见)。 */
+  fun listStaffNotices(): List<EmployeeNoticeRecord> = get("/api/v1/staff/notices")
+
+  /** 公告一键已读(留痕)。 */
+  fun acknowledgeStaffNotice(id: String, request: NoticeAcknowledgeRequest): EmployeeNoticeRecord =
+    post("/api/v1/staff/notices/$id/acknowledge", request)
+
+  /** 我的工单:只看流转到自己的(view_assigned,只读)。 */
+  fun listMyWorkOrders(): List<MyWorkOrderRecord> = get("/api/v1/facility/work-orders/assigned-to-me")
+
+  /** 酒吧空位视图(桌位+活跃预订占用标记,帮客人订位用)。 */
+  fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get("/api/v1/bar/tables/availability")
+
+  /** 员工帮客人订位(免定金——预订创建即 not_required,收款只在公司设备/前台)。 */
+  fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
+    post("/api/v1/bar/reservations", request)
+
   fun bindStaffDeviceCredential(request: StaffDeviceBindRequest): StaffDeviceCredentialRecord =
     post("/api/v1/staff/device-credentials", request)
 

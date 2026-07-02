@@ -432,3 +432,77 @@ data class VerificationReverseRequest(
   val idempotencyKey: String,
   val reason: String? = null,
 )
+
+// ── BYOD 一期(2026-07-02 拍板):员工自有手机——注册/公告/我的工单/酒吧空位代订 ──
+
+@Serializable
+data class StaffRegistrationSubmitRequest(
+  val idempotencyKey: String,
+  val projectId: String,
+  val name: String,
+  val operatorNote: String? = null,
+)
+
+@Serializable
+data class StaffProfileRecord(
+  val id: String? = null,
+  val name: String? = null,
+  val status: String? = null,
+)
+
+@Serializable
+data class EmployeeNoticeRecord(
+  val id: String? = null,
+  val staffProfileId: String? = null,
+  val noticeType: String? = null,
+  val title: String? = null,
+  val body: String? = null,
+  val consentRequired: Boolean? = null,
+  val consentStatus: String? = null,
+  val createdAt: String? = null,
+)
+
+@Serializable
+data class NoticeAcknowledgeRequest(
+  val idempotencyKey: String,
+)
+
+@Serializable
+data class MyWorkOrderRecord(
+  val id: String? = null,
+  val code: String? = null,
+  val title: String? = null,
+  val status: String? = null,
+  val priority: String? = null,
+  val handleDueAt: String? = null,
+)
+
+@Serializable
+data class BarTableAvailabilityRow(
+  val id: String? = null,
+  val barId: String? = null,
+  val tableCode: String? = null,
+  val tableName: String? = null,
+  val tableType: String? = null,
+  val capacity: Int? = null,
+  val minConsumptionCent: Long? = null,
+  val status: String? = null,
+  val reserved: Boolean? = null,
+)
+
+@Serializable
+data class BarReservationCreateRequest(
+  val idempotencyKey: String,
+  val barId: String,
+  val tableId: String,
+  val reservationTime: String,
+  val guestCount: Int,
+  val salespersonUserId: String? = null,
+)
+
+@Serializable
+data class BarReservationRecord(
+  val id: String? = null,
+  val status: String? = null,
+  val depositStatus: String? = null,
+)
