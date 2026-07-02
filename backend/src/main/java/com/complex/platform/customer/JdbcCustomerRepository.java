@@ -922,7 +922,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                  WHERE status = 'active'
                    AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
                  ORDER BY level_rank ASC, id ASC
-                """, Map.of("project_id", (Object) projectId), this::mapMemberLevel);
+                """, new MapSqlParameterSource("project_id", projectId), this::mapMemberLevel);
     }
 
     @Override
@@ -956,7 +956,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                  WHERE status = 'active'
                    AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
                  ORDER BY streak_days ASC, id ASC
-                """, Map.of("project_id", (Object) projectId), this::mapCheckInTier);
+                """, new MapSqlParameterSource("project_id", projectId), this::mapCheckInTier);
     }
 
     @Override
@@ -992,7 +992,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                  WHERE status = 'active'
                    AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
                  ORDER BY multiplier_basis_points DESC, id ASC
-                """, Map.of("project_id", (Object) projectId), this::mapBirthdayRule);
+                """, new MapSqlParameterSource("project_id", projectId), this::mapBirthdayRule);
     }
 
     @Override
@@ -1365,7 +1365,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                  WHERE status = 'active'
                    AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
                  ORDER BY price_cent ASC, id ASC
-                """, Map.of("project_id", (Object) projectId), this::mapMembershipPlan);
+                """, new MapSqlParameterSource("project_id", projectId), this::mapMembershipPlan);
     }
 
     @Override

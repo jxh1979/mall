@@ -368,6 +368,18 @@ class CustomerJdbcIntegrationTests {
     }
 
     @Test
+    void globalScopedLoyaltyConfigQueriesAcceptNullProject() {
+        // ⑤签到500根因回归：这四个"全局口径"查询都以 projectId=null 调用（LoyaltyService 全链），
+        // 旧实现用 Map.of 传参，null 值直接 NPE → 客人签到/积分入账/等级评估真实环境 500。
+        org.assertj.core.api.Assertions.assertThatCode(() -> {
+            repository.listMemberLevels(null);
+            repository.listCheckInTiers(null);
+            repository.listActiveBirthdayRules(null);
+            repository.listMembershipPlans(null);
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
     void persistPointsLedgerRedemptionCatalogAndRedemptions() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveCustomer(new CustomerRecord(
