@@ -41,6 +41,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-MER-004", label: "我的工单", route: "/admin/merchant-zone/work-orders" },
   { pageId: "ADM-MER-005", label: "我的对账", route: "/admin/merchant-zone/settlements" },
   { pageId: "ADM-MER-006", label: "我的合同", route: "/admin/merchant-zone/contracts" },
+  { pageId: "ADM-MER-007", label: "费用通知", route: "/admin/merchant-zone/fee-recipients" },
   { pageId: "ADM-VND-001", label: "外包维保工单", route: "/admin/vendor/work-orders" },
   { pageId: "ADM-VND-002", label: "外包巡检任务", route: "/admin/vendor/inspections" },
   { pageId: "ADM-VND-003", label: "外包进场报备", route: "/admin/vendor/site-entries" },
@@ -105,6 +106,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("merchant-zone-settlements-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-006") {
     await expect(page.getByTestId("merchant-zone-contracts-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-MER-007") {
+    await expect(page.getByTestId("merchant-zone-fee-recipients-page")).toBeVisible();
   } else if (spec.pageId === "ADM-VND-001") {
     await expect(page.getByTestId("vendor-work-orders-page")).toBeVisible();
     await expect(page.getByTestId("vendor-work-orders-table")).toBeVisible();
@@ -379,6 +382,12 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("audit://merchant-scope/bill-1");
         await expect(page.getByTestId("merchant-scope-boundary")).toContainText("不得访问平台治理");
+        continue;
+      }
+      if (spec.pageId === "ADM-MER-007") {
+        await expect(page.getByTestId("merchant-zone-fee-recipients-summary")).toContainText("接收人配置");
+        await expect(page.getByTestId("merchant-zone-fee-recipients-table")).toContainText("15577000001");
+        await expect(page.getByTestId("merchant-zone-fee-recipient-form")).toBeVisible();
         continue;
       }
       if (spec.pageId === "ADM-MER-005") {

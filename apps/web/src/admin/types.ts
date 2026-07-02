@@ -639,6 +639,17 @@ export type MerchantZoneBillRow = {
   updatedAt?: string;
 };
 
+export type MerchantZoneFeeRecipientRow = {
+  id: string;
+  merchantId?: string;
+  feeEvent?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type MerchantZoneSettlementRow = {
   id: string;
   contractId?: string;

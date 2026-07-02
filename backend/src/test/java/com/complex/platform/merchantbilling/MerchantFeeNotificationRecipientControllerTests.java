@@ -18,10 +18,13 @@ import com.complex.platform.common.api.GlobalExceptionHandler;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.config.SecurityConfig;
 import com.complex.platform.merchantbilling.dto.MerchantFeeNotificationRecipientRequest;
+import com.complex.platform.access.AccessActor;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
@@ -56,6 +59,73 @@ class MerchantFeeNotificationRecipientControllerTests {
     @BeforeEach
     void resetMocks() {
         Mockito.reset(service, authorizationService);
+    }
+
+
+    // ── 商户专区一期(3.18)切片5:商户自助口径——无平台 merchant.billing.manage 时,
+    //    走 merchant.portal.fee_recipient.manage + merchant scope,强制只管本商户接收人。 ──
+
+    private void asMerchantSelfService(String merchantId) {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "no platform perm"))
+                .when(authorizationService).requirePermission("merchant.billing.manage");
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of(merchantId));
+        when(authorizationService.currentActor()).thenReturn(
+                new AccessActor("usr_merchant_self", "merchant_self_user", "staff", "org_1", merchantId, "active"));
+    }
+
+    @Test
+    void merchantSelfServiceListForcesOwnMerchantScope() throws Exception {
+        asMerchantSelfService("merchant_self");
+        when(service.list("merchant_self")).thenReturn(new PageResponse<>(List.of(recipient("active")), 1, 200, 1));
+
+        mockMvc.perform(get("/api/v1/merchant-billing/fee-notification-recipients")
+                        .queryParam("merchant_id", "merchant_other")
+                        .with(user("merchant").roles("P0_SMOKE")))
+                .andExpect(status().isOk());
+
+        verify(authorizationService).requirePermission("merchant.portal.fee_recipient.manage");
+        verify(service).list("merchant_self");
+    }
+
+    @Test
+    void merchantSelfServiceUpsertForcesOwnMerchantAndActorOperator() throws Exception {
+        asMerchantSelfService("merchant_self");
+        when(service.upsert(any(MerchantFeeNotificationRecipientRequest.class))).thenReturn(recipient("active"));
+
+        mockMvc.perform(post("/api/v1/merchant-billing/fee-notification-recipients")
+                        .with(user("merchant").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "merchant_id": "merchant_other",
+                                  "fee_event": "rent",
+                                  "recipient_name": "店长",
+                                  "recipient_phone": "15577000009"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<MerchantFeeNotificationRecipientRequest> captor =
+                ArgumentCaptor.forClass(MerchantFeeNotificationRecipientRequest.class);
+        verify(service).upsert(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().merchantId()).isEqualTo("merchant_self");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().operatorUserId()).isEqualTo("usr_merchant_self");
+    }
+
+    @Test
+    void merchantSelfServiceCannotReadOrDeactivateForeignRecipient() throws Exception {
+        asMerchantSelfService("merchant_other_scope");
+        when(service.get("mfnr_1")).thenReturn(recipient("active")); // 记录属 merchant_1
+
+        mockMvc.perform(get("/api/v1/merchant-billing/fee-notification-recipients/mfnr_1")
+                        .with(user("merchant").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+
+        mockMvc.perform(post("/api/v1/merchant-billing/fee-notification-recipients/mfnr_1/deactivate")
+                        .with(user("merchant").roles("P0_SMOKE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
     }
 
     @Test
@@ -123,6 +193,9 @@ class MerchantFeeNotificationRecipientControllerTests {
         doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
                 .when(authorizationService)
                 .requirePermission("merchant.billing.manage");
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
+                .when(authorizationService)
+                .requirePermission("merchant.portal.fee_recipient.manage");
 
         mockMvc.perform(post("/api/v1/merchant-billing/fee-notification-recipients")
                         .with(user("finance").roles("P0_SMOKE"))
