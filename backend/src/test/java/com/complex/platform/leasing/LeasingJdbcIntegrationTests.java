@@ -55,7 +55,7 @@ class LeasingJdbcIntegrationTests {
                 "signed", null, null, null, old, old));
         repository.saveLead(new LeasingLeadRecord("lead_fresh", "刚跟进", null, "referral", null, null, null, null, "u",
                 "following_up", null, fresh, null, old, old));
-        assertThat(repository.listLeadsNeedingFollowUp(cutoff))
+        assertThat(repository.listLeadsNeedingFollowUp(cutoff, null))
                 .extracting(LeasingLeadRecord::id)
                 .contains("lead_due").doesNotContain("lead_signed", "lead_fresh");
     }
@@ -81,12 +81,14 @@ class LeasingJdbcIntegrationTests {
         // 品牌库 4 类。
         repository.saveBrand(new LeasingBrandRecord("brand_jdbc", "星巴克", "partner", "餐饮",
                 null, null, null, null, now, now));
-        assertThat(repository.listBrands()).extracting(LeasingBrandRecord::id).contains("brand_jdbc");
+        assertThat(repository.listBrands(null)).extracting(LeasingBrandRecord::id).contains("brand_jdbc");
+        // 3.2 跨项目读隔离：scoped 查询看不见 null 项目行。
+        assertThat(repository.listBrands("prj-other")).extracting(LeasingBrandRecord::id).doesNotContain("brand_jdbc");
 
         // 跟进流水按 ref 查。
         repository.saveFollowUp(new LeasingFollowUpRecord("follow_jdbc", "lead", "lead_jdbc", "phone",
                 "已沟通", null, "usr_sales", null, now));
-        assertThat(repository.listFollowUpsByRef("lead", "lead_jdbc"))
+        assertThat(repository.listFollowUpsByRef("lead", "lead_jdbc", null))
                 .extracting(LeasingFollowUpRecord::id).contains("follow_jdbc");
     }
 

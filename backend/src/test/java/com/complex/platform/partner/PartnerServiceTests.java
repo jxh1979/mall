@@ -31,7 +31,17 @@ class PartnerServiceTests {
     @BeforeEach
     void setUp() {
         when(authz.currentActor()).thenReturn(new AccessActor(ADMIN, "va", "outsourced_vendor", null, null, "active"));
+        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.empty());
         when(repository.findPartnerOrgIdForUser(ADMIN)).thenReturn(Optional.of(ORG));
+    }
+
+    @Test
+    void listPartnerOrgsPassesProjectScopeToRepository() {
+        // 3.2 跨项目读隔离：项目员工读机构列表时把本项目 scope 下沉仓储谓词。
+        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_a"));
+        when(repository.listOrgs("prj_a")).thenReturn(java.util.List.of());
+        service.listPartnerOrgs();
+        verify(repository).listOrgs("prj_a");
     }
 
     @Test

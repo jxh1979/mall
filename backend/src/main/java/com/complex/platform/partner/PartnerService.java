@@ -34,7 +34,9 @@ public class PartnerService {
 
     public PageResponse<ExternalPartnerOrgRecord> listPartnerOrgs() {
         authorizationService.requirePlatformScope();
-        List<ExternalPartnerOrgRecord> rows = repository.listOrgs();
+        // 3.2 跨项目读隔离：项目员工只见本项目机构，平台管理员/全局平台员工全量。
+        List<ExternalPartnerOrgRecord> rows = repository.listOrgs(
+                authorizationService.currentProjectScopeQuietly().orElse(null));
         auditEventService.recordSuccess("partner_org.viewed", "partner.org.view", "partner_org", "all",
                 null, null, Map.of("count", rows.size()));
         return new PageResponse<>(rows, 1, rows.size(), rows.size());

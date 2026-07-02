@@ -398,6 +398,20 @@ public class AuthorizationService implements CallerScopeResolver {
         }
     }
 
+    /**
+     * 项目维度只读 scope（3.2 跨项目读隔离）：平台管理员与无组织归属的全局平台员工返回 empty（全量），
+     * 带组织归属（organizationId=项目）的项目员工返回其项目 ID，仓储层据此加 project_id 谓词，
+     * 多项目下项目员工不能越读他项目的数据。与 {@link #currentMerchantScope()} 同范式，永不抛。
+     */
+    public Optional<String> currentProjectScopeQuietly() {
+        AccessActor actor = currentActor();
+        if (isPlatformAdminBridge(actor)) {
+            return Optional.empty();
+        }
+        String projectId = actor.organizationId();
+        return projectId == null || projectId.isBlank() ? Optional.empty() : Optional.of(projectId);
+    }
+
     private boolean isPlatformAdminBridge(AccessActor actor) {
         return "active".equals(actor.status())
                 && "platform_admin".equals(normalize(actor.accountType()));

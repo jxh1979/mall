@@ -48,6 +48,8 @@ class LeasingServiceTests {
     void setUp() {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
+        // 3.2 默认：平台管理员无 project scope（全量）；跨项目用例再覆写。
+        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.empty());
         // 3.13 默认：空间存在性放行（专项用例再覆写为 false）。
         org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
         service = new LeasingService(repo, mock(AuditEventService.class), authz, contractService, platformService);
@@ -74,6 +76,29 @@ class LeasingServiceTests {
         assertThatThrownBy(() -> service.listIntents()).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> service.listBrands()).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> service.listFollowUps("lead", "lead_x")).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void projectScopedStaffOnlySeesOwnProjectRows() {
+        // 3.2 跨项目读隔离：项目员工（organizationId=prj_a）只见本项目行，他项目（prj_b）不可见；
+        // 平台管理员（scope empty，见 setUp）全量。
+        Instant now = Instant.now();
+        repo.saveLead(new LeasingLeadRecord("lead_a", "甲", null, "outbound", null, null, null, null, "u",
+                "following_up", null, null, "prj_a", now, now));
+        repo.saveLead(new LeasingLeadRecord("lead_b", "乙", null, "outbound", null, null, null, null, "u",
+                "following_up", null, null, "prj_b", now, now));
+        repo.saveBrand(new LeasingBrandRecord("brand_a", "品牌甲", "prospective", null, null, null, null, "prj_a", now, now));
+        repo.saveBrand(new LeasingBrandRecord("brand_b", "品牌乙", "prospective", null, null, null, null, "prj_b", now, now));
+
+        // 平台管理员：全量可见。
+        assertThat(service.listLeads().items()).extracting(LeasingLeadRecord::id).contains("lead_a", "lead_b");
+
+        // prj_a 项目员工：只见 prj_a。
+        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_a"));
+        assertThat(service.listLeads().items()).extracting(LeasingLeadRecord::id)
+                .contains("lead_a").doesNotContain("lead_b");
+        assertThat(service.listBrands().items()).extracting(LeasingBrandRecord::id)
+                .contains("brand_a").doesNotContain("brand_b");
     }
 
     @Test
@@ -221,8 +246,10 @@ class LeasingServiceTests {
         }
 
         @Override
-        public List<LeasingLeadRecord> listLeads() {
-            return List.copyOf(leads.values());
+        public List<LeasingLeadRecord> listLeads(String projectScope) {
+            return leads.values().stream()
+                    .filter(l -> projectScope == null || projectScope.equals(l.projectId()))
+                    .toList();
         }
 
         @Override
@@ -237,8 +264,10 @@ class LeasingServiceTests {
         }
 
         @Override
-        public List<LeasingIntentRecord> listIntents() {
-            return List.copyOf(intents.values());
+        public List<LeasingIntentRecord> listIntents(String projectScope) {
+            return intents.values().stream()
+                    .filter(i -> projectScope == null || projectScope.equals(i.projectId()))
+                    .toList();
         }
 
         @Override
@@ -253,8 +282,10 @@ class LeasingServiceTests {
         }
 
         @Override
-        public List<LeasingBrandRecord> listBrands() {
-            return List.copyOf(brands.values());
+        public List<LeasingBrandRecord> listBrands(String projectScope) {
+            return brands.values().stream()
+                    .filter(b -> projectScope == null || projectScope.equals(b.projectId()))
+                    .toList();
         }
 
         @Override
@@ -269,8 +300,10 @@ class LeasingServiceTests {
         }
 
         @Override
-        public List<LeasingFollowUpRecord> listFollowUpsByRef(String refType, String refId) {
-            return followUps.stream().filter(f -> f.refType().equals(refType) && f.refId().equals(refId)).toList();
+        public List<LeasingFollowUpRecord> listFollowUpsByRef(String refType, String refId, String projectScope) {
+            return followUps.stream().filter(f -> f.refType().equals(refType) && f.refId().equals(refId))
+                    .filter(f -> projectScope == null || projectScope.equals(f.projectId()))
+                    .toList();
         }
     }
 }

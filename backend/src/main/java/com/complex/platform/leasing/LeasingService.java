@@ -64,7 +64,8 @@ public class LeasingService {
     // ============ 线索 ============
     public PageResponse<LeasingLeadRecord> listLeads() {
         authorizationService.requirePlatformScope();
-        List<LeasingLeadRecord> items = repository.listLeads();
+        // 3.2 跨项目读隔离：项目员工只见本项目，平台管理员/全局平台员工全量。
+        List<LeasingLeadRecord> items = repository.listLeads(currentProjectScope());
         auditEventService.recordSuccess("leasing.lead.viewed", "leasing.lead.manage", "leasing_lead", "all",
                 null, null, Map.of("count", items.size()));
         return new PageResponse<>(items, 1, 500, items.size());
@@ -75,7 +76,7 @@ public class LeasingService {
         authorizationService.requirePlatformScope();
         Instant cutoff = Instant.now().minus(FOLLOW_UP_REMINDER_DAYS, ChronoUnit.DAYS);
         // 3.6：下沉仓储层 WHERE due，不再拉全表内存过滤。
-        List<LeasingLeadRecord> items = repository.listLeadsNeedingFollowUp(cutoff);
+        List<LeasingLeadRecord> items = repository.listLeadsNeedingFollowUp(cutoff, currentProjectScope());
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -136,7 +137,7 @@ public class LeasingService {
     // ============ 意向 ============
     public PageResponse<LeasingIntentRecord> listIntents() {
         authorizationService.requirePlatformScope();
-        List<LeasingIntentRecord> items = repository.listIntents();
+        List<LeasingIntentRecord> items = repository.listIntents(currentProjectScope());
         auditEventService.recordSuccess("leasing.intent.viewed", "leasing.intent.manage", "leasing_intent", "all",
                 null, null, Map.of("count", items.size()));
         return new PageResponse<>(items, 1, 500, items.size());
@@ -252,7 +253,7 @@ public class LeasingService {
     // ============ 品牌库 ============
     public PageResponse<LeasingBrandRecord> listBrands() {
         authorizationService.requirePlatformScope();
-        List<LeasingBrandRecord> items = repository.listBrands();
+        List<LeasingBrandRecord> items = repository.listBrands(currentProjectScope());
         auditEventService.recordSuccess("leasing.brand.viewed", "leasing.brand.manage", "leasing_brand", "all",
                 null, null, Map.of("count", items.size()));
         return new PageResponse<>(items, 1, 500, items.size());
@@ -297,7 +298,8 @@ public class LeasingService {
     public PageResponse<LeasingFollowUpRecord> listFollowUps(String refType, String refId) {
         authorizationService.requirePlatformScope();
         String type = requireEnum(refType, FOLLOW_UP_REF_TYPES, "ref_type");
-        List<LeasingFollowUpRecord> items = repository.listFollowUpsByRef(type, requireText(refId, "ref_id"));
+        List<LeasingFollowUpRecord> items = repository.listFollowUpsByRef(type, requireText(refId, "ref_id"),
+                currentProjectScope());
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -327,6 +329,11 @@ public class LeasingService {
     }
 
     // ============ helpers ============
+    /** 3.2：项目员工读取按本项目过滤（organizationId=项目），平台管理员/全局平台员工 null=全量。 */
+    private String currentProjectScope() {
+        return authorizationService.currentProjectScopeQuietly().orElse(null);
+    }
+
     private void requireBrandNotBlacklisted(String brandId) {
         if (brandId == null) {
             return;

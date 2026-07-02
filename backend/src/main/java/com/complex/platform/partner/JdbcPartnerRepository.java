@@ -58,9 +58,14 @@ class JdbcPartnerRepository implements PartnerRepository {
     }
 
     @Override
-    public List<ExternalPartnerOrgRecord> listOrgs() {
+    public List<ExternalPartnerOrgRecord> listOrgs(String projectScope) {
+        // 3.2 跨项目读隔离：项目员工只见本项目机构；null（平台管理员/全局平台员工）全量。
         return jdbcTemplate.query(
-                "SELECT * FROM external_partner_orgs ORDER BY created_at DESC, id LIMIT 500", this::mapOrg);
+                "SELECT * FROM external_partner_orgs"
+                        + (projectScope != null ? " WHERE project_id = :project_id" : "")
+                        + " ORDER BY created_at DESC, id LIMIT 500",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("project_id", projectScope),
+                this::mapOrg);
     }
 
     @Override

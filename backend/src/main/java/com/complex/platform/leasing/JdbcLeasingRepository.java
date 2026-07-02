@@ -66,19 +66,28 @@ class JdbcLeasingRepository implements LeasingRepository {
     }
 
     @Override
-    public List<LeasingLeadRecord> listLeads() {
-        return jdbcTemplate.query("SELECT * FROM leasing_leads ORDER BY created_at DESC, id LIMIT 500", this::mapLead);
+    public List<LeasingLeadRecord> listLeads(String projectScope) {
+        // 3.2 跨项目读隔离：项目员工只见本项目行；null（平台管理员/全局平台员工）全量。
+        return jdbcTemplate.query(
+                "SELECT * FROM leasing_leads"
+                        + (projectScope != null ? " WHERE project_id = :project_id" : "")
+                        + " ORDER BY created_at DESC, id LIMIT 500",
+                new MapSqlParameterSource("project_id", projectScope), this::mapLead);
     }
 
     @Override
-    public List<LeasingLeadRecord> listLeadsNeedingFollowUp(java.time.Instant cutoff) {
+    public List<LeasingLeadRecord> listLeadsNeedingFollowUp(java.time.Instant cutoff, String projectScope) {
         return jdbcTemplate.query("""
                 SELECT * FROM leasing_leads
                  WHERE status NOT IN ('signed', 'lost')
                    AND COALESCE(last_follow_up_at, created_at) < :cutoff
+                """
+                + (projectScope != null ? "   AND project_id = :project_id\n" : "")
+                + """
                  ORDER BY COALESCE(last_follow_up_at, created_at), id
                  LIMIT 500
-                """, new MapSqlParameterSource("cutoff", timestampWithTimeZone(cutoff)), this::mapLead);
+                """, new MapSqlParameterSource("cutoff", timestampWithTimeZone(cutoff))
+                        .addValue("project_id", projectScope), this::mapLead);
     }
 
     @Override
@@ -116,12 +125,15 @@ class JdbcLeasingRepository implements LeasingRepository {
     }
 
     @Override
-    public List<LeasingIntentRecord> listIntents() {
+    public List<LeasingIntentRecord> listIntents(String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms,
                        last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at
-                  FROM leasing_intents ORDER BY created_at DESC, id LIMIT 500
-                """, this::mapIntent);
+                  FROM leasing_intents
+                """
+                + (projectScope != null ? " WHERE project_id = :project_id" : "")
+                + " ORDER BY created_at DESC, id LIMIT 500",
+                new MapSqlParameterSource("project_id", projectScope), this::mapIntent);
     }
 
     @Override
@@ -161,8 +173,12 @@ class JdbcLeasingRepository implements LeasingRepository {
     }
 
     @Override
-    public List<LeasingBrandRecord> listBrands() {
-        return jdbcTemplate.query("SELECT * FROM leasing_brands ORDER BY created_at DESC, id LIMIT 500", this::mapBrand);
+    public List<LeasingBrandRecord> listBrands(String projectScope) {
+        return jdbcTemplate.query(
+                "SELECT * FROM leasing_brands"
+                        + (projectScope != null ? " WHERE project_id = :project_id" : "")
+                        + " ORDER BY created_at DESC, id LIMIT 500",
+                new MapSqlParameterSource("project_id", projectScope), this::mapBrand);
     }
 
     @Override
@@ -194,11 +210,13 @@ class JdbcLeasingRepository implements LeasingRepository {
     }
 
     @Override
-    public List<LeasingFollowUpRecord> listFollowUpsByRef(String refType, String refId) {
+    public List<LeasingFollowUpRecord> listFollowUpsByRef(String refType, String refId, String projectScope) {
         return jdbcTemplate.query(
                 "SELECT * FROM leasing_follow_ups WHERE ref_type = :ref_type AND ref_id = :ref_id "
+                        + (projectScope != null ? "AND project_id = :project_id " : "")
                         + "ORDER BY created_at DESC, id LIMIT 500",
-                new MapSqlParameterSource().addValue("ref_type", refType).addValue("ref_id", refId), this::mapFollowUp);
+                new MapSqlParameterSource().addValue("ref_type", refType).addValue("ref_id", refId)
+                        .addValue("project_id", projectScope), this::mapFollowUp);
     }
 
     // ---------- row mappers ----------

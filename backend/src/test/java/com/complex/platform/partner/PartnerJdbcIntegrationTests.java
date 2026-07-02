@@ -28,7 +28,10 @@ class PartnerJdbcIntegrationTests {
         Instant now = Instant.parse("2026-06-30T00:00:00Z");
         repository.saveOrg(new ExternalPartnerOrgRecord(
                 "epo-it", "prj1", "维保甲", "facility_maintenance", null, 2, null, "active", now, now));
-        assertThat(repository.listOrgs()).extracting(ExternalPartnerOrgRecord::id).contains("epo-it");
+        assertThat(repository.listOrgs(null)).extracting(ExternalPartnerOrgRecord::id).contains("epo-it");
+        // 3.2 跨项目读隔离：scoped 查询只见本项目，他项目 scope 看不见。
+        assertThat(repository.listOrgs("prj1")).extracting(ExternalPartnerOrgRecord::id).contains("epo-it");
+        assertThat(repository.listOrgs("prj-other")).extracting(ExternalPartnerOrgRecord::id).doesNotContain("epo-it");
 
         repository.createSubordinate(new PartnerSubordinateRecord(
                 "epu-it-1", "sub-it-1", "epo-it", "outsourced_vendor", "active", now), "role_outsourced_facility");

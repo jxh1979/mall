@@ -8,7 +8,8 @@ public interface PartnerRepository {
 
     ExternalPartnerOrgRecord saveOrg(ExternalPartnerOrgRecord org);
 
-    List<ExternalPartnerOrgRecord> listOrgs();
+    /** 3.2 跨项目读隔离：projectScope 非空时仅返回该项目的机构，null（平台管理员/全局平台员工）全量。 */
+    List<ExternalPartnerOrgRecord> listOrgs(String projectScope);
 
     Optional<ExternalPartnerOrgRecord> findOrgById(String id);
 
