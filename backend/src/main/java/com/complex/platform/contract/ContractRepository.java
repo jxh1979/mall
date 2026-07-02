@@ -41,6 +41,26 @@ public interface ContractRepository {
 
     List<ContractSettlementRecord> listSettlementsByContract(String contractId);
 
+    // ---- 商户专区一期(3.18)商户维度读取:default 由既有方法组合,Jdbc 实现覆写为单 SQL ----
+
+    default List<ContractRecord> listContractsByMerchant(String merchantId) {
+        return listContracts().stream()
+                .filter(contract -> merchantId != null && merchantId.equals(contract.merchantId()))
+                .toList();
+    }
+
+    default List<ContractSettlementRecord> listSettlementsByMerchant(String merchantId) {
+        return listContractsByMerchant(merchantId).stream()
+                .flatMap(contract -> listSettlementsByContract(contract.id()).stream())
+                .toList();
+    }
+
+    default List<ContractSettlementRecord> listAllSettlements() {
+        return listContracts().stream()
+                .flatMap(contract -> listSettlementsByContract(contract.id()).stream())
+                .toList();
+    }
+
     // 可配审批链：引擎读「该综合体生效链」（项目覆盖优先、否则平台默认）
     List<ContractApprovalFlowStepRecord> listActiveFlowSteps(String projectId);
 

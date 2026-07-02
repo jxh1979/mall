@@ -111,6 +111,8 @@ function createState(empty = false) {
     ...fillRows(10, (i) => ({ id: `event-fill-${i + 3}`, eventType: "bar.order.settled", eventCategory: "bar", sourceType: "web", result: "success", riskLevel: "normal", traceId: `event-trace-fill-${i + 3}`, objectType: "bar_order", objectId: `order-${i + 3}`, summary: `bar order settled ${i + 3}`, beforeAfter: { before: {}, after: { status: "settled" } }, occurredAt: now })),
   ];
   const merchantWorkOrders = empty ? [] : [{ id: "mswo-1", merchantId: "merchant-1", spaceId: "area-1", contractId: "contract-1", workOrderType: "repair", priority: "high", status: "created", title: "\u7a7a调漏水", description: "\u5546户报修空调漏水", reportedByUserId: "staff_reporter", reportedChannel: "web", ownerDepartment: "", ownerUserId: "", dueAt: "2026-06-16T10:00:00.000Z", evidenceAttachmentIds: ["att-photo-1"], authorizedScope: "merchant-1:work-orders", auditEvidenceRef: "audit://merchant-scope/work-order-1", createdAt: now, updatedAt: now }];
+  const merchantZoneSettlements = empty ? [] : [{ id: "cst-1", contractId: "contract-1", triggerType: "move_out", status: "pending_settlement", settlementItems: [], disputeReason: null, createdAt: now, updatedAt: now }];
+  const merchantZoneContracts = empty ? [] : [{ id: "contract-1", merchantId: "merchant-1", effectiveDate: "2026-07-01", expiryDate: "2027-06-30", lifecycleStatus: "effective", depositCent: 500000, projectId: "project_1", spaceIds: ["space-1"], renewedFromContractId: null, createdAt: now, updatedAt: now }];
   const merchantBills = empty ? [] : [{ id: "merchant-bill-1", merchantId: "merchant-1", billNo: "MBILL-1", title: "物业费账单", totalAmount: 12000, totalAmountCent: 12000000, currency: "CNY", status: "pending_confirm", billPeriodStart: "2026-06-01", billPeriodEnd: "2026-06-30", dueDate: "2026-07-15", agingDays: 0, lines: [{ id: "mbl-1", feeType: "property_fee", description: "物业费 2026-06", amountCent: 12000000, currency: "CNY" }], authorizedScope: "merchant-1:billing", auditEvidenceRef: "audit://merchant-scope/bill-1", createdAt: now, updatedAt: now }];
   const facilityEquipment = empty ? [] : [
     { id: "eq-hvac-1", name: "空调主机", equipmentType: "hvac", status: "normal", spaceId: "area-1", projectId: "venue-1", brand: "MockAir", responsibleUserId: "facility-owner", maintenanceCycleDays: 90, nextMaintenanceDue: "2026-07-15", alarmSource: null, alarmNote: null },
@@ -156,6 +158,8 @@ function createState(empty = false) {
     evidenceEvents,
     merchantWorkOrders,
     merchantBills,
+    merchantZoneSettlements,
+    merchantZoneContracts,
     facilityEquipment,
     facilityWorkOrders,
     facilityInspectionTemplates,
@@ -282,6 +286,8 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/merchant-health": empty,
     "/api/v1/merchant-service/work-orders": state.merchantWorkOrders,
     "/api/v1/merchant-billing/bills": state.merchantBills,
+    "/api/v1/merchant-portal/settlements": state.merchantZoneSettlements,
+    "/api/v1/merchant-portal/contracts": state.merchantZoneContracts,
     "/api/v1/facility/equipment": state.facilityEquipment,
     "/api/v1/facility/equipment/maintenance-due": empty,
     "/api/v1/facility/work-orders": assignedRows(state.facilityWorkOrders, options, "assigneeId"),

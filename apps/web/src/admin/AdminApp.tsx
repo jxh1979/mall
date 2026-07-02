@@ -25,6 +25,8 @@ const MerchantWorkOrdersPage = React.lazy(() => import("./pages/MerchantWorkOrde
 const MerchantScopePage = React.lazy(() => import("./pages/MerchantScopePage").then((m) => ({ default: m.MerchantScopePage })));
 const MerchantZoneBillsPage = React.lazy(() => import("./pages/MerchantZoneBillsPage").then((m) => ({ default: m.MerchantZoneBillsPage })));
 const MerchantZoneWorkOrdersPage = React.lazy(() => import("./pages/MerchantZoneWorkOrdersPage").then((m) => ({ default: m.MerchantZoneWorkOrdersPage })));
+const MerchantZoneSettlementsPage = React.lazy(() => import("./pages/MerchantZoneSettlementsPage").then((m) => ({ default: m.MerchantZoneSettlementsPage })));
+const MerchantZoneContractsPage = React.lazy(() => import("./pages/MerchantZoneContractsPage").then((m) => ({ default: m.MerchantZoneContractsPage })));
 const VendorWorkOrdersPage = React.lazy(() => import("./pages/VendorWorkOrdersPage").then((m) => ({ default: m.VendorWorkOrdersPage })));
 const VendorInspectionsPage = React.lazy(() => import("./pages/VendorInspectionsPage").then((m) => ({ default: m.VendorInspectionsPage })));
 const VendorSiteEntriesPage = React.lazy(() => import("./pages/VendorSiteEntriesPage").then((m) => ({ default: m.VendorSiteEntriesPage })));
@@ -162,6 +164,10 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <MerchantZoneBillsPage {...props} />;
     case "ADM-MER-004":
       return <MerchantZoneWorkOrdersPage {...props} />;
+    case "ADM-MER-005":
+      return <MerchantZoneSettlementsPage {...props} />;
+    case "ADM-MER-006":
+      return <MerchantZoneContractsPage {...props} />;
     case "ADM-VND-001":
       return <VendorWorkOrdersPage {...props} />;
     case "ADM-VND-002":

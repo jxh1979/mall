@@ -639,6 +639,31 @@ export type MerchantZoneBillRow = {
   updatedAt?: string;
 };
 
+export type MerchantZoneSettlementRow = {
+  id: string;
+  contractId?: string;
+  triggerType?: string;
+  status?: string;
+  settlementItems?: unknown[];
+  disputeReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type MerchantZoneContractRow = {
+  id: string;
+  merchantId?: string;
+  effectiveDate?: string;
+  expiryDate?: string;
+  lifecycleStatus?: string;
+  depositCent?: number | null;
+  projectId?: string;
+  spaceIds?: string[];
+  renewedFromContractId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type MerchantScopeBillRow = {
   id: string;
   merchantId?: string;

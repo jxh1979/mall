@@ -39,6 +39,8 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-MER-002", label: "商户授权工作台", route: "/admin/merchant-portal/scope" },
   { pageId: "ADM-MER-003", label: "我的账单", route: "/admin/merchant-zone/bills" },
   { pageId: "ADM-MER-004", label: "我的工单", route: "/admin/merchant-zone/work-orders" },
+  { pageId: "ADM-MER-005", label: "我的对账", route: "/admin/merchant-zone/settlements" },
+  { pageId: "ADM-MER-006", label: "我的合同", route: "/admin/merchant-zone/contracts" },
   { pageId: "ADM-VND-001", label: "外包维保工单", route: "/admin/vendor/work-orders" },
   { pageId: "ADM-VND-002", label: "外包巡检任务", route: "/admin/vendor/inspections" },
   { pageId: "ADM-VND-003", label: "外包进场报备", route: "/admin/vendor/site-entries" },
@@ -99,6 +101,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("merchant-zone-bills-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-004") {
     await expect(page.getByTestId("merchant-zone-work-orders-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-MER-005") {
+    await expect(page.getByTestId("merchant-zone-settlements-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-MER-006") {
+    await expect(page.getByTestId("merchant-zone-contracts-page")).toBeVisible();
   } else if (spec.pageId === "ADM-VND-001") {
     await expect(page.getByTestId("vendor-work-orders-page")).toBeVisible();
     await expect(page.getByTestId("vendor-work-orders-table")).toBeVisible();
@@ -373,6 +379,17 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("audit://merchant-scope/bill-1");
         await expect(page.getByTestId("merchant-scope-boundary")).toContainText("不得访问平台治理");
+        continue;
+      }
+      if (spec.pageId === "ADM-MER-005") {
+        await expect(page.getByTestId("merchant-zone-settlements-summary")).toContainText("结算单");
+        await expect(page.getByTestId("merchant-zone-settlements-table")).toContainText("cst-1");
+        await expect(page.getByTestId("merchant-zone-settlement-dispute-form")).toBeVisible();
+        continue;
+      }
+      if (spec.pageId === "ADM-MER-006") {
+        await expect(page.getByTestId("merchant-zone-contracts-summary")).toContainText("合同总数");
+        await expect(page.getByTestId("merchant-zone-contracts-table")).toContainText("contract-1");
         continue;
       }
       if (spec.pageId === "ADM-MER-004") {

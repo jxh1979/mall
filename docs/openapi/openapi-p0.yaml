@@ -7000,6 +7000,111 @@ paths:
       x-device-capability:
         - verification-gate
       x-auth-context: staff-token
+  /api/v1/merchant-portal/contracts:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantPortalContracts
+      summary: 商户专区·我的合同(只读关键信息)
+      description: 商户自助查看本商户合同关键信息(租期/空间/状态/保证金,最小披露);
+        平台管理员为全量监督口径。数据边界=currentMerchantScope,员工无商户归属 fail-closed。
+      x-auth-context: staff-token
+      x-permission: contract.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: merchant_portal.contract.viewed
+      x-audit-event-failure: merchant_portal.contract.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/settlements:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantPortalSettlements
+      summary: 商户专区·我的对账(结算单只读)
+      description: 商户自助查看与本商户相关的退租/到期结算单;平台管理员为全量监督口径。
+        数据边界=合同 merchant 关联(currentMerchantScope)。
+      x-auth-context: staff-token
+      x-permission: merchant.portal.settlement.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: merchant_portal.settlement.viewed
+      x-audit-event-failure: merchant_portal.settlement.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/settlements/{settlement_id}/dispute:
+    post:
+      tags:
+        - merchant-portal
+      operationId: submitMerchantPortalSettlementDispute
+      summary: 商户专区·结算单异议留言
+      description: 商户对未结清结算单提交异议,结算单挂起为「有争议」;
+        平台按既有裁决流(contract.settlement.dispute.resolve)闭环,资金权威流程不变。
+        跨商户拒绝(CROSS_MERCHANT_FORBIDDEN),已结清/已有争议拒绝(SETTLEMENT_NOT_DISPUTABLE)。
+      x-auth-context: staff-token
+      x-permission: merchant.portal.settlement.dispute
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: true
+      x-audit-event-success: merchant_portal.settlement.disputed
+      x-audit-event-failure: merchant_portal.settlement.dispute_failed
+      parameters:
+        - name: settlement_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                reason:
+                  type: string
+                  description: 异议理由(商户留言)。
+                  maxLength: 2000
+      responses:
+        "200":
+          $ref: "#/components/responses/Item"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-billing/bills:
     get:
       tags:

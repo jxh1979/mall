@@ -1,0 +1,76 @@
+import React from "react";
+import { AdminDataState } from "../components/AdminDataState";
+import { AdminPageHeader } from "../components/AdminPageHeader";
+import { AuditTrailHint } from "../components/AuditTrailHint";
+import { usePagedRows, TablePager } from "../components/TablePager";
+import { useAdminResource } from "../hooks/useAdminResource";
+import type { AdminPageProps, MerchantZoneContractRow } from "../types";
+
+const TEXT = {
+  title: "我的合同",
+  description: "本商户合同的关键信息(租期 / 空间 / 状态 / 保证金)只读;改价、变更与审批仍走平台侧权威流程。",
+  loadFailed: "合同读取失败",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: "起草中",
+  pending_approval: "审批中",
+  pending_confirmation: "待确认",
+  effective: "履约中",
+  expired: "已到期",
+  pending_settlement: "结算中",
+  terminated: "已终止",
+  renewed: "已续签",
+};
+
+function money(cent: number | null | undefined) {
+  if (cent === undefined || cent === null) return "-";
+  return `${new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cent / 100)} CNY`;
+}
+
+export function MerchantZoneContractsPage({ api, setGlobalError }: AdminPageProps) {
+  const [rows, setRows] = React.useState<MerchantZoneContractRow[]>([]);
+
+  const { loading, error, reload } = useAdminResource(
+    async () => {
+      setRows(await api.get<MerchantZoneContractRow[]>("/api/v1/merchant-portal/contracts"));
+    },
+    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
+  );
+
+  const activeCount = rows.filter((row) => row.lifecycleStatus === "effective").length;
+  const paged = usePagedRows(rows, 10);
+
+  return (
+    <section data-testid="merchant-zone-contracts-page">
+      <AdminPageHeader title={TEXT.title} description={TEXT.description} />
+      <AuditTrailHint event="merchant_portal.contract.viewed" />
+      <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+        <div className="admin-kpi-grid" data-testid="merchant-zone-contracts-summary">
+          <div className="admin-kpi-card"><span>合同总数</span><strong>{rows.length}</strong><small>本商户</small></div>
+          <div className="admin-kpi-card"><span>履约中</span><strong>{activeCount}</strong><small>当前有效</small></div>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="merchant-zone-contracts-table">
+            <thead>
+              <tr><th>合同</th><th>租期</th><th>空间</th><th>状态</th><th>保证金</th><th>续签自</th></tr>
+            </thead>
+            <tbody>
+              {paged.pageRows.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.id}</td>
+                  <td>{row.effectiveDate ?? "-"} ~ {row.expiryDate ?? "-"}</td>
+                  <td>{(row.spaceIds ?? []).join(", ") || "-"}</td>
+                  <td>{STATUS_LABELS[row.lifecycleStatus ?? ""] ?? row.lifecycleStatus ?? "-"}</td>
+                  <td>{money(row.depositCent)}</td>
+                  <td>{row.renewedFromContractId ?? "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <TablePager testid="merchant-zone-contracts-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
+        </div>
+      </AdminDataState>
+    </section>
+  );
+}

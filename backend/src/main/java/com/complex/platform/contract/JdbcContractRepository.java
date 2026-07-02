@@ -257,6 +257,35 @@ class JdbcContractRepository implements ContractRepository {
                 """, Map.of("cid", contractId), this::mapSettlement);
     }
 
+    @Override
+    public List<ContractRecord> listContractsByMerchant(String merchantId) {
+        return jdbcTemplate.query(
+                "SELECT " + CONTRACT_COLS + " FROM contracts WHERE merchant_id = :mid ORDER BY created_at DESC, id",
+                Map.of("mid", merchantId == null ? "" : merchantId), this::mapContract);
+    }
+
+    @Override
+    public List<ContractSettlementRecord> listSettlementsByMerchant(String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT s.id, s.contract_id, s.trigger_type, s.status,
+                       s.settlement_items::text AS settlement_items,
+                       s.dispute_reason, s.resolved_by, s.resolved_at, s.project_id, s.created_at, s.updated_at
+                  FROM contract_settlements s
+                  JOIN contracts c ON c.id = s.contract_id
+                 WHERE c.merchant_id = :mid
+                 ORDER BY s.created_at DESC, s.id
+                """, Map.of("mid", merchantId == null ? "" : merchantId), this::mapSettlement);
+    }
+
+    @Override
+    public List<ContractSettlementRecord> listAllSettlements() {
+        return jdbcTemplate.query("""
+                SELECT id, contract_id, trigger_type, status, settlement_items::text AS settlement_items,
+                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at
+                  FROM contract_settlements ORDER BY created_at DESC, id
+                """, Map.of(), this::mapSettlement);
+    }
+
     // ---------- approval flow config ----------
     @Override
     public List<ContractApprovalFlowStepRecord> listActiveFlowSteps(String projectId) {

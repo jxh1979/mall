@@ -52,6 +52,8 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-MER-003", label: "我的账单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/bills", requiredPermissions: ["merchant.billing.view"] },
   { pageId: "ADM-MER-004", label: "我的工单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/work-orders", requiredPermissions: ["merchant.service_work_order.view"] },
+  { pageId: "ADM-MER-005", label: "我的对账", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/settlements", requiredPermissions: ["merchant.portal.settlement.view"] },
+  { pageId: "ADM-MER-006", label: "我的合同", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/contracts", requiredPermissions: ["contract.view"] },
 ];
 
 // 业务域分组顺序与展示文案（frontend-admin §4.3：8 业务域 + 平台域聚合）。
