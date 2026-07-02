@@ -7,8 +7,9 @@ J='Content-Type: application/json'
 PSQL="postgresql://complex:complex_dev_pwd@127.0.0.1:5432/complex"
 
 tok() { curl -s -X POST $API/api/v1/auth/login -H "$J" -d "{\"login_name\":\"$1\",\"password\":\"$2\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["access_token"])'; }
+P0U=$(grep '^P0_ADMIN_USERNAME=' ~/.complex/complex.env | cut -d= -f2)
 P0P=$(grep '^P0_ADMIN_PASSWORD=' ~/.complex/complex.env | cut -d= -f2)
-ADMIN_TOK=$(tok p0_smoke_admin "$P0P")
+ADMIN_TOK=$(tok "${P0U:-admin}" "${P0P:-admin-pass}")
 AH="Authorization: Bearer $ADMIN_TOK"
 jid() { python3 -c 'import sys,json
 raw = sys.stdin.read()

@@ -45,9 +45,9 @@
 | 环境校验 | `npm run verify:p0-env` 已通过，160 具备 Java 21、Maven 3.9+、Gradle/Android SDK 前置能力 |
 | 契约校验 | `npm run verify:p0-contract` 已通过，181 个 OpenAPI operation、示例、验收矩阵、追溯附录和客户端闸口已闭合 |
 | Web 构建 | `npm run verify:p0-web` 已通过，Web typecheck 与生产构建可执行 |
-| 运行配置 | `/etc/complex/complex.env` 仍保留旧配置且当前无免密 sudo 写入权限；已新增用户级覆盖配置 `~/.complex/complex.env`，将旧数据库 URL 转为 `jdbc:postgresql://127.0.0.1:5432/complex`，并把数据库账号/密码拆为独立变量。该覆盖只作为 160 开发/预生产实跑兜底；正式运维仍应由 IT/运维把同口径写入 `/etc/complex/complex.env` |
+| 运行配置 | **2026-07-02 统一**:160 开发/预生产的唯一运行配置真源 = (profile=dev,管理种子账号 admin/admin-pass);用户级 systemd 单元  的 EnvironmentFile 已指向同一文件,旧 (local+独立账号)已归档 。 保留为系统级默认(dev,由用户级覆盖),正式运维仍应由 IT/运维把最终口径写入系统级文件 |
 | 运行配置预检 | `complex-runtime-config-check.sh` 已通过，确认 PostgreSQL、Redis、NATS、MinIO 均运行，且 profile/API port/数据库 URL 口径符合 Spring Boot 4.x |
-| API 运行态 | `complex-deploy-api.sh` 已发布 release `20260613-193142`。因 sudo 需要密码，systemd 写入未完成，脚本已回退为非 systemd 方式启动；当前 API 进程监听 `127.0.0.1:8080`，`/actuator/health`、`/api/v1/system/health` 和 `/docs/openapi` 均可访问；运行时 OpenAPI 描述已确认包含 `Java 21 + Spring Boot 4.x` |
+| API 运行态 | **2026-07-02 起**:API 由用户级 systemd (Restart=always,linger 已开)看护,监听 。 重启优先走 (无需 sudo,且必须发生在 current 软链切换之后);部署收尾强制核对「监听进程实际加载的 jar == current 指向的 release」(verify_running_release),不一致非零退出并给出手工恢复指引——根治 2026-07-02 两次「看护进程在软链切换前抢拉起旧 release」踩坑 |
 | Web 运行态 | `complex-deploy-web.sh` 已发布 release `20260613-180329`，以 `vite preview` 方式监听 `127.0.0.1:3000`；Vite chunk size 仅为构建优化告警，不作为 P0 阻断 |
 | BE-000 验收 | `complex-verify-be000.sh` 已在运行态通过，覆盖 `verify:backend-env`、`npm run test:backend`、Maven package、jar 产物检查、API 健康检查和运行时 OpenAPI 输出 |
 | 整体健康检查 | `complex-health-check.sh` 已通过，覆盖 API actuator、系统健康接口、OpenAPI、Web 和基础容器 |
@@ -310,6 +310,7 @@ P0 采用低成本可落地方案：健康检查脚本 + 定时任务 + 日志�
 | 2026-06-13 | 改 | `complex-rollback-api.sh` 纳入 `complex-runtime-config-check.sh` 预检，Runbook 同步声明回滚不得绕过运行配置检查 | 防止缺数据库账号/密码或基础容器不可用时把回滚误判为运行态通过 |
 | 2026-06-13 | 改 | 160 运行配置预检新增 JDBC URL 形态检查，并禁止在 `COMPLEX_DATABASE_URL` 中内嵌数据库账号密码 | 防止当前旧 `postgresql://...` 配置在补齐用户名后继续导致 Spring Boot 数据源启动失败 |
 | 2026-06-13 | 改 | 记录 160 用户级运行配置覆盖、API release `20260613-180232`、Web release `20260613-180329`、BE-000 运行态和健康检查通过；当时完整 P0 处于阶段性待收口状态，后续已由 release `20260613-183652` 和完整 `complex-verify-p0.sh` 收口 | 防止把阶段性 BE-000/API/Web 运行态与完整 P0 混淆 |
+| 2026-07-02 | 改 | 部署重启可靠化: 优先 (无 sudo)、手工回退杀进程覆盖相对/绝对/unit 全形态、收尾强制 verify_running_release(进程加载 release==current);运行配置统一到 (dev+admin/admin-pass),user unit EnvironmentFile 同源,旧 local 配置归档 | 根治「sudo 静默失败旧进程续跑」与「user unit 在软链切换前抢拉起旧 release」两类部署踩坑,消除三套 env 口径漂移 |
 | 2026-06-13 | 改 | API release `20260613-183652` 已发布；补齐 dev smoke 鉴权、统一响应解包和 P0 smoke 切片后，`complex-verify-p0.sh` 完整通过 | 证明 160 环境、正式路径、Android smoke、APK 和整体健康检查可跑通；同时声明该 smoke 切片不等同于生产级业务实现 |
 | 2026-06-13 | 复核 | 重新执行 `complex-runtime-config-check.sh`、`verify:backend-env`、`verify:android-env`、`verify:p0-contract` 和完整 `complex-verify-p0.sh`，均通过；确认当前 160 编码环境为 JDK 21.0.11、Maven 3.9.11、Node 22.22.3、npm 10.9.8、Spring Boot 4.1.0 | 防止 160 机器旧配置被误判为当前环境，也防止只凭历史记录判断可用 |
 | 2026-06-13 | 改 | 同步本轮安全基线文档与 OpenAPI 描述后，API release `20260613-193142` 已发布，运行时 `/docs/openapi` 已确认包含 `Java 21 + Spring Boot 4.x`，完整 `complex-verify-p0.sh` 再次通过 | 防止本地文档/代码与 160 运行态漂移 |

@@ -80,12 +80,23 @@ EOF
 }
 
 restart_api() {
+  # 2026-07-02 部署可靠化:本机常态=用户级 systemd(~/.config/systemd/user/complex-api.service,
+  # Restart=always 看护,linger 已开)。user unit 重启无需 sudo,且必须发生在 current 软链切换之后,
+  # 否则 unit 自动拉起的进程会挂着旧 release 的 jar(fd 指向旧目录,实证 2026-07-02 两次踩坑)。
+  if command -v systemctl >/dev/null 2>&1 && systemctl --user cat "$SERVICE_NAME" >/dev/null 2>&1; then
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user restart "$SERVICE_NAME"
+    return 0
+  fi
+
+  # 系统级 systemd 需要 sudo;无终端时 sudo 失败(不再静默:提示后走手工路径)。
   if command -v systemctl >/dev/null 2>&1 && write_systemd_service; then
     run_root systemctl daemon-reload
     run_root systemctl enable "$SERVICE_NAME" >/dev/null
     run_root systemctl restart "$SERVICE_NAME"
     return 0
   fi
+  echo "systemd restart unavailable (user unit missing, system unit needs sudo); falling back to manual restart" >&2
 
   mkdir -p "$LOG_DIR"
   local pid_file="$BASE_DIR/complex-api.pid"
@@ -98,7 +109,9 @@ restart_api() {
     fi
   fi
 
-  pkill -f "$BASE_DIR/current/complex-api.jar" 2>/dev/null || true
+  # 旧进程可能以相对路径(java -jar complex-api.jar)或绝对 symlink 各形态启动,
+  # 按命令行模糊匹配统一清理(原先只匹配 $BASE_DIR/current 绝对路径,旧进程续跑=踩坑根因之一)。
+  pkill -f 'java .*complex-api\.jar' 2>/dev/null || true
   cd "$BASE_DIR/current"
   setsid env \
     SPRING_PROFILES_ACTIVE="$SPRING_PROFILES_ACTIVE" \
@@ -122,6 +135,29 @@ wait_for_health() {
     sleep 2
   done
   return 1
+}
+
+# 部署收尾铁律:核对「监听端口的进程实际加载的 jar」==「current 软链指向的 release」。
+# systemd/看护进程在软链切换前抢先拉起时会挂旧版本,健康检查发现不了(旧版本也健康)。
+verify_running_release() {
+  local pid="" jar expected
+  for _ in {1..10}; do
+    pid="$(ss -ltnp 2>/dev/null | grep -E "[:.]$COMPLEX_API_PORT[[:space:]]" | grep -o 'pid=[0-9]*' | head -n1 | cut -d= -f2)"
+    [[ -n "$pid" ]] && break
+    sleep 1
+  done
+  if [[ -z "$pid" ]]; then
+    echo "verify_running_release: no process listening on :$COMPLEX_API_PORT" >&2
+    return 1
+  fi
+  jar="$(ls -l "/proc/$pid/fd" 2>/dev/null | grep -o '/opt/complex/api/releases/[^ ]*complex-api.jar' | head -n1)"
+  expected="$(readlink -f "$BASE_DIR/current")/complex-api.jar"
+  if [[ "$jar" != "$expected" ]]; then
+    echo "RUNNING RELEASE MISMATCH: pid=$pid loaded [$jar] but current -> [$expected]" >&2
+    echo "手工恢复:systemctl --user restart $SERVICE_NAME,然后 ls -l /proc/\$(pgrep -f complex-api.jar)/fd | grep releases 核对。" >&2
+    return 1
+  fi
+  echo "[$(date -Iseconds)] running release verified: pid=$pid jar=$jar" | tee -a "$LOG_DIR/deploy.log"
 }
 
 load_env
@@ -177,6 +213,10 @@ ln -sfn "$BASE_DIR/current/complex-api.jar" "$BASE_DIR/complex-api.jar"
 restart_api
 
 if wait_for_health; then
+  if ! verify_running_release; then
+    echo "[$(date -Iseconds)] deploy api failed (running release mismatch) release=$release_id" | tee -a "$LOG_DIR/deploy.log"
+    exit 1
+  fi
   echo "[$(date -Iseconds)] deploy api ok release=$release_id" | tee -a "$LOG_DIR/deploy.log"
   exit 0
 fi
