@@ -209,6 +209,8 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/access/temporary-grants": empty,
     "/api/v1/analytics/merchants": [{ merchantId: "merchant-1", merchantName: "Main Merchant", merchantType: "complex", revenueAmountCents: 880000, orderCount: 8, riskAlertCount: 1, settlementStatus: "pending", businessDate: "2026-06-15", createdAt: now, updatedAt: now }],
     "/api/v1/ticketing/ticket-types": state.tickets,
+    "/api/v1/ticketing/entitlement-templates": [{ id: "tpl-1", name: "入园1次", entitlementType: "entry", status: "active" }],
+    "/api/v1/ticketing/price-rules": state.priceRules ?? [],
     "/api/v1/ticketing/dynamic-pricing-rules": state.dynamicPricingRules,
     "/api/v1/ticketing/orders": state.ticketOrders,
     "/api/v1/ticketing/entitlement-templates": [{ id: "tpl-1", name: "Entry", entitlementType: "entry", defaultTotalTimes: 1, defaultValueAmount: 9900, status: "active" }],
@@ -331,6 +333,8 @@ function effectivePermissionsFor(options: MockOptions) {
         "facility.site_entry.create_assigned",
         "facility.site_entry.submit_assigned",
         "facility.site_entry.upload_completion_assigned",
+        "partner.subordinate.view",
+        "partner.subordinate.manage",
       ],
       denies: [],
       wildcard: false,
@@ -507,9 +511,18 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
   if (pathname === "/api/v1/platform/supervisor-review/evaluate") return json(route, { reviewId: "review-demo", policyCode: "contract_violation_l3", actionType: "contract_violation", objectType: String(bodyValue(body, "objectType", "object_type") ?? "contract"), objectId: String(bodyValue(body, "objectId", "object_id") ?? "contract-1"), blocked: true, reviewStatus: "pending_review", requiredLevel: 3, decision: "blocked", reason: String(bodyValue(body, "violationSummary", "violation_summary") ?? "mock violation"), evidenceAttachmentIds: bodyValue(body, "evidenceAttachmentIds", "evidence_attachment_ids") ?? [], evaluatedAt: now });
   if (/^\/api\/v1\/platform\/supervisor-review\/[^/]+\/approve$/.test(pathname)) return json(route, { reviewId: pathname.split("/").at(-2), policyCode: "manual_supervisor_review", actionType: "supervisor_review", objectType: "business_operation", objectId: pathname.split("/").at(-2), blocked: false, reviewStatus: String(bodyValue(body, "decision") ?? "approved"), requiredLevel: 3, reviewerLevel: Number(bodyValue(body, "reviewerLevel", "reviewer_level") ?? 3), decision: String(bodyValue(body, "decision") ?? "approved"), reason: String(bodyValue(body, "comment") ?? "mock approval"), evidenceAttachmentIds: bodyValue(body, "evidenceAttachmentIds", "evidence_attachment_ids") ?? [], evaluatedAt: now });
   if (pathname === "/api/v1/ticketing/ticket-types") {
-    const product = ticketProduct(`ticket-${state.tickets.length + 1}`, String(bodyValue(body, "productName", "product_name") ?? "P0 Web Pass"), Number(bodyValue(body, "priceAmount", "price_amount") ?? 9900));
+    const product = ticketProduct(`ticket-${state.tickets.length + 1}`, String(bodyValue(body, "ticketName", "ticket_name") ?? bodyValue(body, "productName", "product_name") ?? "P0 Web Pass"), Number(bodyValue(body, "weekdayPriceCent", "weekday_price_cent") ?? bodyValue(body, "priceAmount", "price_amount") ?? 9900));
     state.tickets.push(product);
     return json(route, product);
+  }
+  if (/^\/api\/v1\/finance\/reconciliation\/differences\/[^/]+\/close$/.test(pathname)) {
+    return json(route, { id: pathname.split("/").at(-2), status: "closed", closeReason: String(bodyValue(body, "closeReason", "close_reason") ?? "") });
+  }
+  if (pathname === "/api/v1/ticketing/price-rules") {
+    state.priceRules = state.priceRules ?? [];
+    const rule = { id: `rule-${state.priceRules.length + 1}`, ticketTypeId: String(bodyValue(body, "ticketTypeId", "ticket_type_id") ?? ""), variantType: String(bodyValue(body, "variantType", "variant_type") ?? ""), priceMode: String(bodyValue(body, "priceMode", "price_mode") ?? ""), discountRate: bodyValue(body, "discountRate", "discount_rate"), weekdayPriceCent: bodyValue(body, "weekdayPriceCent", "weekday_price_cent"), status: "active" };
+    state.priceRules.push(rule);
+    return json(route, rule);
   }
   if (/^\/api\/v1\/ticketing\/ticket-types\/[^/]+\/publish$/.test(pathname)) {
     return json(route, { id: pathname.split("/").at(-2), status: "published" });

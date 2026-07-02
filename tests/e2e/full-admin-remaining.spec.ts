@@ -249,7 +249,7 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-FIN-002") {
         await expect(page.getByTestId("reconciliation-evidence")).toContainText("/api/v1/finance/reconciliation/differences");
-        await expect(page.getByTestId("reconciliation-summary")).toContainText("正式关闭接口未声明");
+        await expect(page.getByTestId("reconciliation-summary")).toContainText("正式关闭接口已就绪");
         await expect(page.getByTestId("reconciliation-differences-table")).toContainText("DIFF-1");
         await expect(page.getByTestId("reconciliation-boundary")).toContainText("原因和附件");
         continue;
@@ -530,7 +530,7 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("reconciliation-review-reason").fill("支付通道入账时间差异，待供应商对账单复核");
     await page.getByTestId("reconciliation-review-attachment").fill("att-recon-1");
     await page.getByTestId("reconciliation-review-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("reconciliation_manual_reviewed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("reconciliation_difference_closed");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-recon-1");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-001")!);
