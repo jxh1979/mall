@@ -61,6 +61,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-008", label: "月度对比", route: "/admin/analytics/monthly" },
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
   { pageId: "ADM-STF-002", label: "薪酬与请假", route: "/admin/staff/payroll" },
+  { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -157,6 +158,11 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-002") {
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
+  } else if (spec.pageId === "ADM-SVC-001") {
+    await expect(page.getByTestId("service-orders-page")).toBeVisible();
+    await expect(page.getByTestId("service-catalog-table")).toContainText("点舞");
+    await expect(page.getByTestId("service-orders-table")).toContainText("待接单");
+    await expect(page.getByTestId("service-catalog-editor")).toBeVisible();
   } else if (spec.pageId === "ADM-STF-002") {
     await expect(page.getByTestId("staff-payroll-page")).toBeVisible();
     await expect(page.getByTestId("payroll-table")).toContainText("¥8,000");

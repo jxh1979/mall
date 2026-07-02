@@ -94,6 +94,29 @@ class TerminalApiClient(
   fun submitStaffRegistration(request: StaffRegistrationSubmitRequest): StaffProfileRecord =
     post("/api/v1/staff/registrations", request)
 
+  // ── G批:服务点单(直付口径:收款码原文由服务端返回,App 重绘 QR) ──
+
+  fun listServiceCatalog(): List<ServiceCatalogRow> = get("/api/v1/services/catalog")
+
+  fun createServiceOrder(request: ServiceOrderCreateReq): ServiceOrderRow =
+    post("/api/v1/services/orders", request)
+
+  fun listMyServiceOrders(): List<ServiceOrderRow> = get("/api/v1/services/orders/assigned-to-me")
+
+  fun acceptServiceOrder(id: String, request: ServiceActionReq): ServiceOrderRow =
+    post("/api/v1/services/orders/$id/accept", request)
+
+  fun completeServiceOrder(id: String, request: ServiceActionReq): ServiceOrderRow =
+    post("/api/v1/services/orders/$id/complete", request)
+
+  fun serviceOrderPaymentCode(id: String): JsonObject = get("/api/v1/services/orders/$id/payment-code")
+
+  fun setMyPaymentCode(request: PaymentCodeReq): JsonObject = post("/api/v1/services/payment-code", request)
+
+  fun myPaymentCode(): JsonObject = get("/api/v1/services/payment-code/mine")
+
+  fun myServiceStats(month: String): JsonObject = get("/api/v1/services/orders/my-stats?month=$month")
+
   // ── BYOD 三期 F 批:我的薪资/请假/考勤月视图 ──
 
   /** 我的薪资(仅已月结定格月份;未结月为空——拍板:月结后才可见)。 */

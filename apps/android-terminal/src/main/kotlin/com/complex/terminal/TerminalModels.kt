@@ -591,3 +591,48 @@ data class AttendanceDayRow(
   val shiftStartAt: String? = null,
   val shiftEndAt: String? = null,
 )
+
+// ── G批(2026-07-02 六口径拍板):服务点单——目录/代客下单指定履约人/直付收款码/履约流转 ──
+
+@Serializable
+data class ServiceCatalogRow(
+  val id: String? = null,
+  val name: String? = null,
+  val priceCent: Long? = null,
+  val durationMinutes: Int? = null,
+  val active: Boolean? = null,
+)
+
+@Serializable
+data class ServiceOrderCreateReq(
+  val idempotencyKey: String,
+  val catalogItemId: String,
+  val performerUserId: String,
+  val barId: String? = null,
+  val tableId: String? = null,
+  val customerNote: String? = null,
+)
+
+@Serializable
+data class ServiceOrderRow(
+  val id: String? = null,
+  val itemName: String? = null,
+  val priceCent: Long? = null,
+  val tableId: String? = null,
+  val performerUserId: String? = null,
+  val status: String? = null,
+  val customerNote: String? = null,
+  val cancelReason: String? = null,
+  val createdAt: String? = null,
+)
+
+@Serializable
+data class ServiceActionReq(
+  val idempotencyKey: String,
+)
+
+@Serializable
+data class PaymentCodeReq(
+  val idempotencyKey: String,
+  val qrContent: String,
+)

@@ -35,6 +35,7 @@ const EnergyAnalyticsPage = React.lazy(() => import("./pages/EnergyAnalyticsPage
 const MonthlyComparisonPage = React.lazy(() => import("./pages/MonthlyComparisonPage").then((m) => ({ default: m.MonthlyComparisonPage })));
 const StaffShiftAttendancePage = React.lazy(() => import("./pages/StaffShiftAttendancePage").then((m) => ({ default: m.StaffShiftAttendancePage })));
 const StaffPayrollLeavePage = React.lazy(() => import("./pages/StaffPayrollLeavePage").then((m) => ({ default: m.StaffPayrollLeavePage })));
+const ServiceOrdersPage = React.lazy(() => import("./pages/ServiceOrdersPage").then((m) => ({ default: m.ServiceOrdersPage })));
 const VendorWorkOrdersPage = React.lazy(() => import("./pages/VendorWorkOrdersPage").then((m) => ({ default: m.VendorWorkOrdersPage })));
 const VendorInspectionsPage = React.lazy(() => import("./pages/VendorInspectionsPage").then((m) => ({ default: m.VendorInspectionsPage })));
 const VendorSiteEntriesPage = React.lazy(() => import("./pages/VendorSiteEntriesPage").then((m) => ({ default: m.VendorSiteEntriesPage })));
@@ -192,6 +193,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <StaffShiftAttendancePage {...props} />;
     case "ADM-STF-002":
       return <StaffPayrollLeavePage {...props} />;
+    case "ADM-SVC-001":
+      return <ServiceOrdersPage {...props} />;
     case "ADM-VND-001":
       return <VendorWorkOrdersPage {...props} />;
     case "ADM-VND-002":

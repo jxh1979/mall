@@ -213,6 +213,10 @@ class MainActivity : Activity() {
       primaryButton("我的薪资") { showMyPayroll() },
       primaryButton("考勤月视图") { showAttendanceMonth() },
       primaryButton("请假") { showLeave() },
+      statusText("—— 服务点单(直付履约人,酒吧不经手) ——"),
+      primaryButton("代客点服务") { showServiceOrderCreate() },
+      primaryButton("我的服务任务") { showMyServiceOrders() },
+      secondaryButton("我的收款码") { showMyPaymentCode() },
       secondaryButton("主管排班(需排班权限)") { showShiftManage() },
       secondaryButton("员工注册申请(店长/HR 代提交)") { showStaffRegistration() },
       secondaryButton("重新登录") { logoutAndRestart() },
@@ -893,6 +897,153 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "请假",
       children = listOf(status, type, start, end, reason, submitButton, list,
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  // ── G批(2026-07-02 六口径):代客点服务(直付QR) / 我的服务任务 / 我的收款码 ──
+  private fun showServiceOrderCreate() {
+    val catalog = statusText("正在拉取服务目录…")
+    val itemId = editText("服务项 id(从上表选)")
+    val performer = editText("履约员工 user_id(客人指定谁填谁)")
+    val tableId = editText("桌台 table_id(可空)")
+    val note = editText("备注(可空)")
+    val status = statusText("下单后自动出示履约人收款码,客人扫码直付——酒吧不经手不入账。")
+    val qrImage = android.widget.ImageView(this)
+    runBackground(
+      action = { api.listServiceCatalog() },
+      onSuccess = { rows ->
+        catalog.text = if (rows.isEmpty()) "目录为空(请后台维护)" else rows.joinToString("\n") { r ->
+          "${r.id}  ${r.name}  参考价 ¥${(r.priceCent ?: 0) / 100.0}" +
+            (r.durationMinutes?.let { "  约${it}分钟" } ?: "")
+        }
+      },
+      onError = { catalog.text = "目录拉取失败：${friendly(it)}" },
+    )
+    val orderButton = primaryButton("下单并出示收款码") {
+      val item = itemId.text.toString().trim()
+      val perf = performer.text.toString().trim()
+      if (item.isEmpty() || perf.isEmpty()) { status.text = "请填 服务项与履约员工"; return@primaryButton }
+      runBackground(
+        action = {
+          val order = api.createServiceOrder(ServiceOrderCreateReq(
+            idempotencyKey = "svo_${System.currentTimeMillis()}",
+            catalogItemId = item, performerUserId = perf,
+            tableId = tableId.text.toString().trim().ifEmpty { null },
+            customerNote = note.text.toString().trim().ifEmpty { null },
+          ))
+          val pay = api.serviceOrderPaymentCode(order.id ?: "")
+          Pair(order, pay["qr_content"]?.toString()?.trim('"') ?: "")
+        },
+        onSuccess = { (order, qr) ->
+          status.text = "已下单 ${order.itemName}(${order.id});请客人扫码直付 ¥${(order.priceCent ?: 0) / 100.0}"
+          if (qr.isNotEmpty()) {
+            runCatching {
+              val bitmap = com.journeyapps.barcodescanner.BarcodeEncoder()
+                .encodeBitmap(qr, com.google.zxing.BarcodeFormat.QR_CODE, 600, 600)
+              qrImage.setImageBitmap(bitmap)
+            }.onFailure { status.append("\n二维码渲染失败:${it.message}") }
+          }
+        },
+        onError = { status.text = "下单失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(
+      title = "代客点服务(直付)",
+      children = listOf(catalog, itemId, performer, tableId, note, orderButton, status, qrImage,
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showMyServiceOrders() {
+    val status = statusText("正在拉取我的服务任务…")
+    val list = statusText("")
+    val orderId = editText("要操作的服务单 id")
+    val labels = mapOf("pending_accept" to "待接单", "accepted" to "已接单", "completed" to "已完成", "cancelled" to "已取消")
+    val refresh = {
+      runBackground(
+        action = {
+          val orders = api.listMyServiceOrders()
+          val month = java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date())
+          val stats = api.myServiceStats(month)
+          Pair(orders, stats)
+        },
+        onSuccess = { (orders, stats) ->
+          val count = stats["completed_count"]?.toString()?.trim('"') ?: "0"
+          val income = (stats["reference_income_cent"]?.toString()?.trim('"')?.toLongOrNull() ?: 0) / 100.0
+          status.text = "本月完成 $count 单,参考收入 ¥$income(直付到手,非公司代发)"
+          list.text = if (orders.isEmpty()) "暂无服务任务" else orders.joinToString("\n\n") { o ->
+            "${o.id}\n${o.itemName} ¥${(o.priceCent ?: 0) / 100.0} 桌台 ${o.tableId ?: "-"} " +
+              "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "")
+          }
+        },
+        onError = { status.text = "拉取失败：${friendly(it)}" },
+      )
+    }
+    val acceptButton = primaryButton("接单") {
+      val id = orderId.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请填服务单 id"; return@primaryButton }
+      runBackground(
+        action = { api.acceptServiceOrder(id, ServiceActionReq("acc_${System.currentTimeMillis()}")) },
+        onSuccess = { status.text = "已接单：${it.id}"; refresh() },
+        onError = { status.text = "接单失败：${friendly(it)}" },
+      )
+    }
+    val completeButton = primaryButton("完成履约") {
+      val id = orderId.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请填服务单 id"; return@primaryButton }
+      runBackground(
+        action = { api.completeServiceOrder(id, ServiceActionReq("cmp_${System.currentTimeMillis()}")) },
+        onSuccess = { status.text = "已完成：${it.id}(直付已在现场发生)"; refresh() },
+        onError = { status.text = "完成失败：${friendly(it)}" },
+      )
+    }
+    refresh()
+    setContentView(screen(
+      title = "我的服务任务",
+      children = listOf(status, list, orderId, acceptButton, completeButton,
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showMyPaymentCode() {
+    val qrInput = editText("收款码内容(扫自己的支付宝/微信收款码自动填入)")
+    val status = statusText("把你的固定收款码录入系统;客人点你的服务后,扫这个码把钱直接付给你。")
+    val qrImage = android.widget.ImageView(this)
+    val scanButton = secondaryButton("扫我的收款码") { launchScan(qrInput) }
+    runBackground(
+      action = { api.myPaymentCode() },
+      onSuccess = { result ->
+        val qr = result["qr_content"]?.toString()?.trim('"') ?: ""
+        if (qr.isNotEmpty()) {
+          qrInput.setText(qr)
+          runCatching {
+            qrImage.setImageBitmap(com.journeyapps.barcodescanner.BarcodeEncoder()
+              .encodeBitmap(qr, com.google.zxing.BarcodeFormat.QR_CODE, 500, 500))
+          }
+        }
+      },
+      onError = { },
+    )
+    val saveButton = primaryButton("保存收款码") {
+      val qr = qrInput.text.toString().trim()
+      if (qr.isEmpty()) { status.text = "请先扫码或粘贴收款码内容"; return@primaryButton }
+      runBackground(
+        action = { api.setMyPaymentCode(PaymentCodeReq("pc_${System.currentTimeMillis()}", qr)) },
+        onSuccess = {
+          status.text = "已保存;下单页会向客人出示此码"
+          runCatching {
+            qrImage.setImageBitmap(com.journeyapps.barcodescanner.BarcodeEncoder()
+              .encodeBitmap(qr, com.google.zxing.BarcodeFormat.QR_CODE, 500, 500))
+          }
+        },
+        onError = { status.text = "保存失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(
+      title = "我的收款码(直付)",
+      children = listOf(status, qrInput, scanButton, saveButton, qrImage,
         secondaryButton("返回首页") { showHome() }),
     ))
   }

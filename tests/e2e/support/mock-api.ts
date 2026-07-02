@@ -297,6 +297,13 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/services/catalog/all": [
+      { id: "svc-e2e-1", name: "点舞", price_cent: 30000, duration_minutes: 15, active: true },
+    ],
+    "/api/v1/services/orders": [
+      { id: "svo-e2e-1", item_name: "点舞", price_cent: 30000, table_id: "tbl-1", performer_user_id: "usr_dancer_1",
+        status: "pending_accept", created_at: "2026-07-02T20:00:00Z" },
+    ],
     "/api/v1/staff/payroll": [
       { id: "pay-e2e-1", user_id: "usr_staff_1", month: "2026-07", base_cent: 800000, commission_cent: 120000,
         bonus_cent: 50000, penalty_cent: 20000, total_cent: 950000 },
