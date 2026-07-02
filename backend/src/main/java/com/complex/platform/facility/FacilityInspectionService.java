@@ -214,13 +214,16 @@ public class FacilityInspectionService {
         authorizationService.requirePlatformScope();
         LocalDate scheduledDate = asOf == null ? LocalDate.now() : asOf;
         int created = 0;
-        for (FacilityInspectionTemplateRecord template : repository.listSchedulableTemplates()) {
-            if (template.cycleDays() == null || repository.existsTaskForTemplateDate(template.id(), scheduledDate)) {
+        List<FacilityInspectionTemplateRecord> templates = repository.listSchedulableTemplates();
+        // F3（审计三补三）：模板排程统计一次取全（原实现逐模板 2 次查询 = 2N）。
+        var scheduleStats = repository.templateScheduleStats(templates, scheduledDate);
+        for (FacilityInspectionTemplateRecord template : templates) {
+            var stat = scheduleStats.get(template.id());
+            if (template.cycleDays() == null || (stat != null && stat.hasOnDate())) {
                 continue;
             }
-            if (repository.latestScheduledDateForTemplate(template.id())
-                    .map(last -> last.plusDays(template.cycleDays()).isAfter(scheduledDate))
-                    .orElse(false)) {
+            if (stat != null && stat.latest() != null
+                    && stat.latest().plusDays(template.cycleDays()).isAfter(scheduledDate)) {
                 continue;
             }
             Instant now = Instant.now();

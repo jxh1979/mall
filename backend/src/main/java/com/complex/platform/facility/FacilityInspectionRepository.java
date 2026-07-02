@@ -52,6 +52,26 @@ public interface FacilityInspectionRepository {
 
     Optional<LocalDate> latestScheduledDateForTemplate(String templateId);
 
+    /** 模板排程统计（F3 批量化）：has_on_date=当日已有任务；latest=历史最新排程日。 */
+    record TemplateScheduleStat(String templateId, LocalDate latest, boolean hasOnDate) {
+    }
+
+    /**
+     * F3（审计三补三）：一次查询取全部模板的排程统计，替代逐模板 2 次查询（2N→1）。
+     * default 实现回落逐模板查询（供 InMemory 测试双子），Jdbc 覆盖为聚合 SQL。
+     */
+    default java.util.Map<String, TemplateScheduleStat> templateScheduleStats(
+            List<FacilityInspectionTemplateRecord> templates, LocalDate scheduledDate) {
+        java.util.Map<String, TemplateScheduleStat> stats = new java.util.LinkedHashMap<>();
+        for (FacilityInspectionTemplateRecord template : templates) {
+            stats.put(template.id(), new TemplateScheduleStat(
+                    template.id(),
+                    latestScheduledDateForTemplate(template.id()).orElse(null),
+                    existsTaskForTemplateDate(template.id(), scheduledDate)));
+        }
+        return stats;
+    }
+
     boolean existsTaskForTemplateDate(String templateId, LocalDate scheduledDate);
 
     void insertTask(FacilityInspectionTaskRecord record);

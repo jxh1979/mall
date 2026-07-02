@@ -139,6 +139,27 @@ class JdbcFacilityInspectionRepository implements FacilityInspectionRepository {
     }
 
     @Override
+    public java.util.Map<String, TemplateScheduleStat> templateScheduleStats(
+            List<FacilityInspectionTemplateRecord> templates, LocalDate scheduledDate) {
+        // F3：单条 GROUP BY 聚合替代逐模板 2N 次查询。
+        java.util.Map<String, TemplateScheduleStat> stats = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT template_id, MAX(scheduled_date) AS latest,
+                       BOOL_OR(scheduled_date = :scheduled_date) AS has_on_date
+                  FROM facility_inspection_tasks
+                 WHERE template_id IS NOT NULL AND scheduled_date IS NOT NULL
+                 GROUP BY template_id
+                """, new MapSqlParameterSource("scheduled_date", scheduledDate), (rs, n) -> {
+            stats.put(rs.getString("template_id"), new TemplateScheduleStat(
+                    rs.getString("template_id"),
+                    rs.getObject("latest", LocalDate.class),
+                    rs.getBoolean("has_on_date")));
+            return null;
+        });
+        return stats;
+    }
+
+    @Override
     public boolean existsTaskForTemplateDate(String templateId, LocalDate scheduledDate) {
         return !jdbcTemplate.query("""
                 SELECT id FROM facility_inspection_tasks

@@ -338,18 +338,23 @@ class JdbcContractRepository implements ContractRepository {
     // ---------- space binding ----------
     @Override
     public void bindContractSpaces(String contractId, List<String> spaceIds, String projectId) {
-        Instant now = Instant.now();
-        for (String spaceId : spaceIds) {
-            jdbcTemplate.update("""
-                    INSERT INTO contract_spaces (contract_id, space_id, project_id, created_at)
-                    VALUES (:contract_id, :space_id, :project_id, :created_at)
-                    ON CONFLICT (contract_id, space_id) DO NOTHING
-                    """, new MapSqlParameterSource()
-                    .addValue("contract_id", contractId)
-                    .addValue("space_id", spaceId)
-                    .addValue("project_id", projectId)
-                    .addValue("created_at", timestampWithTimeZone(now)));
+        if (spaceIds.isEmpty()) {
+            return;
         }
+        // F4（审计三补三）：循环单条 INSERT 改一次 batchUpdate（单往返）。
+        Instant now = Instant.now();
+        MapSqlParameterSource[] batch = spaceIds.stream()
+                .map(spaceId -> new MapSqlParameterSource()
+                        .addValue("contract_id", contractId)
+                        .addValue("space_id", spaceId)
+                        .addValue("project_id", projectId)
+                        .addValue("created_at", timestampWithTimeZone(now)))
+                .toArray(MapSqlParameterSource[]::new);
+        jdbcTemplate.batchUpdate("""
+                INSERT INTO contract_spaces (contract_id, space_id, project_id, created_at)
+                VALUES (:contract_id, :space_id, :project_id, :created_at)
+                ON CONFLICT (contract_id, space_id) DO NOTHING
+                """, batch);
     }
 
     @Override

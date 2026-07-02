@@ -328,22 +328,48 @@ public class LoyaltyService {
         return evaluateAccount(account, now);
     }
 
-    /** 全量等级评估（定时作业逻辑本体，可单测直调；系统作业不过权限闸）。 */
-    @Transactional
+    /** 全量等级评估（定时作业逻辑本体，可单测直调；系统作业不过权限闸）。
+     *  F2（审计三补三）：改 keyset 分页逐账户小事务（对齐 3.14 expirePoints 范式，去全表大事务），
+     *  等级配置表在循环外取一次（原实现每账户重查一次 = 1+N）。 */
     public int evaluateLevels(Instant now) {
-        int changed = 0;
-        for (CustomerPointsAccountRecord account : repository.listAllPointsAccounts()) {
-            CustomerPointsAccountRecord before = account;
-            CustomerPointsAccountRecord after = evaluateAccount(account, now);
-            if (!before.level().equals(after.level())) {
-                changed++;
-            }
+        LoyaltyService self = applicationContext != null
+                ? applicationContext.getBean(LoyaltyService.class) : this;
+        List<CustomerMemberLevelRecord> levels = repository.listMemberLevels(null);
+        if (levels.isEmpty()) {
+            return 0;
         }
+        int changed = 0;
+        String cursor = null;
+        List<String> page;
+        do {
+            page = repository.listPointsAccountCustomerIdsAfter(cursor, EXPIRE_BATCH_SIZE);
+            for (String customerId : page) {
+                if (self.evaluateLevelForCustomer(customerId, levels, now)) {
+                    changed++;
+                }
+                cursor = customerId;
+            }
+        } while (page.size() == EXPIRE_BATCH_SIZE);
         return changed;
     }
 
+    /** 单账户等级评估小事务（F2 批处理步进；行锁只覆盖单账户）。 */
+    @Transactional
+    public boolean evaluateLevelForCustomer(String customerId, List<CustomerMemberLevelRecord> levels, Instant now) {
+        CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId).orElse(null);
+        if (account == null) {
+            return false;
+        }
+        CustomerPointsAccountRecord after = evaluateAccount(account, levels, now);
+        return !account.level().equals(after.level());
+    }
+
     private CustomerPointsAccountRecord evaluateAccount(CustomerPointsAccountRecord account, Instant now) {
-        List<CustomerMemberLevelRecord> levels = repository.listMemberLevels(null);
+        return evaluateAccount(account, repository.listMemberLevels(null), now);
+    }
+
+    private CustomerPointsAccountRecord evaluateAccount(CustomerPointsAccountRecord account,
+            List<CustomerMemberLevelRecord> levels, Instant now) {
         if (levels.isEmpty()) {
             return account;
         }
