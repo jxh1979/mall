@@ -135,6 +135,7 @@ floor_plan_shapes,inherited,floor_plan_id/task_id,floor_plan_id/task_id -> mall_
 idempotency_records,inherited,operation_key,operation_key -> request route + actor + business operation,must join through scope path before multi-complex rollout,covered
 integration_compensation_tasks,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_order_syncs,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
+integration_video_access_approvals,platform,viewer_user_id/point linkage,viewer_user_id + point_id -> integration terminal points (platform-level supervisor approvals),platform-scoped approval ledger; enforcement is viewer match inside service layer,covered
 integration_provider_adapter_tests,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_provider_adapters,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
 integration_read_ledger,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,covered
