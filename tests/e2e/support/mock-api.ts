@@ -297,6 +297,14 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/staff/shifts": [
+      { id: "shf-e2e-1", user_id: "usr_staff_1", work_date: "2026-07-02", start_at: "2026-07-02T02:00:00Z",
+        end_at: "2026-07-02T10:30:00Z", point_space_ids: ["sp_point_1", "sp_point_2"], note: "早班" },
+    ],
+    "/api/v1/staff/attendance": [
+      { id: "att-e2e-1", user_id: "usr_staff_1", punch_type: "check_in", punched_at: "2026-07-02T02:05:00Z",
+        method: "nfc", judgement: "late", space_id: "sp_point_1" },
+    ],
     "/api/v1/analytics/monthly-comparison": { month: "2026-07", rows: [
       { metric_key: "revenue.net", label: "净收入", domain: "finance", unit: "cent", aggregation: "monthly_sum",
         current: 3000000, prev_month: 2000000, mom_pct: 0.5, yoy_same_month: null, yoy_pct: null },

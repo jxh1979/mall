@@ -20,6 +20,150 @@ class JdbcStaffRepository implements StaffRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    // ---------------------------------------------------------------- E1/E2 排班与考勤
+
+    @Override
+    public StaffShiftRecord upsertShift(StaffShiftRecord shift) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_shift_schedules (id, user_id, work_date, start_at, end_at,
+                        point_space_ids, note, created_by, created_at, updated_at)
+                VALUES (:id, :user_id, :work_date, :start_at, :end_at, :points::jsonb, :note, :created_by, :now, :now)
+                ON CONFLICT (user_id, start_at) DO UPDATE SET
+                    work_date = EXCLUDED.work_date,
+                    end_at = EXCLUDED.end_at,
+                    point_space_ids = EXCLUDED.point_space_ids,
+                    note = EXCLUDED.note,
+                    updated_at = EXCLUDED.updated_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", shift.id())
+                .addValue("user_id", shift.userId())
+                .addValue("work_date", shift.workDate())
+                .addValue("start_at", java.sql.Timestamp.from(shift.startAt()))
+                .addValue("end_at", java.sql.Timestamp.from(shift.endAt()))
+                .addValue("points", pointsJson(shift.pointSpaceIds()))
+                .addValue("note", shift.note())
+                .addValue("created_by", shift.createdBy())
+                .addValue("now", java.sql.Timestamp.from(shift.updatedAt())));
+        return listShiftsForUserBetween(shift.userId(), shift.workDate(), shift.workDate()).stream()
+                .filter(row -> row.startAt().equals(shift.startAt()))
+                .findFirst().orElse(shift);
+    }
+
+    @Override
+    public java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, work_date, start_at, end_at, point_space_ids, note, created_by, created_at, updated_at
+                  FROM staff_shift_schedules
+                 WHERE (:work_date::date IS NULL OR work_date = :work_date)
+                   AND (:user_id::text IS NULL OR user_id = :user_id)
+                 ORDER BY work_date DESC, start_at, user_id
+                 LIMIT 500
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("work_date", workDate).addValue("user_id", userId), this::mapShift);
+    }
+
+    @Override
+    public java.util.List<StaffShiftRecord> listShiftsForUserBetween(String userId,
+            java.time.LocalDate from, java.time.LocalDate to) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, work_date, start_at, end_at, point_space_ids, note, created_by, created_at, updated_at
+                  FROM staff_shift_schedules
+                 WHERE user_id = :user_id AND work_date BETWEEN :from AND :to
+                 ORDER BY start_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("from", from).addValue("to", to), this::mapShift);
+    }
+
+    private StaffShiftRecord mapShift(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new StaffShiftRecord(
+                rs.getString("id"), rs.getString("user_id"),
+                rs.getObject("work_date", java.time.LocalDate.class),
+                rs.getTimestamp("start_at").toInstant(), rs.getTimestamp("end_at").toInstant(),
+                parsePoints(rs.getString("point_space_ids")), rs.getString("note"), rs.getString("created_by"),
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
+    }
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper POINTS_JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private String pointsJson(java.util.List<String> points) {
+        try {
+            return POINTS_JSON.writeValueAsString(points == null ? java.util.List.of() : points);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalArgumentException("point_space_ids serialization failed", e);
+        }
+    }
+
+    private java.util.List<String> parsePoints(String json) {
+        try {
+            if (json == null || json.isBlank()) {
+                return java.util.List.of();
+            }
+            return POINTS_JSON.readValue(json,
+                    POINTS_JSON.getTypeFactory().constructCollectionType(java.util.List.class, String.class));
+        } catch (java.io.IOException e) {
+            return java.util.List.of();
+        }
+    }
+
+    @Override
+    public StaffAttendanceRecord saveAttendance(StaffAttendanceRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_attendance_records (id, user_id, punch_type, punched_at, method,
+                        tag_ref, space_id, device_fingerprint, shift_id, judgement, created_at)
+                VALUES (:id, :user_id, :punch_type, :punched_at, :method,
+                        :tag_ref, :space_id, :device_fingerprint, :shift_id, :judgement, :created_at)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", record.id())
+                .addValue("user_id", record.userId())
+                .addValue("punch_type", record.punchType())
+                .addValue("punched_at", java.sql.Timestamp.from(record.punchedAt()))
+                .addValue("method", record.method())
+                .addValue("tag_ref", record.tagRef())
+                .addValue("space_id", record.spaceId())
+                .addValue("device_fingerprint", record.deviceFingerprint())
+                .addValue("shift_id", record.shiftId())
+                .addValue("judgement", record.judgement())
+                .addValue("created_at", java.sql.Timestamp.from(record.createdAt())));
+        return record;
+    }
+
+    @Override
+    public java.util.List<StaffAttendanceRecord> listAttendanceForUser(String userId, java.time.Instant since) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, punch_type, punched_at, method, tag_ref, space_id,
+                       device_fingerprint, shift_id, judgement, created_at
+                  FROM staff_attendance_records
+                 WHERE user_id = :user_id AND punched_at >= :since
+                 ORDER BY punched_at DESC
+                 LIMIT 500
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("since", java.sql.Timestamp.from(since)), this::mapAttendance);
+    }
+
+    @Override
+    public java.util.List<StaffAttendanceRecord> listAttendanceOn(java.time.LocalDate date) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, punch_type, punched_at, method, tag_ref, space_id,
+                       device_fingerprint, shift_id, judgement, created_at
+                  FROM staff_attendance_records
+                 WHERE punched_at >= :day_start AND punched_at < :day_end
+                 ORDER BY punched_at DESC
+                 LIMIT 1000
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay().toInstant(java.time.ZoneOffset.UTC)))
+                .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay().toInstant(java.time.ZoneOffset.UTC))),
+                this::mapAttendance);
+    }
+
+    private StaffAttendanceRecord mapAttendance(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new StaffAttendanceRecord(
+                rs.getString("id"), rs.getString("user_id"), rs.getString("punch_type"),
+                rs.getTimestamp("punched_at").toInstant(), rs.getString("method"), rs.getString("tag_ref"),
+                rs.getString("space_id"), rs.getString("device_fingerprint"), rs.getString("shift_id"),
+                rs.getString("judgement"), rs.getTimestamp("created_at").toInstant());
+    }
+
     // ---------------------------------------------------------------- staff_profiles
 
     @Override

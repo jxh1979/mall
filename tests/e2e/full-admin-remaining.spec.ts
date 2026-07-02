@@ -59,6 +59,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-006", label: "工单时效", route: "/admin/analytics/work-order-sla" },
   { pageId: "ADM-ANA-007", label: "能耗分析", route: "/admin/analytics/energy" },
   { pageId: "ADM-ANA-008", label: "月度对比", route: "/admin/analytics/monthly" },
+  { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -155,6 +156,11 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-002") {
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
+  } else if (spec.pageId === "ADM-STF-001") {
+    await expect(page.getByTestId("staff-shift-page")).toBeVisible();
+    await expect(page.getByTestId("shift-table")).toContainText("usr_staff_1");
+    await expect(page.getByTestId("attendance-table")).toContainText("迟到");
+    await expect(page.getByTestId("shift-editor")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-008") {
     await expect(page.getByTestId("monthly-comparison-page")).toBeVisible();
     const comparisonTable = page.getByTestId("monthly-comparison-table");

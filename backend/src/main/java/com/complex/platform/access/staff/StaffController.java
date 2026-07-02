@@ -84,6 +84,44 @@ public class StaffController {
         return ApiResponse.ok(service.revokeCredential(id, request));
     }
 
+    @PostMapping("/shifts")
+    public ApiResponse<StaffShiftRecord> upsertShift(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffShiftRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.upsertShift(request));
+    }
+
+    @GetMapping("/shifts")
+    public ApiResponse<PageResponse<StaffShiftRecord>> listShifts(
+            @org.springframework.web.bind.annotation.RequestParam(value = "date", required = false) String date,
+            @org.springframework.web.bind.annotation.RequestParam(value = "user_id", required = false) String userId) {
+        java.time.LocalDate workDate = date == null || date.isBlank() ? null : java.time.LocalDate.parse(date);
+        return ApiResponse.ok(service.listShifts(workDate, userId));
+    }
+
+    @GetMapping("/shifts/mine")
+    public ApiResponse<PageResponse<StaffShiftRecord>> listMyShifts() {
+        return ApiResponse.ok(service.listMyShifts());
+    }
+
+    @PostMapping("/attendance/punch")
+    public ApiResponse<StaffAttendanceRecord> punch(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffAttendancePunchRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.punch(request));
+    }
+
+    @GetMapping("/attendance/mine")
+    public ApiResponse<PageResponse<StaffAttendanceRecord>> listMyAttendance() {
+        return ApiResponse.ok(service.listMyAttendance());
+    }
+
+    @GetMapping("/attendance")
+    public ApiResponse<PageResponse<StaffAttendanceRecord>> listAttendance(
+            @org.springframework.web.bind.annotation.RequestParam("date") String date) {
+        return ApiResponse.ok(service.listAttendance(java.time.LocalDate.parse(date)));
+    }
+
     @GetMapping("/notices")
     public ApiResponse<PageResponse<EmployeeNoticeRecord>> listNotices() {
         return ApiResponse.ok(service.listNotices());

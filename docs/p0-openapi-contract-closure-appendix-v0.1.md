@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 560 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 294 | 人工权限矩阵正文未覆盖 191 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1120 | 人工事件矩阵正文未覆盖 1078 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 560 | 人工任务映射正文未逐项覆盖 554 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 339 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 566 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 298 | 人工权限矩阵正文未覆盖 195 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1132 | 人工事件矩阵正文未覆盖 1090 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 566 | 人工任务映射正文未逐项覆盖 560 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 341 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -281,6 +281,8 @@
 | `risk_alert.resolve` | staff-token | platform | 1 | resolveRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.transfer` | staff-token | platform | 1 | transferRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.view` | staff-token | platform | 2 | searchRiskAlerts, getRiskAlertDetail | 已在权限矩阵正文出现 |
+| `staff.attendance.punch` | staff-token | platform | 1 | punchStaffAttendance | OpenAPI 补充，以本附录为准 |
+| `staff.attendance.view` | staff-token | platform | 1 | listStaffAttendance | OpenAPI 补充，以本附录为准 |
 | `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
 | `staff.device.review` | staff-token | project | 1 | approveStaffDeviceRebind | OpenAPI 补充，以本附录为准 |
 | `staff.device.revoke` | staff-token | project | 1 | revokeStaffDeviceCredential | OpenAPI 补充，以本附录为准 |
@@ -288,6 +290,8 @@
 | `staff.profile.review` | staff-token | project | 1 | reviewStaffRegistration | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 1 | submitStaffRegistration | OpenAPI 补充，以本附录为准 |
 | `staff.profile.view` | staff-token | project | 1 | listStaffProfiles | OpenAPI 补充，以本附录为准 |
+| `staff.shift.manage` | staff-token | platform | 2 | listStaffShifts, upsertStaffShift | OpenAPI 补充，以本附录为准 |
+| `staff.shift.view` | staff-token | platform | 2 | listMyStaffShifts, listMyStaffAttendance | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 4 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks | 已在权限矩阵正文出现 |
 | `terminal.device.lifecycle` | staff-token | - | 4 | markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap | OpenAPI 补充，以本附录为准 |
@@ -1322,6 +1326,12 @@
 | `staff_device.revoke_failed` | failure | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | AUTH-账号权限 | `staff.device.revoke` | 接口级事件，以本附录为准 |
 | `staff_device.revoked` | success | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | AUTH-账号权限 | `staff.device.revoke` | 接口级事件，以本附录为准 |
 | `staff.approved` | success | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
+| `staff.attendance_mine.view_failed` | failure | `listMyStaffAttendance` | `GET` | `/api/v1/staff/attendance/mine` | P0-待归类 | `staff.shift.view` | 接口级事件，以本附录为准 |
+| `staff.attendance_mine.viewed` | success | `listMyStaffAttendance` | `GET` | `/api/v1/staff/attendance/mine` | P0-待归类 | `staff.shift.view` | 接口级事件，以本附录为准 |
+| `staff.attendance.punch_failed` | failure | `punchStaffAttendance` | `POST` | `/api/v1/staff/attendance/punch` | P0-待归类 | `staff.attendance.punch` | 接口级事件，以本附录为准 |
+| `staff.attendance.punched` | success | `punchStaffAttendance` | `POST` | `/api/v1/staff/attendance/punch` | P0-待归类 | `staff.attendance.punch` | 接口级事件，以本附录为准 |
+| `staff.attendance.view_failed` | failure | `listStaffAttendance` | `GET` | `/api/v1/staff/attendance` | P0-待归类 | `staff.attendance.view` | 接口级事件，以本附录为准 |
+| `staff.attendance.viewed` | success | `listStaffAttendance` | `GET` | `/api/v1/staff/attendance` | P0-待归类 | `staff.attendance.view` | 接口级事件，以本附录为准 |
 | `staff.notice_acknowledge_failed` | failure | `acknowledgeEmployeeNotice` | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | AUTH-账号权限 | `staff.notice.view` | 接口级事件，以本附录为准 |
 | `staff.notice_acknowledged` | success | `acknowledgeEmployeeNotice` | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | AUTH-账号权限 | `staff.notice.view` | 接口级事件，以本附录为准 |
 | `staff.notice.view_failed` | failure | `listEmployeeNotices` | `GET` | `/api/v1/staff/notices` | AUTH-账号权限 | `staff.notice.view` | 接口级事件，以本附录为准 |
@@ -1331,6 +1341,12 @@
 | `staff.register_failed` | failure | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | AUTH-账号权限 | `staff.profile.submit` | 接口级事件，以本附录为准 |
 | `staff.registered` | success | `submitStaffRegistration` | `POST` | `/api/v1/staff/registrations` | AUTH-账号权限 | `staff.profile.submit` | 接口级事件，以本附录为准 |
 | `staff.review_failed` | failure | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
+| `staff.shift_mine.view_failed` | failure | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | P0-待归类 | `staff.shift.view` | 接口级事件，以本附录为准 |
+| `staff.shift_mine.viewed` | success | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | P0-待归类 | `staff.shift.view` | 接口级事件，以本附录为准 |
+| `staff.shift.save_failed` | failure | `upsertStaffShift` | `POST` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `staff.shift.saved` | success | `upsertStaffShift` | `POST` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `staff.shift.view_failed` | failure | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `staff.shift.viewed` | success | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | P0-待归类 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `stored_value.frozen` | success | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
 | `stored_value.frozen_failed` | failure | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
 | `stored_value.merchant_refund_rule_configured` | success | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
@@ -1914,17 +1930,22 @@
 | P0-待归类 | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | 商户专区·我的合同(只读关键信息) | `contract.view` | `merchant_portal.contract.viewed` / `merchant_portal.contract.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalSettlements` | `GET` | `/api/v1/merchant-portal/settlements` | 商户专区·我的对账(结算单只读) | `merchant.portal.settlement.view` | `merchant_portal.settlement.viewed` / `merchant_portal.settlement.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `listMyStaffAttendance` | `GET` | `/api/v1/staff/attendance/mine` | 我的打卡记录(最近30天) | `staff.shift.view` | `staff.attendance_mine.viewed` / `staff.attendance_mine.view_failed` | staff_private_phone, web | operation 级补充 |
+| P0-待归类 | `listMyStaffShifts` | `GET` | `/api/v1/staff/shifts/mine` | 我的班次与点位(员工手机) | `staff.shift.view` | `staff.shift_mine.viewed` / `staff.shift_mine.view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `listPartnerOrgs` | `GET` | `/api/v1/partner/orgs` | 外部协作机构列表 | `partner.org.view` | `partner_org.viewed` / `partner_org.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listPartnerSubordinates` | `GET` | `/api/v1/partner/subordinates` | 本机构下属账号列表 | `partner.subordinate.view` | `partner_subordinate.viewed` / `partner_subordinate.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listSiteEntryReports` | `GET` | `/api/v1/facility/site-entry-reports` | 查看进场报备/验收单列表（外包只见本机构，平台全量） | `facility.site_entry.view_assigned` | `facility.site_entry.viewed` / `facility.site_entry.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listSpaceExpiryColorRules` | `GET` | `/api/v1/contracts/expiry-color-rules` | 查到期着色分类 | `contract.space.color.manage` | `contract.color_rules_viewed` / `contract.color_rules_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listSpaceRentalStatus` | `GET` | `/api/v1/contracts/space-rental-status` | 铺位平面图着色数据源(可租/已租/即将到期) | `contract.draft.manage` | `contract.space_rental_viewed` / `contract.space_rental_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listStaffAttendance` | `GET` | `/api/v1/staff/attendance` | 按日查考勤(后台/主管) | `staff.attendance.view` | `staff.attendance.viewed` / `staff.attendance.view_failed` | web, staff_private_phone | operation 级补充 |
+| P0-待归类 | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | 查排班(后台/主管) | `staff.shift.manage` | `staff.shift.viewed` / `staff.shift.view_failed` | web, staff_private_phone | operation 级补充 |
 | P0-待归类 | `listSubordinateCompletion` | `GET` | `/api/v1/partner/subordinates/completion` | 机构管理员查看本机构下属工作完成情况 | `partner.subordinate.view` | `partner_subordinate_completion.viewed` / `partner_subordinate_completion.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | 企微留存策略列表 | `wecom.retention.manage` | `wecom.retention_policy_viewed` / `wecom.retention_policy_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | 查询企微会话违规命中列表 | `wecom.risk_hit.view` | `wecom.risk_hit.list` / `wecom.risk_hit.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | 我的工单(员工自有手机) | `facility.work_order.view_assigned` | `facility.work_order_assigned_list.viewed` / `facility.work_order_assigned_list.view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `markFacilityWorkOrdersOverdue` | `POST` | `/api/v1/facility/work-orders/mark-overdue` | 批量标记逾期工单 | `facility.work_order.manage` | `facility.work_order_overdue_marked` / `facility.work_order_overdue_mark_failed` | web | operation 级补充 |
 | P0-待归类 | `publishFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | 发布平面图导入候选 | `floor_plan.import.manage` | `floor_plan.import_published` / `floor_plan.import_publish_failed` | web | operation 级补充 |
+| P0-待归类 | `punchStaffAttendance` | `POST` | `/api/v1/staff/attendance/punch` | 考勤打卡(NFC/扫码) | `staff.attendance.punch` | `staff.attendance.punched` / `staff.attendance.punch_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | 跨对象查询操作留痕 | `audit.operation_log.view` | `audit.operation_log.viewed` / `audit.operation_log.view_failed` | web | operation 级补充 |
 | P0-待归类 | `raiseContractChange` | `POST` | `/api/v1/contracts/{contract_id}/changes` | 发起合同变更(6 类) | `contract.change.manage` | `contract.change_raised` / `contract.change_raise_failed` | web | operation 级补充 |
 | P0-待归类 | `recheckFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/recheck` | 复查整改后的巡检任务 | `facility.inspection.manage` | `facility.inspection_task_rechecked` / `facility.inspection_task_recheck_failed` | web | operation 级补充 |
@@ -1960,6 +1981,7 @@
 | P0-待归类 | `updateFacilityEquipment` | `POST` | `/api/v1/facility/equipment/{equipment_id}` | 更新设备台账 | `facility.equipment.manage` | `facility.equipment_updated` / `facility.equipment_update_failed` | web | operation 级补充 |
 | P0-待归类 | `updateLeasingLeadStatus` | `POST` | `/api/v1/leasing/leads/{lead_id}/status` | 招商线索状态流转(7 态) | `leasing.lead.manage` | `leasing.lead.status_changed` / `leasing.lead.status_change_failed` | web | operation 级补充 |
 | P0-待归类 | `uploadSiteEntryCompletion` | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/completion` | 外包上传完工资料（待物业验收） | `facility.site_entry.upload_completion_assigned` | `facility.site_entry.upload_completion_assigned` / `facility.site_entry.upload_completion_failed` | web | operation 级补充 |
+| P0-待归类 | `upsertStaffShift` | `POST` | `/api/v1/staff/shifts` | 主管排班(双端) | `staff.shift.manage` | `staff.shift.saved` / `staff.shift.save_failed` | web, staff_private_phone | operation 级补充 |
 | P0-待归类 | `upsertWecomRetentionPolicy` | `POST` | `/api/v1/compliance/wecom/retention-policies` | 配置企微留存策略（默认180天） | `wecom.retention.manage` | `wecom.retention_policy_set` / `wecom.retention_policy_failed` | web | operation 级补充 |
 | P0-待归类 | `viewWecomConversationMessages` | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | 分级查看企微会话消息（脱敏/原文，原文需审批+审计） | `wecom.view_raw` | `wecom.raw_viewed` / `wecom.raw_view_failed` | web, mobile_admin | operation 级补充 |
 | SYS-系统健康 | `getSystemHealth` | `GET` | `/api/v1/system/health` | 健康检查 | `public` | `system.health_checked` / `system.health_check_failed` | web, mobile_admin<br>channel: monitoring | operation 级补充 |

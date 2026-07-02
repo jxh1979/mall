@@ -396,6 +396,99 @@ public class StaffService {
     // ============================================================ 员工通知
 
     @GuardedAction(permission = "staff.notice.view")
+    /** E1(2026-07-02 拍板):主管排班——双端(后台页+主管App);班次到分钟+指定点位;
+     * 同员工同开始时刻幂等覆盖;审计留痕。 */
+    public StaffShiftRecord upsertShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
+        authorizationService.requirePermission("staff.shift.manage");
+        if (request == null || request.userId() == null || request.userId().isBlank()
+                || request.workDate() == null || request.startAt() == null || request.endAt() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "user_id/work_date/start_at/end_at are required");
+        }
+        if (!request.endAt().isAfter(request.startAt())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "end_at must be after start_at");
+        }
+        var actor = authorizationService.currentActor();
+        Instant now = Instant.now();
+        StaffShiftRecord saved = repository.upsertShift(new StaffShiftRecord(
+                "shf_" + UUID.randomUUID(), request.userId().trim(), request.workDate(),
+                request.startAt(), request.endAt(),
+                request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds(),
+                request.note(), actor == null ? null : actor.id(), now, now));
+        auditEventService.recordSuccess("staff.shift.saved", "staff.shift.manage",
+                "staff_shift_schedule", saved.id(), null, request.idempotencyKey(),
+                java.util.Map.of("user_id", saved.userId(), "work_date", saved.workDate().toString()));
+        return saved;
+    }
+
+    /** E1:后台/主管按日(可选按人)查排班。 */
+    public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId) {
+        authorizationService.requirePermission("staff.shift.manage");
+        return page(repository.listShifts(workDate, userId));
+    }
+
+    /** E1:员工自有手机看自己的班次与点位(今天起 7 天)。 */
+    public PageResponse<StaffShiftRecord> listMyShifts() {
+        authorizationService.requirePermission("staff.shift.view");
+        var actor = authorizationService.currentActor();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(Instant.now(), java.time.ZoneOffset.UTC);
+        return page(repository.listShiftsForUserBetween(actor.id(), today, today.plusDays(7)));
+    }
+
+    /** E2(2026-07-02 拍板):打卡——时间以服务器为准;严格无宽限:上班晚于班次开始即迟到、
+     * 下班早于班次结束即早退;当日无班次记 no_shift;只记录不自动扣罚(处理归人事)。 */
+    public StaffAttendanceRecord punch(com.complex.platform.access.staff.dto.StaffAttendancePunchRequest request) {
+        authorizationService.requirePermission("staff.attendance.punch");
+        if (request == null || request.punchType() == null
+                || (!request.punchType().equals("check_in") && !request.punchType().equals("check_out"))) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "punch_type must be check_in or check_out");
+        }
+        String method = request.method() == null ? "manual" : request.method();
+        if (!java.util.Set.of("nfc", "qr", "manual").contains(method)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "method must be nfc/qr/manual");
+        }
+        var actor = authorizationService.currentActor();
+        Instant now = Instant.now();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserBetween(actor.id(), today, today);
+        StaffShiftRecord shift = pickShift(shifts, request.punchType(), now);
+        String judgement;
+        if (shift == null) {
+            judgement = "no_shift";
+        } else if (request.punchType().equals("check_in")) {
+            judgement = now.isAfter(shift.startAt()) ? "late" : "normal";
+        } else {
+            judgement = now.isBefore(shift.endAt()) ? "early_leave" : "normal";
+        }
+        StaffAttendanceRecord saved = repository.saveAttendance(new StaffAttendanceRecord(
+                "att_" + UUID.randomUUID(), actor.id(), request.punchType(), now, method,
+                trimToNull(request.tagRef()), trimToNull(request.spaceId()),
+                trimToNull(request.deviceFingerprint()), shift == null ? null : shift.id(), judgement, now));
+        auditEventService.recordSuccess("staff.attendance.punched", "staff.attendance.punch",
+                "staff_attendance_record", saved.id(), null, request.idempotencyKey(),
+                java.util.Map.of("punch_type", saved.punchType(), "judgement", judgement, "method", method));
+        return saved;
+    }
+
+    private StaffShiftRecord pickShift(java.util.List<StaffShiftRecord> shifts, String punchType, Instant now) {
+        return shifts.stream().min(java.util.Comparator.comparingLong(shift -> Math.abs(
+                (punchType.equals("check_in") ? shift.startAt() : shift.endAt()).toEpochMilli()
+                        - now.toEpochMilli()))).orElse(null);
+    }
+
+    /** E2:员工看自己最近 30 天打卡记录。 */
+    public PageResponse<StaffAttendanceRecord> listMyAttendance() {
+        authorizationService.requirePermission("staff.shift.view");
+        var actor = authorizationService.currentActor();
+        return page(repository.listAttendanceForUser(actor.id(),
+                Instant.now().minus(30, java.time.temporal.ChronoUnit.DAYS)));
+    }
+
+    /** E2:后台/主管按日查考勤(判定列:正常/迟到/早退/无班次)。 */
+    public PageResponse<StaffAttendanceRecord> listAttendance(java.time.LocalDate date) {
+        authorizationService.requirePermission("staff.attendance.view");
+        return page(repository.listAttendanceOn(date));
+    }
+
     public PageResponse<EmployeeNoticeRecord> listNotices() {
         List<EmployeeNoticeRecord> notices = repository.listNotices(merchantScopeOrNull());
         auditEventService.recordSuccess("staff.notice.viewed", "staff.notice.view",

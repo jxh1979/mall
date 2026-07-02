@@ -124,6 +124,22 @@ class TerminalApiClient(
     post("/api/v1/staff/registrations", request)
 
   /** 公司内部公告(员工可见)。 */
+  // ── BYOD 二期 E 批:排班/考勤 ──
+
+  /** 主管排班(双端;同员工同开始时刻幂等覆盖)。 */
+  fun upsertStaffShift(request: StaffShiftUpsertRequest): StaffShiftRow =
+    post("/api/v1/staff/shifts", request)
+
+  /** 我的班次与点位(今天起 7 天,时间到分钟)。 */
+  fun listMyShifts(): List<StaffShiftRow> = get("/api/v1/staff/shifts/mine")
+
+  /** 考勤打卡(NFC/扫码;时间以服务器为准;严格无宽限判定随响应返回)。 */
+  fun punchAttendance(request: AttendancePunchRequest): AttendanceRow =
+    post("/api/v1/staff/attendance/punch", request)
+
+  /** 我的打卡记录(最近 30 天)。 */
+  fun listMyAttendance(): List<AttendanceRow> = get("/api/v1/staff/attendance/mine")
+
   fun listStaffNotices(): List<EmployeeNoticeRecord> = get("/api/v1/staff/notices")
 
   /** 公告一键已读(留痕)。 */

@@ -69,9 +69,44 @@ class MainActivity : Activity() {
     super.onActivityResult(requestCode, resultCode, data)
   }
 
+  // ── E批 NFC 打卡:前台分发读点位标签(NDEF 文本或标签 UID),填入当前打卡屏输入框 ──
+  private var nfcAdapter: android.nfc.NfcAdapter? = null
+  private var nfcTarget: EditText? = null
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    nfcAdapter = android.nfc.NfcAdapter.getDefaultAdapter(this)
     showLogin()
+  }
+
+  override fun onResume() {
+    super.onResume()
+    val adapter = nfcAdapter ?: return
+    val intent = Intent(this, javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    val pending = android.app.PendingIntent.getActivity(
+      this, 0, intent, android.app.PendingIntent.FLAG_MUTABLE)
+    adapter.enableForegroundDispatch(this, pending, null, null)
+  }
+
+  override fun onPause() {
+    super.onPause()
+    nfcAdapter?.disableForegroundDispatch(this)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    val target = nfcTarget ?: return
+    val messages = intent.getParcelableArrayExtra(android.nfc.NfcAdapter.EXTRA_NDEF_MESSAGES)
+    val ndefText = messages?.filterIsInstance<android.nfc.NdefMessage>()
+      ?.flatMap { it.records.toList() }
+      ?.firstOrNull()
+      ?.let { record -> runCatching { String(record.payload).trim().dropWhile { !it.isLetterOrDigit() } }.getOrNull() }
+    val tag = intent.getParcelableExtra<android.nfc.Tag>(android.nfc.NfcAdapter.EXTRA_TAG)
+    val uid = tag?.id?.joinToString("") { b -> "%02x".format(b) }
+    val value = ndefText ?: uid
+    if (value != null) {
+      runOnUiThread { target.setText(value) }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -173,6 +208,9 @@ class MainActivity : Activity() {
       primaryButton("公司公告") { showStaffNotices() },
       primaryButton("我的工单") { showMyWorkOrders() },
       primaryButton("酒吧空位 / 帮客订位") { showBarAvailability() },
+      primaryButton("我的排班") { showMyShifts() },
+      primaryButton("考勤打卡(NFC/扫码)") { showPunch() },
+      secondaryButton("主管排班(需排班权限)") { showShiftManage() },
       secondaryButton("员工注册申请(店长/HR 代提交)") { showStaffRegistration() },
       secondaryButton("重新登录") { logoutAndRestart() },
     )
@@ -632,6 +670,115 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "酒吧空位 / 帮客订位",
       children = listOf(status, list, barId, tableId, time, guests, reserveButton,
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  // ── E批(2026-07-02 拍板):我的排班 / NFC打卡 / 主管排班 ──
+  private fun showMyShifts() {
+    val status = statusText("正在拉取我的班次…")
+    val list = statusText("")
+    runBackground(
+      action = { api.listMyShifts() },
+      onSuccess = { shifts ->
+        status.text = "未来 7 天班次 ${shifts.size} 个"
+        list.text = if (shifts.isEmpty()) "暂无排班" else shifts.joinToString("\n\n") { s ->
+          "${s.workDate}  ${s.startAt ?: "-"} ~ ${s.endAt ?: "-"}\n点位: " +
+            (s.pointSpaceIds?.takeIf { it.isNotEmpty() }?.joinToString("、") ?: "未指定") +
+            (s.note?.let { "\n备注: $it" } ?: "")
+        }
+      },
+      onError = { status.text = "拉取失败：${friendly(it)}" },
+    )
+    setContentView(screen(
+      title = "我的排班(时间到分钟)",
+      children = listOf(status, list, secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showPunch() {
+    val tagInput = editText("点位标签(手机碰 NFC 标签自动填入,或扫码)")
+    nfcTarget = tagInput
+    val status = statusText(
+      if (nfcAdapter == null) "本机无 NFC:请用扫码打卡(点位贴二维码)"
+      else "把手机背面贴近点位 NFC 标签即可读取;严格考勤:晚于班次开始即迟到、早于结束即早退",
+    )
+    val scanButton = secondaryButton("扫码读取点位标签") { launchScan(tagInput) }
+    fun doPunch(type: String, label: String) {
+      val tag = tagInput.text.toString().trim()
+      val method = when {
+        tag.isEmpty() -> "manual"
+        nfcAdapter != null && nfcTarget === tagInput -> "nfc"
+        else -> "qr"
+      }
+      status.text = "正在打卡($label)…"
+      runBackground(
+        action = {
+          api.punchAttendance(AttendancePunchRequest(
+            idempotencyKey = "punch_${System.currentTimeMillis()}",
+            punchType = type,
+            method = method,
+            tagRef = tag.ifEmpty { null },
+            spaceId = tag.removePrefix("space:").ifEmpty { null },
+            deviceFingerprint = runCatching { DeviceKeystore.deviceFingerprintHash() }.getOrNull(),
+          ))
+        },
+        onSuccess = { record ->
+          val judgement = when (record.judgement) {
+            "normal" -> "正常"
+            "late" -> "迟到"
+            "early_leave" -> "早退"
+            "no_shift" -> "当日无班次"
+            else -> record.judgement ?: "-"
+          }
+          status.text = "$label 打卡成功：$judgement(服务器时间 ${record.punchedAt ?: "-"})"
+        },
+        onError = { status.text = "打卡失败：${friendly(it)}" },
+      )
+    }
+    val checkInButton = primaryButton("上班打卡") { doPunch("check_in", "上班") }
+    val checkOutButton = primaryButton("下班打卡") { doPunch("check_out", "下班") }
+    setContentView(screen(
+      title = "考勤打卡",
+      children = listOf(status, tagInput, scanButton, checkInButton, checkOutButton,
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showShiftManage() {
+    val userId = editText("员工 user_id")
+    val workDate = editText("日期(2026-07-03)")
+    val startAt = editText("开始(2026-07-03T10:00:00Z)")
+    val endAt = editText("结束(2026-07-03T18:30:00Z)")
+    val points = editText("点位 space_id,逗号分隔(可空)")
+    val note = editText("备注(可空)")
+    val status = statusText("主管排班:同员工同开始时刻重复提交=覆盖修改;需 staff.shift.manage 权限")
+    val submitButton = primaryButton("保存排班") {
+      val u = userId.text.toString().trim()
+      val d = workDate.text.toString().trim()
+      val st = startAt.text.toString().trim()
+      val en = endAt.text.toString().trim()
+      if (u.isEmpty() || d.isEmpty() || st.isEmpty() || en.isEmpty()) {
+        status.text = "请填全 员工/日期/起止时间"
+        return@primaryButton
+      }
+      runBackground(
+        action = {
+          api.upsertStaffShift(StaffShiftUpsertRequest(
+            idempotencyKey = "shift_${System.currentTimeMillis()}",
+            userId = u, workDate = d, startAt = st, endAt = en,
+            pointSpaceIds = points.text.toString().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+              .ifEmpty { null },
+            note = note.text.toString().trim().ifEmpty { null },
+          ))
+        },
+        onSuccess = { s -> status.text = "已保存：${s.userId} ${s.workDate} ${s.startAt}~${s.endAt}" },
+        onError = { status.text = "保存失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(
+      title = "主管排班",
+      children = listOf(status, userId, workDate, startAt, endAt, points, note, submitButton,
         secondaryButton("返回首页") { showHome() }),
     ))
   }

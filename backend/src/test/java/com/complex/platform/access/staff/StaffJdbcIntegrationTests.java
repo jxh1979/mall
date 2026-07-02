@@ -285,6 +285,57 @@ class StaffJdbcIntegrationTests {
                 new StaffRegistrationReviewRequest(key(), null, "approve", null));
     }
 
+    @org.junit.jupiter.api.Test
+    void v210ShiftAttendanceStrictJudgement() {
+        // E批(2026-07-02 拍板):排班幂等覆盖+我的班次窗;打卡严格无宽限——晚于开始即迟到、
+        // 早于结束即早退、无班次记 no_shift;权限种子在位。
+        authenticateAsPlatformAdmin();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM permissions WHERE permission_code IN "
+                        + "('staff.shift.manage','staff.shift.view','staff.attendance.punch','staff.attendance.view')",
+                Integer.class)).isEqualTo(4);
+
+        Instant now = Instant.now();
+        java.time.LocalDate today = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        // 排班:已开始 1 小时、还有 7 小时结束 → 现在打上班=迟到,打下班=早退。
+        com.complex.platform.access.staff.StaffShiftRecord shift = service.upsertShift(
+                new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                        key(), "usr_admin", today, now.minusSeconds(3600), now.plusSeconds(7 * 3600),
+                        List.of("sp_point_1", "sp_point_2"), "E批测试"));
+        assertThat(shift.pointSpaceIds()).containsExactly("sp_point_1", "sp_point_2");
+        // 幂等覆盖:同 (user, start_at) 再排 → 单行,点位更新。
+        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                key(), "usr_admin", today, now.minusSeconds(3600), now.plusSeconds(8 * 3600),
+                List.of("sp_point_3"), "改班"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM staff_shift_schedules WHERE user_id='usr_admin'", Integer.class)).isEqualTo(1);
+
+        assertThat(service.listMyShifts().items()).hasSize(1);
+
+        com.complex.platform.access.staff.StaffAttendanceRecord checkIn = service.punch(
+                new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(
+                        key(), "check_in", "nfc", "space:sp_point_3", "sp_point_3", "fp_test"));
+        assertThat(checkIn.judgement()).isEqualTo("late");        // 严格:开始后打卡即迟到
+        assertThat(checkIn.shiftId()).isNotNull();
+
+        com.complex.platform.access.staff.StaffAttendanceRecord checkOut = service.punch(
+                new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(
+                        key(), "check_out", "qr", "space:sp_point_3", "sp_point_3", "fp_test"));
+        assertThat(checkOut.judgement()).isEqualTo("early_leave"); // 严格:结束前打卡即早退
+
+        assertThat(service.listMyAttendance().items()).hasSizeGreaterThanOrEqualTo(2);
+        assertThat(service.listAttendance(today).items())
+                .extracting(com.complex.platform.access.staff.StaffAttendanceRecord::judgement)
+                .contains("late", "early_leave");
+
+        // 删班次后打卡 → no_shift。
+        jdbcTemplate.update("DELETE FROM staff_shift_schedules WHERE user_id='usr_admin'");
+        com.complex.platform.access.staff.StaffAttendanceRecord orphan = service.punch(
+                new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(
+                        key(), "check_in", "manual", null, null, null));
+        assertThat(orphan.judgement()).isEqualTo("no_shift");
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }

@@ -17,6 +17,20 @@ public interface StaffRepository {
     /** merchantScope=null 见全量；非空仅见 merchant_id=该值的行。 */
     List<StaffProfileRecord> listProfiles(String merchantScope);
 
+    // --- E1/E2 排班与考勤(2026-07-02 拍板) ---
+    StaffShiftRecord upsertShift(StaffShiftRecord shift);
+
+    java.util.List<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId);
+
+    java.util.List<StaffShiftRecord> listShiftsForUserBetween(String userId,
+            java.time.LocalDate from, java.time.LocalDate to);
+
+    StaffAttendanceRecord saveAttendance(StaffAttendanceRecord record);
+
+    java.util.List<StaffAttendanceRecord> listAttendanceForUser(String userId, java.time.Instant since);
+
+    java.util.List<StaffAttendanceRecord> listAttendanceOn(java.time.LocalDate date);
+
     // --- staff_device_credentials ---
     StaffDeviceCredentialRecord saveCredential(StaffDeviceCredentialRecord credential);
 

@@ -506,3 +506,47 @@ data class BarReservationRecord(
   val status: String? = null,
   val depositStatus: String? = null,
 )
+
+// ── BYOD 二期 E 批(2026-07-02 拍板):排班(主管双端)/考勤打卡(NFC/扫码,严格无宽限) ──
+
+@Serializable
+data class StaffShiftUpsertRequest(
+  val idempotencyKey: String,
+  val userId: String,
+  val workDate: String,
+  val startAt: String,
+  val endAt: String,
+  val pointSpaceIds: List<String>? = null,
+  val note: String? = null,
+)
+
+@Serializable
+data class StaffShiftRow(
+  val id: String? = null,
+  val userId: String? = null,
+  val workDate: String? = null,
+  val startAt: String? = null,
+  val endAt: String? = null,
+  val pointSpaceIds: List<String>? = null,
+  val note: String? = null,
+)
+
+@Serializable
+data class AttendancePunchRequest(
+  val idempotencyKey: String,
+  val punchType: String,
+  val method: String,
+  val tagRef: String? = null,
+  val spaceId: String? = null,
+  val deviceFingerprint: String? = null,
+)
+
+@Serializable
+data class AttendanceRow(
+  val id: String? = null,
+  val punchType: String? = null,
+  val punchedAt: String? = null,
+  val method: String? = null,
+  val judgement: String? = null,
+  val spaceId: String? = null,
+)

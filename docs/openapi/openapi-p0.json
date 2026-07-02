@@ -27467,6 +27467,337 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/staff/shifts": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "upsertStaffShift",
+        "summary": "主管排班(双端)",
+        "description": "BYOD E批(2026-07-02 拍板):主管排班到分钟+指定点位;后台页与主管 App 同套规则; 同员工同开始时刻幂等覆盖;审计留痕。",
+        "x-permission": "staff.shift.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.shift.saved",
+        "x-audit-event-failure": "staff.shift.save_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "user_id",
+                  "work_date",
+                  "start_at",
+                  "end_at"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "员工账号 id。",
+                    "maxLength": 64
+                  },
+                  "work_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "班次归属日期。"
+                  },
+                  "start_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "班次开始(到分钟)。"
+                  },
+                  "end_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "班次结束(须晚于开始)。"
+                  },
+                  "point_space_ids": {
+                    "type": "array",
+                    "description": "当班点位(空间/点位 id 列表,服务员/保洁类岗位用)。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "maxItems": 20
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "备注。",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffShifts",
+        "summary": "查排班(后台/主管)",
+        "x-permission": "staff.shift.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.shift.viewed",
+        "x-audit-event-failure": "staff.shift.view_failed",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/shifts/mine": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listMyStaffShifts",
+        "summary": "我的班次与点位(员工手机)",
+        "description": "今天起 7 天;时间到分钟;含当班点位。",
+        "x-permission": "staff.shift.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.shift_mine.viewed",
+        "x-audit-event-failure": "staff.shift_mine.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/attendance/punch": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "punchStaffAttendance",
+        "summary": "考勤打卡(NFC/扫码)",
+        "description": "BYOD E批(2026-07-02 拍板):时间以服务器为准;严格无宽限——上班晚于班次开始即迟到、 下班早于班次结束即早退,当日无班次记 no_shift;只记录不自动扣罚;点位标签原文与设备指纹留痕。",
+        "x-permission": "staff.attendance.punch",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.attendance.punched",
+        "x-audit-event-failure": "staff.attendance.punch_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "punch_type"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "punch_type": {
+                    "type": "string",
+                    "description": "上班/下班。",
+                    "enum": [
+                      "check_in",
+                      "check_out"
+                    ]
+                  },
+                  "method": {
+                    "type": "string",
+                    "description": "打卡方式(NFC 碰标签/扫点位二维码/手动)。",
+                    "enum": [
+                      "nfc",
+                      "qr",
+                      "manual"
+                    ]
+                  },
+                  "tag_ref": {
+                    "type": "string",
+                    "description": "点位标签原文(NDEF 文本或标签 UID/二维码载荷),留痕防代打。",
+                    "maxLength": 200
+                  },
+                  "space_id": {
+                    "type": "string",
+                    "description": "解析出的点位 id(可空)。",
+                    "maxLength": 64
+                  },
+                  "device_fingerprint": {
+                    "type": "string",
+                    "description": "设备指纹(AndroidKeyStore 派生),留痕防代打。",
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/attendance/mine": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listMyStaffAttendance",
+        "summary": "我的打卡记录(最近30天)",
+        "x-permission": "staff.shift.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.attendance_mine.viewed",
+        "x-audit-event-failure": "staff.attendance_mine.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/attendance": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffAttendance",
+        "summary": "按日查考勤(后台/主管)",
+        "x-permission": "staff.attendance.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.attendance.viewed",
+        "x-audit-event-failure": "staff.attendance.view_failed",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {
