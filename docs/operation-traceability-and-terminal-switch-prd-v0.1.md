@@ -679,3 +679,21 @@ flowchart TD
 | 2026-06-18 D7 收口 | 改 | §7/§8 | 收口 §7 与 §8 自相矛盾：§7 明确旧 `/exceptions/*`、`/api/mobile/*` 及 `/api/admin/exceptions/*` 历史路径 deprecated、不作正式契约；§8 明确异常责任链（发现→第一处理→转派→升级→关闭）P0 必做，须改用正式 OpenAPI operationId 并登记到 operation 验收矩阵，含 first-handle/transfer/escalate/close 写动作及验收。两节各管路径形态与能力范围、不再互斥；operationId 待 OpenAPI 与验收矩阵登记后定稿 | D7 异常接口 §7/§8 自相矛盾收口 |
 | 2026-06-20 `文档goalP1` | 改 | §4.1 标准事件类型 | 漂移修正：`order.acquired`/`order.sales_attributed` 代码零命中、无替代，标注为待接线占位（"字典名→代码暂无落点"）；`contract.blocked`→`admission.blocked`、`contract.released`→`admission.released`、`exception.first_handled`→`exception.claimed` 三处就地补"字典名→代码真实名"映射；主表补 `exception.transferred`/`exception.dismissed`（V103 责任链真实事件名） | Grep backend 确认事件名漂移；V103 统一异常责任链 |
 | 2026-06-20 `文档goalP1` | 增 | §4.1.6 V099–V124 新功能事件登记 | 新增小节登记本会话 V099–V124 新功能事件（均经 Grep 核对为代码真实发布名）：`exception.reported/claimed/transferred/escalated/resolved/dismissed`(V103)、`amusement.incident.over_capacity`(V104)、`points.earned/deducted`(V100)、`wecom.risk.hit_detected/hit_reviewed`(V106)、`terminal.device.repaired/lost/found/scrapped`+`mdm.violation.handled`(V107)、`merchant_service.work_order.escalated`(V120)、`bar.order_item_void_decided`(V117/V124)、`finance_cam.trued_up`(V121，注意下划线连写)、`integration.channel_reconciliation.completed/failed`(V109)；指向 `docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md` 为新功能事件权威 | 权威事件字典漂移收口 + 新功能事件登记 |
+
+## 附:按钮级开关禁用扫描结论(2026-07-02,修复计划 3.19 验收尾巴收口)
+
+3.19 验收项中「开关关闭写按钮禁用」经全量扫描后**按业务拍板不做**,依据:
+
+- 全部 31 个能力开关(terminal_capability_switches.capability_code 全集)逐一核实后端消费点,
+  无一直接闸后台页面按钮。它们的真实消费形态分四类:
+  1. **第三方入站通道**(integration.{type}.sync):闸的是外部系统调入的 webhook/机器人上报,非后台按钮;
+  2. **自动降级路由**(payment.gateway.enabled / face.verification.enabled / wecom.ai_qc.enabled):
+     关闭时自动切换降级实现(离线收款/放行/关键词质检),后台按钮功能不受影响,无需禁用;
+  3. **设备端/客人端**(camera_scan / tablet / device_keystore / managed_work_devices / native_client):非 Web 后台;
+  4. **自动短信开关**(sms.notify.*):自动流程,无按钮。
+- 端/模块级 terminal.enabled 开关已完整闭环:菜单整组隐藏(前端 gating)+ 逐请求硬拒
+  (TERMINAL_DISABLED,总开关 AND 语义)——模块关闭时页面不可达,按钮天然不可点。
+- 唯一残余场景:员工停留在已打开页面期间运营恰好关闭该模块,此时点按钮收到后端拒绝提示,
+  刷新/导航即恢复一致。安全无风险(后端硬拒是铁律),不为分钟级边缘窗口引入开关轮询机制。
+- 将来若新增「直接闸后台按钮」的能力开关,应随功能一并实现按钮禁用,并回写本节。
+
