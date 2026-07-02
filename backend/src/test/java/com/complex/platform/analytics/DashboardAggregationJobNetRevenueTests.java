@@ -59,6 +59,14 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void refreshTriggersMerchantSummaryRollup() {
+        // M4:每次日刷后重算商户经营汇总(每商户一行最新态)。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+        assertThat(repository.refreshedMerchantSummariesFor).isEqualTo(BUSINESS_DATE);
+    }
+
+    @Test
     void refreshSyncsDefinitionsAndDetectsDayOverDayAnomalies() {
         // M3(2026-07-02 拍板):环比突变 ±50% 记可疑/±80% 记高;小基数不报(淡季防误报);
         // mtd 类月初天然重置不检测;指标定义由代码目录同步进表(单一事实源投影,异常 FK 前置)。
@@ -652,6 +660,12 @@ class DashboardAggregationJobNetRevenueTests {
         @Override
         public long countMerchantsWithEtlSnapshot(LocalDate businessDate) {
             return 0L;
+        }
+
+        LocalDate refreshedMerchantSummariesFor;
+
+        public void refreshMerchantSummaries(LocalDate businessDate, java.time.Instant now) {
+            this.refreshedMerchantSummariesFor = businessDate;
         }
 
         Map<LocalDate, Map<String, BigDecimal>> snapshotsByDate = Map.of();

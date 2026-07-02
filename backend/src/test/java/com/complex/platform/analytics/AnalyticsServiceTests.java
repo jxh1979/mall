@@ -960,6 +960,9 @@ class AnalyticsServiceTests {
 
         java.util.Map<LocalDate, java.util.Map<String, java.math.BigDecimal>> monthlySnapshots = java.util.Map.of();
 
+        public void refreshMerchantSummaries(LocalDate businessDate, java.time.Instant now) {
+        }
+
         public void syncMetricDefinitions(java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> rows, java.time.Instant now) {
         }
 

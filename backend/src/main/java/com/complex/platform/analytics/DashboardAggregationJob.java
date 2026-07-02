@@ -308,6 +308,9 @@ public class DashboardAggregationJob {
 
         // M3:日环比突变检测(2026-07-02 拍板:±surge 记可疑/±high 记高,阈值后台可调)。
         detectAnomalies(businessDate, now);
+
+        // M4:商户经营汇总真管道(每商户一行最新态;收入与看板同源、单量=当日核销、风险=open 告警数)。
+        repository.refreshMerchantSummaries(businessDate, now);
     }
 
     /** M3:mtd 类月初天然重置会跳变,不做环比检测。 */

@@ -235,6 +235,53 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void merchantSummariesRollupAggregatesRealSources() {
+        // M4(真库):汇总=当日商户维净收入快照+当日核销量+open风险告警数+最新账单状态;V208 演示种子已清。
+        assertThat(countRows("SELECT COUNT(*) FROM analytics_merchant_summaries WHERE merchant_id='merchant_p0'")).isZero();
+
+        java.time.Instant now = java.time.Instant.parse("2099-06-01T12:00:00Z");
+        java.time.LocalDate day = java.time.LocalDate.parse("2099-06-01");
+        jdbcTemplate.update("""
+                INSERT INTO business_entities (id, entity_name, entity_role, unified_social_credit_code,
+                        legal_representative, bank_account_ref, status, created_at, updated_at)
+                VALUES ('org_m4', 'M4主体', 'operation', 'm4-code', 'M4', 'vault://m4', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """, java.util.Map.of());
+        jdbcTemplate.update("""
+                INSERT INTO merchants (id, business_entity_id, merchant_name, merchant_type, contact_name,
+                        contact_phone, status, created_at, updated_at)
+                VALUES ('mch_m4', 'org_m4', 'M4汇总商户', 'other', 'M4', 'enc:m4', 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """, java.util.Map.of());
+        repository.upsertMetricSnapshot(new AnalyticsRecords.MetricSnapshotKey(
+                "revenue.net", "finance", "daily", day, "merchant", "mch_m4"),
+                new java.math.BigDecimal("88800"), "etl_aggregate", now);
+        repository.upsertMetricSnapshot(new AnalyticsRecords.MetricSnapshotKey(
+                "verify.done", "ticketing", "daily", day, "merchant", "mch_m4"),
+                new java.math.BigDecimal("7"), "etl_aggregate", now);
+        jdbcTemplate.update("""
+                INSERT INTO risk_alerts (alert_id, source_domain, alert_type, risk_level, status, summary,
+                        first_reported_by, merchant_id, created_at, updated_at)
+                VALUES ('risk_m4', 'analytics', 'customer_risk', 'high', 'open', 'm4', 'tester', 'mch_m4', now(), now())
+                """, java.util.Map.of());
+
+        repository.refreshMerchantSummaries(day, now);
+
+        java.util.Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT merchant_name, revenue_amount_cents, order_count, risk_alert_count, settlement_status "
+                        + "FROM analytics_merchant_summaries WHERE merchant_id='mch_m4'", java.util.Map.of());
+        assertThat(row.get("merchant_name")).isEqualTo("M4汇总商户");
+        assertThat(((Number) row.get("revenue_amount_cents")).longValue()).isEqualTo(88800L);
+        assertThat(((Number) row.get("order_count")).intValue()).isEqualTo(7);
+        assertThat(((Number) row.get("risk_alert_count")).intValue()).isEqualTo(1);
+        assertThat(row.get("settlement_status")).isEqualTo("none");
+
+        // 幂等重跑:仍单行,值更新不重复建。
+        repository.refreshMerchantSummaries(day, now);
+        assertThat(countRows("SELECT COUNT(*) FROM analytics_merchant_summaries WHERE merchant_id='mch_m4'")).isEqualTo(1);
+    }
+
+    @Test
     void v207CleansDemoSeedsAndAnomalyPipelineIsIdempotent() {
         // M3:V207 清定义/异常演示种子(V017 冒真);定义同步 upsert;异常按 id 幂等;阈值配置往返可调。
         assertThat(countRows("SELECT COUNT(*) FROM analytics_metric_anomalies WHERE id='anomaly_p0'")).isZero();
@@ -394,8 +441,7 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(rowCount("analytics_metric_definitions")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_dashboard_snapshots")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_business_metric_snapshots")).isGreaterThanOrEqualTo(1);
-        assertThat(rowCount("analytics_merchant_summaries")).isGreaterThanOrEqualTo(1);
-        assertThat(rowCount("analytics_merchant_health_scores")).isGreaterThanOrEqualTo(1);
+        // M4(V208):商户汇总/健康分演示种子已清——汇总由 ETL 真管道回填,健康分按裁决未启用。
         // M3(V207):异常演示种子已清,真实异常由日环比检测写入,不再断言演示行。
         assertThat(rowCount("analytics_risk_rules")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_risk_alerts")).isGreaterThanOrEqualTo(1);
@@ -403,7 +449,7 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(rowCount("analytics_ai_quality_results")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_customer_intents")).isGreaterThanOrEqualTo(1);
         assertThat(rowCount("analytics_robot_metrics")).isGreaterThanOrEqualTo(1);
-        assertThat(rowCount("analytics_staff_service_scores")).isGreaterThanOrEqualTo(1);
+        // M4(V208):服务分演示种子已清(按 2026-07-02 裁决未启用,读端点返回真实空集)。
     }
 
     @Test
@@ -419,12 +465,14 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(repository.listBusinessMetricSnapshots())
                 .extracting(AnalyticsRecords.BusinessMetricSnapshotRecord::metricKey, AnalyticsRecords.BusinessMetricSnapshotRecord::trendDirection)
                 .contains(tuple("gmv_amount_cents", "up"));
+        // M4(V208):merchant_p0 演示行已清;汇总行由 refreshMerchantSummaries 真管道回填(单测见 M4 用例)。
         assertThat(repository.listAnalyticsMerchants())
-                .extracting(AnalyticsRecords.MerchantSummaryRecord::merchantId, AnalyticsRecords.MerchantSummaryRecord::revenueAmountCents)
-                .contains(tuple("merchant_p0", 128800L));
+                .extracting(AnalyticsRecords.MerchantSummaryRecord::merchantId)
+                .doesNotContain("merchant_p0");
+        // 健康分按 2026-07-02 裁决未启用,演示行清空后读端点返回真实空集。
         assertThat(repository.listMerchantHealthScores())
-                .extracting(AnalyticsRecords.MerchantHealthScoreRecord::merchantId, AnalyticsRecords.MerchantHealthScoreRecord::scoreLevel)
-                .contains(tuple("merchant_p0", "healthy"));
+                .extracting(AnalyticsRecords.MerchantHealthScoreRecord::merchantId)
+                .doesNotContain("merchant_p0");
         // M3(V207):异常演示种子已清;这里验证真管道写入的异常行可被读端点读回。
         repository.insertMetricAnomaly("ano_m3_read_test", "revenue.net", "finance", "suspicious",
                 new java.math.BigDecimal("150"), new java.math.BigDecimal("100"), "m3",
@@ -447,9 +495,10 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(repository.listRobotMetrics())
                 .extracting(AnalyticsRecords.RobotMetricRecord::metricId, AnalyticsRecords.RobotMetricRecord::successCount)
                 .contains(tuple("robot_metric_p0", 9));
+        // M4(V208):服务分演示行已清(裁决未启用),读端点不再返回演示数据。
         assertThat(repository.listStaffServiceScores())
-                .extracting(AnalyticsRecords.StaffServiceScoreRecord::scoreId, AnalyticsRecords.StaffServiceScoreRecord::serviceScore)
-                .contains(tuple("staff_score_p0", 95));
+                .extracting(AnalyticsRecords.StaffServiceScoreRecord::scoreId)
+                .doesNotContain("staff_score_p0");
         assertThat(repository.listRiskAlerts())
                 .extracting(RiskAlertRecord::id, RiskAlertRecord::status)
                 .contains(tuple("alert_p0", "open"));

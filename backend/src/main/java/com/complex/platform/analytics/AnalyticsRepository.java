@@ -134,6 +134,10 @@ public interface AnalyticsRepository {
     /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。 */
     java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset);
 
+    /** M4:商户经营汇总真管道——从当日商户维快照(净收入/核销)+风险告警+最新账单状态聚合,
+     * 每商户一行最新态(V017 演示种子已清)。口径:收入与看板同源;单量=当日核销;风险=open告警数。 */
+    void refreshMerchantSummaries(LocalDate businessDate, java.time.Instant now);
+
     /** M3:代码指标目录同步进 analytics_metric_definitions(单一事实源投影;异常表 FK 前置)。 */
     void syncMetricDefinitions(java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> rows, java.time.Instant now);
 

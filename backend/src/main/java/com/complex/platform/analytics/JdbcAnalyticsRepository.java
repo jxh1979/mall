@@ -988,6 +988,50 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public void refreshMerchantSummaries(LocalDate businessDate, java.time.Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("now", timestampWithTimeZone(now));
+        jdbcTemplate.update("""
+                INSERT INTO analytics_merchant_summaries (
+                    merchant_id, merchant_name, merchant_type, revenue_amount_cents, order_count,
+                    risk_alert_count, settlement_status, business_date, created_at, updated_at)
+                SELECT m.id, m.merchant_name, m.merchant_type,
+                       GREATEST(COALESCE(rev.v, 0), 0)::bigint,
+                       COALESCE(vd.v, 0)::int,
+                       COALESCE(ra.c, 0)::int,
+                       COALESCE(bill.status, 'none'),
+                       :business_date, :now, :now
+                  FROM merchants m
+                  LEFT JOIN (SELECT segment_id, actual_value AS v
+                               FROM analytics_business_metric_snapshots
+                              WHERE metric_key = 'revenue.net' AND period_type = 'daily'
+                                AND segment_type = 'merchant' AND business_date = :business_date) rev
+                         ON rev.segment_id = m.id
+                  LEFT JOIN (SELECT segment_id, actual_value AS v
+                               FROM analytics_business_metric_snapshots
+                              WHERE metric_key = 'verify.done' AND period_type = 'daily'
+                                AND segment_type = 'merchant' AND business_date = :business_date) vd
+                         ON vd.segment_id = m.id
+                  LEFT JOIN (SELECT merchant_id, COUNT(*) AS c FROM risk_alerts
+                              WHERE status = 'open' AND merchant_id IS NOT NULL GROUP BY merchant_id) ra
+                         ON ra.merchant_id = m.id
+                  LEFT JOIN LATERAL (SELECT status FROM merchant_bills
+                                      WHERE merchant_id = m.id ORDER BY created_at DESC LIMIT 1) bill ON true
+                 WHERE m.status = 'active'
+                ON CONFLICT (merchant_id) DO UPDATE SET
+                    merchant_name = EXCLUDED.merchant_name,
+                    merchant_type = EXCLUDED.merchant_type,
+                    revenue_amount_cents = EXCLUDED.revenue_amount_cents,
+                    order_count = EXCLUDED.order_count,
+                    risk_alert_count = EXCLUDED.risk_alert_count,
+                    settlement_status = EXCLUDED.settlement_status,
+                    business_date = EXCLUDED.business_date,
+                    updated_at = EXCLUDED.updated_at
+                """, params);
+    }
+
+    @Override
     public void syncMetricDefinitions(java.util.List<AnalyticsRecords.MetricDefinitionSyncRow> rows, java.time.Instant now) {
         for (AnalyticsRecords.MetricDefinitionSyncRow row : rows) {
             jdbcTemplate.update("""
