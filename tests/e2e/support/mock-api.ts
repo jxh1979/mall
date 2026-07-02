@@ -208,6 +208,11 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/access/permission-templates": state.permissionTemplates,
     "/api/v1/access/temporary-grants": empty,
     "/api/v1/analytics/merchants": [{ merchantId: "merchant-1", merchantName: "Main Merchant", merchantType: "complex", revenueAmountCents: 880000, orderCount: 8, riskAlertCount: 1, settlementStatus: "pending", businessDate: "2026-06-15", createdAt: now, updatedAt: now }],
+    "/api/v1/terminals/capability-switches": [
+      { id: "tcs_term_web", terminalType: "web", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global", enabled: true, reason: "Web 前端总开关" },
+      { id: "tcs_term_kiosk", terminalType: "kiosk", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global", enabled: true, reason: "一体机总开关" },
+      { id: "tcs_camera_scan_off", terminalType: "tablet", capabilityCode: "camera.scan", scopeType: "global", scopeId: "global", enabled: false, reason: "相机扫码" },
+    ],
     "/api/v1/ticketing/ticket-types": state.tickets,
     "/api/v1/ticketing/entitlement-templates": [{ id: "tpl-1", name: "入园1次", entitlementType: "entry", status: "active" }],
     "/api/v1/ticketing/price-rules": state.priceRules ?? [],
