@@ -18528,6 +18528,353 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
 
+  /api/v1/facility/site-entry-reports:
+    get:
+      tags:
+        - facility
+      operationId: listSiteEntryReports
+      summary: 查看进场报备/验收单列表（外包只见本机构，平台全量）
+      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
+      x-permission: facility.site_entry.view_assigned
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.site_entry.viewed
+      x-audit-event-failure: facility.site_entry.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - facility
+      operationId: createSiteEntryReport
+      summary: 外包创建进场报备单（施工/装修进场前报备）
+      x-permission: facility.site_entry.create_assigned
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.site_entry.create_assigned
+      x-audit-event-failure: facility.site_entry.create_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/facility/site-entry-reports/{report_id}:
+    get:
+      tags:
+        - facility
+      operationId: getSiteEntryReport
+      summary: 查看单个进场报备单
+      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
+      x-permission: facility.site_entry.view_assigned
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: facility.site_entry.viewed
+      x-audit-event-failure: facility.site_entry.view_failed
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 进场报备单 id
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/facility/site-entry-reports/{report_id}/submit:
+    post:
+      tags:
+        - facility
+      operationId: submitSiteEntryReport
+      summary: 外包提交进场报备（进入物业审核）
+      x-permission: facility.site_entry.submit_assigned
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.site_entry.submit_assigned
+      x-audit-event-failure: facility.site_entry.submit_failed
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 进场报备单 id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/facility/site-entry-reports/{report_id}/completion:
+    post:
+      tags:
+        - facility
+      operationId: uploadSiteEntryCompletion
+      summary: 外包上传完工资料（待物业验收）
+      x-permission: facility.site_entry.upload_completion_assigned
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.site_entry.upload_completion_assigned
+      x-audit-event-failure: facility.site_entry.upload_completion_failed
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 进场报备单 id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/facility/site-entry-reports/{report_id}/review:
+    post:
+      tags:
+        - facility
+      operationId: reviewSiteEntryReport
+      summary: 物业审核进场报备（平台侧）
+      x-permission: facility.site_entry.review
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.site_entry.review
+      x-audit-event-failure: facility.site_entry.review_failed
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 进场报备单 id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/facility/site-entry-reports/{report_id}/accept:
+    post:
+      tags:
+        - facility
+      operationId: acceptSiteEntryReport
+      summary: 物业验收完工（平台侧）
+      x-permission: facility.site_entry.accept
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.site_entry.accept
+      x-audit-event-failure: facility.site_entry.accept_failed
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 进场报备单 id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/facility/inspections/tasks/{task_id}/report-exception:
+    post:
+      tags:
+        - facility
+      operationId: reportInspectionException
+      summary: 外包对被指派巡检任务上报异常
+      x-permission: facility.inspection.report_exception_assigned
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: facility.inspection_exception_reported
+      x-audit-event-failure: facility.inspection_exception_report_failed
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 巡检任务 id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/partner/subordinates/completion:
+    get:
+      tags:
+        - partner
+      operationId: listSubordinateCompletion
+      summary: 机构管理员查看本机构下属工作完成情况
+      x-permission: partner.subordinate.view
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: partner_subordinate_completion.viewed
+      x-audit-event-failure: partner_subordinate_completion.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+
 components:
   securitySchemes:
     BearerAuth:

@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 528 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 537 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -549,6 +549,15 @@
 | customer | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | `reinstateCustomerAccount` | 恢复客人账号为正常（解封/解黑） | `object` | `customer.account.manage` | `staff-token` | `platform` | web | 否 | `customer.account.reinstated` | `customer.account.reinstate_failed` |
 | customer | `POST` | `/api/v1/customer/deregister` | `deregisterCustomerAccount` | 客人自助注销本人账号（注销后登录/动作被拒，历史数据物理保留但客人不可见） | `-` | `not_applicable` | `customer-token` | `self` | miniapp, web | 否 | `customer.account.deregistered` | `customer.account.deregister_failed` |
 | customer | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | `listCustomerOrderTickets` | 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id） | `-` | `not_applicable` | `customer-token` | `self` | miniapp, web | 否 | `customer.order_tickets_viewed` | `customer.order_tickets_view_failed` |
+| facility | `GET` | `/api/v1/facility/site-entry-reports` | `listSiteEntryReports` | 查看进场报备/验收单列表（外包只见本机构，平台全量） | `-` | `facility.site_entry.view_assigned` | `staff-token` | `self` | web | 否 | `facility.site_entry.viewed` | `facility.site_entry.view_failed` |
+| facility | `POST` | `/api/v1/facility/site-entry-reports` | `createSiteEntryReport` | 外包创建进场报备单（施工/装修进场前报备） | `object` | `facility.site_entry.create_assigned` | `staff-token` | `self` | web | 是 | `facility.site_entry.create_assigned` | `facility.site_entry.create_failed` |
+| facility | `GET` | `/api/v1/facility/site-entry-reports/{report_id}` | `getSiteEntryReport` | 查看单个进场报备单 | `-` | `facility.site_entry.view_assigned` | `staff-token` | `self` | web | 否 | `facility.site_entry.viewed` | `facility.site_entry.view_failed` |
+| facility | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/submit` | `submitSiteEntryReport` | 外包提交进场报备（进入物业审核） | `object` | `facility.site_entry.submit_assigned` | `staff-token` | `self` | web | 是 | `facility.site_entry.submit_assigned` | `facility.site_entry.submit_failed` |
+| facility | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/completion` | `uploadSiteEntryCompletion` | 外包上传完工资料（待物业验收） | `object` | `facility.site_entry.upload_completion_assigned` | `staff-token` | `self` | web | 是 | `facility.site_entry.upload_completion_assigned` | `facility.site_entry.upload_completion_failed` |
+| facility | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/review` | `reviewSiteEntryReport` | 物业审核进场报备（平台侧） | `object` | `facility.site_entry.review` | `staff-token` | `platform` | web | 是 | `facility.site_entry.review` | `facility.site_entry.review_failed` |
+| facility | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/accept` | `acceptSiteEntryReport` | 物业验收完工（平台侧） | `object` | `facility.site_entry.accept` | `staff-token` | `platform` | web | 是 | `facility.site_entry.accept` | `facility.site_entry.accept_failed` |
+| facility | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/report-exception` | `reportInspectionException` | 外包对被指派巡检任务上报异常 | `object` | `facility.inspection.report_exception_assigned` | `staff-token` | `self` | web | 是 | `facility.inspection_exception_reported` | `facility.inspection_exception_report_failed` |
+| partner | `GET` | `/api/v1/partner/subordinates/completion` | `listSubordinateCompletion` | 机构管理员查看本机构下属工作完成情况 | `-` | `partner.subordinate.view` | `staff-token` | `self` | web | 否 | `partner_subordinate_completion.viewed` | `partner_subordinate_completion.view_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -616,5 +625,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 528 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 537 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |
