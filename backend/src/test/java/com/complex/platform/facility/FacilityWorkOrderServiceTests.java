@@ -50,6 +50,24 @@ class FacilityWorkOrderServiceTests {
     }
 
     @Test
+    void listAssignedToMeReturnsOnlyOwnOrders() {
+        // BYOD 一期(2026-07-02):员工自有手机「我的工单」——凭 view_assigned 只看流转到自己的,不见别人。
+        AuthorizationService auth = mock(AuthorizationService.class);
+        org.mockito.Mockito.when(auth.currentActor()).thenReturn(
+                new AccessActor("staff_me", "staff_me", "staff", null, null, "active"));
+        FacilityWorkOrderService scoped = new FacilityWorkOrderService(workOrders, facility,
+                mock(AuditEventService.class), auth);
+        FacilityWorkOrderRecord mine = service.create(req("repair", "high", "platform", null));
+        service.assign(mine.id(), new FacilityWorkOrderAssignRequest("staff_me", "t1-a1"));
+        FacilityWorkOrderRecord others = service.create(req("cleaning", "normal", "platform", null));
+        service.assign(others.id(), new FacilityWorkOrderAssignRequest("staff_other", "t1-a2"));
+
+        PageResponse<FacilityWorkOrderRecord> result = scoped.listAssignedToMe();
+        assertThat(result.items()).extracting(FacilityWorkOrderRecord::id).containsExactly(mine.id());
+        org.mockito.Mockito.verify(auth).requirePermission("facility.work_order.view_assigned");
+    }
+
+    @Test
     void create_setsSlaCodeAndRejectsMerchantSelfRestrictedTypes() {
         assertThatThrownBy(() -> service.create(req("rectification", "normal", "merchant_self", null)))
                 .isInstanceOfSatisfying(ApiException.class,
@@ -262,6 +280,13 @@ class FacilityWorkOrderServiceTests {
     }
 
     static class InMemoryWorkOrderRepository implements FacilityWorkOrderRepository {
+        @Override
+        public List<FacilityWorkOrderRecord> listAssignedToMe(String assigneeId) {
+            return store.values().stream()
+                    .filter(rec -> assigneeId.equals(rec.assigneeId()))
+                    .toList();
+        }
+
         final Map<String, FacilityWorkOrderRecord> store = new LinkedHashMap<>();
         final Map<String, FacilityWorkOrderPolicyRecord> policies = new LinkedHashMap<>();
 

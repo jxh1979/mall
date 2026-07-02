@@ -194,6 +194,26 @@ class BarServiceTests {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
+    void tableAvailabilityMarksActivelyReservedTables() {
+        // BYOD 一期(2026-07-02):员工自有手机帮客人订位——空位视图=桌位+活跃预订占用标记;
+        // 权限走 bar.reservation.create(能订位自然能看空位),不放大到桌位管理。
+        TestSecurityActors.asMerchantUser("merchant_a");
+        BarTableRecord freeTable = service.createTable(new BarTableRequest(
+                "t1-avail-free", "create", List.of(), "bar_1", "卡座A1", "card_seat", 50000L, 4, "active"));
+        BarTableRecord takenTable = service.createTable(new BarTableRequest(
+                "t1-avail-taken", "create", List.of(), "bar_1", "散台A2", "loose_seat", 0L, 2, "active"));
+        barRepository.activeReservedTableIds = java.util.Set.of(takenTable.id());
+
+        java.util.List<BarTableAvailabilityRecord> rows = service.listTableAvailability().items();
+        java.util.Map<String, Boolean> byId = new java.util.LinkedHashMap<>();
+        for (BarTableAvailabilityRecord row : rows) {
+            byId.put(row.id(), row.reserved());
+        }
+        assertThat(byId).containsEntry(freeTable.id(), false);
+        assertThat(byId).containsEntry(takenTable.id(), true);
+    }
+
+    @Test
     void listTablesReturnsOnlyCurrentMerchantRecordsWhenScopedToMerchant() {
         TestSecurityActors.asMerchantUser("merchant_a");
         BarTableRecord merchantATable = service.createTable(new BarTableRequest(
@@ -2988,6 +3008,13 @@ class BarServiceTests {
     }
 
     private static final class InMemoryBarRepository implements BarRepository {
+        java.util.Set<String> activeReservedTableIds = java.util.Set.of();
+
+        @Override
+        public java.util.Set<String> listActiveReservedTableIds(java.time.Instant since) {
+            return activeReservedTableIds;
+        }
+
         private final Map<String, BarTableRecord> tables = new LinkedHashMap<>();
         private final Map<String, BarReservationRecord> reservations = new LinkedHashMap<>();
         private final Map<String, BarDepositRuleRecord> depositRules = new LinkedHashMap<>();

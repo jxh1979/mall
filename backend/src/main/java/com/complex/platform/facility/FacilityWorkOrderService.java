@@ -67,6 +67,14 @@ public class FacilityWorkOrderService {
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
+    /** BYOD 一期(2026-07-02):员工自有手机「我的工单」——凭 view_assigned 只看流转到自己的,不见别人。 */
+    public PageResponse<FacilityWorkOrderRecord> listAssignedToMe() {
+        authorizationService.requirePermission("facility.work_order.view_assigned");
+        AccessActor actor = authorizationService.currentActor();
+        List<FacilityWorkOrderRecord> items = repository.listAssignedToMe(actor.id());
+        return new PageResponse<>(items, 1, 200, items.size());
+    }
+
     public PageResponse<FacilityWorkOrderRecord> listOverdue() {
         authorizationService.requirePlatformScope();
         List<FacilityWorkOrderRecord> items = repository.listOverdue(Instant.now());

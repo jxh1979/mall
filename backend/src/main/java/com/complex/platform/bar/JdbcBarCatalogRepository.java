@@ -49,6 +49,22 @@ final class JdbcBarCatalogRepository {
         return table;
     }
 
+    /** BYOD 一期:活跃预订(未取消,reserved_at 自 since 起)占用的桌位 id 集,空位视图标记用。 */
+    public java.util.Set<String> listActiveReservedTableIds(java.time.Instant since) {
+        java.util.Set<String> ids = new java.util.LinkedHashSet<>();
+        jdbcTemplate.query("""
+                SELECT DISTINCT table_id
+                  FROM bar_reservations
+                 WHERE status NOT IN ('cancelled', 'expired', 'completed')
+                   AND reserved_at >= :since
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("since", java.sql.Timestamp.from(since)),
+                resultSet -> {
+            ids.add(resultSet.getString("table_id"));
+        });
+        return ids;
+    }
+
     public List<BarTableRecord> listTables(Optional<String> merchantScope) {
         if (merchantScope.isEmpty()) {
             return jdbcTemplate.query("""

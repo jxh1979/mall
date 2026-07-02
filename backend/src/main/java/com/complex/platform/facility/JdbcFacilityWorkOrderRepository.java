@@ -122,6 +122,16 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
     }
 
     @Override
+    public List<FacilityWorkOrderRecord> listAssignedToMe(String assigneeId) {
+        return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + """
+                 FROM facility_work_orders
+                 WHERE assignee_id = :assignee_id
+                 ORDER BY created_at DESC, id
+                 LIMIT 200
+                """, new MapSqlParameterSource("assignee_id", assigneeId), this::mapWorkOrder);
+    }
+
+    @Override
     public List<FacilityWorkOrderRecord> listAssignedTo(String assigneeId, String projectId) {
         return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + """
                  FROM facility_work_orders

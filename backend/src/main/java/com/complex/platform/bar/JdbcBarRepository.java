@@ -32,6 +32,11 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public java.util.Set<String> listActiveReservedTableIds(java.time.Instant since) {
+        return catalog.listActiveReservedTableIds(since);
+    }
+
+    @Override
     public List<BarTableRecord> listTables(Optional<String> merchantScope) {
         return catalog.listTables(merchantScope);
     }

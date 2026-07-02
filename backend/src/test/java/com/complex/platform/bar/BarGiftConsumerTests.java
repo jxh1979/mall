@@ -220,6 +220,11 @@ class BarGiftConsumerTests {
 
     /** 仅实现消费者所需 + 断言所需方法的内存 BarRepository。 */
     private static final class CapturingBarRepository implements BarRepository {
+        @Override
+        public java.util.Set<String> listActiveReservedTableIds(java.time.Instant since) {
+            return java.util.Set.of();
+        }
+
         private final Map<String, BarTableRecord> tables = new LinkedHashMap<>();
         private final Map<String, BarOrderRecord> orders = new LinkedHashMap<>();
         private final List<BarProductionTicketRecord> productionTickets = new ArrayList<>();

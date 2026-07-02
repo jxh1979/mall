@@ -317,6 +317,22 @@ public class BarService {
         return entryService.getInvitation(operations.requireText(reservationId, "reservation_id"));
     }
 
+    /** BYOD 一期(2026-07-02):员工自有手机帮客人订位——空位视图=桌位+活跃预订(近4小时起,未取消)占用标记。 */
+    public PageResponse<BarTableAvailabilityRecord> listTableAvailability() {
+        return operations.readPage(
+                BarReadOperation.LIST_TABLE_AVAILABILITY,
+                () -> {
+                    java.util.Set<String> reserved = repository.listActiveReservedTableIds(
+                            java.time.Instant.now().minus(4, java.time.temporal.ChronoUnit.HOURS));
+                    return repository.listTables(authorizationService.currentMerchantScope()).stream()
+                            .map(table -> new BarTableAvailabilityRecord(table.id(), table.barId(), table.tableCode(),
+                                    table.tableName(), table.tableType(), table.capacity(), table.minConsumptionCent(),
+                                    table.status(), reserved.contains(table.id())))
+                            .toList();
+                }
+        );
+    }
+
     public PageResponse<BarTableRecord> listTables() {
         return operations.readPage(
                 BarReadOperation.LIST_TABLES,

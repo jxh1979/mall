@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 558 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 293 | 人工权限矩阵正文未覆盖 190 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1116 | 人工事件矩阵正文未覆盖 1074 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 558 | 人工任务映射正文未逐项覆盖 552 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI operation 数 | 560 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 294 | 人工权限矩阵正文未覆盖 191 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1120 | 人工事件矩阵正文未覆盖 1078 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 560 | 人工任务映射正文未逐项覆盖 554 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 339 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -107,7 +107,7 @@
 | `bar.product.view` | staff-token | project | 1 | listBarProducts | OpenAPI 补充，以本附录为准 |
 | `bar.production_ticket.manage` | staff-token | project-bar-table | 1 | transitionBarProductionTicket | OpenAPI 补充，以本附录为准 |
 | `bar.production_ticket.view` | staff-token | project-bar-table | 1 | listBarProductionTicketEvents | OpenAPI 补充，以本附录为准 |
-| `bar.reservation.create` | staff-token | project-bar | 1 | createBarReservation | 已在权限矩阵正文出现 |
+| `bar.reservation.create` | staff-token | project-bar, project-merchant-space | 2 | createBarReservation, listBarTableAvailability | 已在权限矩阵正文出现 |
 | `bar.reservation.invitation.manage` | staff-token | project-bar | 2 | issueBarReservationInvitation, revokeBarReservationInvitation | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.manage` | staff-token | project-bar | 3 | payBarReservationDeposit, checkInBarReservationDeposit, cancelBarReservation | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.view` | staff-token | project-bar, project-bar-table | 2 | listBarReservations, getBarReservationInvitation | 已在权限矩阵正文出现 |
@@ -170,6 +170,7 @@
 | `facility.site_entry.upload_completion_assigned` | staff-token | self | 1 | uploadSiteEntryCompletion | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.view_assigned` | staff-token | self | 2 | listSiteEntryReports, getSiteEntryReport | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.manage` | staff-token | platform | 14 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, suspendFacilityWorkOrder, resumeFacilityWorkOrder, markFacilityWorkOrdersOverdue ... | OpenAPI 补充，以本附录为准 |
+| `facility.work_order.view_assigned` | staff-token | platform | 1 | listWorkOrdersAssignedToMe | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project-entity | 3 | createArApItem, generateContractRentBill, generateContractPeriodBills | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | platform, project-entity | 2 | listArApItems, listArOverdueDebtors | 已在权限矩阵正文出现 |
@@ -638,6 +639,8 @@
 | `bar.shift_opened` | success | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
 | `bar.shift.view_failed` | failure | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
 | `bar.shift.viewed` | success | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.table_availability.view_failed` | failure | `listBarTableAvailability` | `GET` | `/api/v1/bar/tables/availability` | BAR-酒吧经营 | `bar.reservation.create` | 接口级事件，以本附录为准 |
+| `bar.table_availability.viewed` | success | `listBarTableAvailability` | `GET` | `/api/v1/bar/tables/availability` | BAR-酒吧经营 | `bar.reservation.create` | 接口级事件，以本附录为准 |
 | `bar.table_commission.calculate_failed` | failure | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | BAR-酒吧经营 | `bar.table_commission.calculate` | 接口级事件，以本附录为准 |
 | `bar.table_commission.calculated` | success | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | BAR-酒吧经营 | `bar.table_commission.calculate` | 已在事件矩阵正文出现 |
 | `bar.table_guest.checked_in` | success | `checkInBarReservationGuest` | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | BAR-酒吧经营 | `bar.table.guest_checkin` | 已在事件矩阵正文出现 |
@@ -911,6 +914,8 @@
 | `facility.work_order_accepted` | success | `acceptFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/accept` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_assign_failed` | failure | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_assigned` | success | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `facility.work_order_assigned_list.view_failed` | failure | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | P0-待归类 | `facility.work_order.view_assigned` | 接口级事件，以本附录为准 |
+| `facility.work_order_assigned_list.viewed` | success | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | P0-待归类 | `facility.work_order.view_assigned` | 接口级事件，以本附录为准 |
 | `facility.work_order_complete_failed` | failure | `completeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/complete` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_completed` | success | `completeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/complete` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_create_failed` | failure | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
@@ -1596,7 +1601,7 @@
 | BAR-酒吧经营 | `createBarOrder` | `POST` | `/api/v1/bar/orders` | 点单 | `bar.order.create` | `bar.order_created` / `bar.order_create_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `createBarOrderBill` | `POST` | `/api/v1/bar/orders/{order_id}/bill` | 创建酒吧订单账单 | `bar.order.create` | `bar.bill.created` / `bar.bill.created_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `createBarProduct` | `POST` | `/api/v1/bar/products` | 创建酒吧商品 | `bar.product.manage` | `bar.product.created` / `bar.product.created_failed` | web | operation 级补充 |
-| BAR-酒吧经营 | `createBarReservation` | `POST` | `/api/v1/bar/reservations` | 订台或卡座预订 | `bar.reservation.create` | `bar.reservation.created` / `bar.reservation.create_failed` | web, tablet, miniapp, app, kiosk | operation 级补充 |
+| BAR-酒吧经营 | `createBarReservation` | `POST` | `/api/v1/bar/reservations` | 订台或卡座预订 | `bar.reservation.create` | `bar.reservation.created` / `bar.reservation.create_failed` | web, tablet, miniapp, app, kiosk, staff_private_phone | operation 级补充 |
 | BAR-酒吧经营 | `createBarTable` | `POST` | `/api/v1/bar/tables` | 创建桌台或卡座 | `bar.table.manage` | `bar.table.changed` / `bar.table.change_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | 创建酒水台位会话（开台） | `bar.table_session.create` | `bar.table_session.create` / `bar.table_session.create_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | 退菜退酒审批决策（通过/驳回） | `bar.order_item.void` | `bar.order_item_void.decide` / `bar.order_item_void.decide_failed` | tablet, web | operation 级补充 |
@@ -1611,6 +1616,7 @@
 | BAR-酒吧经营 | `listBarProducts` | `GET` | `/api/v1/bar/products` | 查询酒吧商品 | `bar.product.view` | `bar.product.viewed` / `bar.product.viewed_failed` | web, tablet, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `listBarReservations` | `GET` | `/api/v1/bar/reservations` | 查询酒吧预约 | `bar.reservation.view` | `bar.reservation.viewed` / `bar.reservation.view_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | 查询收银班次 | `bar.shift.manage` | `bar.shift.viewed` / `bar.shift.view_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `listBarTableAvailability` | `GET` | `/api/v1/bar/tables/availability` | 酒吧空位视图(员工代订用) | `bar.reservation.create` | `bar.table_availability.viewed` / `bar.table_availability.view_failed` | staff_private_phone, web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarTables` | `GET` | `/api/v1/bar/tables` | 查询桌台或卡座 | `bar.table.view` | `bar.table.viewed` / `bar.table.view_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | 查询酒水台位会话列表 | `bar.table_session.view` | `bar.table_session.list` / `bar.table_session.list_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | 未回填空间的卡座/桌台清单 | `bar.table.manage` | `bar.table_space_backlog.viewed` / `bar.table_space_backlog.view_failed` | web | operation 级补充 |
@@ -1916,6 +1922,7 @@
 | P0-待归类 | `listSubordinateCompletion` | `GET` | `/api/v1/partner/subordinates/completion` | 机构管理员查看本机构下属工作完成情况 | `partner.subordinate.view` | `partner_subordinate_completion.viewed` / `partner_subordinate_completion.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listWecomRetentionPolicies` | `GET` | `/api/v1/compliance/wecom/retention-policies` | 企微留存策略列表 | `wecom.retention.manage` | `wecom.retention_policy_viewed` / `wecom.retention_policy_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | 查询企微会话违规命中列表 | `wecom.risk_hit.view` | `wecom.risk_hit.list` / `wecom.risk_hit.list_failed` | web | operation 级补充 |
+| P0-待归类 | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | 我的工单(员工自有手机) | `facility.work_order.view_assigned` | `facility.work_order_assigned_list.viewed` / `facility.work_order_assigned_list.view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `markFacilityWorkOrdersOverdue` | `POST` | `/api/v1/facility/work-orders/mark-overdue` | 批量标记逾期工单 | `facility.work_order.manage` | `facility.work_order_overdue_marked` / `facility.work_order_overdue_mark_failed` | web | operation 级补充 |
 | P0-待归类 | `publishFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | 发布平面图导入候选 | `floor_plan.import.manage` | `floor_plan.import_published` / `floor_plan.import_publish_failed` | web | operation 级补充 |
 | P0-待归类 | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | 跨对象查询操作留痕 | `audit.operation_log.view` | `audit.operation_log.viewed` / `audit.operation_log.view_failed` | web | operation 级补充 |

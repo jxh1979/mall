@@ -36,6 +36,9 @@ public interface FacilityWorkOrderRepository {
         return result;
     }
 
+    /** BYOD 一期:按处理人列工单(不限 project,员工自有手机「我的工单」只读视图;最近 200 条)。 */
+    List<FacilityWorkOrderRecord> listAssignedToMe(String assigneeId);
+
     default List<FacilityWorkOrderRecord> listAssignedTo(String assigneeId, String projectId) {
         return list().stream()
                 .filter(record -> Objects.equals(assigneeId, record.assigneeId()))

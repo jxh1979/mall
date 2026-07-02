@@ -389,6 +389,11 @@ public class BarController {
         return ApiResponse.ok(service.verifyReservationInvitationEntry(id, request));
     }
 
+    @GetMapping("/tables/availability")
+    public ApiResponse<PageResponse<BarTableAvailabilityRecord>> listTableAvailability() {
+        return ApiResponse.ok(service.listTableAvailability());
+    }
+
     @GetMapping("/tables")
     public ApiResponse<PageResponse<BarTableRecord>> listTables() {
         authorizationService.requirePermission("bar.table.view");

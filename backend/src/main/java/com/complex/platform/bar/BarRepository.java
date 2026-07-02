@@ -7,6 +7,9 @@ import java.util.Optional;
 public interface BarRepository {
     BarTableRecord saveTable(BarTableRecord table);
 
+    /** BYOD 一期:活跃预订(未取消,reserved_at 自 since 起)占用的桌位 id 集,空位视图标记用。 */
+    java.util.Set<String> listActiveReservedTableIds(java.time.Instant since);
+
     List<BarTableRecord> listTables(Optional<String> merchantScope);
 
     Optional<BarTableRecord> findTableById(String id);

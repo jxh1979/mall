@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 558 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 560 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -98,7 +98,7 @@
 | bar | `GET` | `/api/v1/bar/products` | `listBarProducts` | 查询酒吧商品 | `-` | `bar.product.view` | `staff-token` | `project` | web, tablet, kiosk | 否 | `bar.product.viewed` | `bar.product.viewed_failed` |
 | bar | `POST` | `/api/v1/bar/products` | `createBarProduct` | 创建酒吧商品 | `BarProductRequest` | `bar.product.manage` | `staff-token` | `project` | web | 是 | `bar.product.created` | `bar.product.created_failed` |
 | bar | `GET` | `/api/v1/bar/reservations` | `listBarReservations` | 查询酒吧预约 | `-` | `bar.reservation.view` | `staff-token` | `project-bar-table` | web, tablet | 否 | `bar.reservation.viewed` | `bar.reservation.view_failed` |
-| bar | `POST` | `/api/v1/bar/reservations` | `createBarReservation` | 订台或卡座预订 | `BarReservationRequest` | `bar.reservation.create` | `staff-token` | `project-bar` | web, tablet, miniapp, app, kiosk | 是 | `bar.reservation.created` | `bar.reservation.create_failed` |
+| bar | `POST` | `/api/v1/bar/reservations` | `createBarReservation` | 订台或卡座预订 | `BarReservationRequest` | `bar.reservation.create` | `staff-token` | `project-bar` | web, tablet, miniapp, app, kiosk, staff_private_phone | 是 | `bar.reservation.created` | `bar.reservation.create_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | `checkInBarReservationGuest` | 卡座免通票入场名额核销 | `VerificationRequest` | `bar.table.guest_checkin` | `staff-token` | `project-bar` | staff_work_phone | 是 | `bar.table_guest.checked_in` | `bar.table_guest.rejected` |
 | bar | `GET` | `/api/v1/bar/reservations/{id}/invitation` | `getBarReservationInvitation` | 查询订卡邀请函 | `-` | `bar.reservation.view` | `staff-token` | `project-bar` | web, tablet | 否 | `bar.reservation_invitation_viewed` | `bar.reservation_invitation_view_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/invitation` | `issueBarReservationInvitation` | 签发订卡邀请函 | `object` | `bar.reservation.invitation.manage` | `staff-token` | `project-bar` | web, tablet | 是 | `bar.reservation_invitation_issued` | `bar.reservation_invitation_issue_failed` |
@@ -579,6 +579,8 @@
 | analytics | `POST` | `/api/v1/analytics/holiday-calendar` | `upsertHolidayPeriod` | 手动录入节假日区间 | `object` | `analytics.operating_params.manage` | `staff-token` | `platform` | web | 是 | `analytics.holiday_calendar.updated` | `analytics.holiday_calendar.update_failed` |
 | analytics | `POST` | `/api/v1/analytics/holiday-calendar/fetch` | `fetchHolidayCalendar` | 从 URL 抓取节假日日历 | `object` | `analytics.operating_params.manage` | `staff-token` | `platform` | web | 是 | `analytics.holiday_calendar.fetched` | `analytics.holiday_calendar.fetch_failed` |
 | analytics | `GET` | `/api/v1/analytics/holiday-comparison` | `getHolidayComparison` | 节假日对比(今年 vs 去年同名) | `-` | `analytics.dashboard.view` | `staff-token` | `platform` | web | 否 | `analytics.holiday_comparison.viewed` | `analytics.holiday_comparison.view_failed` |
+| facility | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | `listWorkOrdersAssignedToMe` | 我的工单(员工自有手机) | `-` | `facility.work_order.view_assigned` | `staff-token` | `platform` | staff_private_phone, web | 否 | `facility.work_order_assigned_list.viewed` | `facility.work_order_assigned_list.view_failed` |
+| bar | `GET` | `/api/v1/bar/tables/availability` | `listBarTableAvailability` | 酒吧空位视图(员工代订用) | `-` | `bar.reservation.create` | `staff-token` | `project-merchant-space` | staff_private_phone, web, tablet | 否 | `bar.table_availability.viewed` | `bar.table_availability.view_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -646,5 +648,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 558 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 560 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

@@ -2962,7 +2962,8 @@
           "tablet",
           "miniapp",
           "app",
-          "kiosk"
+          "kiosk",
+          "staff_private_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.reservation.created",
@@ -27393,6 +27394,69 @@
           },
           "400": {
             "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/facility/work-orders/assigned-to-me": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listWorkOrdersAssignedToMe",
+        "summary": "我的工单(员工自有手机)",
+        "description": "BYOD 一期(2026-07-02):员工自有手机只看流转到自己的工单(只读,最近200条); 凭 view_assigned,不见别人的单。",
+        "x-permission": "facility.work_order.view_assigned",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.work_order_assigned_list.viewed",
+        "x-audit-event-failure": "facility.work_order_assigned_list.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/bar/tables/availability": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarTableAvailability",
+        "summary": "酒吧空位视图(员工代订用)",
+        "description": "BYOD 一期(2026-07-02):员工自有手机帮客人订位——桌位+活跃预订(近4小时起, 未取消)占用标记;权限走 bar.reservation.create(能订位自然能看空位),不放大到桌位管理。",
+        "x-permission": "bar.reservation.create",
+        "x-data-scope": "project-merchant-space",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.table_availability.viewed",
+        "x-audit-event-failure": "bar.table_availability.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
           },
           "403": {
             "$ref": "#/components/responses/Error"

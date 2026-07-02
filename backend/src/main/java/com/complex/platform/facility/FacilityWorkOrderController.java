@@ -39,6 +39,11 @@ public class FacilityWorkOrderController {
         return ApiResponse.ok(service.list());
     }
 
+    @GetMapping("/assigned-to-me")
+    public ApiResponse<PageResponse<FacilityWorkOrderRecord>> listAssignedToMe() {
+        return ApiResponse.ok(service.listAssignedToMe());
+    }
+
     @GetMapping("/overdue")
     public ApiResponse<PageResponse<FacilityWorkOrderRecord>> overdue() {
         authorizationService.requirePermission(PERM);
