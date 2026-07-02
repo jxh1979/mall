@@ -910,17 +910,17 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                             WHEN (:as_of - due_date) <= 60 THEN 'a31_60'
                             WHEN (:as_of - due_date) <= 90 THEN 'a61_90'
                             ELSE 'a90p' END AS bucket,
-                       merchant_id, SUM(unpaid_amount_cent) AS total
+                       COALESCE(merchant_id, counterparty_id) AS merchant_key, SUM(unpaid_amount_cent) AS total
                   FROM ar_ap_items
                  WHERE direction = 'receivable'
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
-                 GROUP BY 1, merchant_id
+                 GROUP BY 1, COALESCE(merchant_id, counterparty_id)
                 """, new MapSqlParameterSource().addValue("as_of", asOf),
                 (org.springframework.jdbc.core.RowCallbackHandler) rs ->
                         result.computeIfAbsent(rs.getString("bucket"), k -> new LinkedHashMap<>())
-                              .put(rs.getString("merchant_id"), rs.getBigDecimal("total")));
+                              .put(rs.getString("merchant_key"), rs.getBigDecimal("total")));
         return result;
     }
 
@@ -958,7 +958,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .addValue("limit", Math.min(Math.max(limit, 1), 200))
                 .addValue("offset", Math.max(offset, 0));
         return jdbcTemplate.query("""
-                SELECT i.merchant_id, m.merchant_name,
+                SELECT COALESCE(i.merchant_id, i.counterparty_id) AS merchant_key, m.merchant_name,
                        SUM(i.unpaid_amount_cent) AS outstanding,
                        MIN(i.due_date) AS oldest_due,
                        (:as_of - MIN(i.due_date)) AS overdue_days,
@@ -967,21 +967,21 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                             WHEN (:as_of - MIN(i.due_date)) <= 90 THEN 'a61_90'
                             ELSE 'a90p' END AS bucket
                   FROM ar_ap_items i
-                  LEFT JOIN merchants m ON m.id = i.merchant_id
+                  LEFT JOIN merchants m ON m.id = COALESCE(i.merchant_id, i.counterparty_id)
                  WHERE i.direction = 'receivable'
                    AND i.status <> 'closed'
                    AND i.unpaid_amount_cent > 0
                    AND i.due_date < :as_of
-                 GROUP BY i.merchant_id, m.merchant_name
+                 GROUP BY COALESCE(i.merchant_id, i.counterparty_id), m.merchant_name
                 HAVING (:bucket IS NULL
                         OR CASE WHEN (:as_of - MIN(i.due_date)) <= 30 THEN 'a0_30'
                                 WHEN (:as_of - MIN(i.due_date)) <= 60 THEN 'a31_60'
                                 WHEN (:as_of - MIN(i.due_date)) <= 90 THEN 'a61_90'
                                 ELSE 'a90p' END = :bucket)
-                 ORDER BY outstanding DESC, i.merchant_id
+                 ORDER BY outstanding DESC, merchant_key
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> new AnalyticsRecords.ArDebtorRow(
-                rs.getString("merchant_id"),
+                rs.getString("merchant_key"),
                 rs.getString("merchant_name"),
                 rs.getBigDecimal("outstanding"),
                 rs.getObject("oldest_due", LocalDate.class),

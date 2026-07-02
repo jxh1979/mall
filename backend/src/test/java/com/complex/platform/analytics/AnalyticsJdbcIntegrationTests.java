@@ -40,9 +40,17 @@ class AnalyticsJdbcIntegrationTests {
         insertArItem("ar_s2_c", "mch_s2_y", 30000L, 30000L, asOf.minusDays(100));
         insertArItem("ar_s2_paidoff", "mch_s2_x", 9000L, 0L, asOf.minusDays(70));
         insertArItem("ar_s2_future", "mch_s2_x", 8000L, 8000L, asOf.plusDays(5));
+        // 平台手工录入的应收 merchant_id 为空、商户在 counterparty_id——COALESCE 口径必须归到商户(S2 活证据实测抓出的血缘缺口)。
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, status, created_at, updated_at, merchant_id)
+                VALUES ('ar_s2_manual', 'ar_s2_manual', 'receivable', 'mch_s2_x', 4000, 0, 4000, 'CNY',
+                        :due, 'open', now(), now(), NULL)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("due", asOf.minusDays(12)));
 
         Map<String, Map<String, java.math.BigDecimal>> aging = repository.arOverdueAgingByMerchant(asOf);
-        assertThat(aging.get("a0_30").get("mch_s2_x")).isEqualByComparingTo("10000");
+        assertThat(aging.get("a0_30").get("mch_s2_x")).isEqualByComparingTo("14000");
         assertThat(aging.get("a31_60").get("mch_s2_x")).isEqualByComparingTo("5000");
         assertThat(aging.get("a90p").get("mch_s2_y")).isEqualByComparingTo("30000");
         assertThat(aging.getOrDefault("a61_90", java.util.Map.of())).doesNotContainKey("mch_s2_x");
@@ -53,7 +61,7 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(debtors).extracting(AnalyticsRecords.ArDebtorRow::merchantId)
                 .containsExactly("mch_s2_y", "mch_s2_x");
         assertThat(debtors.get(0).outstandingCent()).isEqualByComparingTo("30000");
-        assertThat(debtors.get(1).outstandingCent()).isEqualByComparingTo("15000");
+        assertThat(debtors.get(1).outstandingCent()).isEqualByComparingTo("19000");
         assertThat(repository.listOverdueDebtors(asOf, "a90p", 200, 0).stream()
                 .filter(row -> row.merchantId() != null && row.merchantId().startsWith("mch_s2_")).toList())
                 .extracting(AnalyticsRecords.ArDebtorRow::merchantId).containsExactly("mch_s2_y");
