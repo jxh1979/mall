@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -170,6 +171,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
+  const pagedSessions = usePagedRows(sessions, 10);
+  const pagedReservations = usePagedRows(reservations, 10);
+
   return (
     <section data-testid="bar-table-sessions-page">
       {focusObjectId && (
@@ -215,7 +219,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             <thead><tr><th>选择</th><th>会话</th><th>卡座</th><th>人数</th><th>状态</th><th>版本</th></tr></thead>
             <tbody>{sessions.length === 0 ? (
               <tr><td colSpan={6} className="admin-muted-action">暂无开台会话</td></tr>
-            ) : sessions.map((row) => (
+            ) : pagedSessions.pageRows.map((row) => (
               <tr key={row.id}>
                 <td><input type="radio" data-testid={`bar-session-select-${row.id}`} checked={(selectedSession?.id ?? "") === row.id} onChange={() => setSelectedSessionId(row.id)} /></td>
                 <td>{row.id}</td>
@@ -226,6 +230,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
               </tr>
             ))}</tbody>
           </table>
+          <TablePager testid="bar-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} />
         </div>
 
         <h3>订台预定</h3>
@@ -234,7 +239,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>定金状态</th><th>状态</th></tr></thead>
             <tbody>{reservations.length === 0 ? (
               <tr><td colSpan={6} className="admin-muted-action">暂无订台预定</td></tr>
-            ) : reservations.map((row) => (
+            ) : pagedReservations.pageRows.map((row) => (
               <tr key={row.id}>
                 <td><input type="radio" data-testid={`bar-reservation-select-${row.id}`} checked={(selectedReservation?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                 <td>{row.id}</td>
@@ -245,6 +250,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
               </tr>
             ))}</tbody>
           </table>
+          <TablePager testid="bar-reservations-pager" page={pagedReservations.page} pageCount={pagedReservations.pageCount} total={pagedReservations.total} onPrev={pagedReservations.prev} onNext={pagedReservations.next} />
         </div>
 
         <h3>卡座</h3>

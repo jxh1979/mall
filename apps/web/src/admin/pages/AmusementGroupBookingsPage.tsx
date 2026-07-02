@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -79,6 +80,8 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
 
   const reservedCapacity = bookings.reduce((sum, row) => sum + Number(row.reservedCapacity ?? 0), 0);
 
+  const pagedBookings = usePagedRows(bookings, 10);
+
   return (
     <section data-testid="amusement-group-bookings-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -106,7 +109,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
           />
           <span className="admin-muted-action" data-testid="amusement-group-bookings-boundary">{TEXT.boundary}</span>
         </div>
-        <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>容量占用</th><th>项目</th><th>场次</th><th>状态</th></tr></thead><tbody>{bookings.map((row) => <tr key={row.id}><td><input type="radio" data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{display(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td>{display(row.projectId)}</td><td>{display(row.sessionId)}</td><td>{display(row.bookingStatus)}</td></tr>)}</tbody></table></div>
+        <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-group-bookings-table"><thead><tr><th>{TEXT.select}</th><th>类型</th><th>客户</th><th>人数</th><th>容量占用</th><th>项目</th><th>场次</th><th>状态</th></tr></thead><tbody>{pagedBookings.pageRows.map((row) => <tr key={row.id}><td><input type="radio" data-testid={`amusement-group-booking-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td><td>{display(row.bookingType)}</td><td>{display(row.customerName)}</td><td>{display(row.partySize)}</td><td>{display(row.reservedCapacity)}</td><td>{display(row.projectId)}</td><td>{display(row.sessionId)}</td><td>{display(row.bookingStatus)}</td></tr>)}</tbody></table><TablePager testid="amusement-group-bookings-pager" page={pagedBookings.page} pageCount={pagedBookings.pageCount} total={pagedBookings.total} onPrev={pagedBookings.prev} onNext={pagedBookings.next} /></div>
       </AdminDataState>
     </section>
   );

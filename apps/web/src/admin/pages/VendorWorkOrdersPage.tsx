@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
@@ -89,6 +90,8 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
     await runAction(`vendor_work_order_${action}`, request, () => api.post(`/api/v1/facility/work-orders/${encodeURIComponent(selected.id)}/${action}`, request));
   }
 
+  const pagedRows = usePagedRows(rows, 10);
+
   return (
     <section data-testid="vendor-work-orders-page">
       <AdminPageHeader title="外包维保工单" description="维保单位只能查看和处理派给自己的楼宇工单；验收已收回物业侧，外包侧仅保留开始与完成。" />
@@ -134,7 +137,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
           <table className="admin-table" data-testid="vendor-work-orders-table">
             <thead><tr><th>选择</th><th>工单号</th><th>标题</th><th>类型</th><th>优先级</th><th>状态</th><th>空间/设备</th><th>处理人</th><th>处理时限</th></tr></thead>
             <tbody>
-              {rows.map((row) => (
+              {pagedRows.pageRows.map((row) => (
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`vendor-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.code ?? row.id}</td>
@@ -149,6 +152,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
               ))}
             </tbody>
           </table>
+          <TablePager testid="vendor-work-orders-pager" page={pagedRows.page} pageCount={pagedRows.pageCount} total={pagedRows.total} onPrev={pagedRows.prev} onNext={pagedRows.next} />
         </div>
       </AdminDataState>
     </section>

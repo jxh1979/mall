@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
@@ -79,6 +80,8 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
 
   const totalCapacity = sessions.reduce((sum, row) => sum + Number(row.capacity ?? 0), 0);
 
+  const pagedSessions = usePagedRows(sessions, 10);
+
   return (
     <section data-testid="amusement-sessions-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -99,7 +102,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
             <div className="admin-section-title">项目</div>
             <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{display(row.status)}</td></tr>)}</tbody></table></div>
             <div className="admin-section-title">场次</div>
-            <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>容量</th><th>已用</th><th>锁定</th><th>状态</th></tr></thead><tbody>{sessions.map((row) => <tr key={row.id}><td>{display(row.sessionName)}</td><td>{display(row.projectId)}</td><td>{display(row.startsAt)}</td><td>{display(row.endsAt)}</td><td>{display(row.capacity)}</td><td>{display(row.usedCapacity)}</td><td>{display(row.lockedCapacity)}</td><td>{display(row.status)}</td></tr>)}</tbody></table></div>
+            <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>容量</th><th>已用</th><th>锁定</th><th>状态</th></tr></thead><tbody>{pagedSessions.pageRows.map((row) => <tr key={row.id}><td>{display(row.sessionName)}</td><td>{display(row.projectId)}</td><td>{display(row.startsAt)}</td><td>{display(row.endsAt)}</td><td>{display(row.capacity)}</td><td>{display(row.usedCapacity)}</td><td>{display(row.lockedCapacity)}</td><td>{display(row.status)}</td></tr>)}</tbody></table><TablePager testid="amusement-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} /></div>
           </>
         )}
       </AdminDataState>

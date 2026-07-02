@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -111,6 +112,9 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
     }
   }
 
+  const pagedBatches = usePagedRows(batches, 10);
+  const pagedDifferences = usePagedRows(differences, 10);
+
   return (
     <section data-testid="reconciliation-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
@@ -147,15 +151,17 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="reconciliation-batches-table">
             <thead><tr><th>{TEXT.batchNo}</th><th>{TEXT.amount}</th><th>{TEXT.status}</th><th>{TEXT.provider}</th></tr></thead>
-            <tbody>{batches.map((batch) => <tr key={batch.id}><td>{batch.batchNo ?? batch.id}</td><td>{formatAmount(batch.amount ?? batch.totalAmount)}</td><td>{formatBusinessStatus(batch.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={batch.providerCode}>{batch.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
+            <tbody>{pagedBatches.pageRows.map((batch) => <tr key={batch.id}><td>{batch.batchNo ?? batch.id}</td><td>{formatAmount(batch.amount ?? batch.totalAmount)}</td><td>{formatBusinessStatus(batch.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={batch.providerCode}>{batch.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
           </table>
+          <TablePager testid="reconciliation-batches-pager" page={pagedBatches.page} pageCount={pagedBatches.pageCount} total={pagedBatches.total} onPrev={pagedBatches.prev} onNext={pagedBatches.next} />
         </div>
         <h3>{TEXT.differences}</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="reconciliation-differences-table">
             <thead><tr><th>{TEXT.selected}</th><th>{TEXT.differenceNo}</th><th>{TEXT.amount}</th><th>{TEXT.status}</th><th>{TEXT.provider}</th></tr></thead>
-            <tbody>{differences.map((item) => <tr key={item.id}><td><input type="radio" data-testid={`reconciliation-select-${item.id}`} checked={(selected?.id ?? "") === item.id} onChange={() => setSelectedId(item.id)} /></td><td>{item.differenceNo ?? item.id}</td><td>{formatAmount(item.amount ?? item.differenceAmount ?? item.diffAmount)}</td><td>{formatBusinessStatus(item.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={item.providerCode}>{item.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
+            <tbody>{pagedDifferences.pageRows.map((item) => <tr key={item.id}><td><input type="radio" data-testid={`reconciliation-select-${item.id}`} checked={(selected?.id ?? "") === item.id} onChange={() => setSelectedId(item.id)} /></td><td>{item.differenceNo ?? item.id}</td><td>{formatAmount(item.amount ?? item.differenceAmount ?? item.diffAmount)}</td><td>{formatBusinessStatus(item.status)}</td><td><TraceLink navigateTo={navigateTo} pageId="ADM-INT-001" objectId={item.providerCode}>{item.providerCode ?? "-"}</TraceLink></td></tr>)}</tbody>
           </table>
+          <TablePager testid="reconciliation-differences-pager" page={pagedDifferences.page} pageCount={pagedDifferences.pageCount} total={pagedDifferences.total} onPrev={pagedDifferences.prev} onNext={pagedDifferences.next} />
         </div>
       </AdminDataState>
     </section>

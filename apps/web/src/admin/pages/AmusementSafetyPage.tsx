@@ -1,6 +1,7 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -71,6 +72,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   );
 
 
+  const pagedRows = usePagedRows(rows, 10);
   const pendingRectification = rows.filter((row) => ["pending", "rectification_pending", "pending_rectification"].includes(row.rectificationStatus ?? row.overallResult ?? "")).length;
   const recheckPending = rows.filter((row) => ["rectification_submitted", "rechecked"].includes(row.rectificationStatus ?? "") || row.reopenStatus === "pending").length;
 
@@ -194,7 +196,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
           <table className="admin-table" data-testid="amusement-safety-table">
             <thead><tr><th>{TEXT.select}</th><th>{TEXT.inspectionNo}</th><th>{TEXT.project}</th><th>{TEXT.overall}</th><th>{TEXT.inspectionStatus}</th><th>{TEXT.rectificationStatus}</th><th>{TEXT.reopenStatus}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.time}</th></tr></thead>
             <tbody>
-              {rows.map((row) => (
+              {pagedRows.pageRows.map((row) => (
                 <tr key={row.id}>
                   <td><input type="radio" data-testid={`amusement-safety-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{displayNo(row)}</td>
@@ -209,6 +211,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
               ))}
             </tbody>
           </table>
+          <TablePager testid="amusement-safety-pager" page={pagedRows.page} pageCount={pagedRows.pageCount} total={pagedRows.total} onPrev={pagedRows.prev} onNext={pagedRows.next} />
         </div>
       </AdminDataState>
     </section>
