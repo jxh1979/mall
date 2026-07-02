@@ -27,6 +27,14 @@ class FinanceJdbcIntegrationTests {
     private JdbcTemplate jdbcTemplate;
 
     @Test
+    void dailyCloseLockChecksAcceptNullMerchantScope() {
+        // 2026-07-02 现网500根因:平台口径(merchant scope=null)时 :merchant_id 参数无 SQL 类型,
+        // PG 报 could not determine data type of parameter → 平台管理员创建 AR/AP 台账全量 500。
+        assertThat(repository.lockedDailyCloseExistsForDate(LocalDate.of(2099, 1, 1), null)).isFalse();
+        assertThat(repository.lockArApItemsForDailyClose("dc_mz_none", LocalDate.of(2099, 1, 1), null)).isZero();
+    }
+
+    @Test
     void migrationCreatesFinanceTablesAndSeedsPermissions() {
         assertThat(regclass("ar_ap_items")).isEqualTo("ar_ap_items");
         assertThat(regclass("ar_ap_item_sources")).isEqualTo("ar_ap_item_sources");

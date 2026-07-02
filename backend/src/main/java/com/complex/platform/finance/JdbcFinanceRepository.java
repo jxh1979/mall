@@ -481,7 +481,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("daily_close_id", dailyCloseId)
                 .addValue("business_date", businessDate)
-                .addValue("merchant_id", merchantId);
+                // merchantId 可为 null(平台口径):必须带 SQL 类型,否则 PG 无法推断 :merchant_id IS NULL 的参数类型直接 500。
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
         return jdbcTemplate.update("""
                 UPDATE ar_ap_items
                    SET locked_day_close_id = :daily_close_id
@@ -513,7 +514,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         // merchantId 为空（平台口径调用方）：该经营日任一 locked 日结即拦截（平台口径写入受所有封账约束）。
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("business_date", businessDate)
-                .addValue("merchant_id", merchantId);
+                // merchantId 可为 null(平台口径):必须带 SQL 类型,否则 PG 无法推断 :merchant_id IS NULL 的参数类型直接 500。
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                   FROM finance_daily_closes
