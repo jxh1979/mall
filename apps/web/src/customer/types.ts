@@ -10,6 +10,20 @@ export type TicketProduct = {
   status: string;
 };
 
+// 1.8 我的票：订单内票实例安全投影（后端 CustomerTicketResponse）。
+export type CustomerTicket = {
+  id: string;
+  ticketName: string | null;
+  entitlementType: string;
+  status: string;
+  totalTimes: number;
+  usedTimes: number;
+  remainingTimes: number;
+  numPeople: number;
+  validFrom: string | null;
+  validTo: string | null;
+};
+
 export type TicketOrder = {
   id: string;
   orderNo: string;

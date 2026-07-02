@@ -1,6 +1,8 @@
 package com.complex.platform.ticketing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.complex.platform.common.api.ApiException;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -2433,6 +2435,34 @@ class TicketingServiceTests {
                 null,
                 null
         ));
+    }
+
+    // 1.8 客人端我的票：本人订单列票实例（安全投影含票名/剩余次数）；他人 403；不存在订单 404。
+    @Test
+    void listCustomerOrderTicketsReturnsProjectionForOwnerOnly() {
+        Instant now = Instant.now();
+        TicketTypeRecord ticketType = createTicketType("mytickets");
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_mytickets", "TO-MYT", "customer_mine", ticketType.id(), null, 2,
+                LocalDate.parse("2026-06-20"), "miniapp", "13800138000", 19800L, null, 19800L, 0L,
+                "CNY", "paid", "issued", "created", now, now));
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_myt_1", "P0-MYT1", ticketType.id(), "order_mytickets", null, "ticket",
+                null, null, null, 2, 1, null, "active", now, now.plusSeconds(86400), now, now, 1, null));
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_myt_2", "P0-MYT2", ticketType.id(), "order_mytickets", null, "ticket",
+                null, null, null, 1, 0, null, "active", now, now.plusSeconds(86400), now, now, 1, null));
+
+        List<CustomerTicketResponse> tickets = service.listCustomerOrderTickets("order_mytickets", "customer_mine");
+        assertThat(tickets).hasSize(2);
+        assertThat(tickets.getFirst().ticketName()).isEqualTo(ticketType.ticketName());
+        assertThat(tickets.getFirst().remainingTimes()).isEqualTo(1); // 2次已用1
+        assertThat(tickets.get(1).remainingTimes()).isEqualTo(1);
+
+        assertThatThrownBy(() -> service.listCustomerOrderTickets("order_mytickets", "customer_other"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_ORDER_FORBIDDEN"));
+        assertThatThrownBy(() -> service.listCustomerOrderTickets("order_ghost", "customer_mine"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TICKET_ORDER_NOT_FOUND"));
     }
 
     private IssuedEntitlementRecord issueSingleEntitlement(String key) {

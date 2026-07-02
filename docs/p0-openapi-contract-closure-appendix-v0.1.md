@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 530 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 531 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 283 | 人工权限矩阵正文未覆盖 179 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1060 | 人工事件矩阵正文未覆盖 1017 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 530 | 人工任务映射正文未逐项覆盖 524 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1062 | 人工事件矩阵正文未覆盖 1019 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 531 | 人工任务映射正文未逐项覆盖 525 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 329 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -251,7 +251,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 24 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, webhook-signature | customer, customer-project-bar, open-endpoint, project-device, public-project-bar, self | 25 | getOpenEventResult, receiveOpenWebhook, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr, reportIntegrationRobotTaskEvent ... | 已在权限矩阵正文出现 |
 | `openplatform.reconcile.execute` | staff-token | project-entity-channel | 1 | listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -733,6 +733,8 @@
 | `customer.membership.subscribe_failed` | failure | `customerMembershipSubscribe` | `POST` | `/api/v1/customer/memberships/subscribe` | CUS-客人端 | `customer.membership.subscribe` | 接口级事件，以本附录为准 |
 | `customer.memberships_viewed` | success | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
 | `customer.memberships_viewed_failed` | failure | `listCustomerMemberships` | `GET` | `/api/v1/customer/memberships` | CUS-客人端 | `customer.membership.view` | 接口级事件，以本附录为准 |
+| `customer.order_tickets_view_failed` | failure | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.order_tickets_viewed` | success | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_view_failed` | failure | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_viewed` | success | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points_view_failed` | failure | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -1593,6 +1595,7 @@
 | CUS/BAR-客人订台 | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | 客人自助扫码点单 | `not_applicable` | `customer.bar_scan_order.created` / `customer.bar_scan_order.create_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | 客人自助购票下单 | `not_applicable` | `customer.ticket_order.created` / `customer.ticket_order.create_failed` | web, miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `getCustomerTicketQr` | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 我的动态二维码 | `not_applicable` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id） | `not_applicable` | `customer.order_tickets_viewed` / `customer.order_tickets_view_failed` | miniapp, web | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | 客人可购票种和票价 | `public` | `customer.ticket_products_viewed` / `customer.ticket_products_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | EVD-事件证据 | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | 关联证据附件到业务对象 | `evidence.attachment.create` | `evidence.attachment_bound` / `evidence.attachment_bind_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | EVD-事件证据 | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | 认领风险预警 | `risk_alert.claim` | `exception.claimed` / `exception.claim_failed` | web, mobile_admin | operation 级补充 |

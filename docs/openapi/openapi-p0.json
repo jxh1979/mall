@@ -25910,6 +25910,53 @@
         },
         "x-auth-context": "customer-token"
       }
+    },
+    "/api/v1/customer/orders/{order_id}/tickets": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerOrderTickets",
+        "summary": "客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id）",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "miniapp",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.order_tickets_viewed",
+        "x-audit-event-failure": "customer.order_tickets_view_failed",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "本人票订单 id（归属校验：非本人订单 403）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
     }
   },
   "components": {

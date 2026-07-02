@@ -78,7 +78,7 @@ describe("CustomerAccountsPage", () => {
     fireEvent.click(screen.getByTestId("customer-account-suspend"));
 
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
-    const [url, body] = (api.post as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [url, body] = (api.post as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(url).toBe("/api/v1/customer-accounts/cust_1/suspend");
     expect(body.reason).toBe("risk");
     expect(new Date(body.suspendedUntil).toISOString()).toBe(body.suspendedUntil); // 合法 ISO 时刻

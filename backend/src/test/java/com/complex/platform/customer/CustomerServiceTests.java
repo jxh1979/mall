@@ -198,6 +198,26 @@ class CustomerServiceTests {
     }
 
     @Test
+    void listOrderTicketsDelegatesAndEnforcesAccountGate() {
+        // 1.8：我的票走 requireCustomer 状态闸；正常账号取到票实例投影，封禁账号被拒。
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900007777", "000000", "miniapp"));
+        String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
+        com.complex.platform.ticketing.CustomerTicketResponse ticket =
+                new com.complex.platform.ticketing.CustomerTicketResponse(
+                        "ent_1", "全日通票", "ticket", "active", 2, 0, 2, 1, null, null);
+        Mockito.when(ticketingService.listCustomerOrderTickets("order_1", customerId))
+                .thenReturn(java.util.List.of(ticket));
+
+        PageResponse<com.complex.platform.ticketing.CustomerTicketResponse> page =
+                service.listOrderTickets(login.customerToken(), "order_1");
+        assertThat(page.items()).singleElement().extracting(t -> t.id()).isEqualTo("ent_1");
+
+        service.suspendCustomer(customerId, java.time.Instant.parse("2026-06-20T00:00:00Z"), "risk");
+        assertThatThrownBy(() -> service.listOrderTickets(login.customerToken(), "order_1"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_SUSPENDED"));
+    }
+
+    @Test
     void phoneLoginRejectsInvalidSmsCodeWithoutCreatingSession() {
         assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest(
                 "13800138000",

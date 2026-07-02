@@ -229,6 +229,18 @@ public class CustomerService {
         );
     }
 
+    /** 1.8 我的票：订单内票实例列表（先过账号状态闸与订单归属校验，无需手输票 id）。 */
+    public PageResponse<com.complex.platform.ticketing.CustomerTicketResponse> listOrderTickets(String customerToken, String orderId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage(
+                "customer.order_tickets_viewed",
+                "customer.order_tickets_view_failed",
+                "not_applicable",
+                "issued_entitlement",
+                () -> ticketingService.listCustomerOrderTickets(orderId, customer.id())
+        );
+    }
+
     public TicketCredentialResponse getTicketQr(String customerToken, String ticketId) {
         CustomerRecord customer = requireCustomer(customerToken);
         return ticketingService.getCustomerTicketCredential(ticketId, customer.id());

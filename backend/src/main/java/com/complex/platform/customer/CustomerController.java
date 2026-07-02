@@ -77,6 +77,16 @@ public class CustomerController {
         return ApiResponse.ok(service.listOrders(requireCustomerToken(customerToken, authorization)));
     }
 
+    /** 1.8 我的票：订单展开票实例，点票直接出码（无需手输票 id）。 */
+    @GetMapping("/orders/{order_id}/tickets")
+    public ApiResponse<PageResponse<com.complex.platform.ticketing.CustomerTicketResponse>> listOrderTickets(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("order_id") String orderId
+    ) {
+        return ApiResponse.ok(service.listOrderTickets(requireCustomerToken(customerToken, authorization), orderId));
+    }
+
     @GetMapping("/tickets/{ticket_id}/qr")
     public ApiResponse<TicketCredentialResponse> getTicketQr(
             @PathVariable("ticket_id") String ticketId,

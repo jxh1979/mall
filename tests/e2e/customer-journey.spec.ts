@@ -113,11 +113,16 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await expect(page.getByTestId("my-orders-page")).toBeVisible();
     await expect(page.getByTestId("order-item").first()).toContainText("TO-CUST-1");
 
-    await page.getByTestId("qr-ticket-input").fill("ent-1");
-    await page.getByTestId("qr-open").click();
+    // 1.8：订单直接展开票实例，点票出码（无需手输票 ID）。
+    await page.getByTestId("order-tickets-toggle").first().click();
+    await expect(page.getByTestId("ticket-item").first()).toContainText("周末通票");
+    await expect(page.getByTestId("ticket-item").first()).toContainText("剩余 1/1 次");
+    await page.getByTestId("ticket-qr-open").first().click();
     await expect(page.getByTestId("ticket-qr-view")).toBeVisible();
     await expect(page.getByTestId("qr-code").locator("svg")).toBeVisible();
-    await expect(page.getByTestId("qr-token")).toContainText("cred-customer-1");
+    // 1.7 口径：二维码可见但凭证明文不落 DOM。
+    await expect(page.getByTestId("ticket-qr-view")).toContainText("ent-1");
+    await expect(page.locator("body")).not.toContainText("cred-customer-1");
   });
 
   test("CUST-07 buy ticket surfaces backend rejection as a visible error", async ({ page }) => {

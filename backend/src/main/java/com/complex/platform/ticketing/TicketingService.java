@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+import com.complex.platform.common.api.ApiException;
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
@@ -358,6 +360,22 @@ public class TicketingService {
 
     public List<TicketOrderRecord> listTicketOrdersByCustomerId(String customerId) {
         return repository.listTicketOrdersByCustomerId(operations.requireText(customerId, "customer_id"));
+    }
+
+    /** 1.8 客人端我的票：校验订单归属后列该订单全部票实例（安全投影，含票种名）。 */
+    public List<CustomerTicketResponse> listCustomerOrderTickets(String orderId, String customerId) {
+        String resolvedOrderId = operations.requireText(orderId, "order_id");
+        String resolvedCustomerId = operations.requireText(customerId, "customer_id");
+        TicketOrderRecord order = repository.findTicketOrderById(resolvedOrderId)
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "ticket order not found"));
+        if (!resolvedCustomerId.equals(order.customerId())) {
+            throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "order does not belong to customer");
+        }
+        String ticketName = repository.findTicketTypeById(order.ticketTypeId())
+                .map(TicketTypeRecord::ticketName).orElse(null);
+        return repository.listIssuedEntitlementsByOrderId(resolvedOrderId).stream()
+                .map(entitlement -> CustomerTicketResponse.of(entitlement, ticketName))
+                .toList();
     }
 
     @Transactional

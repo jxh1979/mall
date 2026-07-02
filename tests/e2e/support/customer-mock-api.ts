@@ -56,6 +56,12 @@ function createState() {
 type CustomerMockState = ReturnType<typeof createState>;
 
 function listRoutes(pathname: string, state: CustomerMockState, options: CustomerMockOptions): ApiData | undefined {
+  // 1.8 我的票：任意订单 id 的票实例列表
+  if (/^\/api\/v1\/customer\/orders\/[^/]+\/tickets$/.test(pathname)) {
+    return [
+      { id: "ent-1", ticket_name: "周末通票", entitlement_type: "ticket", status: "active", total_times: 1, used_times: 0, remaining_times: 1, num_people: 1, valid_from: now, valid_to: "2026-12-31T23:59:59.000Z" },
+    ];
+  }
   switch (pathname) {
     case "/api/v1/customer/ticket-products":
       return state.ticketProducts;

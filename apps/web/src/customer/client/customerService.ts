@@ -3,6 +3,7 @@
 
 import { CustomerApi } from "./customerClient";
 import type {
+  CustomerTicket,
   BarInvitation,
   BarInvitationMember,
   BarReservation,
@@ -101,6 +102,11 @@ export class CustomerService {
 
   listCheckIns(): Promise<CheckInRecord[]> {
     return this.api.get<CheckInRecord[]>("/api/v1/customer/check-ins");
+  }
+
+  // 1.8 我的票：订单内票实例（点票出码，无需手输票 ID）
+  listOrderTickets(orderId: string): Promise<CustomerTicket[]> {
+    return this.api.get<CustomerTicket[]>(`/api/v1/customer/orders/${encodeURIComponent(orderId)}/tickets`);
   }
 
   // ⑥ 验票二维码出示（凭证刷新走同一 GET）
