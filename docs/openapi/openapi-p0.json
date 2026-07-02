@@ -29373,6 +29373,13 @@
             "type": "string",
             "description": "经营范围(存 rent_terms；越界 enforcement 属下游)。",
             "maxLength": 500
+          },
+          "space_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "3.13 意向空间（可选）。传了则起草即校验空间存在并与生效合同租期重叠早拒，同时预绑定；提交审批时复检。"
           }
         }
       },

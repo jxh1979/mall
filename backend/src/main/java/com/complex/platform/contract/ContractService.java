@@ -136,6 +136,8 @@ public class ContractService {
                 "drafting", trimToNull(actual.projectId()), null, null, null, now, now));
         auditEventService.recordSuccess("contract.drafted", "contract.draft.manage", "contract", saved.id(),
                 null, actual.idempotencyKey(), Map.of("merchant_id", saved.merchantId()));
+        // 3.13 冲突早检：草稿带意向空间 → 空间必须真实存在 + 与生效合同租期重叠即拒（不必等生效终检），并预绑定。
+        bindDraftSpacesWithEarlyConflictCheck(saved, actual.spaceIds());
         return saved;
     }
 
@@ -176,11 +178,41 @@ public class ContractService {
     // ============ 提交 + 分组并行审批 ============
     /** 提交审批：按该综合体生效链物化第一阶段并行审批人，合同→待确认。 */
     @Transactional
+    /** 3.13：空间存在性 + 与生效合同租期重叠早检 + 预绑定（草稿期，activate 仍保留终检）。 */
+    private void bindDraftSpacesWithEarlyConflictCheck(ContractRecord contract, List<String> spaceIds) {
+        if (spaceIds == null || spaceIds.isEmpty()) {
+            return;
+        }
+        List<String> resolved = spaceIds.stream().map(id -> requireText(id, "space_id")).distinct().toList();
+        for (String spaceId : resolved) {
+            if (platformRepository != null && platformRepository.findSpaceById(spaceId).isEmpty()) {
+                throw ApiException.badRequest("CONTRACT_SPACE_NOT_FOUND", "space does not exist: " + spaceId);
+            }
+            requireNoOverlappingEffectiveContract(contract, spaceId);
+        }
+        repository.bindContractSpaces(contract.id(), resolved, contract.projectId());
+    }
+
+    private void requireNoOverlappingEffectiveContract(ContractRecord contract, String spaceId) {
+        if (contract.effectiveDate() == null || contract.expiryDate() == null) {
+            return; // 租期未定无从判重叠；生效终检兜底。
+        }
+        if (repository.hasOverlappingEffectiveContractForSpace(
+                spaceId, contract.effectiveDate(), contract.expiryDate(), contract.id())) {
+            throw ApiException.conflict("CONTRACT_SPACE_CONFLICT",
+                    "space already let by an overlapping effective contract: " + spaceId);
+        }
+    }
+
     public ContractRecord submit(String contractId, String idempotencyKey) {
         authorizationService.requirePlatformScope();
         ContractRecord contract = requireContract(contractId);
         if (!"drafting".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_DRAFTING", "only drafting contract can be submitted");
+        }
+        // 3.13：提交审批前对草稿预绑定空间再检冲突——审批人不该审一份注定冲突的合同。
+        for (String spaceId : repository.listContractSpaceIds(contractId)) {
+            requireNoOverlappingEffectiveContract(contract, spaceId);
         }
         List<ContractApprovalFlowStepRecord> steps = repository.listActiveFlowSteps(contract.projectId());
         if (steps.isEmpty()) {

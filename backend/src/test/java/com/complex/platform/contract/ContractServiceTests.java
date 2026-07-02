@@ -45,6 +45,33 @@ class ContractServiceTests {
         service = new ContractService(repo, mock(AuditEventService.class), authz, null, null);
     }
 
+    // 3.13：草稿带意向空间——被生效合同占用即起草拒(409)；未占用则预绑定；提交审批时被占同样拒。
+    @Test
+    void draftWithOccupiedSpaceIsRejectedEarly() {
+        repo.occupiedSpaces.add("space_a");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createDraft(new ContractDraftRequest(
+                "k_sp1", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(),
+                null, null, null, null, null, List.of(), null, "餐饮", List.of("space_a"))))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("CONTRACT_SPACE_CONFLICT"));
+    }
+
+    @Test
+    void draftWithFreeSpacePreBindsAndSubmitReChecksConflict() {
+        ContractRecord draft = service.createDraft(new ContractDraftRequest(
+                "k_sp2", "mch_1", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of(),
+                null, null, null, null, null, List.of(), null, "餐饮", List.of("space_b")));
+        org.assertj.core.api.Assertions.assertThat(repo.listContractSpaceIds(draft.id())).containsExactly("space_b");
+
+        // 审批期间空间被别的生效合同占用 → 提交审批被拒（审批人不该审注定冲突的单）。
+        repo.occupiedSpaces.add("space_b");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.submit(draft.id(), "k_sp2_submit"))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("CONTRACT_SPACE_CONFLICT"));
+    }
+
     private ContractRecord newDraft() {
         return service.createDraft(new ContractDraftRequest("k_draft", "mch_1", "subj_1", null, "subj_1",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), Map.of("baseRentCent", 100000),
@@ -284,6 +311,10 @@ class ContractServiceTests {
 
     /** 内存仓储：种平台默认链（阶段①业务/财务/法务并行 → 阶段②总经理）。 */
     private static final class InMemoryContractRepository implements ContractRepository {
+        // 3.13 测试基建：草稿预绑定存储 + 可控"空间已被生效合同占用"集合。
+        final java.util.Map<String, java.util.Set<String>> boundSpaces = new java.util.HashMap<>();
+        final java.util.Set<String> occupiedSpaces = new java.util.HashSet<>();
+
         private final Map<String, ContractRecord> contracts = new LinkedHashMap<>();
         private final Map<String, ContractApprovalRecord> approvals = new LinkedHashMap<>();
         private final Map<String, ContractChangeRecord> changes = new LinkedHashMap<>();
@@ -401,13 +432,18 @@ class ContractServiceTests {
 
         @Override
         public void bindContractSpaces(String contractId, List<String> spaceIds, String projectId) {
-            // 内存无需绑定
+            boundSpaces.computeIfAbsent(contractId, k -> new java.util.LinkedHashSet<>()).addAll(spaceIds);
+        }
+
+        @Override
+        public List<String> listContractSpaceIds(String contractId) {
+            return List.copyOf(boundSpaces.getOrDefault(contractId, java.util.Set.of()));
         }
 
         @Override
         public boolean hasOverlappingEffectiveContractForSpace(
                 String spaceId, LocalDate effectiveDate, LocalDate expiryDate, String excludeContractId) {
-            return false;
+            return occupiedSpaces.contains(spaceId);
         }
 
         @Override

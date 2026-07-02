@@ -33,6 +33,11 @@ public interface PlatformRepository {
 
     List<SpaceRecord> listSpaces();
 
+    /** 3.13：按 id 查空间（存在性校验用）。默认基于 listSpaces 过滤（空间量级小）；Jdbc 可按需覆写。 */
+    default Optional<SpaceRecord> findSpaceById(String spaceId) {
+        return listSpaces().stream().filter(space -> space.id().equals(spaceId)).findFirst();
+    }
+
     /** 条目3：空间类型字典中处于 active 的 type_code 列表，供 createSpace 硬校验与前端下拉。 */
     List<String> listActiveSpaceTypeCodes();
 

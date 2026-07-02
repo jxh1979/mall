@@ -412,6 +412,13 @@ class JdbcContractRepository implements ContractRepository {
     }
 
     @Override
+    public List<String> listContractSpaceIds(String contractId) {
+        return jdbcTemplate.queryForList(
+                "SELECT space_id FROM contract_spaces WHERE contract_id = :contract_id ORDER BY space_id",
+                new MapSqlParameterSource().addValue("contract_id", contractId), String.class);
+    }
+
+    @Override
     public boolean hasOverlappingEffectiveContractForSpace(
             String spaceId, LocalDate effectiveDate, LocalDate expiryDate, String excludeContractId) {
         Boolean exists = jdbcTemplate.queryForObject("""

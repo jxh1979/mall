@@ -48,7 +48,19 @@ class LeasingServiceTests {
     void setUp() {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
+        // 3.13 默认：空间存在性放行（专项用例再覆写为 false）。
+        org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
         service = new LeasingService(repo, mock(AuditEventService.class), authz, contractService, platformService);
+    }
+
+    // 3.13：意向空间传了必须真实存在（挂空编号=400）；不传放行。
+    @Test
+    void createLeadRejectsNonexistentIntendedSpace() {
+        org.mockito.Mockito.when(platformService.spaceExists("space_ghost")).thenReturn(false);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createLead(new com.complex.platform.leasing.dto.LeasingLeadRequest(
+                "张三", "13800000000", "outbound", "retail", "space_ghost", null, null, "k_sp_lead")))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("LEASING_SPACE_NOT_FOUND"));
     }
 
     @Test

@@ -169,6 +169,11 @@ public class PlatformService {
         );
     }
 
+    /** 3.13：空间存在性（招商线索/意向意向空间校验用）。 */
+    public boolean spaceExists(String spaceId) {
+        return spaceId != null && repository.findSpaceById(spaceId).isPresent();
+    }
+
     public PageResponse<SpaceRecord> listSpaces() {
         List<SpaceRecord> records = repository.listSpaces();
         auditEventService.recordSuccess(

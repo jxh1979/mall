@@ -56,6 +56,9 @@ public interface ContractRepository {
     // 生效绑定空间 + 防重复出租
     void bindContractSpaces(String contractId, List<String> spaceIds, String projectId);
 
+    /** 3.13：读合同已绑定（含草稿预绑定）空间 id，供提交审批阶段冲突早检。 */
+    List<String> listContractSpaceIds(String contractId);
+
     boolean hasOverlappingEffectiveContractForSpace(
             String spaceId, LocalDate effectiveDate, LocalDate expiryDate, String excludeContractId);
 

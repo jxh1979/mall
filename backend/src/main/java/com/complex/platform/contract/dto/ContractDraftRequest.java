@@ -21,6 +21,30 @@ public record ContractDraftRequest(
         List<Map<String, Object>> settlementRules,
         List<String> attachmentIds,
         String projectId,
-        String businessScope
+        String businessScope,
+        // 3.13：草稿期意向空间（可选）。传了则起草即校验空间存在 + 与生效合同租期重叠早拒，并预绑定 contract_spaces。
+        List<String> spaceIds
 ) {
+    /** 向后兼容构造（无 spaceIds）。 */
+    public ContractDraftRequest(
+            String idempotencyKey,
+            String merchantId,
+            String contractSubjectId,
+            String operationSubjectId,
+            String settlementSubjectId,
+            java.time.LocalDate effectiveDate,
+            java.time.LocalDate expiryDate,
+            Map<String, Object> rentTerms,
+            String commissionMode,
+            String energyFeeBasis,
+            Long depositCent,
+            Map<String, Object> penaltyTerms,
+            List<Map<String, Object>> settlementRules,
+            List<String> attachmentIds,
+            String projectId,
+            String businessScope) {
+        this(idempotencyKey, merchantId, contractSubjectId, operationSubjectId, settlementSubjectId,
+                effectiveDate, expiryDate, rentTerms, commissionMode, energyFeeBasis, depositCent,
+                penaltyTerms, settlementRules, attachmentIds, projectId, businessScope, null);
+    }
 }

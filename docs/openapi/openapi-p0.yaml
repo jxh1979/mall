@@ -20232,6 +20232,11 @@ components:
         - request_id
         - server_time
       properties:
+        space_ids:
+          type: array
+          items:
+            type: string
+          description: 3.13 意向空间（可选）。传了则起草即校验空间存在并与生效合同租期重叠早拒，同时预绑定；提交审批时复检。
         success:
           type: boolean
           const: true

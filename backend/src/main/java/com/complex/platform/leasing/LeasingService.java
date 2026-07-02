@@ -89,6 +89,7 @@ public class LeasingService {
         String source = requireEnum(actual.source(), LEAD_SOURCES, "source");
         String brandId = trimToNull(actual.brandId());
         requireBrandNotBlacklisted(brandId);
+        requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()));
         Instant now = Instant.now();
         LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(
                 "lead_" + UUID.randomUUID(), requireText(actual.contactName(), "contact_name"),
@@ -146,6 +147,7 @@ public class LeasingService {
         authorizationService.requirePlatformScope();
         LeasingIntentRequest actual = requireRequest(request);
         LeasingLeadRecord lead = requireLead(actual.leadId());
+        requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()));
         Instant now = Instant.now();
         LeasingIntentRecord saved = repository.saveIntent(new LeasingIntentRecord(
                 "intent_" + UUID.randomUUID(), lead.id(), "initial_contact",
@@ -203,13 +205,16 @@ public class LeasingService {
         if (merchantId == null) {
             merchantId = autoCreateMerchantForSign(intent, contractSubjectId);
         }
+        // 3.13：签约草稿带意向空间 → 起草即校验存在性+与生效合同冲突（早反馈，不等生效）。
+        List<String> intendedSpaces = intent.intendedSpaceId() != null
+                ? List.of(intent.intendedSpaceId()) : List.of();
         ContractRecord contract = contractService.createDraft(new ContractDraftRequest(
                 "lease-sign-" + intent.id(),
                 merchantId, contractSubjectId,
                 operationSubjectId != null ? operationSubjectId : contractSubjectId,
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
                 actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(),
-                null, null, null, null, null, List.of(), intent.projectId(), null));
+                null, null, null, null, null, List.of(), intent.projectId(), null, intendedSpaces));
         repository.findLeadById(intent.leadId()).ifPresent(lead -> repository.saveLead(new LeasingLeadRecord(
                 lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
                 lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(), "signed",
@@ -332,6 +337,13 @@ public class LeasingService {
                         "brand is blacklisted; new lead blocked, needs higher authority to override");
             }
         });
+    }
+
+    /** 3.13：意向空间传了就必须真实存在（空间=地产主数据，不允许挂空编号；不传=尚未定位，放行）。 */
+    private void requireSpaceExistsIfPresent(String spaceId) {
+        if (spaceId != null && !platformService.spaceExists(spaceId)) {
+            throw ApiException.badRequest("LEASING_SPACE_NOT_FOUND", "intended space does not exist: " + spaceId);
+        }
     }
 
     private LeasingLeadRecord requireLead(String leadId) {
