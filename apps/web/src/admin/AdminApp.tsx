@@ -343,7 +343,7 @@ export default function AdminApp() {
         <form className="admin-auth-panel" data-testid="login-view" onSubmit={(event) => void login(event)}>
           <strong>综合体完整后台</strong>
           <p className="admin-auth-desc">登录以进入对应权限与数据范围</p>
-          {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
+          {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
           <label><span>账号</span><input data-testid="login-username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
           <label><span>密码</span><input data-testid="login-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           <button type="submit" data-testid="login-submit" disabled={loading}>{loading ? "登录中" : "登录"}</button>
@@ -420,16 +420,16 @@ export default function AdminApp() {
           </div>
         </header>
         <div className="admin-content">
-          {globalError ? <div className="admin-inline-error" data-testid="global-error">{globalError}</div> : null}
+          {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
           <PermissionGate permissionsState={effectivePermissions} permissions={route.requiredPermissions}>
             {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，
                 不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
                 chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}
-            <React.Suspense fallback={null}>
+            <React.Suspense fallback={<div className="admin-page-loading" role="status" aria-live="polite">页面加载中…</div>}>
               {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId })}
             </React.Suspense>
           </PermissionGate>
-          {actionResult ? <pre className="admin-result" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
+          {actionResult ? <pre className="admin-result" role="status" aria-live="polite" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
         </div>
       </section>
     </div>

@@ -169,7 +169,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="inventory-ledger-items-table">
             <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th></tr></thead>
-            <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedItemId(item.id)}><td>{item.itemCode ?? item.id}</td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
+            <tbody>{items.map((item) => <tr key={item.id} onClick={() => setSelectedItemId(item.id)}><td>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td></tr>)}</tbody>
           </table>
         </div>
         <h3>{TEXT.balances}</h3>
