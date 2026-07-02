@@ -235,6 +235,25 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void countNewMembersExcludesDeregisteredAndBlacklisted() {
+        // S7(拍板⑨):member.new 排除已注销/黑名单——新增会员是经营口径,不该把已出局的算进来。
+        java.time.LocalDate day = java.time.LocalDate.parse("2099-03-01");
+        java.math.BigDecimal baseline = repository.countNewMembers(day);
+        insertCustomer("cus_s7_active", "active", "2099-03-01T12:00:00Z");
+        insertCustomer("cus_s7_dereg", "deregistered", "2099-03-01T12:00:00Z");
+        insertCustomer("cus_s7_black", "blacklisted", "2099-03-01T12:00:00Z");
+        assertThat(repository.countNewMembers(day).subtract(baseline)).isEqualByComparingTo("1");
+    }
+
+    private void insertCustomer(String id, String status, String createdAt) {
+        jdbcTemplate.update("""
+                INSERT INTO customers (id, phone, masked_phone, status, created_at, updated_at)
+                VALUES (:id, :id, '138****0000', :status, :created_at::timestamptz, :created_at::timestamptz)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("status", status).addValue("created_at", createdAt));
+    }
+
+    @Test
     void v201SeedsDomainCutoffsAndResolverAppliesBarWindow() {
         // S0(2026-07-02 拍板):经营日按域切分——bar=06:00、merchant=10:00、platform=04:00 基准。
         assertThat(jdbcTemplate.queryForObject(

@@ -783,6 +783,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM customers
                  WHERE created_at >= :start
                    AND created_at < :end
+                   AND status NOT IN ('deregistered', 'blacklisted')
                 """, dayRange("customer", businessDate), BigDecimal.class);
         return value == null ? BigDecimal.ZERO : value;
     }

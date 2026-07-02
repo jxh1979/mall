@@ -148,6 +148,7 @@ public class TicketCatalogService {
         requireText(actual.reason(), "reason");
         TicketTypeRecord current = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "ticket type not found"));
+        requireComponentPricesForMultiBusinessPass(current.id());
         Instant now = Instant.now();
         return repository.saveTicketType(new TicketTypeRecord(
                 current.id(),
@@ -166,6 +167,31 @@ public class TicketCatalogService {
                 current.stockQuantity(),
                 current.soldQuantity()
         ));
+    }
+
+    /**
+     * S6(2026-07-02 拍板⑤):联合通票(权益横跨多业态,如酒吧+游乐)按分项单价比例拆分订单实付;
+     * 分项单价没填全时发布直接拦(400),不许均摊兜底——逐绑定行校验,不按模板聚合放水。
+     */
+    private void requireComponentPricesForMultiBusinessPass(String ticketTypeId) {
+        java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
+        java.util.Set<String> businessTypes = new java.util.HashSet<>();
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            repository.findEntitlementTemplateById(binding.entitlementTemplateId())
+                    .map(EntitlementTemplateRecord::entitlementType)
+                    .ifPresent(businessTypes::add);
+        }
+        if (businessTypes.size() <= 1) {
+            return;
+        }
+        java.util.List<String> missing = bindings.stream()
+                .filter(binding -> binding.componentPriceCent() == null)
+                .map(TicketTypeEntitlementRecord::id)
+                .toList();
+        if (!missing.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "multi-business pass requires component_price_cent on every entitlement binding; missing: " + missing);
+        }
     }
 
     private <T> T requireRequest(T request) {

@@ -104,6 +104,43 @@ class TicketingServiceTests {
     }
 
     @Test
+    void publishBlocksMultiBusinessPassWithoutComponentPrices() {
+        // S6(2026-07-02 拍板⑤):联合通票(权益横跨多业态)分项单价必须填全才可发布;
+        // 漏填直接 400 拦截,不许均摊兜底。单业态票不受影响。
+        TicketTypeRecord pass = createTicketType("multi-pass");
+        EntitlementTemplateRecord barTpl = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "s6-tpl-bar", "bar", List.of(), "S6 Bar Drink", "bar_drink", 1, 9900L, "active",
+                null, null, null, null));
+        EntitlementTemplateRecord rideTpl = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "s6-tpl-ride", "ride", List.of(), "S6 Ride", "amusement_ride", 1, 3000L, "active",
+                null, null, null, null));
+        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
+                "s6-bind-bar", "bind", List.of(), barTpl.id(), 1, 1, 9900L, "default", 1, 9900L));
+        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
+                "s6-bind-ride", "bind", List.of(), rideTpl.id(), 1, 1, 3000L, "default", 1, null));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.publishTicketType(pass.id(),
+                        new StatusChangeRequest("s6-pub-1", "publish", "ready", List.of())))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .hasMessageContaining("component_price_cent");
+
+        // 补齐游乐分项单价(再绑一条带单价的)后可发布。
+        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
+                "s6-bind-ride-2", "bind", List.of(), rideTpl.id(), 1, 1, 3000L, "default", 1, 3000L));
+        // 仍有一条 null 行 → 依旧拦(逐行必须填全,不按模板聚合放水)。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.publishTicketType(pass.id(),
+                        new StatusChangeRequest("s6-pub-2", "publish", "ready", List.of())))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+
+        // 单业态票漏填单价不拦(无拆分诉求,全归该业态)。
+        TicketTypeRecord single = createTicketType("single-pass");
+        service.bindTicketTypeEntitlement(single.id(), new TicketTypeEntitlementRequest(
+                "s6-bind-single", "bind", List.of(), barTpl.id(), 1, 1, 9900L, "default", 1, null));
+        assertThat(service.publishTicketType(single.id(), new StatusChangeRequest(
+                "s6-pub-3", "publish", "ready", List.of())).status()).isEqualTo("published");
+    }
+
+    @Test
     void createEntitlementTemplateIsIdempotent() {
         EntitlementTemplateRequest request = new EntitlementTemplateRequest(
                 "template-once",
