@@ -291,6 +291,28 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** M1 月度对比行(环比/同比;缺数据=null,前端标「积累中」,不伪造)。 */
+    public record MonthlyComparisonRow(
+            String metricKey,
+            String label,
+            String domain,
+            String unit,
+            String aggregation,
+            BigDecimal current,
+            BigDecimal prevMonth,
+            BigDecimal momPct,
+            BigDecimal yoySameMonth,
+            BigDecimal yoyPct
+    ) {
+    }
+
+    /** M1 月度对比响应。 */
+    public record MonthlyComparisonResponse(
+            String month,
+            java.util.List<MonthlyComparisonRow> rows
+    ) {
+    }
+
     /** S4 工单时效聚合(P50 小时/超时分子分母/时点积压)。 */
     public record WorkOrderSla(
             BigDecimal responseP50Hours,

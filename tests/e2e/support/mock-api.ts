@@ -286,6 +286,16 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/analytics/monthly-comparison": { month: "2026-07", rows: [
+      { metric_key: "revenue.net", label: "净收入", domain: "finance", unit: "cent", aggregation: "monthly_sum",
+        current: 3000000, prev_month: 2000000, mom_pct: 0.5, yoy_same_month: null, yoy_pct: null },
+      { metric_key: "ar.balance", label: "欠费余额", domain: "finance", unit: "cent", aggregation: "period_end",
+        current: 700000, prev_month: null, mom_pct: null, yoy_same_month: null, yoy_pct: null },
+    ] },
+    "/api/v1/analytics/reports/monthly-export": { month: "2026-07", rows: [
+      { metric_key: "revenue.net", label: "净收入", domain: "finance", unit: "cent", aggregation: "monthly_sum",
+        current: 3000000, prev_month: 2000000, mom_pct: 0.5, yoy_same_month: null, yoy_pct: null },
+    ] },
     "/api/v1/analytics/dashboards/facility": { business_date: "2026-07-01", metrics: {
       "wo.response_hours_p50": { value: 2.5, unit: "hours" },
       "wo.handle_hours_p50": { value: 6, unit: "hours" },

@@ -144,6 +144,23 @@ public class AnalyticsController {
         return ApiResponse.ok(new PageResponse<>(items, 1, Math.min(Math.max(limit, 1), 200), items.size()));
     }
 
+    @GetMapping("/monthly-comparison")
+    public ApiResponse<AnalyticsRecords.MonthlyComparisonResponse> monthlyComparison(
+            @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(service.monthlyComparison(month));
+    }
+
+    @GetMapping("/reports/monthly-export")
+    public ApiResponse<AnalyticsRecords.MonthlyComparisonResponse> exportMonthlyReport(
+            @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
+        // 治理口径(V196 范式):导出与查看分权——看板 view 可看,导出须独立高危权限,不直授审计角色。
+        authorizationService.requirePermission("analytics.report.export");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(service.exportMonthlyReport(month));
+    }
+
     @GetMapping("/work-order-sla/overdue-orders")
     public ApiResponse<PageResponse<AnalyticsRecords.OverdueWorkOrderRow>> listOverdueWorkOrders(
             @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false, defaultValue = "200") int limit,

@@ -59,6 +59,19 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void refreshTriggersMonthlyRollupWithMixedAggregationWhitelists() {
+        // M1:每次日刷后滚动更新当月 monthly 行;流量类 SUM/存量比率类期末 LAST 两白名单,名单外不做(不伪造)。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+        assertThat(repository.rolledUpMonthFirst).isEqualTo(BUSINESS_DATE.withDayOfMonth(1));
+        assertThat(repository.rolledUpUpTo).isEqualTo(BUSINESS_DATE);
+        assertThat(repository.rolledUpSumKeys).contains("revenue.net", "member.new", "energy.total_electricity");
+        assertThat(repository.rolledUpLastKeys).contains("ar.balance", "occupancy.rate", "wo.backlog");
+        assertThat(repository.rolledUpSumKeys).doesNotContain("wo.overdue_rate", "wo.response_hours_p50");
+        assertThat(repository.rolledUpLastKeys).doesNotContain("wo.overdue_rate", "wo.response_hours_p50");
+    }
+
+    @Test
     void workOrderSlaAndEnergyMetricsFollowRulings() {
         // S4:超时率=超时/处理时限落窗单数(分母0不产出);积压=时点存量。
         // S5:能耗按表计类型分列(单位不同不跨类合计);电耗/㎡分母=可租面积(与出租率同分母,分母0不产出)。
@@ -409,6 +422,23 @@ class DashboardAggregationJobNetRevenueTests {
 
         public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
             return java.util.List.of();
+        }
+
+        LocalDate rolledUpMonthFirst;
+        LocalDate rolledUpUpTo;
+        java.util.List<String> rolledUpSumKeys;
+        java.util.List<String> rolledUpLastKeys;
+
+        public void rollupMonthlySnapshots(LocalDate monthFirst, LocalDate upTo,
+                java.util.List<String> sumKeys, java.util.List<String> lastKeys, java.time.Instant now) {
+            this.rolledUpMonthFirst = monthFirst;
+            this.rolledUpUpTo = upTo;
+            this.rolledUpSumKeys = sumKeys;
+            this.rolledUpLastKeys = lastKeys;
+        }
+
+        public Map<String, BigDecimal> readMonthlySnapshots(LocalDate monthFirst) {
+            return Map.of();
         }
 
         AnalyticsRecords.WorkOrderSla workOrderSla = new AnalyticsRecords.WorkOrderSla(null, null, 0, 0, 0);

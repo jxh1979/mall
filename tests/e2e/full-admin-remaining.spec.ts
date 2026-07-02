@@ -58,6 +58,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-005", label: "出租与到期", route: "/admin/analytics/occupancy" },
   { pageId: "ADM-ANA-006", label: "工单时效", route: "/admin/analytics/work-order-sla" },
   { pageId: "ADM-ANA-007", label: "能耗分析", route: "/admin/analytics/energy" },
+  { pageId: "ADM-ANA-008", label: "月度对比", route: "/admin/analytics/monthly" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -153,6 +154,14 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-002") {
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-008") {
+    await expect(page.getByTestId("monthly-comparison-page")).toBeVisible();
+    const comparisonTable = page.getByTestId("monthly-comparison-table");
+    await expect(comparisonTable).toContainText("净收入");
+    await expect(comparisonTable).toContainText("¥30,000");   // 300万分=3万元 本月
+    await expect(comparisonTable).toContainText("+50.00%");   // 环比
+    await expect(comparisonTable).toContainText("积累中");     // 缺同比不伪造
+    await expect(page.getByTestId("monthly-comparison-export")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-006") {
     await expect(page.getByTestId("wo-sla-page")).toBeVisible();
     await expect(page.getByTestId("wo-response-p50")).toContainText("2.5 小时");

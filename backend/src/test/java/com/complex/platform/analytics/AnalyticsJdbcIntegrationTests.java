@@ -235,6 +235,58 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void v206SeedsReportExportPermissionWithSeparationOfDuty() {
+        // M2(V196 范式):报表导出与查看分权——独立高危权限点,平台管理员直授,审计角色不得直授。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM permissions WHERE permission_code='analytics.report.export' AND risk_level='high'",
+                java.util.Map.of(), Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM role_permissions WHERE permission_code='analytics.report.export' AND role_id='role_platform_admin'",
+                java.util.Map.of(), Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM role_permissions WHERE permission_code='analytics.report.export' AND role_id LIKE 'role_auditor%'",
+                java.util.Map.of(), Integer.class)).isEqualTo(0);
+    }
+
+    @Test
+    void monthlyRollupSumsFlowsTakesPeriodEndForStocksAndIsIdempotent() {
+        // M1(拍板④混合口径):流量类=月累计 SUM,存量类=期末时点 LAST;滚动重跑幂等。2099-04 隔离共享库。
+        java.time.Instant now = java.time.Instant.parse("2099-04-02T10:00:00Z");
+        upsertDaily("revenue.net", "finance", "2099-04-01", "100", now);
+        upsertDaily("revenue.net", "finance", "2099-04-02", "200", now);
+        upsertDaily("ar.balance", "finance", "2099-04-01", "500", now);
+        upsertDaily("ar.balance", "finance", "2099-04-02", "700", now);
+        upsertDaily("wo.overdue_rate", "facility", "2099-04-02", "0.5", now);
+
+        java.time.LocalDate monthFirst = java.time.LocalDate.parse("2099-04-01");
+        repository.rollupMonthlySnapshots(monthFirst, java.time.LocalDate.parse("2099-04-30"),
+                java.util.List.of("revenue.net"), java.util.List.of("ar.balance"), now);
+
+        java.util.Map<String, java.math.BigDecimal> monthly = repository.readMonthlySnapshots(monthFirst);
+        assertThat(monthly.get("revenue.net")).isEqualByComparingTo("300");   // SUM
+        assertThat(monthly.get("ar.balance")).isEqualByComparingTo("700");    // 期末=最后经营日值
+        assertThat(monthly).doesNotContainKey("wo.overdue_rate");             // 白名单外不产出
+
+        // 滚动:再来一天,重跑 rollup 覆盖更新(幂等,不重复建行)。
+        upsertDaily("revenue.net", "finance", "2099-04-03", "50", now);
+        repository.rollupMonthlySnapshots(monthFirst, java.time.LocalDate.parse("2099-04-30"),
+                java.util.List.of("revenue.net"), java.util.List.of("ar.balance"), now);
+        java.util.Map<String, java.math.BigDecimal> again = repository.readMonthlySnapshots(monthFirst);
+        assertThat(again.get("revenue.net")).isEqualByComparingTo("350");
+        Integer rowCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM analytics_business_metric_snapshots "
+                        + "WHERE period_type='monthly' AND business_date='2099-04-01' AND metric_key='revenue.net'",
+                java.util.Map.of(), Integer.class);
+        assertThat(rowCount).isEqualTo(1);
+    }
+
+    private void upsertDaily(String metricKey, String domain, String businessDate, String value, java.time.Instant now) {
+        repository.upsertMetricSnapshot(new AnalyticsRecords.MetricSnapshotKey(
+                metricKey, domain, "daily", java.time.LocalDate.parse(businessDate), "platform", null),
+                new java.math.BigDecimal(value), "etl_aggregate", now);
+    }
+
+    @Test
     void countNewMembersExcludesDeregisteredAndBlacklisted() {
         // S7(拍板⑨):member.new 排除已注销/黑名单——新增会员是经营口径,不该把已出局的算进来。
         java.time.LocalDate day = java.time.LocalDate.parse("2099-03-01");

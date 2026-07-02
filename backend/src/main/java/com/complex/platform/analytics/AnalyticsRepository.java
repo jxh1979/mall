@@ -134,6 +134,15 @@ public interface AnalyticsRepository {
     /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。 */
     java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset);
 
+    /** M1 月度滚动汇总:把当月 daily platform 行聚成 monthly 行(business_date=月首日)。
+     * 混合口径(2026-07-02 拍板④):sumKeys=流量类月累计,lastKeys=存量/比率类期末时点;
+     * 白名单外的键不做月度行(月度需重算窗口的比率如 P50/超时率不伪造)。幂等(V070 唯一索引)。 */
+    void rollupMonthlySnapshots(LocalDate monthFirst, LocalDate upTo,
+            java.util.List<String> sumKeys, java.util.List<String> lastKeys, java.time.Instant now);
+
+    /** M1:读某月 monthly platform 快照(metric_key -> actual_value);无行返回空 map。 */
+    Map<String, BigDecimal> readMonthlySnapshots(LocalDate monthFirst);
+
     /** S4 工单时效:响应P50=responded_at 落窗、处理P50=completed_at 落窗且有 assigned_at、
      * 超时分母=handle_due_at 落窗、分子=其中完成晚于时限或未完成且时限已过、积压=asOf 时点未完成存量。 */
     AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf);

@@ -74,6 +74,16 @@ public class DashboardAggregationJob {
     static final String ENERGY_ELECTRICITY_PER_SQM = "energy.electricity_per_sqm"; // 分母=可租面积(与出租率同分母,0不产出)
     static final String ENERGY_ABNORMAL_COUNT = "energy.abnormal_count";
 
+    // M1 月度滚动白名单(混合口径,2026-07-02 拍板④):流量类=月累计 SUM;存量/比率类=期末时点 LAST。
+    // 月度需重算窗口的比率(P50/超时率/每平米)不做月度行——不伪造,后续需要时按月窗重算。
+    public static final java.util.List<String> MONTHLY_SUM_KEYS = java.util.List.of(
+            REVENUE_NET, REVENUE_TICKET, REVENUE_BAR, "revenue.contract_rent", MEMBER_NEW, "verify.done",
+            "traffic.amusement", "energy.total_electricity", "energy.total_water", "energy.total_gas",
+            "energy.total_heat_cold");
+    public static final java.util.List<String> MONTHLY_LAST_KEYS = java.util.List.of(
+            AR_BALANCE, AR_AGING_90P, AR_COLLECTION_RATE_MTD, OCC_RATE, OCC_PARKING_RATE,
+            OCC_SIGNED_PENDING_AREA, CONTRACT_EXPIRING_90D, WO_BACKLOG);
+
     static final String SEGMENT_PLATFORM = "platform";
     static final String SEGMENT_MERCHANT = "merchant";
     static final String SEGMENT_PROJECT = "project";
@@ -284,6 +294,10 @@ public class DashboardAggregationJob {
 
         // ⑤ 集团多项目 ETL：按 project_id 维度 upsert segment_type='project' 行。
         upsertByProject(businessDate, platformTotals, now);
+
+        // M1:每次日刷后滚动更新当月 monthly 行(月末最后一刷自然定格,环比/同比随数据积累自然可比)。
+        repository.rollupMonthlySnapshots(businessDate.withDayOfMonth(1), businessDate,
+                MONTHLY_SUM_KEYS, MONTHLY_LAST_KEYS, now);
     }
 
     /** S2:单个账龄桶 upsert(平台+商户),并累计进欠费总额 map。 */

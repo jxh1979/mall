@@ -15214,6 +15214,73 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/analytics/monthly-comparison:
+    get:
+      tags:
+        - analytics
+      operationId: getMonthlyComparison
+      summary: 月度对比(环比/同比)
+      description: BI M1(2026-07-02 拍板④混合口径):流量类=月累计、存量/比率类=期末时点;
+        环比=上月 monthly 快照、同比=去年同月;缺月返回 null(前端标「积累中」,不伪造)。
+      x-permission: analytics.dashboard.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.monthly_comparison.viewed
+      x-audit-event-failure: analytics.monthly_comparison.view_failed
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/reports/monthly-export:
+    get:
+      tags:
+        - analytics
+      operationId: exportMonthlyReport
+      summary: 月度经营报表导出(分权)
+      description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须
+        独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批);
+        数据与月度对比同一份组装(图表=导出,单一口径)。
+      x-permission: analytics.report.export
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.monthly_report.exported
+      x-audit-event-failure: analytics.monthly_report.export_failed
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/analytics/work-order-sla/overdue-orders:
     get:
       tags:

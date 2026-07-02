@@ -32,6 +32,7 @@ const ReceivablesAnalyticsPage = React.lazy(() => import("./pages/ReceivablesAna
 const OccupancyAnalyticsPage = React.lazy(() => import("./pages/OccupancyAnalyticsPage").then((m) => ({ default: m.OccupancyAnalyticsPage })));
 const WorkOrderSlaPage = React.lazy(() => import("./pages/WorkOrderSlaPage").then((m) => ({ default: m.WorkOrderSlaPage })));
 const EnergyAnalyticsPage = React.lazy(() => import("./pages/EnergyAnalyticsPage").then((m) => ({ default: m.EnergyAnalyticsPage })));
+const MonthlyComparisonPage = React.lazy(() => import("./pages/MonthlyComparisonPage").then((m) => ({ default: m.MonthlyComparisonPage })));
 const VendorWorkOrdersPage = React.lazy(() => import("./pages/VendorWorkOrdersPage").then((m) => ({ default: m.VendorWorkOrdersPage })));
 const VendorInspectionsPage = React.lazy(() => import("./pages/VendorInspectionsPage").then((m) => ({ default: m.VendorInspectionsPage })));
 const VendorSiteEntriesPage = React.lazy(() => import("./pages/VendorSiteEntriesPage").then((m) => ({ default: m.VendorSiteEntriesPage })));
@@ -183,6 +184,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <WorkOrderSlaPage {...props} />;
     case "ADM-ANA-007":
       return <EnergyAnalyticsPage {...props} />;
+    case "ADM-ANA-008":
+      return <MonthlyComparisonPage {...props} />;
     case "ADM-VND-001":
       return <VendorWorkOrdersPage {...props} />;
     case "ADM-VND-002":

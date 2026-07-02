@@ -891,6 +891,32 @@ class AnalyticsServiceTests {
         ));
     }
 
+    @Test
+    void monthlyComparisonComputesMomYoyAndMarksMissingAsNull() {
+        // M1:环比=上月 monthly 行,同比=去年同月;缺行=null(前端标「积累中」),分母0不出百分比。
+        analyticsRepository.monthlySnapshots = java.util.Map.of(
+                LocalDate.parse("2026-07-01"), java.util.Map.of(
+                        "revenue.net", new java.math.BigDecimal("300"),
+                        "ar.balance", new java.math.BigDecimal("700")),
+                LocalDate.parse("2026-06-01"), java.util.Map.of(
+                        "revenue.net", new java.math.BigDecimal("200")));
+
+        AnalyticsRecords.MonthlyComparisonResponse response = service.monthlyComparison("2026-07");
+        assertThat(response.month()).isEqualTo("2026-07");
+        AnalyticsRecords.MonthlyComparisonRow net = response.rows().stream()
+                .filter(row -> row.metricKey().equals("revenue.net")).findFirst().orElseThrow();
+        assertThat(net.current()).isEqualByComparingTo("300");
+        assertThat(net.prevMonth()).isEqualByComparingTo("200");
+        assertThat(net.momPct()).isEqualByComparingTo("0.5000");
+        assertThat(net.yoySameMonth()).isNull();
+        assertThat(net.yoyPct()).isNull();
+        assertThat(net.aggregation()).isEqualTo("monthly_sum");
+        AnalyticsRecords.MonthlyComparisonRow balance = response.rows().stream()
+                .filter(row -> row.metricKey().equals("ar.balance")).findFirst().orElseThrow();
+        assertThat(balance.momPct()).isNull();   // 上月缺行 → 不出百分比
+        assertThat(balance.aggregation()).isEqualTo("period_end");
+    }
+
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
         Map<String, Map<String, BigDecimal>> arAging = Map.of();
         BigDecimal arCollected = BigDecimal.ZERO;
@@ -930,6 +956,16 @@ class AnalyticsServiceTests {
 
         public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
             return java.util.List.of();
+        }
+
+        java.util.Map<LocalDate, java.util.Map<String, java.math.BigDecimal>> monthlySnapshots = java.util.Map.of();
+
+        public void rollupMonthlySnapshots(LocalDate monthFirst, LocalDate upTo,
+                java.util.List<String> sumKeys, java.util.List<String> lastKeys, java.time.Instant now) {
+        }
+
+        public java.util.Map<String, java.math.BigDecimal> readMonthlySnapshots(LocalDate monthFirst) {
+            return monthlySnapshots.getOrDefault(monthFirst, java.util.Map.of());
         }
 
         public AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {

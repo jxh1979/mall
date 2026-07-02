@@ -350,6 +350,88 @@ public class AnalyticsService {
         );
     }
 
+    /** M1 月度对比目录(展示白名单;label=业务名)。聚合口径由 job 月度白名单单一事实源派生,杜绝两处漂移。 */
+    private record MonthlyMetricEntry(String key, String label, String domain, String unit) {
+    }
+
+    private static final List<MonthlyMetricEntry> MONTHLY_COMPARISON_CATALOG = List.of(
+            new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_NET, "净收入", "finance", "cent"),
+            new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_TICKET, "售票收入", "ticketing", "cent"),
+            new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_BAR, "酒吧收入", "bar", "cent"),
+            new MonthlyMetricEntry("revenue.contract_rent", "合同租金挂账", "finance", "cent"),
+            new MonthlyMetricEntry("member.new", "新增会员", "customer", "count"),
+            new MonthlyMetricEntry("verify.done", "核销次数", "ticketing", "count"),
+            new MonthlyMetricEntry("traffic.amusement", "游乐人次", "amusement", "count"),
+            new MonthlyMetricEntry("energy.total_electricity", "用电量", "energy", "kwh"),
+            new MonthlyMetricEntry("energy.total_water", "用水量", "energy", "ton"),
+            new MonthlyMetricEntry("energy.total_gas", "用气量", "energy", "m3"),
+            new MonthlyMetricEntry("energy.total_heat_cold", "冷热量", "energy", "unit"),
+            new MonthlyMetricEntry(DashboardAggregationJob.AR_BALANCE, "欠费余额", "finance", "cent"),
+            new MonthlyMetricEntry(DashboardAggregationJob.AR_AGING_90P, "90天以上欠费", "finance", "cent"),
+            new MonthlyMetricEntry(DashboardAggregationJob.AR_COLLECTION_RATE_MTD, "当月回款率", "finance", "rate"),
+            new MonthlyMetricEntry(DashboardAggregationJob.OCC_RATE, "出租率", "leasing", "rate"),
+            new MonthlyMetricEntry(DashboardAggregationJob.OCC_PARKING_RATE, "车位出租率", "leasing", "rate"),
+            new MonthlyMetricEntry(DashboardAggregationJob.OCC_SIGNED_PENDING_AREA, "已签待交面积", "leasing", "sqm"),
+            new MonthlyMetricEntry(DashboardAggregationJob.CONTRACT_EXPIRING_90D, "90天内到期合同", "leasing", "count"),
+            new MonthlyMetricEntry(DashboardAggregationJob.WO_BACKLOG, "工单积压", "facility", "count"));
+
+    /** M1 月度对比:环比=上月 monthly 行、同比=去年同月;缺行=null(前端标「积累中」),分母0不出百分比(不伪造)。 */
+    public AnalyticsRecords.MonthlyComparisonResponse monthlyComparison(String month) {
+        java.time.YearMonth yearMonth = parseMonth(month);
+        return readSingle(
+                "analytics.monthly_comparison.viewed",
+                "analytics.monthly_comparison.view_failed",
+                "analytics.dashboard.view",
+                "analytics_business_metric_snapshots",
+                () -> buildMonthlyComparison(yearMonth));
+    }
+
+    /** M2 导出:与对比中心同一份组装逻辑(图表=导出,单一口径);权限独立分权(V206,V196 范式)。 */
+    public AnalyticsRecords.MonthlyComparisonResponse exportMonthlyReport(String month) {
+        java.time.YearMonth yearMonth = parseMonth(month);
+        return readSingle(
+                "analytics.monthly_report.exported",
+                "analytics.monthly_report.export_failed",
+                "analytics.report.export",
+                "analytics_business_metric_snapshots",
+                () -> buildMonthlyComparison(yearMonth));
+    }
+
+    private java.time.YearMonth parseMonth(String month) {
+        if (month == null || month.isBlank()) {
+            return java.time.YearMonth.from(LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC));
+        }
+        try {
+            return java.time.YearMonth.parse(month.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "month must be YYYY-MM");
+        }
+    }
+
+    private AnalyticsRecords.MonthlyComparisonResponse buildMonthlyComparison(java.time.YearMonth yearMonth) {
+        Map<String, BigDecimal> current = repository.readMonthlySnapshots(yearMonth.atDay(1));
+        Map<String, BigDecimal> prevMonth = repository.readMonthlySnapshots(yearMonth.minusMonths(1).atDay(1));
+        Map<String, BigDecimal> yoyMonth = repository.readMonthlySnapshots(yearMonth.minusYears(1).atDay(1));
+        List<AnalyticsRecords.MonthlyComparisonRow> rows = new java.util.ArrayList<>();
+        for (MonthlyMetricEntry entry : MONTHLY_COMPARISON_CATALOG) {
+            BigDecimal cur = current.get(entry.key());
+            BigDecimal prev = prevMonth.get(entry.key());
+            BigDecimal yoy = yoyMonth.get(entry.key());
+            String aggregation = DashboardAggregationJob.MONTHLY_SUM_KEYS.contains(entry.key())
+                    ? "monthly_sum" : "period_end";
+            rows.add(new AnalyticsRecords.MonthlyComparisonRow(entry.key(), entry.label(), entry.domain(),
+                    entry.unit(), aggregation, cur, prev, pctChange(cur, prev), yoy, pctChange(cur, yoy)));
+        }
+        return new AnalyticsRecords.MonthlyComparisonResponse(yearMonth.toString(), rows);
+    }
+
+    private BigDecimal pctChange(BigDecimal current, BigDecimal base) {
+        if (current == null || base == null || base.signum() == 0) {
+            return null;
+        }
+        return current.subtract(base).divide(base.abs(), 4, java.math.RoundingMode.HALF_UP);
+    }
+
     /** S4 钻取:超时工单明细(实时,与 wo.overdue_rate 分子同过滤:处理时限落当日 facility 窗且超时)。 */
     public java.util.List<AnalyticsRecords.OverdueWorkOrderRow> listOverdueWorkOrders(int limit, int offset) {
         return readSingle(

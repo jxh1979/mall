@@ -988,6 +988,63 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public void rollupMonthlySnapshots(LocalDate monthFirst, LocalDate upTo,
+            java.util.List<String> sumKeys, java.util.List<String> lastKeys, java.time.Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("month_first", monthFirst)
+                .addValue("up_to", upTo)
+                .addValue("sum_keys", sumKeys)
+                .addValue("last_keys", lastKeys)
+                .addValue("now", timestampWithTimeZone(now));
+        if (!sumKeys.isEmpty()) {
+            jdbcTemplate.update("""
+                    INSERT INTO analytics_business_metric_snapshots (
+                        snapshot_id, metric_key, domain, period_type, business_date, segment_type, segment_id,
+                        actual_value, trend_direction, projection_method, payload_json, created_at)
+                    SELECT 'etl_' || gen_random_uuid(), metric_key, MIN(domain), 'monthly', :month_first, 'platform', NULL,
+                           SUM(actual_value), 'unknown', 'etl_aggregate', '{}'::jsonb, :now
+                      FROM analytics_business_metric_snapshots
+                     WHERE period_type = 'daily' AND segment_type = 'platform'
+                       AND business_date >= :month_first AND business_date <= :up_to
+                       AND metric_key IN (:sum_keys)
+                     GROUP BY metric_key
+                    ON CONFLICT (metric_key, period_type, business_date, segment_type, COALESCE(segment_id, '__platform__'))
+                    DO UPDATE SET actual_value = EXCLUDED.actual_value, created_at = EXCLUDED.created_at
+                    """, params);
+        }
+        if (!lastKeys.isEmpty()) {
+            jdbcTemplate.update("""
+                    INSERT INTO analytics_business_metric_snapshots (
+                        snapshot_id, metric_key, domain, period_type, business_date, segment_type, segment_id,
+                        actual_value, trend_direction, projection_method, payload_json, created_at)
+                    SELECT 'etl_' || gen_random_uuid(), latest.metric_key, latest.domain, 'monthly', :month_first, 'platform', NULL,
+                           latest.actual_value, 'unknown', 'etl_aggregate', '{}'::jsonb, :now
+                      FROM (SELECT DISTINCT ON (metric_key) metric_key, domain, actual_value
+                              FROM analytics_business_metric_snapshots
+                             WHERE period_type = 'daily' AND segment_type = 'platform'
+                               AND business_date >= :month_first AND business_date <= :up_to
+                               AND metric_key IN (:last_keys)
+                             ORDER BY metric_key, business_date DESC) latest
+                    ON CONFLICT (metric_key, period_type, business_date, segment_type, COALESCE(segment_id, '__platform__'))
+                    DO UPDATE SET actual_value = EXCLUDED.actual_value, created_at = EXCLUDED.created_at
+                    """, params);
+        }
+    }
+
+    @Override
+    public Map<String, BigDecimal> readMonthlySnapshots(LocalDate monthFirst) {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT metric_key, actual_value
+                  FROM analytics_business_metric_snapshots
+                 WHERE period_type = 'monthly' AND segment_type = 'platform' AND segment_id IS NULL
+                   AND business_date = :month_first
+                """, new MapSqlParameterSource().addValue("month_first", monthFirst), resultSet ->
+                { result.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("actual_value")); });
+        return result;
+    }
+
+    @Override
     public AnalyticsRecords.WorkOrderSla workOrderSla(java.time.Instant start, java.time.Instant end, java.time.Instant asOf) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("start", timestampWithTimeZone(start))
