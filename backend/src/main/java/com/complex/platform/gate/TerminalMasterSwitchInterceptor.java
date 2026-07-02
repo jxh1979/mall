@@ -23,7 +23,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
 
-    static final String MASTER_CAPABILITY = "terminal.enabled";
+    static final String MASTER_CAPABILITY = TerminalSwitchGuard.MASTER_CAPABILITY;
 
     /** 自救豁免前缀：登录/破窗 + 开关查看与管理（含 effective 只读）。 */
     private static final List<String> EXEMPT_PREFIXES = List.of(
@@ -55,7 +55,8 @@ public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
         TerminalSwitchGuard guard = terminalSwitchGuard.getIfAvailable();
         if (guard != null) {
             // 关/读取失败 → guard 抛 TERMINAL_DISABLED（DispatcherServlet 内，GlobalExceptionHandler 统一 403 JSON）。
-            guard.check(MASTER_CAPABILITY);
+            // 总开关 AND 语义:global 行关闭即硬拒,不被模块/设备行覆盖(商户专区活证据揭出的缺陷)。
+            guard.checkTerminalEnabled();
         }
         return true;
     }

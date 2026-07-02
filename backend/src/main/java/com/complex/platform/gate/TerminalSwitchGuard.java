@@ -20,12 +20,36 @@ public class TerminalSwitchGuard {
 
     private static final String EVENT = "terminal.access_rejected";
 
+    /** 端总开关能力码(V197):global 行按 AND 语义独立强制。 */
+    public static final String MASTER_CAPABILITY = "terminal.enabled";
+
     private final TerminalDeviceRepository repository;
     private final AuditEventService auditEventService;
 
     public TerminalSwitchGuard(TerminalDeviceRepository repository, AuditEventService auditEventService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
+    }
+
+    /**
+     * 3.19 端总开关 AND 语义:先独立校验 global 总开关行(关闭即整端硬拒,不被更具体的
+     * 模块/设备行覆盖——否则 V198/V199 默认开的模块行会把已关停的端重新放行),
+     * 总开关开启后细分维度仍走 {@link #check} 的最具体显式行胜出。
+     */
+    public void checkTerminalEnabled() {
+        String terminalType = GateRequestContext.terminalType();
+        java.util.Optional<TerminalCapabilitySwitchRecord> master;
+        try {
+            master = repository.resolveEffectiveSwitch(
+                    terminalType, MASTER_CAPABILITY, Map.of("global", "global"));
+        } catch (RuntimeException exception) {
+            reject(terminalType, MASTER_CAPABILITY, "switch_fetch_failed", null);
+            return; // unreachable,reject 必抛
+        }
+        if (master.isPresent() && !master.get().enabled()) {
+            reject(terminalType, MASTER_CAPABILITY, "disabled", master.get());
+        }
+        check(MASTER_CAPABILITY);
     }
 
     public void check(String capabilityCode) {

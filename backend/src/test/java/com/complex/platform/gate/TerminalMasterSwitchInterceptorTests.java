@@ -28,7 +28,7 @@ class TerminalMasterSwitchInterceptorTests {
     void requestWithoutTerminalHeaderSkipsGate() {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/bar/orders");
         assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object())).isTrue();
-        verify(guard, never()).check(TerminalMasterSwitchInterceptor.MASTER_CAPABILITY);
+        verify(guard, never()).checkTerminalEnabled();
     }
 
     @Test
@@ -42,7 +42,7 @@ class TerminalMasterSwitchInterceptorTests {
             request.addHeader("X-Terminal-Type", "web");
             assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object())).isTrue();
         }
-        verify(guard, never()).check(TerminalMasterSwitchInterceptor.MASTER_CAPABILITY);
+        verify(guard, never()).checkTerminalEnabled();
     }
 
     @Test
@@ -50,13 +50,13 @@ class TerminalMasterSwitchInterceptorTests {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/ticketing/verifications");
         request.addHeader("X-Terminal-Type", "staff_work_phone");
         assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object())).isTrue();
-        verify(guard).check(TerminalMasterSwitchInterceptor.MASTER_CAPABILITY);
+        verify(guard).checkTerminalEnabled();
     }
 
     @Test
     void disabledTerminalRejectionPropagates() {
         doThrow(ApiException.forbidden("TERMINAL_DISABLED", "terminal capability is disabled: terminal.enabled"))
-                .when(guard).check(TerminalMasterSwitchInterceptor.MASTER_CAPABILITY);
+                .when(guard).checkTerminalEnabled();
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/finance/reconciliation/differences");
         request.addHeader("X-Terminal-Type", "web");
         assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
