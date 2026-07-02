@@ -88,6 +88,30 @@ public class AuthService implements SessionIssuer {
         });
     }
 
+    /**
+     * dev/local 测试基建(商户专区一期):为 access_users 建的账号在内存认证层发放可登录凭证。
+     * id 必须与库一致——权限装配(user_roles)按库 id 查、merchant scope 按 actor.merchantId 判,
+     * 两侧对齐后 dev 后台才能用真实账号验收商户专区。幂等:重复发放按新密码覆盖(改密语义)。
+     */
+    public void provisionUser(String id, String username, String password, String accountType,
+            String organizationId, String merchantId, String status) {
+        if (isBlank(id) || isBlank(username) || isBlank(password)) {
+            return;
+        }
+        UserRecord user = new UserRecord(
+                id,
+                username,
+                passwordEncoder.encode(password),
+                blankToDefault(accountType, "staff"),
+                organizationId,
+                merchantId,
+                blankToDefault(status, "active"),
+                Instant.now()
+        );
+        usersById.put(id, user);
+        usersByUsername.put(username, user);
+    }
+
     public LoginResponse login(LoginRequest request) {
         try {
             requireText(request == null ? null : request.loginName(), "login_name");

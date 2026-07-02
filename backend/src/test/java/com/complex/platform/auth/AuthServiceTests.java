@@ -29,6 +29,26 @@ class AuthServiceTests {
     }
 
     @Test
+    void provisionUserRegistersLoginWithDbAlignedIdentity() {
+        // 商户专区一期:dev/local 下 access_users 建的账号必须可登录,且内存身份与库 id/merchant 对齐,
+        // 否则商户账号无法在 dev 后台验收(权限按库 id 装配、merchant scope 按 actor.merchantId 判)。
+        service.provisionUser("usr_mz1", "mz_merchant", "Pw-1!", "staff", "org-1", "mch-1", "active");
+
+        AuthService.LoginResponse response = service.login(new AuthService.LoginRequest(
+                "mz_merchant", "Pw-1!", null, null, "merchant_portal"));
+        assertThat(response.user().id()).isEqualTo("usr_mz1");
+        assertThat(response.user().merchantId()).isEqualTo("mch-1");
+        assertThat(response.user().accountType()).isEqualTo("staff");
+
+        // 幂等覆盖:重复发放(改密)不抛并以新密码为准
+        service.provisionUser("usr_mz1", "mz_merchant", "Pw-2!", "staff", "org-1", "mch-1", "active");
+        assertThatThrownBy(() -> service.login(new AuthService.LoginRequest("mz_merchant", "Pw-1!", null, null, null)))
+                .isInstanceOf(ApiException.class);
+        assertThat(service.login(new AuthService.LoginRequest("mz_merchant", "Pw-2!", null, null, null))
+                .user().id()).isEqualTo("usr_mz1");
+    }
+
+    @Test
     void loginUsesLoginNameAndReturnsSessionRefreshTokenAndAuditEvent() {
         AuthService.LoginResponse response = service.login(new AuthService.LoginRequest(
                 "p0_admin",
