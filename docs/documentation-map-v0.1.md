@@ -29,6 +29,7 @@
 | `amusement-business-operations-product-prd-v0.1.md` | 游乐业务运营 PRD | 现行 |
 | `supply-chain-inventory-product-prd-v0.1.md` | 供应链-库存 PRD | 现行 |
 | `finance-settlement-product-prd-v0.1.md` | 财务结算 PRD | 现行 |
+| `merchant-portal-zone-prd-v0.1.md` | 商户专区 PRD（3.18，2026-07-02 拍板方案 A：后台内商户专区） | 现行 |
 | `third-party-business-access-product-prd-v0.1.md` | 第三方业务接入 PRD | 现行 |
 | `platform-governance-prd-v0.1.md` / `platform-governance-product-spec-v0.2.md` | 平台治理 PRD / 产品规格 | 现行 |
 | `evidence-risk-control-product-prd-v0.1.md` | 证据留痕与风控 PRD | 现行 |
