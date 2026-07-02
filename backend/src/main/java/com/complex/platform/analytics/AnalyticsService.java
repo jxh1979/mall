@@ -397,6 +397,62 @@ public class AnalyticsService {
                 () -> buildMonthlyComparison(yearMonth));
     }
 
+    /** H1(2026-07-02 拍板):同名节假日今年 vs 去年——流量=区间累计+日均双列(天数不同看日均才公平,
+     * 同比按日均比);存量=假期末时点(同比按值比);去年无同名区间→previous 侧 null(积累中,不伪造)。 */
+    public AnalyticsRecords.HolidayComparisonResponse holidayComparison(String holidayName, int year) {
+        String name = holidayName == null ? "" : holidayName.trim();
+        if (name.isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "holiday is required");
+        }
+        return readSingle(
+                "analytics.holiday_comparison.viewed",
+                "analytics.holiday_comparison.view_failed",
+                "analytics.dashboard.view",
+                "holiday_calendar",
+                () -> buildHolidayComparison(name, year));
+    }
+
+    private AnalyticsRecords.HolidayComparisonResponse buildHolidayComparison(String name, int year) {
+        java.util.List<AnalyticsRecords.HolidayPeriod> all = repository.listHolidayPeriods(null);
+        AnalyticsRecords.HolidayPeriod current = all.stream()
+                .filter(h -> h.holidayName().equals(name) && h.holidayYear() == year)
+                .findFirst()
+                .orElseThrow(() -> com.complex.platform.common.api.ApiException.badRequest(
+                        "VALIDATION_FAILED", "holiday period not found: " + name + " " + year));
+        AnalyticsRecords.HolidayPeriod previous = all.stream()
+                .filter(h -> h.holidayName().equals(name) && h.holidayYear() == year - 1)
+                .findFirst().orElse(null);
+
+        Map<String, BigDecimal> cur = repository.aggregateRange(current.startDate(), current.endDate(),
+                DashboardAggregationJob.MONTHLY_SUM_KEYS, DashboardAggregationJob.MONTHLY_LAST_KEYS);
+        Map<String, BigDecimal> prev = previous == null ? Map.of()
+                : repository.aggregateRange(previous.startDate(), previous.endDate(),
+                        DashboardAggregationJob.MONTHLY_SUM_KEYS, DashboardAggregationJob.MONTHLY_LAST_KEYS);
+        long curDays = java.time.temporal.ChronoUnit.DAYS.between(current.startDate(), current.endDate()) + 1;
+        Long prevDays = previous == null ? null
+                : java.time.temporal.ChronoUnit.DAYS.between(previous.startDate(), previous.endDate()) + 1;
+
+        java.util.List<AnalyticsRecords.HolidayComparisonRow> rows = new java.util.ArrayList<>();
+        for (MonthlyMetricEntry entry : MONTHLY_COMPARISON_CATALOG) {
+            boolean isSum = DashboardAggregationJob.MONTHLY_SUM_KEYS.contains(entry.key());
+            BigDecimal curTotal = cur.get(entry.key());
+            BigDecimal prevTotal = prev.get(entry.key());
+            BigDecimal curAvg = isSum && curTotal != null
+                    ? curTotal.divide(BigDecimal.valueOf(curDays), 2, java.math.RoundingMode.HALF_UP) : null;
+            BigDecimal prevAvg = isSum && prevTotal != null && prevDays != null
+                    ? prevTotal.divide(BigDecimal.valueOf(prevDays), 2, java.math.RoundingMode.HALF_UP) : null;
+            BigDecimal yoy = isSum ? pctChange(curAvg, prevAvg) : pctChange(curTotal, prevTotal);
+            rows.add(new AnalyticsRecords.HolidayComparisonRow(entry.key(), entry.label(), entry.unit(),
+                    isSum ? "monthly_sum" : "period_end", curTotal, curAvg, prevTotal, prevAvg, yoy));
+        }
+        return new AnalyticsRecords.HolidayComparisonResponse(
+                name, year, current.startDate(), current.endDate(),
+                previous == null ? null : previous.holidayYear(),
+                previous == null ? null : previous.startDate(),
+                previous == null ? null : previous.endDate(),
+                rows);
+    }
+
     private java.time.YearMonth parseMonth(String month) {
         if (month == null || month.isBlank()) {
             return java.time.YearMonth.from(LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC));

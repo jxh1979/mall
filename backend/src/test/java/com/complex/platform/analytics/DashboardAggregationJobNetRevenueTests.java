@@ -59,6 +59,22 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void anomalyDetectionSkipsHolidayDates() {
+        // H1(2026-07-02 拍板):节假日暴涨暴跌是正常经营不是异常——经营日落在节假日区间内自动免报。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.anomalyConfig = new AnalyticsRecords.AnomalyConfig(
+                new BigDecimal("0.5"), new BigDecimal("0.8"), true, null, null);
+        repository.snapshotsByDate = Map.of(
+                BUSINESS_DATE, Map.of("revenue.net", new BigDecimal("1900000")),
+                BUSINESS_DATE.minusDays(1), Map.of("revenue.net", new BigDecimal("1000000")));
+        repository.withinHoliday = true;
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.insertedAnomalies).isEmpty();
+    }
+
+    @Test
     void refreshTriggersMerchantSummaryRollup() {
         // M4:每次日刷后重算商户经营汇总(每商户一行最新态)。
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
@@ -660,6 +676,26 @@ class DashboardAggregationJobNetRevenueTests {
         @Override
         public long countMerchantsWithEtlSnapshot(LocalDate businessDate) {
             return 0L;
+        }
+
+        boolean withinHoliday;
+
+        public java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year) {
+            return java.util.List.of();
+        }
+
+        public AnalyticsRecords.HolidayPeriod upsertHolidayPeriod(String holidayName, int holidayYear,
+                LocalDate startDate, LocalDate endDate, String source, java.time.Instant now) {
+            return new AnalyticsRecords.HolidayPeriod(holidayName, holidayYear, startDate, endDate, source, now);
+        }
+
+        public boolean isWithinHoliday(LocalDate businessDate) {
+            return withinHoliday;
+        }
+
+        public Map<String, BigDecimal> aggregateRange(LocalDate start, LocalDate end,
+                java.util.List<String> sumKeys, java.util.List<String> lastKeys) {
+            return Map.of();
         }
 
         LocalDate refreshedMerchantSummariesFor;

@@ -323,6 +323,10 @@ public class DashboardAggregationJob {
         if (config == null || !config.enabled()) {
             return;
         }
+        // H1(2026-07-02 拍板):节假日暴涨暴跌是正常经营不是异常——经营日落在节假日区间内自动免报。
+        if (repository.isWithinHoliday(businessDate)) {
+            return;
+        }
         Map<String, BigDecimal> today = repository.readMetricSnapshots(businessDate, null);
         Map<String, BigDecimal> previous = repository.readMetricSnapshots(businessDate.minusDays(1), null);
         for (AnalyticsService.MetricCatalogEntry entry : AnalyticsService.METRIC_CATALOG) {

@@ -291,6 +291,44 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** H1 节假日区间(法定假期按国务院公布,URL 抓取或手动录入;同名跨年对比)。 */
+    public record HolidayPeriod(
+            String holidayName,
+            int holidayYear,
+            LocalDate startDate,
+            LocalDate endDate,
+            String source,
+            Instant updatedAt
+    ) {
+    }
+
+    /** H1 节假日对比行:总额+日均双列(2026-07-02 拍板,天数不同看日均才公平);存量类=假期末时点。 */
+    public record HolidayComparisonRow(
+            String metricKey,
+            String label,
+            String unit,
+            String aggregation,
+            BigDecimal currentTotal,
+            BigDecimal currentDailyAvg,
+            BigDecimal previousTotal,
+            BigDecimal previousDailyAvg,
+            BigDecimal yoyPct
+    ) {
+    }
+
+    /** H1 节假日对比响应(含两侧区间与天数,便于页面标注)。 */
+    public record HolidayComparisonResponse(
+            String holidayName,
+            int currentYear,
+            LocalDate currentStart,
+            LocalDate currentEnd,
+            Integer previousYear,
+            LocalDate previousStart,
+            LocalDate previousEnd,
+            java.util.List<HolidayComparisonRow> rows
+    ) {
+    }
+
     /** M3 异常检测阈值配置(环比突变,2026-07-02 拍板:阈值后台可调)。 */
     public record AnomalyConfig(
             BigDecimal surgePct,

@@ -43,20 +43,28 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
   const [cutoffs, setCutoffs] = React.useState<BusinessDayCutoffRow[]>([]);
   const [anomalyConfig, setAnomalyConfig] = React.useState<{ surgePct?: number | string; highPct?: number | string; enabled?: boolean } | null>(null);
   const [surgeEdit, setSurgeEdit] = React.useState("");
+  const [holidays, setHolidays] = React.useState<Array<{ holidayName: string; holidayYear: number; startDate?: string; endDate?: string; source?: string }>>([]);
+  const [holidayName, setHolidayName] = React.useState("");
+  const [holidayYear, setHolidayYear] = React.useState("");
+  const [holidayStart, setHolidayStart] = React.useState("");
+  const [holidayEnd, setHolidayEnd] = React.useState("");
+  const [fetchUrl, setFetchUrl] = React.useState("");
   const [highEdit, setHighEdit] = React.useState("");
   const [cutoffEdits, setCutoffEdits] = React.useState<Record<string, string>>({});
   const [form, setForm] = React.useState({ projectId: "project_1", areaSqm: "" });
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [items, cutoffRows, anomalyCfg] = await Promise.all([
+      const [items, cutoffRows, anomalyCfg, holidayRows] = await Promise.all([
         api.get<OperatingParamsRow[]>("/api/v1/analytics/operating-params"),
         api.get<BusinessDayCutoffRow[]>("/api/v1/analytics/business-day-cutoffs"),
         api.get<{ surgePct?: number | string; highPct?: number | string; enabled?: boolean }>("/api/v1/analytics/anomaly-config"),
+        api.get<Array<{ holidayName: string; holidayYear: number; startDate?: string; endDate?: string; source?: string }>>("/api/v1/analytics/holiday-calendar"),
       ]);
       setRows(items ?? []);
       setCutoffs(cutoffRows ?? []);
       setAnomalyConfig(anomalyCfg ?? null);
+      setHolidays(holidayRows ?? []);
       setSurgeEdit(anomalyCfg?.surgePct === undefined ? "" : String(Number(anomalyCfg.surgePct) * 100));
       setHighEdit(anomalyCfg?.highPct === undefined ? "" : String(Number(anomalyCfg.highPct) * 100));
     },
@@ -101,6 +109,30 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
     }
     await api.post("/api/v1/analytics/anomaly-config", { surgePct: surge, highPct: high, enabled: true });
     setActionResult({ action: "anomaly_config_saved", surgePct: surge, highPct: high });
+    reload();
+  }
+
+  async function saveHoliday() {
+    if (!holidayName.trim() || !holidayYear || !holidayStart || !holidayEnd) {
+      setGlobalError("节假日名/年份/起止日期都要填(按国务院公布)");
+      return;
+    }
+    await api.post("/api/v1/analytics/holiday-calendar", {
+      holidayName: holidayName.trim(), holidayYear: Number(holidayYear),
+      startDate: holidayStart, endDate: holidayEnd,
+    });
+    setActionResult({ action: "holiday_saved", holidayName: holidayName.trim(), holidayYear: Number(holidayYear) });
+    setHolidayName(""); setHolidayYear(""); setHolidayStart(""); setHolidayEnd("");
+    reload();
+  }
+
+  async function fetchHolidays() {
+    if (!fetchUrl.trim()) {
+      setGlobalError("请填节假日数据源 URL(holiday-cn JSON 格式)");
+      return;
+    }
+    const result = await api.post<{ imported?: number }>("/api/v1/analytics/holiday-calendar/fetch", { url: fetchUrl.trim() });
+    setActionResult({ action: "holiday_fetched", imported: result?.imported });
     reload();
   }
 
@@ -180,6 +212,35 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
           <label>高风险线(%)<input data-testid="anomaly-high-input" value={highEdit} onChange={(event) => setHighEdit(event.target.value)} /></label>
           <button type="button" data-testid="anomaly-config-save" onClick={saveAnomalyConfig}>保存阈值</button>
           <span className="admin-muted-action">当前:可疑 {anomalyConfig?.surgePct === undefined ? "—" : `${(Number(anomalyConfig.surgePct) * 100).toFixed(0)}%`} / 高风险 {anomalyConfig?.highPct === undefined ? "—" : `${(Number(anomalyConfig.highPct) * 100).toFixed(0)}%`};关键指标当日较前一经营日突变超线自动记异常,小基数日不报防误报。</span>
+        </div>
+        <h3>节假日日历(节假日对比与异常免报共用;农历+调休每年按国务院公布,URL 抓取或手动录入)</h3>
+        <div className="admin-table-scroll" data-testid="holiday-calendar-section">
+          <table className="admin-table" data-testid="holiday-calendar-table">
+            <thead><tr><th>年份</th><th>节假日</th><th>起</th><th>止</th><th>来源</th></tr></thead>
+            <tbody>
+              {holidays.map((h) => (
+                <tr key={`${h.holidayName}-${h.holidayYear}`}>
+                  <td>{h.holidayYear}</td>
+                  <td>{h.holidayName}</td>
+                  <td>{h.startDate ?? "—"}</td>
+                  <td>{h.endDate ?? "—"}</td>
+                  <td>{h.source === "seed" ? "预填" : h.source === "fetched" ? "抓取" : "手动"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-form-grid" data-testid="holiday-manual-editor">
+          <label>名称<input data-testid="holiday-name-input" value={holidayName} onChange={(e) => setHolidayName(e.target.value)} placeholder="春节" /></label>
+          <label>年份<input data-testid="holiday-year-input" value={holidayYear} onChange={(e) => setHolidayYear(e.target.value)} placeholder="2026" /></label>
+          <label>起<input data-testid="holiday-start-input" type="date" value={holidayStart} onChange={(e) => setHolidayStart(e.target.value)} /></label>
+          <label>止<input data-testid="holiday-end-input" type="date" value={holidayEnd} onChange={(e) => setHolidayEnd(e.target.value)} /></label>
+          <button type="button" data-testid="holiday-save" onClick={saveHoliday}>手动录入</button>
+        </div>
+        <div className="admin-form-grid" data-testid="holiday-fetch-editor">
+          <label>数据源 URL<input data-testid="holiday-fetch-url" value={fetchUrl} onChange={(e) => setFetchUrl(e.target.value)} placeholder="https://.../2026.json (holiday-cn 格式)" /></label>
+          <button type="button" data-testid="holiday-fetch" onClick={fetchHolidays}>从 URL 抓取</button>
+          <span className="admin-muted-action">抓取失败不影响既有日历;内网不通外网时用手动录入。</span>
         </div>
       </AdminDataState>
     </section>

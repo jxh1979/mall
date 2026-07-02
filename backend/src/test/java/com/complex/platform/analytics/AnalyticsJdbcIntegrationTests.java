@@ -235,6 +235,43 @@ class AnalyticsJdbcIntegrationTests {
     }
 
     @Test
+    void v209SeedsHolidaysAndRangeAggregationFollowsMixedRuling() {
+        // H1:V209 种子 2025 法定假期;区间聚合=流量累计+存量区间末;isWithinHoliday 免报判定;upsert 幂等。
+        java.util.List<AnalyticsRecords.HolidayPeriod> seeded = repository.listHolidayPeriods(2025);
+        assertThat(seeded).extracting(AnalyticsRecords.HolidayPeriod::holidayName)
+                .contains("春节", "劳动节", "国庆");
+        AnalyticsRecords.HolidayPeriod spring = seeded.stream()
+                .filter(h -> h.holidayName().equals("春节")).findFirst().orElseThrow();
+        assertThat(spring.startDate()).isEqualTo(java.time.LocalDate.parse("2025-01-28"));
+        assertThat(spring.endDate()).isEqualTo(java.time.LocalDate.parse("2025-02-04"));
+
+        assertThat(repository.isWithinHoliday(java.time.LocalDate.parse("2025-02-01"))).isTrue();
+        assertThat(repository.isWithinHoliday(java.time.LocalDate.parse("2025-03-15"))).isFalse();
+
+        repository.upsertHolidayPeriod("测试假", 2099,
+                java.time.LocalDate.parse("2099-07-01"), java.time.LocalDate.parse("2099-07-03"), "manual",
+                java.time.Instant.parse("2099-06-01T00:00:00Z"));
+        repository.upsertHolidayPeriod("测试假", 2099,
+                java.time.LocalDate.parse("2099-07-01"), java.time.LocalDate.parse("2099-07-04"), "manual",
+                java.time.Instant.parse("2099-06-02T00:00:00Z"));
+        java.util.List<AnalyticsRecords.HolidayPeriod> test = repository.listHolidayPeriods(2099);
+        assertThat(test).hasSize(1);
+        assertThat(test.get(0).endDate()).isEqualTo(java.time.LocalDate.parse("2099-07-04"));
+
+        java.time.Instant now = java.time.Instant.parse("2099-07-05T00:00:00Z");
+        upsertDaily("revenue.net", "finance", "2099-07-01", "100", now);
+        upsertDaily("revenue.net", "finance", "2099-07-02", "200", now);
+        upsertDaily("revenue.net", "finance", "2099-07-03", "300", now);
+        upsertDaily("ar.balance", "finance", "2099-07-01", "500", now);
+        upsertDaily("ar.balance", "finance", "2099-07-03", "700", now);
+        Map<String, java.math.BigDecimal> agg = repository.aggregateRange(
+                java.time.LocalDate.parse("2099-07-01"), java.time.LocalDate.parse("2099-07-03"),
+                java.util.List.of("revenue.net"), java.util.List.of("ar.balance"));
+        assertThat(agg.get("revenue.net")).isEqualByComparingTo("600");   // 区间累计
+        assertThat(agg.get("ar.balance")).isEqualByComparingTo("700");    // 区间末
+    }
+
+    @Test
     void merchantSummariesRollupAggregatesRealSources() {
         // M4(真库):汇总=当日商户维净收入快照+当日核销量+open风险告警数+最新账单状态;V208 演示种子已清。
         assertThat(countRows("SELECT COUNT(*) FROM analytics_merchant_summaries WHERE merchant_id='merchant_p0'")).isZero();

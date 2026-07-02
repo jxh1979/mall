@@ -134,6 +134,20 @@ public interface AnalyticsRepository {
     /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。 */
     java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset);
 
+    /** H1:列节假日区间(按年份过滤;year=null 全部,按年份+起始日排序)。 */
+    java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year);
+
+    /** H1:录入/修正节假日区间(同名同年唯一,幂等覆盖;source=seed/fetched/manual)。 */
+    AnalyticsRecords.HolidayPeriod upsertHolidayPeriod(String holidayName, int holidayYear,
+            LocalDate startDate, LocalDate endDate, String source, java.time.Instant now);
+
+    /** H1:某经营日是否落在任一节假日区间内(异常检测免报用——节假日暴涨暴跌是正常经营)。 */
+    boolean isWithinHoliday(LocalDate businessDate);
+
+    /** H1:区间聚合(节假日对比用):sumKeys=区间累计,lastKeys=区间末时点;返回 metric_key -> value。 */
+    Map<String, BigDecimal> aggregateRange(LocalDate start, LocalDate end,
+            java.util.List<String> sumKeys, java.util.List<String> lastKeys);
+
     /** M4:商户经营汇总真管道——从当日商户维快照(净收入/核销)+风险告警+最新账单状态聚合,
      * 每商户一行最新态(V017 演示种子已清)。口径:收入与看板同源;单量=当日核销;风险=open告警数。 */
     void refreshMerchantSummaries(LocalDate businessDate, java.time.Instant now);

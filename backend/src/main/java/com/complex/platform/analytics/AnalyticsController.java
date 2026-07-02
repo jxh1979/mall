@@ -209,6 +209,42 @@ public class AnalyticsController {
         return ApiResponse.ok(operatingParamsService.upsertBusinessDayCutoff(request));
     }
 
+    @GetMapping("/holiday-calendar")
+    public ApiResponse<PageResponse<AnalyticsRecords.HolidayPeriod>> listHolidayPeriods(
+            @org.springframework.web.bind.annotation.RequestParam(value = "year", required = false) Integer year) {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        java.util.List<AnalyticsRecords.HolidayPeriod> items = operatingParamsService.listHolidayPeriods(year);
+        return ApiResponse.ok(new PageResponse<>(items, 1, 100, items.size()));
+    }
+
+    @PostMapping("/holiday-calendar")
+    public ApiResponse<AnalyticsRecords.HolidayPeriod> upsertHolidayPeriod(
+            @RequestBody @jakarta.validation.Valid HolidayPeriodRequest request) {
+        authorizationService.requirePermission("analytics.operating_params.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(operatingParamsService.upsertHolidayPeriod(request));
+    }
+
+    @PostMapping("/holiday-calendar/fetch")
+    public ApiResponse<java.util.Map<String, Object>> fetchHolidayCalendar(
+            @RequestBody @jakarta.validation.Valid HolidayFetchRequest request) {
+        authorizationService.requirePermission("analytics.operating_params.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(operatingParamsService.fetchHolidayCalendar(request));
+    }
+
+    @GetMapping("/holiday-comparison")
+    public ApiResponse<AnalyticsRecords.HolidayComparisonResponse> holidayComparison(
+            @org.springframework.web.bind.annotation.RequestParam("holiday") String holiday,
+            @org.springframework.web.bind.annotation.RequestParam("year") int year) {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(service.holidayComparison(holiday, year));
+    }
+
     @GetMapping("/anomaly-config")
     public ApiResponse<AnalyticsRecords.AnomalyConfig> getAnomalyConfig() {
         authorizationService.requirePermission("analytics.dashboard.view");

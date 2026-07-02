@@ -27174,6 +27174,235 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/analytics/holiday-calendar": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "listHolidayPeriods",
+        "summary": "节假日日历",
+        "description": "H1(2026-07-02 拍板):节假日对比与异常免报共用;农历+调休每年按国务院公布, URL 抓取(holiday-cn JSON)或手动录入,2025 已预填种子。",
+        "x-permission": "analytics.dashboard.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.holiday_calendar.viewed",
+        "x-audit-event-failure": "analytics.holiday_calendar.view_failed",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "upsertHolidayPeriod",
+        "summary": "手动录入节假日区间",
+        "description": "同名同年幂等覆盖;审计留痕。",
+        "x-permission": "analytics.operating_params.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "analytics.holiday_calendar.updated",
+        "x-audit-event-failure": "analytics.holiday_calendar.update_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "holiday_name",
+                  "holiday_year",
+                  "start_date",
+                  "end_date"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "holiday_name": {
+                    "type": "string",
+                    "description": "节假日名(同名跨年对比,如「春节」)。",
+                    "maxLength": 64
+                  },
+                  "holiday_year": {
+                    "type": "integer",
+                    "description": "年份(2000-2100)。",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "假期首日。"
+                  },
+                  "end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "假期末日(≥首日)。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/analytics/holiday-calendar/fetch": {
+      "post": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "fetchHolidayCalendar",
+        "summary": "从 URL 抓取节假日日历",
+        "description": "H1(2026-07-02 拍板):支持 holiday-cn JSON 格式({days:[{name,date,isOffDay}]}); 抓取失败(内网不通/格式不符)不动既有日历,提示手动录入兜底;审计记录 URL 与导入数。",
+        "x-permission": "analytics.operating_params.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "analytics.holiday_calendar.fetched",
+        "x-audit-event-failure": "analytics.holiday_calendar.fetch_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "url"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "节假日数据源 URL(http/https)。",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/analytics/holiday-comparison": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "operationId": "getHolidayComparison",
+        "summary": "节假日对比(今年 vs 去年同名)",
+        "description": "H1(2026-07-02 拍板):流量=区间累计+日均双列(天数不同看日均才公平,同比按日均); 存量=假期末时点;去年无同名假期→上年侧空(积累中,不伪造)。",
+        "x-permission": "analytics.dashboard.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "analytics.holiday_comparison.viewed",
+        "x-audit-event-failure": "analytics.holiday_comparison.view_failed",
+        "parameters": [
+          {
+            "name": "holiday",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {

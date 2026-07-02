@@ -282,6 +282,16 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/robot": empty,
     "/api/v1/analytics/metric-definitions": state.metricDefinitions,
     "/api/v1/analytics/anomaly-config": { surge_pct: 0.5, high_pct: 0.8, enabled: true },
+    "/api/v1/analytics/holiday-calendar": [
+      { holiday_name: "春节", holiday_year: 2026, start_date: "2026-02-15", end_date: "2026-02-22", source: "manual" },
+      { holiday_name: "春节", holiday_year: 2025, start_date: "2025-01-28", end_date: "2025-02-04", source: "seed" },
+    ],
+    "/api/v1/analytics/holiday-comparison": { holiday_name: "春节", current_year: 2026,
+      current_start: "2026-02-15", current_end: "2026-02-22", previous_year: 2025,
+      previous_start: "2025-01-28", previous_end: "2025-02-04", rows: [
+      { metric_key: "revenue.net", label: "净收入", unit: "cent", aggregation: "monthly_sum",
+        current_total: 8000000, current_daily_avg: 1000000, previous_total: 6400000, previous_daily_avg: 800000, yoy_pct: 0.25 },
+    ] },
     "/api/v1/analytics/ai-quality/tasks": empty,
     "/api/v1/analytics/ai-quality/results": empty,
     "/api/v1/analytics/customer-intents": empty,

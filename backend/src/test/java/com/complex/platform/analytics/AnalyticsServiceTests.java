@@ -892,6 +892,40 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void holidayComparisonUsesTotalsAndDailyAveragesAcrossSameNamedHolidays() {
+        // H1(2026-07-02 拍板):同名节假日今年 vs 去年;流量=总额+日均双列(天数不同看日均才公平);
+        // 去年无同名区间 → previous 侧 null(积累中),同比不出。
+        analyticsRepository.holidayPeriods = java.util.List.of(
+                new AnalyticsRecords.HolidayPeriod("春节", 2026,
+                        LocalDate.parse("2026-02-15"), LocalDate.parse("2026-02-22"), "manual", null),
+                new AnalyticsRecords.HolidayPeriod("春节", 2025,
+                        LocalDate.parse("2025-01-28"), LocalDate.parse("2025-02-04"), "seed", null));
+        analyticsRepository.rangeAggregates = java.util.Map.of(
+                "2026-02-15|2026-02-22", java.util.Map.of("revenue.net", new java.math.BigDecimal("800000")),
+                "2025-01-28|2025-02-04", java.util.Map.of("revenue.net", new java.math.BigDecimal("640000")));
+
+        AnalyticsRecords.HolidayComparisonResponse response = service.holidayComparison("春节", 2026);
+        assertThat(response.currentStart()).isEqualTo(LocalDate.parse("2026-02-15"));
+        assertThat(response.previousYear()).isEqualTo(2025);
+        AnalyticsRecords.HolidayComparisonRow net = response.rows().stream()
+                .filter(row -> row.metricKey().equals("revenue.net")).findFirst().orElseThrow();
+        assertThat(net.currentTotal()).isEqualByComparingTo("800000");
+        assertThat(net.currentDailyAvg()).isEqualByComparingTo("100000");   // 8 天
+        assertThat(net.previousTotal()).isEqualByComparingTo("640000");
+        assertThat(net.previousDailyAvg()).isEqualByComparingTo("80000");   // 8 天(1.28-2.4)
+        assertThat(net.yoyPct()).isEqualByComparingTo("0.2500");            // 按日均比
+        // 去年无同名 → previous null
+        analyticsRepository.holidayPeriods = java.util.List.of(
+                new AnalyticsRecords.HolidayPeriod("春节", 2026,
+                        LocalDate.parse("2026-02-15"), LocalDate.parse("2026-02-22"), "manual", null));
+        AnalyticsRecords.HolidayComparisonResponse missing = service.holidayComparison("春节", 2026);
+        AnalyticsRecords.HolidayComparisonRow row = missing.rows().stream()
+                .filter(r -> r.metricKey().equals("revenue.net")).findFirst().orElseThrow();
+        assertThat(row.previousTotal()).isNull();
+        assertThat(row.yoyPct()).isNull();
+    }
+
+    @Test
     void monthlyComparisonComputesMomYoyAndMarksMissingAsNull() {
         // M1:环比=上月 monthly 行,同比=去年同月;缺行=null(前端标「积累中」),分母0不出百分比。
         analyticsRepository.monthlySnapshots = java.util.Map.of(
@@ -959,6 +993,27 @@ class AnalyticsServiceTests {
         }
 
         java.util.Map<LocalDate, java.util.Map<String, java.math.BigDecimal>> monthlySnapshots = java.util.Map.of();
+
+        java.util.List<AnalyticsRecords.HolidayPeriod> holidayPeriods = java.util.List.of();
+        java.util.Map<String, java.util.Map<String, java.math.BigDecimal>> rangeAggregates = java.util.Map.of();
+
+        public java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year) {
+            return holidayPeriods;
+        }
+
+        public AnalyticsRecords.HolidayPeriod upsertHolidayPeriod(String holidayName, int holidayYear,
+                LocalDate startDate, LocalDate endDate, String source, java.time.Instant now) {
+            return new AnalyticsRecords.HolidayPeriod(holidayName, holidayYear, startDate, endDate, source, now);
+        }
+
+        public boolean isWithinHoliday(LocalDate businessDate) {
+            return false;
+        }
+
+        public java.util.Map<String, java.math.BigDecimal> aggregateRange(LocalDate start, LocalDate end,
+                java.util.List<String> sumKeys, java.util.List<String> lastKeys) {
+            return rangeAggregates.getOrDefault(start + "|" + end, java.util.Map.of());
+        }
 
         public void refreshMerchantSummaries(LocalDate businessDate, java.time.Instant now) {
         }

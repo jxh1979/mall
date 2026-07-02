@@ -163,6 +163,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(comparisonTable).toContainText("+50.00%");   // 环比
     await expect(comparisonTable).toContainText("积累中");     // 缺同比不伪造
     await expect(page.getByTestId("monthly-comparison-export")).toBeVisible();
+    await page.getByTestId("holiday-comparison-select").selectOption("春节|2026");
+    await expect(page.getByTestId("holiday-comparison-table")).toContainText("¥10,000");   // 今年日均 100万分
+    await expect(page.getByTestId("holiday-comparison-table")).toContainText("+25.00%");   // 按日均同比
+    await expect(page.getByTestId("holiday-comparison-range")).toContainText("2025-01-28");
   } else if (spec.pageId === "ADM-ANA-006") {
     await expect(page.getByTestId("wo-sla-page")).toBeVisible();
     await expect(page.getByTestId("wo-response-p50")).toContainText("2.5 小时");
@@ -188,6 +192,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("operating-params-page")).toBeVisible();
     await expect(page.getByTestId("anomaly-config-editor")).toBeVisible();
     await expect(page.getByTestId("anomaly-surge-input")).toHaveValue("50");
+    await expect(page.getByTestId("holiday-calendar-table")).toContainText("春节");
+    await expect(page.getByTestId("holiday-fetch-editor")).toBeVisible();
     await expect(page.getByTestId("business-day-cutoffs-table")).toBeVisible();
     await expect(page.getByTestId("cutoff-hour-bar")).toContainText("6:00");
   }

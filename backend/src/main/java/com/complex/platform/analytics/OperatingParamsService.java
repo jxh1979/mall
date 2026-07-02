@@ -113,6 +113,105 @@ public class OperatingParamsService {
         return saved;
     }
 
+    /** H1:列节假日日历(经营参数页维护区)。 */
+    public java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year) {
+        return repository.listHolidayPeriods(year);
+    }
+
+    /** H1:手动录入/修正节假日区间(每年按国务院公布;同名同年幂等覆盖;审计留痕)。 */
+    public AnalyticsRecords.HolidayPeriod upsertHolidayPeriod(HolidayPeriodRequest request) {
+        HolidayPeriodRequest actual = requireRequest(request);
+        String name = requireText(actual.holidayName(), "holiday_name");
+        Integer year = actual.holidayYear();
+        if (year == null || year < 2000 || year > 2100) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "holiday_year must be between 2000 and 2100");
+        }
+        java.time.LocalDate start = actual.startDate();
+        java.time.LocalDate end = actual.endDate();
+        if (start == null || end == null || end.isBefore(start)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "start_date/end_date invalid");
+        }
+        AnalyticsRecords.HolidayPeriod saved = repository.upsertHolidayPeriod(
+                name, year, start, end, "manual", Instant.now(clock));
+        auditEventService.recordSuccess(
+                "analytics.holiday_calendar.updated", "analytics.operating_params.manage",
+                "holiday_calendar", name + "-" + year, null, actual.idempotencyKey(),
+                java.util.Map.of("holiday_name", name, "holiday_year", year,
+                        "start_date", start.toString(), "end_date", end.toString()));
+        return saved;
+    }
+
+    /** H1(2026-07-02 拍板):从 URL 自动抓节假日日历(holiday-cn JSON 格式 {days:[{name,date,isOffDay}]});
+     * 农历+调休不可程序推算,抓取失败(如内网不通外网)不动既有数据,提示手动录入兜底。 */
+    public java.util.Map<String, Object> fetchHolidayCalendar(HolidayFetchRequest request) {
+        HolidayFetchRequest actual = requireRequest(request);
+        String url = requireText(actual.url(), "url");
+        if (!url.startsWith("https://") && !url.startsWith("http://")) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "url must be http(s)");
+        }
+        String body;
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(5)).build();
+            java.net.http.HttpResponse<String> response = client.send(
+                    java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                            .timeout(java.time.Duration.ofSeconds(10)).GET().build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "holiday source returned HTTP " + response.statusCode() + "; existing calendar untouched");
+            }
+            body = response.body();
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "holiday source unreachable (" + e.getClass().getSimpleName() + "); existing calendar untouched, use manual entry");
+        }
+        java.util.Map<String, int[]> merged = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.util.List<java.time.LocalDate>> byName = new java.util.LinkedHashMap<>();
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(body);
+            com.fasterxml.jackson.databind.JsonNode days = root.get("days");
+            if (days == null || !days.isArray()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "unsupported format: expecting holiday-cn JSON with days[]");
+            }
+            for (com.fasterxml.jackson.databind.JsonNode day : days) {
+                if (!day.path("isOffDay").asBoolean(false)) {
+                    continue;
+                }
+                String name = day.path("name").asText("");
+                String date = day.path("date").asText("");
+                if (name.isEmpty() || date.isEmpty()) {
+                    continue;
+                }
+                byName.computeIfAbsent(name, k -> new java.util.ArrayList<>()).add(java.time.LocalDate.parse(date));
+            }
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "holiday source parse failed; existing calendar untouched");
+        }
+        if (byName.isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "no off-days found in source; existing calendar untouched");
+        }
+        Instant now = Instant.now(clock);
+        int imported = 0;
+        for (java.util.Map.Entry<String, java.util.List<java.time.LocalDate>> entry : byName.entrySet()) {
+            java.util.List<java.time.LocalDate> dates = entry.getValue();
+            java.time.LocalDate start = java.util.Collections.min(dates);
+            java.time.LocalDate end = java.util.Collections.max(dates);
+            // 同名假期取 min~max 区间(调休夹缝上班日对区间聚合影响可忽略,注释口径)。
+            repository.upsertHolidayPeriod(entry.getKey(), start.getYear(), start, end, "fetched", now);
+            imported++;
+        }
+        auditEventService.recordSuccess(
+                "analytics.holiday_calendar.fetched", "analytics.operating_params.manage",
+                "holiday_calendar", url, null, actual.idempotencyKey(),
+                java.util.Map.of("url", url, "imported", imported));
+        return java.util.Map.of("imported", imported, "holidays", byName.keySet());
+    }
+
     private <T> T requireRequest(T request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");

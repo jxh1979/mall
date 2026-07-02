@@ -988,6 +988,81 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public java.util.List<AnalyticsRecords.HolidayPeriod> listHolidayPeriods(Integer year) {
+        return jdbcTemplate.query("""
+                SELECT holiday_name, holiday_year, start_date, end_date, source, updated_at
+                  FROM holiday_calendar
+                 WHERE :year::int IS NULL OR holiday_year = :year
+                 ORDER BY holiday_year DESC, start_date
+                """, new MapSqlParameterSource().addValue("year", year),
+                (rs, n) -> new AnalyticsRecords.HolidayPeriod(
+                        rs.getString("holiday_name"), rs.getInt("holiday_year"),
+                        rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class),
+                        rs.getString("source"), rs.getTimestamp("updated_at").toInstant()));
+    }
+
+    @Override
+    public AnalyticsRecords.HolidayPeriod upsertHolidayPeriod(String holidayName, int holidayYear,
+            LocalDate startDate, LocalDate endDate, String source, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO holiday_calendar (id, holiday_name, holiday_year, start_date, end_date, source, updated_at)
+                VALUES ('hol_' || gen_random_uuid(), :name, :year, :start_date, :end_date, :source, :now)
+                ON CONFLICT (holiday_name, holiday_year) DO UPDATE SET
+                    start_date = EXCLUDED.start_date,
+                    end_date = EXCLUDED.end_date,
+                    source = EXCLUDED.source,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("name", holidayName)
+                .addValue("year", holidayYear)
+                .addValue("start_date", startDate)
+                .addValue("end_date", endDate)
+                .addValue("source", source)
+                .addValue("now", timestampWithTimeZone(now)));
+        return new AnalyticsRecords.HolidayPeriod(holidayName, holidayYear, startDate, endDate, source, now);
+    }
+
+    @Override
+    public boolean isWithinHoliday(LocalDate businessDate) {
+        Boolean exists = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM holiday_calendar WHERE :d BETWEEN start_date AND end_date)
+                """, new MapSqlParameterSource().addValue("d", businessDate), Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
+    public Map<String, BigDecimal> aggregateRange(LocalDate start, LocalDate end,
+            java.util.List<String> sumKeys, java.util.List<String> lastKeys) {
+        Map<String, BigDecimal> out = new java.util.LinkedHashMap<>();
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", start).addValue("end", end)
+                .addValue("sum_keys", sumKeys).addValue("last_keys", lastKeys);
+        if (!sumKeys.isEmpty()) {
+            jdbcTemplate.query("""
+                    SELECT metric_key, SUM(actual_value) AS v
+                      FROM analytics_business_metric_snapshots
+                     WHERE period_type = 'daily' AND segment_type = 'platform'
+                       AND business_date BETWEEN :start AND :end AND metric_key IN (:sum_keys)
+                     GROUP BY metric_key
+                    """, params, resultSet -> {
+                out.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("v"));
+            });
+        }
+        if (!lastKeys.isEmpty()) {
+            jdbcTemplate.query("""
+                    SELECT DISTINCT ON (metric_key) metric_key, actual_value AS v
+                      FROM analytics_business_metric_snapshots
+                     WHERE period_type = 'daily' AND segment_type = 'platform'
+                       AND business_date BETWEEN :start AND :end AND metric_key IN (:last_keys)
+                     ORDER BY metric_key, business_date DESC
+                    """, params, resultSet -> {
+                out.put(resultSet.getString("metric_key"), resultSet.getBigDecimal("v"));
+            });
+        }
+        return out;
+    }
+
+    @Override
     public void refreshMerchantSummaries(LocalDate businessDate, java.time.Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("business_date", businessDate)

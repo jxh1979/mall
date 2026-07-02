@@ -19,6 +19,18 @@ type ComparisonRow = {
   yoyPct?: number | string | null;
 };
 type ComparisonResponse = { month?: string; rows?: ComparisonRow[] };
+type HolidayPeriod = { holidayName: string; holidayYear: number; startDate?: string; endDate?: string; source?: string };
+type HolidayRow = {
+  metricKey: string; label?: string; unit?: string; aggregation?: string;
+  currentTotal?: number | string | null; currentDailyAvg?: number | string | null;
+  previousTotal?: number | string | null; previousDailyAvg?: number | string | null;
+  yoyPct?: number | string | null;
+};
+type HolidayComparison = {
+  holidayName?: string; currentYear?: number; currentStart?: string; currentEnd?: string;
+  previousYear?: number | null; previousStart?: string | null; previousEnd?: string | null;
+  rows?: HolidayRow[];
+};
 
 const TEXT = {
   title: "月度对比",
@@ -67,12 +79,18 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
   const [month, setMonth] = React.useState(defaultMonth);
   const [data, setData] = React.useState<ComparisonResponse | null>(null);
   const [exporting, setExporting] = React.useState(false);
+  const [holidays, setHolidays] = React.useState<HolidayPeriod[]>([]);
+  const [selectedHoliday, setSelectedHoliday] = React.useState("");
+  const [holidayData, setHolidayData] = React.useState<HolidayComparison | null>(null);
+  const [holidayError, setHolidayError] = React.useState<string | null>(null);
   const canExport = hasPermissions(effectivePermissions, ["analytics.report.export"]);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
       const response = await api.get<ComparisonResponse>(`/api/v1/analytics/monthly-comparison?month=${month}`);
       setData(response);
+      const holidayRows = await api.get<HolidayPeriod[]>("/api/v1/analytics/holiday-calendar");
+      setHolidays(holidayRows ?? []);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -87,6 +105,22 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
   }, [month, reload]);
 
   const rows = data?.rows ?? [];
+
+  const loadHolidayComparison = async (value: string) => {
+    setSelectedHoliday(value);
+    setHolidayError(null);
+    setHolidayData(null);
+    if (!value) return;
+    const [name = "", year = ""] = value.split("|");
+    if (!name || !year) return;
+    try {
+      const result = await api.get<HolidayComparison>(
+        `/api/v1/analytics/holiday-comparison?holiday=${encodeURIComponent(name)}&year=${year}`);
+      setHolidayData(result);
+    } catch (e) {
+      setHolidayError(e instanceof Error ? e.message : "节假日对比读取失败");
+    }
+  };
 
   const exportCsv = async () => {
     setExporting(true);
@@ -160,6 +194,48 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
           </table>
         </div>
       </AdminDataState>
+      <h3>节假日对比(今年 vs 去年同名假期;流量看总额与日均,天数不同看日均才公平)</h3>
+      <div className="admin-toolbar" data-testid="holiday-comparison-controls">
+        <label>
+          节假日:
+          <select data-testid="holiday-comparison-select" value={selectedHoliday}
+                  onChange={(event) => void loadHolidayComparison(event.target.value)}>
+            <option value="">请选择</option>
+            {holidays.map((h) => (
+              <option key={`${h.holidayName}-${h.holidayYear}`} value={`${h.holidayName}|${h.holidayYear}`}>
+                {h.holidayYear} {h.holidayName}
+              </option>
+            ))}
+          </select>
+        </label>
+        {holidayData ? (
+          <span className="admin-muted-action" data-testid="holiday-comparison-range">
+            本期 {holidayData.currentStart} ~ {holidayData.currentEnd}
+            {holidayData.previousStart ? `;上年同名 ${holidayData.previousStart} ~ ${holidayData.previousEnd}` : ";上年无同名假期(积累中)"}
+          </span>
+        ) : null}
+      </div>
+      {holidayError ? <div className="admin-state admin-error" data-testid="holiday-comparison-error">{holidayError}</div> : null}
+      {holidayData ? (
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="holiday-comparison-table">
+            <thead><tr><th>指标</th><th>口径</th><th>今年合计</th><th>今年日均</th><th>去年合计</th><th>去年日均</th><th>同比</th></tr></thead>
+            <tbody>
+              {(holidayData.rows ?? []).map((row) => (
+                <tr key={row.metricKey}>
+                  <td>{row.label ?? row.metricKey}</td>
+                  <td>{row.aggregation === "monthly_sum" ? "区间累计" : "期末时点"}</td>
+                  <td>{fmt(row.currentTotal, row.unit)}</td>
+                  <td>{row.aggregation === "monthly_sum" ? fmt(row.currentDailyAvg, row.unit) : "—"}</td>
+                  <td>{fmt(row.previousTotal, row.unit)}</td>
+                  <td>{row.aggregation === "monthly_sum" ? fmt(row.previousDailyAvg, row.unit) : "—"}</td>
+                  <td>{pct(row.yoyPct)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </section>
   );
 }
