@@ -8,6 +8,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
+import { usePagedRows, TablePager } from "../components/TablePager";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -82,6 +83,7 @@ function firstBillId(order: BarOrderRow | undefined) {
 
 export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
+  const pagedOrders = usePagedRows(orders, 10, orders.length);
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
@@ -227,7 +229,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => {
+              {pagedOrders.pageRows.map((order) => {
                 const bill = firstBill(order);
                 return (
                   <tr key={order.id}>
@@ -244,6 +246,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
               })}
             </tbody>
           </table>
+            <TablePager testid="bar-orders-pager" page={pagedOrders.page} pageCount={pagedOrders.pageCount} total={pagedOrders.total} onPrev={pagedOrders.prev} onNext={pagedOrders.next} />
         </div>
       </AdminDataState>
     </section>
