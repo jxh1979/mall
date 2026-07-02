@@ -38,6 +38,22 @@ class MasterAuthorityServiceTests {
         return Base64.getEncoder().encodeToString(s.sign());
     }
 
+    // 4.9 破窗登录限速：60 秒窗口内超过 5 次尝试(challenge+login 合计)一律 429 拒并留审计。
+    @Test
+    void rateLimitsMasterAuthAttemptsWithinWindow() {
+        MasterAuthorityService service = service(java.time.Duration.ofMinutes(5), pub());
+        for (int i = 0; i < 5; i++) {
+            service.issueChallenge(); // 前 5 次放行
+        }
+        org.assertj.core.api.Assertions.assertThatThrownBy(service::issueChallenge)
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("MASTER_AUTH_RATE_LIMITED"));
+        // login 与 challenge 共享同一窗口(离线签名暴力尝试两个入口都要压)。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.login("any", "sig"))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("MASTER_AUTH_RATE_LIMITED"));
+    }
+
     @Test
     void validChallengeAndSignatureIssuesMasterSession() throws Exception {
         MasterAuthorityService svc = service(Duration.ofMinutes(2), pub());

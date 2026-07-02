@@ -38,6 +38,28 @@ public class MasterAuthorityService {
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, Instant> challenges = new ConcurrentHashMap<>(); // challenge -> 过期时刻（一次性）
 
+    // 4.9 破窗登录限速：破窗是极罕见操作（U 盘物理钥匙），全局固定窗口足够——60 秒窗口内最多 5 次
+    // challenge/login 尝试，超限 429 拒并审计留痕（防离线签名暴力尝试；分布式部署时窗口按实例，破窗只有单实例）。
+    // ponytail: 全局内存窗口，按 IP 细分待有真实多租户破窗需求再加。
+    private static final int RATE_LIMIT_MAX_ATTEMPTS = 5;
+    private static final Duration RATE_LIMIT_WINDOW = Duration.ofSeconds(60);
+    private final java.util.concurrent.atomic.AtomicInteger windowAttempts = new java.util.concurrent.atomic.AtomicInteger();
+    private volatile Instant windowStartedAt = Instant.EPOCH;
+
+    private synchronized void enforceRateLimit(String action) {
+        Instant now = Instant.now();
+        if (now.isAfter(windowStartedAt.plus(RATE_LIMIT_WINDOW))) {
+            windowStartedAt = now;
+            windowAttempts.set(0);
+        }
+        if (windowAttempts.incrementAndGet() > RATE_LIMIT_MAX_ATTEMPTS) {
+            auditEventService.recordFailure("master_auth." + action + "_rate_limited", "not_applicable",
+                    "master_auth", "global", null, null, "MASTER_AUTH_RATE_LIMITED");
+            throw ApiException.tooManyRequests("MASTER_AUTH_RATE_LIMITED",
+                    "too many master auth attempts, retry later");
+        }
+    }
+
     public MasterAuthorityService(
             SessionIssuer sessionIssuer,
             AuditEventService auditEventService,
@@ -56,6 +78,7 @@ public class MasterAuthorityService {
 
     /** 发一次性短时效挑战码；未启用则拒绝。 */
     public String issueChallenge() {
+        enforceRateLimit("challenge");
         requireEnabled();
         pruneExpired();
         byte[] raw = new byte[32];
@@ -69,6 +92,7 @@ public class MasterAuthorityService {
 
     /** 校验挑战（存在/未过期/一次性）+ Ed25519 验签，通过则签发最高权限会话。 */
     public AuthService.LoginResponse login(String challenge, String signatureBase64) {
+        enforceRateLimit("login");
         requireEnabled();
         Instant expiry = challenge == null ? null : challenges.remove(challenge); // 一次性：取出即消费
         if (expiry == null || Instant.now().isAfter(expiry)) {
