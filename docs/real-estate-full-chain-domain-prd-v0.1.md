@@ -25,7 +25,7 @@
   - 全生命周期变更：续租、退租（保证金抵扣/欠费追缴/争议）、面积/租金/经营范围变更、提前终止，每次留审批与原因；不支持转租，换租户须先退租再重新招商。
   - 按租金规则（固定/每平米/营业额抽成/物业费/保证金/递增/免租期）生成周期性应收账单，逾期账龄与提醒。
   - 铺位平面图 + 租赁状态（空置/洽谈中/已租/即将到期/已退租/不可租）着色看板。
-- **现有承接**：合同准入 + 到期预警（V028 contract_compliance_expiry）、合同空间（V080 contract_spaces）、铺位多边形（V023/V052）、物业费固定计费（V150）；`gap-analysis §7.4` 已给 merchant_contracts / contract_approval_flows / contract_rent_rules / contract_key_dates 等表设计。**审批流/续租退租办理/租金账单引擎未落表。**
+- **现有承接**：合同准入 + 到期预警（V028 contract_compliance_expiry）、合同空间（V080 contract_spaces）、铺位多边形（V023/V052）、物业费固定计费（V150）；`gap-analysis §7.4` 已给 merchant_contracts / contract_approval_flows / contract_rent_rules / contract_key_dates 等表设计。**审批流/续租退租办理/租金账单引擎已由 V162 合同域重建落地（原「未落表」为过期标注，2026-07-02 回写）。**
 - **待深挖**：强制审批阈值、电子签章供应商、租金抽成比例细化。（审批会签规则=分组并行会签、退租结算与保证金抵扣口径、铺位状态枚举集合 已随 V162 落地并由业务系统地图定稿，不再列待深挖。）
 
 ## 3. 物业服务工单

@@ -41,7 +41,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | V046 | inventory 10 表 + `saved_bottles` | merchant_id | VARCHAR(64) | 部分索引；`chk_stock_adjustment_type`（**NOT VALID，待 VALIDATE**）|
 | V047 | bar_tables / bar_reservations / bar_products / bar_orders / bar_production_tickets / bar_bills | merchant_id | VARCHAR(100) | 各部分索引 |
 | V048 | `roles` | organization_id | VARCHAR(64) | 部分索引（NULL=平台全局角色）|
-| V049 | amusement 4 表 | merchant_id | VARCHAR(?) | 无索引（**缺口，见 §6**）|
+| V049 | amusement 4 表 | merchant_id | VARCHAR(?) | 部分索引已补（V065，ISO-GAP-03 已关闭）|
 | V051 | `compliance_reminders` | merchant_id | VARCHAR(64) | 部分索引；`uq_compliance_reminder_dedup` 去重约束 |
 | V052 | `mall_floor_plans` | merchant_id | VARCHAR(64) | 部分索引 |
 | V055 | `staff_level_assignments` | organization_id + merchant_id | VARCHAR(64) | 两个部分索引（org/merchant）；`staff_levels` 为平台全局参考数据 `single_complex_default`，无 scope 列 |
@@ -218,7 +218,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 |---|---|---|
 | ISO-GAP-01 | **已关闭（2026-06-21）**：安全基线生成器已自动纳管 `SEC-P0-TENANT-ISOLATION-001`，`findings-register-v1.md` / `formal-security-baseline-v1.md` 均由 `docs:security-baseline` 生成；`verify:tenant-isolation` 已纳入交付闸口并通过 | Closed |
 | ISO-GAP-02 | **已关闭（2026-06-21）**：`verify:tenant-isolation` 自动闸口已落地并接入 `verify:delivery-gates`，可检查 repository scope 注入与新增表登记 | Closed |
-| ISO-GAP-03 | V049 amusement 4 表的 merchant_id **无索引**（其余域均建了部分索引）→ 性能/一致性缺口 | P1 |
+| ISO-GAP-03 | **已关闭（V065）**：`V065__amusement_merchant_isolation_indexes.sql` 已给 amusement 4 表 merchant_id 建部分索引（原「无索引」P1 为过期标注，2026-07-02 回写并经库内索引核实） | Closed |
 | ISO-GAP-04 | V044–V061 缺 TDD 风格实现/回归 plan（对齐 `superpowers/plans/2026-06-15-security-audit-fixes.md` 的 V038/V039 记录）→ 详见本节末「ISO-GAP-04 TDD 回归 plan 待补」 | P1 |
 | ISO-GAP-05 | dev-design（bar/amusement/foundation）把 merchant_id 写成 `uuid`，与迁移 `VARCHAR` retrofit 不符 | P2 |
 | ISO-GAP-06 | `saved_bottles.customer_phone` 等 V061 新增敏感字段 **at-rest 加密未实现**（明文存储）→ 应补加密/脱敏方案 | P1 |
@@ -233,7 +233,7 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 - V046：inventory 10 表 + `saved_bottles`（direct merchant_id）
 - V047：bar_tables / bar_reservations / bar_products / bar_orders / bar_production_tickets / bar_bills（direct merchant_id）
 - V048：`roles`（direct organization_id，NULL=平台全局）
-- V049：amusement 4 表（direct merchant_id，无索引）
+- V049：amusement 4 表（direct merchant_id，部分索引已补 V065）
 - V051：`compliance_reminders`（direct merchant_id）
 - V052：`mall_floor_plans`（direct merchant_id）
 - V055：`staff_level_assignments`（direct org+merchant）；`staff_levels` 平台全局参考无 scope（只测全量可见）
@@ -323,4 +323,4 @@ V044–V061 各隔离迁移目前**缺统一的 TDD 风格回归 plan / 用例�
 
 - **统一原则**：三类主体一律走 §2「scope 只来自安全 token」，不得以请求参数放大范围；其访问（含被拒）按 HTML 留痕复核要求写审计（外包检修动作、审计人员敏感查看）。
 - **落地现状（2026-06-30 更新，纠正旧"待落地核对"措辞）**：外包与审计已落地——外包账号类型 `outsourced_vendor` + 三角色（OUTSOURCED_FACILITY / OUTSOURCED_SECURITY_CLEANING / OUTSOURCED_CONSTRUCTION）assignee 级数据范围强制（list 按 assignee 过滤、写操作 FORBIDDEN、跨商户/平台拒绝），审计两级只读角色（V180）；权限点已在 `full-admin-page-permission-field-matrix`（外包工作台 ADM-VND 页），详见治理 PRD §4，verify:full-admin-matrix 已绿。外包账号**独立于供货供应商台账**（供货供应商只作采购/对账对象、零登录账号）。
-- **残留 TODO（自助下属层，尚未建）**：当前为平台直发 assignee 账号；"外部协作机构持自助链接自助开通/停用下属账号 + 平台设下属账号上限 + 下属账号有效期随合同周期到期自动停用 + 机构查看下属工作完成情况"这层自助门户**尚未实现**，需求口径见治理 PRD §4。
+- **自助下属层（已全部落地，2026-07-02 回写）**：外部协作机构自助开通/停用下属账号、平台设下属账号上限、账号有效期随合同周期到期自动停用、下属继承机构范围、机构查看下属工作完成情况（`PartnerSubordinateCompletionService` + subordinates-completion 端点 + `ADM-VND-004` 页）均已落地；原「尚未实现」为过期标注。需求口径见治理 PRD §4。
