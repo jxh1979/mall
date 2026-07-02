@@ -63,4 +63,6 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 
 dependencies {
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+  // 4.2 扫码相机：ZXing Embedded（本地解码，无云依赖；平板/工作手机摄像头即用）
+  implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 }

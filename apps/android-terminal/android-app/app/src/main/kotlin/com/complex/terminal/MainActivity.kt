@@ -1,6 +1,8 @@
 package com.complex.terminal
 
 import android.app.Activity
+import android.content.Intent
+import com.google.zxing.integration.android.IntentIntegrator
 import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
@@ -36,6 +38,29 @@ class MainActivity : Activity() {
   private val store = InMemoryLocalStore()
   private val api: TerminalApiClient by lazy { TerminalApiClient(BuildConfig.COMPLEX_API_BASE_URL.trim().trimEnd('/')) }
   private val workflow: TerminalWorkflow by lazy { TerminalWorkflow(api, store) }
+
+  // 4.2 扫码相机：ZXing 内置扫码界面（IntentIntegrator 旧式回调，兼容纯 Activity），
+  // 本地解码无网络依赖，结果回填目标输入框。
+  private var scanTarget: EditText? = null
+
+  private fun launchScan(target: EditText) {
+    scanTarget = target
+    IntentIntegrator(this)
+      .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+      .setPrompt("对准客人验票二维码")
+      .setBeepEnabled(true)
+      .setOrientationLocked(false)
+      .initiateScan()
+  }
+
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+    if (result != null && result.contents != null) {
+      scanTarget?.setText(result.contents)
+      return
+    }
+    super.onActivityResult(requestCode, resultCode, data)
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -161,8 +186,9 @@ class MainActivity : Activity() {
   // 扫码占位：以文本输入 credential 代替。
   // ---------------------------------------------------------------------------
   private fun showTicketVerify() {
-    val credential = editText("核销凭证（扫码占位：手动输入 credential）")
+    val credential = editText("核销凭证（扫码或手动输入）")
     val status = statusText("先预检（preview）再核销（verify）")
+    val scanButton = secondaryButton("扫码读取凭证") { launchScan(credential) }
 
     val previewButton = secondaryButton("预检 preview") {
       val code = credential.text.toString().trim()
@@ -196,7 +222,7 @@ class MainActivity : Activity() {
     setContentView(
       screen(
         title = "门票 / 权益核销",
-        children = listOf(status, credential, previewButton, verifyButton, backButton()),
+        children = listOf(status, credential, scanButton, previewButton, verifyButton, backButton()),
       ),
     )
   }
