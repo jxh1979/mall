@@ -16,15 +16,23 @@ describe("terminalGate 3.19 二期菜单 gating", () => {
     expect(hidden).toEqual(new Set(["finance", "bar"]));
   });
 
-  it("非 terminal.enabled / 非 module scope 的关闭行不影响菜单", () => {
+  it("非 terminal.enabled / 非 module·global scope 的关闭行不影响菜单", () => {
     const hidden = hiddenGroupKeys(
       [
         { terminalType: "web", capabilityCode: "camera.scan", scopeType: "module", scopeId: "bar" },
-        { terminalType: "kiosk", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global" },
+        { terminalType: "web", capabilityCode: "camera.scan", scopeType: "global", scopeId: "global" },
       ],
       ALL,
     );
     expect(hidden.size).toBe(0);
+  });
+
+  it("终端总开关 global 关闭行 → 除自救组外全部隐藏(商户专区 merchant_portal 总开关同范式)", () => {
+    const hidden = hiddenGroupKeys(
+      [{ terminalType: "merchant_portal", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global" }],
+      ALL,
+    );
+    expect(hidden).toEqual(new Set(["access", "governance", "finance", "bar"]));
   });
 
   it("拉取失败兜底关：除自救组(overview/integration)外全部隐藏", () => {

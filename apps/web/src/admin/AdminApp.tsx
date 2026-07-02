@@ -23,6 +23,7 @@ const FinanceArApLedgerPage = React.lazy(() => import("./pages/FinanceArApLedger
 const ReconciliationPage = React.lazy(() => import("./pages/ReconciliationPage").then((m) => ({ default: m.ReconciliationPage })));
 const MerchantWorkOrdersPage = React.lazy(() => import("./pages/MerchantWorkOrdersPage").then((m) => ({ default: m.MerchantWorkOrdersPage })));
 const MerchantScopePage = React.lazy(() => import("./pages/MerchantScopePage").then((m) => ({ default: m.MerchantScopePage })));
+const MerchantZoneBillsPage = React.lazy(() => import("./pages/MerchantZoneBillsPage").then((m) => ({ default: m.MerchantZoneBillsPage })));
 const VendorWorkOrdersPage = React.lazy(() => import("./pages/VendorWorkOrdersPage").then((m) => ({ default: m.VendorWorkOrdersPage })));
 const VendorInspectionsPage = React.lazy(() => import("./pages/VendorInspectionsPage").then((m) => ({ default: m.VendorInspectionsPage })));
 const VendorSiteEntriesPage = React.lazy(() => import("./pages/VendorSiteEntriesPage").then((m) => ({ default: m.VendorSiteEntriesPage })));
@@ -80,6 +81,7 @@ const ICON_PATHS: Record<string, string> = {
 
 const GROUP_ICONS: Record<string, string> = {
   overview: "grid",
+  merchant: "coin",
   ticketing: "ticket",
   bar: "cup",
   inventory: "box",
@@ -155,6 +157,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <MerchantWorkOrdersPage {...props} />;
     case "ADM-MER-002":
       return <MerchantScopePage {...props} />;
+    case "ADM-MER-003":
+      return <MerchantZoneBillsPage {...props} />;
     case "ADM-VND-001":
       return <VendorWorkOrdersPage {...props} />;
     case "ADM-VND-002":
@@ -235,7 +239,12 @@ export default function AdminApp() {
   const [globalError, setGlobalError] = React.useState<string | null>(null);
   const [actionResult, setActionResult] = React.useState<unknown>(null);
 
-  const api = React.useMemo(() => new AdminApi(token), [token]);
+  const api = React.useMemo(() => {
+    const instance = new AdminApi(token);
+    // 商户专区(3.18 方案A):merchant 归属账号整个后台会话按 merchant_portal 终端上报(V197 总开关+V199 模块开关约束)。
+    instance.terminalType = user?.merchantId ? "merchant_portal" : "web";
+    return instance;
+  }, [token, user]);
 
   React.useEffect(() => {
     const onPopState = () => {

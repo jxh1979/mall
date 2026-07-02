@@ -21,6 +21,7 @@ export type EffectivePermissionsState =
 // 导航业务域分组键（frontend-admin §4.3：菜单按业务域聚合，避免 30 项平铺）。
 export type AdminNavGroup =
   | "overview"
+  | "merchant"
   | "ticketing"
   | "bar"
   | "amusement"
@@ -609,6 +610,31 @@ export type MerchantScopeWorkOrderRow = {
   title?: string;
   authorizedScope?: string;
   auditEvidenceRef?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type MerchantZoneBillLineRow = {
+  id: string;
+  feeType?: string;
+  description?: string;
+  amountCent?: number;
+  currency?: string;
+};
+
+export type MerchantZoneBillRow = {
+  id: string;
+  merchantId?: string;
+  billNo?: string;
+  billPeriodStart?: string;
+  billPeriodEnd?: string;
+  dueDate?: string;
+  totalAmountCent?: number;
+  currency?: string;
+  status?: string;
+  agingDays?: number;
+  sourceType?: string;
+  lines?: MerchantZoneBillLineRow[];
   createdAt?: string;
   updatedAt?: string;
 };

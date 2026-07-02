@@ -37,6 +37,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-FIN-003", label: "退款分级授权", route: "/admin/finance/refund-authority" },
   { pageId: "ADM-MER-001", label: "商户服务工单", route: "/admin/merchant-service/tickets" },
   { pageId: "ADM-MER-002", label: "商户授权工作台", route: "/admin/merchant-portal/scope" },
+  { pageId: "ADM-MER-003", label: "我的账单", route: "/admin/merchant-zone/bills" },
   { pageId: "ADM-VND-001", label: "外包维保工单", route: "/admin/vendor/work-orders" },
   { pageId: "ADM-VND-002", label: "外包巡检任务", route: "/admin/vendor/inspections" },
   { pageId: "ADM-VND-003", label: "外包进场报备", route: "/admin/vendor/site-entries" },
@@ -93,6 +94,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("merchant-work-orders-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-002") {
     await expect(page.getByTestId("merchant-scope-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-MER-003") {
+    await expect(page.getByTestId("merchant-zone-bills-page")).toBeVisible();
   } else if (spec.pageId === "ADM-VND-001") {
     await expect(page.getByTestId("vendor-work-orders-page")).toBeVisible();
     await expect(page.getByTestId("vendor-work-orders-table")).toBeVisible();
@@ -367,6 +370,12 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
         await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("audit://merchant-scope/bill-1");
         await expect(page.getByTestId("merchant-scope-boundary")).toContainText("不得访问平台治理");
+        continue;
+      }
+      if (spec.pageId === "ADM-MER-003") {
+        await expect(page.getByTestId("merchant-zone-bills-summary")).toContainText("账单总数");
+        await expect(page.getByTestId("merchant-zone-bills-table")).toContainText("MBILL-1");
+        await expect(page.getByTestId("merchant-zone-bills-table")).toContainText("120,000.00");
         continue;
       }
       if (spec.pageId === "ADM-VND-001") {
@@ -647,6 +656,12 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("merchant-scope-confirm").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant_scope_confirmed");
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant_authorized_scope_checked");
+
+    // 商户专区一期:merchant 账号整个会话按 merchant_portal 终端上报,我的账单页可用(后端 currentMerchantScope 只回本商户)。
+    const billsRequestPromise = page.waitForRequest((request) => request.url().includes("/api/v1/merchant-billing/bills"));
+    await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-003")!);
+    expect((await billsRequestPromise).headers()["x-terminal-type"]).toBe("merchant_portal");
+    await expect(page.getByTestId("merchant-zone-bills-table")).toContainText("MBILL-1");
 
     await page.getByTestId("admin-logout").click();
     await adminLogin(page, "/admin/finance/ar-ap-ledger");

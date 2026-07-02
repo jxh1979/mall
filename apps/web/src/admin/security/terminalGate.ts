@@ -16,7 +16,8 @@ export const RESCUE_GROUP_KEYS = new Set(["overview", "integration"]);
 /**
  * 计算应隐藏的菜单组集合。
  * rows = 已关闭开关行（正常拉取）；null = 拉取失败 → 兜底关。
- * 只认 terminal.enabled + module scope 的行（scope_id=菜单组 key，见 V198）。
+ * 认两类行：terminal.enabled + module scope（scope_id=菜单组 key，见 V198/V199）；
+ * terminal.enabled + global scope（本端总开关被关，V197）→ 与兜底关同口径：除自救组外全隐。
  */
 export function hiddenGroupKeys(rows: DisabledSwitchRow[] | null, allGroupKeys: string[]): Set<string> {
   if (rows === null) {
@@ -24,8 +25,11 @@ export function hiddenGroupKeys(rows: DisabledSwitchRow[] | null, allGroupKeys: 
   }
   const hidden = new Set<string>();
   for (const row of rows) {
-    if (row.capabilityCode === "terminal.enabled" && row.scopeType === "module") {
+    if (row.capabilityCode !== "terminal.enabled") continue;
+    if (row.scopeType === "module") {
       hidden.add(row.scopeId);
+    } else if (row.scopeType === "global") {
+      return new Set(allGroupKeys.filter((key) => !RESCUE_GROUP_KEYS.has(key)));
     }
   }
   return hidden;
