@@ -20,6 +20,8 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
   { pageId: "ADM-GOV-007", label: "空间类型字典", route: "/admin/governance/space-types" },
+  { pageId: "ADM-CUS-001", label: "客人账号管理", route: "/admin/customers/accounts" },
+  { pageId: "ADM-TER-001", label: "终端开关矩阵", route: "/admin/terminals/switch-matrix" },
   { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", route: "/admin/ticketing/orders" },
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", route: "/admin/bar/orders" },
@@ -245,6 +247,19 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("inventory-ledger-summary")).toContainText("负库存禁止");
         await expect(page.getByTestId("inventory-ledger-items-table")).toContainText("WINE");
         await expect(page.getByTestId("inventory-ledger-balances-table")).toContainText("10");
+        continue;
+      }
+      if (spec.pageId === "ADM-CUS-001") {
+        await expect(page.getByTestId("customer-account-search")).toBeVisible();
+        await page.getByLabel("客人手机号").fill("13900001234");
+        await page.getByTestId("customer-account-search-button").click();
+        await expect(page.getByTestId("customer-account-status")).toContainText("正常");
+        continue;
+      }
+      if (spec.pageId === "ADM-TER-001") {
+        await expect(page.getByTestId("terminal-master-switch-table")).toBeVisible();
+        await expect(page.getByTestId("terminal-master-web")).toContainText("Web 前端");
+        await expect(page.getByTestId("terminal-capability-group-tablet")).toContainText("camera.scan");
         continue;
       }
       if (spec.pageId === "ADM-FIN-002") {
