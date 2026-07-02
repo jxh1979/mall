@@ -40,7 +40,23 @@
 - **P2**：我的对账 + 异议留言、我的合同、费用通知自助维护。
 - 每批交付须带：权限点最小化清单、页面矩阵行 + Playwright 验收、终端开关联动、审计事件。
 
-## 6. 与既有文档的关系
+## 6. 一期落地状态(2026-07-02)
+
+P0 五能力全部上线(后台「商户专区」菜单组,ADM-MER-003..007):
+
+| 能力 | 页面 | 承载 |
+| --- | --- | --- |
+| 我的账单 | ADM-MER-003 | 复用商户账单域(只读,账单/账龄/费用构成) |
+| 我的工单 | ADM-MER-004 | 复用商户服务工单域(读+发起,创建强制落本商户) |
+| 我的对账 | ADM-MER-005 | 商户自助层 /api/v1/merchant-portal/settlements(+异议留言,平台裁决闭环不变) |
+| 我的合同 | ADM-MER-006 | 商户自助层 /api/v1/merchant-portal/contracts(关键信息最小披露) |
+| 费用通知 | ADM-MER-007 | 复用接收人配置(商户自助口径:强制本商户+登录主体) |
+
+- 数据边界铁律已活证据实证:只见本商户 / 跨商户拒 / 员工无商户归属 fail-closed(ops/160/merchant-zone-live-evidence-slice{1,2,34,5}.sh);
+- 终端管控:merchant 归属账号整个后台会话按 merchant_portal 终端上报,受总开关(V197)+商户专区模块开关(V199)约束,总开关关闭即整端硬拒(AND 语义);
+- 权限点最小化清单:merchant.billing.view / merchant.service_work_order.view+create / merchant.portal.settlement.view+dispute / contract.view / merchant.portal.fee_recipient.manage(V200,商户自助动作不设审批)。
+
+## 7. 与既有文档的关系
 
 - 权限 / 职级：`platform-governance-map-for-operations` HTML「权限和职级」为最终解释权；
 - 账单口径：`finance-ar-ap-ledger-development-design`；物业费固定计费见 F-OPS-08；
