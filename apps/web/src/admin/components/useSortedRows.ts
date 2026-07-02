@@ -57,5 +57,20 @@ export function useSortedRows<T>(rows: T[], accessors: Record<string, Accessor<T
     return direction === "asc" ? " ↑" : " ↓";
   }
 
-  return { sorted, key, direction, toggle, indicator };
+  /** 4.1 无障碍：排序表头属性——键盘 Enter/Space 可排序、aria-sort 播报当前方向。 */
+  function thProps(forKey: string) {
+    return {
+      tabIndex: 0,
+      "aria-sort": (key === forKey ? (direction === "asc" ? "ascending" : "descending") : "none") as
+        "ascending" | "descending" | "none",
+      onKeyDown: (event: React.KeyboardEvent) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggle(forKey);
+        }
+      },
+    };
+  }
+
+  return { sorted, key, direction, toggle, indicator, thProps };
 }
