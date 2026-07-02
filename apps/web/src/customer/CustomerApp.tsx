@@ -24,21 +24,7 @@ import type { CustomerSession } from "./types";
 
 const { Header, Content, Sider } = Layout;
 
-const STORAGE_KEY = "customer-session";
-
 type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet";
-
-function loadSession(): CustomerSession | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CustomerSession;
-    if (parsed.expiresAt && Date.parse(parsed.expiresAt) < Date.now()) return null;
-    return parsed.customerToken ? parsed : null;
-  } catch {
-    return null;
-  }
-}
 
 // 3.11 多页入口：/ticketing /bar /amusement 直达对应功能页，而非默认客人首页。
 function initialPageFromPath(): PageKey {
@@ -49,7 +35,10 @@ function initialPageFromPath(): PageKey {
 }
 
 export default function CustomerApp(): React.ReactElement {
-  const [session, setSession] = useState<CustomerSession | null>(() => loadSession());
+  // 3.3 安全：客人 token 只存内存（短会话），不落 localStorage/sessionStorage——
+  // 任何可脚本读取的存储都会把 token 暴露给 XSS。刷新页面需重新短信登录。
+  // ponytail: 内存短会话；若业务要求刷新免登录，升级为后端 httpOnly cookie + CSRF。
+  const [session, setSession] = useState<CustomerSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState<PageKey>(initialPageFromPath());
@@ -70,7 +59,6 @@ export default function CustomerApp(): React.ReactElement {
         customerToken: result.customerToken,
         expiresAt: result.expiresAt,
       };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setSession(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");
@@ -80,7 +68,6 @@ export default function CustomerApp(): React.ReactElement {
   };
 
   const onLogout = () => {
-    window.localStorage.removeItem(STORAGE_KEY);
     setSession(null);
     setPage("home");
   };
