@@ -17,7 +17,7 @@ function nextRenewedUntil(minutes: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
-export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [tables, setTables] = React.useState<BarTableRow[]>([]);
   const [reservations, setReservations] = React.useState<BarReservationRow[]>([]);
   const [sessions, setSessions] = React.useState<BarTableSessionRow[]>([]);
@@ -171,6 +171,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
 
   return (
     <section data-testid="bar-table-sessions-page">
+      {focusObjectId && (
+        <div className="admin-state" data-testid="bar-table-sessions-focus">已从下钻定位到桌位：{focusObjectId}</div>
+      )}
       <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并、续卡必须受结账与审批约束。" />
       <AdminDataState loading={loading} error={error} empty={tables.length === 0 && reservations.length === 0 && sessions.length === 0} onRetry={reload}>
         <div className="admin-form-row">

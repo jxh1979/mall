@@ -7,6 +7,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { TraceLink } from "../components/TraceLink";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -79,7 +80,7 @@ function firstBillId(order: BarOrderRow | undefined) {
   return firstBill(order)?.id ?? order?.billId ?? "";
 }
 
-export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [formError, setFormError] = React.useState("");
@@ -232,7 +233,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
                   <tr key={order.id}>
                     <td><input type="radio" data-testid={`bar-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                     <td>{order.orderNo ?? order.id}</td>
-                    <td>{order.tableId ?? "-"}</td>
+                    <td><TraceLink navigateTo={navigateTo} pageId="ADM-BAR-001" objectId={order.tableId}>{order.tableId ?? "-"}</TraceLink></td>
                     <td>{displayStatus(order.status)}</td>
                     <td>{bill?.id ? `${bill.id} / ${displayStatus(bill.status)}` : TEXT.noBill}</td>
                     <td>{formatAmount(order.totalAmount)}</td>

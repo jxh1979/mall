@@ -5,7 +5,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, ProviderAdapterRow } from "../types";
 import { PermissionButton } from "../security/Can";
 
-export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<ProviderAdapterRow[]>([]);
   const [credentialRef, setCredentialRef] = React.useState("");
   const [formError, setFormError] = React.useState("");
@@ -49,7 +49,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="integration-adapters-table">
             <thead><tr><th>供应商</th><th>适配器类型</th><th>生产就绪</th></tr></thead>
-            <tbody>{rows.map((row) => <tr key={row.id}><td>{row.providerCode}</td><td>{row.adapterType}</td><td>{row.productionReady ? "ready" : "not_ready"}</td></tr>)}</tbody>
+            <tbody>{rows.map((row) => <tr key={row.id} className={focusObjectId === row.providerCode ? "admin-row-focus" : undefined}><td>{row.providerCode}</td><td>{row.adapterType}</td><td>{row.productionReady ? "ready" : "not_ready"}</td></tr>)}</tbody>
           </table>
         </div>
       </AdminDataState>

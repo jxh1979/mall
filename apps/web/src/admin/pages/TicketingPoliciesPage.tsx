@@ -53,7 +53,7 @@ function yuan(cent: number | null): string {
   return cent == null ? "—" : (cent / 100).toFixed(2);
 }
 
-export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [tickets, setTickets] = React.useState<TicketTypeRow[]>([]);
   const [templates, setTemplates] = React.useState<EntitlementTemplateRow[]>([]);
   const [rules, setRules] = React.useState<PriceRuleRow[]>([]);
@@ -191,6 +191,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         description="票种/通票、权益、适用范围与派生价规则全部在此配置：先建票种并发布，再建权益模板并组装成通票，最后配派生价（新人/学生/多人/渠道/会员）。"
       />
 
+      {focusObjectId && (
+        <div className="admin-state" data-testid="ticketing-policies-focus">已从下钻定位到票种：{focusObjectId}（下表高亮行）</div>
+      )}
       <h3>票种 / 通票</h3>
       <AdminDataState loading={loading} error={loadError} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
@@ -207,7 +210,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
             </thead>
             <tbody>
               {tickets.map((row) => (
-                <tr key={row.id} data-testid={`ticket-type-${row.id}`}>
+                <tr key={row.id} data-testid={`ticket-type-${row.id}`} className={focusObjectId === row.id ? "admin-row-focus" : undefined}>
                   <td>{row.ticketName}</td>
                   <td>{yuan(row.weekdayPriceCent)}</td>
                   <td>{yuan(row.weekendPriceCent)}</td>

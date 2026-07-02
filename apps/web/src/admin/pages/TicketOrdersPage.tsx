@@ -11,6 +11,7 @@ import { rowMatchesKeyword } from "../components/rowSearch";
 const TICKET_ISSUE_PERMISSION = "ticket.ticket.issue";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import type { AdminPageProps, TicketIssuedEntitlementRow, TicketOrderRow, TicketVerificationRow } from "../types";
+import { TraceLink } from "../components/TraceLink";
 
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
@@ -52,7 +53,7 @@ function selectedLabel(order: TicketOrderRow | undefined) {
   return order?.orderNo ?? order?.id ?? "-";
 }
 
-export function TicketOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function TicketOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [orders, setOrders] = React.useState<TicketOrderRow[]>([]);
   const [entitlements, setEntitlements] = React.useState<TicketIssuedEntitlementRow[]>([]);
   const [verifications, setVerifications] = React.useState<TicketVerificationRow[]>([]);
@@ -177,7 +178,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                 <tr key={order.id}>
                   <td><input type="radio" data-testid={`ticket-order-select-${order.id}`} checked={(selectedOrder?.id ?? "") === order.id} onChange={() => setSelectedOrderId(order.id)} /></td>
                   <td>{order.orderNo ?? order.id}</td>
-                  <td>{order.ticketTypeId ?? "-"}</td>
+                  <td><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={order.ticketTypeId}>{order.ticketTypeId ?? "-"}</TraceLink></td>
                   <td>{order.quantity ?? "-"}</td>
                   <td>{order.visitDate ?? "-"}</td>
                   <td>{order.salesChannel ?? "-"}</td>
