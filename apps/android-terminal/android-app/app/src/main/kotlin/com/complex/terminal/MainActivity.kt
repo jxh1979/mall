@@ -36,7 +36,14 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
 
   private val store = InMemoryLocalStore()
-  private val api: TerminalApiClient by lazy { TerminalApiClient(BuildConfig.COMPLEX_API_BASE_URL.trim().trimEnd('/')) }
+  // 4.2 allowed hosts 生效：COMPLEX_API_ALLOWED_HOSTS 构建白名单在客户端入口强制校验。
+  private val api: TerminalApiClient by lazy {
+    TerminalApiClient(
+      BuildConfig.COMPLEX_API_BASE_URL.trim().trimEnd('/'),
+      allowedHosts = BuildConfig.COMPLEX_API_ALLOWED_HOSTS.split(',')
+        .map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
+    )
+  }
   private val workflow: TerminalWorkflow by lazy { TerminalWorkflow(api, store) }
 
   // 4.2 扫码相机：ZXing 内置扫码界面（IntentIntegrator 旧式回调，兼容纯 Activity），

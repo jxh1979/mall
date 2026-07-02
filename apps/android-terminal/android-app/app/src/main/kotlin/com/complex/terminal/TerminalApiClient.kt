@@ -31,12 +31,19 @@ class TerminalApiClient(
   private val baseUrl: String,
   private val connectTimeoutMs: Int = 10_000,
   private val readTimeoutMs: Int = 30_000,
+  allowedHosts: Set<String>? = null,
 ) {
   init {
     val uri = URI.create(baseUrl)
     val loopbackHttp = uri.scheme == "http" && (uri.host == "127.0.0.1" || uri.host == "localhost")
     require(uri.scheme == "https" || loopbackHttp) {
       "terminal API baseUrl must use https outside loopback"
+    }
+    // 4.2 allowed hosts 生效：构建变量白名单在客户端入口强制，防构建误配把终端指到非授权目标。
+    if (allowedHosts != null) {
+      require(uri.host in allowedHosts) {
+        "terminal API host '${uri.host}' is not in allowed hosts $allowedHosts"
+      }
     }
   }
 
