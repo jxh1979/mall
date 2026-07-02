@@ -27798,6 +27798,679 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/staff/payroll/base": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "setStaffBaseSalary",
+        "summary": "固定工资设定(人事)",
+        "description": "F批(2026-07-02 拍板):薪资四块之固定工资=员工档案月薪,人事维护。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.payroll.base_saved",
+        "x-audit-event-failure": "staff.payroll.base_save_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "user_id",
+                  "monthly_salary_cent"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "员工账号 id。",
+                    "maxLength": 64
+                  },
+                  "monthly_salary_cent": {
+                    "type": "integer",
+                    "description": "月薪(分,非负)。",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/payroll/adjustments": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "addStaffPayrollAdjustment",
+        "summary": "奖金/处罚手录(必须带事由)",
+        "description": "F批:奖惩手工录入,事由必填,审计留痕;计入当月薪资(月结时聚合)。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.payroll.adjustment_added",
+        "x-audit-event-failure": "staff.payroll.adjustment_add_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "user_id",
+                  "month",
+                  "adj_type",
+                  "amount_cent",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "员工账号 id。",
+                    "maxLength": 64
+                  },
+                  "month": {
+                    "type": "string",
+                    "description": "归属月份(YYYY-MM)。",
+                    "pattern": "^\\d{4}-\\d{2}$",
+                    "maxLength": 7
+                  },
+                  "adj_type": {
+                    "type": "string",
+                    "description": "激励奖金/处罚扣款。",
+                    "enum": [
+                      "bonus",
+                      "penalty"
+                    ]
+                  },
+                  "amount_cent": {
+                    "type": "integer",
+                    "description": "金额(分,>0)。",
+                    "minimum": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "事由(必填,钱路留痕硬约束)。",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/payroll/commissions": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "addStaffCommission",
+        "summary": "提成入台账(手录/系统写入口)",
+        "description": "F批:通用提成台账——酒吧提成月结时自动归集;服务点单等业务后续自动写入;此端点供手录与系统补录。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.payroll.commission_added",
+        "x-audit-event-failure": "staff.payroll.commission_add_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "user_id",
+                  "month",
+                  "amount_cent"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "员工账号 id。",
+                    "maxLength": 64
+                  },
+                  "month": {
+                    "type": "string",
+                    "description": "归属月份(YYYY-MM)。",
+                    "pattern": "^\\d{4}-\\d{2}$",
+                    "maxLength": 7
+                  },
+                  "source_type": {
+                    "type": "string",
+                    "description": "提成来源(manual/service_order/…)。",
+                    "maxLength": 32
+                  },
+                  "source_id": {
+                    "type": "string",
+                    "description": "来源单据 id(可空)。",
+                    "maxLength": 64
+                  },
+                  "amount_cent": {
+                    "type": "integer",
+                    "description": "金额(分,>=0)。",
+                    "minimum": 0
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "备注。",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/payroll/close": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "closeStaffPayrollMonth",
+        "summary": "月结(定格全员薪资单)",
+        "description": "F批(2026-07-02 拍板):月结后员工才可见;total=固定+提成(台账+酒吧提成)+奖-罚; 可重复执行=重算覆盖(补录奖惩后重结),审计留痕。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.payroll.month_closed",
+        "x-audit-event-failure": "staff.payroll.month_close_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "month"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "month": {
+                    "type": "string",
+                    "description": "月份(YYYY-MM)。",
+                    "pattern": "^\\d{4}-\\d{2}$",
+                    "maxLength": 7
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/payroll": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffPayroll",
+        "summary": "全员薪资单(人事,按月)",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.payroll.viewed",
+        "x-audit-event-failure": "staff.payroll.view_failed",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$",
+              "maxLength": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/payroll/mine": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listMyStaffPayroll",
+        "summary": "我的薪资(员工手机;仅已月结月份)",
+        "description": "F批(拍板:月结后才可见):四块=固定工资/提成/激励奖金/处罚扣款+实发合计;未结月返回空。",
+        "x-permission": "staff.payroll.view_mine",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.payroll_mine.viewed",
+        "x-audit-event-failure": "staff.payroll_mine.view_failed",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$",
+              "maxLength": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/leaves": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "submitStaffLeave",
+        "summary": "提交请假(员工手机)",
+        "description": "F批(2026-07-02 拍板):四类假(事假/病假/调休/年假)+日期区间+事由;排班主管审批; 通过区间考勤月视图记「请假」不算缺勤。",
+        "x-permission": "staff.leave.submit",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.leave.submitted",
+        "x-audit-event-failure": "staff.leave.submit_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "leave_type",
+                  "start_date",
+                  "end_date",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "leave_type": {
+                    "type": "string",
+                    "description": "事假/病假/调休/年假。",
+                    "enum": [
+                      "personal",
+                      "sick",
+                      "comp",
+                      "annual"
+                    ]
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "起始日。"
+                  },
+                  "end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "结束日(>=起始日)。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "事由(必填)。",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffLeaves",
+        "summary": "查请假(主管/后台,按状态)",
+        "x-permission": "staff.shift.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.leave.viewed",
+        "x-audit-event-failure": "staff.leave.view_failed",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/leaves/mine": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listMyStaffLeaves",
+        "summary": "我的请假(员工手机)",
+        "x-permission": "staff.leave.submit",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.leave_mine.viewed",
+        "x-audit-event-failure": "staff.leave_mine.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/leaves/{id}/review": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "reviewStaffLeave",
+        "summary": "请假审批(排班主管)",
+        "description": "通过/驳回+批注;通过区间考勤记「请假」;审批留痕。",
+        "x-permission": "staff.shift.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.leave.reviewed",
+        "x-audit-event-failure": "staff.leave.review_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "通过/驳回。",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "review_note": {
+                    "type": "string",
+                    "description": "批注。",
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/attendance/month-view": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "myStaffAttendanceMonthView",
+        "summary": "考勤月视图(员工手机,逐日六态)",
+        "description": "F批(2026-07-02 拍板口径):出勤/缺勤(有排班无上班卡)/迟到/早退/未打下班卡/ 请假(approved 覆盖);无排班=休;同日多问题并列。",
+        "x-permission": "staff.shift.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.attendance_month.viewed",
+        "x-audit-event-failure": "staff.attendance_month.view_failed",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$",
+              "maxLength": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
     }
   },
   "components": {

@@ -20,6 +20,203 @@ class JdbcStaffRepository implements StaffRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    // ---------------------------------------------------------------- F批 薪资/请假
+
+    @Override
+    public void upsertBaseSalary(String userId, long monthlySalaryCent, String updatedBy, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_by, updated_at)
+                VALUES (:user_id, :salary, :updated_by, :now)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    monthly_salary_cent = EXCLUDED.monthly_salary_cent,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("salary", monthlySalaryCent)
+                .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    @Override
+    public void insertPayrollAdjustment(String id, String userId, String month, String adjType,
+            long amountCent, String reason, String createdBy, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_payroll_adjustments (id, user_id, month, adj_type, amount_cent, reason, created_by, created_at)
+                VALUES (:id, :user_id, :month, :adj_type, :amount, :reason, :created_by, :now)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("user_id", userId).addValue("month", month)
+                .addValue("adj_type", adjType).addValue("amount", amountCent).addValue("reason", reason)
+                .addValue("created_by", createdBy).addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    @Override
+    public void insertCommission(String id, String userId, String month, String sourceType,
+            String sourceId, long amountCent, String note, java.time.Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_commission_ledger (id, user_id, month, source_type, source_id, amount_cent, note, created_at)
+                VALUES (:id, :user_id, :month, :source_type, :source_id, :amount, :note, :now)
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("user_id", userId).addValue("month", month)
+                .addValue("source_type", sourceType).addValue("source_id", sourceId)
+                .addValue("amount", amountCent).addValue("note", note)
+                .addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    @Override
+    public int closePayrollMonth(String month, String closedBy, java.time.Instant now) {
+        // 月结重算:固定档案 + 台账提成 + 酒吧提成(bar_commission_calculations 按月/非作废) + 奖 - 罚;
+        // 有任一薪资要素的员工都出单;幂等覆盖(uq user+month)。
+        return jdbcTemplate.update("""
+                INSERT INTO staff_payroll_statements (id, user_id, month, base_cent, commission_cent,
+                        bonus_cent, penalty_cent, total_cent, closed_by, closed_at)
+                SELECT 'pay_' || gen_random_uuid(), u.user_id, :month,
+                       COALESCE(b.monthly_salary_cent, 0),
+                       COALESCE(c.total, 0) + COALESCE(bc.total, 0),
+                       COALESCE(adj.bonus, 0),
+                       COALESCE(adj.penalty, 0),
+                       COALESCE(b.monthly_salary_cent, 0) + COALESCE(c.total, 0) + COALESCE(bc.total, 0)
+                           + COALESCE(adj.bonus, 0) - COALESCE(adj.penalty, 0),
+                       :closed_by, :now
+                  FROM (SELECT user_id FROM staff_base_salaries
+                        UNION SELECT user_id FROM staff_commission_ledger WHERE month = :month
+                        UNION SELECT user_id FROM staff_payroll_adjustments WHERE month = :month
+                        UNION SELECT sales_staff_id FROM bar_commission_calculations
+                               WHERE to_char(created_at, 'YYYY-MM') = :month AND sales_staff_id IS NOT NULL) u
+                  LEFT JOIN staff_base_salaries b ON b.user_id = u.user_id
+                  LEFT JOIN (SELECT user_id, SUM(amount_cent) AS total FROM staff_commission_ledger
+                              WHERE month = :month GROUP BY user_id) c ON c.user_id = u.user_id
+                  LEFT JOIN (SELECT sales_staff_id, SUM(commission_amount_cent) AS total
+                               FROM bar_commission_calculations
+                              WHERE to_char(created_at, 'YYYY-MM') = :month
+                                AND status NOT IN ('void', 'cancelled')
+                              GROUP BY sales_staff_id) bc ON bc.sales_staff_id = u.user_id
+                  LEFT JOIN (SELECT user_id,
+                                    SUM(CASE WHEN adj_type = 'bonus' THEN amount_cent ELSE 0 END) AS bonus,
+                                    SUM(CASE WHEN adj_type = 'penalty' THEN amount_cent ELSE 0 END) AS penalty
+                               FROM staff_payroll_adjustments WHERE month = :month GROUP BY user_id) adj
+                         ON adj.user_id = u.user_id
+                ON CONFLICT (user_id, month) DO UPDATE SET
+                    base_cent = EXCLUDED.base_cent,
+                    commission_cent = EXCLUDED.commission_cent,
+                    bonus_cent = EXCLUDED.bonus_cent,
+                    penalty_cent = EXCLUDED.penalty_cent,
+                    total_cent = EXCLUDED.total_cent,
+                    closed_by = EXCLUDED.closed_by,
+                    closed_at = EXCLUDED.closed_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("month", month).addValue("closed_by", closedBy)
+                .addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    @Override
+    public java.util.List<StaffPayrollStatementRecord> listPayrollStatements(String month, String userId) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent,
+                       total_cent, closed_by, closed_at
+                  FROM staff_payroll_statements
+                 WHERE month = :month AND (:user_id::text IS NULL OR user_id = :user_id)
+                 ORDER BY user_id
+                 LIMIT 1000
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("month", month).addValue("user_id", userId),
+                (rs, n) -> new StaffPayrollStatementRecord(
+                        rs.getString("id"), rs.getString("user_id"), rs.getString("month"),
+                        rs.getLong("base_cent"), rs.getLong("commission_cent"), rs.getLong("bonus_cent"),
+                        rs.getLong("penalty_cent"), rs.getLong("total_cent"), rs.getString("closed_by"),
+                        rs.getTimestamp("closed_at").toInstant()));
+    }
+
+    @Override
+    public StaffLeaveRequestRecord saveLeaveRequest(StaffLeaveRequestRecord record) {
+        jdbcTemplate.update("""
+                INSERT INTO staff_leave_requests (id, user_id, leave_type, start_date, end_date, reason,
+                        status, reviewed_by, review_note, created_at, updated_at)
+                VALUES (:id, :user_id, :leave_type, :start_date, :end_date, :reason,
+                        :status, :reviewed_by, :review_note, :created_at, :updated_at)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    reviewed_by = EXCLUDED.reviewed_by,
+                    review_note = EXCLUDED.review_note,
+                    updated_at = EXCLUDED.updated_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", record.id()).addValue("user_id", record.userId())
+                .addValue("leave_type", record.leaveType()).addValue("start_date", record.startDate())
+                .addValue("end_date", record.endDate()).addValue("reason", record.reason())
+                .addValue("status", record.status()).addValue("reviewed_by", record.reviewedBy())
+                .addValue("review_note", record.reviewNote())
+                .addValue("created_at", java.sql.Timestamp.from(record.createdAt()))
+                .addValue("updated_at", java.sql.Timestamp.from(record.updatedAt())));
+        return record;
+    }
+
+    @Override
+    public java.util.Optional<StaffLeaveRequestRecord> findLeaveById(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, leave_type, start_date, end_date, reason, status,
+                       reviewed_by, review_note, created_at, updated_at
+                  FROM staff_leave_requests WHERE id = :id
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource().addValue("id", id),
+                this::mapLeave).stream().findFirst();
+    }
+
+    @Override
+    public java.util.List<StaffLeaveRequestRecord> listLeaves(String status, String userId) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, leave_type, start_date, end_date, reason, status,
+                       reviewed_by, review_note, created_at, updated_at
+                  FROM staff_leave_requests
+                 WHERE (:status::text IS NULL OR status = :status)
+                   AND (:user_id::text IS NULL OR user_id = :user_id)
+                 ORDER BY created_at DESC
+                 LIMIT 500
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("status", status).addValue("user_id", userId), this::mapLeave);
+    }
+
+    private StaffLeaveRequestRecord mapLeave(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new StaffLeaveRequestRecord(
+                rs.getString("id"), rs.getString("user_id"), rs.getString("leave_type"),
+                rs.getObject("start_date", java.time.LocalDate.class),
+                rs.getObject("end_date", java.time.LocalDate.class),
+                rs.getString("reason"), rs.getString("status"), rs.getString("reviewed_by"),
+                rs.getString("review_note"), rs.getTimestamp("created_at").toInstant(),
+                rs.getTimestamp("updated_at").toInstant());
+    }
+
+    @Override
+    public java.util.Set<java.time.LocalDate> approvedLeaveDates(String userId,
+            java.time.LocalDate from, java.time.LocalDate to) {
+        java.util.Set<java.time.LocalDate> out = new java.util.LinkedHashSet<>();
+        jdbcTemplate.query("""
+                SELECT start_date, end_date FROM staff_leave_requests
+                 WHERE user_id = :user_id AND status = 'approved'
+                   AND start_date <= :to AND end_date >= :from
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId).addValue("from", from).addValue("to", to), rs -> {
+            java.time.LocalDate start = rs.getObject("start_date", java.time.LocalDate.class);
+            java.time.LocalDate end = rs.getObject("end_date", java.time.LocalDate.class);
+            for (java.time.LocalDate day = start.isBefore(from) ? from : start;
+                    !day.isAfter(end.isAfter(to) ? to : end); day = day.plusDays(1)) {
+                out.add(day);
+            }
+        });
+        return out;
+    }
+
+    @Override
+    public java.util.List<StaffAttendanceRecord> listAttendanceForUserBetween(String userId,
+            java.time.Instant from, java.time.Instant to) {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, punch_type, punched_at, method, tag_ref, space_id,
+                       device_fingerprint, shift_id, judgement, created_at
+                  FROM staff_attendance_records
+                 WHERE user_id = :user_id AND punched_at >= :from AND punched_at < :to
+                 ORDER BY punched_at
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("from", java.sql.Timestamp.from(from))
+                .addValue("to", java.sql.Timestamp.from(to)), this::mapAttendance);
+    }
+
     // ---------------------------------------------------------------- E1/E2 排班与考勤
 
     @Override

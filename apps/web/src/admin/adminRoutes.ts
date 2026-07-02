@@ -55,6 +55,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-ANA-007", label: "能耗分析", module: "分析", group: "overview", route: "/admin/analytics/energy", requiredPermissions: ["energy.reading.manage"] },
   { pageId: "ADM-ANA-008", label: "月度对比", module: "分析", group: "overview", route: "/admin/analytics/monthly", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-STF-001", label: "排班与考勤", module: "人事", group: "ops", route: "/admin/staff/shifts", requiredPermissions: ["staff.shift.manage"] },
+  { pageId: "ADM-STF-002", label: "薪酬与请假", module: "人事", group: "ops", route: "/admin/staff/payroll", requiredPermissions: ["staff.payroll.manage"] },
   { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-MER-003", label: "我的账单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/bills", requiredPermissions: ["merchant.billing.view"] },
   { pageId: "ADM-MER-004", label: "我的工单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/work-orders", requiredPermissions: ["merchant.service_work_order.view"] },

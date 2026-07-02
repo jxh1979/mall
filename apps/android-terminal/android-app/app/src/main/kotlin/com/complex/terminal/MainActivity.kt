@@ -210,6 +210,9 @@ class MainActivity : Activity() {
       primaryButton("酒吧空位 / 帮客订位") { showBarAvailability() },
       primaryButton("我的排班") { showMyShifts() },
       primaryButton("考勤打卡(NFC/扫码)") { showPunch() },
+      primaryButton("我的薪资") { showMyPayroll() },
+      primaryButton("考勤月视图") { showAttendanceMonth() },
+      primaryButton("请假") { showLeave() },
       secondaryButton("主管排班(需排班权限)") { showShiftManage() },
       secondaryButton("员工注册申请(店长/HR 代提交)") { showStaffRegistration() },
       secondaryButton("重新登录") { logoutAndRestart() },
@@ -779,6 +782,117 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "主管排班",
       children = listOf(status, userId, workDate, startAt, endAt, points, note, submitButton,
+        secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  // ── F批(2026-07-02 拍板):我的薪资 / 考勤月视图 / 请假 ──
+  private fun showMyPayroll() {
+    val month = editText("月份(2026-06)")
+    val status = statusText("薪资单在人事「月结」后可见;固定工资+提成+奖金-处罚。")
+    val detail = statusText("")
+    val queryButton = primaryButton("查询") {
+      val m = month.text.toString().trim()
+      if (!Regex("\\d{4}-\\d{2}").matches(m)) { status.text = "请输入月份如 2026-06"; return@primaryButton }
+      runBackground(
+        action = { api.listMyPayroll(m) },
+        onSuccess = { rows ->
+          if (rows.isEmpty()) {
+            status.text = "$m 尚未月结(人事月结后可见)或无记录"
+            detail.text = ""
+          } else {
+            val r = rows.first()
+            status.text = "$m 薪资单(已定格)"
+            detail.text = buildString {
+              append("固定工资: ¥").append((r.baseCent ?: 0) / 100.0).append('\n')
+              append("提成: ¥").append((r.commissionCent ?: 0) / 100.0).append('\n')
+              append("激励奖金: ¥").append((r.bonusCent ?: 0) / 100.0).append('\n')
+              append("处罚扣款: -¥").append((r.penaltyCent ?: 0) / 100.0).append('\n')
+              append("实发合计: ¥").append((r.totalCent ?: 0) / 100.0)
+            }
+          }
+        },
+        onError = { status.text = "查询失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(
+      title = "我的薪资",
+      children = listOf(status, month, queryButton, detail, secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showAttendanceMonth() {
+    val month = editText("月份(2026-07)")
+    val status = statusText("逐日:出勤/缺勤/迟到/早退/未打下班卡/请假;无排班=休。")
+    val list = statusText("")
+    val labels = mapOf(
+      "present" to "出勤", "absent" to "缺勤", "late" to "迟到", "early_leave" to "早退",
+      "missing_checkout" to "未打下班卡", "leave" to "请假", "rest" to "休",
+    )
+    val queryButton = primaryButton("查询") {
+      val m = month.text.toString().trim()
+      if (!Regex("\\d{4}-\\d{2}").matches(m)) { status.text = "请输入月份如 2026-07"; return@primaryButton }
+      runBackground(
+        action = { api.attendanceMonthView(m) },
+        onSuccess = { days ->
+          status.text = "$m 考勤月视图(${days.size} 天)"
+          list.text = days.joinToString("\n") { d ->
+            val states = d.dayStatus?.joinToString("+") { labels[it] ?: it } ?: "-"
+            val shift = if (d.shiftStartAt != null) "  班次 ${d.shiftStartAt} ~ ${d.shiftEndAt}" else ""
+            "${d.date}  $states$shift"
+          }
+        },
+        onError = { status.text = "查询失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(
+      title = "考勤月视图",
+      children = listOf(status, month, queryButton, list, secondaryButton("返回首页") { showHome() }),
+    ))
+  }
+
+  private fun showLeave() {
+    val type = editText("类型:personal(事假)/sick(病假)/comp(调休)/annual(年假)")
+    val start = editText("开始日期(2026-07-05)")
+    val end = editText("结束日期(2026-07-06)")
+    val reason = editText("事由")
+    val status = statusText("提交后由排班主管审批;通过的日子考勤记「请假」不算缺勤。")
+    val list = statusText("")
+    val refresh = {
+      runBackground(
+        action = { api.listMyLeaves() },
+        onSuccess = { rows ->
+          list.text = if (rows.isEmpty()) "暂无请假记录" else rows.joinToString("\n") { r ->
+            val st = when (r.status) { "pending" -> "待审"; "approved" -> "已通过"; "rejected" -> "已驳回"; else -> r.status ?: "-" }
+            "${r.startDate}~${r.endDate} ${r.leaveType} [$st]" + (r.reviewNote?.let { " 批注:$it" } ?: "")
+          }
+        },
+        onError = { list.text = "请假记录拉取失败：${friendly(it)}" },
+      )
+    }
+    val submitButton = primaryButton("提交请假") {
+      val t = type.text.toString().trim()
+      val s1 = start.text.toString().trim()
+      val e1 = end.text.toString().trim()
+      val r1 = reason.text.toString().trim()
+      if (t.isEmpty() || s1.isEmpty() || e1.isEmpty() || r1.isEmpty()) {
+        status.text = "请填全 类型/起止日期/事由"
+        return@primaryButton
+      }
+      runBackground(
+        action = {
+          api.submitLeave(LeaveSubmitRequest(
+            idempotencyKey = "leave_${System.currentTimeMillis()}",
+            leaveType = t, startDate = s1, endDate = e1, reason = r1))
+        },
+        onSuccess = { status.text = "已提交,等待主管审批"; refresh() },
+        onError = { status.text = "提交失败：${friendly(it)}" },
+      )
+    }
+    refresh()
+    setContentView(screen(
+      title = "请假",
+      children = listOf(status, type, start, end, reason, submitButton, list,
         secondaryButton("返回首页") { showHome() }),
     ))
   }

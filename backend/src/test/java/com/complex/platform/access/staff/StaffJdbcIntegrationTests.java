@@ -336,6 +336,77 @@ class StaffJdbcIntegrationTests {
         assertThat(orphan.judgement()).isEqualTo("no_shift");
     }
 
+    @org.junit.jupiter.api.Test
+    void v211PayrollLeaveMonthView() {
+        // F批(2026-07-02 拍板):月结定格(total=base+提成+奖-罚,可重结覆盖);员工只见已定格月;
+        // 请假主管审,通过区间月视图记 leave;月视图六态口径。
+        authenticateAsPlatformAdmin();
+        String month = "2099-08";
+
+        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(
+                key(), "usr_admin", 800000L));
+        service.addCommission(new com.complex.platform.access.staff.dto.StaffCommissionRequest(
+                key(), "usr_admin", month, "manual", null, 120000L, "订位提成"));
+        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
+                key(), "usr_admin", month, "bonus", 50000L, "月度之星"));
+        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
+                key(), "usr_admin", month, "penalty", 20000L, "迟到3次"));
+        // 事由缺失必须拒绝(钱路留痕硬约束)。
+        assertThatThrownBy(() -> service.addPayrollAdjustment(
+                new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
+                        key(), "usr_admin", month, "penalty", 100L, " ")))
+                .isInstanceOf(ApiException.class);
+
+        // 月结前员工不可见(拍板:月结后才可见)。
+        assertThat(service.listMyPayroll(month).items()).isEmpty();
+
+        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        com.complex.platform.access.staff.StaffPayrollStatementRecord statement =
+                service.listMyPayroll(month).items().stream()
+                        .filter(row -> row.userId().equals("usr_admin")).findFirst().orElseThrow();
+        assertThat(statement.baseCent()).isEqualTo(800000L);
+        assertThat(statement.commissionCent()).isEqualTo(120000L);
+        assertThat(statement.bonusCent()).isEqualTo(50000L);
+        assertThat(statement.penaltyCent()).isEqualTo(20000L);
+        assertThat(statement.totalCent()).isEqualTo(800000L + 120000L + 50000L - 20000L);
+
+        // 补录奖金后重结=覆盖,仍单行。
+        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
+                key(), "usr_admin", month, "bonus", 10000L, "补录"));
+        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        java.util.List<com.complex.platform.access.staff.StaffPayrollStatementRecord> after =
+                service.listMyPayroll(month).items().stream()
+                        .filter(row -> row.userId().equals("usr_admin")).toList();
+        assertThat(after).hasSize(1);
+        assertThat(after.get(0).totalCent()).isEqualTo(800000L + 120000L + 60000L - 20000L);
+
+        // 请假:提交→主管通过→月视图该日=leave。
+        com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "annual", java.time.LocalDate.parse("2099-08-10"),
+                        java.time.LocalDate.parse("2099-08-11"), "年假"));
+        assertThat(leave.status()).isEqualTo("pending");
+        service.reviewLeave(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(
+                key(), "approve", "准"));
+
+        // 排班一天(2099-08-05)不打卡=缺勤;请假日=leave;其余无排班=rest。
+        service.upsertShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
+                key(), "usr_admin", java.time.LocalDate.parse("2099-08-05"),
+                Instant.parse("2099-08-05T02:00:00Z"), Instant.parse("2099-08-05T10:00:00Z"),
+                List.of("sp_p1"), null));
+        java.util.List<com.complex.platform.access.staff.StaffAttendanceDayRecord> view =
+                service.myAttendanceMonthView(month);
+        assertThat(view).hasSize(31);
+        java.util.Map<String, java.util.List<String>> byDay = new java.util.LinkedHashMap<>();
+        for (com.complex.platform.access.staff.StaffAttendanceDayRecord d : view) {
+            byDay.put(d.date().toString(), d.dayStatus());
+        }
+        assertThat(byDay.get("2099-08-05")).containsExactly("absent");
+        assertThat(byDay.get("2099-08-10")).containsExactly("leave");
+        assertThat(byDay.get("2099-08-11")).containsExactly("leave");
+        assertThat(byDay.get("2099-08-20")).containsExactly("rest");
+    }
+
     private String key() {
         return UUID.randomUUID().toString().replace("-", "");
     }

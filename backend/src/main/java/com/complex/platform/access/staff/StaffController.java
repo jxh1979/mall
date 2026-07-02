@@ -122,6 +122,81 @@ public class StaffController {
         return ApiResponse.ok(service.listAttendance(java.time.LocalDate.parse(date)));
     }
 
+    @PostMapping("/payroll/base")
+    public ApiResponse<java.util.Map<String, String>> setBaseSalary(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffPayrollBaseRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        service.setBaseSalary(request);
+        return ApiResponse.ok(java.util.Map.of("status", "saved"));
+    }
+
+    @PostMapping("/payroll/adjustments")
+    public ApiResponse<java.util.Map<String, String>> addPayrollAdjustment(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        service.addPayrollAdjustment(request);
+        return ApiResponse.ok(java.util.Map.of("status", "saved"));
+    }
+
+    @PostMapping("/payroll/commissions")
+    public ApiResponse<java.util.Map<String, String>> addCommission(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffCommissionRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        service.addCommission(request);
+        return ApiResponse.ok(java.util.Map.of("status", "saved"));
+    }
+
+    @PostMapping("/payroll/close")
+    public ApiResponse<java.util.Map<String, Object>> closePayroll(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffPayrollCloseRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.closePayroll(request));
+    }
+
+    @GetMapping("/payroll")
+    public ApiResponse<PageResponse<StaffPayrollStatementRecord>> listPayroll(
+            @org.springframework.web.bind.annotation.RequestParam("month") String month) {
+        return ApiResponse.ok(service.listPayroll(month));
+    }
+
+    @GetMapping("/payroll/mine")
+    public ApiResponse<PageResponse<StaffPayrollStatementRecord>> listMyPayroll(
+            @org.springframework.web.bind.annotation.RequestParam("month") String month) {
+        return ApiResponse.ok(service.listMyPayroll(month));
+    }
+
+    @PostMapping("/leaves")
+    public ApiResponse<StaffLeaveRequestRecord> submitLeave(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffLeaveRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.submitLeave(request));
+    }
+
+    @GetMapping("/leaves/mine")
+    public ApiResponse<PageResponse<StaffLeaveRequestRecord>> listMyLeaves() {
+        return ApiResponse.ok(service.listMyLeaves());
+    }
+
+    @PostMapping("/leaves/{id}/review")
+    public ApiResponse<StaffLeaveRequestRecord> reviewLeave(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffLeaveReviewRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reviewLeave(id, request));
+    }
+
+    @GetMapping("/leaves")
+    public ApiResponse<PageResponse<StaffLeaveRequestRecord>> listLeaves(
+            @org.springframework.web.bind.annotation.RequestParam(value = "status", required = false) String status) {
+        return ApiResponse.ok(service.listLeaves(status));
+    }
+
+    @GetMapping("/attendance/month-view")
+    public ApiResponse<java.util.List<StaffAttendanceDayRecord>> myAttendanceMonthView(
+            @org.springframework.web.bind.annotation.RequestParam("month") String month) {
+        return ApiResponse.ok(service.myAttendanceMonthView(month));
+    }
+
     @GetMapping("/notices")
     public ApiResponse<PageResponse<EmployeeNoticeRecord>> listNotices() {
         return ApiResponse.ok(service.listNotices());

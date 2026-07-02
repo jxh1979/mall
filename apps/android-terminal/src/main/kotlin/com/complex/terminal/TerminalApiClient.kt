@@ -124,6 +124,23 @@ class TerminalApiClient(
     post("/api/v1/staff/registrations", request)
 
   /** 公司内部公告(员工可见)。 */
+  // ── BYOD 三期 F 批:我的薪资/请假/考勤月视图 ──
+
+  /** 我的薪资(仅已月结定格月份;未结月为空——拍板:月结后才可见)。 */
+  fun listMyPayroll(month: String): List<PayrollStatementRow> =
+    get("/api/v1/staff/payroll/mine?month=$month")
+
+  /** 提交请假(事假/病假/调休/年假;主管审)。 */
+  fun submitLeave(request: LeaveSubmitRequest): LeaveRow =
+    post("/api/v1/staff/leaves", request)
+
+  /** 我的请假列表。 */
+  fun listMyLeaves(): List<LeaveRow> = get("/api/v1/staff/leaves/mine")
+
+  /** 考勤月视图(六态逐日)。 */
+  fun attendanceMonthView(month: String): List<AttendanceDayRow> =
+    get("/api/v1/staff/attendance/month-view?month=$month")
+
   // ── BYOD 二期 E 批:排班/考勤 ──
 
   /** 主管排班(双端;同员工同开始时刻幂等覆盖)。 */

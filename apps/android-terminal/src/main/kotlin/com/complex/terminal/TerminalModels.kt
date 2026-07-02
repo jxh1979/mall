@@ -550,3 +550,44 @@ data class AttendanceRow(
   val judgement: String? = null,
   val spaceId: String? = null,
 )
+
+// ── BYOD 三期 F 批(2026-07-02 拍板):我的薪资(月结后可见)/请假(主管审)/考勤月视图 ──
+
+@Serializable
+data class PayrollStatementRow(
+  val id: String? = null,
+  val month: String? = null,
+  val baseCent: Long? = null,
+  val commissionCent: Long? = null,
+  val bonusCent: Long? = null,
+  val penaltyCent: Long? = null,
+  val totalCent: Long? = null,
+)
+
+@Serializable
+data class LeaveSubmitRequest(
+  val idempotencyKey: String,
+  val leaveType: String,
+  val startDate: String,
+  val endDate: String,
+  val reason: String,
+)
+
+@Serializable
+data class LeaveRow(
+  val id: String? = null,
+  val leaveType: String? = null,
+  val startDate: String? = null,
+  val endDate: String? = null,
+  val reason: String? = null,
+  val status: String? = null,
+  val reviewNote: String? = null,
+)
+
+@Serializable
+data class AttendanceDayRow(
+  val date: String? = null,
+  val dayStatus: List<String>? = null,
+  val shiftStartAt: String? = null,
+  val shiftEndAt: String? = null,
+)

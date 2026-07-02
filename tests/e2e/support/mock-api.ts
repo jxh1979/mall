@@ -297,6 +297,14 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/staff/payroll": [
+      { id: "pay-e2e-1", user_id: "usr_staff_1", month: "2026-07", base_cent: 800000, commission_cent: 120000,
+        bonus_cent: 50000, penalty_cent: 20000, total_cent: 950000 },
+    ],
+    "/api/v1/staff/leaves": [
+      { id: "lv-e2e-1", user_id: "usr_staff_1", leave_type: "annual", start_date: "2026-07-10",
+        end_date: "2026-07-11", reason: "年假", status: "pending" },
+    ],
     "/api/v1/staff/shifts": [
       { id: "shf-e2e-1", user_id: "usr_staff_1", work_date: "2026-07-02", start_at: "2026-07-02T02:00:00Z",
         end_at: "2026-07-02T10:30:00Z", point_space_ids: ["sp_point_1", "sp_point_2"], note: "早班" },

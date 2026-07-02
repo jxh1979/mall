@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 566 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 577 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -587,6 +587,17 @@
 | staff | `POST` | `/api/v1/staff/attendance/punch` | `punchStaffAttendance` | 考勤打卡(NFC/扫码) | `object` | `staff.attendance.punch` | `staff-token` | `platform` | staff_private_phone, web | 是 | `staff.attendance.punched` | `staff.attendance.punch_failed` |
 | staff | `GET` | `/api/v1/staff/attendance/mine` | `listMyStaffAttendance` | 我的打卡记录(最近30天) | `-` | `staff.shift.view` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.attendance_mine.viewed` | `staff.attendance_mine.view_failed` |
 | staff | `GET` | `/api/v1/staff/attendance` | `listStaffAttendance` | 按日查考勤(后台/主管) | `-` | `staff.attendance.view` | `staff-token` | `platform` | web, staff_private_phone | 否 | `staff.attendance.viewed` | `staff.attendance.view_failed` |
+| staff | `POST` | `/api/v1/staff/payroll/base` | `setStaffBaseSalary` | 固定工资设定(人事) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.base_saved` | `staff.payroll.base_save_failed` |
+| staff | `POST` | `/api/v1/staff/payroll/adjustments` | `addStaffPayrollAdjustment` | 奖金/处罚手录(必须带事由) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.adjustment_added` | `staff.payroll.adjustment_add_failed` |
+| staff | `POST` | `/api/v1/staff/payroll/commissions` | `addStaffCommission` | 提成入台账(手录/系统写入口) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.commission_added` | `staff.payroll.commission_add_failed` |
+| staff | `POST` | `/api/v1/staff/payroll/close` | `closeStaffPayrollMonth` | 月结(定格全员薪资单) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.month_closed` | `staff.payroll.month_close_failed` |
+| staff | `GET` | `/api/v1/staff/payroll` | `listStaffPayroll` | 全员薪资单(人事,按月) | `-` | `staff.payroll.manage` | `staff-token` | `platform` | web | 否 | `staff.payroll.viewed` | `staff.payroll.view_failed` |
+| staff | `GET` | `/api/v1/staff/payroll/mine` | `listMyStaffPayroll` | 我的薪资(员工手机;仅已月结月份) | `-` | `staff.payroll.view_mine` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.payroll_mine.viewed` | `staff.payroll_mine.view_failed` |
+| staff | `GET` | `/api/v1/staff/leaves` | `listStaffLeaves` | 查请假(主管/后台,按状态) | `-` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 否 | `staff.leave.viewed` | `staff.leave.view_failed` |
+| staff | `POST` | `/api/v1/staff/leaves` | `submitStaffLeave` | 提交请假(员工手机) | `object` | `staff.leave.submit` | `staff-token` | `platform` | staff_private_phone, web | 是 | `staff.leave.submitted` | `staff.leave.submit_failed` |
+| staff | `GET` | `/api/v1/staff/leaves/mine` | `listMyStaffLeaves` | 我的请假(员工手机) | `-` | `staff.leave.submit` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.leave_mine.viewed` | `staff.leave_mine.view_failed` |
+| staff | `POST` | `/api/v1/staff/leaves/{id}/review` | `reviewStaffLeave` | 请假审批(排班主管) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 是 | `staff.leave.reviewed` | `staff.leave.review_failed` |
+| staff | `GET` | `/api/v1/staff/attendance/month-view` | `myStaffAttendanceMonthView` | 考勤月视图(员工手机,逐日六态) | `-` | `staff.shift.view` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.attendance_month.viewed` | `staff.attendance_month.view_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 
@@ -654,5 +665,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 566 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 577 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |
