@@ -175,7 +175,7 @@ npm run verify:production-evidence-crosslinks` |
 |---|---|---|
 | `V117__bar_void_approval_writeback` | 酒吧退菜/退酒作废审批回写 | 酒吧 PRD/开发设计、§36 R6-D14（酒吧异常优先级升 P0） |
 | `V120__merchant_service_work_order_sla_escalation` | 商户服务工单 SLA 升级 | `p1-merchant-service-work-order-api-contract-v0.1.md` |
-| `V121__cam_trueup_and_refund_direction` | CAM（公共区域分摊）找差与退款方向 | finance-settlement PRD、§36 R6-D08（科目方向） |
+| `V121__cam_trueup_and_refund_direction` | CAM 找差与退款方向（CAM 分摊已废止于 2026-06-22 物业费改制 V150，本迁移仅退款方向维度仍现行） | finance-settlement PRD、§36 R6-D08（科目方向） |
 | `V123__amusement_maintenance_vendor_fk_validate` | 游乐维保供应商外键校验 | 游乐开发设计、`V116__amusement_maintenance_vendor_fk` 续 |
 | `V124__bar_void_reject_reversal_adjustment` | 酒吧作废驳回/冲销调整 | 酒吧 PRD/开发设计、§36 R6-D14 |
 
