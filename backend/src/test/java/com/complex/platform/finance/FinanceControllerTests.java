@@ -163,7 +163,7 @@ class FinanceControllerTests {
     }
 
     @Test
-    void exportArApItemsUsesViewPermissionAndReturnsCsvSnapshot() throws Exception {
+    void exportArApItemsUsesDedicatedExportPermissionAndReturnsCsvSnapshot() throws Exception {
         when(service.exportArApItems()).thenReturn(new ArApLedgerExportRecord(
                 "arap_export_1",
                 "csv",
@@ -179,7 +179,8 @@ class FinanceControllerTests {
                 .andExpect(jsonPath("$.data.row_count").value(1))
                 .andExpect(jsonPath("$.data.csv_text").value(org.hamcrest.Matchers.containsString("ARAP202606140001")));
 
-        verify(authorizationService).requirePermission("finance.ar_ap.view");
+        // 查≠导：导出须独立权限点（审计角色不直授，走临时授权审批）。
+        verify(authorizationService).requirePermission("finance.ar_ap.export");
         verify(service).exportArApItems();
     }
 

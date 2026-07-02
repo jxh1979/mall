@@ -15,7 +15,7 @@
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
 | OpenAPI operation 数 | 531 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 283 | 人工权限矩阵正文未覆盖 179 项；缺口以本文第 3 节补齐 |
+| OpenAPI 权限/通用权限状态数 | 284 | 人工权限矩阵正文未覆盖 180 项；缺口以本文第 3 节补齐 |
 | OpenAPI 成功/失败事件数 | 1062 | 人工事件矩阵正文未覆盖 1019 项；完整事件字典以本文第 4 节为准 |
 | operation 级任务追溯 | 531 | 人工任务映射正文未逐项覆盖 525 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 329 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
@@ -163,8 +163,9 @@
 | `facility.equipment.manage` | staff-token | platform | 6 | listFacilityEquipment, createFacilityEquipment, listFacilityMaintenanceDueEquipment, updateFacilityEquipment, changeFacilityEquipmentStatus, recordFacilityEquipmentMaintenanceDone | OpenAPI 补充，以本附录为准 |
 | `facility.inspection.manage` | staff-token | platform | 10 | listFacilityInspectionTemplates, createFacilityInspectionTemplate, listFacilityInspectionTasks, createFacilityInspectionTask, getFacilityInspectionTask, startFacilityInspectionTask, listFacilityInspectionRecords, submitFacilityInspectionRecord, recheckFacilityInspectionTask, confirmFacilityInspectionSupervisor | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.manage` | staff-token | platform | 13 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, suspendFacilityWorkOrder, resumeFacilityWorkOrder, markFacilityWorkOrdersOverdue ... | OpenAPI 补充，以本附录为准 |
+| `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project-entity | 3 | createArApItem, generateContractRentBill, generateContractPeriodBills | 已在权限矩阵正文出现 |
-| `finance.ar_ap.view` | staff-token | project-entity | 2 | listArApItems, exportArApItems | 已在权限矩阵正文出现 |
+| `finance.ar_ap.view` | staff-token | project-entity | 1 | listArApItems | 已在权限矩阵正文出现 |
 | `finance.cam.allocate` | staff-token | platform | 1 | allocateCam | OpenAPI 补充，以本附录为准 |
 | `finance.cam.trueup` | staff-token | platform | 1 | trueUpCam | OpenAPI 补充，以本附录为准 |
 | `finance.daily_close.lock` | staff-token | project-entity | 1 | createDailyClose | 已在权限矩阵正文出现 |
@@ -881,8 +882,8 @@
 | `facility.work_order.viewed` | success | `listFacilityWorkOrders` | `GET` | `/api/v1/facility/work-orders` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.create_failed` | failure | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.created` | success | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.manage` | 已在事件矩阵正文出现 |
-| `finance_ar_ap.export_failed` | failure | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
-| `finance_ar_ap.exported` | success | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `finance_ar_ap.export_failed` | failure | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | FIN-财务台账 | `finance.ar_ap.export` | 接口级事件，以本附录为准 |
+| `finance_ar_ap.exported` | success | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | FIN-财务台账 | `finance.ar_ap.export` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.view_failed` | failure | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.viewed` | success | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `finance_daily_close.lock_failed` | failure | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
@@ -1626,7 +1627,7 @@
 | FIN-财务台账 | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | 创建财务退款记录 | `finance.refund.create` | `finance_refund.created` / `finance_refund.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createPaymentIntent` | `POST` | `/api/v1/finance/payment-intents` | 创建聚合支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | web, tablet, kiosk, miniapp, app | operation 级补充 |
 | FIN-财务台账 | `createPropertyFeeRate` | `POST` | `/api/v1/finance/property-fee/rates` | 维护物业费费率（项目级、可按期） | `finance.property_fee.manage` | `finance_property_fee.rate_set` / `finance_property_fee.rate_set_failed` | web | operation 级补充 |
-| FIN-财务台账 | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | 导出应收应付台账快照 | `finance.ar_ap.view` | `finance_ar_ap.exported` / `finance_ar_ap.export_failed` | web | operation 级补充 |
+| FIN-财务台账 | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | 导出应收应付台账快照 | `finance.ar_ap.export` | `finance_ar_ap.exported` / `finance_ar_ap.export_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | 查询日结六源汇总 | `finance.daily_close.manage` | `finance.daily_close_summary.viewed` / `finance.daily_close_summary.view_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `listPropertyFeeRates` | `GET` | `/api/v1/finance/property-fee/rates` | 列出某项目的物业费费率 | `finance.property_fee.manage` | `finance_property_fee.rate_viewed` / `finance_property_fee.rate_view_failed` | web | operation 级补充 |

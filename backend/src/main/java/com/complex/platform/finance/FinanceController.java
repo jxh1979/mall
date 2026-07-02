@@ -51,7 +51,8 @@ public class FinanceController {
 
     @GetMapping("/ar-ap-items/export")
     public ApiResponse<ArApLedgerExportRecord> exportArApItems() {
-        authorizationService.requirePermission("finance.ar_ap.view");
+        // 治理口径：资金流水属敏感信息，导出与查看分权——审计角色只直授 view，export 须走临时授权审批（V196）。
+        authorizationService.requirePermission("finance.ar_ap.export");
         return ApiResponse.ok(service.exportArApItems());
     }
 
