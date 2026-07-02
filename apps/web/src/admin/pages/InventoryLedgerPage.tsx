@@ -3,6 +3,7 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
+import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import type { AdminPageProps, InventoryItemRow, StockBalanceRow, StockMovementRow } from "../types";
@@ -50,6 +51,8 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [items, setItems] = React.useState<InventoryItemRow[]>([]);
   const [balances, setBalances] = React.useState<StockBalanceRow[]>([]);
   const [movements, setMovements] = React.useState<StockMovementRow[]>([]);
+  const pagedBalances = usePagedRows(balances, 10, balances.length);
+  const pagedMovements = usePagedRows(movements, 10, movements.length);
   const { selectedId: selectedItemId, setSelectedId: setSelectedItemId, selected: selectedItem } = useSelectedRow(items);
   const [fromLocation, setFromLocation] = React.useState("bar-main");
   const [toLocation, setToLocation] = React.useState("warehouse-main");
@@ -172,15 +175,17 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="inventory-ledger-balances-table">
             <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.location}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th></tr></thead>
-            <tbody>{balances.map((row) => <tr key={row.id}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{row.status ?? "normal"}</td></tr>)}</tbody>
+            <tbody>{pagedBalances.pageRows.map((row) => <tr key={row.id}><td>{row.itemId ?? "-"}</td><td>{row.locationType ?? row.locationId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{row.status ?? "normal"}</td></tr>)}</tbody>
           </table>
+            <TablePager testid="inventory-balances-pager" page={pagedBalances.page} pageCount={pagedBalances.pageCount} total={pagedBalances.total} onPrev={pagedBalances.prev} onNext={pagedBalances.next} />
         </div>
         <h3>{TEXT.movements}</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="inventory-ledger-movements-table">
             <thead><tr><th>{TEXT.itemId}</th><th>{TEXT.quantity}</th><th>{TEXT.status}</th><th>{TEXT.time}</th></tr></thead>
-            <tbody>{movements.map((row, index) => <tr key={row.id ?? index}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{row.status ?? "-"}</td><td>{row.createdAt ?? "-"}</td></tr>)}</tbody>
+            <tbody>{pagedMovements.pageRows.map((row, index) => <tr key={row.id ?? index}><td>{row.itemId ?? "-"}</td><td>{row.quantity ?? "-"}</td><td>{row.status ?? "-"}</td><td>{row.createdAt ?? "-"}</td></tr>)}</tbody>
           </table>
+            <TablePager testid="inventory-movements-pager" page={pagedMovements.page} pageCount={pagedMovements.pageCount} total={pagedMovements.total} onPrev={pagedMovements.prev} onNext={pagedMovements.next} />
         </div>
       </AdminDataState>
     </section>
