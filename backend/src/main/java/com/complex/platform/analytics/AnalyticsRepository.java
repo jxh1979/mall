@@ -122,6 +122,22 @@ public interface AnalyticsRepository {
 
     /** Σ ticket_orders.amount_cent（pay_status='paid'）——售票收入；ticket_orders 无 merchant_id，仅平台口径。 */
     /**
+     * S3:出租面积盘(as-of 时点)。分母口径(2026-07-02 拍板):商铺+摊位(shop/booth)且非人工不可租;
+     * 车位(parking)单列不与铺位混算;容器类(楼栋/楼层/区块)与公共区域面积重叠/不出租,不进分母。
+     * 已租=有生效合同覆盖当日;已签待交=pending_effective 绑定(不算已租,单列)。
+     */
+    AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf);
+
+    /** S3:90 天内到期的生效合同数(到期预警 KPI)。 */
+    long countExpiringContracts(LocalDate asOf, int windowDays);
+
+    /** S3 钻取:未出租的铺位明细(shop/booth,含推导租赁态,实时与快照同过滤)。 */
+    java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset);
+
+    /** S3 钻取:到期预警合同明细(生效合同按到期日升序,含绑定面积)。 */
+    java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset);
+
+    /**
      * S2:应收账龄桶(as-of 时点存量,direction=receivable、未结清、已过应收日)。
      * 返回 bucket -> (merchantId(可空=未挂商户) -> 未清金额);bucket in a0_30/a31_60/a61_90/a90p。
      */

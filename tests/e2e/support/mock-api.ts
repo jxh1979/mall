@@ -286,6 +286,20 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/analytics/dashboards/leasing": { businessDate: "2026-07-01", metrics: {
+      "occupancy.rate": { value: 0.8, unit: "rate" },
+      "occupancy.rentable_area": { value: 1000, unit: "sqm" },
+      "occupancy.leased_area": { value: 800, unit: "sqm" },
+      "occupancy.signed_pending_area": { value: 120, unit: "sqm" },
+      "occupancy.parking_rate": { value: 0.25, unit: "rate" },
+      "contract.expiring_90d": { value: 7, unit: "count" },
+    } },
+    "/api/v1/analytics/occupancy/vacant-spaces": [
+      { spaceId: "space-v1", spaceName: "示例空铺", spaceType: "shop", floorNo: "2F", areaSqm: 60, rentalStatus: "vacant" },
+    ],
+    "/api/v1/analytics/occupancy/expiring-contracts": [
+      { contractId: "contract-exp-1", merchantId: "merchant-1", merchantName: "到期示例商户", expiryDate: "2026-08-15", daysLeft: 45, boundArea: 100 },
+    ],
     "/api/v1/analytics/dashboards/finance": { businessDate: "2026-07-01", metrics: {
       "ar.balance": { value: 4200000, unit: "cent" },
       "ar.aging_0_30": { value: 1200000, unit: "cent" },

@@ -15214,6 +15214,81 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/analytics/occupancy/vacant-spaces:
+    get:
+      tags:
+        - analytics
+      operationId: listVacantSpaces
+      summary: 空置铺位明细(出租率钻取)
+      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径
+        (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。
+      x-permission: contract.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.vacant_spaces.viewed
+      x-audit-event-failure: analytics.vacant_spaces.view_failed
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/analytics/occupancy/expiring-contracts:
+    get:
+      tags:
+        - analytics
+      operationId: listExpiringContracts
+      summary: 到期预警合同明细
+      description: 90 天(可配 1-365)内到期的生效合同,按到期日升序,含商户与绑定面积。
+      x-permission: contract.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: analytics.expiring_contracts.viewed
+      x-audit-event-failure: analytics.expiring_contracts.view_failed
+      parameters:
+        - name: window_days
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 365
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/analytics/finance-receivables/debtors:
     get:
       tags:

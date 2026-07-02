@@ -55,6 +55,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-002", label: "集团总览", route: "/admin/analytics/group-overview" },
   { pageId: "ADM-ANA-003", label: "经营参数", route: "/admin/analytics/operating-params" },
   { pageId: "ADM-ANA-004", label: "欠费与回款", route: "/admin/analytics/receivables" },
+  { pageId: "ADM-ANA-005", label: "出租与到期", route: "/admin/analytics/occupancy" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -150,6 +151,11 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("business-analytics-page")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-002") {
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
+  } else if (spec.pageId === "ADM-ANA-005") {
+    await expect(page.getByTestId("occupancy-analytics-page")).toBeVisible();
+    await expect(page.getByTestId("occupancy-rate")).toContainText("80.00%");
+    await expect(page.getByTestId("occupancy-vacant-table")).toContainText("示例空铺");
+    await expect(page.getByTestId("occupancy-expiring-table")).toContainText("contract-exp-1");
   } else if (spec.pageId === "ADM-ANA-004") {
     await expect(page.getByTestId("receivables-analytics-page")).toBeVisible();
     await expect(page.getByTestId("receivables-summary")).toContainText("欠费总额");

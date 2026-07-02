@@ -37,6 +37,28 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void occupancyRateDerivesFromAreasAndSkipsWhenRentableZero() {
+        // S3:出租率=已租/可租(分母0不产出);已签待交不并入已租,单列;车位单列。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.occupancy = new AnalyticsRecords.OccupancyAreas(
+                new BigDecimal("1000"), new BigDecimal("800"), new BigDecimal("120"),
+                new BigDecimal("200"), new BigDecimal("50"));
+        repository.expiringContracts = 7;
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.upserts.get(DashboardAggregationJob.OCC_RATE + "|platform")).isEqualByComparingTo("0.8000");
+        assertThat(repository.upserts.get(DashboardAggregationJob.OCC_SIGNED_PENDING_AREA + "|platform")).isEqualByComparingTo("120");
+        assertThat(repository.upserts.get(DashboardAggregationJob.OCC_PARKING_RATE + "|platform")).isEqualByComparingTo("0.2500");
+        assertThat(repository.upserts.get(DashboardAggregationJob.CONTRACT_EXPIRING_90D + "|platform")).isEqualByComparingTo("7");
+
+        CapturingAnalyticsRepository zero = new CapturingAnalyticsRepository();
+        new DashboardAggregationJob(zero).refreshSnapshots(BUSINESS_DATE);
+        assertThat(zero.upserts).doesNotContainKey(DashboardAggregationJob.OCC_RATE + "|platform");
+        assertThat(zero.upserts).doesNotContainKey(DashboardAggregationJob.OCC_PARKING_RATE + "|platform");
+    }
+
+    @Test
     void arAgingBucketsSumToBalanceAndCollectionRateDerives() {
         // S2 口径断言:Σ四桶 == 欠费总额(平台+商户);回款率=月实收/月应收;分母0不产出。
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
@@ -336,6 +358,26 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         public java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset) {
+            return java.util.List.of();
+        }
+
+        AnalyticsRecords.OccupancyAreas occupancy = new AnalyticsRecords.OccupancyAreas(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+        long expiringContracts = 0;
+
+        public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {
+            return occupancy;
+        }
+
+        public long countExpiringContracts(LocalDate asOf, int windowDays) {
+            return expiringContracts;
+        }
+
+        public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset) {
+            return java.util.List.of();
+        }
+
+        public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
             return java.util.List.of();
         }
 

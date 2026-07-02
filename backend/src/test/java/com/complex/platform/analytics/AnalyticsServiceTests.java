@@ -912,6 +912,26 @@ class AnalyticsServiceTests {
             return java.util.List.of();
         }
 
+        AnalyticsRecords.OccupancyAreas occupancy = new AnalyticsRecords.OccupancyAreas(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+        long expiringContracts = 0;
+
+        public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {
+            return occupancy;
+        }
+
+        public long countExpiringContracts(LocalDate asOf, int windowDays) {
+            return expiringContracts;
+        }
+
+        public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset) {
+            return java.util.List.of();
+        }
+
+        public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
+            return java.util.List.of();
+        }
+
         public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
             return java.util.List.of();
         }

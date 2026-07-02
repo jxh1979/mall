@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 546 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 548 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 292 | 人工权限矩阵正文未覆盖 189 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1092 | 人工事件矩阵正文未覆盖 1050 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 546 | 人工任务映射正文未逐项覆盖 540 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 1096 | 人工事件矩阵正文未覆盖 1054 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 548 | 人工任务映射正文未逐项覆盖 542 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 336 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -137,7 +137,7 @@
 | `contract.settlement.dispute.resolve` | staff-token | platform | 1 | resolveContractDispute | OpenAPI 补充，以本附录为准 |
 | `contract.settlement.manage` | staff-token | platform | 4 | settleContract, listContractSettlements, completeContractSettlement, advanceContractSettlement | OpenAPI 补充，以本附录为准 |
 | `contract.space.color.manage` | staff-token | platform | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
-| `contract.view` | staff-token | merchant | 1 | listMerchantPortalContracts | 已在权限矩阵正文出现 |
+| `contract.view` | staff-token | merchant, platform | 3 | listMerchantPortalContracts, listVacantSpaces, listExpiringContracts | 已在权限矩阵正文出现 |
 | `customer.account.manage` | staff-token | platform | 4 | lookupCustomerAccountByPhone, suspendCustomerAccount, blacklistCustomerAccount, reinstateCustomerAccount | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.view` | staff-token | project | 1 | listMemberLevels | OpenAPI 补充，以本附录为准 |
@@ -495,6 +495,8 @@
 | `analytics.dashboard_domain.viewed` | success | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_view_failed` | failure | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_viewed` | success | `getP0OverviewDashboard` | `GET` | `/api/v1/analytics/dashboards/p0-overview` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.expiring_contracts.view_failed` | failure | `listExpiringContracts` | `GET` | `/api/v1/analytics/occupancy/expiring-contracts` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
+| `analytics.expiring_contracts.viewed` | success | `listExpiringContracts` | `GET` | `/api/v1/analytics/occupancy/expiring-contracts` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
 | `analytics.group_overview.view_failed` | failure | `getGroupOverview` | `GET` | `/api/v1/analytics/group-overview` | ANA-风控分析 | `analytics.group.view` | 接口级事件，以本附录为准 |
 | `analytics.group_overview.viewed` | success | `getGroupOverview` | `GET` | `/api/v1/analytics/group-overview` | ANA-风控分析 | `analytics.group.view` | 接口级事件，以本附录为准 |
 | `analytics.merchant_health.viewed` | success | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -517,6 +519,8 @@
 | `analytics.staff_service_score.viewed_failed` | failure | `listStaffServiceScores` | `GET` | `/api/v1/analytics/staff-service-score` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.traffic_hourly.view_failed` | failure | `getAnalyticsTrafficHourly` | `GET` | `/api/v1/analytics/traffic-hourly` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.traffic_hourly.viewed` | success | `getAnalyticsTrafficHourly` | `GET` | `/api/v1/analytics/traffic-hourly` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.vacant_spaces.view_failed` | failure | `listVacantSpaces` | `GET` | `/api/v1/analytics/occupancy/vacant-spaces` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
+| `analytics.vacant_spaces.viewed` | success | `listVacantSpaces` | `GET` | `/api/v1/analytics/occupancy/vacant-spaces` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
 | `api_call.logged` | success | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `api_call.logged` | success | `receiveOpenWebhook` | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `api_call.rejected` | failure | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -1496,6 +1500,7 @@
 | ANA-风控分析 | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | 查询经营日切分配置(按业务域) | `analytics.dashboard.view` | `analytics.business_day_cutoff.viewed` / `analytics.business_day_cutoff.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | List P2 business metric snapshots for operational analytics | `analytics.dashboard.view` | `analytics_business_metric_snapshot.viewed.success` / `analytics_business_metric_snapshot.viewed.failure` | web | operation 级补充 |
 | ANA-风控分析 | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | 查询客户意向 | `analytics.risk_alert.view` | `analytics.customer_intent.viewed` / `analytics.customer_intent.viewed_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listExpiringContracts` | `GET` | `/api/v1/analytics/occupancy/expiring-contracts` | 到期预警合同明细 | `contract.view` | `analytics.expiring_contracts.viewed` / `analytics.expiring_contracts.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | 查询商户健康度scores | `analytics.dashboard.view` | `analytics.merchant_health.viewed` / `analytics.merchant_health.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listMetricAnomalies` | `GET` | `/api/v1/analytics/metric-anomalies` | 查询指标异常 | `analytics.risk_alert.view` | `analytics.metric_anomaly.viewed` / `analytics.metric_anomaly.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listMetricDefinitions` | `GET` | `/api/v1/analytics/metric-definitions` | 查询指标定义 | `analytics.dashboard.view` | `analytics.metric_definition.viewed` / `analytics.metric_definition.viewed_failed` | web | operation 级补充 |
@@ -1503,6 +1508,7 @@
 | ANA-风控分析 | `listRiskAlerts` | `GET` | `/api/v1/analytics/risk-alerts` | 风险预警 | `analytics.risk_alert.view` | `risk_alert.viewed` / `risk_alert.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listRiskRules` | `GET` | `/api/v1/analytics/risk-rules` | 查询风险规则 | `analytics.risk_alert.view` | `analytics.risk_rule.viewed` / `analytics.risk_rule.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listStaffServiceScores` | `GET` | `/api/v1/analytics/staff-service-score` | 查询员工服务scores | `analytics.risk_alert.view` | `analytics.staff_service_score.viewed` / `analytics.staff_service_score.viewed_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listVacantSpaces` | `GET` | `/api/v1/analytics/occupancy/vacant-spaces` | 空置铺位明细(出租率钻取) | `contract.view` | `analytics.vacant_spaces.viewed` / `analytics.vacant_spaces.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | 处理风险alert | `analytics.risk_alert.manage` | `analytics.risk_alert.resolved` / `analytics.risk_alert.resolved_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | 修改某业务域的经营日切分小时 | `analytics.operating_params.manage` | `analytics.business_day_cutoff.updated` / `analytics.business_day_cutoff.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertOperatingParams` | `POST` | `/api/v1/analytics/operating-params` | 新增或更新综合体经营参数（坪效面积） | `analytics.operating_params.manage` | `operating_params.changed` / `operating_params.change_failed` | web | operation 级补充 |

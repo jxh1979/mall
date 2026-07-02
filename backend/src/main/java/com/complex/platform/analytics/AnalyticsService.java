@@ -109,6 +109,15 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.AR_RECEIVABLE_MTD, "finance", "cent", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.AR_COLLECTION_RATE_MTD, "finance", "rate", true,
                     "collection rate is platform-scope only (no snapshot when month receivable is zero)"),
+            // S3 出租率/去化(平台口径,期末时点):
+            new MetricCatalogEntry(DashboardAggregationJob.OCC_RATE, "leasing", "rate", true,
+                    "occupancy is platform-scope only (not emitted when rentable area is zero)"),
+            new MetricCatalogEntry(DashboardAggregationJob.OCC_RENTABLE_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.OCC_LEASED_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.OCC_SIGNED_PENDING_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
+            new MetricCatalogEntry(DashboardAggregationJob.OCC_PARKING_RATE, "leasing", "rate", true,
+                    "parking occupancy is platform-scope only (not emitted when parking area is zero)"),
+            new MetricCatalogEntry(DashboardAggregationJob.CONTRACT_EXPIRING_90D, "leasing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
             // 数据源未就绪（不伪造）：
             new MetricCatalogEntry("revenue.thirdparty", "finance", "cent", false,
                     "third-party reflow depends on integration capability switch wiring (not yet aggregated)"),
@@ -288,6 +297,31 @@ public class AnalyticsService {
                 "ar_ap_items",
                 () -> repository.listOverdueDebtors(
                         LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), finalBucket, limit, offset)
+        );
+    }
+
+    /** S3 钻取:未出租铺位明细(实时,与出租率快照同过滤同口径)。 */
+    public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(int limit, int offset) {
+        return readSingle(
+                "analytics.vacant_spaces.viewed",
+                "analytics.vacant_spaces.view_failed",
+                "contract.view",
+                "spaces",
+                () -> repository.listVacantSpaces(
+                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), limit, offset)
+        );
+    }
+
+    /** S3 钻取:到期预警合同明细(窗口天数 1-365)。 */
+    public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(int windowDays, int limit, int offset) {
+        int days = Math.min(Math.max(windowDays, 1), 365);
+        return readSingle(
+                "analytics.expiring_contracts.viewed",
+                "analytics.expiring_contracts.view_failed",
+                "contract.view",
+                "contracts",
+                () -> repository.listExpiringContracts(
+                        LocalDate.ofInstant(Instant.now(clock), java.time.ZoneOffset.UTC), days, limit, offset)
         );
     }
 

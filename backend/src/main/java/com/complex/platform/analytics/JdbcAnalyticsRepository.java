@@ -903,6 +903,90 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("as_of", asOf);
+        return jdbcTemplate.queryForObject("""
+                SELECT
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth')), 0) AS rentable,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth') AND EXISTS (
+                      SELECT 1 FROM contract_spaces cs JOIN contracts c ON c.id = cs.contract_id
+                       WHERE cs.space_id = s.id AND c.lifecycle_status = 'effective'
+                         AND c.effective_date <= :as_of AND c.expiry_date >= :as_of)), 0) AS leased,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type IN ('shop','booth') AND EXISTS (
+                      SELECT 1 FROM contract_spaces cs2 JOIN contracts c2 ON c2.id = cs2.contract_id
+                       WHERE cs2.space_id = s.id AND c2.lifecycle_status = 'pending_effective')), 0) AS signed_pending,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'), 0) AS parking_rentable,
+                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking' AND EXISTS (
+                      SELECT 1 FROM contract_spaces cs4 JOIN contracts c4 ON c4.id = cs4.contract_id
+                       WHERE cs4.space_id = s.id AND c4.lifecycle_status = 'effective'
+                         AND c4.effective_date <= :as_of AND c4.expiry_date >= :as_of)), 0) AS parking_leased
+                  FROM spaces s
+                 WHERE s.status <> 'unavailable'
+                """, params, (rs, n) -> new AnalyticsRecords.OccupancyAreas(
+                rs.getBigDecimal("rentable"), rs.getBigDecimal("leased"), rs.getBigDecimal("signed_pending"),
+                rs.getBigDecimal("parking_rentable"), rs.getBigDecimal("parking_leased")));
+    }
+
+    @Override
+    public long countExpiringContracts(LocalDate asOf, int windowDays) {
+        Long value = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM contracts
+                 WHERE lifecycle_status = 'effective'
+                   AND expiry_date >= :as_of AND expiry_date <= :until
+                """, new MapSqlParameterSource()
+                .addValue("as_of", asOf).addValue("until", asOf.plusDays(windowDays)), Long.class);
+        return value == null ? 0L : value;
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.VacantSpaceRow> listVacantSpaces(LocalDate asOf, int limit, int offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("as_of", asOf)
+                .addValue("limit", Math.min(Math.max(limit, 1), 200))
+                .addValue("offset", Math.max(offset, 0));
+        return jdbcTemplate.query("""
+                SELECT s.id, s.space_name, s.space_type, s.floor_no, s.area_square_meter,
+                       CASE WHEN EXISTS (SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) THEN 'negotiating'
+                            WHEN EXISTS (SELECT 1 FROM contract_spaces cs3 WHERE cs3.space_id = s.id) THEN 'moved_out'
+                            ELSE 'vacant' END AS rental_status
+                  FROM spaces s
+                 WHERE s.space_type IN ('shop','booth')
+                   AND s.status <> 'unavailable'
+                   AND NOT EXISTS (
+                      SELECT 1 FROM contract_spaces cs JOIN contracts c ON c.id = cs.contract_id
+                       WHERE cs.space_id = s.id AND c.lifecycle_status = 'effective'
+                         AND c.effective_date <= :as_of AND c.expiry_date >= :as_of)
+                 ORDER BY s.area_square_meter DESC NULLS LAST, s.id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> new AnalyticsRecords.VacantSpaceRow(
+                rs.getString("id"), rs.getString("space_name"), rs.getString("space_type"),
+                rs.getString("floor_no"), rs.getBigDecimal("area_square_meter"), rs.getString("rental_status")));
+    }
+
+    @Override
+    public java.util.List<AnalyticsRecords.ExpiringContractRow> listExpiringContracts(LocalDate asOf, int windowDays, int limit, int offset) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("as_of", asOf)
+                .addValue("until", asOf.plusDays(windowDays))
+                .addValue("limit", Math.min(Math.max(limit, 1), 200))
+                .addValue("offset", Math.max(offset, 0));
+        return jdbcTemplate.query("""
+                SELECT c.id, c.merchant_id, m.merchant_name, c.expiry_date,
+                       (c.expiry_date - :as_of) AS days_left,
+                       COALESCE((SELECT SUM(s.area_square_meter) FROM contract_spaces cs
+                                   JOIN spaces s ON s.id = cs.space_id WHERE cs.contract_id = c.id), 0) AS bound_area
+                  FROM contracts c
+                  LEFT JOIN merchants m ON m.id = c.merchant_id
+                 WHERE c.lifecycle_status = 'effective'
+                   AND c.expiry_date >= :as_of AND c.expiry_date <= :until
+                 ORDER BY c.expiry_date, c.id
+                 LIMIT :limit OFFSET :offset
+                """, params, (rs, n) -> new AnalyticsRecords.ExpiringContractRow(
+                rs.getString("id"), rs.getString("merchant_id"), rs.getString("merchant_name"),
+                rs.getObject("expiry_date", LocalDate.class), rs.getLong("days_left"), rs.getBigDecimal("bound_area")));
+    }
+
+    @Override
     public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf) {
         Map<String, Map<String, BigDecimal>> result = new LinkedHashMap<>();
         jdbcTemplate.query("""

@@ -11,6 +11,35 @@ public final class AnalyticsRecords {
     private AnalyticsRecords() {
     }
 
+    public record OccupancyAreas(
+            java.math.BigDecimal rentableArea,
+            java.math.BigDecimal leasedArea,
+            java.math.BigDecimal signedPendingArea,
+            java.math.BigDecimal parkingRentableArea,
+            java.math.BigDecimal parkingLeasedArea
+    ) {
+    }
+
+    public record VacantSpaceRow(
+            String spaceId,
+            String spaceName,
+            String spaceType,
+            String floorNo,
+            java.math.BigDecimal areaSqm,
+            String rentalStatus
+    ) {
+    }
+
+    public record ExpiringContractRow(
+            String contractId,
+            String merchantId,
+            String merchantName,
+            LocalDate expiryDate,
+            long daysLeft,
+            java.math.BigDecimal boundArea
+    ) {
+    }
+
     public record ArDebtorRow(
             String merchantId,
             String merchantName,

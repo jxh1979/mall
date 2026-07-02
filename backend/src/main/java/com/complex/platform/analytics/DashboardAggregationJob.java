@@ -56,6 +56,13 @@ public class DashboardAggregationJob {
     static final String AR_COLLECTED_MTD = "ar.collected_mtd";       // 本月实收(月初至当日)
     static final String AR_RECEIVABLE_MTD = "ar.receivable_mtd";     // 本月应收(不含未来月)
     static final String AR_COLLECTION_RATE_MTD = "ar.collection_rate_mtd"; // 回款率(分母0不产出,不伪造)
+    // S3 出租率/去化(2026-07-02 拍板):分母=商铺+摊位且非不可租;车位单列;已签待交单列(期末时点)。
+    static final String OCC_RATE = "occupancy.rate";
+    static final String OCC_RENTABLE_AREA = "occupancy.rentable_area";
+    static final String OCC_LEASED_AREA = "occupancy.leased_area";
+    static final String OCC_SIGNED_PENDING_AREA = "occupancy.signed_pending_area";
+    static final String OCC_PARKING_RATE = "occupancy.parking_rate";
+    static final String CONTRACT_EXPIRING_90D = "contract.expiring_90d";
 
     static final String SEGMENT_PLATFORM = "platform";
     static final String SEGMENT_MERCHANT = "merchant";
@@ -215,6 +222,22 @@ public class DashboardAggregationJob {
             upsertPlatform(AR_COLLECTION_RATE_MTD, "finance", businessDate,
                     collected.divide(receivableMtd, 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
         }
+
+        // S3 出租率/去化(as-of 期末时点;比率分母 0 不产出,不伪造)。
+        AnalyticsRecords.OccupancyAreas areas = repository.occupancyAreas(businessDate);
+        upsertPlatform(OCC_RENTABLE_AREA, "leasing", businessDate, areas.rentableArea(), now, platformTotals);
+        upsertPlatform(OCC_LEASED_AREA, "leasing", businessDate, areas.leasedArea(), now, platformTotals);
+        upsertPlatform(OCC_SIGNED_PENDING_AREA, "leasing", businessDate, areas.signedPendingArea(), now, platformTotals);
+        if (areas.rentableArea() != null && areas.rentableArea().signum() > 0) {
+            upsertPlatform(OCC_RATE, "leasing", businessDate,
+                    areas.leasedArea().divide(areas.rentableArea(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
+        }
+        if (areas.parkingRentableArea() != null && areas.parkingRentableArea().signum() > 0) {
+            upsertPlatform(OCC_PARKING_RATE, "leasing", businessDate,
+                    areas.parkingLeasedArea().divide(areas.parkingRentableArea(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
+        }
+        upsertPlatform(CONTRACT_EXPIRING_90D, "leasing", businessDate,
+                BigDecimal.valueOf(repository.countExpiringContracts(businessDate, 90)), now, platformTotals);
 
         // ⑤ 集团多项目 ETL：按 project_id 维度 upsert segment_type='project' 行。
         upsertByProject(businessDate, platformTotals, now);

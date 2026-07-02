@@ -32,6 +32,63 @@ class AnalyticsJdbcIntegrationTests {
     private com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     @Test
+    void occupancyAreasHonorDenominatorRulingAndVacantListMatches() {
+        // S3 分母口径(拍板):shop+booth 且非 unavailable;车位单列;容器/公共区域不进;
+        // pending_effective 算「已签待交」不算已租。
+        java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
+        insertSpace("sp_s3_shop_let", "shop", "100");
+        insertSpace("sp_s3_shop_vacant", "shop", "60");
+        insertSpace("sp_s3_booth", "booth", "40");
+        insertSpace("sp_s3_unavailable", "shop", "500");
+        jdbcTemplate.update("UPDATE spaces SET status='unavailable' WHERE id='sp_s3_unavailable'", java.util.Map.of());
+        insertSpace("sp_s3_public", "public_area", "300");
+        insertSpace("sp_s3_parking", "parking", "20");
+        insertContractWithSpace("ct_s3_let", "sp_s3_shop_let", "effective", asOf.minusDays(30), asOf.plusDays(60));
+        insertContractWithSpace("ct_s3_pending", "sp_s3_booth", "pending_effective", asOf.plusDays(10), asOf.plusDays(370));
+        insertContractWithSpace("ct_s3_parking", "sp_s3_parking", "effective", asOf.minusDays(5), asOf.plusDays(30));
+
+        AnalyticsRecords.OccupancyAreas areas = repository.occupancyAreas(asOf);
+        assertThat(areas.rentableArea()).isEqualByComparingTo("200");
+        assertThat(areas.leasedArea()).isEqualByComparingTo("100");
+        assertThat(areas.signedPendingArea()).isEqualByComparingTo("40");
+        assertThat(areas.parkingRentableArea()).isEqualByComparingTo("20");
+        assertThat(areas.parkingLeasedArea()).isEqualByComparingTo("20");
+
+        java.util.List<AnalyticsRecords.VacantSpaceRow> vacant = repository.listVacantSpaces(asOf, 200, 0).stream()
+                .filter(row -> row.spaceId().startsWith("sp_s3_")).toList();
+        assertThat(vacant).extracting(AnalyticsRecords.VacantSpaceRow::spaceId)
+                .containsExactlyInAnyOrder("sp_s3_shop_vacant", "sp_s3_booth");
+
+        assertThat(repository.countExpiringContracts(asOf, 90)).isGreaterThanOrEqualTo(2);
+        java.util.List<AnalyticsRecords.ExpiringContractRow> expiring = repository.listExpiringContracts(asOf, 90, 200, 0).stream()
+                .filter(row -> row.contractId().startsWith("ct_s3_")).toList();
+        assertThat(expiring).extracting(AnalyticsRecords.ExpiringContractRow::contractId)
+                .containsExactly("ct_s3_parking", "ct_s3_let");
+        assertThat(expiring.get(1).boundArea()).isEqualByComparingTo("100");
+    }
+
+    private void insertSpace(String id, String type, String area) {
+        jdbcTemplate.update("""
+                INSERT INTO spaces (id, space_name, space_type, floor_no, area_square_meter, polygon_points, status, created_at, updated_at)
+                VALUES (:id, :id, :type, '1F', :area, '[]'::jsonb, 'active', now(), now())
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", id).addValue("type", type).addValue("area", new java.math.BigDecimal(area)));
+    }
+
+    private void insertContractWithSpace(String contractId, String spaceId, String lifecycle,
+            java.time.LocalDate effective, java.time.LocalDate expiry) {
+        jdbcTemplate.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id,
+                        effective_date, expiry_date, lifecycle_status, created_at, updated_at)
+                VALUES (:id, 'mch_s3', 'subj_s3', 'subj_s3', :eff, :exp, :lc, now(), now())
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("id", contractId).addValue("eff", effective).addValue("exp", expiry).addValue("lc", lifecycle));
+        jdbcTemplate.update("INSERT INTO contract_spaces (contract_id, space_id) VALUES (:c, :s)",
+                new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                        .addValue("c", contractId).addValue("s", spaceId));
+    }
+
+    @Test
     void arAgingBucketsAndDebtorsReflectRealLedgerRows() {
         // S2 口径:桶按 as-of−due_date;未清=unpaid_amount_cent;Σ桶=欠费总额;明细与快照同过滤。
         java.time.LocalDate asOf = java.time.LocalDate.parse("2026-06-20");
