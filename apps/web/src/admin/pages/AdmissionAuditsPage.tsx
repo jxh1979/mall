@@ -11,7 +11,7 @@ const EVIDENCE_CREATE = ["evidence.event.create"];
 const TEXT = {
   title: "商户准入审批流水",
   description: "把商户档案、四类主体绑定、合同草稿/审批三类准入证据放在同一条审计链路里，支撑总控、法务、财务和运营共同验收。",
-  evidence: "接口证据：读取 /api/v1/platform/merchants、/api/v1/platform/business-entity-bindings、/api/v1/platform/contracts；导出写入 /api/v1/evidence/events。",
+  evidence: "接口证据：读取 /api/v1/platform/merchants、/api/v1/platform/business-entity-bindings、/api/v1/contracts；导出写入 /api/v1/evidence/events。",
   boundary: "商户准入必须同时核验商户档案、四类主体绑定、合同审批与附件归档；任何一段缺失都不能视为准入闭环完成。",
   loadFailed: "准入流水读取失败",
   exportReasonRequired: "导出原因不能为空。",
@@ -45,7 +45,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       const [nextMerchants, nextBindings, nextContracts] = await Promise.all([
         api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
         api.get<SubjectBindingRow[]>("/api/v1/platform/business-entity-bindings"),
-        api.get<ContractRow[]>("/api/v1/platform/contracts"),
+        api.get<{ items?: ContractRow[] } | ContractRow[]>("/api/v1/contracts").then((data) => (Array.isArray(data) ? data : data?.items ?? [])),
       ]);
       setMerchants(nextMerchants);
       setBindings(nextBindings);

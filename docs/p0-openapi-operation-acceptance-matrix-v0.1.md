@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 531 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 528 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -211,9 +211,6 @@
 | platform | `GET` | `/api/v1/platform/business-entity-bindings` | `listBusinessEntityBindings` | 查询四类主体绑定 | `-` | `entity.binding.view` | `staff-token` | `project-merchant` | web | 否 | `entity_binding.viewed` | `entity_binding.view_failed` |
 | platform | `POST` | `/api/v1/platform/business-entity-bindings` | `createBusinessEntityBinding` | 创建四类主体唯一绑定 | `BusinessEntityBindingRequest` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `entity_binding.changed` | `entity_binding.change_failed` |
 | platform | `POST` | `/api/v1/platform/business-entity-bindings/{id}/change` | `changeBusinessEntityBinding` | 变更四类主体绑定 | `StatusChangeRequest` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `entity_binding.changed` | `entity_binding.change_failed` |
-| platform | `GET` | `/api/v1/platform/contracts` | `listContracts` | 查询合同摘要和附件归档 | `-` | `contract.view` | `staff-token` | `project-merchant` | web | 否 | `contract.viewed` | `contract.view_failed` |
-| platform | `POST` | `/api/v1/platform/contracts` | `createContractDraft` | 创建合同草稿和归档附件 | `ContractDraftRequest` | `contract.draft.manage` | `staff-token` | `project-merchant` | web | 是 | `contract.draft_saved` | `contract.draft_save_failed` |
-| platform | `POST` | `/api/v1/platform/contracts/{contract_id}/approve` | `approveContract` | 合同审批流 | `ApprovalRequest` | `contract.lifecycle.approve` | `staff-token` | `project-merchant` | web | 是 | `contract.lifecycle_changed` | `contract.lifecycle_change_failed` |
 | platform | `GET` | `/api/v1/platform/merchants` | `listMerchants` | 查询商户 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web, merchant_portal | 否 | `merchant.viewed` | `merchant.view_failed` |
 | platform | `POST` | `/api/v1/platform/merchants` | `createMerchant` | 创建商户 | `MerchantProfileRequest` | `merchant.profile.manage` | `staff-token` | `project` | web | 是 | `merchant.updated` | `merchant.update_failed` |
 | platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | `updateMerchant` | 修改商户 | `MerchantProfileRequest` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.updated` | `merchant.update_failed` |
@@ -619,5 +616,5 @@ Given Java Spring Boot 代码完成，When 通过 springdoc 生成运行时 Open
 | 2026-06-12 | V0.1 D2 订台资源接口补齐 | 新增 `GET /api/v1/customer/bar-reservation-options`。历史 operation 总数曾更新为 118 个；当前总数以第 3 节和 OpenAPI 为准。 |
 | 2026-06-12 | V0.1 可编码准入收口修复 | 对齐 OpenAPI：`logout` 改为 `LogoutRequest`，`unbindDevice` 改为 `DeviceUnbindRequest`，一体机心跳使用 `device-credential` 与 `x-permission=not_applicable`，所有 operation 必须显式 `x-auth-context`。 |
 | 2026-06-12 | V0.1 字段级契约补强 | OpenAPI schema 和公共参数补齐字符串长度、数值边界、数组上限和字段说明；接口自动化、DTO 生成和供应商 mock 不得再依赖模板化字段描述。 |
-| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 531 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
+| 2026-06-12 | V0.1 客户端方法级契约闸口 | 按当前 OpenAPI 重建 operation 清单，P0 operation 总数为 528 个；客户端 OpenAPI 覆盖闸口升级为路径 + HTTP 方法一致性检查。 |
 | 2026-06-13 | V0.1 OpenAPI 追溯附录闸口 | operation 验收矩阵同步引用 `p0-openapi-contract-closure-appendix-v0.1.md`，防止接口实现、SDK/mock 或自动化只对齐路径和 schema，遗漏任务簇、权限、事件、终端和样例准入。 |

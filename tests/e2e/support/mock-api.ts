@@ -194,7 +194,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/dashboards/p0-overview": { merchants: 1, ticketProducts: state.tickets.length, issuedTickets: state.issuedEntitlements.length, verifications: state.verifications.length, barOrders: 1, amusementSessions: state.amusementSessions.length, openRiskAlerts: 1, auditEvents: 2 },
     "/api/v1/platform/business-entities": [{ id: "org-1", name: "Platform Org", code: "ORG", orgType: "platform", status: "active", createdAt: now }],
     "/api/v1/platform/business-entity-bindings": state.businessBindings,
-    "/api/v1/platform/contracts": state.contracts,
+    "/api/v1/contracts": { items: state.contracts, page: 1, pageSize: 500, total: state.contracts.length },
     "/api/v1/platform/supervisor-review-policies": state.supervisorReviewPolicies,
     "/api/v1/platform/merchants": [{ id: "merchant-1", admissionStep: "商户档案", organizationId: "org-1", displayName: "Main Merchant", companyName: "Main Company", mallBlockCode: "1F-A", areaSquareMeter: 128.5, leasedAreaSquareMeter: 120, secondaryContactName: "Jack", rentPerSquareMeter: 12.3, cooperationForm: "fixed_rent_plus_commission", status: "active", riskLevel: "normal", auditEvidenceRef: "audit://admission/merchant-1" }],
     "/api/v1/platform/projects": [{ id: "venue-1", merchantId: "merchant-1", name: "Main Venue", code: "VENUE", venueType: "complex", status: "active" }],

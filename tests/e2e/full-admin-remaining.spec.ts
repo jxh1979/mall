@@ -303,7 +303,7 @@ test.describe("full admin remaining pages acceptance", () => {
       if (spec.pageId === "ADM-GOV-005") {
         await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/merchants");
         await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/business-entity-bindings");
-        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/contracts");
+        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/contracts");
         await expect(page.getByTestId("admission-audits-summary")).toContainText("准入闭环");
         await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("Main Merchant");
         await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("audit://admission/merchant-1");
