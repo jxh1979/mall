@@ -4,6 +4,7 @@ import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
 import { adminRoutes, findAdminRoute, groupedAdminRoutes } from "./adminRoutes";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
+import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
 
 // P2 bundle 优化：admin 页面路由级 lazy 分包。
@@ -267,6 +268,35 @@ export default function AdminApp() {
     };
   }, [api, token, user]);
 
+  // 3.19 二期：终端开关菜单 gating——[]=无关闭项/加载中(不闪隐藏)，null=拉取失败→兜底关(留自救组)。
+  const [disabledSwitchRows, setDisabledSwitchRows] = React.useState<DisabledSwitchRow[] | null>([]);
+
+  React.useEffect(() => {
+    if (!user || !token) return;
+    let cancelled = false;
+    api
+      .get<DisabledSwitchRow[]>("/api/v1/terminals/capability-switches/effective")
+      .then((rows) => {
+        if (!cancelled) setDisabledSwitchRows(rows ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setDisabledSwitchRows(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, token, user]);
+
+  // 3.19 二期：当前菜单模块随路由更新，请求头 X-Module-Code 让后端按模块闸。
+  React.useEffect(() => {
+    api.moduleCode = route?.group ?? null;
+  }, [api, route]);
+
+  const hiddenGroups = React.useMemo(
+    () => hiddenGroupKeys(disabledSwitchRows, groupedAdminRoutes().map((group) => group.key)),
+    [disabledSwitchRows],
+  );
+
   const [collapsedGroups, setCollapsedGroups] = React.useState<Record<string, boolean>>({});
 
   function toggleGroup(key: string) {
@@ -276,6 +306,10 @@ export default function AdminApp() {
   function navigate(nextRoute: AdminRoute) {
     // onClick 级拦截：无权限项不导航（不止 aria-disabled）。
     if (!hasPermissions(effectivePermissions, nextRoute.requiredPermissions)) {
+      return;
+    }
+    // 3.19 二期：被终端开关关闭的模块不导航（菜单已隐藏，此处兜底直链/历史记录）。
+    if (nextRoute.group && hiddenGroups.has(nextRoute.group)) {
       return;
     }
     setRoute(nextRoute);
@@ -361,7 +395,7 @@ export default function AdminApp() {
           </div>
         </div>
         <nav data-testid="admin-nav">
-          {groupedAdminRoutes().map((group) => {
+          {groupedAdminRoutes().filter((group) => !hiddenGroups.has(group.key)).map((group) => {
             const collapsed = collapsedGroups[group.key] ?? false;
             return (
               <div className="admin-nav-group" key={group.key} data-testid={`admin-nav-group-${group.key}`}>

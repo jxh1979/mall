@@ -55,6 +55,9 @@ function normalizeRequestBody(body: JsonBody): JsonValue {
 export class AdminApi {
   private readonly apiBaseUrl = getApiBaseUrl();
 
+  /** 3.19 二期：当前所在菜单模块（AdminApp 路由切换时更新），随请求带 X-Module-Code 供终端开关按模块闸。 */
+  moduleCode: string | null = null;
+
   constructor(private readonly accessToken: string) {}
 
   get<T>(path: string): Promise<T> {
@@ -80,6 +83,9 @@ export class AdminApi {
   private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
     const headers = new Headers();
     if (this.accessToken) headers.set("authorization", `Bearer ${this.accessToken}`);
+    // 3.19 二期：后台=web 终端；声明后后端按 terminal.enabled 逐请求强制（矩阵页关端/关模块=接口硬拒）。
+    headers.set("x-terminal-type", "web");
+    if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
     const init: RequestInit = { method, headers };
     if (body) {
       headers.set("content-type", "application/json");

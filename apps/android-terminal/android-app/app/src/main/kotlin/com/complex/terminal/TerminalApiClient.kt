@@ -152,6 +152,8 @@ class TerminalApiClient(
     connection.requestMethod = method
     connection.connectTimeout = connectTimeoutMs
     connection.readTimeout = readTimeoutMs
+    // 3.19 二期：声明终端类型，接受 terminal.enabled 总开关逐请求后端强制（矩阵页关端=接口硬拒）。
+    connection.setRequestProperty("X-Terminal-Type", "staff_work_phone")
     accessToken?.takeIf { it.isNotBlank() }?.let { connection.setRequestProperty("authorization", "Bearer $it") }
     return connection
   }

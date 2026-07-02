@@ -6032,6 +6032,45 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/terminals/capability-switches/effective:
+    get:
+      tags:
+        - terminal
+      operationId: listEffectiveDisabledTerminalSwitches
+      summary: 当前终端的已关闭开关行（前端菜单 gating 数据源）
+      description: 3.19 二期：各端启动时拉取"本端哪些模块/能力被关"——只回 enabled=false 的行；terminal_type 取 X-Terminal-Type 头（缺省 web）。功能可用性非机密，任何已登录主体可读（普通员工菜单也要按开关隐藏）；拉取失败端侧兜底关。
+      x-permission: not_applicable
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
+        - kiosk
+        - tablet
+        - staff_work_phone
+        - staff_private_phone
+        - merchant_portal
+        - merchant_app
+        - mobile_admin
+      x-idempotency-required: false
+      x-audit-event-success: terminal_switch.effective_viewed
+      x-audit-event-failure: terminal_switch.effective_view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: X-Terminal-Type
+          in: header
+          required: false
+          description: 调用端终端类型（十端之一）；缺省按 web。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/terminals/capability-switches/{id}:
     put:
       tags:

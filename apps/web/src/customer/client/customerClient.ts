@@ -79,6 +79,8 @@ export class CustomerApi {
     }
     // 3.3 免登录：token 为空时走 httpOnly cookie 鉴权；自定义头是后端 cookie 写操作的 CSRF 闸。
     headers.set("x-requested-with", "XMLHttpRequest");
+    // 3.19 二期：客人 web 端声明终端类型，接受 terminal.enabled 总开关逐请求强制。
+    headers.set("x-terminal-type", "web");
     const init: RequestInit = { method, headers, credentials: "include" };
     if (body) {
       const idempotencyKey = nextIdempotencyKey();

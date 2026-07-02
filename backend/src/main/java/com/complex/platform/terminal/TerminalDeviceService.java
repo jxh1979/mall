@@ -256,6 +256,19 @@ public class TerminalDeviceService {
         }
     }
 
+    /**
+     * 3.19 二期：某终端的已关闭开关行（前端菜单 gating 用，只回 enabled=false 的行）。
+     * terminalType 空/未知按 "web" 兜底；配置表全量 ≤ 数百行，内存过滤足够。
+     */
+    public PageResponse<TerminalCapabilitySwitchRecord> listDisabledSwitchesFor(String terminalType) {
+        String type = terminalType == null || terminalType.isBlank() ? "web" : terminalType.trim();
+        List<TerminalCapabilitySwitchRecord> disabled = repository.listCapabilitySwitches().stream()
+                .filter(record -> !record.enabled())
+                .filter(record -> type.equals(record.terminalType()) || "*".equals(record.terminalType()))
+                .toList();
+        return new PageResponse<>(disabled, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, disabled.size());
+    }
+
     @Transactional
     public TerminalCapabilitySwitchRecord updateCapabilitySwitch(String id, CapabilitySwitchRequest request) {
         String switchId = requireText(id, "id");
@@ -273,14 +286,31 @@ public class TerminalDeviceService {
                     if (actual.enabled() == null) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "enabled is required");
                     }
+                    Instant now = Instant.now();
+                    // 3.19 二期修复：既有行 = 纯开/关切换，身份字段（端/能力/scope）保持原行——
+                    // 旧实现按请求重推导 scope_type（非 global 一律改成 device），会把 V198 的 module 行
+                    // 改写成 device 行，守卫按模块解析不到 → 关了开关接口照放行（活证据抓到的真 bug）。
+                    java.util.Optional<TerminalCapabilitySwitchRecord> existing =
+                            repository.findCapabilitySwitchById(switchId);
+                    if (existing.isPresent()) {
+                        TerminalCapabilitySwitchRecord current = existing.get();
+                        return repository.saveCapabilitySwitch(new TerminalCapabilitySwitchRecord(
+                                current.id(),
+                                current.terminalType(),
+                                current.capabilityCode(),
+                                current.scopeType(),
+                                current.scopeId(),
+                                actual.enabled(),
+                                trimToNull(actual.operatorNote()),
+                                current.createdAt(),
+                                now
+                        ));
+                    }
+                    // 新建行：沿用既有推导（kiosk 设备级开关为主的历史口径）。
                     String terminalType = trimToDefault(actual.terminalType(), "kiosk");
                     String capabilityCode = requireText(actual.capabilityCode(), "capability_code");
                     String scopeId = trimToDefault(actual.scopeId(), "global");
                     String scopeType = "global".equals(scopeId) ? "global" : "device";
-                    Instant now = Instant.now();
-                    Instant createdAt = repository.findCapabilitySwitchById(switchId)
-                            .map(TerminalCapabilitySwitchRecord::createdAt)
-                            .orElse(now);
                     return repository.saveCapabilitySwitch(new TerminalCapabilitySwitchRecord(
                             switchId,
                             terminalType,
@@ -289,7 +319,7 @@ public class TerminalDeviceService {
                             scopeId,
                             actual.enabled(),
                             trimToNull(actual.operatorNote()),
-                            createdAt,
+                            now,
                             now
                     ));
                 }

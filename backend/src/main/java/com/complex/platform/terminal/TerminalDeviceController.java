@@ -103,6 +103,17 @@ public class TerminalDeviceController {
         return ApiResponse.ok(service.listCapabilitySwitches());
     }
 
+    /**
+     * 3.19 二期：当前终端的已关闭开关行（前端菜单 gating 数据源）。
+     * 各端启动时拉取"我这个端哪些模块被关了"——功能可用性非机密，任何已登录主体可读
+     * （不设 terminal.switch.view：普通员工的菜单也要按开关隐藏）；terminal_type 取 X-Terminal-Type 头。
+     */
+    @GetMapping("/capability-switches/effective")
+    public ApiResponse<PageResponse<TerminalCapabilitySwitchRecord>> listEffectiveDisabledSwitches(
+            @org.springframework.web.bind.annotation.RequestHeader(name = "X-Terminal-Type", required = false) String terminalType) {
+        return ApiResponse.ok(service.listDisabledSwitchesFor(terminalType));
+    }
+
     @PutMapping("/capability-switches/{id}")
     public ApiResponse<TerminalCapabilitySwitchRecord> updateCapabilitySwitch(
             @PathVariable String id,
