@@ -1,0 +1,10 @@
+# 综合体运行态「app 自有」密钥清单（U 盘 keystore 自动随机生成 + 纳管）。
+# 新增 app 自有密钥在此登记一行即被 generate/provision/verify 覆盖。
+#
+# 注意：仅列可安全「随机生成」的 app 自有密钥。外部既定凭证（DB 角色密码
+# COMPLEX_DATABASE_PASSWORD/_APP_PASSWORD、本地种子 P0_ADMIN_PASSWORD 等）由 DBA/IT
+# 按实际值单独写入 secrets.env（随机生成会与既有 role/账号对不上导致登录失败）——见 runbook。
+COMPLEX_KEYVAULT_PII_KEY
+COMPLEX_TICKET_SIGNING_SECRET
+COMPLEX_BAR_INVITATION_SIGNING_SECRET
+JWT_SECRET

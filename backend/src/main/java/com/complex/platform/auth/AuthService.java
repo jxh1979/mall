@@ -19,7 +19,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @Profile({"local", "dev", "test"})
-public class AuthService {
+public class AuthService implements SessionIssuer {
 
     private final ConcurrentMap<String, UserRecord> usersByUsername = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, UserRecord> usersById = new ConcurrentHashMap<>();
@@ -255,6 +255,19 @@ public class AuthService {
                 .filter(session -> session.accessExpiresAt() == null || Instant.now().isBefore(session.accessExpiresAt()))
                 .map(SessionRecord::userId)
                 .map(usersById::get);
+    }
+
+    @Override
+    public LoginResponse issueMasterSession() {
+        // U 盘破窗：按需保留超管账号（内存），不依赖已有账号；随后发最高权限会话。
+        UserRecord user = usersById.computeIfAbsent(SessionIssuer.MASTER_USER_ID, id ->
+                new UserRecord(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                        "!usb-only-no-password", "platform_admin", "platform-company", null, "active", Instant.now()));
+        usersByUsername.putIfAbsent(SessionIssuer.MASTER_USERNAME, user);
+        SessionRecord session = createSession(user, "usb-master", "recovery");
+        auditEventService.recordSuccess("auth.master.session_issued", "auth.master", "auth-session",
+                session.id(), null, null, java.util.Map.of("user_id", user.id()));
+        return responseFor(session, user);
     }
 
     private SessionRecord createSession(UserRecord user, String deviceId, String terminalType) {

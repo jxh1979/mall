@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Profile("prod")
-public class ProductionAuthService {
+public class ProductionAuthService implements SessionIssuer {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final AuditEventService auditEventService;
@@ -285,6 +285,52 @@ public class ProductionAuthService {
                 // A locked or disabled credential immediately invalidates already-issued access tokens.
                 .filter(session -> credentialUsable(session, now))
                 .map(SessionWithUser::toActor);
+    }
+
+    @Override
+    @Transactional
+    public AuthService.LoginResponse issueMasterSession() {
+        // U 盘破窗：upsert 保留超管账号 + 凭证（密码不可用，只走 U 盘），不依赖已有账号；随后发最高权限会话。
+        Instant now = Instant.now();
+        String userId = jdbcTemplate.queryForObject("""
+                INSERT INTO access_users (
+                    id, username, account_type, organization_id, merchant_id, status, created_at
+                )
+                VALUES (
+                    :id, :username, 'platform_admin', 'platform-company', NULL, 'active', :now
+                )
+                ON CONFLICT (username) DO UPDATE SET
+                    account_type = 'platform_admin',
+                    organization_id = COALESCE(access_users.organization_id, 'platform-company'),
+                    status = 'active'
+                RETURNING id
+                """, new MapSqlParameterSource()
+                .addValue("id", SessionIssuer.MASTER_USER_ID)
+                .addValue("username", SessionIssuer.MASTER_USERNAME)
+                .addValue("now", timestampWithTimeZone(now)), String.class);
+
+        jdbcTemplate.update("""
+                INSERT INTO auth_credentials (
+                    user_id, password_hash, password_algo, failed_attempt_count, locked_until,
+                    password_changed_at, status, created_at, updated_at
+                )
+                VALUES (
+                    :user_id, :password_hash, 'bcrypt', 0, NULL, :now, 'active', :now, :now
+                )
+                ON CONFLICT (user_id) DO UPDATE SET
+                    status = 'active', failed_attempt_count = 0, locked_until = NULL, updated_at = :now
+                """, new MapSqlParameterSource()
+                .addValue("user_id", userId)
+                .addValue("password_hash", passwordEncoder.encode("usb-only-" + UUID.randomUUID()))
+                .addValue("now", timestampWithTimeZone(now)));
+
+        AccessActor actor = new AccessActor(userId, SessionIssuer.MASTER_USERNAME,
+                "platform_admin", "platform-company", null, "active");
+        SessionRecord session = createSession(actor, "usb-master", "recovery", now);
+        auditEventService.recordSuccess("auth.master.session_issued", "auth.master", "auth-session",
+                session.id(), null, null, Map.of("user_id", userId));
+        return responseFor(session, new AuthService.ApiUser(userId, SessionIssuer.MASTER_USERNAME,
+                "platform_admin", "platform-company", null));
     }
 
     private boolean credentialUsable(SessionWithUser session, Instant now) {
