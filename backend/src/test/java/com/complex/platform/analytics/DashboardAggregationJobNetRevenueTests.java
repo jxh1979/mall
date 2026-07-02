@@ -37,6 +37,24 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     @Test
+    void barBusinessDayWindowSplitsBarKeyFromPlatformNetComponent() {
+        // S0(2026-07-02 拍板):酒吧经营日 06:00 切、平台汇总基准 04:00——凌晨 04:00–06:00 的酒吧流水
+        // 归酒吧域「前一经营日」(revenue.bar 键按 bar 窗),但平台对账归当日(net 分量按 platform 窗)。
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.barRevenueByWindow = Map.of(
+                "bar", orderedMap("merchant_a", "60000"),
+                "platform", orderedMap("merchant_a", "80000"));
+        repository.barRefundByWindow = Map.of();
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.upserts.get(DashboardAggregationJob.REVENUE_BAR + "|merchant_a"))
+                .isEqualByComparingTo("60000");
+        assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("80000");
+        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("80000");
+    }
+
+    @Test
     void platformNetIsTicketPlusBarMinusRefundsAndExcludesThirdParty() {
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
         // 自营售票实付 100000，售票退款 10000；
@@ -277,6 +295,18 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     private static final class CapturingAnalyticsRepository implements AnalyticsRepository {
+        public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
+            return java.util.List.of();
+        }
+
+        public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.BusinessDayCutoffRecord(domain, cutoffHour, now, updatedBy);
+        }
+
+
+        Map<String, Map<String, BigDecimal>> barRevenueByWindow;
+        Map<String, Map<String, BigDecimal>> barRefundByWindow;
+
         private final Map<String, BigDecimal> upserts = new LinkedHashMap<>();
         private BigDecimal ticketRevenue = BigDecimal.ZERO;
         private BigDecimal ticketRefund = BigDecimal.ZERO;
@@ -303,48 +333,50 @@ class DashboardAggregationJobNetRevenueTests {
         }
 
         @Override
-        public BigDecimal sumTicketRevenueCents(LocalDate businessDate) {
+        public BigDecimal sumTicketRevenueCents(LocalDate businessDate, String windowDomain) {
             return ticketRevenue;
         }
 
         @Override
-        public BigDecimal sumTicketRefundCents(LocalDate businessDate) {
+        public BigDecimal sumTicketRefundCents(LocalDate businessDate, String windowDomain) {
             return ticketRefund;
         }
 
         @Override
-        public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
+            if (barRevenueByWindow != null) return barRevenueByWindow.getOrDefault(windowDomain, Map.of());
             return barRevenue;
         }
 
         @Override
-        public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain) {
+            if (barRefundByWindow != null) return barRefundByWindow.getOrDefault(windowDomain, Map.of());
             return barRefund;
         }
 
         @Override
-        public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain) {
             return ticketAllocated;
         }
 
         @Override
-        public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain) {
             return ticketRefundByMerchant;
         }
 
         @Override
-        public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate, String windowDomain) {
             return contractRent;
         }
 
         // ── 其余聚合源：本测试不关心，返回中性值 ──
         @Override
-        public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 
         @Override
-        public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 

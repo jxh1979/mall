@@ -110,6 +110,23 @@ class AnalyticsServiceTests {
     }
 
     @Test
+    void businessDayCutoffUpsertValidatesDomainAndHourRange() {
+        // S0:域白名单+0-23 校验;合法写入落审计。
+        OperatingParamsService ops = new OperatingParamsService(
+                analyticsRepository, new AuditEventService(auditEventRepository));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ops.upsertBusinessDayCutoff(
+                new BusinessDayCutoffRequest("k1", null, "nonsense", 6)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ops.upsertBusinessDayCutoff(
+                new BusinessDayCutoffRequest("k2", null, "bar", 24)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        org.assertj.core.api.Assertions.assertThat(ops.upsertBusinessDayCutoff(
+                new BusinessDayCutoffRequest("k3", null, "bar", 6)).cutoffHour()).isEqualTo(6);
+    }
+
+    @Test
     void overviewReturnsMetricCodeKeyedMapForPlatformScope() {
         // 平台口径快照（ETL 落地）。
         analyticsRepository.upsertMetricSnapshot(metricKey("revenue.ticket", "platform", null), new BigDecimal("128800"), "etl_aggregate", Instant.now(FIXED_CLOCK));
@@ -875,6 +892,14 @@ class AnalyticsServiceTests {
     }
 
     private static final class InMemoryAnalyticsRepository implements AnalyticsRepository {
+        public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
+            return java.util.List.of();
+        }
+
+        public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, java.time.Instant now) {
+            return new AnalyticsRecords.BusinessDayCutoffRecord(domain, cutoffHour, now, updatedBy);
+        }
+
         private final Map<String, String> projectEntityMap = new LinkedHashMap<>();
         private final List<MetricDefinitionRecord> metricDefinitions = new ArrayList<>();
         private DashboardSnapshotRecord dashboardSnapshot;
@@ -1058,47 +1083,47 @@ class AnalyticsServiceTests {
         }
 
         @Override
-        public BigDecimal sumTicketRevenueCents(LocalDate businessDate) {
+        public BigDecimal sumTicketRevenueCents(LocalDate businessDate, String windowDomain) {
             return BigDecimal.ZERO;
         }
 
         @Override
-        public BigDecimal sumTicketRefundCents(LocalDate businessDate) {
+        public BigDecimal sumTicketRefundCents(LocalDate businessDate, String windowDomain) {
             return BigDecimal.ZERO;
         }
 
         @Override
-        public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 
         @Override
-        public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 
         @Override
-        public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 
         @Override
-        public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 
         @Override
-        public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 
         @Override
-        public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 
         @Override
-        public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate) {
+        public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate, String windowDomain) {
             return Map.of();
         }
 

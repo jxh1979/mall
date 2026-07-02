@@ -151,6 +151,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("admin-group-overview")).toBeVisible();
   } else if (spec.pageId === "ADM-ANA-003") {
     await expect(page.getByTestId("operating-params-page")).toBeVisible();
+    await expect(page.getByTestId("business-day-cutoffs-table")).toBeVisible();
+    await expect(page.getByTestId("cutoff-hour-bar")).toContainText("6:00");
   }
 }
 

@@ -7,6 +7,24 @@ import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 
 // 综合体经营参数行（后端 OperatingParamsRecord，客户端 unwrap 已 camel 化）。
+type BusinessDayCutoffRow = {
+  domain: string;
+  cutoffHour: number;
+  updatedAt?: string;
+};
+
+const DOMAIN_LABELS: Record<string, string> = {
+  platform: "平台汇总基准",
+  finance: "财务日结",
+  ticketing: "票务",
+  amusement: "游乐",
+  customer: "会员",
+  inventory: "供应链",
+  governance: "治理/风险",
+  bar: "酒吧",
+  merchant: "零售/餐饮商户",
+};
+
 type OperatingParamsRow = {
   projectId: string;
   operatingAreaSqm: number | string | null;
@@ -22,12 +40,18 @@ const MANAGE = ["analytics.operating_params.manage"];
  */
 export function OperatingParamsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<OperatingParamsRow[]>([]);
+  const [cutoffs, setCutoffs] = React.useState<BusinessDayCutoffRow[]>([]);
+  const [cutoffEdits, setCutoffEdits] = React.useState<Record<string, string>>({});
   const [form, setForm] = React.useState({ projectId: "project_1", areaSqm: "" });
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const items = await api.get<OperatingParamsRow[]>("/api/v1/analytics/operating-params");
+      const [items, cutoffRows] = await Promise.all([
+        api.get<OperatingParamsRow[]>("/api/v1/analytics/operating-params"),
+        api.get<BusinessDayCutoffRow[]>("/api/v1/analytics/business-day-cutoffs"),
+      ]);
       setRows(items ?? []);
+      setCutoffs(cutoffRows ?? []);
     },
     { onError: setGlobalError, fallbackMessage: "综合体经营参数读取失败" },
   );
@@ -45,6 +69,19 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
     });
     setActionResult({ action: "operating_params_saved", projectId: form.projectId.trim(), operatingAreaSqm: area });
     setForm({ projectId: form.projectId.trim(), areaSqm: "" });
+    reload();
+  }
+
+  async function saveCutoff(domain: string) {
+    const raw = cutoffEdits[domain];
+    const hour = Number(raw);
+    if (raw === undefined || !Number.isInteger(hour) || hour < 0 || hour > 23) {
+      setGlobalError("日切小时必须是 0-23 的整数");
+      return;
+    }
+    await api.post("/api/v1/analytics/business-day-cutoffs", { domain, cutoffHour: hour });
+    setActionResult({ action: "business_day_cutoff_saved", domain, cutoffHour: hour });
+    setCutoffEdits((edits) => ({ ...edits, [domain]: "" }));
     reload();
   }
 
@@ -98,6 +135,25 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
           >
             保存面积
           </PermissionButton>
+        </div>
+        <h3>经营日切分(各业务的「一天」从几点切)</h3>
+        <div className="admin-muted-action">酒吧=6 点(晚 6 点到次日早 6 点算一天)、零售/餐饮商户=10 点、其余=4 点;「平台汇总基准」行影响全场对账口径,改动一分钟内生效。</div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="business-day-cutoffs-table">
+            <thead>
+              <tr><th>业务域</th><th>当前切分(点)</th><th>改为</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              {cutoffs.map((row) => (
+                <tr key={row.domain} data-testid={`cutoff-row-${row.domain}`}>
+                  <td>{DOMAIN_LABELS[row.domain] ?? row.domain}</td>
+                  <td data-testid={`cutoff-hour-${row.domain}`}>{row.cutoffHour}:00</td>
+                  <td><input aria-label={`${row.domain} 日切小时`} type="number" min="0" max="23" style={{ width: 72 }} value={cutoffEdits[row.domain] ?? ""} onChange={(event) => setCutoffEdits((edits) => ({ ...edits, [row.domain]: event.target.value }))} placeholder={String(row.cutoffHour)} /></td>
+                  <td><PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid={`cutoff-save-${row.domain}`} onClick={() => void saveCutoff(row.domain)}>保存</PermissionButton></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </AdminDataState>
     </section>

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 543 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 545 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 292 | 人工权限矩阵正文未覆盖 189 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1086 | 人工事件矩阵正文未覆盖 1044 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 543 | 人工任务映射正文未逐项覆盖 537 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 335 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 1090 | 人工事件矩阵正文未覆盖 1048 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 545 | 人工任务映射正文未逐项覆盖 539 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 336 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -83,9 +83,9 @@
 | `amusement.verification.override` | staff-token | project-amusement, project-amusement-point | 2 | listAmusementManualOverrides, createAmusementManualOverride | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 1 | listAmusementVerifications | 已在权限矩阵正文出现 |
 | `amusement.waiver.acknowledge` | staff-token | project-amusement | 1 | acknowledgeAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
-| `analytics.dashboard.view` | staff-token | project | 9 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams | 已在权限矩阵正文出现 |
+| `analytics.dashboard.view` | staff-token | platform, project | 10 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, listBusinessDayCutoffs | 已在权限矩阵正文出现 |
 | `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
-| `analytics.operating_params.manage` | staff-token | project | 1 | upsertOperatingParams | OpenAPI 补充，以本附录为准 |
+| `analytics.operating_params.manage` | staff-token | platform, project | 2 | upsertOperatingParams, upsertBusinessDayCutoff | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 7 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
 | `audit.operation_log.export` | staff-token | platform | 1 | exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
@@ -483,6 +483,10 @@
 | `analytics.ai_quality_task.viewed_failed` | failure | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality.local_llm_suggestion.created` | success | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
 | `analytics.ai_quality.local_llm_suggestion.failed` | failure | `generateLocalLlmAiQualitySuggestion` | `POST` | `/api/v1/analytics/ai-quality/local-llm-suggestions` | ANA-风控分析 | `analytics.risk_alert.manage` | 接口级事件，以本附录为准 |
+| `analytics.business_day_cutoff.update_failed` | failure | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
+| `analytics.business_day_cutoff.updated` | success | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
+| `analytics.business_day_cutoff.view_failed` | failure | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `analytics.business_day_cutoff.viewed` | success | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.customer_intent.viewed` | success | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.customer_intent.viewed_failed` | failure | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_domain.view_failed` | failure | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -1486,6 +1490,7 @@
 | ANA-风控分析 | `listAiQualityResults` | `GET` | `/api/v1/analytics/ai-quality/results` | 查询ai质检结果 | `analytics.risk_alert.view` | `analytics.ai_quality_result.viewed` / `analytics.ai_quality_result.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | 查询ai质检任务 | `analytics.risk_alert.view` | `analytics.ai_quality_task.viewed` / `analytics.ai_quality_task.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAnalyticsMerchants` | `GET` | `/api/v1/analytics/merchants` | 查询经营分析商户 | `analytics.dashboard.view` | `analytics.merchant_summary.viewed` / `analytics.merchant_summary.viewed_failed` | web | operation 级补充 |
+| ANA-风控分析 | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | 查询经营日切分配置(按业务域) | `analytics.dashboard.view` | `analytics.business_day_cutoff.viewed` / `analytics.business_day_cutoff.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | List P2 business metric snapshots for operational analytics | `analytics.dashboard.view` | `analytics_business_metric_snapshot.viewed.success` / `analytics_business_metric_snapshot.viewed.failure` | web | operation 级补充 |
 | ANA-风控分析 | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | 查询客户意向 | `analytics.risk_alert.view` | `analytics.customer_intent.viewed` / `analytics.customer_intent.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listMerchantHealthScores` | `GET` | `/api/v1/analytics/merchant-health` | 查询商户健康度scores | `analytics.dashboard.view` | `analytics.merchant_health.viewed` / `analytics.merchant_health.viewed_failed` | web | operation 级补充 |
@@ -1496,6 +1501,7 @@
 | ANA-风控分析 | `listRiskRules` | `GET` | `/api/v1/analytics/risk-rules` | 查询风险规则 | `analytics.risk_alert.view` | `analytics.risk_rule.viewed` / `analytics.risk_rule.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listStaffServiceScores` | `GET` | `/api/v1/analytics/staff-service-score` | 查询员工服务scores | `analytics.risk_alert.view` | `analytics.staff_service_score.viewed` / `analytics.staff_service_score.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | 处理风险alert | `analytics.risk_alert.manage` | `analytics.risk_alert.resolved` / `analytics.risk_alert.resolved_failed` | web | operation 级补充 |
+| ANA-风控分析 | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | 修改某业务域的经营日切分小时 | `analytics.operating_params.manage` | `analytics.business_day_cutoff.updated` / `analytics.business_day_cutoff.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertOperatingParams` | `POST` | `/api/v1/analytics/operating-params` | 新增或更新综合体经营参数（坪效面积） | `analytics.operating_params.manage` | `operating_params.changed` / `operating_params.change_failed` | web | operation 级补充 |
 | AUTH-登录会话 | `login` | `POST` | `/api/v1/auth/login` | 员工或商户员工登录 | `public` | `auth.login.succeeded` / `auth.login.failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | 已在任务映射正文出现 |
 | AUTH-登录会话 | `logout` | `POST` | `/api/v1/auth/logout` | 退出登录 | `authenticated` | `auth.logout` / `auth.logout_failed` | web, merchant_portal, staff_work_phone, tablet, kiosk | 已在任务映射正文出现 |

@@ -57,6 +57,38 @@ public class OperatingParamsService {
         return saved;
     }
 
+    /** S0:经营日切分配置读取(九域,经营参数页数据源)。 */
+    public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
+        return repository.listBusinessDayCutoffs();
+    }
+
+    private static final java.util.Set<String> CUTOFF_DOMAINS = java.util.Set.of(
+            "platform", "finance", "ticketing", "amusement", "customer", "inventory", "governance", "bar", "merchant");
+
+    /**
+     * S0(2026-07-02 拍板):改某业务域的日切小时——各业务的「一天」后台可配(酒吧6点/零售餐饮10点)。
+     * platform 行是跨域汇总与财务日结的对齐基准,允许改但影响全场对账口径;审计留痕。
+     * BusinessDayResolver 60s 缓存,改动一分钟内生效。
+     */
+    public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(BusinessDayCutoffRequest request) {
+        BusinessDayCutoffRequest actual = requireRequest(request);
+        String domain = requireText(actual.domain(), "domain");
+        if (!CUTOFF_DOMAINS.contains(domain)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "domain must be one of " + CUTOFF_DOMAINS);
+        }
+        Integer hour = actual.cutoffHour();
+        if (hour == null || hour < 0 || hour > 23) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "cutoff_hour must be between 0 and 23");
+        }
+        AnalyticsRecords.BusinessDayCutoffRecord saved =
+                repository.upsertBusinessDayCutoff(domain, hour, null, Instant.now(clock));
+        auditEventService.recordSuccess(
+                "analytics.business_day_cutoff.updated", "analytics.operating_params.manage",
+                "business_day_cutoff_config", domain, null, actual.idempotencyKey(),
+                java.util.Map.of("domain", domain, "cutoff_hour", hour));
+        return saved;
+    }
+
     private <T> T requireRequest(T request) {
         if (request == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "request body is required");

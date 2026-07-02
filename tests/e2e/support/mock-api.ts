@@ -286,6 +286,13 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/customer-intents": empty,
     "/api/v1/analytics/staff-service-score": empty,
     "/api/v1/analytics/merchant-health": empty,
+    "/api/v1/analytics/business-day-cutoffs": [
+      { domain: "platform", cutoffHour: 4 }, { domain: "finance", cutoffHour: 4 },
+      { domain: "ticketing", cutoffHour: 4 }, { domain: "amusement", cutoffHour: 4 },
+      { domain: "customer", cutoffHour: 4 }, { domain: "inventory", cutoffHour: 4 },
+      { domain: "governance", cutoffHour: 4 }, { domain: "bar", cutoffHour: 6 },
+      { domain: "merchant", cutoffHour: 10 },
+    ],
     "/api/v1/merchant-service/work-orders": state.merchantWorkOrders,
     "/api/v1/merchant-billing/bills": state.merchantBills,
     "/api/v1/merchant-portal/settlements": state.merchantZoneSettlements,

@@ -28,6 +28,24 @@ class AnalyticsJdbcIntegrationTests {
     @Autowired
     private NamedParameterJdbcTemplate jdbcTemplate;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDayResolver;
+
+    @Test
+    void v201SeedsDomainCutoffsAndResolverAppliesBarWindow() {
+        // S0(2026-07-02 拍板):经营日按域切分——bar=06:00、merchant=10:00、platform=04:00 基准。
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='bar'", java.util.Map.of(), Integer.class)).isEqualTo(6);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='merchant'", java.util.Map.of(), Integer.class)).isEqualTo(10);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='platform'", java.util.Map.of(), Integer.class)).isEqualTo(4);
+        // 凌晨 05:00 的流水:酒吧域归前一经营日(06:00 切),平台基准归当日(04:00 切)。
+        java.time.Instant fiveAm = java.time.Instant.parse("2026-06-18T05:00:00Z");
+        assertThat(businessDayResolver.businessDate("bar", fiveAm)).isEqualTo(java.time.LocalDate.parse("2026-06-17"));
+        assertThat(businessDayResolver.businessDate(fiveAm)).isEqualTo(java.time.LocalDate.parse("2026-06-18"));
+    }
+
     @Test
     void migrationCreatesAnalyticsTablesSeedsPermissionsAndCurrentFlywayVersion() {
         assertThat(regclass("analytics_metric_definitions")).isEqualTo("analytics_metric_definitions");
@@ -250,8 +268,8 @@ class AnalyticsJdbcIntegrationTests {
         // 无 allocated（direct 出票）→ 不计入任何 share。
         insertIssuedEntitlement("ent_share_null", "entry", "mch_bar", null, businessDate);
 
-        Map<String, java.math.BigDecimal> barShare = repository.sumTicketBarShareCentsByMerchant(businessDate);
-        Map<String, java.math.BigDecimal> amuShare = repository.sumTicketAmusementShareCentsByMerchant(businessDate);
+        Map<String, java.math.BigDecimal> barShare = repository.sumTicketBarShareCentsByMerchant(businessDate, "ticketing");
+        Map<String, java.math.BigDecimal> amuShare = repository.sumTicketAmusementShareCentsByMerchant(businessDate, "ticketing");
 
         assertThat(barShare.get("mch_bar")).isEqualByComparingTo("480");
         assertThat(barShare).doesNotContainKey("mch_amu");
@@ -268,13 +286,13 @@ class AnalyticsJdbcIntegrationTests {
         insertIssuedEntitlementForOrder("ent_net_a", "ord_net", "drink", "mch_a", 600L, businessDate);
         insertIssuedEntitlementForOrder("ent_net_b", "ord_net", "amusement", "mch_b", 400L, businessDate);
 
-        Map<String, java.math.BigDecimal> allocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate);
+        Map<String, java.math.BigDecimal> allocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate, "platform");
         assertThat(allocated.get("mch_a")).isEqualByComparingTo("600");
         assertThat(allocated.get("mch_b")).isEqualByComparingTo("400");
 
         // 退款 300 针对 ord_net：按 allocated 占比分摊 → mch_a=180(=300*600/1000)、mch_b=120(=300*400/1000)。
         insertTicketRefund("rf_net", "ord_net", 300L, businessDate);
-        Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate);
+        Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate, "platform");
         assertThat(refundShare.get("mch_a")).isEqualByComparingTo("180");
         assertThat(refundShare.get("mch_b")).isEqualByComparingTo("120");
         // Σ分摊 == 退款额（不丢分）。
@@ -289,7 +307,7 @@ class AnalyticsJdbcIntegrationTests {
         insertIssuedEntitlementForOrder("ent_noalloc", "ord_noalloc", "entry", "mch_x", null, businessDate);
         insertTicketRefund("rf_noalloc", "ord_noalloc", 200L, businessDate);
 
-        Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate);
+        Map<String, java.math.BigDecimal> refundShare = repository.sumTicketRefundByMerchant(businessDate, "platform");
         assertThat(refundShare).doesNotContainKey("mch_x");
         assertThat(refundShare).isEmpty();
     }

@@ -959,4 +959,6 @@ public class AnalyticsService {
 
     private record NormalizedText(String value, boolean adjusted) {
     }
+
+
 }

@@ -11,6 +11,14 @@ public final class AnalyticsRecords {
     private AnalyticsRecords() {
     }
 
+    public record BusinessDayCutoffRecord(
+            String domain,
+            int cutoffHour,
+            java.time.Instant updatedAt,
+            String updatedBy
+    ) {
+    }
+
     public record MetricDefinitionRecord(
             String metricKey,
             String name,

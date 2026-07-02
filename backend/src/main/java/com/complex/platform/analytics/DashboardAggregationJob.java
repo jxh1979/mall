@@ -103,20 +103,22 @@ public class DashboardAggregationJob {
         Map<String, BigDecimal> platformTotals = new java.util.LinkedHashMap<>();
 
         // 收入·售票：ticket_orders 无 merchant_id → 仅平台口径。
-        upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate), now, platformTotals);
+        upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate, "ticketing"), now, platformTotals);
 
         // 收入·酒吧：bar_bill_settlements 有 merchant_id → 平台 + 商户口径。
         // 硬约束：revenue.bar 仅取现场消费实收（bar_bill_settlements），不含通票售票分摊，保证净收入口径不重复。
-        upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate), now, platformTotals);
+        upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate, "bar"), now, platformTotals);
 
         // 收入·酒吧退款（待确认#2）：bar_bill_adjustments(adjustment_type='refund') 按 refunded_at 落经营日窗口，
         // 单列 revenue.bar_refund（不改写 revenue.bar 实收口径），net 派生时扣减；免单 waiver 不计入（已在更低结算实收体现）。
-        upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate), now, platformTotals);
+        upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate, "bar"), now, platformTotals);
 
         // RC1②：收入·自营售票退款（ticket_refunds 无 merchant_id → 仅平台口径，与 revenue.ticket 同口径）。
-        BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate));
-        BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate));
-        upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate, ticketRefund, now, platformTotals);
+        // S0 双窗：net 全部分量按 platform 窗（对齐基准 04:00）；展示键各按业务域窗。
+        BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate, "platform"));
+        BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate, "platform"));
+        upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate,
+                nonNull(repository.sumTicketRefundCents(businessDate, "ticketing")), now, platformTotals);
 
         // RC1② 统一净收入 revenue.net（派生指标，财务确认口径 2026-06-18）：
         //   net = 自营售票实付(revenue.ticket) + 酒吧实收(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
@@ -129,14 +131,15 @@ public class DashboardAggregationJob {
         //   Σallocated==订单实付，故"有发券且有 allocated"的订单其商户分量 Σ 等于平台售票分量的对应部分；
         //   仅 direct 出票/历史无 allocated 的订单不进商户行（保守不归任何商户），是平台≥Σ商户的唯一差额来源——
         //   因平台与商户用各自来源各算一次，无重复计入。
-        Map<String, BigDecimal> barRevenue = repository.sumBarRevenueCentsByMerchant(businessDate);
-        Map<String, BigDecimal> barRefund = repository.sumBarRefundCentsByMerchant(businessDate);
-        Map<String, BigDecimal> ticketAllocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate);
-        Map<String, BigDecimal> ticketRefundByMerchant = repository.sumTicketRefundByMerchant(businessDate);
+        Map<String, BigDecimal> barRevenue = repository.sumBarRevenueCentsByMerchant(businessDate, "platform");
+        Map<String, BigDecimal> barRefund = repository.sumBarRefundCentsByMerchant(businessDate, "platform");
+        Map<String, BigDecimal> ticketAllocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate, "platform");
+        Map<String, BigDecimal> ticketRefundByMerchant = repository.sumTicketRefundByMerchant(businessDate, "platform");
         // P1-C 收入闭环：合同租金/物业/能源应收（ar_ap_items receivable）按 due_date 当日确认，
         // 单列 revenue.contract_rent 展示行（平台+商户），并入商户行级 net 的租金分量。
-        Map<String, BigDecimal> contractRent = repository.sumContractRentReceivableByMerchant(businessDate);
-        upsertByMerchant(REVENUE_CONTRACT_RENT, "finance", businessDate, contractRent, now, platformTotals);
+        Map<String, BigDecimal> contractRent = repository.sumContractRentReceivableByMerchant(businessDate, "platform");
+        upsertByMerchant(REVENUE_CONTRACT_RENT, "finance", businessDate,
+                repository.sumContractRentReceivableByMerchant(businessDate, "finance"), now, platformTotals);
         upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund,
                 ticketAllocated, ticketRefundByMerchant, contractRent, now, platformTotals);
 
@@ -144,9 +147,9 @@ public class DashboardAggregationJob {
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
         // 按酒吧/游乐业态拆出展示行，与 revenue.bar（消费实收）口径区分，避免重复计净收入。
         upsertByMerchant(REVENUE_TICKET_BAR_SHARE, "ticketing", businessDate,
-                repository.sumTicketBarShareCentsByMerchant(businessDate), now, platformTotals);
+                repository.sumTicketBarShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
         upsertByMerchant(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
-                repository.sumTicketAmusementShareCentsByMerchant(businessDate), now, platformTotals);
+                repository.sumTicketAmusementShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
 
         // 客流·游乐：amusement_verifications 无 merchant_id → 仅平台口径。
         upsertPlatform(TRAFFIC_AMUSEMENT, "amusement", businessDate, repository.countAmusementVerificationSuccess(businessDate), now, platformTotals);

@@ -23,6 +23,10 @@ import java.util.Optional;
 
 public interface AnalyticsRepository {
 
+    // BI S0(2026-07-02 拍板):收入类聚合按「窗口域」取经营日窗——展示键用各业务域自己的切分
+    // (bar=06:00 等,V201 可配),跨域相加的 revenue.net 分量一律传 "platform"(对齐基准 04:00,防混窗)。
+
+
     /** project_id -> business_entity_id（projects ⋈ merchants），供 group-overview groupBy=entity 派生。 */
     default Map<String, String> projectBusinessEntityMap() {
         return Map.of();
@@ -117,23 +121,29 @@ public interface AnalyticsRepository {
     // ETL 聚合源（从真实业务表读取，按 segment 维度返回 segmentId -> 聚合值；segmentId=null 行表示平台口径）。
 
     /** Σ ticket_orders.amount_cent（pay_status='paid'）——售票收入；ticket_orders 无 merchant_id，仅平台口径。 */
-    BigDecimal sumTicketRevenueCents(LocalDate businessDate);
+    /** S0:经营日切分配置(V201)——九域清单读取(经营参数页数据源)。 */
+    java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs();
+
+    /** S0:改某业务域的日切小时(0-23);后台经营参数页写入,Resolver 60s 缓存内生效。 */
+    AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, java.time.Instant now);
+
+    BigDecimal sumTicketRevenueCents(LocalDate businessDate, String windowDomain);
 
     /**
      * RC1②：Σ ticket_refunds.refund_amount_cent——自营售票退款（按 created_at 落经营日窗口，与 T7 日结口径一致）；
      * ticket_refunds 无 merchant_id，仅平台口径。用于 revenue.net 派生时冲减自营售票收入。
      */
-    BigDecimal sumTicketRefundCents(LocalDate businessDate);
+    BigDecimal sumTicketRefundCents(LocalDate businessDate, String windowDomain);
 
     /** Σ bar_bill_settlements.settlement_amount_cent——酒吧收入；返回 merchantId(可 null) -> 金额。 */
-    Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate);
+    Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
      * 待确认#2：Σ bar_bill_adjustments.amount_cent（adjustment_type='refund'）——酒吧结账后退款；
      * 按 refunded_at 落经营日窗口，返回 merchantId(可 null) -> 退款金额。退款冲减 net（revenue.bar 不被改写，
      * 单列 revenue.bar_refund 展示并由净收入派生时扣减）；免单 waiver 不计入（已体现在更低结算实收）。
      */
-    Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate);
+    Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
      * 待确认项#1：通票售票收入的"业态拆分展示口径"——按 issued_entitlements.allocated_revenue_cent
@@ -141,13 +151,13 @@ public interface AnalyticsRepository {
      * 仅作展示（revenue.ticket_bar_share），不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，
      * revenue.bar 仍仅取 bar_bill_settlements 现场消费实收，二者口径区分，避免重复计净收入。
      */
-    Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate);
+    Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
      * 待确认项#1：通票售票收入业态拆分——映射到游乐的权益分配收入；返回 merchantId(可 null) -> 金额。
      * 仅作展示（revenue.ticket_amusement_share），不并入 revenue.net（同上理由）。
      */
-    Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate);
+    Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
      * 清单#4：本商户售票分量——Σ issued_entitlements.allocated_revenue_cent 按 merchant_id 汇总（按 created_at 落经营日窗口）。
@@ -155,7 +165,7 @@ public interface AnalyticsRepository {
      * 故 Σmerchant(allocated) 等于 Σ有发券订单的实付；direct 出票/无 allocated 的权益（allocated_revenue_cent IS NULL）不计，
      * 保守不归任何商户（避免凭空摊派）。返回 merchantId(可 null) -> 金额，并入商户行级 revenue.net 的售票分量。
      */
-    Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate);
+    Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
      * 清单#4：本商户售票退款分量——按 ticket_refunds（按 created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径同population）
@@ -164,14 +174,14 @@ public interface AnalyticsRepository {
      * 订单无 allocated 权益（基数为 0）的退款保守不归任何商户（与售票分量口径一致，避免摊派）。
      * 返回 merchantId(可 null) -> 退款分摊额，用于商户行级 revenue.net 冲减。
      */
-    Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate);
+    Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
      * P1-C 收入闭环：合同租金/物业/能源应收（ar_ap_items receivable，source_type contract_rent/property_fee/energy_fee）
      * 按 due_date = businessDate（期首逐期确认，不在生效日堆叠整租期）汇总到 merchant_id。
      * 返回 merchantId -> 金额（合同账单 merchant_id 恒非空），并入商户行级 revenue.net 的租金分量。
      */
-    Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate);
+    Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate, String windowDomain);
 
     /** count amusement_verifications(verification_result='success')——游乐核销人次；无 merchant_id，仅平台口径。 */
     BigDecimal countAmusementVerificationSuccess(LocalDate businessDate);

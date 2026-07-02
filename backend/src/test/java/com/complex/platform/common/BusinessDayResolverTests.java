@@ -45,6 +45,18 @@ class BusinessDayResolverTests {
     }
 
     @Test
+    void domainCutoffFallsBackToGlobalWhenConfigUnavailable() {
+        // S0:配置表缺席(单测/未迁移库)按域回落全局切分,fail-safe 不阻塞日结。
+        BusinessDayResolver resolver = new BusinessDayResolver(4);
+        org.assertj.core.api.Assertions.assertThat(resolver.cutoffHourFor("bar")).isEqualTo(4);
+        org.assertj.core.api.Assertions.assertThat(
+                resolver.businessDate("bar", java.time.Instant.parse("2026-06-18T05:00:00Z")))
+                .isEqualTo(resolver.businessDate(java.time.Instant.parse("2026-06-18T05:00:00Z")));
+        org.assertj.core.api.Assertions.assertThat(resolver.startInstant("bar", java.time.LocalDate.parse("2026-06-18")))
+                .isEqualTo(resolver.startInstant(java.time.LocalDate.parse("2026-06-18")));
+    }
+
+    @Test
     void invalidCutoffIsRejected() {
         assertThatThrownBy(() -> new BusinessDayResolver(24))
                 .isInstanceOf(IllegalArgumentException.class);

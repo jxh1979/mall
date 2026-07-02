@@ -480,31 +480,31 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
-    public BigDecimal sumTicketRevenueCents(LocalDate businessDate) {
+    public BigDecimal sumTicketRevenueCents(LocalDate businessDate, String windowDomain) {
         BigDecimal value = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(amount_cent), 0)
                   FROM ticket_orders
                  WHERE pay_status = 'paid'
                    AND created_at >= :start
                    AND created_at < :end
-                """, dayRange(businessDate), BigDecimal.class);
+                """, dayRange(windowDomain, businessDate), BigDecimal.class);
         return value == null ? BigDecimal.ZERO : value;
     }
 
     @Override
-    public BigDecimal sumTicketRefundCents(LocalDate businessDate) {
+    public BigDecimal sumTicketRefundCents(LocalDate businessDate, String windowDomain) {
         // RC1②：自营售票退款，ticket_refunds 以 created_at 落经营日窗口 [start, end)（与 T7 aggregateOfficialTicket 口径一致）。
         BigDecimal value = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(refund_amount_cent), 0)
                   FROM ticket_refunds
                  WHERE created_at >= :start
                    AND created_at < :end
-                """, dayRange(businessDate), BigDecimal.class);
+                """, dayRange(windowDomain, businessDate), BigDecimal.class);
         return value == null ? BigDecimal.ZERO : value;
     }
 
     @Override
-    public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate) {
+    public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         jdbcTemplate.query("""
                 SELECT merchant_id, COALESCE(SUM(settlement_amount_cent), 0) AS total
@@ -513,14 +513,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND settled_at < :end
                    AND reversed = FALSE
                  GROUP BY merchant_id
-                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
         );
         return result;
     }
 
     @Override
-    public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate) {
+    public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain) {
         // 待确认#2：酒吧结账后退款（adjustment_type='refund'）按 refunded_at 落经营日窗口，经 bar_bills 取 merchant_id。
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         jdbcTemplate.query("""
@@ -531,33 +531,33 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND a.refunded_at >= :start
                    AND a.refunded_at < :end
                  GROUP BY b.merchant_id
-                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
         );
         return result;
     }
 
     @Override
-    public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate) {
+    public Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate, String windowDomain) {
         // 待确认项#1：当日发放（created_at 落经营日窗口）、业态映射到酒吧的权益分配收入按商户汇总（展示口径）。
         // 业态归属映射：drink/gift_drink/bar_* → 酒吧（与 ticket_amusement_share 互斥，避免重复）。
-        return sumAllocatedRevenueByMerchant(businessDate, """
+        return sumAllocatedRevenueByMerchant(businessDate, windowDomain, """
                    AND (entitlement_type IN ('drink', 'gift_drink')
                         OR entitlement_type LIKE 'bar\\_%' ESCAPE '\\')
                 """);
     }
 
     @Override
-    public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate) {
+    public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchant(LocalDate businessDate, String windowDomain) {
         // 待确认项#1：当日发放、业态映射到游乐的权益分配收入按商户汇总（展示口径）。
         // 业态归属映射：amusement / amusement_* → 游乐。
-        return sumAllocatedRevenueByMerchant(businessDate, """
+        return sumAllocatedRevenueByMerchant(businessDate, windowDomain, """
                    AND (entitlement_type = 'amusement'
                         OR entitlement_type LIKE 'amusement\\_%' ESCAPE '\\')
                 """);
     }
 
-    private Map<String, BigDecimal> sumAllocatedRevenueByMerchant(LocalDate businessDate, String entitlementTypeFilter) {
+    private Map<String, BigDecimal> sumAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain, String entitlementTypeFilter) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         jdbcTemplate.query("""
                 SELECT merchant_id, COALESCE(SUM(allocated_revenue_cent), 0) AS total
@@ -567,14 +567,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND created_at < :end
                 """ + entitlementTypeFilter + """
                  GROUP BY merchant_id
-                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
         );
         return result;
     }
 
     @Override
-    public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate) {
+    public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchant(LocalDate businessDate, String windowDomain) {
         // 清单#4：本商户售票分量——当日发放（created_at 落经营日窗口）权益的 allocated_revenue_cent 按商户汇总。
         // allocated_revenue_cent IS NULL（direct 出票/无订单）不计，保守不归任何商户。
         Map<String, BigDecimal> result = new LinkedHashMap<>();
@@ -585,14 +585,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND created_at >= :start
                    AND created_at < :end
                  GROUP BY merchant_id
-                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                """, dayRange(windowDomain, businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
         );
         return result;
     }
 
     @Override
-    public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate) {
+    public Map<String, BigDecimal> sumTicketRefundByMerchant(LocalDate businessDate, String windowDomain) {
         // 清单#4：本商户售票退款分量——按 ticket_refunds（created_at 落经营日窗口，与平台 sumTicketRefundCents 同口径）
         // 关联订单各权益 allocated 占比把退款分摊到 merchant。逐笔退款用"最大余数补尾"保证 Σ分摊==退款额、分到分不丢分。
         //
@@ -611,7 +611,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND r.created_at < :end
                  GROUP BY r.id, r.refund_amount_cent, e.merchant_id
                  ORDER BY r.id, e.merchant_id
-                """, dayRange(businessDate), (resultSet, rowNum) -> new RefundMerchantShareRow(
+                """, dayRange(windowDomain, businessDate), (resultSet, rowNum) -> new RefundMerchantShareRow(
                 resultSet.getString("refund_id"),
                 resultSet.getLong("refund_amount"),
                 resultSet.getString("merchant_id"),
@@ -622,7 +622,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
-    public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate) {
+    public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate, String windowDomain) {
         // P1-C：合同租金/物业/能源应收按 due_date 当日（期首）逐期确认收入，并入商户行级 revenue.net 租金分量。
         // 用 amount_cent（已挂账应收，权责发生制确认），与酒吧/售票的现金口径合并入 net（任务要求接 ar_ap receivable）。
         Map<String, BigDecimal> result = new LinkedHashMap<>();
@@ -705,7 +705,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE verification_result = 'success'
                    AND created_at >= :start
                    AND created_at < :end
-                """, dayRange(businessDate), BigDecimal.class);
+                """, dayRange("amusement", businessDate), BigDecimal.class);
         return value == null ? BigDecimal.ZERO : value;
     }
 
@@ -719,7 +719,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND created_at >= :start
                    AND created_at < :end
                  GROUP BY merchant_id
-                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                """, dayRange("ticketing", businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
         );
         return result;
@@ -730,7 +730,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         // T4.3：按经营日窗口对成功核销 created_at 分小时桶。
         // ponytail: 按 UTC 小时分桶（确定、与窗口同源）；若要本地时段口径，改 AT TIME ZONE '业务时区'。
         Map<Integer, Long> result = new LinkedHashMap<>();
-        MapSqlParameterSource params = dayRange(businessDate);
+        MapSqlParameterSource params = dayRange("amusement", businessDate);
         String sql;
         if (merchantScope.isEmpty()) {
             sql = """
@@ -770,7 +770,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE created_at >= :start
                    AND created_at < :end
                  GROUP BY merchant_id
-                """, dayRange(businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
+                """, dayRange("ticketing", businessDate), (org.springframework.jdbc.core.RowCallbackHandler) resultSet ->
                 result.put(resultSet.getString("merchant_id"), resultSet.getBigDecimal("total"))
         );
         return result;
@@ -783,7 +783,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM customers
                  WHERE created_at >= :start
                    AND created_at < :end
-                """, dayRange(businessDate), BigDecimal.class);
+                """, dayRange("customer", businessDate), BigDecimal.class);
         return value == null ? BigDecimal.ZERO : value;
     }
 
@@ -902,10 +902,39 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return count == null ? 0L : count;
     }
 
+    @Override
+    public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
+        return jdbcTemplate.query("""
+                SELECT domain, cutoff_hour, updated_at, updated_by
+                  FROM business_day_cutoff_config ORDER BY domain
+                """, Map.of(), (rs, n) -> new AnalyticsRecords.BusinessDayCutoffRecord(
+                rs.getString("domain"), rs.getInt("cutoff_hour"),
+                rs.getTimestamp("updated_at").toInstant(), rs.getString("updated_by")));
+    }
+
+    @Override
+    public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, Instant now) {
+        jdbcTemplate.update("""
+                INSERT INTO business_day_cutoff_config (domain, cutoff_hour, updated_at, updated_by)
+                VALUES (:domain, :cutoff_hour, :now, :updated_by)
+                ON CONFLICT (domain) DO UPDATE SET
+                    cutoff_hour = EXCLUDED.cutoff_hour, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
+                """, new MapSqlParameterSource()
+                .addValue("domain", domain)
+                .addValue("cutoff_hour", cutoffHour)
+                .addValue("now", timestampWithTimeZone(now))
+                .addValue("updated_by", updatedBy, java.sql.Types.VARCHAR));
+        return new AnalyticsRecords.BusinessDayCutoffRecord(domain, cutoffHour, now, updatedBy);
+    }
+
     private MapSqlParameterSource dayRange(LocalDate businessDate) {
-        // 经营日窗口按可配日切（默认 04:00）派生：[经营日 00:00+cutoff, 次日 00:00+cutoff)。
-        Instant start = businessDayResolver.startInstant(businessDate);
-        Instant end = businessDayResolver.endInstant(businessDate);
+        return dayRange(null, businessDate);
+    }
+
+    private MapSqlParameterSource dayRange(String windowDomain, LocalDate businessDate) {
+        // 经营日窗口按窗口域可配日切派生（V201；domain 为空=全局 04:00 基准）：[经营日 00:00+cutoff, 次日 00:00+cutoff)。
+        Instant start = businessDayResolver.startInstant(windowDomain, businessDate);
+        Instant end = businessDayResolver.endInstant(windowDomain, businessDate);
         return new MapSqlParameterSource()
                 .addValue("start", timestampWithTimeZone(start))
                 .addValue("end", timestampWithTimeZone(end));

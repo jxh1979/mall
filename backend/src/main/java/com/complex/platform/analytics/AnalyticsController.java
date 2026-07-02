@@ -123,6 +123,23 @@ public class AnalyticsController {
         return ApiResponse.ok(service.groupOverview(groupBy));
     }
 
+    @GetMapping("/business-day-cutoffs")
+    public ApiResponse<PageResponse<AnalyticsRecords.BusinessDayCutoffRecord>> listBusinessDayCutoffs() {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        authorizationService.requirePlatformScope();
+        java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> items = operatingParamsService.listBusinessDayCutoffs();
+        return ApiResponse.ok(new PageResponse<>(items, 1, 50, items.size()));
+    }
+
+    @PostMapping("/business-day-cutoffs")
+    public ApiResponse<AnalyticsRecords.BusinessDayCutoffRecord> upsertBusinessDayCutoff(
+            @RequestBody @jakarta.validation.Valid BusinessDayCutoffRequest request) {
+        authorizationService.requirePermission("analytics.operating_params.manage");
+        authorizationService.requirePlatformScope();
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(operatingParamsService.upsertBusinessDayCutoff(request));
+    }
+
     @GetMapping("/operating-params")
     public ApiResponse<PageResponse<OperatingParamsRecord>> listOperatingParams() {
         authorizationService.requirePermission("analytics.dashboard.view");
